@@ -1,7 +1,7 @@
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-const API_URL = 'http://192.168.100.22:8000/api/v1'
+const API_URL = 'http://localhost:8000/api/v1'
 
 const api = axios.create({
   baseURL: API_URL,
@@ -46,7 +46,7 @@ api.interceptors.response.use(
 
 export const authAPI = {
   register: async (data) => {
-    const response = await api.post('/auth/register', data)
+    const response = await api.post('/auth/register', data) 
     if (response.data.access_token) {
       await AsyncStorage.setItem('token', response.data.access_token)
     }

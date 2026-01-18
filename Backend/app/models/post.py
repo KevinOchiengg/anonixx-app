@@ -14,14 +14,26 @@ class Post(BaseModel):
     user_id: str
     content: str
     post_type: PostType = PostType.TEXT
+    
+    # Media
     images: List[str] = []
     audio_url: Optional[str] = None
     video_url: Optional[str] = None
+    
+    # Topics/Categories for personalized feed ✅ NEW
+    topics: List[str] = []
+    
+    # Anonymous posting
     is_anonymous: bool = False
     anonymous_name: Optional[str] = None
+    
+    # Engagement
     reactions: Dict[str, str] = {}
+    reactions_count: int = 0  # ✅ Added for easier counting
     comments_count: int = 0
     views_count: int = 0
+    
+    # Status
     is_deleted: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

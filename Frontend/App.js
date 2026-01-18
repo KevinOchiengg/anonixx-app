@@ -8,7 +8,8 @@ import store from './src/store'
 import AppNavigator from './src/navigation/AppNavigator'
 import { SocketProvider } from './src/context/SocketContext'
 import { ThemeProvider } from '@react-navigation/native'
-import { ThemeProvider as CustomThemeProvider } from './src/context/ThemeContext' // ✅ Renamed
+import { ThemeProvider as CustomThemeProvider } from './src/context/ThemeContext'
+import { AuthProvider } from './src/context/AuthContext' // ✅ NEW: Auth context
 
 export default function App() {
   // console.log('App.js rendering...')
@@ -17,10 +18,12 @@ export default function App() {
       <SafeAreaProvider>
         <Provider store={store}>
           <CustomThemeProvider>
-            <SocketProvider>
-              <StatusBar style='light' />
-              <AppNavigator />
-            </SocketProvider>
+            <AuthProvider>
+              <SocketProvider>
+                <StatusBar style='light' />
+                <AppNavigator />
+              </SocketProvider>
+            </AuthProvider>
           </CustomThemeProvider>
         </Provider>
       </SafeAreaProvider>

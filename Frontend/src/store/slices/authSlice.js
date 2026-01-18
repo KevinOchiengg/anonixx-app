@@ -43,6 +43,10 @@ export const signup = createAsyncThunk(
       await AsyncStorage.setItem('token', response.data.access_token)
       await AsyncStorage.setItem('authToken', response.data.access_token)
 
+      // ✅ CLEAR interests flag for new users
+      await AsyncStorage.removeItem('hasInterests')
+      console.log('✅ Cleared hasInterests flag for new user')
+
       return {
         user: response.data.user,
         token: response.data.access_token,
@@ -84,7 +88,7 @@ export const updateProfile = createAsyncThunk(
       const token = await AsyncStorage.getItem('token')
 
       const response = await fetch(
-        'http://192.168.100.22:8000/api/v1/auth/update-profile',
+        'http://localhost:8000/api/v1/auth/update-profile',
         {
           method: 'PUT',
           headers: {
@@ -158,9 +162,16 @@ const authSlice = createSlice({
       state.error = null
 
       // Clear AsyncStorage (async, but fire and forget)
-      AsyncStorage.multiRemove(['token', 'authToken', 'refreshToken'])
-        .then(() => console.log('✅ Tokens cleared from AsyncStorage'))
-        .catch((error) => console.error('❌ Error clearing tokens:', error))
+      AsyncStorage.multiRemove([
+        'token',
+        'authToken',
+        'refreshToken',
+        'hasInterests',
+      ])
+        .then(() =>
+          console.log('✅ All tokens and flags cleared from AsyncStorage')
+        )
+        .catch((error) => console.error('❌ Error clearing storage:', error))
 
       console.log('✅ User logged out from Redux')
     },

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional
-
+from typing import Optional, List 
 
 class User(BaseModel):
     id: str = Field(..., alias="_id")
@@ -61,6 +61,7 @@ class UserResponse(BaseModel):
     bio: Optional[str]
     avatar_url: Optional[str]
     cover_image_url: Optional[str]
+    interests: List[str] = []
     is_verified: bool
     coin_balance: int
     created_at: datetime

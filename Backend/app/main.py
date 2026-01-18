@@ -3,13 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection
-from app.api.v1 import auth, coins, posts, groups, upload   # ← ADD groups
+from app.api.v1 import auth, coins, posts, groups, upload, users, impact, connections, rituals
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
-    print("🚀 Echo Backend Started - Auth, Coins, Posts, Groups!")
+    print("🚀 Anonixx Backend Started!")
+    print("✅ MongoDB Connected")
+    print("📦 Loading Phase 2 Features...")
+    print("   - Impact Dashboard")
+    print("   - Deep Connections")
+    print("   - Sunday Reflections")
+    print("   - Crisis Resources")
+    print("🌙 A space that heals, not hurts")
     yield
     await close_mongo_connection()
 
@@ -39,9 +46,19 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to Echo API",
+        "message": "Welcome to Anonixx API - A space that heals, not hurts",
         "docs": "/docs",
-        "features": ["auth", "coins", "posts", "groups","upload"]  # ← UPDATE
+        "features": [
+            "auth",
+            "coins",
+            "posts",
+            "groups",
+            "upload",
+            "users",
+            "impact",
+            "connections",
+            "rituals"
+        ]
     }
 
 
@@ -49,5 +66,9 @@ async def root():
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(coins.router, prefix=settings.API_V1_PREFIX)
 app.include_router(posts.router, prefix=settings.API_V1_PREFIX)
-app.include_router(groups.router, prefix=settings.API_V1_PREFIX) 
-app.include_router(upload.router, prefix=settings.API_V1_PREFIX) 
+app.include_router(groups.router, prefix=settings.API_V1_PREFIX)
+app.include_router(upload.router, prefix=settings.API_V1_PREFIX)
+app.include_router(users.router, prefix=settings.API_V1_PREFIX)
+app.include_router(impact.router, prefix=settings.API_V1_PREFIX)
+app.include_router(connections.router, prefix=settings.API_V1_PREFIX)
+app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)

@@ -1,349 +1,273 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+from passlib.context import CryptContext
+from jose import JWTError, jwt
 from bson import ObjectId
+
 from app.database import get_database
-from app.core.security import verify_password, get_password_hash, generate_anonymous_name
-from app.core.jwt import create_access_token, create_refresh_token
+from app.config import settings
 from app.dependencies import get_current_user_id
 
-
+# Router
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Password hashing - UPDATED TO ARGON2
+pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
-# ==================== MODELS ====================
+# OAuth2
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/token")
 
-class UserCreate(BaseModel):
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
+
+# ==================== REQUEST/RESPONSE MODELS ====================
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
     password: str
     username: Optional[str] = None
 
 
-class UserLogin(BaseModel):
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
+class LoginRequest(BaseModel):
+    email: EmailStr
     password: str
-
-
-class UserProfile(BaseModel):
-    id: str
-    anonymous_name: str
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    avatar: Optional[str] = None
-    bio: Optional[str] = None
-    coin_balance: int = 0
-    is_premium: bool = False
 
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    user: UserProfile
+    token_type: str
+    user: dict
 
 
-class UpdateProfileRequest(BaseModel):
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    username: Optional[str]
+    anonymous_name: Optional[str]
+    created_at: str
 
 
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
+# ==================== HELPER FUNCTIONS ====================
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password - truncate to 72 bytes for bcrypt compatibility"""
+    # Bcrypt has a 72-byte limit
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password: str) -> str:
+    """Hash password - truncate to 72 bytes for bcrypt compatibility"""
+    # Bcrypt has a 72-byte limit, so truncate if necessary
+    return pwd_context.hash(password)
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Create JWT token"""
+    to_encode = data.copy()
+    
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=30)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
+    
+    return encoded_jwt
+
+
+def generate_anonymous_name() -> str:
+    """Generate random anonymous name"""
+    import random
+    
+    adjectives = [
+        "Quiet", "Gentle", "Brave", "Kind", "Thoughtful", "Peaceful",
+        "Calm", "Hopeful", "Strong", "Soft", "Wise", "Warm"
+    ]
+    
+    nouns = [
+        "Soul", "Heart", "Spirit", "Mind", "Voice", "Light",
+        "Star", "Moon", "Sky", "Dream", "Hope", "Dawn"
+    ]
+    
+    number = random.randint(100, 999)
+    
+    return f"{random.choice(adjectives)} {random.choice(nouns)} {number}"
 
 
 # ==================== ENDPOINTS ====================
 
-@router.post("/anonymous", response_model=TokenResponse)
-async def create_anonymous_user(db = Depends(get_database)):
-    """Create anonymous user account"""
-    anonymous_name = generate_anonymous_name()
+@router.post("/register", response_model=TokenResponse)
+async def register(
+    data: RegisterRequest,
+    db = Depends(get_database)
+):
+    """Register a new user"""
     
-    user_data = {
-        "_id": ObjectId(),
-        "anonymous_name": anonymous_name,
-        "username": None,
-        "email": None,
-        "password_hash": None,
-        "coin_balance": 100,
-        "is_premium": False,
-        "is_anonymous": True,
-        "created_at": datetime.utcnow(),
-    }
+    print(f"🔵 Registration attempt: {data.email}")
     
-    await db["users"].insert_one(user_data)
+    # Check if user already exists
+    existing_user = await db["users"].find_one({"email": data.email})
     
-    user_id = str(user_data["_id"])
-    access_token = create_access_token({"sub": user_id})
-    refresh_token = create_refresh_token({"sub": user_id})
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserProfile(
-            id=user_id,
-            anonymous_name=anonymous_name,
-            coin_balance=100,
-            is_premium=False
+    if existing_user:
+        print(f"❌ User already exists: {data.email}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
         )
-    )
-
-
-@router.post("/signup", response_model=TokenResponse)
-async def signup(data: UserCreate, db = Depends(get_database)):
-    """Sign up with email/phone and password"""
-    if not data.email and not data.phone:
-        raise HTTPException(status_code=400, detail="Email or phone required")
     
-    # Check if email already exists
-    if data.email:
-        existing = await db["users"].find_one({"email": data.email})
-        if existing:
-            raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Check if phone already exists
-    if data.phone:
-        existing = await db["users"].find_one({"phone": data.phone})
-        if existing:
-            raise HTTPException(status_code=400, detail="Phone number already registered")
-    
-    # Validate password
-    if len(data.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    
-    anonymous_name = generate_anonymous_name()
-    password_hash = get_password_hash(data.password)
-    
-    user_data = {
+    # Create user
+    user = {
         "_id": ObjectId(),
-        "anonymous_name": anonymous_name,
-        "username": data.username,
         "email": data.email,
-        "phone": data.phone,
-        "password_hash": password_hash,
-        "coin_balance": 100,
-        "is_premium": False,
-        "is_anonymous": False,
+        "username": data.username or data.email.split("@")[0],
+        "password": get_password_hash(data.password),
+        "anonymous_name": generate_anonymous_name(),
+        "interests": [],
         "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
     }
     
-    await db["users"].insert_one(user_data)
+    await db["users"].insert_one(user)
     
-    user_id = str(user_data["_id"])
-    access_token = create_access_token({"sub": user_id})
-    refresh_token = create_refresh_token({"sub": user_id})
+    print(f"✅ User registered: {data.email}")
     
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserProfile(
-            id=user_id,
-            anonymous_name=anonymous_name,
-            username=data.username,
-            email=data.email,
-            coin_balance=100,
-            is_premium=False
-        )
-    )
+    # Create token
+    access_token = create_access_token(data={"sub": str(user["_id"])})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["_id"]),
+            "email": user["email"],
+            "username": user["username"],
+            "anonymous_name": user["anonymous_name"]
+        }
+    }
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: UserLogin, db = Depends(get_database)):
-    """Login with email/phone and password"""
-    user = None
+async def login(
+    data: LoginRequest,
+    db = Depends(get_database)
+):
+    """Login user"""
     
-    if data.email:
-        user = await db["users"].find_one({"email": data.email})
-    elif data.phone:
-        user = await db["users"].find_one({"phone": data.phone})
-    else:
-        raise HTTPException(status_code=400, detail="Email or phone required")
+    print(f"🔵 Login attempt: {data.email}")
+    
+    # Find user
+    user = await db["users"].find_one({"email": data.email})
     
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    if not user.get("password_hash"):
-        raise HTTPException(status_code=401, detail="This account has no password. Please sign up first.")
-    
-    if not verify_password(data.password, user.get("password_hash", "")):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    user_id = str(user["_id"])
-    access_token = create_access_token({"sub": user_id})
-    refresh_token = create_refresh_token({"sub": user_id})
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserProfile(
-            id=user_id,
-            anonymous_name=user["anonymous_name"],
-            username=user.get("username"),
-            email=user.get("email"),
-            coin_balance=user.get("coin_balance", 0),
-            is_premium=user.get("is_premium", False)
+        print(f"❌ User not found: {data.email}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
         )
-    )
-
-
-@router.get("/me", response_model=UserProfile)
-async def get_me(
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """Get current user profile"""
-    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Check if user has password field (for legacy users)
+    if "password" not in user:
+        print(f"❌ User {data.email} has no password field - legacy user")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account needs to be migrated. Please register again or contact support."
+        )
     
-    return UserProfile(
-        id=str(user["_id"]),
-        anonymous_name=user["anonymous_name"],
-        username=user.get("username"),
-        email=user.get("email"),
-        coin_balance=user.get("coin_balance", 0),
-        is_premium=user.get("is_premium", False)
-    )
-
-
-@router.put("/update-profile")
-async def update_profile(
-    data: UpdateProfileRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """Update user profile (username and/or email)"""
-    update_data = {}
+    # Verify password
+    if not verify_password(data.password, user["password"]):
+        print(f"❌ Invalid password: {data.email}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
     
-    if data.username:
-        # Validate username
-        if len(data.username) < 3:
-            raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
-        
-        if len(data.username) > 30:
-            raise HTTPException(status_code=400, detail="Username must be less than 30 characters")
-        
-        # Check if username is already taken by another user
-        existing = await db["users"].find_one({
-            "username": data.username,
-            "_id": {"$ne": ObjectId(current_user_id)}
-        })
-        if existing:
-            raise HTTPException(status_code=400, detail="Username already taken")
-        
-        update_data["username"] = data.username
+    print(f"✅ User logged in: {data.email}")
     
-    if data.email:
-        # Check if email is already taken by another user
-        existing = await db["users"].find_one({
-            "email": data.email,
-            "_id": {"$ne": ObjectId(current_user_id)}
-        })
-        if existing:
-            raise HTTPException(status_code=400, detail="Email already in use")
-        
-        update_data["email"] = data.email
-    
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No data to update")
-    
-    # Update user
-    await db["users"].update_one(
-        {"_id": ObjectId(current_user_id)},
-        {"$set": update_data}
-    )
-    
-    # Return updated user
-    updated_user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
-    
-    if not updated_user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Create token
+    access_token = create_access_token(data={"sub": str(user["_id"])})
     
     return {
-        "username": updated_user.get("username"),
-        "email": updated_user.get("email"),
-        "anonymous_name": updated_user.get("anonymous_name"),
-        "coin_balance": updated_user.get("coin_balance", 0)
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["_id"]),
+            "email": user["email"],
+            "username": user.get("username"),
+            "anonymous_name": user.get("anonymous_name")
+        }
     }
 
 
-@router.put("/change-password")
-async def change_password(
-    data: ChangePasswordRequest,
-    current_user_id: str = Depends(get_current_user_id),
+@router.post("/token", response_model=TokenResponse)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db = Depends(get_database)
 ):
-    """Change user password"""
-    # Get user
-    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    """OAuth2 compatible token login (for docs)"""
     
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Find user
+    user = await db["users"].find_one({"email": form_data.username})
     
-    # Check if user has a password (not anonymous)
-    if not user.get("password_hash"):
+    if not user or not verify_password(form_data.password, user.get("password", "")):
         raise HTTPException(
-            status_code=400, 
-            detail="Cannot change password for anonymous accounts. Please set up an account first."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Verify current password
-    if not verify_password(data.current_password, user.get("password_hash", "")):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    # Create token
+    access_token = create_access_token(data={"sub": str(user["_id"])})
     
-    # Validate new password
-    if len(data.new_password) < 8:
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
-    
-    if data.current_password == data.new_password:
-        raise HTTPException(status_code=400, detail="New password must be different from current password")
-    
-    # Hash new password
-    new_password_hash = get_password_hash(data.new_password)
-    
-    # Update password
-    await db["users"].update_one(
-        {"_id": ObjectId(current_user_id)},
-        {"$set": {"password_hash": new_password_hash}}
-    )
-    
-    return {"message": "Password changed successfully"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["_id"]),
+            "email": user["email"],
+            "username": user.get("username"),
+            "anonymous_name": user.get("anonymous_name")
+        }
+    }
 
 
-@router.delete("/delete-account")
-async def delete_account(
+@router.get("/me", response_model=UserResponse)
+async def get_current_user(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """Delete user account permanently"""
-    # Check if user exists
+    """Get current user info"""
+    
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
     
-    # Delete user's posts
-    await db["posts"].delete_many({"user_id": current_user_id})
+    return {
+        "id": str(user["_id"]),
+        "email": user["email"],
+        "username": user.get("username"),
+        "anonymous_name": user.get("anonymous_name"),
+        "created_at": user["created_at"].isoformat()
+    }
+
+
+@router.post("/logout")
+async def logout(
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Logout endpoint
+    In a stateless JWT system, logout is handled client-side by removing the token.
+    This endpoint is for logging purposes.
+    """
+    print(f"🔴 User {current_user_id} logged out")
     
-    # Delete user's comments
-    await db["comments"].delete_many({"user_id": current_user_id})
-    
-    # Delete user's reactions
-    await db["reactions"].delete_many({"user_id": current_user_id})
-    
-    # Remove user from groups
-    await db["groups"].update_many(
-        {"members": current_user_id},
-        {"$pull": {"members": current_user_id}, "$inc": {"members_count": -1}}
-    )
-    
-    # Delete user
-    result = await db["users"].delete_one({"_id": ObjectId(current_user_id)})
-    
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    return {"message": "Account deleted successfully"}
+    return {
+        "message": "Logged out successfully",
+        "status": "success"
+    }

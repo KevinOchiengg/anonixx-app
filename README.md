@@ -1,4 +1,4 @@
-# 🎭 Echo - Mental Health Support App
+# 🎭 Anonixx - Mental Health Support App
 
 A safe, anonymous platform for mental health support and community connection.
 
@@ -37,8 +37,8 @@ A safe, anonymous platform for mental health support and community connection.
 
 1. Clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/echo-app.git
-cd echo-app/backend
+git clone https://github.com/YOUR_USERNAME/anonixx-app.git
+cd anonixx-app/backend
 ```
 
 2. Create virtual environment
@@ -106,7 +106,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 🆘 Support
 
-For support, email support@echo-app.com or open an issue.
+For support, email support@anonixx-app.com or open an issue.
 
 ## 🙏 Acknowledgments
 

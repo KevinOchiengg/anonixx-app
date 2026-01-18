@@ -73,10 +73,10 @@ export default function LoadingScreen() {
         className='items-center'
       >
         <View className='bg-gradient-to-br from-echo-purple to-echo-teal rounded-full w-32 h-32 items-center justify-center mb-6 shadow-2xl'>
-          <Text className='text-white text-5xl font-bold'>E</Text>
+          <Text className='text-white text-5xl font-bold'>A</Text>
         </View>
 
-        <Text className='text-white text-5xl font-bold mb-2'>Echo</Text>
+        <Text className='text-white text-5xl font-bold mb-2'>Anonixx</Text>
         <Text className='text-echo-teal text-lg mb-8'>
           Where anonymity meets authenticity
         </Text>
