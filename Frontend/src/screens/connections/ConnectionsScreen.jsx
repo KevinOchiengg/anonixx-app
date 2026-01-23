@@ -46,7 +46,7 @@ export default function ConnectionsScreen({ navigation }) {
       }
 
       const response = await fetch(
-        'http://localhost:8000/api/v1/connections/weekly-invites-left',
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/connections/weekly-invites-left',
         {
           headers: {
             Authorization: `Bearer ${token}`,

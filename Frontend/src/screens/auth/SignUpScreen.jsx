@@ -11,6 +11,7 @@ import {
   StyleSheet,
   StatusBar,
 } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useDispatch, useSelector } from 'react-redux'
 import { signup } from '../../store/slices/authSlice'
 import { useAuth } from '../../context/AuthContext'
@@ -56,24 +57,38 @@ export default function SignUpScreen({ navigation }) {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSignUp = async () => {
-    if (!validate()) return
+const handleSignUp = async () => {
+  if (!validate()) return
 
-    try {
-      const result = await dispatch(signup(formData)).unwrap()
-      console.log('✅ Signup successful:', result)
-      await authContextLogin(result.access_token, result.user)
-      console.log('✅ AuthContext updated, navigating to Main')
-
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Main' }],
-      })
-    } catch (err) {
-      console.error('❌ Signup failed:', err)
-      Alert.alert('Signup Failed', err.detail || 'Something went wrong')
+  try {
+    const result = await dispatch(signup(formData)).unwrap()
+    console.log('✅ Signup successful:', result)
+    console.log('🔍 Token from signup:', result.token) // ✅ Changed
+    
+    // ✅ Update AuthContext
+    await authContextLogin(result.token, result.user) // ✅ Changed
+    
+    // ✅ VERIFY token was saved
+    const savedToken = await AsyncStorage.getItem('token')
+    console.log('🔍 Token saved to AsyncStorage:', savedToken?.substring(0, 30))
+    
+    if (!savedToken) {
+      throw new Error('Token was not saved properly')
     }
+
+    console.log('✅ AuthContext updated')
+    console.log('✅ Navigating to InterestSelection...')
+    
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'InterestSelection' }],
+    })
+  } catch (err) {
+    console.error('❌ Signup failed:', err)
+    Alert.alert('Signup Failed', err.detail || 'Something went wrong')
   }
+}
+
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }))

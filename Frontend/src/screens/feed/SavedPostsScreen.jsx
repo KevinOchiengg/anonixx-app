@@ -25,11 +25,14 @@ export default function SavedPostsScreen({ navigation }) {
   const loadSavedPosts = async () => {
     try {
       const token = await AsyncStorage.getItem('token')
-      const response = await fetch('http://localhost:8000/api/v1/posts/saved', {
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/saved',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      })
+      )
 
       const data = await response.json()
 

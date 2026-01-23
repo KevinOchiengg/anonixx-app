@@ -6,6 +6,7 @@ import { Home, Users, Settings, PlusCircle } from 'lucide-react-native'
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen'
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen'
 import ThreadViewScreen from '../screens/feed/ThreadViewScreen'
+import PostDetailScreen from '../screens/posts/PostDetailScreen' // ✅ ADD THIS
 import GroupsScreen from '../screens/groups/GroupsScreen'
 import GroupDetailScreen from '../screens/groups/GroupDetailScreen'
 import CreateGroupScreen from '../screens/groups/CreateGroupScreen'
@@ -22,11 +23,13 @@ import CrisisResourcesScreen from '../screens/resources/CrisisResourcesScreen'
 const Tab = createBottomTabNavigator()
 const Stack = createStackNavigator()
 
+
 // Feed Stack
 function FeedStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name='FeedMain' component={CalmFeedScreen} />
+      <Stack.Screen name='PostDetail' component={PostDetailScreen} />
       <Stack.Screen name='SavedPosts' component={SavedPostsScreen} />
       <Stack.Screen name='ThreadView' component={ThreadViewScreen} />
       <Stack.Screen name='ImpactDashboard' component={ImpactDashboardScreen} />

@@ -32,6 +32,8 @@ const INTERESTS = [
   { id: 'general', emoji: '🌟', name: 'General' },
 ]
 
+const MAX_INTERESTS = 5
+
 export default function InterestSelectionScreen({ navigation }) {
   const { theme } = useTheme()
   const [selectedInterests, setSelectedInterests] = useState([])
@@ -39,74 +41,101 @@ export default function InterestSelectionScreen({ navigation }) {
 
   const toggleInterest = (interestId) => {
     if (selectedInterests.includes(interestId)) {
+      // Remove interest
       setSelectedInterests(selectedInterests.filter((id) => id !== interestId))
     } else {
+      // Add interest (with max limit)
+      if (selectedInterests.length >= MAX_INTERESTS) {
+        Alert.alert(
+          'Maximum Reached',
+          `You can select up to ${MAX_INTERESTS} interests. Deselect one to choose another.`,
+        )
+        return
+      }
       setSelectedInterests([...selectedInterests, interestId])
     }
   }
 
- const handleContinue = async () => {
-   if (selectedInterests.length === 0) {
-     Alert.alert(
-       'Select Interests',
-       'Please select at least one interest to continue'
-     )
-     return
-   }
+const handleContinue = async () => {
+  if (selectedInterests.length === 0) {
+    Alert.alert(
+      'Select Interests',
+      'Please select at least one interest to personalize your feed',
+    )
+    return
+  }
 
-   setLoading(true)
-   try {
-     const token = await AsyncStorage.getItem('token')
+  setLoading(true)
+  try {
+    console.log('🔵 Saving interests:', selectedInterests)
 
-     const response = await fetch(
-       'http://localhost:8000/api/v1/auth/interests',
-       {
-         method: 'PUT',
-         headers: {
-           'Content-Type': 'application/json',
-           Authorization: `Bearer ${token}`,
-         },
-         body: JSON.stringify({
-           interests: selectedInterests,
-         }),
-       }
-     )
+    const token = await AsyncStorage.getItem('token')
 
-     const data = await response.json()
+    // ✅ DEBUG: Check token
+    console.log('🔍 Token exists:', !!token)
+    console.log('🔍 Token type:', typeof token)
+    console.log('🔍 Token value:', token)
 
-     if (!response.ok) {
-       throw new Error(data.detail || 'Failed to save interests')
-     }
+    if (!token) {
+      throw new Error('No authentication token found. Please log in again.')
+    }
 
-     console.log('✅ Interests saved:', data.interests)
+    const response = await fetch(
+      'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/auth/interests',
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          interests: selectedInterests,
+        }),
+      },
+    )
 
-     // Mark that interests have been set
-     await AsyncStorage.setItem('hasInterests', 'true')
+    console.log('🔍 Response status:', response.status)
 
-     // Don't need to do anything else - AppNavigator will detect the change
-     console.log('✅ Flag set, waiting for navigation...')
-   } catch (error) {
-     console.error('❌ Save interests error:', error)
-     Alert.alert('Error', error.message || 'Failed to save interests')
-   } finally {
-     setLoading(false)
-   }
- }
+    const data = await response.json()
+    console.log('🔍 Response data:', data)
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to save interests')
+    }
+
+    console.log('✅ Interests saved:', data.interests)
+
+    // Navigate to main feed
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Main' }],
+    })
+  } catch (error) {
+    console.error('❌ Save interests error:', error)
+    Alert.alert('Error', error.message || 'Failed to save interests')
+  } finally {
+    setLoading(false)
+  }
+}
 
   const handleSkip = async () => {
     Alert.alert(
       'Skip Interest Selection?',
-      "You'll see random content. You can set interests later in settings.",
+      "You'll see a general feed. You can customize your interests anytime in Settings.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Skip',
-          onPress: async () => {
-            await AsyncStorage.setItem('hasInterests', 'true')
-            window.location.reload()
+          onPress: () => {
+            console.log('⏭️ User skipped interest selection')
+            // Navigate to main feed without saving interests
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Main' }],
+            })
           },
         },
-      ]
+      ],
     )
   }
 
@@ -121,10 +150,10 @@ export default function InterestSelectionScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>
-          What interests you?
+          What brings you here?
         </Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Choose topics you'd like to see in your feed
+          Select up to {MAX_INTERESTS} topics to personalize your feed
         </Text>
       </View>
 
@@ -132,27 +161,38 @@ export default function InterestSelectionScreen({ navigation }) {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.grid}>
           {INTERESTS.map((interest) => {
             const isSelected = selectedInterests.includes(interest.id)
+            const isMaxReached =
+              selectedInterests.length >= MAX_INTERESTS && !isSelected
+
             return (
               <TouchableOpacity
                 key={interest.id}
                 onPress={() => toggleInterest(interest.id)}
+                disabled={isMaxReached}
                 style={[
                   styles.interestCard,
                   {
                     backgroundColor: isSelected
-                      ? theme.primaryLight
+                      ? theme.primary + '15'
                       : theme.card,
                     borderColor: isSelected ? theme.primary : theme.border,
+                    opacity: isMaxReached ? 0.5 : 1,
                   },
                 ]}
                 activeOpacity={0.7}
               >
                 <Text style={styles.emoji}>{interest.emoji}</Text>
-                <Text style={[styles.interestName, { color: theme.text }]}>
+                <Text
+                  style={[
+                    styles.interestName,
+                    { color: isSelected ? theme.primary : theme.text },
+                  ]}
+                >
                   {interest.name}
                 </Text>
                 <View style={styles.checkIcon}>
@@ -173,9 +213,9 @@ export default function InterestSelectionScreen({ navigation }) {
       </ScrollView>
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { borderTopColor: theme.border }]}>
         <Text style={[styles.selectedCount, { color: theme.textSecondary }]}>
-          {selectedInterests.length} selected
+          {selectedInterests.length} / {MAX_INTERESTS} selected
         </Text>
 
         <TouchableOpacity
@@ -183,21 +223,26 @@ export default function InterestSelectionScreen({ navigation }) {
           disabled={loading || selectedInterests.length === 0}
           style={[
             styles.continueButton,
-            { backgroundColor: theme.primary },
-            (loading || selectedInterests.length === 0) &&
-              styles.continueButtonDisabled,
+            {
+              backgroundColor:
+                selectedInterests.length > 0 ? theme.primary : theme.border,
+            },
           ]}
         >
           {loading ? (
             <ActivityIndicator color='#ffffff' />
           ) : (
-            <Text style={styles.continueButtonText}>Continue</Text>
+            <Text style={styles.continueButtonText}>
+              {selectedInterests.length > 0
+                ? 'Continue'
+                : 'Select at least one'}
+            </Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
           <Text style={[styles.skipButtonText, { color: theme.textSecondary }]}>
-            Skip for now
+            I'll choose later
           </Text>
         </TouchableOpacity>
       </View>
@@ -212,13 +257,14 @@ const createStyles = (theme) =>
     },
     header: {
       paddingHorizontal: 24,
-      paddingTop: 20,
-      paddingBottom: 16,
+      paddingTop: 40,
+      paddingBottom: 24,
     },
     title: {
       fontSize: 32,
       fontWeight: 'bold',
       marginBottom: 8,
+      letterSpacing: -0.5,
     },
     subtitle: {
       fontSize: 16,
@@ -226,6 +272,9 @@ const createStyles = (theme) =>
     },
     scrollView: {
       flex: 1,
+    },
+    scrollContent: {
+      paddingBottom: 20,
     },
     grid: {
       flexDirection: 'row',
@@ -240,13 +289,15 @@ const createStyles = (theme) =>
       borderWidth: 2,
       alignItems: 'center',
       position: 'relative',
+      minHeight: 120,
+      justifyContent: 'center',
     },
     emoji: {
       fontSize: 40,
       marginBottom: 12,
     },
     interestName: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '600',
       textAlign: 'center',
     },
@@ -258,11 +309,13 @@ const createStyles = (theme) =>
     footer: {
       padding: 24,
       paddingBottom: 32,
+      borderTopWidth: 1,
     },
     selectedCount: {
       fontSize: 14,
       textAlign: 'center',
       marginBottom: 16,
+      fontWeight: '500',
     },
     continueButton: {
       height: 56,
@@ -270,9 +323,14 @@ const createStyles = (theme) =>
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 12,
-    },
-    continueButtonDisabled: {
-      opacity: 0.5,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+      elevation: 3,
     },
     continueButtonText: {
       color: '#ffffff',

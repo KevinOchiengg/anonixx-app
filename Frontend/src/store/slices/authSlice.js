@@ -5,29 +5,48 @@ import { authAPI } from '../../services/api'
 // ==========================================
 // Authentication Thunks
 // ==========================================
-
 export const login = createAsyncThunk(
   'auth/login',
-  async ({ email, password }, { rejectWithValue }) => {
+  async (credentials, { rejectWithValue }) => {
     try {
-      console.log('🔵 Attempting login with:', email)
+      console.log('🔵 Redux login - Starting...')
 
-      const response = await authAPI.login({ email, password })
-      console.log('✅ Login successful:', response.data)
+      const response = await fetch('https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      })
 
-      // Save token to AsyncStorage
-      await AsyncStorage.setItem('token', response.data.access_token)
-      await AsyncStorage.setItem('authToken', response.data.access_token)
+      console.log('🔍 Login response status:', response.status)
 
-      return {
-        user: response.data.user,
-        token: response.data.access_token,
+      const data = await response.json()
+      console.log('🔍 Login response data:', data)
+
+      if (!response.ok) {
+        return rejectWithValue(data)
       }
+
+      // ✅ Check what we got
+      console.log('🔍 access_token exists?', !!data.access_token)
+      console.log('🔍 access_token type:', typeof data.access_token)
+      console.log(
+        '🔍 access_token preview:',
+        data.access_token?.substring(0, 30),
+      )
+
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('token', data.access_token)
+      await AsyncStorage.setItem('user', JSON.stringify(data.user))
+
+      console.log('✅ Redux: Saved to AsyncStorage')
+
+      // ✅ IMPORTANT: Return the data
+      return data
     } catch (error) {
-      console.error('❌ Login error:', error.response?.data || error.message)
-      return rejectWithValue(error.response?.data || { detail: 'Login failed' })
+      console.error('❌ Redux login error:', error)
+      return rejectWithValue({ detail: error.message })
     }
-  }
+  },
 )
 
 export const signup = createAsyncThunk(
@@ -54,10 +73,10 @@ export const signup = createAsyncThunk(
     } catch (error) {
       console.error('❌ Signup error:', error.response?.data || error.message)
       return rejectWithValue(
-        error.response?.data || { detail: 'Signup failed' }
+        error.response?.data || { detail: 'Signup failed' },
       )
     }
-  }
+  },
 )
 
 export const fetchProfile = createAsyncThunk(
@@ -71,13 +90,13 @@ export const fetchProfile = createAsyncThunk(
     } catch (error) {
       console.error(
         '❌ Fetch profile error:',
-        error.response?.data || error.message
+        error.response?.data || error.message,
       )
       return rejectWithValue(
-        error.response?.data || { detail: 'Failed to fetch profile' }
+        error.response?.data || { detail: 'Failed to fetch profile' },
       )
     }
-  }
+  },
 )
 
 export const updateProfile = createAsyncThunk(
@@ -88,7 +107,7 @@ export const updateProfile = createAsyncThunk(
       const token = await AsyncStorage.getItem('token')
 
       const response = await fetch(
-        'http://localhost:8000/api/v1/auth/update-profile',
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/auth/update-profile',
         {
           method: 'PUT',
           headers: {
@@ -96,7 +115,7 @@ export const updateProfile = createAsyncThunk(
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(profileData),
-        }
+        },
       )
 
       const data = await response.json()
@@ -111,7 +130,7 @@ export const updateProfile = createAsyncThunk(
       console.error('❌ Update profile error:', error)
       return rejectWithValue({ detail: error.message })
     }
-  }
+  },
 )
 
 // ==========================================
@@ -169,7 +188,7 @@ const authSlice = createSlice({
         'hasInterests',
       ])
         .then(() =>
-          console.log('✅ All tokens and flags cleared from AsyncStorage')
+          console.log('✅ All tokens and flags cleared from AsyncStorage'),
         )
         .catch((error) => console.error('❌ Error clearing storage:', error))
 

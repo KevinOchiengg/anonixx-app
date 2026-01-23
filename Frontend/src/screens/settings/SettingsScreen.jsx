@@ -17,12 +17,14 @@ import {
   LogOut,
   ChevronRight,
   TrendingUp,
+  Sun,
+  Moon,
 } from 'lucide-react-native'
 import { useTheme } from '../../context/ThemeContext'
 import { useLogout } from '../../hooks/useLogout'
 
 export default function SettingsScreen({ navigation }) {
-  const { theme } = useTheme()
+  const { theme, isDarkMode, toggleTheme } = useTheme()
   const { confirmLogout } = useLogout(navigation)
 
   const handleLogoutPress = () => {
@@ -85,6 +87,48 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.scrollView}>
+        {/* ✅ NEW: Theme Toggle */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            onPress={toggleTheme}
+            style={[styles.themeToggle, { backgroundColor: theme.card }]}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.iconContainer,
+                { backgroundColor: isDarkMode ? '#FFB36620' : '#6B7FFF20' },
+              ]}
+            >
+              {isDarkMode ? (
+                <Moon size={20} color='#FFB366' />
+              ) : (
+                <Sun size={20} color='#6B7FFF' />
+              )}
+            </View>
+            <View style={styles.themeTextContainer}>
+              <Text style={[styles.menuText, { color: theme.text }]}>
+                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+              </Text>
+              <Text
+                style={[styles.themeSubtext, { color: theme.textSecondary }]}
+              >
+                {isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.toggle,
+                { backgroundColor: isDarkMode ? theme.primary : theme.border },
+              ]}
+            >
+              <View
+                style={[styles.toggleDot, isDarkMode && styles.toggleDotActive]}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Menu Items */}
         <View style={styles.section}>
           {menuItems.map((item, index) => (
@@ -160,6 +204,37 @@ const createStyles = (theme) =>
     },
     section: {
       padding: 16,
+    },
+    // ✅ NEW: Theme toggle styles
+    themeToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderRadius: 12,
+      gap: 12,
+    },
+    themeTextContainer: {
+      flex: 1,
+    },
+    themeSubtext: {
+      fontSize: 12,
+      marginTop: 2,
+    },
+    toggle: {
+      width: 50,
+      height: 28,
+      borderRadius: 14,
+      padding: 2,
+      justifyContent: 'center',
+    },
+    toggleDot: {
+      width: 24,
+      height: 24,
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+    },
+    toggleDotActive: {
+      alignSelf: 'flex-end',
     },
     menuItem: {
       flexDirection: 'row',

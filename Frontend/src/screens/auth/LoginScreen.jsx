@@ -10,6 +10,7 @@ import {
   StyleSheet,
   StatusBar,
 } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useDispatch } from 'react-redux'
 import { login } from '../../store/slices/authSlice'
 import { useTheme } from '../../context/ThemeContext'
@@ -23,36 +24,49 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields')
-      return
-    }
+ const handleLogin = async () => {
+   if (!email || !password) {
+     Alert.alert('Error', 'Please fill in all fields')
+     return
+   }
 
-    setLoading(true)
-    try {
-      // ✅ Redux login - saves to AsyncStorage
-      const result = await dispatch(login({ email, password })).unwrap()
+   setLoading(true)
+   try {
+     const result = await dispatch(login({ email, password })).unwrap()
 
-      console.log('✅ Login successful:', result)
+     // ✅ DEBUG: What did we get from backend?
+     console.log('🔍 Login result:', result)
+     console.log('🔍 result.access_token:', result.access_token)
+     console.log('🔍 result.user:', result.user)
+     console.log('🔍 Type of access_token:', typeof result.access_token)
 
-      // ✅ IMPORTANT: Update AuthContext immediately with token and user data
-      await authContextLogin(result.access_token, result.user)
+     // Check if token exists
+     if (!result.access_token) {
+       Alert.alert('Error', 'Login failed: No token received')
+       setLoading(false)
+       return
+     }
 
-      console.log('✅ AuthContext updated, navigating to Main')
+     // ✅ Update AuthContext
+     await authContextLogin(result.access_token, result.user)
 
-      // Navigate to Main (Feed) and reset navigation stack
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Main' }],
-      })
-    } catch (error) {
-      console.error('❌ Login error:', error)
-      Alert.alert('Login Failed', error.detail || 'Invalid email or password')
-    } finally {
-      setLoading(false)
-    }
-  }
+     // ✅ Verify it was saved
+     const savedToken = await AsyncStorage.getItem('token')
+     console.log('🔍 Saved token:', savedToken?.substring(0, 30))
+
+     console.log('✅ AuthContext updated, navigating to Main')
+
+     navigation.reset({
+       index: 0,
+       routes: [{ name: 'Main' }],
+     })
+   } catch (error) {
+     console.error('❌ Login error:', error)
+     Alert.alert('Login Failed', error.detail || 'Invalid email or password')
+   } finally {
+     setLoading(false)
+   }
+ }
 
   const styles = createStyles(theme)
 

@@ -1,36 +1,39 @@
 {
   "expo": {
-    "name": "anonixx",
+    "name": "Anonixx",
     "slug": "anonixx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "scheme": "anonixx",
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0a0a1a"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonixx.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0a0a1a"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.anonixx"
+      "package": "com.anonixx.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-audio"],
-
+    "plugins": [],
     "extra": {
-      "cloudinaryCloudName": "dojbdm2e1",
-      "cloudinaryUploadPreset": "anonixx"
+      "eas": {
+        "projectId": "e6e5b944-ee40-4251-8b89-ff8a3e733ec2"
+      }
     }
   }
 }

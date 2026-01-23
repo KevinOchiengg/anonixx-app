@@ -32,12 +32,12 @@ export default function ImpactDashboardScreen({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        'http://localhost:8000/api/v1/impact/dashboard',
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/impact/dashboard',
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       )
 
       const data = await response.json()

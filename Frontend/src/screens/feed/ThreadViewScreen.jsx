@@ -36,22 +36,50 @@ export default function ThreadViewScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
 
-      // ✅ Optional auth - guests can view
+      // ✅ Debug token
+      console.log('🔍 Thread - Token exists:', !!token)
+      console.log('🔍 Thread - Token type:', typeof token)
+      console.log('🔍 Thread - Token preview:', token?.substring(0, 30))
+
+      // Optional auth - guests can view
       const headers = {}
-      if (token) {
+      if (token && typeof token === 'string' && token.length > 10) {
         headers['Authorization'] = `Bearer ${token}`
+      } else if (isAuthenticated) {
+        // User thinks they're authenticated but token is bad
+        console.error('❌ Invalid token despite isAuthenticated=true')
+        Alert.alert('Session Expired', 'Please log in again to continue', [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+          },
+        ])
+        setLoading(false)
+        return
       }
 
       const response = await fetch(
-        `http://localhost:8000/api/v1/posts/${postId}/thread`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/thread`,
         { headers },
       )
+
+      console.log('🔍 Thread response status:', response.status)
 
       const data = await response.json()
 
       if (response.ok) {
         setThreads(data.threads)
         setIsClosed(data.is_closed)
+      } else if (response.status === 401) {
+        console.error('❌ Thread 401:', data)
+        Alert.alert('Session Expired', 'Please log in again', [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+          },
+        ])
+      } else {
+        console.error('❌ Thread load failed:', data)
       }
     } catch (error) {
       console.error('❌ Load threads error:', error)
@@ -60,66 +88,91 @@ export default function ThreadViewScreen({ route, navigation }) {
     }
   }
 
-  const handleSendReply = async () => {
-    // ✅ Check auth FIRST before any validation
-    if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to reply to posts', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign In',
-          onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
-        },
-      ])
-      return
-    }
+ const handleSendReply = async () => {
+   // Auth check first
+   if (!isAuthenticated) {
+     Alert.alert('Sign in Required', 'Please sign in to reply to posts', [
+       { text: 'Cancel', style: 'cancel' },
+       {
+         text: 'Sign In',
+         onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+       },
+     ])
+     return
+   }
 
-    if (!replyText.trim()) {
-      Alert.alert('Error', 'Please write something')
-      return
-    }
+   if (!replyText.trim()) {
+     Alert.alert('Error', 'Please write something')
+     return
+   }
 
-    if (isClosed) {
-      Alert.alert('Thread Closed', 'This thread has reached its 2-reply limit')
-      return
-    }
+   if (isClosed) {
+     Alert.alert('Thread Closed', 'This thread has reached its 2-reply limit')
+     return
+   }
 
-    setSending(true)
-    try {
-      const token = await AsyncStorage.getItem('token')
-      const response = await fetch(
-        `http://localhost:8000/api/v1/posts/${postId}/thread`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            content: replyText.trim(),
-          }),
-        },
-      )
+   setSending(true)
+   try {
+     const token = await AsyncStorage.getItem('token')
 
-      const data = await response.json()
+     // ✅ Debug token
+     console.log('🔍 Reply - Token exists:', !!token)
+     console.log('🔍 Reply - Token type:', typeof token)
 
-      if (response.ok) {
-        Alert.alert('Success', data.message)
-        setReplyText('')
-        loadThreads()
+     if (!token || typeof token !== 'string' || token.length < 10) {
+       Alert.alert('Session Expired', 'Please log in again', [
+         {
+           text: 'OK',
+           onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+         },
+       ])
+       setSending(false)
+       return
+     }
 
-        if (data.thread_closed) {
-          setIsClosed(true)
-        }
-      } else {
-        Alert.alert('Error', data.detail || 'Failed to post reply')
-      }
-    } catch (error) {
-      console.error('❌ Send reply error:', error)
-      Alert.alert('Error', 'Failed to post reply')
-    } finally {
-      setSending(false)
-    }
-  }
+     const response = await fetch(
+       `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/thread`,
+       {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           Authorization: `Bearer ${token}`,
+         },
+         body: JSON.stringify({
+           content: replyText.trim(),
+         }),
+       },
+     )
+
+     console.log('🔍 Reply response status:', response.status)
+
+     const data = await response.json()
+
+     if (response.ok) {
+       Alert.alert('Success', data.message)
+       setReplyText('')
+       loadThreads()
+
+       if (data.thread_closed) {
+         setIsClosed(true)
+       }
+     } else if (response.status === 401) {
+       Alert.alert('Session Expired', 'Please log in again', [
+         {
+           text: 'OK',
+           onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+         },
+       ])
+     } else {
+       Alert.alert('Error', data.detail || 'Failed to post reply')
+     }
+   } catch (error) {
+     console.error('❌ Send reply error:', error)
+     Alert.alert('Error', 'Failed to post reply')
+   } finally {
+     setSending(false)
+   }
+ }
 
   const styles = createStyles(theme)
 

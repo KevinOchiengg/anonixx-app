@@ -22,12 +22,15 @@ export default function FullScreenPostCard({ post, onReact, onComment }) {
   const recordView = async () => {
     try {
       const token = await AsyncStorage.getItem('token')
-      await fetch(`http://localhost:8000/api/v1/posts/${post.id}/view`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
+      await fetch(
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/view`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      })
+      )
     } catch (error) {
       console.error('Failed to record view:', error)
     }

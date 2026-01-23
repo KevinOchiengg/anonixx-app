@@ -21,43 +21,65 @@ import {
 import * as ImagePicker from 'expo-image-picker'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
+import { useAuth } from '../../context/AuthContext'
 
-const TOPICS = [
-  { id: 'relationships', emoji: '💔', name: 'Relationships' },
-  { id: 'anxiety', emoji: '😰', name: 'Anxiety' },
-  { id: 'depression', emoji: '😢', name: 'Depression' },
-  { id: 'self_growth', emoji: '💪', name: 'Self-Growth' },
-  { id: 'school_career', emoji: '🎓', name: 'School/Career' },
-  { id: 'family', emoji: '👨‍👩‍👧‍👦', name: 'Family' },
-  { id: 'lgbtq', emoji: '🏳️‍🌈', name: 'LGBTQ+' },
-  { id: 'addiction', emoji: '💊', name: 'Addiction' },
-  { id: 'sleep', emoji: '😴', name: 'Sleep' },
-  { id: 'identity', emoji: '🎭', name: 'Identity' },
-  { id: 'wins', emoji: '🎉', name: 'Wins' },
-  { id: 'friendship', emoji: '🤝', name: 'Friendship' },
-  { id: 'financial', emoji: '💰', name: 'Financial' },
-  { id: 'health', emoji: '🏥', name: 'Health' },
-  { id: 'general', emoji: '🌟', name: 'General' },
-]
+// ✅ Cloudinary config from .env
+const CLOUDINARY_CLOUD_NAME = 'dojbdm2e1'
+const CLOUDINARY_UPLOAD_PRESET = 'anonix'
 
 export default function CreatePostScreen({ navigation }) {
   const { theme } = useTheme()
+  const { isAuthenticated } = useAuth()
   const [content, setContent] = useState('')
-  const [selectedTopics, setSelectedTopics] = useState([])
   const [isAnonymous, setIsAnonymous] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('') // ✅ NEW: Show upload status
   const [images, setImages] = useState([])
   const [videoUri, setVideoUri] = useState(null)
 
-  const toggleTopic = (topicId) => {
-    if (selectedTopics.includes(topicId)) {
-      setSelectedTopics(selectedTopics.filter((id) => id !== topicId))
-    } else {
-      if (selectedTopics.length < 3) {
-        setSelectedTopics([...selectedTopics, topicId])
-      } else {
-        Alert.alert('Limit Reached', 'You can select up to 3 topics')
+  // ✅ NEW: Upload to Cloudinary
+  const uploadToCloudinary = async (uri, resourceType = 'image') => {
+    try {
+      console.log(`📤 Uploading ${resourceType} to Cloudinary...`)
+
+      // Create form data
+      const formData = new FormData()
+
+      // Get file extension
+      const uriParts = uri.split('.')
+      const fileType = uriParts[uriParts.length - 1]
+
+      formData.append('file', {
+        uri,
+        type:
+          resourceType === 'video' ? `video/${fileType}` : `image/${fileType}`,
+        name: `upload.${fileType}`,
+      })
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
+
+      // Upload to Cloudinary
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+        {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Upload failed')
       }
+
+      console.log(`✅ ${resourceType} uploaded:`, data.secure_url)
+      return data.secure_url // Return permanent URL
+    } catch (error) {
+      console.error(`❌ Cloudinary upload error:`, error)
+      throw error
     }
   }
 
@@ -114,79 +136,122 @@ export default function CreatePostScreen({ navigation }) {
     setVideoUri(null)
   }
 
-  const uploadMedia = async (uri) => {
-    // For web testing, return the URI as-is
-    // In production, you'd upload to a service like Cloudinary, S3, etc.
-    return uri
-  }
-
   const handlePost = async () => {
+    // ✅ Check auth first
+    if (!isAuthenticated) {
+      Alert.alert('Sign in Required', 'Please sign in to post', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign In',
+          onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+        },
+      ])
+      return
+    }
+
     if (!content.trim()) {
       Alert.alert('Error', 'Please write something')
       return
     }
 
-    if (selectedTopics.length === 0) {
-      Alert.alert('Error', 'Please select at least one topic')
-      return
-    }
-
     setLoading(true)
+    setUploadProgress('Preparing post...')
+
     try {
       const token = await AsyncStorage.getItem('token')
 
-      // Upload media (in production, upload to cloud storage)
-      let uploadedImages = []
-      let uploadedVideo = null
+      if (!token) {
+        Alert.alert(
+          'Error',
+          'Authentication token not found. Please log in again.',
+        )
+        setLoading(false)
+        setUploadProgress('')
+        return
+      }
 
+      // Prepare post data
+      const postData = {
+        content: content.trim(),
+        topics: [],
+        is_anonymous: isAnonymous,
+      }
+
+      // ✅ Upload images to Cloudinary
       if (images.length > 0) {
-        uploadedImages = await Promise.all(images.map(uploadMedia))
+        setUploadProgress(`Uploading ${images.length} image(s)...`)
+        const uploadedImageUrls = []
+
+        for (let i = 0; i < images.length; i++) {
+          setUploadProgress(`Uploading image ${i + 1}/${images.length}...`)
+          const url = await uploadToCloudinary(images[i], 'image')
+          uploadedImageUrls.push(url)
+        }
+
+        postData.images = uploadedImageUrls
+        console.log('✅ All images uploaded:', uploadedImageUrls)
       }
 
+      // ✅ Upload video to Cloudinary
       if (videoUri) {
-        uploadedVideo = await uploadMedia(videoUri)
+        setUploadProgress('Uploading video...')
+        const uploadedVideoUrl = await uploadToCloudinary(videoUri, 'video')
+        postData.video_url = uploadedVideoUrl
+        console.log('✅ Video uploaded:', uploadedVideoUrl)
       }
 
-      const response = await fetch('http://localhost:8000/api/v1/posts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      // ✅ Create post with permanent URLs
+      setUploadProgress('Posting...')
+      const response = await fetch(
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(postData),
         },
-        body: JSON.stringify({
-          content: content.trim(),
-          topics: selectedTopics,
-          is_anonymous: isAnonymous,
-          images: uploadedImages,
-          video_url: uploadedVideo,
-          audio_url: null,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to create post')
-      }
+      )
 
       const data = await response.json()
 
-      Alert.alert('Posted', data.message, [
-        {
-          text: 'OK',
-          onPress: () => {
-            setContent('')
-            setSelectedTopics([])
-            setImages([])
-            setVideoUri(null)
-            navigation.navigate('Feed')
+      if (!response.ok) {
+        throw new Error(data.detail || `Server error: ${response.status}`)
+      }
+
+      console.log('✅ Post created successfully!')
+
+      Alert.alert(
+        'Posted!',
+        data.message || 'Your confession has been shared',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Reset form
+              setContent('')
+              setImages([])
+              setVideoUri(null)
+              setUploadProgress('')
+
+              // Navigate back to feed
+              navigation.navigate('Feed')
+            },
           },
-        },
-      ])
+        ],
+      )
     } catch (error) {
       console.error('❌ Create post error:', error)
-      Alert.alert('Error', error.message || 'Failed to create post')
+
+      Alert.alert(
+        'Post Failed',
+        error.message || 'Failed to create post. Please try again.',
+        [{ text: 'OK' }],
+      )
     } finally {
       setLoading(false)
+      setUploadProgress('')
     }
   }
 
@@ -204,12 +269,18 @@ export default function CreatePostScreen({ navigation }) {
           <X size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>
-          New Confession
+          Share Your Story
         </Text>
         <TouchableOpacity
           onPress={handlePost}
-          disabled={loading}
-          style={[styles.postButton, { backgroundColor: theme.primary }]}
+          disabled={loading || !content.trim()}
+          style={[
+            styles.postButton,
+            {
+              backgroundColor:
+                loading || !content.trim() ? theme.border : theme.primary,
+            },
+          ]}
         >
           {loading ? (
             <ActivityIndicator size='small' color='#ffffff' />
@@ -218,6 +289,16 @@ export default function CreatePostScreen({ navigation }) {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* ✅ Upload Progress Indicator */}
+      {uploadProgress && (
+        <View style={[styles.uploadProgress, { backgroundColor: theme.card }]}>
+          <ActivityIndicator size='small' color={theme.primary} />
+          <Text style={[styles.uploadProgressText, { color: theme.text }]}>
+            {uploadProgress}
+          </Text>
+        </View>
+      )}
 
       <ScrollView
         style={styles.scrollView}
@@ -228,9 +309,10 @@ export default function CreatePostScreen({ navigation }) {
           <TextInput
             value={content}
             onChangeText={setContent}
-            placeholder='Share your thoughts anonymously...'
+            placeholder="Share what's on your mind..."
             placeholderTextColor={theme.placeholder}
             multiline
+            autoFocus
             style={[styles.textInput, { color: theme.text }]}
             maxLength={1000}
           />
@@ -244,21 +326,24 @@ export default function CreatePostScreen({ navigation }) {
           <View style={styles.mediaButtons}>
             <TouchableOpacity
               onPress={pickImage}
-              disabled={videoUri !== null}
+              disabled={videoUri !== null || loading}
               style={[
                 styles.mediaButton,
                 { backgroundColor: theme.card, borderColor: theme.border },
-                videoUri && styles.mediaButtonDisabled,
+                (videoUri || loading) && styles.mediaButtonDisabled,
               ]}
             >
               <ImageIcon
                 size={20}
-                color={videoUri ? theme.textTertiary : theme.primary}
+                color={videoUri || loading ? theme.textTertiary : theme.primary}
               />
               <Text
                 style={[
                   styles.mediaButtonText,
-                  { color: videoUri ? theme.textTertiary : theme.text },
+                  {
+                    color:
+                      videoUri || loading ? theme.textTertiary : theme.text,
+                  },
                 ]}
               >
                 Add Images
@@ -267,22 +352,29 @@ export default function CreatePostScreen({ navigation }) {
 
             <TouchableOpacity
               onPress={pickVideo}
-              disabled={images.length > 0}
+              disabled={images.length > 0 || loading}
               style={[
                 styles.mediaButton,
                 { backgroundColor: theme.card, borderColor: theme.border },
-                images.length > 0 && styles.mediaButtonDisabled,
+                (images.length > 0 || loading) && styles.mediaButtonDisabled,
               ]}
             >
               <VideoIcon
                 size={20}
-                color={images.length > 0 ? theme.textTertiary : theme.primary}
+                color={
+                  images.length > 0 || loading
+                    ? theme.textTertiary
+                    : theme.primary
+                }
               />
               <Text
                 style={[
                   styles.mediaButtonText,
                   {
-                    color: images.length > 0 ? theme.textTertiary : theme.text,
+                    color:
+                      images.length > 0 || loading
+                        ? theme.textTertiary
+                        : theme.text,
                   },
                 ]}
               >
@@ -306,6 +398,7 @@ export default function CreatePostScreen({ navigation }) {
                     <TouchableOpacity
                       onPress={() => removeImage(index)}
                       style={styles.removeButton}
+                      disabled={loading}
                     >
                       <Trash2 size={16} color='#ffffff' />
                     </TouchableOpacity>
@@ -327,6 +420,7 @@ export default function CreatePostScreen({ navigation }) {
               <TouchableOpacity
                 onPress={removeVideo}
                 style={styles.removeButton}
+                disabled={loading}
               >
                 <Trash2 size={20} color='#ffffff' />
               </TouchableOpacity>
@@ -338,18 +432,30 @@ export default function CreatePostScreen({ navigation }) {
         <View style={styles.section}>
           <TouchableOpacity
             onPress={() => setIsAnonymous(!isAnonymous)}
+            disabled={loading}
             style={[
               styles.toggleButton,
               { backgroundColor: theme.card, borderColor: theme.border },
             ]}
           >
-            <Text style={[styles.toggleText, { color: theme.text }]}>
-              Post Anonymously
-            </Text>
+            <View>
+              <Text style={[styles.toggleText, { color: theme.text }]}>
+                Post Anonymously
+              </Text>
+              <Text
+                style={[styles.toggleSubtext, { color: theme.textSecondary }]}
+              >
+                {isAnonymous
+                  ? 'Your identity is hidden'
+                  : 'Posting with your username'}
+              </Text>
+            </View>
             <View
               style={[
                 styles.toggle,
-                { backgroundColor: isAnonymous ? theme.accent : theme.border },
+                {
+                  backgroundColor: isAnonymous ? theme.primary : theme.border,
+                },
               ]}
             >
               <View
@@ -362,41 +468,12 @@ export default function CreatePostScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Topics */}
+        {/* Helper Text */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            Select Topics (up to 3)
+          <Text style={[styles.helperText, { color: theme.textSecondary }]}>
+            Your post will appear in feeds based on relevance. Be authentic, be
+            kind.
           </Text>
-          <View style={styles.topicsGrid}>
-            {TOPICS.map((topic) => {
-              const isSelected = selectedTopics.includes(topic.id)
-              return (
-                <TouchableOpacity
-                  key={topic.id}
-                  onPress={() => toggleTopic(topic.id)}
-                  style={[
-                    styles.topicCard,
-                    {
-                      backgroundColor: isSelected
-                        ? theme.primaryLight
-                        : theme.card,
-                      borderColor: isSelected ? theme.primary : theme.border,
-                    },
-                  ]}
-                >
-                  <Text style={styles.topicEmoji}>{topic.emoji}</Text>
-                  <Text
-                    style={[
-                      styles.topicName,
-                      { color: isSelected ? theme.primary : theme.text },
-                    ]}
-                  >
-                    {topic.name}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -432,6 +509,20 @@ const createStyles = (theme) =>
       fontSize: 16,
       fontWeight: '600',
     },
+    // ✅ NEW: Upload progress styles
+    uploadProgress: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      marginHorizontal: 16,
+      marginTop: 8,
+      borderRadius: 8,
+    },
+    uploadProgressText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
     scrollView: {
       flex: 1,
     },
@@ -441,7 +532,7 @@ const createStyles = (theme) =>
     textInput: {
       fontSize: 18,
       lineHeight: 28,
-      minHeight: 150,
+      minHeight: 200,
       textAlignVertical: 'top',
     },
     charCount: {
@@ -512,6 +603,10 @@ const createStyles = (theme) =>
       fontSize: 16,
       fontWeight: '600',
     },
+    toggleSubtext: {
+      fontSize: 12,
+      marginTop: 4,
+    },
     toggle: {
       width: 50,
       height: 28,
@@ -533,25 +628,9 @@ const createStyles = (theme) =>
       fontWeight: '600',
       marginBottom: 16,
     },
-    topicsGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 12,
-    },
-    topicCard: {
-      width: '30%',
-      padding: 12,
-      borderRadius: 12,
-      borderWidth: 2,
-      alignItems: 'center',
-    },
-    topicEmoji: {
-      fontSize: 28,
-      marginBottom: 4,
-    },
-    topicName: {
-      fontSize: 12,
-      fontWeight: '600',
+    helperText: {
+      fontSize: 14,
+      lineHeight: 20,
       textAlign: 'center',
     },
   })

@@ -38,7 +38,7 @@ export default function ChatScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `http://localhost:8000/api/v1/connections/connections/${connectionId}/messages`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/connections/connections/${connectionId}/messages`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -67,7 +67,7 @@ export default function ChatScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `http://localhost:8000/api/v1/connections/connections/${connectionId}/messages`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/connections/connections/${connectionId}/messages`,
         {
           method: 'POST',
           headers: {

@@ -43,15 +43,13 @@ export default function CalmFeedScreen({ navigation }) {
     !!confirmLogout,
   )
 
-  // ✅ MOVED STYLES TO TOP - Before any conditional returns
   const styles = createStyles(theme)
 
   useEffect(() => {
     loadFeed()
-
   }, [])
 
-  // Re-check auth when screen comes into focus
+  // Re-check auth and reload feed when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       checkAuth()
@@ -61,6 +59,10 @@ export default function CalmFeedScreen({ navigation }) {
         'user:',
         user?.username,
       )
+      // ✅ Reload feed when returning (shows new posts)
+      setPosts([])
+      setSessionPosts(0)
+      loadFeed()
     }, []),
   )
 
@@ -79,7 +81,7 @@ export default function CalmFeedScreen({ navigation }) {
       }
 
       const response = await fetch(
-        `http://localhost:8000/api/v1/posts/calm-feed?session_posts=${sessionPosts}`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/calm-feed?session_posts=${sessionPosts}`,
         { headers },
       )
 
@@ -109,6 +111,9 @@ export default function CalmFeedScreen({ navigation }) {
   }
 
   const handleResponse = async (postId, responseType) => {
+    console.log('🔵 Response button clicked:', responseType)
+    console.log('🔵 isAuthenticated:', isAuthenticated)
+
     if (!isAuthenticated) {
       showAuthPrompt('respond')
       return
@@ -116,8 +121,30 @@ export default function CalmFeedScreen({ navigation }) {
 
     try {
       const token = await AsyncStorage.getItem('token')
+
+      console.log('🔍 Token raw value:', token)
+      console.log('🔍 Token type:', typeof token)
+      console.log('🔍 Token length:', token?.length)
+
+      if (!token || typeof token !== 'string' || token.length < 10) {
+        console.error('❌ Invalid token format')
+        Alert.alert('Session Expired', 'Please log in again', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Login',
+            onPress: async () => {
+              await AsyncStorage.clear()
+              navigation.navigate('Auth', { screen: 'Login' })
+            },
+          },
+        ])
+        return
+      }
+
+      console.log('🔍 Sending response:', { postId, responseType })
+
       const response = await fetch(
-        `http://localhost:8000/api/v1/posts/${postId}/respond`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/respond`,
         {
           method: 'POST',
           headers: {
@@ -128,7 +155,10 @@ export default function CalmFeedScreen({ navigation }) {
         },
       )
 
+      console.log('🔍 Response status:', response.status)
+
       const data = await response.json()
+      console.log('🔍 Response data:', data)
 
       if (response.ok) {
         setPosts((prev) =>
@@ -138,9 +168,28 @@ export default function CalmFeedScreen({ navigation }) {
               : item,
           ),
         )
+        console.log('✅ Response recorded')
+      } else {
+        console.error('❌ Response failed:', data)
+
+        if (response.status === 401) {
+          Alert.alert('Session Expired', 'Please log in again', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Login',
+              onPress: async () => {
+                await AsyncStorage.clear()
+                navigation.navigate('Auth', { screen: 'Login' })
+              },
+            },
+          ])
+        } else {
+          Alert.alert('Error', data.detail || 'Failed to record response')
+        }
       }
     } catch (error) {
       console.error('❌ Response error:', error)
+      Alert.alert('Error', 'Failed to record response')
     }
   }
 
@@ -153,7 +202,7 @@ export default function CalmFeedScreen({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `http://localhost:8000/api/v1/posts/${postId}/save`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/save`,
         {
           method: 'POST',
           headers: {
@@ -182,33 +231,36 @@ export default function CalmFeedScreen({ navigation }) {
     }
   }
 
-const handleViewThread = async (postId) => {
-  // ✅ No auth required to VIEW threads - anyone can read
-  try {
-    const token = await AsyncStorage.getItem('token')
+  const handleViewThread = async (postId) => {
+    try {
+      const token = await AsyncStorage.getItem('token')
 
-    // Send view request to backend (optional auth)
-    await fetch(`http://localhost:8000/api/v1/posts/${postId}/view`, {
-      method: 'POST',
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {},
-    }).catch((err) => console.log('View tracking failed:', err))
+      await fetch(`https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/view`, {
+        method: 'POST',
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : {},
+      }).catch((err) => console.log('View tracking failed:', err))
 
-    // Navigate to thread
-    const post = posts.find((p) => p.type === 'post' && p.id === postId)
-    if (post) {
-      navigation.navigate('ThreadView', {
-        postId: postId,
-        postContent: post.content,
-      })
+      const post = posts.find((p) => p.type === 'post' && p.id === postId)
+      if (post) {
+        navigation.navigate('ThreadView', {
+          postId: postId,
+          postContent: post.content,
+        })
+      }
+    } catch (error) {
+      console.error('❌ View thread error:', error)
     }
-  } catch (error) {
-    console.error('❌ View thread error:', error)
   }
-}
+
+  // ✅ NEW: Handle post card click
+  const handlePostPress = (post) => {
+    console.log('🔵 Post clicked:', post.id)
+    navigation.navigate('PostDetail', { post })
+  }
 
   const handleContinue = () => {
     setSessionLimitReached(false)
@@ -225,18 +277,18 @@ const handleViewThread = async (postId) => {
     navigation.navigate('Auth', { screen: 'Login' })
   }
 
-const handleHeaderAuthAction = () => {
-  console.log('🔴 Header button pressed')
-  console.log('🔴 isAuthenticated:', isAuthenticated)
+  const handleHeaderAuthAction = () => {
+    console.log('🔴 Header button pressed')
+    console.log('🔴 isAuthenticated:', isAuthenticated)
 
-  if (isAuthenticated) {
-    console.log('🔴 Calling confirmLogout from header')
-    confirmLogout()
-  } else {
-    console.log('🔴 Navigating to login')
-    navigation.navigate('Auth', { screen: 'Login' })
+    if (isAuthenticated) {
+      console.log('🔴 Calling confirmLogout from header')
+      confirmLogout()
+    } else {
+      console.log('🔴 Navigating to login')
+      navigation.navigate('Auth', { screen: 'Login' })
+    }
   }
-}
 
   const renderItem = ({ item }) => {
     if (item.type === 'divider') {
@@ -254,6 +306,7 @@ const handleHeaderAuthAction = () => {
           onResponse={handleResponse}
           onSave={handleSave}
           onViewThread={handleViewThread}
+          onPress={handlePostPress} // ✅ NEW: Pass click handler
           navigation={navigation}
         />
       )
@@ -339,7 +392,6 @@ const handleHeaderAuthAction = () => {
       >
         <Text style={[styles.headerTitle, { color: theme.text }]}>Anonixx</Text>
 
-        {/* Dynamic Auth Button */}
         <TouchableOpacity
           onPress={handleHeaderAuthAction}
           style={[styles.headerAuthButton, { borderColor: theme.border }]}
@@ -387,7 +439,6 @@ const handleHeaderAuthAction = () => {
         }
       />
 
-      {/* Auth Prompt Modal */}
       <AuthPromptModal
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}

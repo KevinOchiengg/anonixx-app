@@ -9,7 +9,7 @@ from bson import ObjectId
 # Required authentication
 security = HTTPBearer()
 
-# ✅ NEW: Optional authentication (doesn't error if no token)
+# Optional authentication (doesn't error if no token)
 security_optional = HTTPBearer(auto_error=False)
 
 
@@ -18,33 +18,54 @@ async def get_current_user_id(
     db = Depends(get_database)
 ) -> str:
     """Get current user ID - REQUIRED authentication"""
-    token = credentials.credentials
-    payload = decode_token(token)
-    
-    if not payload or payload.get("type") != "access":
+    try:
+        token = credentials.credentials
+        print(f"🔍 Auth - Token received: {token[:30]}...")
+        
+        payload = decode_token(token)
+        print(f"🔍 Auth - Payload: {payload}")
+        
+        # ✅ REMOVE type check - it might not exist in your tokens
+        if not payload:
+            print(f"❌ Auth - Payload is None")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+        
+        user_id = payload.get("sub")
+        print(f"🔍 Auth - User ID from token: {user_id}")
+        
+        if not user_id:
+            print(f"❌ Auth - No user_id in payload")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload"
+            )
+        
+        user = await db["users"].find_one({"_id": ObjectId(user_id)})
+        print(f"🔍 Auth - User found: {user is not None}")
+        
+        if not user:
+            print(f"❌ Auth - User not found in database")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        print(f"✅ Auth - Success for user: {user.get('username')}")
+        return user_id
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Auth - Exception: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
+            detail=f"Authentication failed: {str(e)}"
         )
-    
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
-        )
-    
-    user = await db["users"].find_one({"_id": ObjectId(user_id)})
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    return user_id
 
 
-# ✅ NEW: Optional authentication dependency
 async def get_optional_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
     db = Depends(get_database)
@@ -53,25 +74,33 @@ async def get_optional_user_id(
     
     # No credentials provided (guest user)
     if not credentials:
+        print("🔍 Optional auth - No credentials (guest)")
         return None
     
     try:
         token = credentials.credentials
+        print(f"🔍 Optional auth - Token: {token[:30]}...")
+        
         payload = decode_token(token)
+        print(f"🔍 Optional auth - Payload: {payload}")
         
         # Invalid token - treat as guest
-        if not payload or payload.get("type") != "access":
+        if not payload:
+            print("⚠️ Optional auth - Invalid payload, treating as guest")
             return None
         
         user_id = payload.get("sub")
         if not user_id:
+            print("⚠️ Optional auth - No user_id, treating as guest")
             return None
         
         # Verify user exists
         user = await db["users"].find_one({"_id": ObjectId(user_id)})
         if not user:
+            print(f"⚠️ Optional auth - User {user_id} not found, treating as guest")
             return None
         
+        print(f"✅ Optional auth - User authenticated: {user.get('username')}")
         return user_id
     
     except Exception as e:

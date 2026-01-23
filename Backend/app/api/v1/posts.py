@@ -513,93 +513,137 @@ async def get_saved_posts(
 
 
 @router.post("/{post_id}/thread")
-async def create_thread_reply(
+async def add_to_thread(
     post_id: str,
-    data: ThreadReplyRequest,
-    current_user_id: str = Depends(get_current_user_id),
+    data: dict,  # Or create a proper Pydantic model
+    current_user_id: str = Depends(get_current_user_id),  # ✅ Required auth
     db = Depends(get_database)
 ):
-    """Reply to a post (2-reply max)"""
+    """Add reply to thread - requires authentication"""
     try:
-        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
-    except:
-        post = await db["posts"].find_one({"_id": post_id})
+        print(f"🔵 Adding to thread: {post_id}")
+        print(f"🔍 User ID: {current_user_id}")
+        print(f"🔍 Content: {data.get('content')}")
         
-    if not post:
-        raise HTTPException(status_code=404, detail="Post not found")
-    
-    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
-    
-    thread_count = await db["post_threads"].count_documents({
-        "post_id": post_id
-    })
-    
-    if thread_count >= 2:
-        raise HTTPException(status_code=400, detail="Thread is closed")
-    
-    thread_reply = {
-        "_id": ObjectId(),
-        "post_id": post_id,
-        "user_id": current_user_id,
-        "anonymous_name": user.get("anonymous_name"),
-        "content": data.content,
-        "depth": thread_count,
-        "created_at": datetime.utcnow()
-    }
-    
-    await db["post_threads"].insert_one(thread_reply)
-    
-    try:
+        content = data.get("content")
+        if not content or not content.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Content is required"
+            )
+        
+        # Check if post exists
+        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
+        
+        # Check thread limit
+        thread_count = await db["threads"].count_documents({"post_id": ObjectId(post_id)})
+        if thread_count >= 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Thread limit reached (maximum 2 replies)"
+            )
+        
+        # Get user
+        user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Create thread reply
+        thread_doc = {
+            "post_id": ObjectId(post_id),
+            "user_id": ObjectId(current_user_id),
+            "content": content.strip(),
+            "anonymous_name": user.get("anonymous_name", "Anonymous User"),
+            "depth": 0,
+            "created_at": datetime.utcnow()
+        }
+        
+        result = await db["threads"].insert_one(thread_doc)
+        
+        # Update post thread count
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
             {"$inc": {"thread_count": 1}}
         )
-    except:
-        await db["posts"].update_one(
-            {"_id": post_id},
-            {"$inc": {"thread_count": 1}}
+        
+        thread_closed = thread_count + 1 >= 2
+        
+        print(f"✅ Thread reply added: {result.inserted_id}")
+        
+        return {
+            "message": "Reply added successfully",
+            "thread_id": str(result.inserted_id),
+            "thread_closed": thread_closed
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Add thread error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )
-    
-    if thread_count == 1:
-        message = "Thread closed - Preserved for reading"
-    else:
-        message = "Reply added"
-    
-    return {
-        "id": str(thread_reply["_id"]),
-        "message": message,
-        "thread_closed": thread_count == 1
-    }
-
 
 @router.get("/{post_id}/thread")
-async def get_thread_replies(
+async def get_thread(
     post_id: str,
-    current_user_id: str = Depends(get_current_user_id),
+    current_user_id: Optional[str] = Depends(get_optional_user_id),  # ✅ Optional for guests
     db = Depends(get_database)
 ):
-    """Get all thread replies for a post"""
-    thread_cursor = db["post_threads"].find({
-        "post_id": post_id
-    }).sort("created_at", 1)
-    
-    threads = []
-    async for thread in thread_cursor:
-        threads.append({
-            "id": str(thread["_id"]),
-            "anonymous_name": thread["anonymous_name"],
-            "content": thread["content"],
-            "depth": thread["depth"],
-            "created_at": thread["created_at"].isoformat(),
-            "time_ago": get_time_ago(thread["created_at"]),
-            "is_own_reply": thread["user_id"] == current_user_id
-        })
-    
-    return {
-        "threads": threads,
-        "total": len(threads),
-        "is_closed": len(threads) >= 2
-    }
+    """Get thread replies - guests can view, auth shows ownership"""
+    try:
+        print(f"🔵 Getting thread for post {post_id}")
+        print(f"🔍 User ID: {current_user_id or 'Guest'}")
+        
+        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
+        
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
+        
+        # Get all thread replies
+        threads = []
+        thread_docs = await db["threads"].find(
+            {"post_id": ObjectId(post_id)}
+        ).sort("created_at", 1).to_list(None)
+        
+        for thread in thread_docs:
+            threads.append({
+                "id": str(thread["_id"]),
+                "content": thread["content"],
+                "anonymous_name": thread["anonymous_name"],
+                "created_at": thread["created_at"].isoformat(),
+                "time_ago": get_time_ago(thread["created_at"]),
+                "depth": thread.get("depth", 0),
+                "is_own_reply": str(thread["user_id"]) == current_user_id if current_user_id else False
+            })
+        
+        # Check if thread is closed
+        is_closed = len(thread_docs) >= 2
+        
+        return {
+            "threads": threads,
+            "is_closed": is_closed,
+            "thread_count": len(threads)
+        }
+        
+    except Exception as e:
+        print(f"❌ Get thread error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
 @router.post("/{post_id}/view")

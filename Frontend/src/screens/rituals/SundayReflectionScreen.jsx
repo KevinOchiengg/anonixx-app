@@ -41,7 +41,7 @@ export default function SundayReflectionScreen({ navigation }) {
 
       // Load Sunday prompt
       const promptRes = await fetch(
-        'http://localhost:8000/api/v1/rituals/sunday-prompt',
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/rituals/sunday-prompt',
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -54,7 +54,7 @@ export default function SundayReflectionScreen({ navigation }) {
 
       // Load past reflections
       const pastRes = await fetch(
-        'http://localhost:8000/api/v1/rituals/past-reflections',
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/rituals/past-reflections',
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -85,7 +85,7 @@ export default function SundayReflectionScreen({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        'http://localhost:8000/api/v1/rituals/reflect',
+        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/rituals/reflect',
         {
           method: 'POST',
           headers: {

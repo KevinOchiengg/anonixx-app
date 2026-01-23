@@ -1,7 +1,7 @@
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-const API_URL = 'http://localhost:8000/api/v1'
+const API_URL = 'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1'
 
 const api = axios.create({
   baseURL: API_URL,
@@ -162,6 +162,7 @@ export const groupsAPI = {
   },
 
   postInGroup: async (groupId, data) => {
+    
     const response = await api.post(`/groups/${groupId}/posts`, data)
     return response.data
   },

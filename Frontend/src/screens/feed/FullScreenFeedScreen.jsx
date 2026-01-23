@@ -36,12 +36,12 @@ export default function FullScreenFeedScreen({ navigation }) {
       const token = await AsyncStorage.getItem('token')
 
       const response = await fetch(
-        `http://localhost:8000/api/v1/posts/personalized-feed?page=${page}&limit=10`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/personalized-feed?page=${page}&limit=10`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       )
 
       const data = await response.json()
@@ -78,13 +78,13 @@ export default function FullScreenFeedScreen({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `http://localhost:8000/api/v1/posts/${postId}/react`,
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/react`,
         {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       )
 
       const data = await response.json()

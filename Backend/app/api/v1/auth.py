@@ -33,6 +33,8 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class UpdateInterestsRequest(BaseModel):
+    interests: list[str]  # List of topic IDs
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -147,7 +149,6 @@ async def register(
         }
     }
 
-
 @router.post("/login", response_model=TokenResponse)
 async def login(
     data: LoginRequest,
@@ -161,33 +162,25 @@ async def login(
     user = await db["users"].find_one({"email": data.email})
     
     if not user:
-        print(f"❌ User not found: {data.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
-        )
-    
-    # Check if user has password field (for legacy users)
-    if "password" not in user:
-        print(f"❌ User {data.email} has no password field - legacy user")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account needs to be migrated. Please register again or contact support."
         )
     
     # Verify password
     if not verify_password(data.password, user["password"]):
-        print(f"❌ Invalid password: {data.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
     
-    print(f"✅ User logged in: {data.email}")
-    
     # Create token
     access_token = create_access_token(data={"sub": str(user["_id"])})
     
+    print(f"✅ User logged in: {data.email}")
+    print(f"🔍 Token created: {access_token[:30]}...")
+    
+    # ✅ IMPORTANT: Return with access_token key
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -255,6 +248,47 @@ async def get_current_user(
         "created_at": user["created_at"].isoformat()
     }
 
+@router.put("/interests")
+async def update_interests(
+    data: UpdateInterestsRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    """Update user interests (called after onboarding)"""
+    
+    print(f"🔵 Updating interests for user: {current_user_id}")
+    print(f"🔍 New interests: {data.interests}")
+    
+    # Validate interests (max 5)
+    if len(data.interests) > 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 5 interests allowed"
+        )
+    
+    # Update user
+    result = await db["users"].update_one(
+        {"_id": ObjectId(current_user_id)},
+        {
+            "$set": {
+                "interests": data.interests,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    print(f"✅ Interests updated successfully")
+    
+    return {
+        "message": "Interests updated successfully",
+        "interests": data.interests
+    }
 
 @router.post("/logout")
 async def logout(
@@ -270,4 +304,54 @@ async def logout(
     return {
         "message": "Logged out successfully",
         "status": "success"
+    }
+
+# ==================== ADD THIS NEW MODEL ====================
+
+class UpdateInterestsRequest(BaseModel):
+    interests: list[str]  # List of topic IDs
+
+
+# ==================== ADD THIS NEW ENDPOINT ====================
+
+@router.put("/interests")
+async def update_interests(
+    data: UpdateInterestsRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    """Update user interests (called after onboarding)"""
+    
+    print(f"🔵 Updating interests for user: {current_user_id}")
+    print(f"🔍 New interests: {data.interests}")
+    
+    # Validate interests (max 5)
+    if len(data.interests) > 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 5 interests allowed"
+        )
+    
+    # Update user
+    result = await db["users"].update_one(
+        {"_id": ObjectId(current_user_id)},
+        {
+            "$set": {
+                "interests": data.interests,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    print(f"✅ Interests updated successfully")
+    
+    return {
+        "message": "Interests updated successfully",
+        "interests": data.interests
     }

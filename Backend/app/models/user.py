@@ -1,16 +1,15 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional
 from typing import Optional, List 
 
 class User(BaseModel):
     id: str = Field(..., alias="_id")
     email: EmailStr
     username: Optional[str] = None
-    password_hash: Optional[str] = None  # ← Changed to Optional (not always needed)
+    password_hash: Optional[str] = None
     
-    # Anonymous identity (IMPORTANT - this field exists in your DB!)
-    anonymous_name: Optional[str] = None  # ← Added this!
+    # Anonymous identity
+    anonymous_name: Optional[str] = None
     
     # Profile
     display_name: Optional[str] = None
@@ -18,11 +17,14 @@ class User(BaseModel):
     avatar_url: Optional[str] = None
     cover_image_url: Optional[str] = None
     
+    # ✅ NEW: User interests (selected during onboarding)
+    interests: List[str] = []  # ← ADD THIS LINE
+    
     # Settings
     is_verified: bool = False
     is_active: bool = True
     is_online: bool = False
-    is_premium: bool = False  # ← Added this (from your seeded data)
+    is_premium: bool = False
     
     # Coins
     coin_balance: int = 100
@@ -34,7 +36,7 @@ class User(BaseModel):
 
     class Config:
         populate_by_name = True
-        extra = "allow"  # ← CRITICAL: Ignore extra fields from DB!
+        extra = "allow"
         json_schema_extra = {
             "example": {
                 "_id": "user123",
@@ -56,12 +58,12 @@ class UserResponse(BaseModel):
     id: str
     email: str
     username: Optional[str]
-    anonymous_name: Optional[str]  # ← Added this!
+    anonymous_name: Optional[str]
     display_name: Optional[str]
     bio: Optional[str]
     avatar_url: Optional[str]
     cover_image_url: Optional[str]
-    interests: List[str] = []
+    interests: List[str] = []  # ✅ Already here - good!
     is_verified: bool
     coin_balance: int
     created_at: datetime
