@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View,
   FlatList,
@@ -36,30 +36,15 @@ export default function CalmFeedScreen({ navigation }) {
   const [authModalAction, setAuthModalAction] = useState('default')
   const flatListRef = useRef(null)
 
-  console.log(
-    '🔍 Feed mounted - isAuthenticated:',
-    isAuthenticated,
-    'confirmLogout exists:',
-    !!confirmLogout,
-  )
-
-  const styles = createStyles(theme)
+  const styles = useMemo(() => createStyles(theme), [theme])
 
   useEffect(() => {
     loadFeed()
   }, [])
 
-  // Re-check auth and reload feed when screen comes into focus
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       checkAuth()
-      console.log(
-        '🔍 Checking auth - isAuthenticated:',
-        isAuthenticated,
-        'user:',
-        user?.username,
-      )
-      // ✅ Reload feed when returning (shows new posts)
       setPosts([])
       setSessionPosts(0)
       loadFeed()
@@ -71,8 +56,6 @@ export default function CalmFeedScreen({ navigation }) {
 
     setLoading(true)
     try {
-      console.log('🔵 Loading calm feed...')
-
       const token = await AsyncStorage.getItem('token')
       const headers = {}
 
@@ -92,7 +75,6 @@ export default function CalmFeedScreen({ navigation }) {
           setSessionLimitReached(true)
           setHasMore(data.has_more)
         } else {
-          console.log('✅ Feed loaded:', data.posts.length, 'items')
           setPosts((prev) => [...prev, ...data.posts])
           setSessionPosts(data.session_posts)
           setHasMore(data.has_more)
@@ -105,74 +87,22 @@ export default function CalmFeedScreen({ navigation }) {
     }
   }
 
-  const showAuthPrompt = (action) => {
+  const showAuthPrompt = useCallback((action) => {
     setAuthModalAction(action)
     setAuthModalVisible(true)
-  }
+  }, [])
 
-  const handleResponse = async (postId, responseType) => {
-    console.log('🔵 Response button clicked:', responseType)
-    console.log('🔵 isAuthenticated:', isAuthenticated)
-
-    if (!isAuthenticated) {
-      showAuthPrompt('respond')
-      return
-    }
-
-    try {
-      const token = await AsyncStorage.getItem('token')
-
-      console.log('🔍 Token raw value:', token)
-      console.log('🔍 Token type:', typeof token)
-      console.log('🔍 Token length:', token?.length)
-
-      if (!token || typeof token !== 'string' || token.length < 10) {
-        console.error('❌ Invalid token format')
-        Alert.alert('Session Expired', 'Please log in again', [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Login',
-            onPress: async () => {
-              await AsyncStorage.clear()
-              navigation.navigate('Auth', { screen: 'Login' })
-            },
-          },
-        ])
+  const handleResponse = useCallback(
+    async (postId, responseType) => {
+      if (!isAuthenticated) {
+        showAuthPrompt('respond')
         return
       }
 
-      console.log('🔍 Sending response:', { postId, responseType })
+      try {
+        const token = await AsyncStorage.getItem('token')
 
-      const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/respond`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ type: responseType }),
-        },
-      )
-
-      console.log('🔍 Response status:', response.status)
-
-      const data = await response.json()
-      console.log('🔍 Response data:', data)
-
-      if (response.ok) {
-        setPosts((prev) =>
-          prev.map((item) =>
-            item.type === 'post' && item.id === postId
-              ? { ...item, user_response: responseType }
-              : item,
-          ),
-        )
-        console.log('✅ Response recorded')
-      } else {
-        console.error('❌ Response failed:', data)
-
-        if (response.status === 401) {
+        if (!token || typeof token !== 'string' || token.length < 10) {
           Alert.alert('Session Expired', 'Please log in again', [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -183,137 +113,200 @@ export default function CalmFeedScreen({ navigation }) {
               },
             },
           ])
-        } else {
-          Alert.alert('Error', data.detail || 'Failed to record response')
+          return
         }
-      }
-    } catch (error) {
-      console.error('❌ Response error:', error)
-      Alert.alert('Error', 'Failed to record response')
-    }
-  }
 
-  const handleSave = async (postId) => {
-    if (!isAuthenticated) {
-      showAuthPrompt('save')
-      return
-    }
-
-    try {
-      const token = await AsyncStorage.getItem('token')
-      const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/save`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
+        const response = await fetch(
+          `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/respond`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ type: responseType }),
           },
-        },
-      )
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setPosts((prev) =>
-          prev.map((item) =>
-            item.type === 'post' && item.id === postId
-              ? { ...item, is_saved: data.saved }
-              : item,
-          ),
         )
 
-        if (data.saved) {
-          Alert.alert('Saved', 'Added to your collection')
+        const data = await response.json()
+
+        if (response.ok) {
+          setPosts((prev) =>
+            prev.map((item) =>
+              item.type === 'post' && item.id === postId
+                ? { ...item, user_response: responseType }
+                : item,
+            ),
+          )
+        } else {
+          if (response.status === 401) {
+            Alert.alert('Session Expired', 'Please log in again', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Login',
+                onPress: async () => {
+                  await AsyncStorage.clear()
+                  navigation.navigate('Auth', { screen: 'Login' })
+                },
+              },
+            ])
+          } else {
+            Alert.alert('Error', data.detail || 'Failed to record response')
+          }
         }
+      } catch (error) {
+        console.error('❌ Response error:', error)
+        Alert.alert('Error', 'Failed to record response')
       }
-    } catch (error) {
-      console.error('❌ Save error:', error)
-    }
-  }
+    },
+    [isAuthenticated, navigation, showAuthPrompt],
+  )
 
-  const handleViewThread = async (postId) => {
-    try {
-      const token = await AsyncStorage.getItem('token')
+  const handleSave = useCallback(
+    async (postId) => {
+      if (!isAuthenticated) {
+        showAuthPrompt('save')
+        return
+      }
 
-      await fetch(`https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/view`, {
-        method: 'POST',
-        headers: token
-          ? {
+      try {
+        const token = await AsyncStorage.getItem('token')
+        const response = await fetch(
+          `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/save`,
+          {
+            method: 'POST',
+            headers: {
               Authorization: `Bearer ${token}`,
-            }
-          : {},
-      }).catch((err) => console.log('View tracking failed:', err))
+            },
+          },
+        )
 
-      const post = posts.find((p) => p.type === 'post' && p.id === postId)
-      if (post) {
-        navigation.navigate('ThreadView', {
-          postId: postId,
-          postContent: post.content,
-        })
+        const data = await response.json()
+
+        if (response.ok) {
+          setPosts((prev) =>
+            prev.map((item) =>
+              item.type === 'post' && item.id === postId
+                ? { ...item, is_saved: data.saved }
+                : item,
+            ),
+          )
+
+          if (data.saved) {
+            Alert.alert('Saved', 'Added to your collection')
+          }
+        }
+      } catch (error) {
+        console.error('❌ Save error:', error)
       }
-    } catch (error) {
-      console.error('❌ View thread error:', error)
-    }
-  }
+    },
+    [isAuthenticated, showAuthPrompt],
+  )
 
-  // ✅ NEW: Handle post card click
-  const handlePostPress = (post) => {
-    console.log('🔵 Post clicked:', post.id)
-    navigation.navigate('PostDetail', { post })
-  }
+  const handleViewThread = useCallback(
+    async (postId) => {
+      try {
+        const token = await AsyncStorage.getItem('token')
 
-  const handleContinue = () => {
+        await fetch(
+          `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/view`,
+          {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+        ).catch((err) => console.log('View tracking failed:', err))
+
+        const post = posts.find((p) => p.type === 'post' && p.id === postId)
+        if (post) {
+          navigation.navigate('ThreadView', {
+            postId: postId,
+            postContent: post.content,
+          })
+        }
+      } catch (error) {
+        console.error('❌ View thread error:', error)
+      }
+    },
+    [posts, navigation],
+  )
+
+  const handlePostPress = useCallback(
+    (post) => {
+      navigation.navigate('PostDetail', { post })
+    },
+    [navigation],
+  )
+
+  const handleContinue = useCallback(() => {
     setSessionLimitReached(false)
     loadFeed()
-  }
+  }, [])
 
-  const handleAuthModalSignUp = () => {
+  const handleAuthModalSignUp = useCallback(() => {
     setAuthModalVisible(false)
     navigation.navigate('Auth', { screen: 'Register' })
-  }
+  }, [navigation])
 
-  const handleAuthModalLogin = () => {
+  const handleAuthModalLogin = useCallback(() => {
     setAuthModalVisible(false)
     navigation.navigate('Auth', { screen: 'Login' })
-  }
+  }, [navigation])
 
-  const handleHeaderAuthAction = () => {
-    console.log('🔴 Header button pressed')
-    console.log('🔴 isAuthenticated:', isAuthenticated)
-
+  const handleHeaderAuthAction = useCallback(() => {
     if (isAuthenticated) {
-      console.log('🔴 Calling confirmLogout from header')
       confirmLogout()
     } else {
-      console.log('🔴 Navigating to login')
       navigation.navigate('Auth', { screen: 'Login' })
     }
-  }
+  }, [isAuthenticated, confirmLogout, navigation])
 
-  const renderItem = ({ item }) => {
-    if (item.type === 'divider') {
-      return <FeedDivider text={item.text} />
+  const renderItem = useCallback(
+    ({ item }) => {
+      if (item.type === 'divider') {
+        return <FeedDivider text={item.text} />
+      }
+
+      if (item.type === 'mood_balancer') {
+        return <MoodBalancer text={item.text} />
+      }
+
+      if (item.type === 'post') {
+        return (
+          <CalmPostCard
+            post={item}
+            onResponse={handleResponse}
+            onSave={handleSave}
+            onViewThread={handleViewThread}
+            onPress={handlePostPress}
+            navigation={navigation}
+          />
+        )
+      }
+
+      return null
+    },
+    [handleResponse, handleSave, handleViewThread, handlePostPress, navigation],
+  )
+
+  const keyExtractor = useCallback(
+    (item, index) => `${item.id || item.type}-${index}`,
+    [],
+  )
+
+  const renderFooter = useMemo(() => {
+    if (!loading || !hasMore) return null
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator color={theme.primary} />
+      </View>
+    )
+  }, [loading, hasMore, theme.primary, styles.footer])
+
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !loading) {
+      loadFeed()
     }
-
-    if (item.type === 'mood_balancer') {
-      return <MoodBalancer text={item.text} />
-    }
-
-    if (item.type === 'post') {
-      return (
-        <CalmPostCard
-          post={item}
-          onResponse={handleResponse}
-          onSave={handleSave}
-          onViewThread={handleViewThread}
-          onPress={handlePostPress} // ✅ NEW: Pass click handler
-          navigation={navigation}
-        />
-      )
-    }
-
-    return null
-  }
+  }, [hasMore, loading])
 
   if (loading && posts.length === 0) {
     return (
@@ -383,7 +376,6 @@ export default function CalmFeedScreen({ navigation }) {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle='light-content' />
 
-      {/* Header with Dynamic Login/Logout Button */}
       <View
         style={[
           styles.header,
@@ -421,22 +413,17 @@ export default function CalmFeedScreen({ navigation }) {
       <FlatList
         ref={flatListRef}
         data={posts}
-        keyExtractor={(item, index) => `${item.id || item.type}-${index}`}
+        keyExtractor={keyExtractor}
         renderItem={renderItem}
-        showsVerticalScrollIndicator={false}
-        onEndReached={() => {
-          if (hasMore && !loading) {
-            loadFeed()
-          }
-        }}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={5}
+        windowSize={3}
+        onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          loading && hasMore ? (
-            <View style={styles.footer}>
-              <ActivityIndicator color={theme.primary} />
-            </View>
-          ) : null
-        }
+        ListFooterComponent={renderFooter}
+        showsVerticalScrollIndicator={false}
       />
 
       <AuthPromptModal

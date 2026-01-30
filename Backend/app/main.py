@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection
 from app.api.v1 import auth, coins, posts, groups, upload, users, impact, connections, rituals
+from app.routers import connect 
 
 
 @asynccontextmanager
@@ -36,6 +37,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 @app.get("/health")
@@ -72,3 +74,4 @@ app.include_router(users.router, prefix=settings.API_V1_PREFIX)
 app.include_router(impact.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connections.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
+app.include_router(connect.router)

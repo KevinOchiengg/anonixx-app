@@ -1,12 +1,17 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createStackNavigator } from '@react-navigation/stack'
-import { Home, Users, Settings, PlusCircle } from 'lucide-react-native'
-
+import {
+  Home,
+  Users,
+  Settings,
+  PlusCircle,
+  MessageCircle,
+} from 'lucide-react-native' 
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen'
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen'
 import ThreadViewScreen from '../screens/feed/ThreadViewScreen'
-import PostDetailScreen from '../screens/posts/PostDetailScreen' // ✅ ADD THIS
+import PostDetailScreen from '../screens/posts/PostDetailScreen'
 import GroupsScreen from '../screens/groups/GroupsScreen'
 import GroupDetailScreen from '../screens/groups/GroupDetailScreen'
 import CreateGroupScreen from '../screens/groups/CreateGroupScreen'
@@ -19,10 +24,18 @@ import ConnectionsScreen from '../screens/connections/ConnectionsScreen'
 import ChatScreen from '../screens/connections/ChatScreen'
 import SundayReflectionScreen from '../screens/rituals/SundayReflectionScreen'
 import CrisisResourcesScreen from '../screens/resources/CrisisResourcesScreen'
+import ConnectFeedScreen from '../screens/connect/ConnectFeedScreen'
+import CreateBroadcastScreen from '../screens/connect/CreateBroadcastScreen'
+import SendOpenerScreen from '../screens/connect/SendOpenerScreen'
+import PendingOpenersScreen from '../screens/connect/PendingOpenersScreen'
+import ConnectionsListScreen from '../screens/connect/ConnectionsListScreen'
+import ConnectChatScreen from '../screens/connect/ChatScreen'
+import RevealInitiateScreen from '../screens/connect/RevealInitiateScreen'
+import RevealPendingScreen from '../screens/connect/RevealPendingScreen'
+import RevealMomentScreen from '../screens/connect/RevealMomentScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createStackNavigator()
-
 
 // Feed Stack
 function FeedStack() {
@@ -40,6 +53,23 @@ function FeedStack() {
         component={SundayReflectionScreen}
       />
       <Stack.Screen name='CrisisResources' component={CrisisResourcesScreen} />
+    </Stack.Navigator>
+  )
+}
+
+// ✅ NEW: Connect Stack
+function ConnectStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name='ConnectFeed' component={ConnectFeedScreen} />
+      <Stack.Screen name='CreateBroadcast' component={CreateBroadcastScreen} />
+      <Stack.Screen name='SendOpener' component={SendOpenerScreen} />
+      <Stack.Screen name='PendingOpeners' component={PendingOpenersScreen} />
+      <Stack.Screen name='ConnectionsList' component={ConnectionsListScreen} />
+      <Stack.Screen name='ConnectChat' component={ConnectChatScreen} />
+      <Stack.Screen name='RevealInitiate' component={RevealInitiateScreen} />
+      <Stack.Screen name='RevealPending' component={RevealPendingScreen} />
+      <Stack.Screen name='RevealMoment' component={RevealMomentScreen} />
     </Stack.Navigator>
   )
 }
@@ -92,6 +122,8 @@ export default function TabNavigator() {
         tabBarIcon: ({ color, size }) => {
           if (route.name === 'Feed') {
             return <Home size={size} color={color} />
+          } else if (route.name === 'Connect') {
+            return <MessageCircle size={size} color={color} />
           } else if (route.name === 'Groups') {
             return <Users size={size} color={color} />
           } else if (route.name === 'Create') {
@@ -107,6 +139,14 @@ export default function TabNavigator() {
         component={FeedStack}
         options={{ tabBarLabel: 'Thoughts' }}
       />
+
+      
+      <Tab.Screen
+        name='Connect'
+        component={ConnectStack}
+        options={{ tabBarLabel: 'Connect' }}
+      />
+
       <Tab.Screen
         name='Groups'
         component={GroupsStack}

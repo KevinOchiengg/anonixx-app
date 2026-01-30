@@ -40,12 +40,12 @@ const RESPONSE_LABELS = {
   this_matters: 'This matters',
 }
 
-export default function CalmPostCard({
+function CalmPostCard({
   post,
   onResponse,
   onSave,
   onViewThread,
-  onPress, // ✅ NEW: For making card clickable
+  onPress,
   navigation,
 }) {
   const { theme } = useTheme()
@@ -54,7 +54,6 @@ export default function CalmPostCard({
   const [menuVisible, setMenuVisible] = useState(false)
 
   useEffect(() => {
-    // Track views (optional auth)
     if (post.id) {
       trackView()
     }
@@ -77,7 +76,6 @@ export default function CalmPostCard({
         },
       )
     } catch (error) {
-      // Silently fail
       console.log('View tracking failed:', error)
     }
   }
@@ -206,14 +204,17 @@ export default function CalmPostCard({
     try {
       const token = await AsyncStorage.getItem('token')
 
-      const response = await fetch(`https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/users/block`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/users/block`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ user_id: post.user_id }),
         },
-        body: JSON.stringify({ user_id: post.user_id }),
-      })
+      )
 
       if (response.ok) {
         Alert.alert('Blocked', 'You will no longer see posts from this user')
@@ -229,10 +230,8 @@ export default function CalmPostCard({
   const handleHidePost = () => {
     setMenuVisible(false)
     Alert.alert('Post Hidden', 'This post has been hidden from your feed')
-    // You can implement actual hiding logic here
   }
 
-  // ✅ NEW: Handle card press
   const handleCardPress = () => {
     if (onPress) {
       onPress(post)
@@ -247,7 +246,6 @@ export default function CalmPostCard({
       onPress={handleCardPress}
       activeOpacity={0.95}
     >
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.authorInfo}>
           <View
@@ -269,7 +267,7 @@ export default function CalmPostCard({
         <TouchableOpacity
           style={styles.moreButton}
           onPress={(e) => {
-            e.stopPropagation() // ✅ Prevent card click
+            e.stopPropagation()
             setMenuVisible(true)
           }}
         >
@@ -277,12 +275,10 @@ export default function CalmPostCard({
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
       <Text style={[styles.content, { color: theme.text }]}>
         {post.content}
       </Text>
 
-      {/* ✅ NEW: Images */}
       {post.images && post.images.length > 0 && (
         <ScrollView
           horizontal
@@ -300,7 +296,6 @@ export default function CalmPostCard({
         </ScrollView>
       )}
 
-      {/* ✅ NEW: Video */}
       {post.video_url && (
         <View style={styles.videoContainer}>
           <Image
@@ -317,7 +312,6 @@ export default function CalmPostCard({
         </View>
       )}
 
-      {/* Topics */}
       {post.topics && post.topics.length > 0 && (
         <View style={styles.topics}>
           {post.topics.slice(0, 3).map((topic, index) => (
@@ -333,13 +327,12 @@ export default function CalmPostCard({
         </View>
       )}
 
-      {/* Response Options */}
       <View style={styles.responseOptions}>
         {post.response_options?.map((option) => (
           <TouchableOpacity
             key={option}
             onPress={(e) => {
-              e.stopPropagation() // ✅ Prevent card click
+              e.stopPropagation()
               handleResponse(option)
             }}
             style={[
@@ -371,11 +364,10 @@ export default function CalmPostCard({
         ))}
       </View>
 
-      {/* Actions */}
       <View style={[styles.actions, { borderTopColor: theme.border }]}>
         <TouchableOpacity
           onPress={(e) => {
-            e.stopPropagation() // ✅ Prevent card click
+            e.stopPropagation()
             handleViewThread()
           }}
           style={styles.action}
@@ -388,7 +380,7 @@ export default function CalmPostCard({
 
         <TouchableOpacity
           onPress={(e) => {
-            e.stopPropagation() // ✅ Prevent card click
+            e.stopPropagation()
             handleSave()
           }}
           style={styles.action}
@@ -402,7 +394,7 @@ export default function CalmPostCard({
 
         <TouchableOpacity
           onPress={(e) => {
-            e.stopPropagation() // ✅ Prevent card click
+            e.stopPropagation()
             handleShare()
           }}
           style={styles.action}
@@ -411,7 +403,6 @@ export default function CalmPostCard({
         </TouchableOpacity>
       </View>
 
-      {/* 3 Dots Menu Modal */}
       <Modal
         visible={menuVisible}
         transparent
@@ -530,17 +521,15 @@ const createStyles = (theme) =>
       lineHeight: 22,
       marginBottom: 12,
     },
-    // ✅ NEW: Image styles
     imagesContainer: {
       marginBottom: 12,
     },
     postImage: {
-      width: width - 64, // Card width minus padding
+      width: width - 64,
       height: 250,
       borderRadius: 12,
       marginRight: 8,
     },
-    // ✅ NEW: Video styles
     videoContainer: {
       position: 'relative',
       marginBottom: 12,
@@ -626,14 +615,12 @@ const createStyles = (theme) =>
       fontSize: 13,
       fontWeight: '500',
     },
-    // Modal Styles
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.75)',
       justifyContent: 'flex-end',
     },
     menuContainer: {
-      backgroundColor: theme.surface,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       paddingBottom: 20,
@@ -652,7 +639,6 @@ const createStyles = (theme) =>
       alignItems: 'center',
       padding: 20,
       borderBottomWidth: 1,
-      borderBottomColor: theme.border,
     },
     menuTitle: {
       fontSize: 18,
@@ -674,12 +660,20 @@ const createStyles = (theme) =>
       padding: 18,
       borderRadius: 12,
       alignItems: 'center',
-      backgroundColor: theme.card,
       borderWidth: 1,
-      borderColor: theme.border,
     },
     cancelButtonText: {
       fontSize: 16,
       fontWeight: '600',
     },
   })
+
+const areEqual = (prevProps, nextProps) => {
+  return (
+    prevProps.post.id === nextProps.post.id &&
+    prevProps.post.user_response === nextProps.post.user_response &&
+    prevProps.post.is_saved === nextProps.post.is_saved
+  )
+}
+
+export default React.memo(CalmPostCard, areEqual)
