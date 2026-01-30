@@ -11,6 +11,7 @@ import {
   StatusBar,
 } from 'react-native'
 import { CheckCircle, Circle } from 'lucide-react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
 
@@ -80,19 +81,16 @@ const handleContinue = async () => {
       throw new Error('No authentication token found. Please log in again.')
     }
 
-    const response = await fetch(
-      'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/auth/interests',
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          interests: selectedInterests,
-        }),
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/interests`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
-    )
+      body: JSON.stringify({
+        interests: selectedInterests,
+      }),
+    })
 
     console.log('🔍 Response status:', response.status)
 

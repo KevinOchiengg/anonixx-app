@@ -12,6 +12,7 @@ import {
   Image,
   ScrollView,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import {
   Heart,
   MessageCircle,
@@ -69,7 +70,7 @@ function CalmPostCard({
       }
 
       await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/view`,
+        `${API_BASE_URL}/api/v1/posts/${post.id}/view`,
         {
           method: 'POST',
           headers,
@@ -150,7 +151,7 @@ function CalmPostCard({
       const token = await AsyncStorage.getItem('token')
 
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/report`,
+        `${API_BASE_URL}/api/v1/posts/${post.id}/report`,
         {
           method: 'POST',
           headers: {
@@ -205,7 +206,7 @@ function CalmPostCard({
       const token = await AsyncStorage.getItem('token')
 
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/users/block`,
+        `${API_BASE_URL}/api/v1/users/block`,
         {
           method: 'POST',
           headers: {

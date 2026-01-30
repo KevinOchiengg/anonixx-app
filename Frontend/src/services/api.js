@@ -1,7 +1,7 @@
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-const API_URL = 'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1'
+const API_URL = `${API_BASE_URL}/api/v1`
 
 const api = axios.create({
   baseURL: API_URL,

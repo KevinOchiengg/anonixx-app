@@ -10,6 +10,7 @@ import {
   StatusBar,
 } from 'react-native'
 import { ArrowLeft } from 'lucide-react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
 
@@ -25,14 +26,11 @@ export default function SavedPostsScreen({ navigation }) {
   const loadSavedPosts = async () => {
     try {
       const token = await AsyncStorage.getItem('token')
-      const response = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/saved',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${API_BASE_URL}/api/v1/posts/saved`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      )
+      })
 
       const data = await response.json()
 

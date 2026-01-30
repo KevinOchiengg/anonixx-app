@@ -10,6 +10,7 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ArrowLeft, Save, Lock, Eye, EyeOff } from 'lucide-react-native'
 

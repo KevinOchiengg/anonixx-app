@@ -8,6 +8,7 @@ import {
   FlatList,
   StyleSheet,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import { Coins, TrendingUp, Award } from 'lucide-react-native'
 import { useSelector } from 'react-redux'
 import CoinBadge from '../../components/common/CoinBadge'

@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
 } from 'react-native'
 import { LogIn, LogOut } from 'lucide-react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../context/ThemeContext'
@@ -64,7 +65,7 @@ export default function CalmFeedScreen({ navigation }) {
       }
 
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/calm-feed?session_posts=${sessionPosts}`,
+        `${API_BASE_URL}/api/v1/posts/calm-feed?session_posts=${sessionPosts}`,
         { headers },
       )
 
@@ -117,7 +118,7 @@ export default function CalmFeedScreen({ navigation }) {
         }
 
         const response = await fetch(
-          `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/respond`,
+          `${API_BASE_URL}/api/v1/posts/${postId}/respond`,
           {
             method: 'POST',
             headers: {
@@ -172,7 +173,7 @@ export default function CalmFeedScreen({ navigation }) {
       try {
         const token = await AsyncStorage.getItem('token')
         const response = await fetch(
-          `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/save`,
+          `${API_BASE_URL}/api/v1/posts/${postId}/save`,
           {
             method: 'POST',
             headers: {
@@ -209,7 +210,7 @@ export default function CalmFeedScreen({ navigation }) {
         const token = await AsyncStorage.getItem('token')
 
         await fetch(
-          `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/view`,
+          `${API_BASE_URL}/api/v1/posts/${postId}/view`,
           {
             method: 'POST',
             headers: token ? { Authorization: `Bearer ${token}` } : {},

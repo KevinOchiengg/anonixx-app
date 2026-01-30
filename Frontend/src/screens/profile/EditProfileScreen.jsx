@@ -12,6 +12,7 @@ import {
   StatusBar,
   Image,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import {
@@ -155,7 +156,7 @@ export default function EditProfileScreen({ navigation }) {
       }
 
       const response = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/auth/update-profile',
+        `${API_BASE_URL}/api/v1/auth/update-profile`,
         {
           method: 'PUT',
           headers: {

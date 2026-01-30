@@ -16,6 +16,7 @@ import {
 import { ArrowLeft, Send, Clock, Info } from 'lucide-react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
+import { API_BASE_URL } from '../../config/api'
 
 export default function ChatScreen({ route, navigation }) {
   const { theme } = useTheme()
@@ -38,7 +39,7 @@ export default function ChatScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/connections/connections/${connectionId}/messages`,
+        `${API_BASE_URL}/api/v1/connections/connections/${connectionId}/messages`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -67,7 +68,7 @@ export default function ChatScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/connections/connections/${connectionId}/messages`,
+        `${API_BASE_URL}/api/v1/connections/connections/${connectionId}/messages`,
         {
           method: 'POST',
           headers: {

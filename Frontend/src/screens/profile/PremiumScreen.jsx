@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   StyleSheet,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import { Check, Crown } from 'lucide-react-native'
 
 const features = [

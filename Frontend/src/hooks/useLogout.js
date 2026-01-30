@@ -19,13 +19,10 @@ export const useLogout = (navigation) => {
       // 2. Call backend logout endpoint (optional)
       if (token) {
         try {
-          await fetch(
-            'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/auth/logout',
-            {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}` },
-            },
-          )
+          await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
           console.log('✅ Backend logout successful')
         } catch (error) {
           console.log('⚠️ Backend logout failed, continuing anyway')

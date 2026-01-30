@@ -9,6 +9,7 @@ import {
   StatusBar,
   ActivityIndicator,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import {
   MessageCircle,
   Users,
@@ -46,7 +47,7 @@ export default function ConnectionsScreen({ navigation }) {
       }
 
       const response = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/connections/weekly-invites-left',
+        `${API_BASE_URL}/api/v1/connections/weekly-invites-left`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

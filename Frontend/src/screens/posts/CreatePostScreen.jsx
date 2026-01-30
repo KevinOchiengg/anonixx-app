@@ -12,6 +12,7 @@ import {
   StatusBar,
   Image,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import {
   X,
   Image as ImageIcon,
@@ -202,17 +203,14 @@ export default function CreatePostScreen({ navigation }) {
 
       // ✅ Create post with permanent URLs
       setUploadProgress('Posting...')
-      const response = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(postData),
+      const response = await fetch(`${API_BASE_URL}/api/v1/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-      )
+        body: JSON.stringify(postData),
+      })
 
       const data = await response.json()
 

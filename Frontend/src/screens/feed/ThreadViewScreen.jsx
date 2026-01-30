@@ -14,6 +14,7 @@ import {
   Platform,
 } from 'react-native'
 import { ArrowLeft, Send } from 'lucide-react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -59,7 +60,7 @@ export default function ThreadViewScreen({ route, navigation }) {
       }
 
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/thread`,
+        `${API_BASE_URL}/api/v1/posts/${postId}/thread`,
         { headers },
       )
 
@@ -131,7 +132,7 @@ export default function ThreadViewScreen({ route, navigation }) {
      }
 
      const response = await fetch(
-       `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${postId}/thread`,
+       `${API_BASE_URL}/api/v1/posts/${postId}/thread`,
        {
          method: 'POST',
          headers: {

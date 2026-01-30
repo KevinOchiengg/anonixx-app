@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import { Heart, MessageCircle, Share2, Eye } from 'lucide-react-native'
 import { useTheme } from '../../context/ThemeContext'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -22,15 +23,12 @@ export default function FullScreenPostCard({ post, onReact, onComment }) {
   const recordView = async () => {
     try {
       const token = await AsyncStorage.getItem('token')
-      await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/view`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/view`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      )
+      })
     } catch (error) {
       console.error('Failed to record view:', error)
     }

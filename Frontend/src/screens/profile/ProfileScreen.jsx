@@ -15,6 +15,7 @@ import {
   MessageCircle,
 } from 'lucide-react-native'
 import { useSelector } from 'react-redux'
+import { API_BASE_URL } from '../../config/api'
 import Avatar from '../../components/common/Avatar'
 import CoinBadge from '../../components/common/CoinBadge'
 

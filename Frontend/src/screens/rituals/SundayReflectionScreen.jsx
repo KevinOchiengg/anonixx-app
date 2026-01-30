@@ -11,6 +11,7 @@ import {
   StatusBar,
   Alert,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import { ArrowLeft, Heart, MessageCircle, BookOpen } from 'lucide-react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
@@ -41,7 +42,7 @@ export default function SundayReflectionScreen({ navigation }) {
 
       // Load Sunday prompt
       const promptRes = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/rituals/sunday-prompt',
+        `${API_BASE_URL}/api/v1/rituals/sunday-prompt`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -54,7 +55,7 @@ export default function SundayReflectionScreen({ navigation }) {
 
       // Load past reflections
       const pastRes = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/rituals/past-reflections',
+        `${API_BASE_URL}/api/v1/rituals/past-reflections`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -85,7 +86,7 @@ export default function SundayReflectionScreen({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/rituals/reflect',
+        `${API_BASE_URL}/api/v1/rituals/reflect`,
         {
           method: 'POST',
           headers: {

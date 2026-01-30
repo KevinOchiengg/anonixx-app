@@ -16,6 +16,7 @@ import {
   MessageCircle,
   Award,
 } from 'lucide-react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
 
@@ -31,14 +32,11 @@ export default function ImpactDashboardScreen({ navigation }) {
   const loadImpact = async () => {
     try {
       const token = await AsyncStorage.getItem('token')
-      const response = await fetch(
-        'https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/impact/dashboard',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${API_BASE_URL}/api/v1/impact/dashboard`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      )
+      })
 
       const data = await response.json()
 

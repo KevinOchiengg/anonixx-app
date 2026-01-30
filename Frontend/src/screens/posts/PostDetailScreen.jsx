@@ -13,6 +13,7 @@ import {
   StatusBar,
   Dimensions,
 } from 'react-native'
+import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   ArrowLeft,
@@ -64,7 +65,7 @@ export default function PostDetailScreen({ route, navigation }) {
       }
 
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/thread`,
+        `${API_BASE_URL}/api/v1/posts/${post.id}/thread`,
         { headers },
       )
 
@@ -97,7 +98,7 @@ export default function PostDetailScreen({ route, navigation }) {
       const newResponse = type === selectedResponse ? null : type
 
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/respond`,
+        `${API_BASE_URL}/api/v1/posts/${post.id}/respond`,
         {
           method: newResponse ? 'POST' : 'DELETE',
           headers: {
@@ -131,7 +132,7 @@ export default function PostDetailScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/save`,
+        `${API_BASE_URL}/api/v1/posts/${post.id}/save`,
         {
           method: 'POST',
           headers: {
@@ -182,7 +183,7 @@ export default function PostDetailScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token')
       const response = await fetch(
-        `https://ulysses-apronlike-alethia.ngrok-free.dev/api/v1/posts/${post.id}/thread`,
+        `${API_BASE_URL}/api/v1/posts/${post.id}/thread`,
         {
           method: 'POST',
           headers: {
