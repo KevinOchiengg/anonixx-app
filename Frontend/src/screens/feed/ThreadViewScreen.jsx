@@ -14,10 +14,11 @@ import {
   Platform,
 } from 'react-native'
 import { ArrowLeft, Send } from 'lucide-react-native'
-import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
+import { API_BASE_URL } from '../../config/api'
+
 
 export default function ThreadViewScreen({ route, navigation }) {
   const { theme } = useTheme()

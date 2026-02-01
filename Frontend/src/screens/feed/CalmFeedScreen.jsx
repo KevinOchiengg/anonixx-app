@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
 } from 'react-native'
 import { LogIn, LogOut } from 'lucide-react-native'
-import { API_BASE_URL } from '../../config/api'
+
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../context/ThemeContext'
@@ -21,6 +21,8 @@ import CalmPostCard from '../../components/feed/CalmPostCard'
 import FeedDivider from '../../components/feed/FeedDivider'
 import MoodBalancer from '../../components/feed/MoodBalancer'
 import AuthPromptModal from '../../components/modals/AuthPromptModal'
+import { API_BASE_URL } from '../../config/api'
+
 
 const { height } = Dimensions.get('window')
 

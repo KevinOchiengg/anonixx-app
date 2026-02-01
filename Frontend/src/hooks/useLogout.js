@@ -4,6 +4,8 @@ import { Alert, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuth } from '../context/AuthContext'
 import { logout as logoutAction } from '../store/slices/authSlice'
+import { API_BASE_URL } from '../config/api'
+
 
 export const useLogout = (navigation) => {
   const dispatch = useDispatch()

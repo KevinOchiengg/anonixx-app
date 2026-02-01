@@ -1,7 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { API_BASE_URL } from '../../config/api'
-
-const API_BASE_URL = `${API_BASE_URL}`
+import { API_BASE_URL } from '../config/api'
 
 // Helper function
 const getHeaders = async () => {

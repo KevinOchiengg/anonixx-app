@@ -12,7 +12,7 @@ import {
   StatusBar,
   Image,
 } from 'react-native'
-import { API_BASE_URL } from '../../config/api'
+
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import {
@@ -25,6 +25,8 @@ import {
 } from 'lucide-react-native'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
+import { API_BASE_URL } from '../../config/api'
+
 
 // ✅ Cloudinary config
 const CLOUDINARY_CLOUD_NAME = 'dojbdm2e1'

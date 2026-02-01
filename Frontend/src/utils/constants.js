@@ -1,9 +1,3 @@
-export const API_BASE_URL = __DEV__
-  ? 'http://localhost:3000/api/v1'
-  : 'https://api.echo.app/v1'
-
-export const WS_URL = __DEV__ ? 'ws://localhost:3000' : 'wss://ws.echo.app'
-
 // Coins
 export const COIN_REWARDS = {
   DAILY_LOGIN: 10,

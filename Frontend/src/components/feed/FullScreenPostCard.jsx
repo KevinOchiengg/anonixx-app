@@ -6,10 +6,11 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native'
-import { API_BASE_URL } from '../../config/api'
+
 import { Heart, MessageCircle, Share2, Eye } from 'lucide-react-native'
 import { useTheme } from '../../context/ThemeContext'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { API_BASE_URL } from '../../config/api'
 
 const { width, height } = Dimensions.get('window')
 

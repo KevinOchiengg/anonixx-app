@@ -11,9 +11,9 @@ import {
   StatusBar,
 } from 'react-native'
 import { CheckCircle, Circle } from 'lucide-react-native'
-import { API_BASE_URL } from '../../config/api'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
+import { API_BASE_URL } from '../../config/api'
 
 const INTERESTS = [
   { id: 'relationships', emoji: '💔', name: 'Relationships' },

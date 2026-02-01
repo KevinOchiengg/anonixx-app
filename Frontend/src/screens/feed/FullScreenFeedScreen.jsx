@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import FullScreenPostCard from '../../components/feed/FullScreenPostCard'
 import { useTheme } from '../../context/ThemeContext'
 import { API_BASE_URL } from '../../config/api'
+
 const { height } = Dimensions.get('window')
 
 export default function FullScreenFeedScreen({ navigation }) {

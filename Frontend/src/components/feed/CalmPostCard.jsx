@@ -12,7 +12,7 @@ import {
   Image,
   ScrollView,
 } from 'react-native'
-import { API_BASE_URL } from '../../config/api'
+
 import {
   Heart,
   MessageCircle,
@@ -29,6 +29,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
+import { API_BASE_URL } from '../../config/api'
+
 
 const { width } = Dimensions.get('window')
 

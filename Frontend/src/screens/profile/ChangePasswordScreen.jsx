@@ -10,9 +10,11 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native'
-import { API_BASE_URL } from '../../config/api'
+
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ArrowLeft, Save, Lock, Eye, EyeOff } from 'lucide-react-native'
+import { API_BASE_URL } from '../../config/api'
+
 
 export default function ChangePasswordScreen({ navigation }) {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -53,7 +55,7 @@ export default function ChangePasswordScreen({ navigation }) {
       const token = await AsyncStorage.getItem('token')
 
       const response = await fetch(
-        'http://192.168.100.22:8000/api/v1/auth/change-password',
+        `${API_BASE_URL}/api/v1/auth/change-password`,
         {
           method: 'PUT',
           headers: {
@@ -64,7 +66,7 @@ export default function ChangePasswordScreen({ navigation }) {
             current_password: currentPassword,
             new_password: newPassword,
           }),
-        }
+        },
       )
 
       const data = await response.json()
