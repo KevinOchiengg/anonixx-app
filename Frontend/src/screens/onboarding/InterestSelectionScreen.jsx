@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,60 @@ import {
   Alert,
   ActivityIndicator,
   StatusBar,
-} from 'react-native'
-import { CheckCircle, Circle } from 'lucide-react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useTheme } from '../../context/ThemeContext'
-import { API_BASE_URL } from '../../config/api'
+  Dimensions,
+} from 'react-native';
+import { CheckCircle, Circle } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../../context/ThemeContext';
+import { API_BASE_URL } from '../../config/api';
+
+const { height, width } = Dimensions.get('window');
+
+// NEW Cinematic Coral Theme
+const THEME = {
+  background: '#0b0f18',
+  backgroundDark: '#06080f',
+  surface: '#151924',
+  surfaceDark: '#10131c',
+  primary: '#FF634A',
+  primaryDark: '#ff3b2f',
+  text: '#EAEAF0',
+  textSecondary: '#9A9AA3',
+  border: 'rgba(255,255,255,0.05)',
+};
+
+// Starry Background Component
+const StarryBackground = () => {
+  const stars = useMemo(() => {
+    return Array.from({ length: 30 }, (_, i) => ({
+      id: i,
+      top: Math.random() * height,
+      left: Math.random() * width,
+      size: Math.random() * 3 + 1,
+      opacity: Math.random() * 0.6 + 0.2,
+    }));
+  }, []);
+
+  return (
+    <>
+      {stars.map((star) => (
+        <View
+          key={star.id}
+          style={{
+            position: 'absolute',
+            backgroundColor: THEME.primary,
+            borderRadius: 50,
+            top: star.top,
+            left: star.left,
+            width: star.size,
+            height: star.size,
+            opacity: star.opacity,
+          }}
+        />
+      ))}
+    </>
+  );
+};
 
 const INTERESTS = [
   { id: 'relationships', emoji: '💔', name: 'Relationships' },
@@ -31,90 +80,86 @@ const INTERESTS = [
   { id: 'financial', emoji: '💰', name: 'Financial' },
   { id: 'health', emoji: '🏥', name: 'Health' },
   { id: 'general', emoji: '🌟', name: 'General' },
-]
+];
 
-const MAX_INTERESTS = 5
+const MAX_INTERESTS = 5;
 
 export default function InterestSelectionScreen({ navigation }) {
-  const { theme } = useTheme()
-  const [selectedInterests, setSelectedInterests] = useState([])
-  const [loading, setLoading] = useState(false)
+  const { theme } = useTheme();
+  const [selectedInterests, setSelectedInterests] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const toggleInterest = (interestId) => {
     if (selectedInterests.includes(interestId)) {
-      // Remove interest
-      setSelectedInterests(selectedInterests.filter((id) => id !== interestId))
+      setSelectedInterests(selectedInterests.filter((id) => id !== interestId));
     } else {
-      // Add interest (with max limit)
       if (selectedInterests.length >= MAX_INTERESTS) {
         Alert.alert(
           'Maximum Reached',
-          `You can select up to ${MAX_INTERESTS} interests. Deselect one to choose another.`,
-        )
-        return
+          `You can select up to ${MAX_INTERESTS} interests. Deselect one to choose another.`
+        );
+        return;
       }
-      setSelectedInterests([...selectedInterests, interestId])
+      setSelectedInterests([...selectedInterests, interestId]);
     }
-  }
+  };
 
-const handleContinue = async () => {
-  if (selectedInterests.length === 0) {
-    Alert.alert(
-      'Select Interests',
-      'Please select at least one interest to personalize your feed',
-    )
-    return
-  }
-
-  setLoading(true)
-  try {
-    console.log('🔵 Saving interests:', selectedInterests)
-
-    const token = await AsyncStorage.getItem('token')
-
-    // ✅ DEBUG: Check token
-    console.log('🔍 Token exists:', !!token)
-    console.log('🔍 Token type:', typeof token)
-    console.log('🔍 Token value:', token)
-
-    if (!token) {
-      throw new Error('No authentication token found. Please log in again.')
+  const handleContinue = async () => {
+    if (selectedInterests.length === 0) {
+      Alert.alert(
+        'Select Interests',
+        'Please select at least one interest to personalize your feed'
+      );
+      return;
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/interests`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        interests: selectedInterests,
-      }),
-    })
+    setLoading(true);
+    try {
+      console.log('🔵 Saving interests:', selectedInterests);
 
-    console.log('🔍 Response status:', response.status)
+      const token = await AsyncStorage.getItem('token');
 
-    const data = await response.json()
-    console.log('🔍 Response data:', data)
+      console.log('🔍 Token exists:', !!token);
+      console.log('🔍 Token type:', typeof token);
+      console.log('🔍 Token value:', token);
 
-    if (!response.ok) {
-      throw new Error(data.detail || 'Failed to save interests')
+      if (!token) {
+        throw new Error('No authentication token found. Please log in again.');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/interests`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          interests: selectedInterests,
+        }),
+      });
+
+      console.log('🔍 Response status:', response.status);
+
+      const data = await response.json();
+      console.log('🔍 Response data:', data);
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Failed to save interests');
+      }
+
+      console.log('✅ Interests saved:', data.interests);
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Main' }],
+      });
+    } catch (error) {
+      console.error('❌ Save interests error:', error);
+      Alert.alert('Error', error.message || 'Failed to save interests');
+    } finally {
+      setLoading(false);
     }
-
-    console.log('✅ Interests saved:', data.interests)
-
-    // Navigate to main feed
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Main' }],
-    })
-  } catch (error) {
-    console.error('❌ Save interests error:', error)
-    Alert.alert('Error', error.message || 'Failed to save interests')
-  } finally {
-    setLoading(false)
-  }
-}
+  };
 
   const handleSkip = async () => {
     Alert.alert(
@@ -125,32 +170,26 @@ const handleContinue = async () => {
         {
           text: 'Skip',
           onPress: () => {
-            console.log('⏭️ User skipped interest selection')
-            // Navigate to main feed without saving interests
+            console.log('⏭️ User skipped interest selection');
             navigation.reset({
               index: 0,
               routes: [{ name: 'Main' }],
-            })
+            });
           },
         },
-      ],
-    )
-  }
-
-  const styles = createStyles(theme)
+      ]
+    );
+  };
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.background }]}
-    >
-      <StatusBar barStyle={theme.statusBar} />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
+      <StarryBackground />
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>
-          What brings you here?
-        </Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+        <Text style={styles.title}>What brings you here?</Text>
+        <Text style={styles.subtitle}>
           Select up to {MAX_INTERESTS} topics to personalize your feed
         </Text>
       </View>
@@ -163,183 +202,258 @@ const handleContinue = async () => {
       >
         <View style={styles.grid}>
           {INTERESTS.map((interest) => {
-            const isSelected = selectedInterests.includes(interest.id)
+            const isSelected = selectedInterests.includes(interest.id);
             const isMaxReached =
-              selectedInterests.length >= MAX_INTERESTS && !isSelected
+              selectedInterests.length >= MAX_INTERESTS && !isSelected;
 
             return (
-              <TouchableOpacity
-                key={interest.id}
-                onPress={() => toggleInterest(interest.id)}
-                disabled={isMaxReached}
-                style={[
-                  styles.interestCard,
-                  {
-                    backgroundColor: isSelected
-                      ? theme.primary + '15'
-                      : theme.card,
-                    borderColor: isSelected ? theme.primary : theme.border,
-                    opacity: isMaxReached ? 0.5 : 1,
-                  },
-                ]}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.emoji}>{interest.emoji}</Text>
-                <Text
+              <View key={interest.id} style={styles.interestCardWrapper}>
+                <View
                   style={[
-                    styles.interestName,
-                    { color: isSelected ? theme.primary : theme.text },
+                    styles.interestAccentBar,
+                    !isSelected && styles.interestAccentBarInactive,
                   ]}
+                />
+                <TouchableOpacity
+                  onPress={() => toggleInterest(interest.id)}
+                  disabled={isMaxReached}
+                  style={[
+                    styles.interestCard,
+                    isSelected && styles.interestCardSelected,
+                    isMaxReached && styles.interestCardDisabled,
+                  ]}
+                  activeOpacity={0.8}
                 >
-                  {interest.name}
-                </Text>
-                <View style={styles.checkIcon}>
-                  {isSelected ? (
-                    <CheckCircle
-                      size={24}
-                      color={theme.primary}
-                      fill={theme.primary}
-                    />
-                  ) : (
-                    <Circle size={24} color={theme.textTertiary} />
-                  )}
-                </View>
-              </TouchableOpacity>
-            )
+                  <View style={styles.checkIcon}>
+                    {isSelected ? (
+                      <CheckCircle
+                        size={20}
+                        color={THEME.primary}
+                        fill={THEME.primary}
+                      />
+                    ) : (
+                      <Circle
+                        size={20}
+                        color={THEME.textSecondary}
+                        opacity={0.4}
+                      />
+                    )}
+                  </View>
+                  <Text style={styles.emoji}>{interest.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.interestName,
+                      isSelected && styles.interestNameSelected,
+                    ]}
+                  >
+                    {interest.name}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            );
           })}
         </View>
       </ScrollView>
 
       {/* Footer */}
-      <View style={[styles.footer, { borderTopColor: theme.border }]}>
-        <Text style={[styles.selectedCount, { color: theme.textSecondary }]}>
+      <View style={styles.footer}>
+        <Text style={styles.selectedCount}>
           {selectedInterests.length} / {MAX_INTERESTS} selected
         </Text>
 
-        <TouchableOpacity
-          onPress={handleContinue}
-          disabled={loading || selectedInterests.length === 0}
-          style={[
-            styles.continueButton,
-            {
-              backgroundColor:
-                selectedInterests.length > 0 ? theme.primary : theme.border,
-            },
-          ]}
-        >
-          {loading ? (
-            <ActivityIndicator color='#ffffff' />
-          ) : (
-            <Text style={styles.continueButtonText}>
-              {selectedInterests.length > 0
-                ? 'Continue'
-                : 'Select at least one'}
-            </Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.continueButtonWrapper}>
+          <View
+            style={[
+              styles.continueAccentBar,
+              selectedInterests.length === 0 &&
+                styles.continueAccentBarDisabled,
+            ]}
+          />
+          <TouchableOpacity
+            onPress={handleContinue}
+            disabled={loading || selectedInterests.length === 0}
+            style={[
+              styles.continueButton,
+              selectedInterests.length === 0 && styles.continueButtonDisabled,
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.continueButtonText}>
+                {selectedInterests.length > 0
+                  ? 'Continue'
+                  : 'Select at least one'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-          <Text style={[styles.skipButtonText, { color: theme.textSecondary }]}>
-            I'll choose later
-          </Text>
+          <Text style={styles.skipButtonText}>I'll choose later</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
-  )
+  );
 }
 
-const createStyles = (theme) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-    },
-    header: {
-      paddingHorizontal: 24,
-      paddingTop: 40,
-      paddingBottom: 24,
-    },
-    title: {
-      fontSize: 32,
-      fontWeight: 'bold',
-      marginBottom: 8,
-      letterSpacing: -0.5,
-    },
-    subtitle: {
-      fontSize: 16,
-      lineHeight: 22,
-    },
-    scrollView: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingBottom: 20,
-    },
-    grid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      padding: 16,
-      gap: 12,
-    },
-    interestCard: {
-      width: '47%',
-      padding: 20,
-      borderRadius: 16,
-      borderWidth: 2,
-      alignItems: 'center',
-      position: 'relative',
-      minHeight: 120,
-      justifyContent: 'center',
-    },
-    emoji: {
-      fontSize: 40,
-      marginBottom: 12,
-    },
-    interestName: {
-      fontSize: 15,
-      fontWeight: '600',
-      textAlign: 'center',
-    },
-    checkIcon: {
-      position: 'absolute',
-      top: 12,
-      right: 12,
-    },
-    footer: {
-      padding: 24,
-      paddingBottom: 32,
-      borderTopWidth: 1,
-    },
-    selectedCount: {
-      fontSize: 14,
-      textAlign: 'center',
-      marginBottom: 16,
-      fontWeight: '500',
-    },
-    continueButton: {
-      height: 56,
-      borderRadius: 28,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
-      elevation: 3,
-    },
-    continueButtonText: {
-      color: '#ffffff',
-      fontSize: 18,
-      fontWeight: '700',
-    },
-    skipButton: {
-      padding: 12,
-      alignItems: 'center',
-    },
-    skipButtonText: {
-      fontSize: 16,
-    },
-  })
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: THEME.background,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 24,
+    backgroundColor: 'transparent',
+    zIndex: 10,
+  },
+  title: {
+    fontSize: 36,
+    fontWeight: '800',
+    marginBottom: 8,
+    letterSpacing: -0.5,
+    color: THEME.primary,
+  },
+  subtitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: THEME.textSecondary,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 16,
+    gap: 12,
+  },
+  interestCardWrapper: {
+    width: '47%',
+    position: 'relative',
+  },
+  interestAccentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: THEME.primary,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    opacity: 0.8,
+    zIndex: 1,
+  },
+  interestAccentBarInactive: {
+    opacity: 0.3,
+  },
+  interestCard: {
+    padding: 20,
+    paddingLeft: 24,
+    borderRadius: 16,
+    backgroundColor: THEME.surface,
+    alignItems: 'center',
+    position: 'relative',
+    minHeight: 120,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  interestCardSelected: {
+    backgroundColor: 'rgba(255, 99, 74, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 99, 74, 0.4)',
+  },
+  interestCardDisabled: {
+    opacity: 0.4,
+  },
+  emoji: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  interestName: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    color: THEME.text,
+  },
+  interestNameSelected: {
+    color: THEME.primary,
+    fontWeight: '700',
+  },
+  checkIcon: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+  footer: {
+    padding: 24,
+    paddingBottom: 32,
+    backgroundColor: 'transparent',
+    zIndex: 10,
+  },
+  selectedCount: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '600',
+    color: THEME.textSecondary,
+  },
+  continueButtonWrapper: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  continueAccentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: THEME.primary,
+    borderTopLeftRadius: 28,
+    borderBottomLeftRadius: 28,
+    opacity: 0.8,
+  },
+  continueAccentBarDisabled: {
+    opacity: 0.3,
+  },
+  continueButton: {
+    height: 56,
+    borderRadius: 28,
+    paddingLeft: 4,
+    backgroundColor: THEME.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  continueButtonDisabled: {
+    backgroundColor: THEME.textSecondary,
+    opacity: 0.5,
+  },
+  continueButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  skipButton: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    fontSize: 16,
+    color: THEME.textSecondary,
+    fontWeight: '500',
+  },
+});

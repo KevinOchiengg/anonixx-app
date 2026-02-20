@@ -1,0 +1,31 @@
+{
+  "folders": [
+    {
+      "name": "🔥 Backend (FastAPI)",
+      "path": "./backend"
+    },
+    {
+      "name": "📱 Frontend (React Native)",
+      "path": "./frontend"
+    },
+    {
+      "name": "📄 Docs & Config",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:🔥 Backend (FastAPI)}/venv/Scripts/python.exe"
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "dsznajder.es7-react-js-snippets",
+      "msjsdiag.vscode-react-native",
+      "esbenp.prettier-vscode",
+      "eamodio.gitlens",
+      "mongodb.mongodb-vscode",
+      "rangav.vscode-thunder-client"
+    ]
+  }
+}

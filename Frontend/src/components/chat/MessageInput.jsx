@@ -1,66 +1,124 @@
-import React, { useState } from 'react'
+import React, { useState } from 'react';
 import {
   View,
   TextInput,
   TouchableOpacity,
+  StyleSheet,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native'
-import { Send, Mic, Image as ImageIcon, Smile } from 'lucide-react-native'
+} from 'react-native';
+import { Send, Mic, Image as ImageIcon } from 'lucide-react-native';
+
+const THEME = {
+  background: '#0b0f18',
+  surface: '#151924',
+  surfaceDark: '#10131c',
+  primary: '#FF634A',
+  text: '#EAEAF0',
+  textSecondary: '#9A9AA3',
+  input: 'rgba(30, 35, 45, 0.7)',
+};
 
 export default function MessageInput({ onSend, onVoicePress, onImagePress }) {
-  const [message, setMessage] = useState('')
+  const [messageText, setMessageText] = useState('');
 
   const handleSend = () => {
-    if (message.trim()) {
-      onSend(message.trim())
-      setMessage('')
-    }
-  }
+    if (!messageText.trim()) return;
+    onSend(messageText.trim());
+    setMessageText('');
+  };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={90}
+      style={styles.wrapper}
     >
-      <View className='bg-echo-navy border-t border-gray-800 px-4 py-3'>
-        <View className='flex-row items-center'>
-          <TouchableOpacity onPress={onImagePress} className='mr-2'>
-            <ImageIcon size={24} color='#6b7280' />
+      <View style={styles.accentBar} />
+      <View style={styles.container}>
+        <TouchableOpacity onPress={onImagePress} style={styles.attachButton}>
+          <ImageIcon size={22} color={THEME.textSecondary} />
+        </TouchableOpacity>
+
+        <TextInput
+          value={messageText}
+          onChangeText={setMessageText}
+          placeholder="Type a message..."
+          placeholderTextColor={THEME.textSecondary}
+          style={styles.input}
+          multiline
+          maxLength={1000}
+        />
+
+        {messageText.trim() ? (
+          <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
+            <Send size={20} color="#ffffff" />
           </TouchableOpacity>
-
-          <View className='flex-1 bg-echo-card rounded-full px-4 py-2 flex-row items-center'>
-            <TextInput
-              value={message}
-              onChangeText={setMessage}
-              placeholder='Type a message...'
-              placeholderTextColor='#6b7280'
-              className='flex-1 text-white text-base'
-              multiline
-              maxLength={500}
-            />
-            <TouchableOpacity className='ml-2'>
-              <Smile size={20} color='#6b7280' />
-            </TouchableOpacity>
-          </View>
-
-          {message.trim() ? (
-            <TouchableOpacity
-              onPress={handleSend}
-              className='ml-2 bg-echo-purple rounded-full w-10 h-10 items-center justify-center'
-            >
-              <Send size={18} color='#ffffff' />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={onVoicePress}
-              className='ml-2 bg-echo-teal rounded-full w-10 h-10 items-center justify-center'
-            >
-              <Mic size={18} color='#ffffff' />
-            </TouchableOpacity>
-          )}
-        </View>
+        ) : (
+          <TouchableOpacity onPress={onVoicePress} style={styles.voiceButton}>
+            <Mic size={22} color={THEME.textSecondary} />
+          </TouchableOpacity>
+        )}
       </View>
     </KeyboardAvoidingView>
-  )
+  );
 }
+
+const styles = StyleSheet.create({
+  wrapper: {
+    position: 'relative',
+  },
+  accentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: THEME.primary,
+    opacity: 0.4,
+  },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingLeft: 20,
+    backgroundColor: THEME.surfaceDark,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  attachButton: {
+    padding: 10,
+    marginRight: 8,
+    backgroundColor: 'rgba(255, 99, 74, 0.1)',
+    borderRadius: 20,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: THEME.input,
+    color: THEME.text,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    fontSize: 16,
+    maxHeight: 100,
+    marginRight: 8,
+  },
+  sendButton: {
+    backgroundColor: THEME.primary,
+    borderRadius: 20,
+    padding: 10,
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  voiceButton: {
+    padding: 10,
+    backgroundColor: 'rgba(255, 99, 74, 0.1)',
+    borderRadius: 20,
+  },
+});

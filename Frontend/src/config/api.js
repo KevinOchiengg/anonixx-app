@@ -9,9 +9,11 @@ const BACKENDS = {
 }
 
 // Auto-switch: ngrok for dev, production for release builds
-export const API_BASE_URL = __DEV__
-  ? BACKENDS.ngrok // Development (physical device)
-  : BACKENDS.production // Production (app release)
+// export const API_BASE_URL = __DEV__
+//   ? BACKENDS.ngrok
+//   : BACKENDS.production
+export const API_BASE_URL =BACKENDS.localhost
+
 
 // Debug info
 if (__DEV__) {

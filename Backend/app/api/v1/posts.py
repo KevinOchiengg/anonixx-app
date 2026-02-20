@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Header  # ✅ Add Header
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -17,16 +17,6 @@ AVAILABLE_TOPICS = [
     "financial", "health", "general"
 ]
 
-# Response types
-RESPONSE_TYPES = {
-    "felt_this": "I felt this",
-    "not_alone": "You're not alone",
-    "hear_you": "I hear you",
-    "holding_with_you": "Holding this with you",
-    "sending_strength": "Sending strength",
-    "this_matters": "This matters"
-}
-
 
 # ==================== REQUEST MODELS ====================
 
@@ -43,16 +33,12 @@ class ThreadReplyRequest(BaseModel):
     content: str
 
 
-class ResponseRequest(BaseModel):
-    type: str
-
-
 # ==================== HELPER FUNCTIONS ====================
 
 def get_time_ago(dt: datetime) -> str:
     """Convert datetime to 'time ago' string"""
     delta = datetime.utcnow() - dt
-    
+
     if delta.days > 365:
         years = delta.days // 365
         return f"{years}y ago"
@@ -71,40 +57,27 @@ def get_time_ago(dt: datetime) -> str:
         return "just now"
 
 
-async def format_post(post, current_user_id: str, db):
+async def format_post(post, current_user_id: Optional[str], db):
     """Format a post with all necessary data"""
-    # Check if user has responded
-    user_response = await db["post_responses"].find_one({
-        "post_id": str(post["_id"]),
-        "user_id": current_user_id
-    })
-    
-    # Check if user saved this post
-    is_saved = await db["saved_posts"].find_one({
-        "post_id": str(post["_id"]),
-        "user_id": current_user_id
-    }) is not None
-    
+
+    # Check if user saved this post (only if authenticated)
+    is_saved = False
+    if current_user_id:
+        is_saved = await db["saved_posts"].find_one({
+            "post_id": str(post["_id"]),
+            "user_id": current_user_id
+        }) is not None
+
+    # Check if user liked this post (only if authenticated)
+    is_liked = current_user_id in post.get("liked_by", []) if current_user_id else False
+
     # Get thread count
     thread_count = await db["post_threads"].count_documents({
         "post_id": str(post["_id"])
     })
-    
-    # Get response counts
-    response_counts = post.get("responses", {})
-    total_responses = sum(response_counts.values())
-    
-    # Determine contextual responses based on topics
+
     topics = post.get("topics", [])
-    is_heavy = any(t in ["depression", "anxiety", "addiction", "self_harm"] for t in topics)
-    
-    if is_heavy:
-        response_options = ["felt_this", "not_alone"]
-    elif "wins" in topics or "self_growth" in topics:
-        response_options = ["this_matters", "sending_strength"]
-    else:
-        response_options = ["felt_this", "hear_you"]
-    
+
     formatted_post = {
         "id": str(post["_id"]),
         "content": post["content"],
@@ -117,24 +90,23 @@ async def format_post(post, current_user_id: str, db):
         "thread_count": thread_count,
         "views_count": post.get("views_count", 0),
         "saves_count": post.get("saves_count", 0),
-        "user_response": user_response.get("type") if user_response else None,
+        "likes_count": post.get("likes_count", 0),
+        "is_liked": is_liked,
         "is_saved": is_saved,
-        "response_options": response_options,
         "created_at": post["created_at"].isoformat(),
         "time_ago": get_time_ago(post["created_at"]),
-        "is_own_post": post["user_id"] == current_user_id,
+        "is_own_post": post["user_id"] == current_user_id if current_user_id else False,
         "type": "post"
     }
-    
-    # Add private impact for poster
-    if post["user_id"] == current_user_id:
+
+    # Add private impact for poster (only if authenticated and is own post)
+    if current_user_id and post["user_id"] == current_user_id:
         formatted_post["private_impact"] = {
-            "total_responses": total_responses,
-            "response_breakdown": response_counts,
             "saves": post.get("saves_count", 0),
+            "likes": post.get("likes_count", 0),
             "threads": thread_count
         }
-    
+
     return formatted_post
 
 
@@ -148,17 +120,17 @@ async def create_post(
 ):
     """Create a new post/confession"""
     print(f"🔵 Creating post for user: {current_user_id}")
-    
+
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Validate topics
     valid_topics = [t for t in data.topics if t in AVAILABLE_TOPICS]
     if not valid_topics and data.topics:
         valid_topics = ["general"]
-    
+
     post_data = {
         "_id": ObjectId(),
         "user_id": current_user_id,
@@ -169,17 +141,18 @@ async def create_post(
         "images": data.images,
         "video_url": data.video_url,
         "audio_url": data.audio_url,
-        "responses": {},
         "thread_count": 0,
         "views_count": 0,
         "saves_count": 0,
+        "liked_by": [],
+        "likes_count": 0,
         "created_at": datetime.utcnow(),
     }
-    
+
     await db["posts"].insert_one(post_data)
-    
+
     print(f"✅ Post created: {str(post_data['_id'])}")
-    
+
     return {
         "id": str(post_data["_id"]),
         "message": "Your words might help someone tonight."
@@ -189,24 +162,24 @@ async def create_post(
 @router.get("/calm-feed")
 async def get_calm_feed(
     session_posts: int = Query(0, ge=0),
-    authorization: str = Header(None),  # ✅ Make auth OPTIONAL
+    authorization: str = Header(None),
     db = Depends(get_database)
 ):
     """
     Calm feed with intentional pacing
     🌟 NOW PUBLIC - No login required to browse!
-    
+
     If user is logged in, personalize based on interests
     If guest, show general feed
     """
     # Try to get user ID from token (may be None for guests)
     current_user_id = None
-    
+
     if authorization:
         try:
             from jose import jwt
             from app.config import settings
-            
+
             token = authorization.replace("Bearer ", "")
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             current_user_id = payload.get("sub")
@@ -214,14 +187,14 @@ async def get_calm_feed(
         except Exception as e:
             print(f"⚠️ Invalid token, continuing as guest: {e}")
             current_user_id = None
-    
+
     is_guest = current_user_id is None
-    
+
     if is_guest:
         print(f"👤 Guest user browsing feed - session posts: {session_posts}")
     else:
         print(f"✅ Logged in user browsing - session posts: {session_posts}")
-    
+
     # Check if user needs a break
     if session_posts >= 20:
         return {
@@ -231,25 +204,25 @@ async def get_calm_feed(
             "has_more": True,
             "is_guest": is_guest
         }
-    
+
     interests = []
-    
+
     # Get user interests if logged in
     if current_user_id:
         user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
         if user:
             interests = user.get("interests", [])
             print(f"📌 User interests: {interests}")
-    
+
     # Determine how many posts to load
     posts_to_load = min(10, 20 - session_posts)
-    
+
     # Algorithm: 70% interests, 30% discovery (or all general for guests)
     interest_count = int(posts_to_load * 0.7) if interests else 0
     discovery_count = posts_to_load - interest_count
-    
+
     posts = []
-    
+
     # Get posts matching interests (only if logged in with interests)
     if interests and interest_count > 0:
         interest_posts_cursor = db["posts"].aggregate([
@@ -259,7 +232,7 @@ async def get_calm_feed(
         ])
         async for post in interest_posts_cursor:
             posts.append(post)
-    
+
     # Get discovery posts (or all posts for guests)
     if discovery_count > 0:
         match_query = {"topics": {"$nin": interests}} if interests else {}
@@ -270,26 +243,26 @@ async def get_calm_feed(
         ])
         async for post in discovery_posts_cursor:
             posts.append(post)
-    
+
     print(f"✅ Found {len(posts)} posts")
-    
+
     # Randomize order
     random.shuffle(posts)
-    
+
     # Format posts with mood balancing
     formatted_posts = []
     heavy_count = 0
-    
+
     for i, post in enumerate(posts):
         formatted_post = await format_post(post, current_user_id, db)
-        
+
         # Track heavy content
         is_heavy = any(t in ["depression", "anxiety", "addiction", "self_harm"] for t in post.get("topics", []))
         if is_heavy:
             heavy_count += 1
-        
+
         formatted_posts.append(formatted_post)
-        
+
         # Insert divider every 5 posts
         if (i + 1) % 5 == 0 and (i + 1) < len(posts):
             divider_texts = [
@@ -303,7 +276,7 @@ async def get_calm_feed(
                 "type": "divider",
                 "text": random.choice(divider_texts)
             })
-        
+
         # Mood balancing
         if heavy_count >= 3 and (i + 1) < len(posts):
             formatted_posts.append({
@@ -311,7 +284,7 @@ async def get_calm_feed(
                 "text": "Here's something lighter."
             })
             heavy_count = 0
-    
+
     return {
         "posts": formatted_posts,
         "has_more": session_posts + len(posts) < 20,
@@ -320,116 +293,121 @@ async def get_calm_feed(
     }
 
 
-@router.post("/{post_id}/respond")
-async def respond_to_post(
-    post_id: str,
-    data: ResponseRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """
-    Respond to a post emotionally
-    """
-    if data.type not in RESPONSE_TYPES:
-        raise HTTPException(status_code=400, detail="Invalid response type")
-    
-    print(f"🔵 User {current_user_id} responding to post {post_id} with {data.type}")
-    
-    existing = await db["post_responses"].find_one({
-        "post_id": post_id,
-        "user_id": current_user_id
-    })
-    
-    if existing:
-        old_type = existing["type"]
-        
-        await db["post_responses"].update_one(
-            {"_id": existing["_id"]},
-            {
-                "$set": {
-                    "type": data.type,
-                    "updated_at": datetime.utcnow()
-                }
-            }
-        )
-        
-        try:
-            await db["posts"].update_one(
-                {"_id": ObjectId(post_id)},
-                {
-                    "$inc": {
-                        f"responses.{old_type}": -1,
-                        f"responses.{data.type}": 1
-                    }
-                }
-            )
-        except:
-            await db["posts"].update_one(
-                {"_id": post_id},
-                {
-                    "$inc": {
-                        f"responses.{old_type}": -1,
-                        f"responses.{data.type}": 1
-                    }
-                }
-            )
-        
-        return {"message": "Response updated", "type": data.type}
-    else:
-        await db["post_responses"].insert_one({
-            "_id": ObjectId(),
-            "post_id": post_id,
-            "user_id": current_user_id,
-            "type": data.type,
-            "created_at": datetime.utcnow()
-        })
-        
-        try:
-            await db["posts"].update_one(
-                {"_id": ObjectId(post_id)},
-                {"$inc": {f"responses.{data.type}": 1}}
-            )
-        except:
-            await db["posts"].update_one(
-                {"_id": post_id},
-                {"$inc": {f"responses.{data.type}": 1}}
-            )
-        
-        print(f"✅ Response recorded")
-        
-        return {"message": "Quiet acknowledgment sent", "type": data.type}
+# ==================== LIKE ENDPOINTS ====================
 
-
-@router.delete("/{post_id}/respond")
-async def remove_response(
+@router.post("/{post_id}/like")
+async def like_post(
     post_id: str,
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """Remove your response from a post"""
-    existing = await db["post_responses"].find_one({
-        "post_id": post_id,
-        "user_id": current_user_id
-    })
-    
-    if not existing:
-        raise HTTPException(status_code=404, detail="No response found")
-    
-    await db["post_responses"].delete_one({"_id": existing["_id"]})
-    
+    """Like a post"""
+    print(f"🔵 User {current_user_id} liking post {post_id}")
+
+    # Check if post exists
+    try:
+        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
+    except:
+        post = await db["posts"].find_one({"_id": post_id})
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    # Check if already liked
+    liked_by = post.get("liked_by", [])
+    if current_user_id in liked_by:
+        return {
+            "message": "Already liked",
+            "liked": True,
+            "likes_count": post.get("likes_count", 0)
+        }
+
+    # Add like
     try:
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
-            {"$inc": {f"responses.{existing['type']}": -1}}
+            {
+                "$push": {"liked_by": current_user_id},
+                "$inc": {"likes_count": 1}
+            }
         )
     except:
         await db["posts"].update_one(
             {"_id": post_id},
-            {"$inc": {f"responses.{existing['type']}": -1}}
+            {
+                "$push": {"liked_by": current_user_id},
+                "$inc": {"likes_count": 1}
+            }
         )
-    
-    return {"message": "Response removed"}
 
+    new_likes_count = post.get("likes_count", 0) + 1
+
+    print(f"✅ Like added. Total likes: {new_likes_count}")
+
+    return {
+        "message": "Post liked",
+        "liked": True,
+        "likes_count": new_likes_count
+    }
+
+
+@router.delete("/{post_id}/like")
+async def unlike_post(
+    post_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    """Unlike a post"""
+    print(f"🔵 User {current_user_id} unliking post {post_id}")
+
+    # Check if post exists
+    try:
+        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
+    except:
+        post = await db["posts"].find_one({"_id": post_id})
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    # Check if not liked
+    liked_by = post.get("liked_by", [])
+    if current_user_id not in liked_by:
+        return {
+            "message": "Not liked",
+            "liked": False,
+            "likes_count": post.get("likes_count", 0)
+        }
+
+    # Remove like
+    try:
+        await db["posts"].update_one(
+            {"_id": ObjectId(post_id)},
+            {
+                "$pull": {"liked_by": current_user_id},
+                "$inc": {"likes_count": -1}
+            }
+        )
+    except:
+        await db["posts"].update_one(
+            {"_id": post_id},
+            {
+                "$pull": {"liked_by": current_user_id},
+                "$inc": {"likes_count": -1}
+            }
+        )
+
+    new_likes_count = max(0, post.get("likes_count", 1) - 1)
+
+    print(f"✅ Like removed. Total likes: {new_likes_count}")
+
+    return {
+        "message": "Post unliked",
+        "liked": False,
+        "likes_count": new_likes_count
+    }
+
+
+# ==================== SAVE ENDPOINTS ====================
 
 @router.post("/{post_id}/save")
 async def save_post(
@@ -442,10 +420,10 @@ async def save_post(
         "post_id": post_id,
         "user_id": current_user_id
     })
-    
+
     if existing:
         await db["saved_posts"].delete_one({"_id": existing["_id"]})
-        
+
         try:
             await db["posts"].update_one(
                 {"_id": ObjectId(post_id)},
@@ -456,7 +434,7 @@ async def save_post(
                 {"_id": post_id},
                 {"$inc": {"saves_count": -1}}
             )
-        
+
         return {"message": "Post removed from saved", "saved": False}
     else:
         await db["saved_posts"].insert_one({
@@ -465,7 +443,7 @@ async def save_post(
             "user_id": current_user_id,
             "created_at": datetime.utcnow()
         })
-        
+
         try:
             await db["posts"].update_one(
                 {"_id": ObjectId(post_id)},
@@ -476,7 +454,7 @@ async def save_post(
                 {"_id": post_id},
                 {"$inc": {"saves_count": 1}}
             )
-        
+
         return {"message": "Saved to your collection", "saved": True}
 
 
@@ -489,14 +467,14 @@ async def get_saved_posts(
     saved_cursor = db["saved_posts"].find({
         "user_id": current_user_id
     }).sort("created_at", -1)
-    
+
     saved_posts = []
     async for saved in saved_cursor:
         try:
             post = await db["posts"].find_one({"_id": ObjectId(saved["post_id"])})
         except:
             post = await db["posts"].find_one({"_id": saved["post_id"]})
-            
+
         if post:
             saved_posts.append({
                 "id": str(post["_id"]),
@@ -505,18 +483,20 @@ async def get_saved_posts(
                 "saved_at": saved["created_at"].isoformat(),
                 "saved_days_ago": (datetime.utcnow() - saved["created_at"]).days
             })
-    
+
     return {
         "saved_posts": saved_posts,
         "total": len(saved_posts)
     }
 
 
+# ==================== THREAD/COMMENT ENDPOINTS ====================
+
 @router.post("/{post_id}/thread")
 async def add_to_thread(
     post_id: str,
-    data: dict,  # Or create a proper Pydantic model
-    current_user_id: str = Depends(get_current_user_id),  # ✅ Required auth
+    data: dict,
+    current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
     """Add reply to thread - requires authentication"""
@@ -524,14 +504,14 @@ async def add_to_thread(
         print(f"🔵 Adding to thread: {post_id}")
         print(f"🔍 User ID: {current_user_id}")
         print(f"🔍 Content: {data.get('content')}")
-        
+
         content = data.get("content")
         if not content or not content.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Content is required"
             )
-        
+
         # Check if post exists
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
         if not post:
@@ -539,7 +519,7 @@ async def add_to_thread(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Post not found"
             )
-        
+
         # Check thread limit
         thread_count = await db["threads"].count_documents({"post_id": ObjectId(post_id)})
         if thread_count >= 2:
@@ -547,7 +527,7 @@ async def add_to_thread(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Thread limit reached (maximum 2 replies)"
             )
-        
+
         # Get user
         user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
         if not user:
@@ -555,7 +535,7 @@ async def add_to_thread(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         # Create thread reply
         thread_doc = {
             "post_id": ObjectId(post_id),
@@ -565,25 +545,25 @@ async def add_to_thread(
             "depth": 0,
             "created_at": datetime.utcnow()
         }
-        
+
         result = await db["threads"].insert_one(thread_doc)
-        
+
         # Update post thread count
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
             {"$inc": {"thread_count": 1}}
         )
-        
+
         thread_closed = thread_count + 1 >= 2
-        
+
         print(f"✅ Thread reply added: {result.inserted_id}")
-        
+
         return {
             "message": "Reply added successfully",
             "thread_id": str(result.inserted_id),
             "thread_closed": thread_closed
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -593,31 +573,32 @@ async def add_to_thread(
             detail=str(e)
         )
 
+
 @router.get("/{post_id}/thread")
 async def get_thread(
     post_id: str,
-    current_user_id: Optional[str] = Depends(get_optional_user_id),  # ✅ Optional for guests
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
     db = Depends(get_database)
 ):
     """Get thread replies - guests can view, auth shows ownership"""
     try:
         print(f"🔵 Getting thread for post {post_id}")
         print(f"🔍 User ID: {current_user_id or 'Guest'}")
-        
+
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
-        
+
         if not post:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Post not found"
             )
-        
+
         # Get all thread replies
         threads = []
         thread_docs = await db["threads"].find(
             {"post_id": ObjectId(post_id)}
         ).sort("created_at", 1).to_list(None)
-        
+
         for thread in thread_docs:
             threads.append({
                 "id": str(thread["_id"]),
@@ -628,16 +609,16 @@ async def get_thread(
                 "depth": thread.get("depth", 0),
                 "is_own_reply": str(thread["user_id"]) == current_user_id if current_user_id else False
             })
-        
+
         # Check if thread is closed
         is_closed = len(thread_docs) >= 2
-        
+
         return {
             "threads": threads,
             "is_closed": is_closed,
             "thread_count": len(threads)
         }
-        
+
     except Exception as e:
         print(f"❌ Get thread error: {e}")
         raise HTTPException(
@@ -646,10 +627,12 @@ async def get_thread(
         )
 
 
+# ==================== VIEW TRACKING ====================
+
 @router.post("/{post_id}/view")
 async def view_post(
     post_id: str,
-    current_user_id: Optional[str] = Depends(get_optional_user_id),  # ✅ Optional
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
     db = Depends(get_database)
 ):
     """
@@ -657,19 +640,19 @@ async def view_post(
     """
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
-        
+
         if not post:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Post not found"
             )
-        
+
         # Increment view count
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
             {"$inc": {"views": 1}}
         )
-        
+
         # Track user view if authenticated
         if current_user_id:
             await db["post_views"].update_one(
@@ -686,14 +669,16 @@ async def view_post(
                 },
                 upsert=True
             )
-        
+
         return {"status": "success", "message": "View tracked"}
-    
+
     except Exception as e:
         print(f"❌ View tracking error: {e}")
         # Don't fail if view tracking fails
         return {"status": "success", "message": "View tracking skipped"}
 
+
+# ==================== TOPICS ====================
 
 @router.get("/topics")
 async def get_available_topics():

@@ -1,8 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from datetime import datetime
-from app.schemas.common import ContentType, PyObjectId
-
+from app.schema.common import ContentType, PyObjectId
 
 class PostCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)

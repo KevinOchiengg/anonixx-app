@@ -1,73 +1,92 @@
-import React from 'react'
-import { View, Text, Image, TouchableOpacity } from 'react-native'
-import { Check, CheckCheck } from 'lucide-react-native'
-import VoiceNote from '../feed/VoiceNote'
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+
+const THEME = {
+  background: '#0b0f18',
+  surface: '#151924',
+  primary: '#FF634A',
+  text: '#EAEAF0',
+  textSecondary: '#9A9AA3',
+  border: 'rgba(255,255,255,0.05)',
+};
 
 export default function ChatBubble({ message, isOwn }) {
-  const formatTime = (dateString) => {
-    const date = new Date(dateString)
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
   return (
-    <View className={`mb-3 ${isOwn ? 'items-end' : 'items-start'}`}>
+    <View style={styles.bubbleWrapper}>
       <View
-        className={`max-w-[75%] rounded-2xl p-3 ${
-          isOwn ? 'bg-echo-purple' : 'bg-echo-card'
-        }`}
+        style={[
+          styles.accentBar,
+          isOwn ? styles.ownAccentBar : styles.theirAccentBar,
+        ]}
+      />
+      <View
+        style={[styles.bubble, isOwn ? styles.ownBubble : styles.theirBubble]}
       >
-        {message.type === 'text' && (
-          <Text className='text-white text-base'>{message.content}</Text>
-        )}
-
-        {message.type === 'image' && (
-          <Image
-            source={{ uri: message.mediaUrl }}
-            className='w-56 h-56 rounded-xl'
-            resizeMode='cover'
-          />
-        )}
-
-        {message.type === 'voice' && (
-          <View className='w-64'>
-            <VoiceNote uri={message.mediaUrl} duration={message.duration} />
-          </View>
-        )}
-
-        <View className='flex-row items-center justify-between mt-1'>
-          <Text
-            className={`text-xs ${isOwn ? 'text-purple-200' : 'text-gray-400'}`}
-          >
-            {formatTime(message.createdAt)}
-          </Text>
-          {isOwn && (
-            <View className='ml-2'>
-              {message.isRead ? (
-                <CheckCheck size={14} color='#c084fc' />
-              ) : (
-                <Check size={14} color='#c084fc' />
-              )}
-            </View>
-          )}
-        </View>
+        <Text style={styles.messageText}>{message.content}</Text>
+        <Text style={styles.messageTime}>
+          {new Date(message.createdAt).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+          })}
+        </Text>
       </View>
-
-      {/* Reactions */}
-      {message.reactions?.length > 0 && (
-        <View className='flex-row mt-1'>
-          {message.reactions.map((reaction, index) => (
-            <View
-              key={index}
-              className='bg-echo-navy px-2 py-1 rounded-full mr-1'
-            >
-              <Text className='text-xs'>{reaction}</Text>
-            </View>
-          ))}
-        </View>
-      )}
     </View>
-  )
+  );
 }
+
+const styles = StyleSheet.create({
+  bubbleWrapper: {
+    position: 'relative',
+    maxWidth: '80%',
+    alignSelf: 'flex-start',
+  },
+  accentBar: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderRadius: 12,
+    opacity: 0.6,
+  },
+  ownAccentBar: {
+    right: 0,
+    backgroundColor: THEME.primary,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+  },
+  theirAccentBar: {
+    left: 0,
+    backgroundColor: THEME.primary,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    opacity: 0.4,
+  },
+  bubble: {
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  ownBubble: {
+    backgroundColor: THEME.primary,
+    paddingRight: 18,
+    alignSelf: 'flex-end',
+  },
+  theirBubble: {
+    backgroundColor: THEME.surface,
+    paddingLeft: 18,
+  },
+  messageText: {
+    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  messageTime: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    marginTop: 6,
+  },
+});

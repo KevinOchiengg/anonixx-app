@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,82 +9,133 @@ import {
   RefreshControl,
   StyleSheet,
   StatusBar,
-} from 'react-native'
-import { useSelector, useDispatch } from 'react-redux'
-import { PlusCircle, Users } from 'lucide-react-native'
-import { fetchGroups } from '../../store/slices/groupsSlice'
-import { useTheme } from '../../context/ThemeContext'
+  Dimensions,
+} from 'react-native';
+import { useSelector, useDispatch } from 'react-redux';
+import { PlusCircle, Users } from 'lucide-react-native';
+import { fetchGroups } from '../../store/slices/groupsSlice';
+import { useTheme } from '../../context/ThemeContext';
+
+const { height, width } = Dimensions.get('window');
+
+// NEW Cinematic Coral Theme
+const THEME = {
+  background: '#0b0f18',
+  backgroundDark: '#06080f',
+  surface: '#151924',
+  surfaceDark: '#10131c',
+  primary: '#FF634A',
+  primaryDark: '#ff3b2f',
+  text: '#EAEAF0',
+  textSecondary: '#9A9AA3',
+  border: 'rgba(255,255,255,0.05)',
+};
+
+// Starry Background Component
+const StarryBackground = () => {
+  const stars = useMemo(() => {
+    return Array.from({ length: 30 }, (_, i) => ({
+      id: i,
+      top: Math.random() * height,
+      left: Math.random() * width,
+      size: Math.random() * 3 + 1,
+      opacity: Math.random() * 0.6 + 0.2,
+    }));
+  }, []);
+
+  return (
+    <>
+      {stars.map((star) => (
+        <View
+          key={star.id}
+          style={{
+            position: 'absolute',
+            backgroundColor: THEME.primary,
+            borderRadius: 50,
+            top: star.top,
+            left: star.left,
+            width: star.size,
+            height: star.size,
+            opacity: star.opacity,
+          }}
+        />
+      ))}
+    </>
+  );
+};
 
 export default function GroupsScreen({ navigation }) {
-  const dispatch = useDispatch()
-  const { theme } = useTheme()
-  const groups = useSelector((state) => state.groups?.groups || [])
-  const loading = useSelector((state) => state.groups?.loading || false)
+  const dispatch = useDispatch();
+  const { theme } = useTheme();
+  const groups = useSelector((state) => state.groups?.groups || []);
+  const loading = useSelector((state) => state.groups?.loading || false);
 
   useEffect(() => {
-    console.log('🔵 GroupsScreen mounted, fetching groups...')
-    dispatch(fetchGroups())
-  }, [])
+    console.log('🔵 GroupsScreen mounted, fetching groups...');
+    dispatch(fetchGroups());
+  }, []);
 
   const GroupCard = ({ group }) => (
-    <TouchableOpacity
-      onPress={() => navigation.navigate('GroupDetail', { groupId: group.id })}
-      style={[
-        styles.groupCard,
-        { backgroundColor: theme.card, borderColor: theme.border },
-      ]}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.groupIcon, { backgroundColor: theme.primaryLight }]}>
-        <Users size={28} color={theme.primary} />
-      </View>
-      <View style={styles.groupInfo}>
-        <Text style={[styles.groupName, { color: theme.text }]}>
-          {group.name}
-        </Text>
-        <Text
-          style={[styles.groupDescription, { color: theme.textSecondary }]}
-          numberOfLines={2}
-        >
-          {group.description}
-        </Text>
-        <View style={styles.groupStats}>
-          <Text style={[styles.groupStat, { color: theme.textSecondary }]}>
-            👥 {group.members_count || 0} members
-          </Text>
-          <Text style={[styles.groupStat, { color: theme.textSecondary }]}>
-            💬 {group.posts_count || 0} posts
-          </Text>
+    <View style={styles.groupCardWrapper}>
+      <View style={styles.groupCardAccentBar} />
+      <TouchableOpacity
+        onPress={() =>
+          navigation.navigate('GroupDetail', { groupId: group.id })
+        }
+        style={styles.groupCard}
+        activeOpacity={0.8}
+      >
+        <View style={styles.groupIcon}>
+          <Users size={28} color={THEME.primary} />
         </View>
-      </View>
-    </TouchableOpacity>
-  )
+        <View style={styles.groupInfo}>
+          <Text style={styles.groupName}>{group.name}</Text>
+          <Text style={styles.groupDescription} numberOfLines={2}>
+            {group.description}
+          </Text>
+          <View style={styles.divider} />
+          <View style={styles.groupStats}>
+            <View style={styles.stat}>
+              <Users size={14} color={THEME.textSecondary} />
+              <Text style={styles.groupStat}>
+                {group.members_count || 0} members
+              </Text>
+            </View>
+            <Text style={styles.statSeparator}>•</Text>
+            <Text style={styles.groupStat}>{group.posts_count || 0} posts</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
 
   if (loading && (!groups || groups.length === 0)) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <StatusBar barStyle={theme.statusBar} />
-        <ActivityIndicator size='large' color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-          Loading groups...
-        </Text>
+      <View style={styles.centered}>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor={THEME.background}
+        />
+        <StarryBackground />
+        <ActivityIndicator size="large" color={THEME.primary} />
+        <Text style={styles.loadingText}>Loading groups...</Text>
       </View>
-    )
+    );
   }
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.background }]}
-    >
-      <StatusBar barStyle={theme.statusBar} />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
+      <StarryBackground />
 
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Groups</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Groups</Text>
         <TouchableOpacity
           onPress={() => navigation.navigate('CreateGroup')}
-          style={[styles.createButton, { backgroundColor: theme.primary }]}
+          style={styles.createButton}
         >
-          <PlusCircle size={20} color='#ffffff' />
+          <PlusCircle size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
 
@@ -96,76 +147,123 @@ export default function GroupsScreen({ navigation }) {
           <RefreshControl
             refreshing={loading}
             onRefresh={() => dispatch(fetchGroups())}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
+            tintColor={THEME.primary}
+            colors={[THEME.primary]}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Users size={64} color={theme.textTertiary} />
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+            <View style={styles.emptyIconContainer}>
+              <Users size={64} color={THEME.textSecondary} opacity={0.3} />
+            </View>
+            <Text style={styles.emptyText}>
               No groups yet. Create one to get started!
             </Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('CreateGroup')}
-              style={[styles.emptyButton, { backgroundColor: theme.primary }]}
-            >
-              <Text style={styles.emptyButtonText}>Create Group</Text>
-            </TouchableOpacity>
+            <View style={styles.emptyButtonWrapper}>
+              <View style={styles.emptyButtonAccentBar} />
+              <TouchableOpacity
+                onPress={() => navigation.navigate('CreateGroup')}
+                style={styles.emptyButton}
+              >
+                <PlusCircle size={18} color="#ffffff" />
+                <Text style={styles.emptyButtonText}>Create Group</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         }
         contentContainerStyle={
-          !groups || groups.length === 0 ? styles.emptyList : null
+          !groups || groups.length === 0 ? styles.emptyList : styles.listContent
         }
+        showsVerticalScrollIndicator={false}
       />
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: THEME.background,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: THEME.background,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
+    marginTop: 16,
+    fontSize: 15,
+    color: THEME.textSecondary,
+    fontStyle: 'italic',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: 'transparent',
+    zIndex: 10,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '800',
+    color: THEME.primary,
+    letterSpacing: -0.5,
   },
   createButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: THEME.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  listContent: {
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+  // Group Card
+  groupCardWrapper: {
+    position: 'relative',
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  groupCardAccentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: THEME.primary,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    opacity: 0.6,
+    zIndex: 1,
   },
   groupCard: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginVertical: 8,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+    backgroundColor: THEME.surface,
+    padding: 18,
+    paddingLeft: 22,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 6,
   },
   groupIcon: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 99, 74, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -175,22 +273,41 @@ const styles = StyleSheet.create({
   },
   groupName: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontWeight: '700',
+    color: THEME.text,
+    marginBottom: 6,
   },
   groupDescription: {
     fontSize: 14,
-    marginBottom: 8,
+    color: THEME.textSecondary,
+    marginBottom: 12,
     lineHeight: 20,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: THEME.border,
+    marginBottom: 12,
   },
   groupStats: {
     flexDirection: 'row',
-    marginTop: 4,
+    alignItems: 'center',
+  },
+  stat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   groupStat: {
     fontSize: 13,
-    marginRight: 16,
+    color: THEME.textSecondary,
+    fontWeight: '500',
   },
+  statSeparator: {
+    fontSize: 13,
+    color: THEME.textSecondary,
+    marginHorizontal: 12,
+  },
+  // Empty State
   emptyList: {
     flexGrow: 1,
   },
@@ -198,22 +315,56 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: 40,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 99, 74, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
   },
   emptyText: {
     fontSize: 16,
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 24,
+    color: THEME.textSecondary,
+    marginBottom: 32,
+    lineHeight: 24,
+  },
+  emptyButtonWrapper: {
+    position: 'relative',
+  },
+  emptyButtonAccentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: THEME.primary,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    opacity: 0.8,
   },
   emptyButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: THEME.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    paddingLeft: 32,
+    borderRadius: 16,
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
   },
   emptyButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-})
+});

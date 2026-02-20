@@ -1,10 +1,14 @@
-import React, { useEffect, useRef } from 'react'
-import { View, Animated } from 'react-native'
+import React, { useEffect, useRef } from 'react';
+import { View, Animated, StyleSheet } from 'react-native';
+
+const THEME = {
+  primary: '#FF634A',
+};
 
 export default function TypingIndicator() {
-  const dot1 = useRef(new Animated.Value(0)).current
-  const dot2 = useRef(new Animated.Value(0)).current
-  const dot3 = useRef(new Animated.Value(0)).current
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const animate = (dot, delay) => {
@@ -12,7 +16,7 @@ export default function TypingIndicator() {
         Animated.sequence([
           Animated.delay(delay),
           Animated.timing(dot, {
-            toValue: -8,
+            toValue: 1,
             duration: 400,
             useNativeDriver: true,
           }),
@@ -22,28 +26,48 @@ export default function TypingIndicator() {
             useNativeDriver: true,
           }),
         ])
-      ).start()
-    }
+      ).start();
+    };
 
-    animate(dot1, 0)
-    animate(dot2, 150)
-    animate(dot3, 300)
-  }, [])
+    animate(dot1, 0);
+    animate(dot2, 200);
+    animate(dot3, 400);
+  }, []);
+
+  const animatedStyle = (dot) => ({
+    opacity: dot.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.3, 1],
+    }),
+    transform: [
+      {
+        translateY: dot.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -8],
+        }),
+      },
+    ],
+  });
 
   return (
-    <View className='flex-row items-center bg-echo-card rounded-2xl px-4 py-3 self-start mb-3'>
-      <Animated.View
-        style={{ transform: [{ translateY: dot1 }] }}
-        className='w-2 h-2 rounded-full bg-gray-400 mr-1'
-      />
-      <Animated.View
-        style={{ transform: [{ translateY: dot2 }] }}
-        className='w-2 h-2 rounded-full bg-gray-400 mr-1'
-      />
-      <Animated.View
-        style={{ transform: [{ translateY: dot3 }] }}
-        className='w-2 h-2 rounded-full bg-gray-400'
-      />
+    <View style={styles.container}>
+      <Animated.View style={[styles.dot, animatedStyle(dot1)]} />
+      <Animated.View style={[styles.dot, animatedStyle(dot2)]} />
+      <Animated.View style={[styles.dot, animatedStyle(dot3)]} />
     </View>
-  )
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: THEME.primary,
+  },
+});
