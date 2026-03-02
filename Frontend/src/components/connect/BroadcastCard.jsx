@@ -1,19 +1,31 @@
 import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
-import { MessageCircle } from 'lucide-react-native'
+import { MessageCircle, Flame } from 'lucide-react-native'
 import { useTheme } from '../../context/ThemeContext'
 import VibeTag from './VibeTag'
 
-export default function BroadcastCard({ broadcast, onSendOpener }) {
+export default function BroadcastCard({ broadcast, onSendOpener, isHot = false, hintsComponent }) {
   const { theme } = useTheme()
 
   return (
     <View
       style={[
         styles.card,
-        { backgroundColor: theme.card, borderColor: theme.border },
+        {
+          backgroundColor: theme.card,
+          borderColor: isHot ? '#FF634A' : theme.border, // ✅ hot traces get coral border
+          borderWidth: isHot ? 1.5 : 1,
+        },
       ]}
     >
+      {/* Hot badge */}
+      {isHot && (
+        <View style={styles.hotBadge}>
+          <Flame size={11} color='#FF634A' />
+          <Text style={styles.hotBadgeText}>Hot</Text>
+        </View>
+      )}
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.nameContainer}>
@@ -29,17 +41,22 @@ export default function BroadcastCard({ broadcast, onSendOpener }) {
         </Text>
       </View>
 
+      {/* Hints — replaces plain "Anonymous User" context */}
+      {hintsComponent}
+
       {/* Content */}
       <Text style={[styles.content, { color: theme.text }]}>
         {broadcast.content}
       </Text>
 
       {/* Vibe Tags */}
-      <View style={styles.tags}>
-        {broadcast.vibe_tags.map((tag) => (
-          <VibeTag key={tag} tag={tag} disabled />
-        ))}
-      </View>
+      {broadcast.vibe_tags?.length > 0 && (
+        <View style={styles.tags}>
+          {broadcast.vibe_tags.map((tag) => (
+            <VibeTag key={tag} tag={tag} disabled />
+          ))}
+        </View>
+      )}
 
       {/* Intention Tag */}
       {broadcast.intention_tag && (
@@ -85,14 +102,28 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
+  hotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-end',
+    marginBottom: 6,
+  },
+  hotBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FF634A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 4, // ✅ reduced — hints sit right below
   },
   nameContainer: {
     flexDirection: 'row',
@@ -112,6 +143,7 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 15,
     lineHeight: 22,
+    marginTop: 10,
     marginBottom: 12,
   },
   tags: {
@@ -137,6 +169,7 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 14,
     borderRadius: 12,
+    marginTop: 4,
   },
   replyButtonText: {
     color: '#ffffff',
@@ -147,6 +180,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
+    marginTop: 4,
   },
   respondedText: {
     fontSize: 14,

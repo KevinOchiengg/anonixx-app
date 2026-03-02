@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone  # ✅ added timezone
 from bson import ObjectId
 import random
 from app.database import get_database
@@ -35,9 +35,18 @@ class ThreadReplyRequest(BaseModel):
 
 # ==================== HELPER FUNCTIONS ====================
 
+def now_utc() -> datetime:
+    """Always returns timezone-aware UTC datetime from server"""
+    return datetime.now(timezone.utc)
+
+
 def get_time_ago(dt: datetime) -> str:
     """Convert datetime to 'time ago' string"""
-    delta = datetime.utcnow() - dt
+    # ✅ Ensure both datetimes are timezone-aware for safe comparison
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    delta = now_utc() - dt
 
     if delta.days > 365:
         years = delta.days // 365
@@ -93,7 +102,7 @@ async def format_post(post, current_user_id: Optional[str], db):
         "likes_count": post.get("likes_count", 0),
         "is_liked": is_liked,
         "is_saved": is_saved,
-        "created_at": post["created_at"].isoformat(),
+        "created_at": post["created_at"].isoformat(),  # ✅ UTC ISO string from DB
         "time_ago": get_time_ago(post["created_at"]),
         "is_own_post": post["user_id"] == current_user_id if current_user_id else False,
         "type": "post"
@@ -146,7 +155,7 @@ async def create_post(
         "saves_count": 0,
         "liked_by": [],
         "likes_count": 0,
-        "created_at": datetime.utcnow(),
+        "created_at": now_utc(),  # ✅ server-side UTC datetime
     }
 
     await db["posts"].insert_one(post_data)
@@ -172,7 +181,6 @@ async def get_calm_feed(
     If user is logged in, personalize based on interests
     If guest, show general feed
     """
-    # Try to get user ID from token (may be None for guests)
     current_user_id = None
 
     if authorization:
@@ -195,7 +203,6 @@ async def get_calm_feed(
     else:
         print(f"✅ Logged in user browsing - session posts: {session_posts}")
 
-    # Check if user needs a break
     if session_posts >= 20:
         return {
             "posts": [],
@@ -207,23 +214,17 @@ async def get_calm_feed(
 
     interests = []
 
-    # Get user interests if logged in
     if current_user_id:
         user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
         if user:
             interests = user.get("interests", [])
             print(f"📌 User interests: {interests}")
 
-    # Determine how many posts to load
     posts_to_load = min(10, 20 - session_posts)
-
-    # Algorithm: 70% interests, 30% discovery (or all general for guests)
     interest_count = int(posts_to_load * 0.7) if interests else 0
     discovery_count = posts_to_load - interest_count
-
     posts = []
 
-    # Get posts matching interests (only if logged in with interests)
     if interests and interest_count > 0:
         interest_posts_cursor = db["posts"].aggregate([
             {"$match": {"topics": {"$in": interests}}},
@@ -233,7 +234,6 @@ async def get_calm_feed(
         async for post in interest_posts_cursor:
             posts.append(post)
 
-    # Get discovery posts (or all posts for guests)
     if discovery_count > 0:
         match_query = {"topics": {"$nin": interests}} if interests else {}
         discovery_posts_cursor = db["posts"].aggregate([
@@ -245,25 +245,20 @@ async def get_calm_feed(
             posts.append(post)
 
     print(f"✅ Found {len(posts)} posts")
-
-    # Randomize order
     random.shuffle(posts)
 
-    # Format posts with mood balancing
     formatted_posts = []
     heavy_count = 0
 
     for i, post in enumerate(posts):
         formatted_post = await format_post(post, current_user_id, db)
 
-        # Track heavy content
         is_heavy = any(t in ["depression", "anxiety", "addiction", "self_harm"] for t in post.get("topics", []))
         if is_heavy:
             heavy_count += 1
 
         formatted_posts.append(formatted_post)
 
-        # Insert divider every 5 posts
         if (i + 1) % 5 == 0 and (i + 1) < len(posts):
             divider_texts = [
                 "Take your time.",
@@ -277,7 +272,6 @@ async def get_calm_feed(
                 "text": random.choice(divider_texts)
             })
 
-        # Mood balancing
         if heavy_count >= 3 and (i + 1) < len(posts):
             formatted_posts.append({
                 "type": "mood_balancer",
@@ -304,7 +298,6 @@ async def like_post(
     """Like a post"""
     print(f"🔵 User {current_user_id} liking post {post_id}")
 
-    # Check if post exists
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
     except:
@@ -313,7 +306,6 @@ async def like_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    # Check if already liked
     liked_by = post.get("liked_by", [])
     if current_user_id in liked_by:
         return {
@@ -322,7 +314,6 @@ async def like_post(
             "likes_count": post.get("likes_count", 0)
         }
 
-    # Add like
     try:
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
@@ -341,7 +332,6 @@ async def like_post(
         )
 
     new_likes_count = post.get("likes_count", 0) + 1
-
     print(f"✅ Like added. Total likes: {new_likes_count}")
 
     return {
@@ -360,7 +350,6 @@ async def unlike_post(
     """Unlike a post"""
     print(f"🔵 User {current_user_id} unliking post {post_id}")
 
-    # Check if post exists
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
     except:
@@ -369,7 +358,6 @@ async def unlike_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    # Check if not liked
     liked_by = post.get("liked_by", [])
     if current_user_id not in liked_by:
         return {
@@ -378,7 +366,6 @@ async def unlike_post(
             "likes_count": post.get("likes_count", 0)
         }
 
-    # Remove like
     try:
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
@@ -397,7 +384,6 @@ async def unlike_post(
         )
 
     new_likes_count = max(0, post.get("likes_count", 1) - 1)
-
     print(f"✅ Like removed. Total likes: {new_likes_count}")
 
     return {
@@ -441,7 +427,7 @@ async def save_post(
             "_id": ObjectId(),
             "post_id": post_id,
             "user_id": current_user_id,
-            "created_at": datetime.utcnow()
+            "created_at": now_utc()  # ✅ fixed
         })
 
         try:
@@ -476,12 +462,17 @@ async def get_saved_posts(
             post = await db["posts"].find_one({"_id": saved["post_id"]})
 
         if post:
+            saved_at = saved["created_at"]
+            # ✅ Make timezone-aware for safe comparison
+            if saved_at.tzinfo is None:
+                saved_at = saved_at.replace(tzinfo=timezone.utc)
+
             saved_posts.append({
                 "id": str(post["_id"]),
                 "content": post["content"],
                 "topics": post.get("topics", []),
-                "saved_at": saved["created_at"].isoformat(),
-                "saved_days_ago": (datetime.utcnow() - saved["created_at"]).days
+                "saved_at": saved_at.isoformat(),
+                "saved_days_ago": (now_utc() - saved_at).days
             })
 
     return {
@@ -512,7 +503,6 @@ async def add_to_thread(
                 detail="Content is required"
             )
 
-        # Check if post exists
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
         if not post:
             raise HTTPException(
@@ -520,7 +510,6 @@ async def add_to_thread(
                 detail="Post not found"
             )
 
-        # Check thread limit
         thread_count = await db["threads"].count_documents({"post_id": ObjectId(post_id)})
         if thread_count >= 2:
             raise HTTPException(
@@ -528,7 +517,6 @@ async def add_to_thread(
                 detail="Thread limit reached (maximum 2 replies)"
             )
 
-        # Get user
         user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
         if not user:
             raise HTTPException(
@@ -536,26 +524,23 @@ async def add_to_thread(
                 detail="User not found"
             )
 
-        # Create thread reply
         thread_doc = {
             "post_id": ObjectId(post_id),
             "user_id": ObjectId(current_user_id),
             "content": content.strip(),
             "anonymous_name": user.get("anonymous_name", "Anonymous User"),
             "depth": 0,
-            "created_at": datetime.utcnow()
+            "created_at": now_utc()  # ✅ fixed
         }
 
         result = await db["threads"].insert_one(thread_doc)
 
-        # Update post thread count
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
             {"$inc": {"thread_count": 1}}
         )
 
         thread_closed = thread_count + 1 >= 2
-
         print(f"✅ Thread reply added: {result.inserted_id}")
 
         return {
@@ -593,7 +578,6 @@ async def get_thread(
                 detail="Post not found"
             )
 
-        # Get all thread replies
         threads = []
         thread_docs = await db["threads"].find(
             {"post_id": ObjectId(post_id)}
@@ -604,13 +588,12 @@ async def get_thread(
                 "id": str(thread["_id"]),
                 "content": thread["content"],
                 "anonymous_name": thread["anonymous_name"],
-                "created_at": thread["created_at"].isoformat(),
+                "created_at": thread["created_at"].isoformat(),  # ✅ UTC from DB
                 "time_ago": get_time_ago(thread["created_at"]),
                 "depth": thread.get("depth", 0),
                 "is_own_reply": str(thread["user_id"]) == current_user_id if current_user_id else False
             })
 
-        # Check if thread is closed
         is_closed = len(thread_docs) >= 2
 
         return {
@@ -635,9 +618,7 @@ async def view_post(
     current_user_id: Optional[str] = Depends(get_optional_user_id),
     db = Depends(get_database)
 ):
-    """
-    Track post view (anonymous or authenticated)
-    """
+    """Track post view (anonymous or authenticated)"""
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
 
@@ -647,13 +628,11 @@ async def view_post(
                 detail="Post not found"
             )
 
-        # Increment view count
         await db["posts"].update_one(
             {"_id": ObjectId(post_id)},
             {"$inc": {"views": 1}}
         )
 
-        # Track user view if authenticated
         if current_user_id:
             await db["post_views"].update_one(
                 {
@@ -664,7 +643,7 @@ async def view_post(
                     "$set": {
                         "post_id": ObjectId(post_id),
                         "user_id": ObjectId(current_user_id),
-                        "viewed_at": datetime.utcnow()
+                        "viewed_at": now_utc()  # ✅ fixed
                     }
                 },
                 upsert=True
@@ -674,7 +653,6 @@ async def view_post(
 
     except Exception as e:
         print(f"❌ View tracking error: {e}")
-        # Don't fail if view tracking fails
         return {"status": "success", "message": "View tracking skipped"}
 
 
