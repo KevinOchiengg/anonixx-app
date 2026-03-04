@@ -1,12 +1,11 @@
-import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
+import InterestSelectionScreen from '../screens/onboarding/InterestSelectionScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
-import InterestSelectionScreen from '../screens/onboarding/InterestSelectionScreen';
-import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen'; // ✅ added
 
 const Stack = createStackNavigator();
 
@@ -37,8 +36,7 @@ export default function AppNavigator() {
           name="InterestSelection"
           component={InterestSelectionScreen}
         />
-        <Stack.Screen name="UnlockPremium" component={UnlockPremiumScreen} />{' '}
-        {/* ✅ added */}
+        <Stack.Screen name="UnlockPremium" component={UnlockPremiumScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
