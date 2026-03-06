@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SearchScreen from '../screens/feed/SearchScreen';
 import {
   Home,
@@ -170,20 +171,23 @@ function SettingsStack() {
 }
 
 export default function TabNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          ...styles.tabBar,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 4,
+        },
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.inactive,
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
         tabBarIcon: ({ focused, color, size }) => {
-          // Hide icon for Create tab (handled by custom button)
-          if (route.name === 'Create') {
-            return null;
-          }
+          if (route.name === 'Create') return null;
           return (
             <TabBarIcon
               route={route}
@@ -200,13 +204,11 @@ export default function TabNavigator() {
         component={FeedStack}
         options={{ tabBarLabel: 'Thoughts' }}
       />
-
       <Tab.Screen
         name="Connect"
         component={ConnectStack}
         options={{ tabBarLabel: 'Connect' }}
       />
-
       <Tab.Screen
         name="Create"
         component={CreatePostScreen}
@@ -215,13 +217,11 @@ export default function TabNavigator() {
           tabBarButton: (props) => <CustomTabBarButton {...props} />,
         }}
       />
-
       <Tab.Screen
         name="Groups"
         component={GroupsStack}
         options={{ tabBarLabel: 'Groups' }}
       />
-
       <Tab.Screen
         name="Settings"
         component={SettingsStack}
