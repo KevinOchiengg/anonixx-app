@@ -1,40 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Modal,
-  Share,
-  Alert,
-  Clipboard,
-  Image,
-  ScrollView,
-  Animated,
-  TouchableWithoutFeedback,
-} from 'react-native';
-
-import {
-  Heart,
-  MessageCircle,
-  Share2,
-  Bookmark,
-  MoreHorizontal,
-  Flag,
-  UserX,
-  Link,
-  EyeOff,
-  X,
-  Play,
-} from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '../../context/AuthContext';
+import { Audio, Video } from 'expo-av';
+import {
+  Bookmark,
+  ChevronDown,
+  EyeOff,
+  Flag,
+  Heart,
+  Link,
+  MessageCircle,
+  MoreHorizontal,
+  Pause,
+  Play,
+  Send,
+  Share2,
+  UserX,
+  X,
+} from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Clipboard,
+  Dimensions,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { API_BASE_URL } from '../../config/api';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
-// NEW Cinematic Coral Theme
 const THEME = {
   background: '#0b0f18',
   backgroundDark: '#06080f',
@@ -45,35 +52,32 @@ const THEME = {
   text: '#EAEAF0',
   textSecondary: '#9A9AA3',
   border: 'rgba(255,255,255,0.05)',
-  avatarBg: '#3a3f50',
+  borderStrong: 'rgba(255,255,255,0.10)',
+  avatarBg: '#1e2330',
   avatarIcon: '#5a5f70',
+  inputBg: 'rgba(255,255,255,0.05)',
 };
 
-// ==================== DOUBLE TAP LIKE COMPONENT ====================
-const DoubleTapLike = ({ children, onDoubleTap, disabled = false }) => {
+// ─── DOUBLE TAP ───────────────────────────────────────────────
+const DoubleTapLike = ({ children, onDoubleTap }) => {
   const [showHeart, setShowHeart] = useState(false);
-  const [scaleAnim] = useState(new Animated.Value(0));
-  const [opacityAnim] = useState(new Animated.Value(1));
-  const [lastTap, setLastTap] = useState(null);
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(1)).current;
+  const lastTap = useRef(null);
 
   const handleTap = () => {
-    if (disabled) return;
-
     const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300;
-
-    if (lastTap && now - lastTap < DOUBLE_TAP_DELAY) {
-      handleDoubleTap();
+    if (lastTap.current && now - lastTap.current < 300) {
+      triggerHeart();
     } else {
-      setLastTap(now);
+      lastTap.current = now;
     }
   };
 
-  const handleDoubleTap = () => {
+  const triggerHeart = () => {
     setShowHeart(true);
     scaleAnim.setValue(0);
     opacityAnim.setValue(1);
-
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
@@ -82,33 +86,25 @@ const DoubleTapLike = ({ children, onDoubleTap, disabled = false }) => {
       }),
       Animated.timing(opacityAnim, {
         toValue: 0,
-        duration: 1000,
+        duration: 900,
         delay: 200,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      setShowHeart(false);
-    });
-
-    if (onDoubleTap) {
-      onDoubleTap();
-    }
+    ]).start(() => setShowHeart(false));
+    onDoubleTap?.();
   };
 
   return (
     <TouchableWithoutFeedback onPress={handleTap}>
-      <View style={styles.doubleTapContainer}>
+      <View style={{ position: 'relative' }}>
         {children}
         {showHeart && (
           <Animated.View
+            pointerEvents="none"
             style={[
               styles.heartAnimation,
-              {
-                transform: [{ scale: scaleAnim }],
-                opacity: opacityAnim,
-              },
+              { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
             ]}
-            pointerEvents="none"
           >
             <Heart size={80} color={THEME.primary} fill={THEME.primary} />
           </Animated.View>
@@ -118,6 +114,317 @@ const DoubleTapLike = ({ children, onDoubleTap, disabled = false }) => {
   );
 };
 
+// ─── AUDIO PLAYER ─────────────────────────────────────────────
+const AudioPlayer = ({ audioUrl }) => {
+  const soundRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, []);
+
+  const togglePlay = async () => {
+    try {
+      if (!soundRef.current) {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: audioUrl },
+          { shouldPlay: true },
+          onPlaybackStatusUpdate
+        );
+        soundRef.current = sound;
+        setPlaying(true);
+      } else {
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isPlaying) {
+          await soundRef.current.pauseAsync();
+          setPlaying(false);
+        } else {
+          await soundRef.current.playAsync();
+          setPlaying(true);
+        }
+      }
+    } catch (e) {
+      console.error('Audio error:', e);
+    }
+  };
+
+  const onPlaybackStatusUpdate = (status) => {
+    if (status.isLoaded) {
+      setPosition(status.positionMillis);
+      setDuration(status.durationMillis || 0);
+      setProgress(
+        status.durationMillis
+          ? status.positionMillis / status.durationMillis
+          : 0
+      );
+      if (status.didJustFinish) {
+        setPlaying(false);
+        setProgress(0);
+        setPosition(0);
+      }
+    }
+  };
+
+  const formatTime = (ms) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  const bars = Array.from({ length: 28 }, (_, i) => ({
+    height: Math.sin(i * 0.8) * 12 + Math.random() * 10 + 8,
+    played: progress > 0 && i / 28 <= progress,
+  }));
+
+  return (
+    <View style={styles.audioContainer}>
+      <TouchableOpacity style={styles.audioPlayBtn} onPress={togglePlay}>
+        {playing ? (
+          <Pause size={18} color="#fff" fill="#fff" />
+        ) : (
+          <Play size={18} color="#fff" fill="#fff" />
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.audioRight}>
+        <View style={styles.waveform}>
+          {bars.map((bar, i) => (
+            <View
+              key={i}
+              style={[
+                styles.waveBar,
+                { height: bar.height },
+                bar.played ? styles.waveBarPlayed : styles.waveBarUnplayed,
+              ]}
+            />
+          ))}
+        </View>
+        <View style={styles.audioMeta}>
+          <Text style={styles.audioTimeText}>
+            {duration > 0 ? formatTime(position) : '0:00'}
+          </Text>
+          <Text style={styles.audioTimeText}>
+            {duration > 0 ? formatTime(duration) : '—'}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+// ─── VIDEO PLAYER ─────────────────────────────────────────────
+const VideoPlayer = ({ videoUrl }) => {
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const togglePlay = async () => {
+    if (!videoRef.current) return;
+    if (playing) {
+      await videoRef.current.pauseAsync();
+      setPlaying(false);
+    } else {
+      await videoRef.current.playAsync();
+      setPlaying(true);
+    }
+  };
+
+  return (
+    <View style={styles.videoContainer}>
+      <Video
+        ref={videoRef}
+        source={{ uri: videoUrl }}
+        style={styles.video}
+        resizeMode="cover"
+        onLoad={() => setLoaded(true)}
+        onPlaybackStatusUpdate={(s) => {
+          if (s.didJustFinish) setPlaying(false);
+        }}
+        useNativeControls={false}
+      />
+      {!loaded && (
+        <View style={styles.videoLoading}>
+          <ActivityIndicator color={THEME.primary} />
+        </View>
+      )}
+      <TouchableOpacity
+        style={styles.videoOverlay}
+        onPress={togglePlay}
+        activeOpacity={0.9}
+      >
+        {!playing && (
+          <View style={styles.playButton}>
+            <Play size={26} color="#fff" fill="#fff" />
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// ─── COMMENT SECTION (TikTok style inline) ────────────────────
+const CommentSection = ({ postId, isAuthenticated, navigation, onClose }) => {
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const slideAnim = useRef(new Animated.Value(300)).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+    loadComments();
+  }, []);
+
+  const loadComments = async () => {
+    setLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (res.ok) setComments(data.threads || []);
+    } catch (e) {
+      console.error('Load comments error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitComment = async () => {
+    if (!text.trim()) return;
+    if (!isAuthenticated) {
+      navigation.navigate('Auth', { screen: 'Login' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: text.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setComments((prev) => [data, ...prev]);
+        setText('');
+      }
+    } catch (e) {
+      console.error('Submit comment error:', e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    Animated.timing(slideAnim, {
+      toValue: 300,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(onClose);
+  };
+
+  return (
+    <Animated.View
+      style={[
+        styles.commentSection,
+        { transform: [{ translateY: slideAnim }] },
+      ]}
+    >
+      {/* Handle bar */}
+      <TouchableOpacity style={styles.commentHandle} onPress={handleClose}>
+        <View style={styles.handleBar} />
+      </TouchableOpacity>
+
+      <View style={styles.commentHeader}>
+        <Text style={styles.commentHeaderText}>
+          {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+        </Text>
+        <TouchableOpacity onPress={handleClose}>
+          <ChevronDown size={20} color={THEME.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={styles.commentLoading}>
+          <ActivityIndicator color={THEME.primary} size="small" />
+        </View>
+      ) : comments.length === 0 ? (
+        <View style={styles.commentEmpty}>
+          <Text style={styles.commentEmptyText}>
+            No comments yet. Be the first.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={comments}
+          keyExtractor={(item, i) => item.id || String(i)}
+          style={styles.commentList}
+          renderItem={({ item }) => (
+            <View style={styles.commentItem}>
+              <View style={styles.commentAvatar}>
+                <Text style={styles.commentAvatarText}>
+                  {item.anonymous_name?.[0]?.toUpperCase() || 'A'}
+                </Text>
+              </View>
+              <View style={styles.commentBody}>
+                <Text style={styles.commentAuthor}>
+                  {item.anonymous_name || 'Anonymous'}
+                </Text>
+                <Text style={styles.commentText}>{item.content}</Text>
+              </View>
+            </View>
+          )}
+        />
+      )}
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.commentInput}>
+          <TextInput
+            style={styles.commentTextInput}
+            value={text}
+            onChangeText={setText}
+            placeholder="Add a comment..."
+            placeholderTextColor={THEME.textSecondary}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendBtn,
+              (!text.trim() || submitting) && { opacity: 0.4 },
+            ]}
+            onPress={submitComment}
+            disabled={!text.trim() || submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Send size={16} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Animated.View>
+  );
+};
+
+// ─── MAIN CARD ────────────────────────────────────────────────
 function CalmPostCard({
   post,
   onResponse,
@@ -129,47 +436,19 @@ function CalmPostCard({
   const { isAuthenticated } = useAuth();
   const [menuVisible, setMenuVisible] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
-
-  // ✅ NEW: Like state
+  const [showComments, setShowComments] = useState(false);
   const [liked, setLiked] = useState(post.is_liked || false);
   const [likesCount, setLikesCount] = useState(post.likes_count || 0);
   const [animating, setAnimating] = useState(false);
-  const [scaleAnim] = useState(new Animated.Value(1));
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    if (post.id) {
-      trackView();
-    }
-  }, [post.id]);
-
-  // ✅ NEW: Update like state when post changes
   useEffect(() => {
     setLiked(post.is_liked || false);
     setLikesCount(post.likes_count || 0);
   }, [post.is_liked, post.likes_count]);
 
-  const trackView = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const headers = {};
-
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/view`, {
-        method: 'POST',
-        headers,
-      });
-    } catch (error) {
-      console.log('View tracking failed:', error);
-    }
-  };
-
-  // ✅ NEW: Handle like/unlike
   const handleLike = async () => {
     if (animating) return;
-
     if (!isAuthenticated) {
       Alert.alert('Sign in Required', 'Please sign in to like posts', [
         { text: 'Cancel', style: 'cancel' },
@@ -180,242 +459,147 @@ function CalmPostCard({
       ]);
       return;
     }
-
     setAnimating(true);
     const newLiked = !liked;
-    const newCount = newLiked ? likesCount + 1 : likesCount - 1;
-
-    // Optimistic update
     setLiked(newLiked);
-    setLikesCount(newCount);
-
-    // Animate
+    setLikesCount((c) => (newLiked ? c + 1 : c - 1));
     Animated.sequence([
       Animated.timing(scaleAnim, {
-        toValue: 1.3,
-        duration: 150,
+        toValue: 1.35,
+        duration: 120,
         useNativeDriver: true,
       }),
       Animated.timing(scaleAnim, {
         toValue: 1,
-        duration: 150,
+        duration: 120,
         useNativeDriver: true,
       }),
     ]).start(() => setAnimating(false));
-
-    // Call API
     try {
       const token = await AsyncStorage.getItem('token');
-      const endpoint = `${API_BASE_URL}/api/v1/posts/${post.id}/like`;
-
-      const response = await fetch(endpoint, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/like`, {
         method: newLiked ? 'POST' : 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
+      const data = await res.json();
+      if (res.ok) {
         setLiked(data.liked);
         setLikesCount(data.likes_count);
       } else {
-        // Revert on error
         setLiked(!newLiked);
-        setLikesCount(liked ? likesCount + 1 : likesCount - 1);
-        console.error('Like error:', data);
+        setLikesCount((c) => (newLiked ? c - 1 : c + 1));
       }
-    } catch (error) {
-      // Revert on error
+    } catch {
       setLiked(!newLiked);
-      setLikesCount(liked ? likesCount + 1 : likesCount - 1);
-      console.error('Like error:', error);
+      setLikesCount((c) => (newLiked ? c - 1 : c + 1));
     }
   };
 
-  // ✅ NEW: Handle double tap like
   const handleDoubleTap = async () => {
-    if (!liked && isAuthenticated) {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const response = await fetch(
-          `${API_BASE_URL}/api/v1/posts/${post.id}/like`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        const data = await response.json();
-
-        if (response.ok) {
-          setLiked(data.liked);
-          setLikesCount(data.likes_count);
-        }
-      } catch (error) {
-        console.error('Double tap like error:', error);
+    if (liked || !isAuthenticated) return;
+    setLiked(true);
+    setLikesCount((c) => c + 1);
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 1.35,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/like`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikesCount(data.likes_count);
       }
+    } catch (e) {
+      console.error(e);
     }
-  };
-
-  const handleSave = () => {
-    setMenuVisible(false);
-    onSave(post.id);
-  };
-
-  const handleViewThread = () => {
-    onViewThread(post.id);
   };
 
   const handleShare = async () => {
     try {
-      const message = `Check out this post on Anonixx:\n\n"${post.content.substring(0, 100)}${post.content.length > 100 ? '...' : ''}"`;
-
       await Share.share({
-        message,
-        title: 'Share from Anonixx',
+        message: `"${post.content?.substring(0, 120)}..." — Anonixx`,
       });
-    } catch (error) {
-      console.log('Share error:', error);
+    } catch (e) {
+      console.log(e);
     }
   };
 
   const handleCopyLink = () => {
-    const link = `anonixx://post/${post.id}`;
-    Clipboard.setString(link);
+    Clipboard.setString(`anonixx://post/${post.id}`);
     setMenuVisible(false);
-    Alert.alert('Link Copied', 'Post link copied to clipboard');
+    Alert.alert('Copied', 'Link copied to clipboard');
   };
 
   const handleReport = () => {
     setMenuVisible(false);
-
-    if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to report posts', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign In',
-          onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
-        },
-      ]);
-      return;
-    }
-
-    Alert.alert('Report Post', 'Why are you reporting this post?', [
+    Alert.alert('Report Post', 'Why are you reporting this?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Harmful Content',
-        onPress: () => submitReport('harmful'),
-      },
-      {
-        text: 'Spam',
-        onPress: () => submitReport('spam'),
-      },
-      {
-        text: 'Inappropriate',
-        onPress: () => submitReport('inappropriate'),
-      },
+      { text: 'Harmful', onPress: () => submitReport('harmful') },
+      { text: 'Spam', onPress: () => submitReport('spam') },
+      { text: 'Inappropriate', onPress: () => submitReport('inappropriate') },
     ]);
   };
 
   const submitReport = async (reason) => {
     try {
       const token = await AsyncStorage.getItem('token');
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/posts/${post.id}/report`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (response.ok) {
-        Alert.alert('Reported', 'Thank you for helping keep Anonixx safe');
-      } else {
-        Alert.alert('Error', 'Failed to report post');
-      }
-    } catch (error) {
-      console.error('Report error:', error);
-      Alert.alert('Error', 'Failed to report post');
-    }
-  };
-
-  const handleBlockUser = () => {
-    setMenuVisible(false);
-
-    if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to block users', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign In',
-          onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
-        },
-      ]);
-      return;
-    }
-
-    Alert.alert(
-      'Block User',
-      `Block ${post.anonymous_name}? You won't see their posts anymore.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block',
-          style: 'destructive',
-          onPress: () => submitBlock(),
-        },
-      ]
-    );
-  };
-
-  const submitBlock = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-
-      const response = await fetch(`${API_BASE_URL}/api/v1/users/block`, {
+      await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/report`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ user_id: post.user_id }),
+        body: JSON.stringify({ reason }),
       });
-
-      if (response.ok) {
-        Alert.alert('Blocked', 'You will no longer see posts from this user');
-      } else {
-        Alert.alert('Error', 'Failed to block user');
-      }
-    } catch (error) {
-      console.error('Block error:', error);
-      Alert.alert('Error', 'Failed to block user');
+      Alert.alert('Reported', 'Thank you for keeping Anonixx safe.');
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const handleHidePost = () => {
+  const handleBlockUser = () => {
     setMenuVisible(false);
-    Alert.alert('Post Hidden', 'This post has been hidden from your feed');
-  };
-
-  const handleCardPress = () => {
-    if (onPress) {
-      onPress(post);
-    }
+    Alert.alert('Block User', `Block ${post.anonymous_name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Block',
+        style: 'destructive',
+        onPress: async () => {
+          const token = await AsyncStorage.getItem('token');
+          await fetch(`${API_BASE_URL}/api/v1/users/block`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ user_id: post.user_id }),
+          });
+        },
+      },
+    ]);
   };
 
   const isTextOnly = !post.images?.length && !post.video_url && !post.audio_url;
-  const shouldTruncate =
-    isTextOnly && post.content && post.content.length > 200;
+  const shouldTruncate = isTextOnly && post.content?.length > 200;
   const displayContent =
     shouldTruncate && !showFullContent
       ? post.content.substring(0, 200) + '...'
@@ -423,13 +607,14 @@ function CalmPostCard({
 
   return (
     <View style={styles.cardWrapper}>
+      {/* Thin accent bar */}
       <View style={styles.accentBar} />
 
       <DoubleTapLike onDoubleTap={handleDoubleTap}>
         <TouchableOpacity
           style={styles.card}
-          onPress={handleCardPress}
-          activeOpacity={0.95}
+          onPress={() => onPress?.(post)}
+          activeOpacity={0.97}
         >
           {/* Header */}
           <View style={styles.header}>
@@ -440,54 +625,53 @@ function CalmPostCard({
                 </Text>
               </View>
               <View style={styles.authorInfo}>
-                <View style={styles.nameRow}>
-                  <Text style={styles.authorName}>
-                    {post.anonymous_name || 'Anonymous'}
-                  </Text>
-                  <Text style={styles.dot}>·</Text>
-                  <Text style={styles.timestamp}>{post.time_ago}</Text>
-                </View>
+                <Text style={styles.authorName}>
+                  {post.anonymous_name || 'Anonymous'}
+                </Text>
+                <Text style={styles.timestamp}>{post.time_ago}</Text>
               </View>
             </View>
-
             <TouchableOpacity
-              style={styles.moreButton}
               onPress={(e) => {
                 e.stopPropagation();
                 setMenuVisible(true);
               }}
+              style={styles.moreButton}
             >
-              <MoreHorizontal size={20} color={THEME.textSecondary} />
+              <MoreHorizontal size={18} color={THEME.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.divider} />
 
-          {/* Content */}
-          <Text style={styles.content}>{displayContent}</Text>
-
-          {shouldTruncate && !showFullContent && (
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                setShowFullContent(true);
-              }}
-            >
-              <Text style={styles.readMore}>Read More</Text>
-            </TouchableOpacity>
-          )}
+          {/* Text content */}
+          {post.content ? (
+            <>
+              <Text style={styles.content}>{displayContent}</Text>
+              {shouldTruncate && !showFullContent && (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setShowFullContent(true);
+                  }}
+                >
+                  <Text style={styles.readMore}>Read more</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : null}
 
           {/* Images */}
-          {post.images && post.images.length > 0 && (
+          {post.images?.length > 0 && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={styles.imagesContainer}
+              style={styles.imagesScroll}
             >
-              {post.images.map((imageUrl, index) => (
+              {post.images.map((url, i) => (
                 <Image
-                  key={index}
-                  source={{ uri: imageUrl }}
+                  key={i}
+                  source={{ uri: url }}
                   style={styles.postImage}
                   resizeMode="cover"
                 />
@@ -496,93 +680,112 @@ function CalmPostCard({
           )}
 
           {/* Video */}
-          {post.video_url && (
-            <View style={styles.videoContainer}>
-              <Image
-                source={{ uri: post.video_url }}
-                style={styles.videoThumbnail}
-                resizeMode="cover"
-              />
-              <View style={styles.videoOverlay}>
-                <View style={styles.playButton}>
-                  <Play size={24} color="#1a1f2e" fill="#1a1f2e" />
-                </View>
-              </View>
-            </View>
-          )}
+          {post.video_url && <VideoPlayer videoUrl={post.video_url} />}
 
           {/* Audio */}
-          {post.audio_url && (
-            <View style={styles.audioContainer}>
-              <View style={styles.audioPlayButton}>
-                <Play size={20} color="#fff" fill="#fff" />
-              </View>
-              <View style={styles.waveform}>
-                {[...Array(20)].map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.waveBar,
-                      { height: Math.random() * 30 + 10 },
-                      i < 8 ? styles.waveBarPlayed : styles.waveBarUnplayed,
-                    ]}
-                  />
-                ))}
-              </View>
-              <Text style={styles.audioTime}>0:42</Text>
-            </View>
-          )}
-
-          {(post.video_url || post.audio_url) && (
-            <Text style={styles.hint}>React or comment</Text>
-          )}
+          {post.audio_url && <AudioPlayer audioUrl={post.audio_url} />}
 
           <View style={styles.divider} />
 
+          {/* Nudge */}
           {isTextOnly && (
-            <Text style={styles.hint}>
-              React or comment to share your thoughts
-            </Text>
+            <Text style={styles.hint}>say something if it hits.</Text>
+          )}
+          {(post.video_url || post.audio_url) && (
+            <Text style={styles.hint}>react or drop a comment.</Text>
           )}
 
-          {/* Actions - ✅ NOW WITH REAL DATA */}
+          {/* Actions: save+share LEFT | like+comment RIGHT */}
           <View style={styles.actions}>
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                handleLike();
-              }}
-              style={styles.action}
-            >
-              <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-                <Heart
-                  size={18}
-                  color={liked ? THEME.primary : THEME.textSecondary}
-                  fill={liked ? THEME.primary : 'none'}
-                />
-              </Animated.View>
-              <Text
-                style={[styles.actionCount, liked && { color: THEME.primary }]}
+            {/* Left: Save + Share */}
+            <View style={styles.actionsLeft}>
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onSave(post.id);
+                }}
+                style={styles.action}
               >
-                {likesCount}
-              </Text>
-            </TouchableOpacity>
+                <Bookmark
+                  size={17}
+                  color={post.is_saved ? THEME.primary : THEME.textSecondary}
+                  fill={post.is_saved ? THEME.primary : 'none'}
+                />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                handleViewThread();
-              }}
-              style={styles.action}
-            >
-              <MessageCircle size={18} color={THEME.textSecondary} />
-              <Text style={styles.actionCount}>{post.thread_count || 0}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleShare();
+                }}
+                style={styles.action}
+              >
+                <Share2 size={17} color={THEME.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Right: Like + Comment */}
+            <View style={styles.actionsRight}>
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setShowComments((v) => !v);
+                }}
+                style={styles.action}
+              >
+                <MessageCircle
+                  size={18}
+                  color={showComments ? THEME.primary : THEME.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.actionCount,
+                    showComments && { color: THEME.primary },
+                  ]}
+                >
+                  {post.thread_count || 0}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleLike();
+                }}
+                style={styles.action}
+              >
+                <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                  <Heart
+                    size={18}
+                    color={liked ? THEME.primary : THEME.textSecondary}
+                    fill={liked ? THEME.primary : 'none'}
+                  />
+                </Animated.View>
+                <Text
+                  style={[
+                    styles.actionCount,
+                    liked && { color: THEME.primary },
+                  ]}
+                >
+                  {likesCount}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {/* Inline TikTok-style comment section */}
+          {showComments && (
+            <CommentSection
+              postId={post.id}
+              isAuthenticated={isAuthenticated}
+              navigation={navigation}
+              onClose={() => setShowComments(false)}
+            />
+          )}
         </TouchableOpacity>
       </DoubleTapLike>
 
-      {/* Menu Modal */}
+      {/* Options Menu */}
       <Modal
         visible={menuVisible}
         transparent
@@ -596,63 +799,80 @@ function CalmPostCard({
         >
           <View style={styles.menuContainer}>
             <View style={styles.menuHeader}>
-              <Text style={styles.menuTitle}>Post Options</Text>
+              <Text style={styles.menuTitle}>Options</Text>
               <TouchableOpacity onPress={() => setMenuVisible(false)}>
                 <X size={20} color={THEME.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.menuItem} onPress={handleSave}>
-              <Bookmark
-                size={20}
-                color={post.is_saved ? THEME.primary : THEME.textSecondary}
-                fill={post.is_saved ? THEME.primary : 'none'}
-              />
-              <Text style={styles.menuItemText}>
-                {post.is_saved ? 'Unsave Post' : 'Save Post'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                handleShare();
-              }}
-            >
-              <Share2 size={20} color={THEME.textSecondary} />
-              <Text style={styles.menuItemText}>Share Post</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={handleCopyLink}>
-              <Link size={20} color={THEME.textSecondary} />
-              <Text style={styles.menuItemText}>Copy Link</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={handleHidePost}>
-              <EyeOff size={20} color={THEME.textSecondary} />
-              <Text style={styles.menuItemText}>Hide Post</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={handleReport}>
-              <Flag size={20} color={THEME.primary} />
-              <Text style={[styles.menuItemText, { color: THEME.primary }]}>
-                Report Post
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={handleBlockUser}>
-              <UserX size={20} color={THEME.primary} />
-              <Text style={[styles.menuItemText, { color: THEME.primary }]}>
-                Block User
-              </Text>
-            </TouchableOpacity>
+            {[
+              {
+                icon: (
+                  <Bookmark
+                    size={18}
+                    color={post.is_saved ? THEME.primary : THEME.textSecondary}
+                    fill={post.is_saved ? THEME.primary : 'none'}
+                  />
+                ),
+                label: post.is_saved ? 'Unsave' : 'Save',
+                onPress: () => {
+                  setMenuVisible(false);
+                  onSave(post.id);
+                },
+              },
+              {
+                icon: <Share2 size={18} color={THEME.textSecondary} />,
+                label: 'Share',
+                onPress: () => {
+                  setMenuVisible(false);
+                  handleShare();
+                },
+              },
+              {
+                icon: <Link size={18} color={THEME.textSecondary} />,
+                label: 'Copy Link',
+                onPress: handleCopyLink,
+              },
+              {
+                icon: <EyeOff size={18} color={THEME.textSecondary} />,
+                label: 'Hide Post',
+                onPress: () => setMenuVisible(false),
+              },
+              {
+                icon: <Flag size={18} color={THEME.primary} />,
+                label: 'Report',
+                onPress: handleReport,
+                danger: true,
+              },
+              {
+                icon: <UserX size={18} color={THEME.primary} />,
+                label: 'Block User',
+                onPress: handleBlockUser,
+                danger: true,
+              },
+            ].map((item, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.menuItem}
+                onPress={item.onPress}
+              >
+                {item.icon}
+                <Text
+                  style={[
+                    styles.menuItemText,
+                    item.danger && { color: THEME.primary },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
 
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={() => setMenuVisible(false)}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -664,48 +884,39 @@ function CalmPostCard({
 const styles = StyleSheet.create({
   cardWrapper: {
     position: 'relative',
-    marginBottom: 26,
+    marginBottom: 24,
     marginHorizontal: 16,
   },
   accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 6,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-    zIndex: 1,
+    display: 'none',
   },
   card: {
     backgroundColor: THEME.surface,
-    paddingVertical: 22,
-    paddingHorizontal: 24,
-    paddingLeft: 28,
-    borderRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    paddingLeft: 22,
+    borderRadius: 18,
+    borderLeftWidth: 1,
+    borderLeftColor: THEME.primary,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.6,
-    shadowRadius: 40,
-    elevation: 10,
-  },
-  doubleTapContainer: {
-    position: 'relative',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 8,
   },
   heartAnimation: {
     position: 'absolute',
-    top: '50%',
+    top: '40%',
     left: '50%',
-    marginTop: -40,
     marginLeft: -40,
+    marginTop: -40,
     zIndex: 1000,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   leftSection: {
     flexDirection: 'row',
@@ -713,81 +924,66 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: THEME.avatarBg,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,99,74,0.2)',
   },
   avatarText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: THEME.avatarIcon,
+    fontSize: 15,
+    fontWeight: '700',
+    color: THEME.primary,
   },
-  authorInfo: {
-    flex: 1,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  authorName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: THEME.text,
-  },
-  dot: {
-    fontSize: 14,
-    color: THEME.textSecondary,
-  },
-  timestamp: {
-    fontSize: 14,
-    color: THEME.textSecondary,
-  },
-  moreButton: {
-    padding: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: THEME.border,
-    marginVertical: 12,
-  },
+  authorInfo: { flex: 1 },
+  authorName: { fontSize: 14, fontWeight: '600', color: THEME.text },
+  timestamp: { fontSize: 12, color: THEME.textSecondary, marginTop: 1 },
+  moreButton: { padding: 4 },
+  divider: { height: 1, backgroundColor: THEME.border, marginVertical: 12 },
   content: {
-    fontSize: 17,
-    lineHeight: 27,
+    fontSize: 16,
+    lineHeight: 26,
     color: THEME.text,
-    marginBottom: 14,
     letterSpacing: 0.2,
+    marginBottom: 10,
   },
   readMore: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
     color: THEME.primary,
-    marginBottom: 14,
+    marginBottom: 12,
   },
-  imagesContainer: {
-    marginBottom: 16,
-  },
+  imagesScroll: { marginBottom: 14 },
   postImage: {
-    width: width - 80,
-    height: 180,
+    width: width - 90,
+    height: 200,
     borderRadius: 12,
     marginRight: 8,
   },
+
+  // Video
   videoContainer: {
     position: 'relative',
-    marginBottom: 16,
-    borderRadius: 12,
+    marginBottom: 14,
+    borderRadius: 14,
     overflow: 'hidden',
-    height: 180,
-    backgroundColor: '#1a1f2e',
+    height: 220,
+    backgroundColor: '#0d1018',
   },
-  videoThumbnail: {
-    width: '100%',
-    height: '100%',
+  video: { width: '100%', height: '100%' },
+  videoLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0d1018',
   },
   videoOverlay: {
     position: 'absolute',
@@ -799,137 +995,221 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,99,74,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
   },
+
+  // Audio
   audioContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    backgroundColor: 'rgba(30, 35, 45, 0.7)',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
+    gap: 12,
+    backgroundColor: 'rgba(255,99,74,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,99,74,0.15)',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 14,
   },
-  audioPlayButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  audioPlayBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: THEME.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
   },
+  audioRight: { flex: 1 },
   waveform: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    height: 40,
+    gap: 2,
+    height: 36,
   },
-  waveBar: {
-    width: 3,
-    borderRadius: 2,
+  waveBar: { width: 3, borderRadius: 2 },
+  waveBarPlayed: { backgroundColor: THEME.primary },
+  waveBarUnplayed: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  audioMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
   },
-  waveBarPlayed: {
-    backgroundColor: THEME.primary,
-  },
-  waveBarUnplayed: {
-    backgroundColor: '#4a4f60',
-  },
-  audioTime: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: THEME.text,
-  },
+  audioTimeText: { fontSize: 11, color: THEME.textSecondary },
+
   hint: {
     fontSize: 13,
     color: THEME.textSecondary,
     fontStyle: 'italic',
-    marginBottom: 18,
+    marginBottom: 12,
   },
+
+  // Actions
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: 2,
+  },
+  actionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  actionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  actionCount: {
-    fontSize: 16,
-    fontWeight: '500',
+  actionCount: { fontSize: 14, fontWeight: '500', color: THEME.textSecondary },
+
+  // Comment section
+  commentSection: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: THEME.border,
+    paddingTop: 8,
+    maxHeight: 320,
+  },
+  commentHandle: { alignItems: 'center', paddingVertical: 6 },
+  handleBar: {
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: THEME.borderStrong,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginBottom: 10,
+  },
+  commentHeaderText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: THEME.textSecondary,
   },
+  commentLoading: { paddingVertical: 20, alignItems: 'center' },
+  commentEmpty: { paddingVertical: 16, alignItems: 'center' },
+  commentEmptyText: {
+    fontSize: 13,
+    color: THEME.textSecondary,
+    fontStyle: 'italic',
+  },
+  commentList: { maxHeight: 180 },
+  commentItem: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  commentAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: THEME.avatarBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commentAvatarText: { fontSize: 12, fontWeight: '700', color: THEME.primary },
+  commentBody: { flex: 1 },
+  commentAuthor: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: THEME.text,
+    marginBottom: 2,
+  },
+  commentText: { fontSize: 13, color: THEME.textSecondary, lineHeight: 18 },
+  commentInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  commentTextInput: {
+    flex: 1,
+    backgroundColor: THEME.inputBg,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: THEME.text,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    maxHeight: 80,
+  },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: THEME.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Menu
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'flex-end',
   },
   menuContainer: {
     backgroundColor: THEME.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   menuHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 18,
     borderBottomWidth: 1,
     borderBottomColor: THEME.border,
   },
-  menuTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: THEME.text,
-  },
+  menuTitle: { fontSize: 16, fontWeight: '700', color: THEME.text },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 18,
     gap: 14,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: THEME.border,
   },
-  menuItemText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: THEME.text,
-  },
+  menuItemText: { fontSize: 15, fontWeight: '500', color: THEME.text },
   cancelButton: {
-    margin: 20,
-    padding: 18,
+    margin: 16,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: THEME.text,
-  },
+  cancelText: { fontSize: 15, fontWeight: '600', color: THEME.textSecondary },
 });
 
-const areEqual = (prevProps, nextProps) => {
-  return (
-    prevProps.post.id === nextProps.post.id &&
-    prevProps.post.is_saved === nextProps.post.is_saved &&
-    prevProps.post.is_liked === nextProps.post.is_liked &&
-    prevProps.post.likes_count === nextProps.post.likes_count &&
-    prevProps.post.thread_count === nextProps.post.thread_count
-  );
-};
+const areEqual = (prev, next) =>
+  prev.post.id === next.post.id &&
+  prev.post.is_saved === next.post.is_saved &&
+  prev.post.is_liked === next.post.is_liked &&
+  prev.post.likes_count === next.post.likes_count &&
+  prev.post.thread_count === next.post.thread_count;
 
 export default React.memo(CalmPostCard, areEqual);
-
-
-
-

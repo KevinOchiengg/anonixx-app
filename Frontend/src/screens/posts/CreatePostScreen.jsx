@@ -301,7 +301,7 @@ export default function CreatePostScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <X size={24} color={THEME.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Share Your Story</Text>
+        <Text style={styles.headerTitle}>Confess</Text>
         <TouchableOpacity
           onPress={handlePost}
           disabled={loading || !content.trim()}
@@ -340,7 +340,7 @@ export default function CreatePostScreen({ navigation }) {
             <TextInput
               value={content}
               onChangeText={setContent}
-              placeholder="Share what's on your mind..."
+              placeholder="Say the unsayable..."
               placeholderTextColor={THEME.textSecondary}
               multiline
               autoFocus
@@ -477,7 +477,7 @@ export default function CreatePostScreen({ navigation }) {
               <Text style={styles.toggleText}>Post Anonymously</Text>
               <Text style={styles.toggleSubtext}>
                 {isAnonymous
-                  ? 'Your identity is hidden'
+                  ? "Nobody knows it's you"
                   : 'Posting with your username'}
               </Text>
             </View>
@@ -504,8 +504,7 @@ export default function CreatePostScreen({ navigation }) {
           <View style={styles.helperAccentBar} />
           <View style={styles.helperBox}>
             <Text style={styles.helperText}>
-              Your post will appear in feeds based on relevance. Be authentic,
-              be kind.
+              No filters. No judgment. Just the raw truth.
             </Text>
           </View>
         </View>

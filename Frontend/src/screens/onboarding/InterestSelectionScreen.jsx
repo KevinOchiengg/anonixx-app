@@ -96,7 +96,7 @@ export default function InterestSelectionScreen({ navigation }) {
       if (selectedInterests.length >= MAX_INTERESTS) {
         Alert.alert(
           'Maximum Reached',
-          `You can select up to ${MAX_INTERESTS} interests. Deselect one to choose another.`
+          ` Pick what you actually deal with. Up to ${MAX_INTERESTS} `
         );
         return;
       }
@@ -108,7 +108,7 @@ export default function InterestSelectionScreen({ navigation }) {
     if (selectedInterests.length === 0) {
       Alert.alert(
         'Select Interests',
-        'Please select at least one interest to personalize your feed'
+        'Pick at least one. We need somewhere to start.'
       );
       return;
     }
@@ -164,7 +164,7 @@ export default function InterestSelectionScreen({ navigation }) {
   const handleSkip = async () => {
     Alert.alert(
       'Skip Interest Selection?',
-      "You'll see a general feed. You can customize your interests anytime in Settings.",
+      "You'll see everything. You can narrow it down later, in settings",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -290,7 +290,7 @@ export default function InterestSelectionScreen({ navigation }) {
         </View>
 
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-          <Text style={styles.skipButtonText}>I'll choose later</Text>
+          <Text style={styles.skipButtonText}>Skip for now</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

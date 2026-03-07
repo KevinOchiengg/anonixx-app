@@ -236,8 +236,6 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.surface,
     borderTopWidth: 1,
     borderTopColor: THEME.border,
-    height: Platform.OS === 'ios' ? 88 : 68,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
     paddingTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },

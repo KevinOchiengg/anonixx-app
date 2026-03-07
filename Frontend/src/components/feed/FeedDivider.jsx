@@ -3,14 +3,10 @@ import { View, Text, StyleSheet, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
-// NEW Cinematic Coral Theme
 const THEME = {
   background: '#0b0f18',
-  backgroundDark: '#06080f',
   surface: '#151924',
-  surfaceDark: '#10131c',
   primary: '#FF634A',
-  primaryDark: '#ff3b2f',
   text: '#EAEAF0',
   textSecondary: '#9A9AA3',
   border: 'rgba(255,255,255,0.05)',
@@ -48,8 +44,9 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.border,
   },
   text: {
-    fontSize: 14,
+    fontSize: 13,
     fontStyle: 'italic',
     color: THEME.textSecondary,
+    letterSpacing: 0.3,
   },
 });

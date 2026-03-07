@@ -234,7 +234,7 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleLike = async () => {
     if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to like posts', [
+      Alert.alert('Sign in Required', 'Please sign in to like confessions', [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign In',
@@ -268,7 +268,7 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleSave = async () => {
     if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to save posts', [
+      Alert.alert('Sign in Required', 'Please sign in to save Confessions', [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign In',
@@ -310,7 +310,7 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleShare = async () => {
     try {
-      const message = `Check out this post on Anonixx:\n\n"${post.content.substring(0, 100)}${post.content.length > 100 ? '...' : ''}"`;
+      const message = `Check out this confession on Anonixx:\n\n"${post.content.substring(0, 100)}${post.content.length > 100 ? '...' : ''}"`;
 
       await Share.share({
         message,
@@ -421,7 +421,7 @@ export default function PostDetailScreen({ route, navigation }) {
         >
           <ArrowLeft size={24} color={THEME.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Post</Text>
+        <Text style={styles.headerTitle}>Confess</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -674,14 +674,14 @@ export default function PostDetailScreen({ route, navigation }) {
             ))
           ) : (
             <Text style={styles.noReplies}>
-              No replies yet. Be the first to respond.
+              No one has said anything yet. say something.
             </Text>
           )}
 
           {threads.length >= 2 && (
             <View style={styles.closedBanner}>
               <Text style={styles.closedText}>
-                Thread closed - Preserved for reading
+                this thread is sealed. read it as it is
               </Text>
             </View>
           )}
@@ -707,7 +707,7 @@ export default function PostDetailScreen({ route, navigation }) {
               onChangeText={setReplyText}
               placeholder={
                 isAuthenticated
-                  ? 'Add a thoughtful reply...'
+                  ? 'say what you actually think...'
                   : 'Sign in to reply...'
               }
               placeholderTextColor={THEME.textSecondary}
