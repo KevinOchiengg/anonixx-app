@@ -6,6 +6,7 @@ import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
 import InterestSelectionScreen from '../screens/onboarding/InterestSelectionScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
+import ChatScreen from '../screens/connect/ChatScreen';
 
 const Stack = createStackNavigator();
 
@@ -37,6 +38,7 @@ export default function AppNavigator() {
           component={InterestSelectionScreen}
         />
         <Stack.Screen name="UnlockPremium" component={UnlockPremiumScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

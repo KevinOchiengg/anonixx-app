@@ -1,9 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '../config/api';
+import { FEATURES } from '../config/featureFlags';
+
+// expo-notifications only works in EAS builds, not Expo Go
+let Notifications = null;
+if (FEATURES.pushNotifications) {
+  Notifications = require('expo-notifications');
+}
 
 const AuthContext = createContext();
 
@@ -17,11 +23,15 @@ export const useAuth = () => {
 
 // ── Push token registration ──────────────────────────────────
 async function registerPushToken(token) {
+  if (!FEATURES.pushNotifications || !Notifications) {
+    console.log('ℹ️ Push notifications disabled — enable in featureFlags.js for EAS build');
+    return;
+  }
+
   try {
     if (!Device.isDevice) return; // Skip on emulator
 
-    const { status: existingStatus } =
-      await Notifications.getPermissionsAsync();
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
@@ -55,21 +65,23 @@ async function registerPushToken(token) {
 }
 
 // ── Notification handler (foreground) ───────────────────────
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
-if (Platform.OS === 'android') {
-  Notifications.setNotificationChannelAsync('default', {
-    name: 'default',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#FF634A',
+if (FEATURES.pushNotifications && Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
   });
+
+  if (Platform.OS === 'android') {
+    Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF634A',
+    });
+  }
 }
 
 // ── Provider ─────────────────────────────────────────────────
@@ -90,10 +102,7 @@ export const AuthProvider = ({ children }) => {
       if (token && userData) {
         setIsAuthenticated(true);
         setUser(JSON.parse(userData));
-        console.log(
-          '✅ User authenticated from storage:',
-          JSON.parse(userData).username
-        );
+        console.log('✅ User authenticated from storage:', JSON.parse(userData).username);
       } else {
         setIsAuthenticated(false);
         setUser(null);

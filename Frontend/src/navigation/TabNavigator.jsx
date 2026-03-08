@@ -3,91 +3,79 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SearchScreen from '../screens/feed/SearchScreen';
 import {
   Home,
   Users,
   Settings,
-  PlusCircle,
   MessageCircle,
   Plus,
 } from 'lucide-react-native';
+
+// Feed
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen';
+import SearchScreen from '../screens/feed/SearchScreen';
+import PostDetailScreen from '../screens/posts/PostDetailScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
-import PostDetailScreen from '../screens/posts/PostDetailScreen';
+import ImpactDashboardScreen from '../screens/impact/ImpactDashboardScreen';
+import SundayReflectionScreen from '../screens/rituals/SundayReflectionScreen';
+import CrisisResourcesScreen from '../screens/resources/CrisisResourcesScreen';
+
+// Connect (new system)
+import ConnectScreen from '../screens/connect/ConnectScreen';
+import ChatScreen from '../screens/connect/ChatScreen';
+
+// Groups
 import GroupsScreen from '../screens/groups/GroupsScreen';
 import GroupDetailScreen from '../screens/groups/GroupDetailScreen';
 import CreateGroupScreen from '../screens/groups/CreateGroupScreen';
+
+// Settings
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
+
+// Create
 import CreatePostScreen from '../screens/posts/CreatePostScreen';
-import ImpactDashboardScreen from '../screens/impact/ImpactDashboardScreen';
-import ConnectionsScreen from '../screens/connections/ConnectionsScreen';
-import ChatScreen from '../screens/connections/ChatScreen';
-import SundayReflectionScreen from '../screens/rituals/SundayReflectionScreen';
-import CrisisResourcesScreen from '../screens/resources/CrisisResourcesScreen';
-import ConnectFeedScreen from '../screens/connect/ConnectFeedScreen';
-import CreateBroadcastScreen from '../screens/connect/CreateBroadcastScreen';
-import SendOpenerScreen from '../screens/connect/SendOpenerScreen';
-import PendingOpenersScreen from '../screens/connect/PendingOpenersScreen';
-import ConnectionsListScreen from '../screens/connect/ConnectionsListScreen';
-import ConnectChatScreen from '../screens/connect/ChatScreen';
-import RevealInitiateScreen from '../screens/connect/RevealInitiateScreen';
-import RevealPendingScreen from '../screens/connect/RevealPendingScreen';
-import RevealMomentScreen from '../screens/connect/RevealMomentScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-// NEW Cinematic Coral Theme
 const THEME = {
   background: '#0b0f18',
-  backgroundDark: '#06080f',
   surface: '#151924',
-  surfaceDark: '#10131c',
   primary: '#FF634A',
-  primaryDark: '#ff3b2f',
   text: '#EAEAF0',
   textSecondary: '#9A9AA3',
   border: 'rgba(255,255,255,0.05)',
   inactive: '#5a5f70',
 };
 
-// Custom Tab Bar Icon with Glow Effect
+// ─── TAB BAR ICON ─────────────────────────────────────────────
 const TabBarIcon = ({ route, focused, color, size }) => {
-  let IconComponent;
-
-  if (route.name === 'Feed') {
-    IconComponent = Home;
-  } else if (route.name === 'Connect') {
-    IconComponent = MessageCircle;
-  } else if (route.name === 'Groups') {
-    IconComponent = Users;
-  } else if (route.name === 'Settings') {
-    IconComponent = Settings;
-  }
+  const icons = {
+    Feed: Home,
+    Connect: MessageCircle,
+    Groups: Users,
+    Settings: Settings,
+  };
+  const IconComponent = icons[route.name];
+  if (!IconComponent) return null;
 
   return (
     <View style={styles.iconContainer}>
-      {/* Glow effect for active tab */}
       {focused && <View style={styles.glowEffect} />}
-
-      {/* Icon */}
       <IconComponent
         size={size}
         color={color}
         strokeWidth={focused ? 2.5 : 2}
       />
-
-      {/* Active indicator dot */}
       {focused && <View style={styles.activeDot} />}
     </View>
   );
 };
 
-// Custom Center Button Component
+// ─── CENTER CREATE BUTTON ─────────────────────────────────────
 const CustomTabBarButton = ({ children, onPress }) => (
   <TouchableOpacity
     style={styles.centerButtonContainer}
@@ -101,7 +89,7 @@ const CustomTabBarButton = ({ children, onPress }) => (
   </TouchableOpacity>
 );
 
-// Feed Stack
+// ─── FEED STACK ───────────────────────────────────────────────
 function FeedStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -111,8 +99,6 @@ function FeedStack() {
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ThreadView" component={ThreadViewScreen} />
       <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen name="Connections" component={ConnectionsScreen} />
-      <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen
         name="SundayReflection"
         component={SundayReflectionScreen}
@@ -122,24 +108,17 @@ function FeedStack() {
   );
 }
 
-// Connect Stack
+// ─── CONNECT STACK ────────────────────────────────────────────
 function ConnectStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="ConnectFeed" component={ConnectFeedScreen} />
-      <Stack.Screen name="CreateBroadcast" component={CreateBroadcastScreen} />
-      <Stack.Screen name="SendOpener" component={SendOpenerScreen} />
-      <Stack.Screen name="PendingOpeners" component={PendingOpenersScreen} />
-      <Stack.Screen name="ConnectionsList" component={ConnectionsListScreen} />
-      <Stack.Screen name="ConnectChat" component={ConnectChatScreen} />
-      <Stack.Screen name="RevealInitiate" component={RevealInitiateScreen} />
-      <Stack.Screen name="RevealPending" component={RevealPendingScreen} />
-      <Stack.Screen name="RevealMoment" component={RevealMomentScreen} />
+      <Stack.Screen name="ConnectMain" component={ConnectScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
     </Stack.Navigator>
   );
 }
 
-// Groups Stack
+// ─── GROUPS STACK ─────────────────────────────────────────────
 function GroupsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -150,7 +129,7 @@ function GroupsStack() {
   );
 }
 
-// Settings Stack
+// ─── SETTINGS STACK ───────────────────────────────────────────
 function SettingsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -159,8 +138,6 @@ function SettingsStack() {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen name="Connections" component={ConnectionsScreen} />
-      <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen
         name="SundayReflection"
         component={SundayReflectionScreen}
@@ -170,6 +147,7 @@ function SettingsStack() {
   );
 }
 
+// ─── TAB NAVIGATOR ────────────────────────────────────────────
 export default function TabNavigator() {
   const insets = useSafeAreaInsets();
 
@@ -273,7 +251,6 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.primary,
     marginTop: 4,
   },
-  // Center Button Styles
   centerButtonContainer: {
     top: -20,
     justifyContent: 'center',

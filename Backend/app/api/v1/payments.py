@@ -8,7 +8,8 @@ from app.dependencies import get_current_user_id
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
-UNLOCK_AMOUNT = 2.00  # USD
+UNLOCK_AMOUNT_USD = 2.00
+UNLOCK_AMOUNT_KES = 260
 
 
 # ─────────────────────────────────────────────
@@ -16,12 +17,12 @@ UNLOCK_AMOUNT = 2.00  # USD
 # ─────────────────────────────────────────────
 
 class StripeUnlockRequest(BaseModel):
-    connection_id: str
+    chat_id: str
     payment_method_id: str
 
 
 class MpesaUnlockRequest(BaseModel):
-    connection_id: str
+    chat_id: str
     phone_number: str
 
 
@@ -30,36 +31,52 @@ class MpesaCallbackRequest(BaseModel):
 
 
 # ─────────────────────────────────────────────
-# HELPER
+# HELPERS
 # ─────────────────────────────────────────────
 
-async def upgrade_connection_to_premium(connection_id: str, payment_ref: str, db):
-    """Mark connection as premium after successful payment"""
-    result = await db.connections.update_one(
-        {"_id": ObjectId(connection_id)},
+async def unlock_chat(chat_id: str, payment_ref: str, user_id: str, db):
+    """Mark connect_chat as unlocked after successful payment"""
+    result = await db.connect_chats.update_one(
+        {"_id": ObjectId(chat_id)},
         {
             "$set": {
-                "status": "premium",
-                "upgraded_at": datetime.now(timezone.utc),
+                "is_unlocked": True,
+                "unlocked_at": datetime.now(timezone.utc),
+                "unlocked_by": user_id,
                 "payment_ref": payment_ref,
-                "expires_at": None,
-                "message_limit": None,
             }
         }
     )
 
     if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Connection not found")
+        raise HTTPException(status_code=404, detail="Chat not found")
 
     await db.payments.insert_one({
         "_id": ObjectId(),
-        "connection_id": ObjectId(connection_id),
-        "amount": UNLOCK_AMOUNT,
-        "currency": "USD",
+        "chat_id": chat_id,
+        "user_id": user_id,
+        "amount_usd": UNLOCK_AMOUNT_USD,
+        "amount_kes": UNLOCK_AMOUNT_KES,
         "payment_ref": payment_ref,
-        "type": "connection_unlock",
+        "type": "chat_unlock",
         "created_at": datetime.now(timezone.utc),
     })
+
+
+async def get_chat_for_user(chat_id: str, user_id: str, db):
+    """Fetch a chat and verify the user is a participant"""
+    try:
+        chat = await db.connect_chats.find_one({"_id": ObjectId(chat_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid chat ID")
+
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    if user_id not in [chat.get("from_user_id"), chat.get("to_user_id")]:
+        raise HTTPException(status_code=403, detail="Not your chat")
+
+    return chat
 
 
 # ─────────────────────────────────────────────
@@ -80,28 +97,19 @@ async def unlock_with_stripe(
     except ImportError:
         raise HTTPException(status_code=500, detail="Stripe not installed. Run: pip install stripe")
 
-    connection = await db.connections.find_one({
-        "_id": ObjectId(data.connection_id),
-        "$or": [
-            {"broadcast_user_id": current_user_id},
-            {"opener_user_id": current_user_id},
-        ]
-    })
+    chat = await get_chat_for_user(data.chat_id, current_user_id, db)
 
-    if not connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
-    if connection.get("status") == "premium":
-        return {"message": "Already unlocked", "status": "premium"}
+    if chat.get("is_unlocked"):
+        return {"message": "Already unlocked", "status": "unlocked"}
 
     try:
         intent = stripe.PaymentIntent.create(
-            amount=200,
+            amount=200,  # $2.00 in cents
             currency="usd",
             payment_method=data.payment_method_id,
             confirm=True,
             automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
-            metadata={"connection_id": data.connection_id, "user_id": current_user_id}
+            metadata={"chat_id": data.chat_id, "user_id": current_user_id}
         )
     except stripe.CardError as e:
         raise HTTPException(status_code=400, detail=str(e.user_message))
@@ -111,9 +119,9 @@ async def unlock_with_stripe(
     if intent.status != "succeeded":
         raise HTTPException(status_code=400, detail=f"Payment not completed. Status: {intent.status}")
 
-    await upgrade_connection_to_premium(data.connection_id, intent.id, db)
+    await unlock_chat(data.chat_id, intent.id, current_user_id, db)
 
-    return {"message": "Connection unlocked!", "status": "premium", "payment_ref": intent.id}
+    return {"message": "Chat unlocked!", "status": "unlocked", "payment_ref": intent.id}
 
 
 # ─────────────────────────────────────────────
@@ -126,25 +134,17 @@ async def unlock_with_mpesa(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """Initiate M-Pesa STK Push for $2 connection unlock"""
+    """Initiate M-Pesa STK Push for KES 260 chat unlock"""
     import httpx
     import base64
     from app.config import settings
 
-    connection = await db.connections.find_one({
-        "_id": ObjectId(data.connection_id),
-        "$or": [
-            {"broadcast_user_id": current_user_id},
-            {"opener_user_id": current_user_id},
-        ]
-    })
+    chat = await get_chat_for_user(data.chat_id, current_user_id, db)
 
-    if not connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
+    if chat.get("is_unlocked"):
+        return {"message": "Already unlocked", "status": "unlocked"}
 
-    if connection.get("status") == "premium":
-        return {"message": "Already unlocked", "status": "premium"}
-
+    # Get M-Pesa access token
     async with httpx.AsyncClient() as client:
         credentials = base64.b64encode(
             f"{settings.MPESA_CONSUMER_KEY}:{settings.MPESA_CONSUMER_SECRET}".encode()
@@ -165,20 +165,18 @@ async def unlock_with_mpesa(
         f"{settings.MPESA_SHORTCODE}{settings.MPESA_PASSKEY}{timestamp}".encode()
     ).decode()
 
-    amount_kes = 260  # ~$2 USD
-
     stk_payload = {
         "BusinessShortCode": settings.MPESA_SHORTCODE,
         "Password": password,
         "Timestamp": timestamp,
         "TransactionType": "CustomerPayBillOnline",
-        "Amount": amount_kes,
+        "Amount": UNLOCK_AMOUNT_KES,
         "PartyA": data.phone_number,
         "PartyB": settings.MPESA_SHORTCODE,
         "PhoneNumber": data.phone_number,
         "CallBackURL": f"{settings.BASE_URL}/api/v1/payments/mpesa/callback",
-        "AccountReference": f"TRACE-{data.connection_id[:8]}",
-        "TransactionDesc": "Anonixx Connection Unlock",
+        "AccountReference": f"ANON-{data.chat_id[:8]}",
+        "TransactionDesc": "Anonixx Chat Unlock",
     }
 
     async with httpx.AsyncClient() as client:
@@ -204,10 +202,10 @@ async def unlock_with_mpesa(
     await db.pending_payments.insert_one({
         "_id": ObjectId(),
         "checkout_request_id": checkout_request_id,
-        "connection_id": data.connection_id,
+        "chat_id": data.chat_id,
         "user_id": current_user_id,
-        "amount_kes": amount_kes,
-        "type": "connection_unlock",
+        "amount_kes": UNLOCK_AMOUNT_KES,
+        "type": "chat_unlock",
         "status": "pending",
         "created_at": datetime.now(timezone.utc),
     })
@@ -247,12 +245,20 @@ async def mpesa_callback(
                 checkout_request_id
             )
 
-            await upgrade_connection_to_premium(pending["connection_id"], mpesa_ref, db)
+            await unlock_chat(
+                chat_id=pending["chat_id"],
+                payment_ref=mpesa_ref,
+                user_id=pending["user_id"],
+                db=db
+            )
 
             await db.pending_payments.update_one(
                 {"_id": pending["_id"]},
                 {"$set": {"status": "completed", "mpesa_ref": mpesa_ref}}
             )
+
+            print(f"✅ Chat {pending['chat_id']} unlocked via M-Pesa — {mpesa_ref}")
+
         else:
             await db.pending_payments.update_one(
                 {"_id": pending["_id"]},
@@ -262,6 +268,8 @@ async def mpesa_callback(
                     "result_desc": stk_callback.get("ResultDesc"),
                 }}
             )
+
+            print(f"❌ M-Pesa failed for chat {pending['chat_id']} — {stk_callback.get('ResultDesc')}")
 
     except Exception as e:
         print(f"❌ M-Pesa callback error: {e}")
@@ -289,6 +297,6 @@ async def check_mpesa_status(
         raise HTTPException(status_code=404, detail="Payment not found")
 
     return {
-        "status": pending["status"],   # pending | completed | failed
-        "connection_id": pending.get("connection_id"),
+        "status": pending["status"],  # pending | completed | failed
+        "chat_id": pending.get("chat_id"),
     }

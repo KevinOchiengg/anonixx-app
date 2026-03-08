@@ -12,12 +12,13 @@
       "resizeMode": "contain",
       "backgroundColor": "#0a0a1a"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonixx.app"
+      "bundleIdentifier": "com.anonixx.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -30,9 +31,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-asset"
-    ],
+    "plugins": ["expo-asset", "expo-video"],
     "extra": {
       "eas": {
         "projectId": "e6e5b944-ee40-4251-8b89-ff8a3e733ec2"

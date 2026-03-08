@@ -15,7 +15,7 @@ from app.api.v1 import (
     connections,
     rituals,
     connect,
-)  # ✅ fixed import
+)
 
 
 @asynccontextmanager
@@ -23,13 +23,6 @@ async def lifespan(app: FastAPI):
     await connect_to_mongo()
     print("🚀 Anonixx Backend Started!")
     print("✅ MongoDB Connected")
-    print("📦 Loading Phase 2 Features...")
-    print("   - Impact Dashboard")
-    print("   - Deep Connections")
-    print("   - Sunday Reflections")
-    print("   - Crisis Resources")
-    print("   - Traces (TRACE System)")  # ✅ added
-    print("🌙 A space that heals, not hurts")
     yield
     await close_mongo_connection()
 
@@ -60,15 +53,13 @@ async def root():
         "docs": "/docs",
         "features": [
             "auth",
-            "coins",
             "posts",
+            "connect",
+            "payments",
+            "impact",
+            "rituals",
             "groups",
             "upload",
-            "users",
-            "impact",
-            "connections",
-            "rituals",
-            "traces",  # ✅ added
         ],
     }
 
@@ -83,5 +74,5 @@ app.include_router(users.router, prefix=settings.API_V1_PREFIX)
 app.include_router(impact.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connections.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
-app.include_router(connect.router, prefix=settings.API_V1_PREFIX)  # ✅ fixed prefix
+app.include_router(connect.router, prefix=settings.API_V1_PREFIX)
 app.include_router(payments.router, prefix=settings.API_V1_PREFIX)

@@ -129,9 +129,37 @@ export default function CalmFeedScreen({ navigation }) {
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authModalAction, setAuthModalAction] = useState('default');
   const [streakBanner, setStreakBanner] = useState(null);
+  const [activeVideoId, setActiveVideoId] = useState(null);
+  const [nextVideo, setNextVideo] = useState(null);
 
   const flatListRef = useRef(null);
+  const postsRef = useRef([]);  // Ref so onViewableItemsChanged never changes
   const styles = useMemo(() => createStyles(), []);
+
+  // Keep postsRef in sync — avoids recreating onViewableItemsChanged
+  useEffect(() => { postsRef.current = posts; }, [posts]);
+
+  // Viewability config — 60% of item must be visible to count as active
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 60,
+    minimumViewTime: 300,
+  }).current;
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    const visibleVideo = viewableItems.find(
+      (v) => v.item?.type === 'post' && v.item?.video_url
+    );
+    if (visibleVideo) {
+      setActiveVideoId(visibleVideo.item.id);
+      const videoPosts = postsRef.current.filter((p) => p.type === 'post' && p.video_url);
+      const currentIdx = videoPosts.findIndex((p) => p.id === visibleVideo.item.id);
+      const next = videoPosts[currentIdx + 1] || null;
+      setNextVideo(next || null);
+    } else {
+      setActiveVideoId(null);
+      setNextVideo(null);
+    }
+  }).current;
 
   useEffect(() => {
     loadFeed();
@@ -171,7 +199,6 @@ export default function CalmFeedScreen({ navigation }) {
           setSessionPosts(data.session_posts);
           setHasMore(data.has_more);
 
-          // Show streak banner only on first load of the day
           if (data.streak?.is_new_day && data.streak?.message) {
             setStreakBanner({
               message: data.streak.message,
@@ -276,6 +303,22 @@ export default function CalmFeedScreen({ navigation }) {
     navigation.navigate('PostDetail', { post });
   }, [navigation]);
 
+  const handleVideoChange = useCallback((newPostId) => {
+    // When fullscreen swaps to next video, update active + next
+    setActiveVideoId(newPostId);
+    const videoPosts = postsRef.current.filter((p) => p.type === 'post' && p.video_url);
+    const currentIdx = videoPosts.findIndex((p) => p.id === newPostId);
+    const next = videoPosts[currentIdx + 1] || null;
+    setNextVideo(next || null);
+    // Also scroll feed to keep in sync
+    if (flatListRef.current) {
+      const nextIndex = postsRef.current.findIndex((p) => p.id === newPostId);
+      if (nextIndex !== -1) {
+        flatListRef.current.scrollToIndex({ index: nextIndex, animated: true, viewPosition: 0.1 });
+      }
+    }
+  }, []);
+
   const handleContinue = useCallback(() => {
     setSessionLimitReached(false);
     loadFeed();
@@ -309,12 +352,15 @@ export default function CalmFeedScreen({ navigation }) {
             onViewThread={handleViewThread}
             onPress={handlePostPress}
             navigation={navigation}
+            activeVideoId={activeVideoId}
+            nextVideo={item.video_url && item.id === activeVideoId ? nextVideo : null}
+            onVideoChange={handleVideoChange}
           />
         );
       }
       return null;
     },
-    [handleResponse, handleSave, handleViewThread, handlePostPress, navigation]
+    [handleResponse, handleSave, handleViewThread, handlePostPress, navigation, activeVideoId, nextVideo, handleVideoChange]
   );
 
   const keyExtractor = useCallback(
@@ -433,6 +479,8 @@ export default function CalmFeedScreen({ navigation }) {
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.feedContent}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
       />
 
       <AuthPromptModal
