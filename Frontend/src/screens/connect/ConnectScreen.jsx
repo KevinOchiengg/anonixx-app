@@ -26,16 +26,9 @@ const THEME = {
 };
 
 const AVATAR_MAP = {
-  ghost: '👻',
-  shadow: '🌑',
-  flame: '🔥',
-  void: '🕳️',
-  storm: '⛈️',
-  smoke: '💨',
-  eclipse: '🌘',
-  shard: '🔷',
-  moth: '🦋',
-  raven: '🐦‍⬛',
+  ghost: '👻', shadow: '🌑', flame: '🔥', void: '🕳️',
+  storm: '⛈️', smoke: '💨', eclipse: '🌘', shard: '🔷',
+  moth: '🦋', raven: '🐦‍⬛',
 };
 
 const getAvatar = (name) => AVATAR_MAP[name] || '👤';
@@ -47,7 +40,6 @@ function timeAgo(isoString) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
-
 
 // ─── REQUEST CARD ─────────────────────────────────────────────
 function RequestCard({ request, onAccept, onDecline, accepting }) {
@@ -62,12 +54,9 @@ function RequestCard({ request, onAccept, onDecline, accepting }) {
 
   return (
     <Animated.View style={[styles.requestCard, { transform: [{ scale: scaleAnim }] }]}>
-      {/* Avatar */}
       <View style={[styles.requestAvatar, { backgroundColor: request.from_avatar_color + '22', borderColor: request.from_avatar_color + '55' }]}>
         <Text style={styles.requestAvatarEmoji}>{getAvatar(request.from_avatar)}</Text>
       </View>
-
-      {/* Info */}
       <View style={styles.requestInfo}>
         <Text style={styles.requestName}>{request.from_anonymous_name}</Text>
         {request.from_vibe_tags?.length > 0 && (
@@ -81,8 +70,6 @@ function RequestCard({ request, onAccept, onDecline, accepting }) {
         )}
         <Text style={styles.requestTime}>{timeAgo(request.created_at)}</Text>
       </View>
-
-      {/* Actions */}
       <View style={styles.requestActions}>
         <TouchableOpacity
           style={styles.acceptBtn}
@@ -90,11 +77,10 @@ function RequestCard({ request, onAccept, onDecline, accepting }) {
           disabled={accepting === request.request_id}
           activeOpacity={0.8}
         >
-          {accepting === request.request_id ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.acceptBtnText}>Accept</Text>
-          )}
+          {accepting === request.request_id
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.acceptBtnText}>Accept</Text>
+          }
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.declineBtn}
@@ -108,7 +94,6 @@ function RequestCard({ request, onAccept, onDecline, accepting }) {
   );
 }
 
-
 // ─── CHAT CARD ────────────────────────────────────────────────
 function ChatCard({ chat, onPress }) {
   const hasUnread = chat.unread_count > 0;
@@ -116,13 +101,10 @@ function ChatCard({ chat, onPress }) {
 
   return (
     <TouchableOpacity style={styles.chatCard} onPress={() => onPress(chat)} activeOpacity={0.8}>
-      {/* Avatar */}
       <View style={[styles.chatAvatar, { backgroundColor: (chat.other_avatar_color || '#FF634A') + '22', borderColor: (chat.other_avatar_color || '#FF634A') + '55' }]}>
         <Text style={styles.chatAvatarEmoji}>{getAvatar(chat.other_avatar)}</Text>
         {hasUnread && <View style={styles.unreadDot} />}
       </View>
-
-      {/* Info */}
       <View style={styles.chatInfo}>
         <View style={styles.chatTopRow}>
           <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]}>
@@ -130,12 +112,9 @@ function ChatCard({ chat, onPress }) {
           </Text>
           <Text style={styles.chatTime}>{timeAgo(chat.last_message_at)}</Text>
         </View>
-
         <Text style={[styles.chatPreview, hasUnread && styles.chatPreviewUnread]} numberOfLines={1}>
           {chat.last_message || 'No messages yet'}
         </Text>
-
-        {/* Status badges */}
         <View style={styles.chatBadges}>
           {chat.is_unlocked && (
             <View style={styles.unlockedBadge}>
@@ -161,7 +140,6 @@ function ChatCard({ chat, onPress }) {
           )}
         </View>
       </View>
-
       {hasUnread && (
         <View style={styles.unreadBadge}>
           <Text style={styles.unreadBadgeText}>{chat.unread_count}</Text>
@@ -171,16 +149,15 @@ function ChatCard({ chat, onPress }) {
   );
 }
 
-
 // ─── MAIN SCREEN ──────────────────────────────────────────────
 export default function ConnectScreen({ navigation }) {
-  const [activeTab, setActiveTab] = useState('requests');
-  const [requests, setRequests] = useState([]);
-  const [chats, setChats] = useState([]);
+  const [activeTab, setActiveTab]       = useState('requests');
+  const [requests, setRequests]         = useState([]);
+  const [chats, setChats]               = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [loadingChats, setLoadingChats] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [accepting, setAccepting] = useState(null);
+  const [refreshing, setRefreshing]     = useState(false);
+  const [accepting, setAccepting]       = useState(null);
   const [requestCount, setRequestCount] = useState(0);
 
   const tabIndicator = useRef(new Animated.Value(0)).current;
@@ -199,13 +176,19 @@ export default function ConnectScreen({ navigation }) {
     setLoadingRequests(true);
     try {
       const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        console.log('⚠️ loadRequests — no token');
+        return;
+      }
       const res = await fetch(`${API_BASE_URL}/api/v1/connect/requests/incoming`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (res.ok) {
         setRequests(data.requests || []);
         setRequestCount(data.count || 0);
+      } else {
+        console.log('loadRequests error:', res.status, data.detail);
       }
     } catch (e) {
       console.log('Load requests error:', e);
@@ -218,11 +201,16 @@ export default function ConnectScreen({ navigation }) {
     setLoadingChats(true);
     try {
       const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        console.log('⚠️ loadChats — no token');
+        return;
+      }
       const res = await fetch(`${API_BASE_URL}/api/v1/connect/chats`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (res.ok) setChats(data.chats || []);
+      else console.log('loadChats error:', res.status, data.detail);
     } catch (e) {
       console.log('Load chats error:', e);
     } finally {
@@ -249,18 +237,19 @@ export default function ConnectScreen({ navigation }) {
     setAccepting(requestId);
     try {
       const token = await AsyncStorage.getItem('token');
+      if (!token) return;
       const res = await fetch(`${API_BASE_URL}/api/v1/connect/requests/${requestId}/accept`, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (res.ok) {
         setRequests((prev) => prev.filter((r) => r.request_id !== requestId));
         setRequestCount((c) => Math.max(0, c - 1));
-        // Reload chats to show new one
         loadChats();
-        // Switch to chats tab
         switchTab('chats');
+      } else {
+        console.log('Accept error:', res.status, data.detail);
       }
     } catch (e) {
       console.log('Accept error:', e);
@@ -272,9 +261,10 @@ export default function ConnectScreen({ navigation }) {
   const handleDecline = async (requestId) => {
     try {
       const token = await AsyncStorage.getItem('token');
+      if (!token) return;
       await fetch(`${API_BASE_URL}/api/v1/connect/requests/${requestId}/decline`, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       });
       setRequests((prev) => prev.filter((r) => r.request_id !== requestId));
       setRequestCount((c) => Math.max(0, c - 1));
@@ -298,7 +288,7 @@ export default function ConnectScreen({ navigation }) {
   });
 
   const isLoading = activeTab === 'requests' ? loadingRequests : loadingChats;
-  const isEmpty = activeTab === 'requests' ? requests.length === 0 : chats.length === 0;
+  const isEmpty   = activeTab === 'requests' ? requests.length === 0 : chats.length === 0;
 
   return (
     <View style={styles.container}>
@@ -325,8 +315,6 @@ export default function ConnectScreen({ navigation }) {
             Chats
           </Text>
         </TouchableOpacity>
-
-        {/* Sliding indicator */}
         <Animated.View style={[styles.tabIndicator, { left: tabIndicatorX }]} />
       </View>
 
@@ -345,7 +333,7 @@ export default function ConnectScreen({ navigation }) {
           </Text>
           <Text style={styles.emptyBody}>
             {activeTab === 'requests'
-              ? 'When someone wants to connect with you, they\'ll appear here.'
+              ? "When someone wants to connect with you, they'll appear here."
               : 'Accept a connect request to start an anonymous conversation.'}
           </Text>
         </View>
@@ -383,329 +371,62 @@ export default function ConnectScreen({ navigation }) {
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEME.background,
-  },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: THEME.text,
-    letterSpacing: -0.5,
-  },
-  headerSub: {
-    fontSize: 13,
-    color: THEME.textSecondary,
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
+  container:      { flex: 1, backgroundColor: THEME.background },
+  header:         { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16 },
+  headerTitle:    { fontSize: 28, fontWeight: '800', color: THEME.text, letterSpacing: -0.5 },
+  headerSub:      { fontSize: 13, color: THEME.textSecondary, marginTop: 4, fontStyle: 'italic' },
 
-  // Tabs
-  tabs: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    backgroundColor: THEME.surface,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-    position: 'relative',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: THEME.border,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    zIndex: 1,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: THEME.textSecondary,
-  },
-  tabTextActive: {
-    color: THEME.text,
-  },
-  tabIndicator: {
-    position: 'absolute',
-    width: '50%',
-    top: 4,
-    bottom: 4,
-    backgroundColor: THEME.surfaceAlt,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: THEME.border,
-  },
-  tabBadge: {
-    backgroundColor: THEME.primary,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    minWidth: 18,
-    alignItems: 'center',
-  },
-  tabBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  tabs:           { flexDirection: 'row', marginHorizontal: 20, backgroundColor: THEME.surface, borderRadius: 12, padding: 4, marginBottom: 16, position: 'relative', overflow: 'hidden', borderWidth: 1, borderColor: THEME.border },
+  tab:            { flex: 1, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, zIndex: 1 },
+  tabText:        { fontSize: 14, fontWeight: '600', color: THEME.textSecondary },
+  tabTextActive:  { color: THEME.text },
+  tabIndicator:   { position: 'absolute', width: '50%', top: 4, bottom: 4, backgroundColor: THEME.surfaceAlt, borderRadius: 9, borderWidth: 1, borderColor: THEME.border },
+  tabBadge:       { backgroundColor: THEME.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, minWidth: 18, alignItems: 'center' },
+  tabBadgeText:   { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  // List
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-    gap: 12,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  listContent:    { paddingHorizontal: 20, paddingBottom: 100, gap: 12 },
+  centered:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Empty state
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: THEME.text,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  emptyBody: {
-    fontSize: 14,
-    color: THEME.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  emptyState:     { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+  emptyEmoji:     { fontSize: 48, marginBottom: 16 },
+  emptyTitle:     { fontSize: 18, fontWeight: '700', color: THEME.text, marginBottom: 10, textAlign: 'center' },
+  emptyBody:      { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 22 },
 
-  // Request card
-  requestCard: {
-    backgroundColor: THEME.surface,
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    borderWidth: 1,
-    borderColor: THEME.border,
-  },
-  requestAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    flexShrink: 0,
-  },
-  requestAvatarEmoji: {
-    fontSize: 24,
-  },
-  requestInfo: {
-    flex: 1,
-    gap: 5,
-  },
-  requestName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: THEME.text,
-  },
-  requestVibes: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  miniVibeTag: {
-    backgroundColor: 'rgba(255,99,74,0.1)',
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,99,74,0.2)',
-  },
-  miniVibeText: {
-    color: THEME.primary,
-    fontSize: 11,
-  },
-  requestTime: {
-    color: THEME.textSecondary,
-    fontSize: 12,
-  },
-  requestActions: {
-    gap: 8,
-    flexShrink: 0,
-  },
-  acceptBtn: {
-    backgroundColor: THEME.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    minWidth: 72,
-    alignItems: 'center',
-  },
-  acceptBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  declineBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: THEME.border,
-  },
-  declineBtnText: {
-    color: THEME.textSecondary,
-    fontSize: 13,
-  },
+  requestCard:        { backgroundColor: THEME.surface, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: THEME.border },
+  requestAvatar:      { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, flexShrink: 0 },
+  requestAvatarEmoji: { fontSize: 24 },
+  requestInfo:        { flex: 1, gap: 5 },
+  requestName:        { fontSize: 15, fontWeight: '700', color: THEME.text },
+  requestVibes:       { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  miniVibeTag:        { backgroundColor: 'rgba(255,99,74,0.1)', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)' },
+  miniVibeText:       { color: THEME.primary, fontSize: 11 },
+  requestTime:        { color: THEME.textSecondary, fontSize: 12 },
+  requestActions:     { gap: 8, flexShrink: 0 },
+  acceptBtn:          { backgroundColor: THEME.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, minWidth: 72, alignItems: 'center' },
+  acceptBtnText:      { color: '#fff', fontSize: 13, fontWeight: '700' },
+  declineBtn:         { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: THEME.border },
+  declineBtnText:     { color: THEME.textSecondary, fontSize: 13 },
 
-  // Chat card
-  chatCard: {
-    backgroundColor: THEME.surface,
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
-  },
-  chatAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    flexShrink: 0,
-    position: 'relative',
-  },
-  chatAvatarEmoji: {
-    fontSize: 22,
-  },
-  unreadDot: {
-    position: 'absolute',
-    top: 1,
-    right: 1,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: THEME.primary,
-    borderWidth: 1.5,
-    borderColor: THEME.background,
-  },
-  chatInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  chatTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  chatName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: THEME.text,
-  },
-  chatNameUnread: {
-    fontWeight: '800',
-  },
-  chatTime: {
-    fontSize: 11,
-    color: THEME.textSecondary,
-  },
-  chatPreview: {
-    fontSize: 13,
-    color: THEME.textSecondary,
-  },
-  chatPreviewUnread: {
-    color: THEME.text,
-    fontWeight: '500',
-  },
-  chatBadges: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  unlockedBadge: {
-    backgroundColor: 'rgba(76,175,80,0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(76,175,80,0.25)',
-  },
-  unlockedBadgeText: {
-    color: THEME.success,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  lowBadge: {
-    backgroundColor: 'rgba(255,99,74,0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,99,74,0.25)',
-  },
-  lowBadgeText: {
-    color: THEME.primary,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  revealBadge: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: THEME.border,
-  },
-  revealAccepted: {
-    backgroundColor: 'rgba(76,175,80,0.08)',
-    borderColor: 'rgba(76,175,80,0.2)',
-  },
-  revealBadgeText: {
-    color: THEME.textSecondary,
-    fontSize: 11,
-  },
-  unreadBadge: {
-    backgroundColor: THEME.primary,
-    borderRadius: 12,
-    minWidth: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    flexShrink: 0,
-  },
-  unreadBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
-  },
+  chatCard:           { backgroundColor: THEME.surface, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: THEME.border },
+  chatAvatar:         { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, flexShrink: 0, position: 'relative' },
+  chatAvatarEmoji:    { fontSize: 22 },
+  unreadDot:          { position: 'absolute', top: 1, right: 1, width: 10, height: 10, borderRadius: 5, backgroundColor: THEME.primary, borderWidth: 1.5, borderColor: THEME.background },
+  chatInfo:           { flex: 1, gap: 4 },
+  chatTopRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  chatName:           { fontSize: 15, fontWeight: '600', color: THEME.text },
+  chatNameUnread:     { fontWeight: '800' },
+  chatTime:           { fontSize: 11, color: THEME.textSecondary },
+  chatPreview:        { fontSize: 13, color: THEME.textSecondary },
+  chatPreviewUnread:  { color: THEME.text, fontWeight: '500' },
+  chatBadges:         { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
+  unlockedBadge:      { backgroundColor: 'rgba(76,175,80,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(76,175,80,0.25)' },
+  unlockedBadgeText:  { color: THEME.success, fontSize: 11, fontWeight: '600' },
+  lowBadge:           { backgroundColor: 'rgba(255,99,74,0.1)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,99,74,0.25)' },
+  lowBadgeText:       { color: THEME.primary, fontSize: 11, fontWeight: '600' },
+  revealBadge:        { backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: THEME.border },
+  revealAccepted:     { backgroundColor: 'rgba(76,175,80,0.08)', borderColor: 'rgba(76,175,80,0.2)' },
+  revealBadgeText:    { color: THEME.textSecondary, fontSize: 11 },
+  unreadBadge:        { backgroundColor: THEME.primary, borderRadius: 12, minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, flexShrink: 0 },
+  unreadBadgeText:    { color: '#fff', fontSize: 11, fontWeight: '800' },
 });

@@ -2,7 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { FEATURES } from '../../config/featureFlags';
 // expo-video only works in EAS builds, not Expo Go
-let VideoView = null, useVideoPlayer = null, useEvent = null;
+// Stubs keep hooks valid in Expo Go (hooks can't be called conditionally)
+let VideoView = null;
+let useVideoPlayer = () => ({
+  play: () => {}, pause: () => {}, replace: () => {},
+  loop: false, muted: false, playing: false,
+  addListener: () => ({ remove: () => {} }),
+  removeListener: () => {},
+});
+let useEvent = (_player, _event, defaultVal) => defaultVal ?? {};
+
 if (FEATURES.nativeVideo) {
   const expoVideo = require('expo-video');
   VideoView = expoVideo.VideoView;
@@ -418,14 +427,16 @@ const FullScreenVideoPlayer = ({ visible, videoUrl: initialVideoUrl, thumbnail: 
             {currentThumb && !isPlaying && (
               <Image source={{ uri: currentThumb }} style={fsStyles.video} resizeMode="contain" />
             )}
-            <VideoView
-              player={player}
-              style={fsStyles.video}
-              contentFit="contain"
-              allowsPictureInPicture={FEATURES.pictureInPicture}
-              startsPictureInPictureAutomatically={false}
-              nativeControls={false}
-            />
+            {VideoView && (
+              <VideoView
+                player={player}
+                style={fsStyles.video}
+                contentFit="contain"
+                allowsPictureInPicture={FEATURES.pictureInPicture}
+                startsPictureInPictureAutomatically={false}
+                nativeControls={false}
+              />
+            )}
           </Animated.View>
         </TouchableWithoutFeedback>
 
@@ -574,14 +585,16 @@ const VideoPlayer = ({ videoUrl, isActive, postId, onLike, liked, viewCount, nex
         {thumbnail && !inlinePlaying && (
           <Image source={{ uri: thumbnail }} style={styles.video} resizeMode="cover" />
         )}
-        {/* Inline autoplay — muted */}
-        <VideoView
-          player={inlinePlayer}
-          style={[styles.video, !inlinePlaying && { position: 'absolute', opacity: 0 }]}
-          contentFit="cover"
-          nativeControls={false}
-          allowsPictureInPicture={FEATURES.pictureInPicture}
-        />
+        {/* Inline autoplay — muted (EAS build only) */}
+        {VideoView && (
+          <VideoView
+            player={inlinePlayer}
+            style={[styles.video, !inlinePlaying && { position: 'absolute', opacity: 0 }]}
+            contentFit="cover"
+            nativeControls={false}
+            allowsPictureInPicture={FEATURES.pictureInPicture}
+          />
+        )}
         <View style={styles.videoOverlay} pointerEvents="none">
           {!inlinePlaying && (
             <View style={styles.playButton}>
@@ -863,30 +876,31 @@ function CalmPostCard({ post, onResponse, onSave, onViewThread, onPress, navigat
 
   return (
     <View style={styles.cardWrapper}>
-      <DoubleTapLike onDoubleTap={handleDoubleTap}>
-        <TouchableOpacity style={styles.card} onPress={() => onPress?.(post)} activeOpacity={0.97}>
+      <View style={styles.card}>
+        {/* Header — outside DoubleTapLike so avatar/name tap works */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.leftSection}
+            onPress={() => setProfileSheetVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
+            </View>
+            <View style={styles.authorInfo}>
+              <Text style={styles.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
+              <Text style={styles.timestamp}>{post.time_ago}</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.moreButton}>
+            <MoreHorizontal size={18} color={THEME.textSecondary} />
+          </TouchableOpacity>
+        </View>
 
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.leftSection}
-              onPress={(e) => { e.stopPropagation(); setProfileSheetVisible(true); }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
-              </View>
-              <View style={styles.authorInfo}>
-                <Text style={styles.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-                <Text style={styles.timestamp}>{post.time_ago}</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={(e) => { e.stopPropagation(); setMenuVisible(true); }} style={styles.moreButton}>
-              <MoreHorizontal size={18} color={THEME.textSecondary} />
-            </TouchableOpacity>
-          </View>
+        <View style={styles.divider} />
 
-          <View style={styles.divider} />
+        <DoubleTapLike onDoubleTap={handleDoubleTap}>
+          <TouchableOpacity style={styles.cardBody} onPress={() => onPress?.(post)} activeOpacity={0.97}>
 
           {/* Text content */}
           {post.content ? (
@@ -971,8 +985,9 @@ function CalmPostCard({ post, onResponse, onSave, onViewThread, onPress, navigat
               onClose={() => setShowComments(false)}
             />
           )}
-        </TouchableOpacity>
-      </DoubleTapLike>
+          </TouchableOpacity>
+        </DoubleTapLike>
+      </View>
 
       {/* Options Menu */}
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
@@ -1003,12 +1018,20 @@ function CalmPostCard({ post, onResponse, onSave, onViewThread, onPress, navigat
           </View>
         </TouchableOpacity>
       </Modal>
+    <AnonProfileSheet
+        visible={profileSheetVisible}
+        onClose={() => setProfileSheetVisible(false)}
+        userId={post.user_id}
+        anonymousName={post.anonymous_name}
+        navigation={navigation}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   cardWrapper: { position: 'relative', marginBottom: 24, marginHorizontal: 16 },
+  cardBody: { paddingBottom: 4 },
   card: {
     backgroundColor: THEME.surface,
     paddingVertical: 20,

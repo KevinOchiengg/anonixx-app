@@ -134,7 +134,7 @@ export default function CalmFeedScreen({ navigation }) {
 
   const flatListRef = useRef(null);
   const postsRef = useRef([]);  // Ref so onViewableItemsChanged never changes
-  const styles = useMemo(() => createStyles(), []);
+
 
   // Keep postsRef in sync — avoids recreating onViewableItemsChanged
   useEffect(() => { postsRef.current = posts; }, [posts]);
@@ -555,3 +555,5 @@ const createStyles = () =>
     limitButtonPrimaryText: { fontSize: 16, fontWeight: '600', color: '#fff' },
     footer: { height: 100, justifyContent: 'center', alignItems: 'center' },
   });
+
+const styles = createStyles();
