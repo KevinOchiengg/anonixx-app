@@ -333,7 +333,8 @@ async def create_post(
 @router.get("/calm-feed")
 async def get_calm_feed(
     session_posts: int = Query(0, ge=0),
-    authorization: str = Header(None),
+    # FIX: explicit alias ensures header casing doesn't cause auth misses
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     db = Depends(get_database)
 ):
     """
@@ -352,11 +353,12 @@ async def get_calm_feed(
         except Exception as e:
             print(f"⚠️ Guest token: {e}")
 
+    # FIX: session limit → has_more must be False, not True
     if session_posts >= 20:
         return {
             "posts": [],
             "message": "session_limit",
-            "has_more": True,
+            "has_more": False,
             "is_guest": current_user_id is None
         }
 
@@ -441,9 +443,15 @@ async def get_calm_feed(
         if (i + 1) % 5 == 0 and i + 1 < len(formatted_posts):
             final_feed.append({"type": "divider", "text": random.choice(divider_texts)})
 
+    # FIX: has_more is only True if DB returned a full batch AND session cap not hit.
+    # If DB returned fewer posts than requested, it's exhausted → False.
+    db_has_more = len(posts) >= posts_to_load
+    session_has_more = (session_posts + len(posts)) < 20
+    has_more = db_has_more and session_has_more
+
     return {
         "posts": final_feed,
-        "has_more": session_posts + len(posts) < 20,
+        "has_more": has_more,
         "session_posts": session_posts + len(posts),
         "is_guest": current_user_id is None,
         "streak": streak_info,  # { streak, is_new_day, message } or None for guests

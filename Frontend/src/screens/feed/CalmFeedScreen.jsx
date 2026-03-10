@@ -133,7 +133,8 @@ export default function CalmFeedScreen({ navigation }) {
   const [nextVideo, setNextVideo] = useState(null);
 
   const flatListRef = useRef(null);
-  const postsRef = useRef([]);  // Ref so onViewableItemsChanged never changes
+  const postsRef = useRef([]);
+  const loadingRef = useRef(false);  // Ref so onViewableItemsChanged never changes
 
 
   // Keep postsRef in sync — avoids recreating onViewableItemsChanged
@@ -161,21 +162,21 @@ export default function CalmFeedScreen({ navigation }) {
     }
   }).current;
 
-  useEffect(() => {
-    loadFeed();
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       checkAuth();
+      // Reset and reload fresh on every focus
       setPosts([]);
       setSessionPosts(0);
-      loadFeed();
+      setHasMore(true);
+      setSessionLimitReached(false);
+      loadFeed(true);
     }, [])
   );
 
-  const loadFeed = async () => {
-    if (loading && posts.length > 0) return;
+  const loadFeed = async (reset = false) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
 
     try {
@@ -183,8 +184,10 @@ export default function CalmFeedScreen({ navigation }) {
       const headers = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
+      const currentOffset = reset ? 0 : sessionPosts;
+
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/posts/calm-feed?session_posts=${sessionPosts}`,
+        `${API_BASE_URL}/api/v1/posts/calm-feed?session_posts=${currentOffset}`,
         { headers }
       );
 
@@ -195,7 +198,16 @@ export default function CalmFeedScreen({ navigation }) {
           setSessionLimitReached(true);
           setHasMore(data.has_more);
         } else {
-          setPosts((prev) => [...prev, ...data.posts]);
+          setPosts((prev) => {
+            const merged = reset ? data.posts : [...prev, ...data.posts];
+            const seen = new Set();
+            return merged.filter(p => {
+              const key = p.id || p.type + Math.random();
+              if (seen.has(p.id)) return false;
+              seen.add(p.id);
+              return true;
+            });
+          });
           setSessionPosts(data.session_posts);
           setHasMore(data.has_more);
 
@@ -211,6 +223,7 @@ export default function CalmFeedScreen({ navigation }) {
       console.error('❌ Load feed error:', error);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   };
 
@@ -369,16 +382,16 @@ export default function CalmFeedScreen({ navigation }) {
   );
 
   const renderFooter = useMemo(() => {
-    if (!loading || !hasMore) return null;
+    if (!loading || !hasMore || posts.length === 0) return null;
     return (
       <View style={styles.footer}>
         <ActivityIndicator color={THEME.primary} />
       </View>
     );
-  }, [loading, hasMore]);
+  }, [loading, hasMore, posts.length]);
 
   const handleEndReached = useCallback(() => {
-    if (hasMore && !loading) loadFeed();
+    if (hasMore && !loading) loadFeed(false);
   }, [hasMore, loading]);
 
   if (loading && posts.length === 0) {
