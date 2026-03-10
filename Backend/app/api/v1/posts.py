@@ -384,8 +384,8 @@ async def get_calm_feed(
     posts = []
 
     if all_preferred:
-        # 60% from preferred topics
-        preferred_count = int(posts_to_load * 0.6)
+        # 60% from preferred topics — floor at 1 to avoid $limit: 0
+        preferred_count = max(1, int(posts_to_load * 0.6))
         async for post in db["posts"].aggregate([
             {"$match": {"topics": {"$in": all_preferred}}},
             {"$sample": {"size": preferred_count * 3}},
@@ -398,16 +398,17 @@ async def get_calm_feed(
         if discovery_count > 0:
             async for post in db["posts"].aggregate([
                 {"$match": {"topics": {"$nin": all_preferred}}},
-                {"$sample": {"size": discovery_count * 3}},
+                {"$sample": {"size": max(1, discovery_count * 3)}},
                 {"$limit": discovery_count}
             ]):
                 posts.append(post)
     else:
-        async for post in db["posts"].aggregate([
-            {"$sample": {"size": posts_to_load * 3}},
-            {"$limit": posts_to_load}
-        ]):
-            posts.append(post)
+        if posts_to_load > 0:
+            async for post in db["posts"].aggregate([
+                {"$sample": {"size": posts_to_load * 3}},
+                {"$limit": posts_to_load}
+            ]):
+                posts.append(post)
 
     # ── Emotional interleaving ───────────────────────────────────
     posts = interleave_by_emotion(posts)
