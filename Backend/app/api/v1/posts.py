@@ -269,7 +269,6 @@ async def create_post(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # "general" is the silent fallback — not selectable in UI but valid here
     valid_topics = [t for t in data.topics if t in AVAILABLE_TOPICS] or ["general"]
 
     post_data = {
@@ -312,55 +311,33 @@ async def get_calm_feed(
         except Exception as e:
             print(f"⚠️ Guest token: {e}")
 
-    if session_posts >= 20:
+    SESSION_LIMIT = 50
+    BATCH_SIZE = 10
+
+    if session_posts >= SESSION_LIMIT:
         return {
             "posts": [],
             "message": "session_limit",
             "has_more": False,
+            "session_posts": session_posts,
             "is_guest": current_user_id is None
         }
 
-    posts_to_load = min(10, 20 - session_posts)
+    posts_to_load = min(BATCH_SIZE, SESSION_LIMIT - session_posts)
 
-    interests = []
-    affinities = {}
     streak_info = None
-
     if current_user_id:
-        user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
-        if user:
-            interests = user.get("interests", [])
-        affinities = await get_behavioral_interests(current_user_id, db)
         streak_info = await track_streak(current_user_id, db)
 
-    all_preferred = list(set(interests + [t for t, s in sorted(affinities.items(), key=lambda x: -x[1])[:5]]))
+    # Count total posts for accurate has_more
+    total_posts = await db["posts"].count_documents({})
 
-    posts = []
-
-    if all_preferred:
-        preferred_count = max(1, int(posts_to_load * 0.6))
-        async for post in db["posts"].aggregate([
-            {"$match": {"topics": {"$in": all_preferred}}},
-            {"$sample": {"size": preferred_count * 3}},
-            {"$limit": preferred_count}
-        ]):
-            posts.append(post)
-
-        discovery_count = posts_to_load - len(posts)
-        if discovery_count > 0:
-            async for post in db["posts"].aggregate([
-                {"$match": {"topics": {"$nin": all_preferred}}},
-                {"$sample": {"size": max(1, discovery_count * 3)}},
-                {"$limit": discovery_count}
-            ]):
-                posts.append(post)
-    else:
-        if posts_to_load > 0:
-            async for post in db["posts"].aggregate([
-                {"$sample": {"size": posts_to_load * 3}},
-                {"$limit": posts_to_load}
-            ]):
-                posts.append(post)
+    # Reliable pagination with skip/limit, newest first
+    posts = await db["posts"].find({}) \
+        .sort("created_at", -1) \
+        .skip(session_posts) \
+        .limit(posts_to_load) \
+        .to_list(None)
 
     posts = interleave_by_emotion(posts)
     formatted_posts = await batch_format_posts(posts, current_user_id, db)
@@ -392,14 +369,13 @@ async def get_calm_feed(
         if (i + 1) % 5 == 0 and i + 1 < len(formatted_posts):
             final_feed.append({"type": "divider", "text": random.choice(divider_texts)})
 
-    db_has_more = len(posts) >= posts_to_load
-    session_has_more = (session_posts + len(posts)) < 20
-    has_more = db_has_more and session_has_more
+    new_session_posts = session_posts + len(posts)
+    has_more = new_session_posts < total_posts and new_session_posts < SESSION_LIMIT
 
     return {
         "posts": final_feed,
         "has_more": has_more,
-        "session_posts": session_posts + len(posts),
+        "session_posts": new_session_posts,
         "is_guest": current_user_id is None,
         "streak": streak_info,
     }

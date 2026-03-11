@@ -106,10 +106,7 @@ function FeedStack() {
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ThreadView" component={ThreadViewScreen} />
       <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen
-        name="SundayReflection"
-        component={SundayReflectionScreen}
-      />
+      <Stack.Screen name="SundayReflection" component={SundayReflectionScreen} />
       <Stack.Screen name="CrisisResources" component={CrisisResourcesScreen} />
     </Stack.Navigator>
   );
@@ -121,15 +118,11 @@ function ConnectStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ConnectMain" component={ConnectScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
-      {/* Drops */}
       <Stack.Screen name="ShareCard" component={ShareCardScreen} />
       <Stack.Screen name="DropLanding" component={DropLandingScreen} />
       <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
       <Stack.Screen name="DropChat" component={DropChatScreen} />
-      <Stack.Screen
-        name="ConfessionMarketplace"
-        component={ConfessionMarketplaceScreen}
-      />
+      <Stack.Screen name="ConfessionMarketplace" component={ConfessionMarketplaceScreen} />
       <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
     </Stack.Navigator>
   );
@@ -155,10 +148,7 @@ function SettingsStack() {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen
-        name="SundayReflection"
-        component={SundayReflectionScreen}
-      />
+      <Stack.Screen name="SundayReflection" component={SundayReflectionScreen} />
       <Stack.Screen name="CrisisResources" component={CrisisResourcesScreen} />
     </Stack.Navigator>
   );
@@ -167,6 +157,7 @@ function SettingsStack() {
 // ─── TAB NAVIGATOR ────────────────────────────────────────────
 export default function TabNavigator() {
   const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 16); // at least 16px above home indicator
 
   return (
     <Tab.Navigator
@@ -174,8 +165,8 @@ export default function TabNavigator() {
         headerShown: false,
         tabBarStyle: {
           ...styles.tabBar,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom + 4,
+          height: 60 + bottomPad,
+          paddingBottom: bottomPad,
         },
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.inactive,
