@@ -12,6 +12,7 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '../../config/api';
 import { useFocusEffect } from '@react-navigation/native';
+import { Flame, Inbox, ShoppingBag } from 'lucide-react-native';
 
 const THEME = {
   background: '#0b0f18',
@@ -39,6 +40,50 @@ function timeAgo(isoString) {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
+}
+
+// ─── DROPS BANNER ─────────────────────────────────────────────
+function DropsBanner({ navigation }) {
+  return (
+    <View style={styles.dropsBanner}>
+      <View style={styles.dropsBannerTop}>
+        <View>
+          <Text style={styles.dropsBannerTitle}>Drops 🔥</Text>
+          <Text style={styles.dropsBannerSub}>
+            Post a confession. Get paid connections.
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.dropsCreateBtn}
+          onPress={() => navigation.navigate('ShareCard')}
+          activeOpacity={0.85}
+        >
+          <Flame size={15} color="#fff" />
+          <Text style={styles.dropsCreateBtnText}>Drop It</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.dropsActions}>
+        <TouchableOpacity
+          style={styles.dropsActionBtn}
+          onPress={() => navigation.navigate('ConfessionMarketplace')}
+          activeOpacity={0.8}
+        >
+          <ShoppingBag size={15} color={THEME.primary} />
+          <Text style={styles.dropsActionText}>Browse</Text>
+        </TouchableOpacity>
+        <View style={styles.dropsActionDivider} />
+        <TouchableOpacity
+          style={styles.dropsActionBtn}
+          onPress={() => navigation.navigate('DropsInbox')}
+          activeOpacity={0.8}
+        >
+          <Inbox size={15} color={THEME.primary} />
+          <Text style={styles.dropsActionText}>My Drops</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 // ─── REQUEST CARD ─────────────────────────────────────────────
@@ -176,10 +221,7 @@ export default function ConnectScreen({ navigation }) {
     setLoadingRequests(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        console.log('⚠️ loadRequests — no token');
-        return;
-      }
+      if (!token) return;
       const res = await fetch(`${API_BASE_URL}/api/v1/connect/requests/incoming`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -187,8 +229,6 @@ export default function ConnectScreen({ navigation }) {
       if (res.ok) {
         setRequests(data.requests || []);
         setRequestCount(data.count || 0);
-      } else {
-        console.log('loadRequests error:', res.status, data.detail);
       }
     } catch (e) {
       console.log('Load requests error:', e);
@@ -201,16 +241,12 @@ export default function ConnectScreen({ navigation }) {
     setLoadingChats(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        console.log('⚠️ loadChats — no token');
-        return;
-      }
+      if (!token) return;
       const res = await fetch(`${API_BASE_URL}/api/v1/connect/chats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (res.ok) setChats(data.chats || []);
-      else console.log('loadChats error:', res.status, data.detail);
     } catch (e) {
       console.log('Load chats error:', e);
     } finally {
@@ -248,8 +284,6 @@ export default function ConnectScreen({ navigation }) {
         setRequestCount((c) => Math.max(0, c - 1));
         loadChats();
         switchTab('chats');
-      } else {
-        console.log('Accept error:', res.status, data.detail);
       }
     } catch (e) {
       console.log('Accept error:', e);
@@ -297,6 +331,9 @@ export default function ConnectScreen({ navigation }) {
         <Text style={styles.headerTitle}>Connect</Text>
         <Text style={styles.headerSub}>Anonymous, until you're ready.</Text>
       </View>
+
+      {/* Drops Banner */}
+      <DropsBanner navigation={navigation} />
 
       {/* Tabs */}
       <View style={styles.tabs}>
@@ -373,9 +410,42 @@ export default function ConnectScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: THEME.background },
-  header:         { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16 },
+  header:         { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
   headerTitle:    { fontSize: 28, fontWeight: '800', color: THEME.text, letterSpacing: -0.5 },
   headerSub:      { fontSize: 13, color: THEME.textSecondary, marginTop: 4, fontStyle: 'italic' },
+
+  // ── Drops Banner
+  dropsBanner: {
+    marginHorizontal: 20, marginBottom: 16,
+    backgroundColor: THEME.surface,
+    borderRadius: 18, padding: 16,
+    borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)',
+  },
+  dropsBannerTop: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 14,
+  },
+  dropsBannerTitle: { fontSize: 18, fontWeight: '800', color: THEME.text },
+  dropsBannerSub:   { fontSize: 12, color: THEME.textSecondary, marginTop: 3 },
+  dropsCreateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: THEME.primary, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 9,
+    shadowColor: THEME.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 10, elevation: 6,
+  },
+  dropsCreateBtnText: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  dropsActions: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: THEME.surfaceAlt, borderRadius: 12,
+    borderWidth: 1, borderColor: THEME.border, overflow: 'hidden',
+  },
+  dropsActionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 6, paddingVertical: 10,
+  },
+  dropsActionDivider: { width: 1, height: 20, backgroundColor: THEME.border },
+  dropsActionText: { fontSize: 13, fontWeight: '600', color: THEME.primary },
 
   tabs:           { flexDirection: 'row', marginHorizontal: 20, backgroundColor: THEME.surface, borderRadius: 12, padding: 4, marginBottom: 16, position: 'relative', overflow: 'hidden', borderWidth: 1, borderColor: THEME.border },
   tab:            { flex: 1, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, zIndex: 1 },
