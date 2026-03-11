@@ -1,39 +1,46 @@
-import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Home,
-  Users,
-  Settings,
   MessageCircle,
   Plus,
+  Settings,
+  Users,
 } from 'lucide-react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Feed
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen';
-import SearchScreen from '../screens/feed/SearchScreen';
-import PostDetailScreen from '../screens/posts/PostDetailScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
+import SearchScreen from '../screens/feed/SearchScreen';
 import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
 import ImpactDashboardScreen from '../screens/impact/ImpactDashboardScreen';
-import SundayReflectionScreen from '../screens/rituals/SundayReflectionScreen';
+import PostDetailScreen from '../screens/posts/PostDetailScreen';
 import CrisisResourcesScreen from '../screens/resources/CrisisResourcesScreen';
+import SundayReflectionScreen from '../screens/rituals/SundayReflectionScreen';
 
-// Connect (new system)
-import ConnectScreen from '../screens/connect/ConnectScreen';
+// Connect (existing)
 import ChatScreen from '../screens/connect/ChatScreen';
+import ConnectScreen from '../screens/connect/ConnectScreen';
+
+// Drops
+import ConfessionMarketplaceScreen from '../screens/drops/ConfessionMarketPlaceScreen';
+import DropChatScreen from '../screens/drops/DropChatScreen';
+import DropLandingScreen from '../screens/drops/DropLandingScreen';
+import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
+import ShareCardScreen from '../screens/drops/ShareCardScreen';
+import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
 
 // Groups
-import GroupsScreen from '../screens/groups/GroupsScreen';
-import GroupDetailScreen from '../screens/groups/GroupDetailScreen';
 import CreateGroupScreen from '../screens/groups/CreateGroupScreen';
+import GroupDetailScreen from '../screens/groups/GroupDetailScreen';
+import GroupsScreen from '../screens/groups/GroupsScreen';
 
 // Settings
-import SettingsScreen from '../screens/settings/SettingsScreen';
-import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
+import EditProfileScreen from '../screens/profile/EditProfileScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 
 // Create
 import CreatePostScreen from '../screens/posts/CreatePostScreen';
@@ -114,6 +121,16 @@ function ConnectStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ConnectMain" component={ConnectScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
+      {/* Drops */}
+      <Stack.Screen name="ShareCard" component={ShareCardScreen} />
+      <Stack.Screen name="DropLanding" component={DropLandingScreen} />
+      <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
+      <Stack.Screen name="DropChat" component={DropChatScreen} />
+      <Stack.Screen
+        name="ConfessionMarketplace"
+        component={ConfessionMarketplaceScreen}
+      />
+      <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
     </Stack.Navigator>
   );
 }

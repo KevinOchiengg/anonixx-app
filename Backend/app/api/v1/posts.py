@@ -71,10 +71,6 @@ def is_light(post) -> bool:
 
 
 def interleave_by_emotion(posts: list) -> list:
-    """
-    Interleave posts so no more than 2 heavy posts appear consecutively.
-    Pulls a light post in between when needed.
-    """
     heavy = [p for p in posts if is_heavy(p)]
     light  = [p for p in posts if not is_heavy(p)]
     result = []
@@ -95,13 +91,9 @@ def interleave_by_emotion(posts: list) -> list:
 
 
 async def batch_format_posts(posts: list, current_user_id: Optional[str], db) -> list:
-    """
-    Format all posts in 3 batched DB queries instead of 3 per post (N*3 → 3 total).
-    """
     post_ids_obj = [p["_id"] for p in posts]
     post_ids_str = [str(p["_id"]) for p in posts]
 
-    # Batch 1: thread counts
     thread_counts = {}
     async for item in db["post_threads"].aggregate([
         {"$match": {"post_id": {"$in": post_ids_str}}},
@@ -109,7 +101,6 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
     ]):
         thread_counts[item["_id"]] = item["count"]
 
-    # Also check threads collection (dual collection safety)
     async for item in db["threads"].aggregate([
         {"$match": {"post_id": {"$in": post_ids_obj}}},
         {"$group": {"_id": "$post_id", "count": {"$sum": 1}}}
@@ -121,14 +112,12 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
     liked_set = set()
 
     if current_user_id:
-        # Batch 2: saved posts
         async for s in db["saved_posts"].find({
             "post_id": {"$in": post_ids_str},
             "user_id": current_user_id
         }):
             saved_set.add(s["post_id"])
 
-        # Batch 3: liked posts (check liked_by array)
         async for p in db["posts"].find(
             {"_id": {"$in": post_ids_obj}, "liked_by": current_user_id},
             {"_id": 1}
@@ -163,10 +152,6 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
 
 
 async def get_behavioral_interests(user_id: str, db) -> dict:
-    """
-    Returns topic affinity scores based on user's like/save/comment history.
-    { "anxiety": 5, "wins": 3, ... }
-    """
     doc = await db["user_affinities"].find_one({"user_id": user_id})
     if doc:
         return doc.get("affinities", {})
@@ -174,10 +159,6 @@ async def get_behavioral_interests(user_id: str, db) -> dict:
 
 
 async def update_affinity(user_id: str, topics: list, action: str, db):
-    """
-    Increment affinity scores when user likes/saves/comments.
-    action: "like" = +3, "save" = +2, "comment" = +1
-    """
     weights = {"like": 3, "save": 2, "comment": 1}
     weight = weights.get(action, 1)
 
@@ -196,11 +177,7 @@ async def update_affinity(user_id: str, topics: list, action: str, db):
 
 
 async def track_streak(user_id: str, db) -> dict:
-    """
-    Track daily visit streaks. Returns { streak, is_new_day, message }
-    """
     today = now_utc().date().isoformat()
-
     doc = await db["user_streaks"].find_one({"user_id": user_id})
 
     if not doc:
@@ -223,7 +200,6 @@ async def track_streak(user_id: str, db) -> dict:
     yesterday = (now_utc() - timedelta(days=1)).date().isoformat()
 
     if last_visit == yesterday:
-        # Continued streak
         new_streak = current_streak + 1
         new_longest = max(longest, new_streak)
         streak_messages = {
@@ -240,7 +216,6 @@ async def track_streak(user_id: str, db) -> dict:
         )
         return {"streak": new_streak, "is_new_day": True, "message": message}
     else:
-        # Streak broken
         await db["user_streaks"].update_one(
             {"user_id": user_id},
             {"$set": {"streak": 1, "last_visit": today}}
@@ -249,29 +224,18 @@ async def track_streak(user_id: str, db) -> dict:
 
 
 async def send_push_notification(user_id: str, title: str, body: str, db):
-    """
-    Send Expo push notification to a user if they have a push token.
-    """
     try:
         doc = await db["push_tokens"].find_one({"user_id": user_id})
         if not doc:
             return
-
         token = doc.get("token")
         if not token or not token.startswith("ExponentPushToken"):
             return
-
         import httpx
         async with httpx.AsyncClient() as client:
             await client.post(
                 "https://exp.host/--/api/v2/push/send",
-                json={
-                    "to": token,
-                    "title": title,
-                    "body": body,
-                    "sound": "default",
-                    "data": {}
-                },
+                json={"to": token, "title": title, "body": body, "sound": "default", "data": {}},
                 headers={"Content-Type": "application/json"},
                 timeout=5.0
             )
@@ -287,7 +251,6 @@ async def register_push_token(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """Register Expo push token for this user"""
     await db["push_tokens"].update_one(
         {"user_id": current_user_id},
         {"$set": {"token": data.token, "updated_at": now_utc()}},
@@ -306,6 +269,7 @@ async def create_post(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # "general" is the silent fallback — not selectable in UI but valid here
     valid_topics = [t for t in data.topics if t in AVAILABLE_TOPICS] or ["general"]
 
     post_data = {
@@ -333,14 +297,9 @@ async def create_post(
 @router.get("/calm-feed")
 async def get_calm_feed(
     session_posts: int = Query(0, ge=0),
-    # FIX: explicit alias ensures header casing doesn't cause auth misses
     authorization: Optional[str] = Header(None, alias="Authorization"),
     db = Depends(get_database)
 ):
-    """
-    Calm feed — fast, emotionally balanced, personalized.
-    Public (no login required). Authenticated users get personalization + streak.
-    """
     current_user_id = None
 
     if authorization:
@@ -353,7 +312,6 @@ async def get_calm_feed(
         except Exception as e:
             print(f"⚠️ Guest token: {e}")
 
-    # FIX: session limit → has_more must be False, not True
     if session_posts >= 20:
         return {
             "posts": [],
@@ -364,7 +322,6 @@ async def get_calm_feed(
 
     posts_to_load = min(10, 20 - session_posts)
 
-    # ── Personalized topic weights ──────────────────────────────
     interests = []
     affinities = {}
     streak_info = None
@@ -373,18 +330,14 @@ async def get_calm_feed(
         user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
         if user:
             interests = user.get("interests", [])
-
         affinities = await get_behavioral_interests(current_user_id, db)
         streak_info = await track_streak(current_user_id, db)
 
-    # Merge interests + behavioral affinities into a ranked topic list
     all_preferred = list(set(interests + [t for t, s in sorted(affinities.items(), key=lambda x: -x[1])[:5]]))
 
-    # ── Fetch posts ──────────────────────────────────────────────
     posts = []
 
     if all_preferred:
-        # 60% from preferred topics — floor at 1 to avoid $limit: 0
         preferred_count = max(1, int(posts_to_load * 0.6))
         async for post in db["posts"].aggregate([
             {"$match": {"topics": {"$in": all_preferred}}},
@@ -393,7 +346,6 @@ async def get_calm_feed(
         ]):
             posts.append(post)
 
-        # 40% discovery (different topics — prevents echo chamber)
         discovery_count = posts_to_load - len(posts)
         if discovery_count > 0:
             async for post in db["posts"].aggregate([
@@ -410,13 +362,9 @@ async def get_calm_feed(
             ]):
                 posts.append(post)
 
-    # ── Emotional interleaving ───────────────────────────────────
     posts = interleave_by_emotion(posts)
-
-    # ── Batch format (3 queries total regardless of post count) ──
     formatted_posts = await batch_format_posts(posts, current_user_id, db)
 
-    # ── Insert dividers + mood balancers ────────────────────────
     final_feed = []
     divider_texts = [
         "keep scrolling.",
@@ -444,8 +392,6 @@ async def get_calm_feed(
         if (i + 1) % 5 == 0 and i + 1 < len(formatted_posts):
             final_feed.append({"type": "divider", "text": random.choice(divider_texts)})
 
-    # FIX: has_more is only True if DB returned a full batch AND session cap not hit.
-    # If DB returned fewer posts than requested, it's exhausted → False.
     db_has_more = len(posts) >= posts_to_load
     session_has_more = (session_posts + len(posts)) < 20
     has_more = db_has_more and session_has_more
@@ -455,7 +401,7 @@ async def get_calm_feed(
         "has_more": has_more,
         "session_posts": session_posts + len(posts),
         "is_guest": current_user_id is None,
-        "streak": streak_info,  # { streak, is_new_day, message } or None for guests
+        "streak": streak_info,
     }
 
 
@@ -484,10 +430,8 @@ async def like_post(
         {"$push": {"liked_by": current_user_id}, "$inc": {"likes_count": 1}}
     )
 
-    # Update behavioral affinity
     await update_affinity(current_user_id, post.get("topics", []), "like", db)
 
-    # Notify post owner (not self-likes)
     if post["user_id"] != current_user_id:
         await send_push_notification(
             post["user_id"],
@@ -610,10 +554,6 @@ async def add_to_thread(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    thread_count = await db["threads"].count_documents({"post_id": ObjectId(post_id)})
-    if thread_count >= 2:
-        raise HTTPException(status_code=400, detail="Thread limit reached (maximum 2 replies)")
-
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -630,7 +570,6 @@ async def add_to_thread(
     result = await db["threads"].insert_one(thread_doc)
     await db["posts"].update_one({"_id": ObjectId(post_id)}, {"$inc": {"thread_count": 1}})
 
-    # Update affinity + notify post owner
     await update_affinity(current_user_id, post.get("topics", []), "comment", db)
 
     if post["user_id"] != current_user_id:
@@ -647,7 +586,6 @@ async def add_to_thread(
         "anonymous_name": user.get("anonymous_name", "Anonymous"),
         "time_ago": "just now",
         "message": "Reply added",
-        "thread_closed": thread_count + 1 >= 2
     }
 
 
@@ -667,7 +605,7 @@ async def get_thread(
 
     thread_docs = await db["threads"].find(
         {"post_id": ObjectId(post_id)}
-    ).sort("created_at", 1).to_list(None)
+    ).sort("created_at", -1).to_list(None)
 
     threads = [{
         "id": str(t["_id"]),
@@ -679,7 +617,7 @@ async def get_thread(
         "is_own_reply": str(t["user_id"]) == current_user_id if current_user_id else False
     } for t in thread_docs]
 
-    return {"threads": threads, "is_closed": len(threads) >= 2, "thread_count": len(threads)}
+    return {"threads": threads, "thread_count": len(threads)}
 
 
 # ==================== VIEW TRACKING ====================
@@ -723,6 +661,5 @@ async def get_available_topics():
             {"id": "friendship",    "name": "🤝 Friendship",    "emoji": "🤝"},
             {"id": "financial",     "name": "💰 Financial",     "emoji": "💰"},
             {"id": "health",        "name": "🏥 Health",        "emoji": "🏥"},
-            {"id": "general",       "name": "🌟 General",       "emoji": "🌟"},
         ]
     }

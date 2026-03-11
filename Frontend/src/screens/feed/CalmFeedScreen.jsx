@@ -100,10 +100,7 @@ const StreakBanner = ({ message, onDismiss }) => {
 
   return (
     <Animated.View
-      style={[
-        styles.streakBanner,
-        { transform: [{ translateY: slideAnim }], opacity: opacityAnim },
-      ]}
+      style={[styles.streakBanner, { transform: [{ translateY: slideAnim }], opacity: opacityAnim }]}
     >
       <Flame size={16} color={THEME.primary} fill={THEME.primary} />
       <Text style={styles.streakText}>{message}</Text>
@@ -134,13 +131,11 @@ export default function CalmFeedScreen({ navigation }) {
 
   const flatListRef = useRef(null);
   const postsRef = useRef([]);
-  const loadingRef = useRef(false);  // Ref so onViewableItemsChanged never changes
+  const loadingRef = useRef(false);
+  const hasLoadedRef = useRef(false);
 
-
-  // Keep postsRef in sync — avoids recreating onViewableItemsChanged
   useEffect(() => { postsRef.current = posts; }, [posts]);
 
-  // Viewability config — 60% of item must be visible to count as active
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
     minimumViewTime: 300,
@@ -154,8 +149,7 @@ export default function CalmFeedScreen({ navigation }) {
       setActiveVideoId(visibleVideo.item.id);
       const videoPosts = postsRef.current.filter((p) => p.type === 'post' && p.video_url);
       const currentIdx = videoPosts.findIndex((p) => p.id === visibleVideo.item.id);
-      const next = videoPosts[currentIdx + 1] || null;
-      setNextVideo(next || null);
+      setNextVideo(videoPosts[currentIdx + 1] || null);
     } else {
       setActiveVideoId(null);
       setNextVideo(null);
@@ -165,12 +159,10 @@ export default function CalmFeedScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       checkAuth();
-      // Reset and reload fresh on every focus
-      setPosts([]);
-      setSessionPosts(0);
-      setHasMore(true);
-      setSessionLimitReached(false);
-      loadFeed(true);
+      if (!hasLoadedRef.current) {
+        hasLoadedRef.current = true;
+        loadFeed(true);
+      }
     }, [])
   );
 
@@ -202,7 +194,7 @@ export default function CalmFeedScreen({ navigation }) {
             const merged = reset ? data.posts : [...prev, ...data.posts];
             const seen = new Set();
             return merged.filter(p => {
-              const key = p.id || p.type + Math.random();
+              if (!p.id) return true;
               if (seen.has(p.id)) return false;
               seen.add(p.id);
               return true;
@@ -212,10 +204,7 @@ export default function CalmFeedScreen({ navigation }) {
           setHasMore(data.has_more);
 
           if (data.streak?.is_new_day && data.streak?.message) {
-            setStreakBanner({
-              message: data.streak.message,
-              streak: data.streak.streak,
-            });
+            setStreakBanner({ message: data.streak.message, streak: data.streak.streak });
           }
         }
       }
@@ -227,10 +216,30 @@ export default function CalmFeedScreen({ navigation }) {
     }
   };
 
+  const refreshFeed = useCallback(() => {
+    setPosts([]);
+    setSessionPosts(0);
+    setHasMore(true);
+    setSessionLimitReached(false);
+    loadFeed(true);
+  }, []);
+
   const showAuthPrompt = useCallback((action) => {
     setAuthModalAction(action);
     setAuthModalVisible(true);
   }, []);
+
+  // ── Media press — launches TikTok-style swipe player ─────────
+  const handleMediaPress = useCallback((post) => {
+    const mediaPosts = postsRef.current.filter(
+      (p) => p.type === 'post' && (p.video_url || p.audio_url)
+    );
+    const startIndex = mediaPosts.findIndex((p) => p.id === post.id);
+    navigation.navigate('MediaFeed', {
+      posts: mediaPosts,
+      startIndex: Math.max(0, startIndex),
+    });
+  }, [navigation]);
 
   const handleResponse = useCallback(
     async (postId, responseType) => {
@@ -261,8 +270,6 @@ export default function CalmFeedScreen({ navigation }) {
             { text: 'Cancel', style: 'cancel' },
             { text: 'Login', onPress: async () => { await AsyncStorage.clear(); navigation.navigate('Auth', { screen: 'Login' }); } },
           ]);
-        } else {
-          Alert.alert('Error', data.detail || 'Failed to record response');
         }
       } catch (error) {
         console.error('❌ Response error:', error);
@@ -317,13 +324,10 @@ export default function CalmFeedScreen({ navigation }) {
   }, [navigation]);
 
   const handleVideoChange = useCallback((newPostId) => {
-    // When fullscreen swaps to next video, update active + next
     setActiveVideoId(newPostId);
     const videoPosts = postsRef.current.filter((p) => p.type === 'post' && p.video_url);
     const currentIdx = videoPosts.findIndex((p) => p.id === newPostId);
-    const next = videoPosts[currentIdx + 1] || null;
-    setNextVideo(next || null);
-    // Also scroll feed to keep in sync
+    setNextVideo(videoPosts[currentIdx + 1] || null);
     if (flatListRef.current) {
       const nextIndex = postsRef.current.findIndex((p) => p.id === newPostId);
       if (nextIndex !== -1) {
@@ -364,6 +368,7 @@ export default function CalmFeedScreen({ navigation }) {
             onSave={handleSave}
             onViewThread={handleViewThread}
             onPress={handlePostPress}
+            onMediaPress={handleMediaPress}
             navigation={navigation}
             activeVideoId={activeVideoId}
             nextVideo={item.video_url && item.id === activeVideoId ? nextVideo : null}
@@ -373,7 +378,7 @@ export default function CalmFeedScreen({ navigation }) {
       }
       return null;
     },
-    [handleResponse, handleSave, handleViewThread, handlePostPress, navigation, activeVideoId, nextVideo, handleVideoChange]
+    [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, navigation, activeVideoId, nextVideo, handleVideoChange]
   );
 
   const keyExtractor = useCallback(
@@ -383,11 +388,7 @@ export default function CalmFeedScreen({ navigation }) {
 
   const renderFooter = useMemo(() => {
     if (!loading || !hasMore || posts.length === 0) return null;
-    return (
-      <View style={styles.footer}>
-        <ActivityIndicator color={THEME.primary} />
-      </View>
-    );
+    return <View style={styles.footer}><ActivityIndicator color={THEME.primary} /></View>;
   }, [loading, hasMore, posts.length]);
 
   const handleEndReached = useCallback(() => {
@@ -418,12 +419,8 @@ export default function CalmFeedScreen({ navigation }) {
         <View style={styles.centered}>
           <View style={styles.limitContent}>
             <Text style={styles.limitTitle}>You've been deep in it.</Text>
-            <View style={styles.dividerContainer}>
-              <View style={styles.dividerLine} />
-            </View>
-            <Text style={styles.limitSubtitle}>
-              Sometimes the truth hits differently when you step away from it.
-            </Text>
+            <View style={styles.dividerContainer}><View style={styles.dividerLine} /></View>
+            <Text style={styles.limitSubtitle}>Sometimes the truth hits differently when you step away from it.</Text>
             <Text style={styles.limitMessage}>Come back when you have more to say.</Text>
             <View style={styles.limitButtons}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.limitButtonSecondary}>
@@ -469,12 +466,8 @@ export default function CalmFeedScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Streak banner */}
       {streakBanner && (
-        <StreakBanner
-          message={streakBanner.message}
-          onDismiss={() => setStreakBanner(null)}
-        />
+        <StreakBanner message={streakBanner.message} onDismiss={() => setStreakBanner(null)} />
       )}
 
       <FlatList
@@ -507,66 +500,51 @@ export default function CalmFeedScreen({ navigation }) {
   );
 }
 
-const createStyles = () =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: THEME.background },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingVertical: 16,
-      backgroundColor: 'transparent',
-      zIndex: 10,
-    },
-    headerTitle: { fontSize: 24, fontWeight: '800', color: THEME.primary, letterSpacing: -0.5 },
-    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    headerSearchButton: {
-      width: 40, height: 40, borderRadius: 20,
-      alignItems: 'center', justifyContent: 'center',
-      backgroundColor: 'rgba(255, 99, 74, 0.1)',
-    },
-    headerAuthButton: {
-      flexDirection: 'row', alignItems: 'center', gap: 6,
-      paddingHorizontal: 12, paddingVertical: 6,
-      borderRadius: 16, backgroundColor: 'rgba(255, 99, 74, 0.1)',
-    },
-    headerAuthText: { fontSize: 13, fontWeight: '600', color: THEME.textSecondary },
-
-    streakBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginHorizontal: 16,
-      marginBottom: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 12,
-      backgroundColor: 'rgba(255, 99, 74, 0.10)',
-      borderWidth: 1,
-      borderColor: 'rgba(255, 99, 74, 0.25)',
-    },
-    streakText: { flex: 1, fontSize: 13, fontWeight: '600', color: THEME.text },
-    streakDismiss: { padding: 2 },
-    streakDismissText: { fontSize: 12, color: THEME.textSecondary },
-
-    feedContent: { paddingTop: 8, paddingBottom: 40 },
-    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, zIndex: 5 },
-    loadingContent: { alignItems: 'center', gap: 16 },
-    loadingLine: { width: 80, height: 2, backgroundColor: THEME.primary, opacity: 0.3 },
-    loadingText: { fontSize: 15, textAlign: 'center', fontStyle: 'italic', color: THEME.textSecondary },
-    limitContent: { alignItems: 'center', width: '100%' },
-    limitTitle: { fontSize: 24, fontWeight: '600', textAlign: 'center', marginBottom: 24, color: THEME.text },
-    dividerContainer: { width: '100%', alignItems: 'center', marginVertical: 24 },
-    dividerLine: { width: 120, height: 1, backgroundColor: THEME.border },
-    limitSubtitle: { fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 16, color: THEME.textSecondary },
-    limitMessage: { fontSize: 15, textAlign: 'center', marginBottom: 40, color: THEME.textSecondary },
-    limitButtons: { flexDirection: 'row', gap: 12, width: '100%' },
-    limitButtonSecondary: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', backgroundColor: THEME.surface },
-    limitButtonSecondaryText: { fontSize: 16, fontWeight: '600', color: THEME.text },
-    limitButtonPrimary: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', backgroundColor: THEME.primary },
-    limitButtonPrimaryText: { fontSize: 16, fontWeight: '600', color: '#fff' },
-    footer: { height: 100, justifyContent: 'center', alignItems: 'center' },
-  });
-
-const styles = createStyles();
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: THEME.background },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+    backgroundColor: 'transparent', zIndex: 10,
+  },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: THEME.primary, letterSpacing: -0.5 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerSearchButton: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255, 99, 74, 0.1)',
+  },
+  headerAuthButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 16, backgroundColor: 'rgba(255, 99, 74, 0.1)',
+  },
+  headerAuthText: { fontSize: 13, fontWeight: '600', color: THEME.textSecondary },
+  streakBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginBottom: 8,
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12,
+    backgroundColor: 'rgba(255, 99, 74, 0.10)',
+    borderWidth: 1, borderColor: 'rgba(255, 99, 74, 0.25)',
+  },
+  streakText: { flex: 1, fontSize: 13, fontWeight: '600', color: THEME.text },
+  streakDismiss: { padding: 2 },
+  streakDismissText: { fontSize: 12, color: THEME.textSecondary },
+  feedContent: { paddingTop: 8, paddingBottom: 40 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, zIndex: 5 },
+  loadingContent: { alignItems: 'center', gap: 16 },
+  loadingLine: { width: 80, height: 2, backgroundColor: THEME.primary, opacity: 0.3 },
+  loadingText: { fontSize: 15, textAlign: 'center', fontStyle: 'italic', color: THEME.textSecondary },
+  limitContent: { alignItems: 'center', width: '100%' },
+  limitTitle: { fontSize: 24, fontWeight: '600', textAlign: 'center', marginBottom: 24, color: THEME.text },
+  dividerContainer: { width: '100%', alignItems: 'center', marginVertical: 24 },
+  dividerLine: { width: 120, height: 1, backgroundColor: THEME.border },
+  limitSubtitle: { fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 16, color: THEME.textSecondary },
+  limitMessage: { fontSize: 15, textAlign: 'center', marginBottom: 40, color: THEME.textSecondary },
+  limitButtons: { flexDirection: 'row', gap: 12, width: '100%' },
+  limitButtonSecondary: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', backgroundColor: THEME.surface },
+  limitButtonSecondaryText: { fontSize: 16, fontWeight: '600', color: THEME.text },
+  limitButtonPrimary: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', backgroundColor: THEME.primary },
+  limitButtonPrimaryText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  footer: { height: 100, justifyContent: 'center', alignItems: 'center' },
+});
