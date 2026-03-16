@@ -4,8 +4,8 @@ import {
   Home,
   MessageCircle,
   Plus,
+  Radio,
   Settings,
-  Users,
 } from 'lucide-react-native';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +20,7 @@ import PostDetailScreen from '../screens/posts/PostDetailScreen';
 import CrisisResourcesScreen from '../screens/resources/CrisisResourcesScreen';
 import SundayReflectionScreen from '../screens/rituals/SundayReflectionScreen';
 
-// Connect (existing)
+// Connect
 import ChatScreen from '../screens/connect/ChatScreen';
 import ConnectScreen from '../screens/connect/ConnectScreen';
 
@@ -32,10 +32,15 @@ import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
 import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
 
-// Groups
-import CreateGroupScreen from '../screens/groups/CreateGroupScreen';
-import GroupDetailScreen from '../screens/groups/GroupDetailScreen';
-import GroupsScreen from '../screens/groups/GroupsScreen';
+// Circles
+import CirclesScreen from '../screens/circles/CirclesScreen';
+import CircleProfileScreen from '../screens/circles/CircleProfileScreen';
+import CreateCircleScreen from '../screens/circles/CreateCircleScreen';
+import ScheduleEventScreen from '../screens/circles/ScheduleEventScreen';
+import WaitingRoomScreen from '../screens/circles/WaitingRoomScreen';
+import CircleLiveScreen from '../screens/circles/CircleLiveScreen';
+import CircleAudioRoomScreen from '../screens/circles/CircleAudioRoomScreen';
+import CircleDashboardScreen from '../screens/circles/CircleDashboardScreen';
 
 // Settings
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
@@ -63,7 +68,7 @@ const TabBarIcon = ({ route, focused, color, size }) => {
   const icons = {
     Feed: Home,
     Connect: MessageCircle,
-    Groups: Users,
+    Circles: Radio,
     Settings: Settings,
   };
   const IconComponent = icons[route.name];
@@ -106,7 +111,10 @@ function FeedStack() {
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ThreadView" component={ThreadViewScreen} />
       <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen name="SundayReflection" component={SundayReflectionScreen} />
+      <Stack.Screen
+        name="SundayReflection"
+        component={SundayReflectionScreen}
+      />
       <Stack.Screen name="CrisisResources" component={CrisisResourcesScreen} />
     </Stack.Navigator>
   );
@@ -122,19 +130,27 @@ function ConnectStack() {
       <Stack.Screen name="DropLanding" component={DropLandingScreen} />
       <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
       <Stack.Screen name="DropChat" component={DropChatScreen} />
-      <Stack.Screen name="ConfessionMarketplace" component={ConfessionMarketplaceScreen} />
+      <Stack.Screen
+        name="ConfessionMarketplace"
+        component={ConfessionMarketplaceScreen}
+      />
       <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
     </Stack.Navigator>
   );
 }
 
-// ─── GROUPS STACK ─────────────────────────────────────────────
-function GroupsStack() {
+// ─── CIRCLES STACK ────────────────────────────────────────────
+function CirclesStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="GroupsMain" component={GroupsScreen} />
-      <Stack.Screen name="GroupDetail" component={GroupDetailScreen} />
-      <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+      <Stack.Screen name="CirclesMain" component={CirclesScreen} />
+      <Stack.Screen name="CircleProfile" component={CircleProfileScreen} />
+      <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
+      <Stack.Screen name="ScheduleEvent" component={ScheduleEventScreen} />
+      <Stack.Screen name="WaitingRoom" component={WaitingRoomScreen} />
+      <Stack.Screen name="CircleLive" component={CircleLiveScreen} />
+      <Stack.Screen name="CircleAudioRoom" component={CircleAudioRoomScreen} />
+      <Stack.Screen name="CircleDashboard" component={CircleDashboardScreen} />
     </Stack.Navigator>
   );
 }
@@ -148,7 +164,10 @@ function SettingsStack() {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen name="SundayReflection" component={SundayReflectionScreen} />
+      <Stack.Screen
+        name="SundayReflection"
+        component={SundayReflectionScreen}
+      />
       <Stack.Screen name="CrisisResources" component={CrisisResourcesScreen} />
     </Stack.Navigator>
   );
@@ -157,7 +176,7 @@ function SettingsStack() {
 // ─── TAB NAVIGATOR ────────────────────────────────────────────
 export default function TabNavigator() {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 16); // at least 16px above home indicator
+  const bottomPad = Math.max(insets.bottom, 16);
 
   return (
     <Tab.Navigator
@@ -204,9 +223,9 @@ export default function TabNavigator() {
         }}
       />
       <Tab.Screen
-        name="Groups"
-        component={GroupsStack}
-        options={{ tabBarLabel: 'Groups' }}
+        name="Circles"
+        component={CirclesStack}
+        options={{ tabBarLabel: 'Circles' }}
       />
       <Tab.Screen
         name="Settings"

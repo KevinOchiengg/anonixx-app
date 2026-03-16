@@ -1,346 +1,437 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
-  Alert,
   ActivityIndicator,
   StyleSheet,
   StatusBar,
-  Dimensions,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { login } from '../../store/slices/authSlice';
-import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { Mail, Lock } from 'lucide-react-native';
+import { useToast } from '../../components/ui/Toast';
+import { rs, rf, rp, rh, SPACING, FONT, RADIUS, ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP } from '../../utils/responsive';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 
-const { height, width } = Dimensions.get('window');
-
-// NEW Cinematic Coral Theme
 const THEME = {
-  background: '#0b0f18',
-  backgroundDark: '#06080f',
-  surface: '#151924',
-  surfaceDark: '#10131c',
-  primary: '#FF634A',
-  primaryDark: '#ff3b2f',
-  text: '#EAEAF0',
+  background:    '#0b0f18',
+  surface:       '#151924',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255, 99, 74, 0.15)',
+  text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  input: 'rgba(30, 35, 45, 0.7)',
-  error: '#ef4444',
+  border:        'rgba(255,255,255,0.06)',
+  inputBg:       'rgba(255,255,255,0.04)',
+  error:         '#ef4444',
 };
 
-// Starry Background Component
-const StarryBackground = () => {
-  const stars = useMemo(() => {
-    return Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      top: Math.random() * height,
-      left: Math.random() * width,
-      size: Math.random() * 3 + 1,
-      opacity: Math.random() * 0.6 + 0.2,
-    }));
-  }, []);
+const STARS = Array.from({ length: 40 }, (_, i) => ({
+  id: i,
+  top:     Math.random() * SCREEN.height,
+  left:    Math.random() * SCREEN.width,
+  size:    Math.random() * rs(2.5) + rs(0.5),
+  opacity: Math.random() * 0.5 + 0.1,
+}));
 
-  return (
-    <>
-      {stars.map((star) => (
-        <View
-          key={star.id}
-          style={{
-            position: 'absolute',
-            backgroundColor: THEME.primary,
-            borderRadius: 50,
-            top: star.top,
-            left: star.left,
-            width: star.size,
-            height: star.size,
-            opacity: star.opacity,
-          }}
-        />
-      ))}
-    </>
-  );
-};
+const StarryBackground = React.memo(() => (
+  <>
+    {STARS.map((s) => (
+      <View
+        key={s.id}
+        style={{
+          position:        'absolute',
+          backgroundColor: THEME.primary,
+          borderRadius:    s.size,
+          top: s.top, left: s.left,
+          width: s.size, height: s.size,
+          opacity: s.opacity,
+        }}
+      />
+    ))}
+  </>
+));
+
+const GlowOrb = React.memo(() => <View style={styles.glowOrb} />);
+
+const EMAIL_REGEX         = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_EMAIL_LENGTH    = 254;
+const MAX_PASSWORD_LENGTH = 128;
 
 export default function LoginScreen({ navigation }) {
-  const dispatch = useDispatch();
-  const { theme } = useTheme();
+  const dispatch                    = useDispatch();
   const { login: authContextLogin } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { showToast }               = useToast();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [showPass, setShowPass]     = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [focused, setFocused]       = useState('');
+
+  const fadeAnim    = useRef(new Animated.Value(0)).current;
+  const slideAnim   = useRef(new Animated.Value(rh(32))).current;
+  const passwordRef = useRef(null);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 60, friction: 10, delay: 200, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const validateEmail = useCallback((val) => {
+    const t = val.trim();
+    if (!t)                          return 'Email is required';
+    if (!EMAIL_REGEX.test(t))        return 'Enter a valid email address';
+    if (t.length > MAX_EMAIL_LENGTH) return 'Email is too long';
+    return '';
+  }, []);
+
+  const handleEmailChange    = useCallback((val) => {
+    setEmail(val.slice(0, MAX_EMAIL_LENGTH));
+    if (emailError) setEmailError('');
+  }, [emailError]);
+
+  const handlePasswordChange = useCallback((val) => {
+    setPassword(val.slice(0, MAX_PASSWORD_LENGTH));
+  }, []);
+
+  const handleLogin = useCallback(async () => {
+    const trimmedEmail = email.trim();
+    const err = validateEmail(trimmedEmail);
+    if (err) {
+      setEmailError(err);
+      showToast({ type: 'error', message: err });
+      return;
+    }
+    if (!password) {
+      showToast({ type: 'error', message: 'Password is required.' });
       return;
     }
 
     setLoading(true);
     try {
-      const result = await dispatch(login({ email, password })).unwrap();
-
-      console.log('🔍 Login result:', result);
-      console.log('🔍 result.access_token:', result.access_token);
-      console.log('🔍 result.user:', result.user);
-      console.log('🔍 Type of access_token:', typeof result.access_token);
+      const result = await dispatch(login({
+        email:    trimmedEmail.toLowerCase(),
+        password,
+      })).unwrap();
 
       if (!result.access_token) {
-        Alert.alert('Error', 'Login failed: No token received');
-        setLoading(false);
+        showToast({ type: 'error', title: 'Login Failed', message: 'No token received. Please try again.' });
         return;
       }
 
       await authContextLogin(result.access_token, result.user);
+      showToast({ type: 'success', message: 'Welcome back 👋' });
 
-      const savedToken = await AsyncStorage.getItem('token');
-      console.log('🔍 Saved token:', savedToken?.substring(0, 30));
+      setTimeout(() => {
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      }, 600);
 
-      console.log('✅ AuthContext updated, navigating to Main');
-
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Main' }],
-      });
     } catch (error) {
-      console.error('❌ Login error:', error);
-      Alert.alert('Login Failed', error.detail || 'Invalid email or password');
+      const msg = error?.detail || error?.message || '';
+      if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('invalid')) {
+        showToast({ type: 'error', title: 'Login Failed', message: 'Incorrect email or password.' });
+      } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+        showToast({ type: 'error', title: 'No Connection', message: 'Check your internet and try again.' });
+      } else {
+        showToast({ type: 'error', title: 'Login Failed', message: 'Something went wrong. Please try again.' });
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, password, validateEmail, dispatch, authContextLogin, showToast, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
       <StarryBackground />
+      <GlowOrb />
 
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to continue to Anonixx</Text>
-        </View>
+      <KeyboardAvoidingView
+        style={styles.kav}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <Animated.View
+          style={[styles.content, {
+            opacity:   fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }]}
+        >
+          {/* Brand mark */}
+          <View style={styles.brandMark}>
+            <View style={styles.brandDot} />
+            <Text style={styles.brandText}>ANONIXX</Text>
+          </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          {/* Email Input */}
-          <View style={styles.inputCardWrapper}>
-            <View style={styles.inputAccentBar} />
-            <View style={styles.inputCard}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Your confessions are waiting for you.</Text>
+          </View>
+
+          {/* Form */}
+          <View style={styles.form}>
+
+            {/* Email */}
+            <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>
-              <View style={styles.inputContainer}>
-                <View style={styles.inputIcon}>
-                  <Mail size={20} color={THEME.textSecondary} />
-                </View>
+              <View style={[
+                styles.inputRow,
+                focused === 'email'    && styles.inputRowFocused,
+                emailError             && styles.inputRowError,
+              ]}>
+                <Mail
+                  size={ICON.md}
+                  color={focused === 'email' ? THEME.primary : THEME.textSecondary}
+                  strokeWidth={2}
+                  style={styles.fieldIcon}
+                />
                 <TextInput
                   value={email}
-                  onChangeText={setEmail}
-                  placeholder="Enter your email"
+                  onChangeText={handleEmailChange}
+                  onFocus={() => setFocused('email')}
+                  onBlur={() => { setFocused(''); setEmailError(validateEmail(email.trim())); }}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  placeholder="your@email.com"
                   placeholderTextColor={THEME.textSecondary}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
                   autoComplete="email"
+                  returnKeyType="next"
+                  textContentType="emailAddress"
                   style={styles.input}
                 />
               </View>
+              {emailError ? <Text style={styles.fieldError}>{emailError}</Text> : null}
             </View>
-          </View>
 
-          {/* Password Input */}
-          <View style={styles.inputCardWrapper}>
-            <View style={styles.inputAccentBar} />
-            <View style={styles.inputCard}>
+            {/* Password */}
+            <View style={styles.fieldGroup}>
               <Text style={styles.label}>Password</Text>
-              <View style={styles.inputContainer}>
-                <View style={styles.inputIcon}>
-                  <Lock size={20} color={THEME.textSecondary} />
-                </View>
+              <View style={[
+                styles.inputRow,
+                focused === 'password' && styles.inputRowFocused,
+              ]}>
+                <Lock
+                  size={ICON.md}
+                  color={focused === 'password' ? THEME.primary : THEME.textSecondary}
+                  strokeWidth={2}
+                  style={styles.fieldIcon}
+                />
                 <TextInput
+                  ref={passwordRef}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={handlePasswordChange}
+                  onFocus={() => setFocused('password')}
+                  onBlur={() => setFocused('')}
+                  onSubmitEditing={handleLogin}
                   placeholder="Enter your password"
                   placeholderTextColor={THEME.textSecondary}
-                  secureTextEntry
+                  secureTextEntry={!showPass}
                   autoCapitalize="none"
+                  autoCorrect={false}
                   autoComplete="password"
+                  returnKeyType="done"
+                  textContentType="password"
                   style={styles.input}
                 />
+                <Pressable
+                  onPress={() => setShowPass((p) => !p)}
+                  hitSlop={HIT_SLOP}
+                  style={styles.eyeButton}
+                >
+                  {showPass
+                    ? <EyeOff size={ICON.md} color={THEME.textSecondary} strokeWidth={2} />
+                    : <Eye    size={ICON.md} color={THEME.textSecondary} strokeWidth={2} />
+                  }
+                </Pressable>
               </View>
             </View>
-          </View>
 
-          {/* Login Button */}
-          <View style={styles.loginButtonWrapper}>
-            <View style={styles.loginAccentBar} />
+            {/* Login button */}
             <TouchableOpacity
               onPress={handleLogin}
               disabled={loading}
-              style={[
-                styles.loginButton,
-                loading && styles.loginButtonDisabled,
-              ]}
+              style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+              activeOpacity={0.85}
             >
-              {loading ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
-              )}
+              {loading
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.loginBtnText}>Sign In</Text>
+              }
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Sign up */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('SignUp')}
+              style={styles.signupBtn}
+              activeOpacity={0.75}
+              hitSlop={HIT_SLOP}
+            >
+              <Text style={styles.signupText}>
+                New here?{'  '}
+                <Text style={styles.signupTextBold}>Create an account</Text>
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Sign Up Link */}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('SignUp')}
-            style={styles.signupLink}
-          >
-            <Text style={styles.signupText}>
-              Don't have an account?{' '}
-              <Text style={styles.signupTextBold}>Sign Up</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+          <Text style={styles.footerNote}>Anonymous. Safe. Yours.</Text>
+        </Animated.View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEME.background,
+  container: { flex: 1, backgroundColor: THEME.background },
+
+  glowOrb: {
+    position:        'absolute',
+    width:           rs(320),
+    height:          rs(320),
+    borderRadius:    rs(160),
+    backgroundColor: THEME.primary,
+    opacity:         0.06,
+    bottom:          rh(-60),
+    alignSelf:       'center',
   },
+
+  kav:     { flex: 1 },
   content: {
-    flex: 1,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
+    flex:             1,
+    paddingHorizontal: SPACING.lg,
+    justifyContent:   'center',
+    paddingBottom:    SPACING.lg,
   },
-  header: {
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 36,
-    fontWeight: '800',
-    marginBottom: 8,
-    color: THEME.primary,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: THEME.textSecondary,
-  },
-  form: {
-    width: '100%',
-  },
-  // Input Cards
-  inputCardWrapper: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  inputAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.6,
-  },
-  inputCard: {
-    backgroundColor: THEME.surface,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: THEME.text,
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  inputContainer: {
+
+  brandMark: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: THEME.input,
-    borderRadius: 12,
+    alignItems:    'center',
+    gap:           SPACING.sm,
+    marginBottom:  SPACING.xxl,
   },
-  inputIcon: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
+  brandDot: {
+    width:           rs(8),
+    height:          rs(8),
+    borderRadius:    rs(4),
+    backgroundColor: THEME.primary,
+    shadowColor:     THEME.primary,
+    shadowOffset:    { width: 0, height: 0 },
+    shadowOpacity:   0.8,
+    shadowRadius:    rs(6),
+    elevation:       4,
   },
+  brandText: {
+    fontSize:      rf(11),
+    fontWeight:    '800',
+    color:         THEME.primary,
+    letterSpacing: rs(3),
+    opacity:       0.8,
+  },
+
+  header:   { marginBottom: SPACING.xl },
+  title:    {
+    fontSize:     FONT.hero,
+    fontWeight:   '800',
+    color:        THEME.text,
+    letterSpacing: rs(-1),
+    marginBottom: SPACING.sm,
+    lineHeight:   FONT.hero * 1.15,
+  },
+  subtitle: { fontSize: FONT.md, color: THEME.textSecondary, lineHeight: FONT.md * 1.6 },
+
+  form:       { width: '100%' },
+  fieldGroup: { marginBottom: SPACING.md },
+  label: {
+    fontSize:      rf(11),
+    fontWeight:    '700',
+    color:         THEME.textSecondary,
+    marginBottom:  SPACING.sm,
+    textTransform: 'uppercase',
+    letterSpacing: rs(1),
+  },
+
+  inputRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    backgroundColor:   THEME.inputBg,
+    borderRadius:      RADIUS.lg,
+    borderWidth:       1.5,
+    borderColor:       THEME.border,
+    paddingHorizontal: rp(14),
+    height:            INPUT_HEIGHT,
+  },
+  inputRowFocused: { borderColor: THEME.primary, backgroundColor: THEME.primaryDim },
+  inputRowError:   { borderColor: THEME.error },
+  fieldIcon:       { marginRight: rp(10) },
   input: {
-    flex: 1,
-    height: 48,
-    fontSize: 16,
-    color: THEME.text,
-    paddingRight: 16,
+    flex:     1,
+    fontSize: FONT.md,
+    color:    THEME.text,
+    height:   INPUT_HEIGHT,
   },
-  // Login Button
-  loginButtonWrapper: {
-    position: 'relative',
-    marginTop: 8,
-    marginBottom: 24,
+  eyeButton: { padding: rp(4), marginLeft: rp(6) },
+  fieldError: {
+    color:      THEME.error,
+    fontSize:   rf(11),
+    marginTop:  SPACING.xs,
+    marginLeft: rp(4),
+    fontWeight: '500',
   },
-  loginAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
+
+  loginBtn: {
+    height:          BUTTON_HEIGHT,
+    borderRadius:    RADIUS.lg,
+    alignItems:      'center',
+    justifyContent:  'center',
     backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.8,
+    marginTop:       SPACING.sm,
+    shadowColor:     THEME.primary,
+    shadowOffset:    { width: 0, height: rh(8) },
+    shadowOpacity:   0.45,
+    shadowRadius:    rs(20),
+    elevation:       10,
   },
-  loginButton: {
-    height: 56,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: THEME.primary,
-    paddingLeft: 4,
-    shadowColor: THEME.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
+  loginBtnDisabled: { opacity: 0.55, shadowOpacity: 0 },
+  loginBtnText:     { color: '#fff', fontSize: FONT.lg, fontWeight: '700', letterSpacing: rs(0.3) },
+
+  divider: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginVertical: SPACING.lg,
+    gap:            SPACING.md,
   },
-  loginButtonDisabled: {
-    opacity: 0.6,
-  },
-  loginButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  // Sign Up Link
-  signupLink: {
-    alignItems: 'center',
-  },
-  signupText: {
-    fontSize: 15,
-    color: THEME.textSecondary,
-  },
-  signupTextBold: {
-    fontWeight: '700',
-    color: THEME.primary,
+  dividerLine: { flex: 1, height: 1, backgroundColor: THEME.border },
+  dividerText: { fontSize: FONT.sm, color: THEME.textSecondary },
+
+  signupBtn:      { alignItems: 'center', paddingVertical: rp(4) },
+  signupText:     { fontSize: FONT.md, color: THEME.textSecondary },
+  signupTextBold: { fontWeight: '700', color: THEME.primary },
+
+  footerNote: {
+    textAlign:     'center',
+    marginTop:     SPACING.xxl,
+    fontSize:      rf(11),
+    color:         THEME.textSecondary,
+    opacity:       0.5,
+    letterSpacing: rs(1),
   },
 });

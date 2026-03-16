@@ -1,603 +1,715 @@
-/**
- * ShareCardScreen
- * Create a confession card, preview it beautifully, then share anywhere.
- */
-
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Share, Animated, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Alert, Dimensions,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  ArrowLeft, Clock, Flame, Share2, Users, Zap,
-  Moon, Heart, Compass, Smile, Sparkles,
-} from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
+import { useToast } from '../../components/ui/Toast';
+import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 
-const { width } = Dimensions.get('window');
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  surfaceAlt: '#1a1f2e',
-  primary: '#FF634A',
-  text: '#EAEAF0',
+// ─── Theme ────────────────────────────────────────────────────────────────────
+const T = {
+  background:    '#0b0f18',
+  surface:       '#151924',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255, 99, 74, 0.15)',
+  text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.06)',
-  borderStrong: 'rgba(255,255,255,0.12)',
+  border:        'rgba(255,255,255,0.06)',
+  inputBg:       'rgba(255,255,255,0.04)',
 };
 
-const CATEGORIES = [
-  { id: 'love',       label: 'Love',       emoji: '💔', color: '#FF6B8A' },
-  { id: 'fun',        label: 'Fun',        emoji: '😈', color: '#FFB347' },
-  { id: 'adventure',  label: 'Adventure',  emoji: '🌍', color: '#47B8FF' },
-  { id: 'friendship', label: 'Friendship', emoji: '🤝', color: '#47FFB8' },
-  { id: 'spicy',      label: 'Spicy',      emoji: '🌶️', color: '#FF4747' },
-];
+const SCREEN_W = Dimensions.get('window').width;
 
+// ─── Static data (module level) ───────────────────────────────────────────────
 const PROMPTS = [
-  "I need someone to take me out tonight",
-  "I need a husband",
-  "I need a travel partner",
-  "I need a gym partner who won't judge me",
-  "I need someone to watch movies with",
-  "I need a business partner with vision",
-  "I need someone who texts back",
-  "I need a 4th for our trip to Nairobi",
-  "Two of us looking for an adventure",
+  'I wish someone knew…',
+  'The thing I can\'t say out loud…',
+  'I\'ve been carrying this alone…',
+  'What I really need right now…',
+  'Something I\'ve never admitted…',
+  'If I could tell anyone…',
+  'My honest truth is…',
+  'I keep pretending that…',
 ];
 
-const getCategoryColor = (id) =>
-  CATEGORIES.find(c => c.id === id)?.color || THEME.primary;
+const CARD_STYLES = [
+  { id: 'midnight', bg: '#0b0f18', accent: '#FF634A', label: 'Midnight' },
+  { id: 'dusk',     bg: '#150d1e', accent: '#C084FC', label: 'Dusk'     },
+  { id: 'ocean',    bg: '#091419', accent: '#38BDF8', label: 'Ocean'    },
+  { id: 'ember',    bg: '#160d05', accent: '#FB923C', label: 'Ember'    },
+];
 
-const getCategoryEmoji = (id) =>
-  CATEGORIES.find(c => c.id === id)?.emoji || '✨';
+// ─── ConfessionCard — same component used for preview AND captured as image ───
+const ConfessionCard = React.memo(({ text, prompt, cardStyle, captureRef }) => {
+  const style = CARD_STYLES.find(s => s.id === cardStyle) || CARD_STYLES[0];
+  const cardWidth = SCREEN_W - SPACING.md * 2;
 
+  return (
+    <ViewShot
+      ref={captureRef}
+      options={{ format: 'png', quality: 1.0 }}
+      style={{ borderRadius: RADIUS.lg, overflow: 'hidden' }}
+    >
+      <View style={[cardStyles.card, { backgroundColor: style.bg, width: cardWidth }]}>
+        {/* Top accent bar */}
+        <View style={[cardStyles.accentBar, { backgroundColor: style.accent }]} />
+
+        <View style={cardStyles.inner}>
+          {/* Brand row */}
+          <View style={cardStyles.brandRow}>
+            <View style={[cardStyles.brandDot, { backgroundColor: style.accent }]} />
+            <Text style={[cardStyles.brandName, { color: style.accent }]}>anonixx</Text>
+            <Text style={cardStyles.brandTagline}>· anonymous confessions</Text>
+          </View>
+
+          {/* Divider */}
+          <View style={[cardStyles.divider, { backgroundColor: style.accent + '22' }]} />
+
+          {/* Prompt */}
+          {!!prompt && (
+            <Text style={[cardStyles.prompt, { color: style.accent + 'bb' }]}>
+              {prompt}
+            </Text>
+          )}
+
+          {/* The actual confession */}
+          <Text
+            style={[
+              cardStyles.confessionText,
+              !text && cardStyles.placeholderText,
+            ]}
+            numberOfLines={10}
+          >
+            {text || 'Your confession will appear here…'}
+          </Text>
+
+          {/* Footer */}
+          <View style={cardStyles.footer}>
+            <Text style={cardStyles.anonTag}>— Anonymous</Text>
+            <View style={[cardStyles.ctaBadge, {
+              borderColor: style.accent + '55',
+              backgroundColor: style.accent + '15',
+            }]}>
+              <Text style={[cardStyles.ctaLabel, { color: style.accent }]}>
+                Tap to respond ›
+              </Text>
+            </View>
+          </View>
+
+          {/* Watermark URL */}
+          <Text style={cardStyles.watermark}>anonixx.app</Text>
+        </View>
+      </View>
+    </ViewShot>
+  );
+});
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function ShareCardScreen({ navigation }) {
-  const insets = useSafeAreaInsets();
-  const [confession, setConfession] = useState('');
-  const [category, setCategory] = useState('love');
-  const [isGroup, setIsGroup] = useState(false);
-  const [groupSize, setGroupSize] = useState(2);
-  const [loading, setLoading] = useState(false);
-  const [createdDrop, setCreatedDrop] = useState(null);
+  const { token }      = useAuth();
+  const { showToast }  = useToast();
+  const captureRef     = useRef(null);
+  const scaleAnim      = useRef(new Animated.Value(1)).current;
 
-  const cardScale = useRef(new Animated.Value(1)).current;
-  const successAnim = useRef(new Animated.Value(0)).current;
+  const [text, setText]               = useState('');
+  const [prompt, setPrompt]           = useState('');
+  const [cardStyle, setCardStyle]     = useState('midnight');
+  const [loading, setLoading]         = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
 
-  const catColor = getCategoryColor(category);
-  const catEmoji = getCategoryEmoji(category);
-  const charCount = confession.length;
-  const maxChars = 280;
+  // ── Press animation on card ──────────────────────────────────────────────────
+  const onPressIn = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97, useNativeDriver: true, tension: 300, friction: 10,
+    }).start();
+  }, [scaleAnim]);
 
-  const animateCard = () => {
-    Animated.sequence([
-      Animated.timing(cardScale, { toValue: 0.97, duration: 80, useNativeDriver: true }),
-      Animated.spring(cardScale, { toValue: 1, friction: 4, useNativeDriver: true }),
-    ]).start();
-  };
+  const onPressOut = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 1, useNativeDriver: true, tension: 300, friction: 10,
+    }).start();
+  }, [scaleAnim]);
 
-  const handlePrompt = (prompt) => {
-    setConfession(prompt);
-    animateCard();
-  };
+  // ── Prompt handlers ──────────────────────────────────────────────────────────
+  const handleSelectPrompt = useCallback((p) => {
+    setPrompt(p);
+    setShowPrompts(false);
+  }, []);
 
-  const handleCreate = async () => {
-    if (!confession.trim()) {
-      Alert.alert('Say something', 'Your confession card needs a message.');
+  const handleClearPrompt = useCallback(() => setPrompt(''), []);
+
+  // ── Style handler ────────────────────────────────────────────────────────────
+  const handleStyleSelect = useCallback((id) => setCardStyle(id), []);
+
+  // ── Main action: create drop → capture card → share image + link ─────────────
+  const handleDrop = useCallback(async () => {
+    if (!text.trim()) {
+      showToast({ type: 'warning', message: 'Write your confession first.' });
       return;
     }
+    if (text.trim().length < 10) {
+      showToast({ type: 'warning', message: 'Say a little more — at least 10 characters.' });
+      return;
+    }
+
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('token');
+      // Step 1 — Create the drop on the server
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          confession: confession.trim(),
-          category,
-          is_group: isGroup,
-          group_size: isGroup ? groupSize : null,
+          text:       text.trim(),
+          prompt:     prompt || null,
+          card_style: cardStyle,
         }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setCreatedDrop(data);
-        Animated.spring(successAnim, { toValue: 1, friction: 6, useNativeDriver: true }).start();
-      } else {
-        Alert.alert('Error', data.detail || 'Failed to create card');
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.detail || `Server error ${res.status}`);
       }
-    } catch (e) {
-      Alert.alert('Error', 'Something went wrong. Try again.');
+
+      const data   = await res.json();
+      const dropId = data?.id || data?._id || data?.drop_id;
+      if (!dropId) throw new Error('No drop ID returned from server.');
+
+      // Step 2 — Capture the card preview as a PNG
+      const imageUri = await captureRef.current.capture();
+
+      // Step 3 — Verify sharing is available
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        showToast({ type: 'error', message: 'Sharing is not available on this device.' });
+        return;
+      }
+
+      // Step 4 — Share the real card image
+      // The image IS the card with the full confession.
+      // Deep link goes in the message body so recipients can tap into Anonixx.
+      const deepLink = `anonixx://drop/${dropId}`;
+
+      await Sharing.shareAsync(imageUri, {
+        mimeType:    'image/png',
+        UTI:         'public.png',       // iOS
+        dialogTitle: 'Share your confession',
+        // Android shows this text alongside the image in the share sheet
+        message:     `I left a confession on Anonixx. Tap to respond:\n${deepLink}`,
+      });
+
+      showToast({ type: 'success', title: 'Dropped!', message: 'Your card is live.' });
+
+    } catch (err) {
+      showToast({ type: 'error', message: 'Could not create your drop. Try again.' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [text, prompt, cardStyle, token, showToast]);
 
-  const handleShare = async () => {
-    if (!createdDrop) return;
-    try {
-      await Share.share({
-        message: createdDrop.share_text,
-        title: 'Anonixx Drop',
-      });
-    } catch (e) {}
-  };
+  // ── Char count color ─────────────────────────────────────────────────────────
+  const charColor = useMemo(() => {
+    if (text.length > 450) return '#ef4444';
+    if (text.length > 350) return '#FB923C';
+    return T.textSecondary;
+  }, [text.length]);
 
-  const handleReset = () => {
-    setCreatedDrop(null);
-    setConfession('');
-    successAnim.setValue(0);
-  };
-
-  // ── Success state ──────────────────────────────────────────
-  if (createdDrop) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+  // ────────────────────────────────────────────────────────────────────────────
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleReset} style={styles.backBtn}>
-            <ArrowLeft size={22} color={THEME.text} />
+          <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
+            <Text style={styles.backIcon}>‹</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Your Card is Live 🔥</Text>
-          <View style={{ width: 40 }} />
+          <Text style={styles.headerTitle}>Drop a Confession</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('DropsInbox')} hitSlop={HIT_SLOP}>
+            <Text style={styles.headerAction}>My Drops</Text>
+          </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.successContent} showsVerticalScrollIndicator={false}>
-          {/* Live card preview */}
-          <Animated.View style={[styles.liveCard, {
-            borderColor: catColor,
-            transform: [{ scale: cardScale }],
-          }]}>
-            {createdDrop.is_night_mode && (
-              <View style={styles.nightBadge}>
-                <Moon size={12} color="#fff" />
-                <Text style={styles.nightBadgeText}>Night Drop</Text>
-              </View>
-            )}
-            <View style={styles.cardCategoryRow}>
-              <Text style={styles.cardEmoji}>{catEmoji}</Text>
-              <Text style={[styles.cardCategory, { color: catColor }]}>
-                {CATEGORIES.find(c => c.id === category)?.label}
-              </Text>
-              {isGroup && (
-                <View style={[styles.groupBadge, { backgroundColor: `${catColor}22` }]}>
-                  <Users size={12} color={catColor} />
-                  <Text style={[styles.groupBadgeText, { color: catColor }]}>Group · {groupSize}</Text>
-                </View>
-              )}
-            </View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Card Preview ── */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Your Card</Text>
+            <Text style={styles.hint}>
+              This exact card — with your real message — gets shared as an image.
+              The caption includes a link to open Anonixx.
+            </Text>
 
-            <Text style={styles.cardConfession}>"{createdDrop.confession || confession}"</Text>
+            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+              <Pressable
+                onPressIn={onPressIn}
+                onPressOut={onPressOut}
+                onPress={handleDrop}
+                disabled={loading}
+              >
+                <ConfessionCard
+                  text={text}
+                  prompt={prompt}
+                  cardStyle={cardStyle}
+                  captureRef={captureRef}
+                />
+              </Pressable>
+            </Animated.View>
 
-            <View style={styles.cardFooter}>
-              <View style={styles.cardTimerRow}>
-                <Clock size={13} color={THEME.textSecondary} />
-                <Text style={styles.cardTimer}>{createdDrop.time_left}</Text>
-              </View>
-              <View style={[styles.unlockBadge, { backgroundColor: `${catColor}22`, borderColor: `${catColor}44` }]}>
-                <Zap size={12} color={catColor} />
-                <Text style={[styles.unlockText, { color: catColor }]}>
-                  ${createdDrop.price} to connect
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.cardBrand}>anonixx</Text>
-          </Animated.View>
-
-          {/* Stats row */}
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNum}>0</Text>
-              <Text style={styles.statLabel}>unlocks</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNum}>0</Text>
-              <Text style={styles.statLabel}>reactions</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNum}>0</Text>
-              <Text style={styles.statLabel}>admirers</Text>
-            </View>
+            <Text style={styles.tapHint}>↑ Tap card or use the button below</Text>
           </View>
 
-          {/* Share instructions */}
-          <View style={styles.instructionCard}>
-            <Text style={styles.instructionTitle}>Share your card anywhere</Text>
-            <View style={styles.platformList}>
-              {['WhatsApp', 'Instagram', 'TikTok', 'Facebook', 'Twitter'].map(p => (
-                <View key={p} style={styles.platformTag}>
-                  <Text style={styles.platformText}>{p}</Text>
-                </View>
+          {/* ── Card Style ── */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Card Style</Text>
+            <View style={styles.styleRow}>
+              {CARD_STYLES.map((s) => (
+                <TouchableOpacity
+                  key={s.id}
+                  onPress={() => handleStyleSelect(s.id)}
+                  hitSlop={HIT_SLOP}
+                  style={[
+                    styles.stylePill,
+                    { borderColor: s.accent },
+                    cardStyle === s.id && { backgroundColor: s.accent + '22' },
+                  ]}
+                >
+                  <View style={[styles.styleDot, { backgroundColor: s.accent }]} />
+                  <Text style={[
+                    styles.stylePillLabel,
+                    cardStyle === s.id && { color: s.accent },
+                  ]}>
+                    {s.label}
+                  </Text>
+                </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.instructionSub}>
-              Anyone who taps your link lands on Anonixx. They pay ${createdDrop.price} to connect with you anonymously.
-            </Text>
           </View>
 
-          {/* Actions */}
-          <TouchableOpacity style={[styles.shareBtn, { backgroundColor: catColor }]} onPress={handleShare}>
-            <Share2 size={20} color="#fff" />
-            <Text style={styles.shareBtnText}>Share My Card</Text>
-          </TouchableOpacity>
+          {/* ── Prompt ── */}
+          <View style={styles.section}>
+            <View style={styles.row}>
+              <Text style={styles.label}>Prompt</Text>
+              {prompt
+                ? <TouchableOpacity onPress={handleClearPrompt} hitSlop={HIT_SLOP}>
+                    <Text style={styles.clearBtn}>Clear</Text>
+                  </TouchableOpacity>
+                : null}
+            </View>
 
-          <TouchableOpacity style={styles.newCardBtn} onPress={handleReset}>
-            <Text style={styles.newCardBtnText}>Create Another Card</Text>
-          </TouchableOpacity>
+            {prompt ? (
+              <View style={styles.activePrompt}>
+                <Text style={styles.activePromptText}>{prompt}</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.promptToggle}
+                onPress={() => setShowPrompts(v => !v)}
+                hitSlop={HIT_SLOP}
+              >
+                <Text style={styles.promptToggleText}>
+                  {showPrompts ? 'Hide prompts ↑' : 'Pick a prompt (optional) ↓'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
-          <TouchableOpacity
-            style={styles.inboxBtn}
-            onPress={() => navigation.navigate('DropsInbox')}
-          >
-            <Text style={styles.inboxBtnText}>Go to Drops Inbox</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ── Create state ───────────────────────────────────────────
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={22} color={THEME.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create a Drop</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Live card preview */}
-        <Animated.View style={[styles.liveCard, {
-          borderColor: catColor,
-          transform: [{ scale: cardScale }],
-        }]}>
-          <View style={styles.cardCategoryRow}>
-            <Text style={styles.cardEmoji}>{catEmoji}</Text>
-            <Text style={[styles.cardCategory, { color: catColor }]}>
-              {CATEGORIES.find(c => c.id === category)?.label}
-            </Text>
-            {isGroup && (
-              <View style={[styles.groupBadge, { backgroundColor: `${catColor}22` }]}>
-                <Users size={12} color={catColor} />
-                <Text style={[styles.groupBadgeText, { color: catColor }]}>Group · {groupSize}</Text>
+            {showPrompts && !prompt && (
+              <View style={styles.promptGrid}>
+                {PROMPTS.map((p) => (
+                  <TouchableOpacity
+                    key={p}
+                    style={styles.promptChip}
+                    onPress={() => handleSelectPrompt(p)}
+                    hitSlop={HIT_SLOP}
+                  >
+                    <Text style={styles.promptChipText}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
           </View>
 
-          <Text style={[styles.cardConfession, !confession && styles.cardPlaceholder]}>
-            "{confession || 'your confession appears here...'}"
-          </Text>
-
-          <View style={styles.cardFooter}>
-            <View style={styles.cardTimerRow}>
-              <Clock size={13} color={THEME.textSecondary} />
-              <Text style={styles.cardTimer}>24h · expires</Text>
-            </View>
-            <View style={[styles.unlockBadge, { backgroundColor: `${catColor}22`, borderColor: `${catColor}44` }]}>
-              <Zap size={12} color={catColor} />
-              <Text style={[styles.unlockText, { color: catColor }]}>
-                ${isGroup ? '3' : '2'} to connect
+          {/* ── Confession Input ── */}
+          <View style={styles.section}>
+            <View style={styles.row}>
+              <Text style={styles.label}>Your Confession</Text>
+              <Text style={[styles.charCount, { color: charColor }]}>
+                {text.length}/500
               </Text>
             </View>
+            <TextInput
+              style={styles.input}
+              placeholder={prompt || 'Say what you\'ve been holding in…'}
+              placeholderTextColor={T.textSecondary}
+              value={text}
+              onChangeText={setText}
+              multiline
+              maxLength={500}
+              textAlignVertical="top"
+              autoCorrect
+              autoCapitalize="sentences"
+            />
           </View>
-          <Text style={styles.cardBrand}>anonixx</Text>
-        </Animated.View>
 
-        {/* Category picker */}
-        <Text style={styles.label}>Category</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.categoryScroll}
-          contentContainerStyle={styles.categoryContent}
-        >
-          {CATEGORIES.map(cat => (
-            <TouchableOpacity
-              key={cat.id}
-              style={[
-                styles.categoryChip,
-                category === cat.id && { backgroundColor: `${cat.color}22`, borderColor: cat.color },
-              ]}
-              onPress={() => { setCategory(cat.id); animateCard(); }}
-            >
-              <Text style={styles.categoryChipEmoji}>{cat.emoji}</Text>
-              <Text style={[
-                styles.categoryChipText,
-                category === cat.id && { color: cat.color },
-              ]}>{cat.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Confession input */}
-        <Text style={styles.label}>Your confession</Text>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            value={confession}
-            onChangeText={(t) => { setConfession(t); animateCard(); }}
-            placeholder="I need someone to..."
-            placeholderTextColor={THEME.textSecondary}
-            multiline
-            maxLength={maxChars}
-            textAlignVertical="top"
-          />
-          <Text style={[styles.charCount, charCount > maxChars * 0.85 && { color: THEME.primary }]}>
-            {charCount}/{maxChars}
-          </Text>
-        </View>
-
-        {/* Prompts */}
-        <Text style={styles.label}>Need inspiration?</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.promptScroll}
-          contentContainerStyle={styles.promptContent}
-        >
-          {PROMPTS.map((p, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.promptChip}
-              onPress={() => handlePrompt(p)}
-            >
-              <Text style={styles.promptText}>{p}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Group toggle */}
-        <View style={styles.groupRow}>
-          <View style={styles.groupLeft}>
-            <Users size={18} color={isGroup ? catColor : THEME.textSecondary} />
-            <View>
-              <Text style={[styles.groupTitle, isGroup && { color: catColor }]}>Group Drop</Text>
-              <Text style={styles.groupSub}>Looking for multiple people? ($3 unlock)</Text>
-            </View>
-          </View>
+          {/* ── Drop It ── */}
           <TouchableOpacity
-            style={[styles.toggle, isGroup && { backgroundColor: catColor }]}
-            onPress={() => setIsGroup(v => !v)}
+            style={[styles.dropBtn, loading && styles.dropBtnDisabled]}
+            onPress={handleDrop}
+            disabled={loading}
+            activeOpacity={0.85}
           >
-            <View style={[styles.toggleThumb, isGroup && styles.toggleThumbOn]} />
+            {loading
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <>
+                  <Text style={styles.dropBtnText}>Drop It</Text>
+                  <Text style={styles.dropBtnSub}>Shares your real card as an image</Text>
+                </>
+            }
           </TouchableOpacity>
-        </View>
 
-        {isGroup && (
-          <View style={styles.groupSizeRow}>
-            <Text style={styles.groupSizeLabel}>Group size:</Text>
-            {[2, 3, 4, 5, 6].map(n => (
-              <TouchableOpacity
-                key={n}
-                style={[styles.sizeChip, groupSize === n && { backgroundColor: catColor }]}
-                onPress={() => setGroupSize(n)}
-              >
-                <Text style={[styles.sizeChipText, groupSize === n && { color: '#fff' }]}>{n}</Text>
-              </TouchableOpacity>
+          {/* ── How it works ── */}
+          <View style={styles.howBox}>
+            <Text style={styles.howTitle}>How it works</Text>
+            {[
+              'Write your confession — it appears on the card exactly.',
+              'Tap Drop It → card saved, real image ready to share.',
+              'Send the image anywhere — WhatsApp, Instagram, anywhere.',
+              'They tap the link in the caption → opens Anonixx → your drop.',
+              'Chat anonymously. Reveal only if you both want to.',
+            ].map((step, i) => (
+              <View key={i} style={styles.howRow}>
+                <Text style={styles.howNum}>{i + 1}</Text>
+                <Text style={styles.howText}>{step}</Text>
+              </View>
             ))}
           </View>
-        )}
 
-        {/* Night mode info */}
-        <View style={styles.nightInfo}>
-          <Moon size={14} color='#9B8BFF' />
-          <Text style={styles.nightInfoText}>
-            Cards created between 10pm–3am get a special Night Drop badge 🌙
-          </Text>
-        </View>
-
-        {/* Create button */}
-        <TouchableOpacity
-          style={[styles.createBtn, { backgroundColor: catColor }, (!confession.trim() || loading) && { opacity: 0.5 }]}
-          onPress={handleCreate}
-          disabled={!confession.trim() || loading}
-        >
-          {loading
-            ? <ActivityIndicator color="#fff" />
-            : <>
-                <Flame size={20} color="#fff" />
-                <Text style={styles.createBtnText}>Drop It</Text>
-              </>
-          }
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={{ height: SPACING.xxl }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
+// ─── Card Styles ──────────────────────────────────────────────────────────────
+const cardStyles = StyleSheet.create({
+  card: {
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    minHeight: rs(240),
+  },
+  accentBar: {
+    height: rs(4),
+    width: '100%',
+  },
+  inner: {
+    padding: SPACING.lg,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  brandDot: {
+    width: rs(7),
+    height: rs(7),
+    borderRadius: rs(4),
+    marginRight: SPACING.xs,
+  },
+  brandName: {
+    fontSize: FONT.sm,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginRight: SPACING.xs,
+  },
+  brandTagline: {
+    fontSize: FONT.xs,
+    color: '#9A9AA3',
+    letterSpacing: 0.3,
+  },
+  divider: {
+    height: 1,
+    marginBottom: SPACING.md,
+  },
+  prompt: {
+    fontSize: FONT.xs,
+    fontStyle: 'italic',
+    marginBottom: SPACING.sm,
+    lineHeight: rf(18),
+  },
+  confessionText: {
+    fontSize: rf(17),
+    fontWeight: '300',
+    color: '#EAEAF0',
+    lineHeight: rf(27),
+    letterSpacing: 0.2,
+    marginBottom: SPACING.lg,
+  },
+  placeholderText: {
+    opacity: 0.3,
+    fontStyle: 'italic',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  anonTag: {
+    fontSize: FONT.xs,
+    color: '#9A9AA3',
+    fontStyle: 'italic',
+  },
+  ctaBadge: {
+    paddingHorizontal: rp(10),
+    paddingVertical: rp(4),
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  ctaLabel: {
+    fontSize: FONT.xs,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+  },
+  watermark: {
+    fontSize: rf(10),
+    color: '#9A9AA3',
+    opacity: 0.4,
+    letterSpacing: 0.5,
+    textAlign: 'right',
+    marginTop: rp(2),
+  },
+});
+
+// ─── Screen Styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
+  safe: {
+    flex: 1,
+    backgroundColor: T.background,
+  },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: THEME.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: THEME.surface,
+  backIcon: {
+    fontSize: rf(28),
+    color: T.text,
+    lineHeight: rf(30),
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: THEME.text },
-
-  content: { padding: 20 },
-  successContent: { padding: 20 },
-
-  // Live card preview
-  liveCard: {
-    backgroundColor: THEME.surface,
-    borderRadius: 20, padding: 24,
-    borderWidth: 1.5,
-    marginBottom: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4, shadowRadius: 20, elevation: 10,
+  headerTitle: {
+    fontSize: FONT.md,
+    fontWeight: '600',
+    color: T.text,
+    letterSpacing: 0.2,
   },
-  cardCategoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  cardEmoji: { fontSize: 20 },
-  cardCategory: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  groupBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
+  headerAction: {
+    fontSize: FONT.sm,
+    color: T.primary,
+    fontWeight: '500',
   },
-  groupBadgeText: { fontSize: 11, fontWeight: '600' },
-  cardConfession: {
-    fontSize: 18, lineHeight: 28, color: THEME.text,
-    fontStyle: 'italic', marginBottom: 18, letterSpacing: 0.2,
+  scroll: { flex: 1 },
+  content: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.lg,
   },
-  cardPlaceholder: { color: THEME.textSecondary },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTimerRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  cardTimer: { fontSize: 12, color: THEME.textSecondary },
-  unlockBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1,
+  section: {
+    marginBottom: SPACING.lg,
   },
-  unlockText: { fontSize: 12, fontWeight: '700' },
-  cardBrand: {
-    fontSize: 11, color: THEME.textSecondary, opacity: 0.5,
-    textAlign: 'right', marginTop: 14, letterSpacing: 2,
+  label: {
+    fontSize: FONT.xs,
+    fontWeight: '600',
+    color: T.textSecondary,
     textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: SPACING.sm,
   },
-  nightBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(155,139,255,0.15)', borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 12,
+  hint: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+    marginBottom: SPACING.sm,
+    lineHeight: rf(18),
   },
-  nightBadgeText: { fontSize: 11, color: '#9B8BFF', fontWeight: '600' },
-
-  label: { fontSize: 13, fontWeight: '600', color: THEME.textSecondary, marginBottom: 10, letterSpacing: 0.5 },
-
-  // Category
-  categoryScroll: { marginBottom: 24 },
-  categoryContent: { gap: 8, paddingRight: 16 },
-  categoryChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14,
-    backgroundColor: THEME.surface, borderWidth: 1, borderColor: THEME.border,
+  tapHint: {
+    fontSize: FONT.xs,
+    color: T.primary,
+    opacity: 0.7,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+    letterSpacing: 0.3,
   },
-  categoryChipEmoji: { fontSize: 16 },
-  categoryChipText: { fontSize: 13, fontWeight: '600', color: THEME.textSecondary },
-
-  // Input
-  inputWrapper: {
-    backgroundColor: THEME.surface, borderRadius: 16,
-    borderWidth: 1, borderColor: THEME.border,
-    padding: 16, marginBottom: 24, minHeight: 100,
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
   },
-  input: { fontSize: 16, color: THEME.text, lineHeight: 24, minHeight: 80 },
-  charCount: { fontSize: 12, color: THEME.textSecondary, textAlign: 'right', marginTop: 8 },
-
-  // Prompts
-  promptScroll: { marginBottom: 24 },
-  promptContent: { gap: 8, paddingRight: 16 },
+  styleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  stylePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: rp(6),
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    gap: SPACING.xs,
+  },
+  styleDot: {
+    width: rs(8),
+    height: rs(8),
+    borderRadius: rs(4),
+  },
+  stylePillLabel: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+    fontWeight: '500',
+  },
+  promptToggle: {
+    paddingVertical: rp(10),
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: T.inputBg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderStyle: 'dashed',
+  },
+  promptToggleText: {
+    fontSize: FONT.sm,
+    color: T.textSecondary,
+  },
+  activePrompt: {
+    paddingVertical: rp(10),
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: T.primaryDim,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.primary + '44',
+  },
+  activePromptText: {
+    fontSize: FONT.sm,
+    color: T.primary,
+    fontStyle: 'italic',
+  },
+  clearBtn: {
+    fontSize: FONT.xs,
+    color: T.primary,
+    fontWeight: '500',
+  },
+  promptGrid: {
+    marginTop: SPACING.sm,
+    gap: SPACING.xs,
+  },
   promptChip: {
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
-    backgroundColor: THEME.surfaceAlt, borderWidth: 1, borderColor: THEME.border,
-    maxWidth: 220,
+    paddingVertical: rp(10),
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.border,
   },
-  promptText: { fontSize: 13, color: THEME.textSecondary, lineHeight: 18 },
-
-  // Group
-  groupRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: THEME.surface, borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: THEME.border, marginBottom: 12,
+  promptChipText: {
+    fontSize: FONT.sm,
+    color: T.text,
+    lineHeight: rf(20),
   },
-  groupLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  groupTitle: { fontSize: 15, fontWeight: '600', color: THEME.text },
-  groupSub: { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
-  toggle: {
-    width: 48, height: 28, borderRadius: 14,
-    backgroundColor: THEME.border, justifyContent: 'center', padding: 3,
+  input: {
+    backgroundColor: T.inputBg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: SPACING.md,
+    color: T.text,
+    fontSize: FONT.md,
+    lineHeight: rf(24),
+    minHeight: rs(140),
   },
-  toggleThumb: {
-    width: 22, height: 22, borderRadius: 11, backgroundColor: THEME.textSecondary,
+  charCount: {
+    fontSize: FONT.xs,
   },
-  toggleThumbOn: { alignSelf: 'flex-end', backgroundColor: '#fff' },
-  groupSizeRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginBottom: 20, paddingLeft: 4,
+  dropBtn: {
+    backgroundColor: T.primary,
+    borderRadius: RADIUS.md,
+    height: BUTTON_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+    gap: rp(2),
   },
-  groupSizeLabel: { fontSize: 13, color: THEME.textSecondary, marginRight: 4 },
-  sizeChip: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: THEME.surface, borderWidth: 1, borderColor: THEME.border,
-    alignItems: 'center', justifyContent: 'center',
+  dropBtnDisabled: { opacity: 0.6 },
+  dropBtnText: {
+    fontSize: FONT.md,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
-  sizeChipText: { fontSize: 14, fontWeight: '600', color: THEME.textSecondary },
-
-  // Night info
-  nightInfo: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(155,139,255,0.08)', borderRadius: 12,
-    padding: 12, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(155,139,255,0.15)',
+  dropBtnSub: {
+    fontSize: FONT.xs,
+    color: 'rgba(255,255,255,0.6)',
   },
-  nightInfoText: { fontSize: 13, color: 'rgba(155,139,255,0.9)', flex: 1, lineHeight: 18 },
-
-  // Create button
-  createBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 10, paddingVertical: 17, borderRadius: 18,
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.5, shadowRadius: 16, elevation: 10,
+  howBox: {
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: T.border,
+    gap: SPACING.sm,
   },
-  createBtnText: { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
-
-  // Success
-  statsRow: {
-    flexDirection: 'row', backgroundColor: THEME.surface,
-    borderRadius: 16, padding: 20, marginBottom: 20,
-    borderWidth: 1, borderColor: THEME.border,
+  howTitle: {
+    fontSize: FONT.xs,
+    fontWeight: '600',
+    color: T.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: SPACING.xs,
   },
-  statItem: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: 22, fontWeight: '800', color: THEME.text },
-  statLabel: { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: THEME.border },
-
-  instructionCard: {
-    backgroundColor: THEME.surface, borderRadius: 16, padding: 18,
-    marginBottom: 20, borderWidth: 1, borderColor: THEME.border,
+  howRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
   },
-  instructionTitle: { fontSize: 15, fontWeight: '700', color: THEME.text, marginBottom: 12 },
-  platformList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  platformTag: {
-    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10,
-    backgroundColor: THEME.surfaceAlt, borderWidth: 1, borderColor: THEME.border,
+  howNum: {
+    fontSize: FONT.xs,
+    fontWeight: '700',
+    color: T.primary,
+    width: rs(16),
   },
-  platformText: { fontSize: 12, fontWeight: '600', color: THEME.textSecondary },
-  instructionSub: { fontSize: 13, color: THEME.textSecondary, lineHeight: 20 },
-
-  shareBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 10, paddingVertical: 17, borderRadius: 18, marginBottom: 12,
+  howText: {
+    fontSize: FONT.sm,
+    color: T.textSecondary,
+    flex: 1,
+    lineHeight: rf(20),
   },
-  shareBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  newCardBtn: {
-    paddingVertical: 15, borderRadius: 18, alignItems: 'center',
-    backgroundColor: THEME.surface, borderWidth: 1, borderColor: THEME.border, marginBottom: 10,
-  },
-  newCardBtnText: { fontSize: 15, fontWeight: '600', color: THEME.text },
-  inboxBtn: {
-    paddingVertical: 15, borderRadius: 18, alignItems: 'center', marginBottom: 8,
-  },
-  inboxBtnText: { fontSize: 14, color: THEME.textSecondary, fontWeight: '500' },
 });

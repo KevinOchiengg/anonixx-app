@@ -1,49 +1,45 @@
-from pydantic import BaseModel, Field
+"""
+payment_schemas.py — Anonixx payment request/response models.
+
+Two payment flows:
+  1. Connect unlock  — M-Pesa (KES) or Stripe (USD)
+  2. Group entry     — handled in groups.py schemas
+"""
+
+from pydantic import BaseModel
 from typing import Optional
-from enum import Enum
 
 
-class CoinPack(str, Enum):
-    PACK_100 = "100"
-    PACK_500 = "500"
-    PACK_1000 = "1000"
+# ─── Connect unlock ───────────────────────────────────────────────────────────
 
 
-class Currency(str, Enum):
-    KES = "KES"
-    USD = "USD"
+class MpesaUnlockRequest(BaseModel):
+    chat_id: str
+    phone_number: str  # Accepts 07XX, 254XX, or +254XX — normalized in router
 
 
-class InitiatePaymentRequest(BaseModel):
-    coin_pack: CoinPack
-    provider: str  # "mpesa", "stripe", "paypal"
-    phone: Optional[str] = None  # For M-Pesa
-    currency: Currency = Currency.USD
+class StripeUnlockRequest(BaseModel):
+    chat_id: str
+    payment_method_id: str  # From Stripe.js / Stripe SDK on the frontend
 
 
-class PaymentResponse(BaseModel):
-    transaction_id: str
-    provider: str
-    amount: float
-    currency: str
-    coins: int
-    status: str
-    payment_url: Optional[str] = None  # For Stripe/PayPal redirect
-    checkout_request_id: Optional[str] = None  # For M-Pesa STK
+class UnlockStatusResponse(BaseModel):
+    status: str  # pending | completed | failed | unlocked
+    chat_id: Optional[str] = None
+    message: Optional[str] = None
 
 
-class MPesaCallbackRequest(BaseModel):
-    """M-Pesa Daraja callback structure"""
+# ─── Callbacks / webhooks (Safaricom and Stripe POST to these) ────────────────
+
+
+class MpesaCallbackRequest(BaseModel):
+    """Safaricom Daraja STK callback body."""
+
     Body: dict
 
 
 class StripeWebhookRequest(BaseModel):
-    """Stripe webhook structure"""
+    """Stripe webhook event envelope."""
+
     type: str
     data: dict
-
-
-class PayPalWebhookRequest(BaseModel):
-    """PayPal webhook structure"""
-    event_type: str
-    resource: dict

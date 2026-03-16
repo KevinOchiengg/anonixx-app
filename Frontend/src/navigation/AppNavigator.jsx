@@ -69,6 +69,7 @@ export default function AppNavigator() {
           component={ConfessionMarketPlaceScreen}
         />
         <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
+
       </Stack.Navigator>
     </NavigationContainer>
   );

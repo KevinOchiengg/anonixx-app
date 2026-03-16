@@ -1,6 +1,6 @@
 import stripe
-from app.config import settings
 from typing import Optional
+from app.config import settings
 
 
 class StripeClient:
@@ -11,49 +11,43 @@ class StripeClient:
         self,
         amount: int,
         currency: str,
-        metadata: dict
+        metadata: dict,
     ) -> dict:
-        """Create Stripe PaymentIntent"""
-        try:
-            intent = stripe.PaymentIntent.create(
-                amount=amount,
-                currency=currency,
-                metadata=metadata,
-                automatic_payment_methods={"enabled": True}
-            )
-            return {
-                "id": intent.id,
-                "client_secret": intent.client_secret,
-                "status": intent.status
-            }
-        except stripe.error.StripeError as e:
-            print(f"Stripe error: {e}")
-            raise
+        """Create a Stripe PaymentIntent. Amount in smallest currency unit (cents)."""
+        intent = stripe.PaymentIntent.create(
+            amount=amount,
+            currency=currency,
+            metadata=metadata,
+            automatic_payment_methods={"enabled": True},
+        )
+        return {
+            "id": intent.id,
+            "client_secret": intent.client_secret,
+            "status": intent.status,
+        }
 
     async def retrieve_payment_intent(self, payment_intent_id: str) -> Optional[dict]:
-        """Retrieve PaymentIntent details"""
+        """Retrieve a PaymentIntent by ID."""
         try:
             intent = stripe.PaymentIntent.retrieve(payment_intent_id)
             return {
                 "id": intent.id,
                 "status": intent.status,
                 "amount": intent.amount,
-                "metadata": intent.metadata
+                "metadata": intent.metadata,
             }
-        except stripe.error.StripeError as e:
-            print(f"Stripe retrieve error: {e}")
+        except stripe.error.StripeError:
             return None
 
-    def verify_webhook_signature(self, payload: bytes, sig_header: str) -> Optional[dict]:
-        """Verify Stripe webhook signature"""
+    def verify_webhook_signature(
+        self,
+        payload: bytes,
+        sig_header: str,
+    ) -> Optional[dict]:
+        """Verify Stripe webhook signature. Returns the event or None."""
         try:
-            event = stripe.Webhook.construct_event(
+            return stripe.Webhook.construct_event(
                 payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
             )
-            return event
-        except ValueError:
-            print("Invalid payload")
-            return None
-        except stripe.error.SignatureVerificationError:
-            print("Invalid signature")
+        except (ValueError, stripe.error.SignatureVerificationError):
             return None

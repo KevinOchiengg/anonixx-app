@@ -3,7 +3,7 @@
  * Anonymous chat between two connected users.
  * Features: message limit, $2 unlock, identity reveal request/response.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -17,23 +17,32 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { API_BASE_URL } from '../../config/api';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { useToast } from '../../components/ui/Toast';
+import { API_BASE_URL } from '../../config/api';
 
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  surfaceAlt: '#1a1f2e',
-  primary: '#FF634A',
-  text: '#EAEAF0',
+// ─── Theme ────────────────────────────────────────────────────────────────────
+const T = {
+  background:    '#0b0f18',
+  surface:       '#151924',
+  surfaceAlt:    '#1a1f2e',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255,99,74,0.10)',
+  primaryBorder: 'rgba(255,99,74,0.20)',
+  text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.06)',
-  avatarBg: '#1e2330',
-  myBubble: '#FF634A',
-  theirBubble: '#1e2535',
+  border:        'rgba(255,255,255,0.06)',
+  myBubble:      '#FF634A',
+  theirBubble:   '#1e2535',
+  success:       '#4CAF50',
+  successDim:    'rgba(76,175,80,0.08)',
+  successBorder: 'rgba(76,175,80,0.15)',
 };
 
+// ─── Static data (module level) ───────────────────────────────────────────────
 const AVATAR_MAP = {
   ghost: '👻', shadow: '🌑', flame: '🔥', void: '🕳️',
   storm: '⛈️', smoke: '💨', eclipse: '🌘', shard: '🔷',
@@ -41,20 +50,18 @@ const AVATAR_MAP = {
 };
 
 function formatTime(isoString) {
-  const d = new Date(isoString);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-
-// ─── MESSAGE BUBBLE ──────────────────────────────────────────
-function MessageBubble({ message, showTime }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+// ─── Message Bubble ───────────────────────────────────────────────────────────
+const MessageBubble = React.memo(({ message, showTime }) => {
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(message.is_own ? 12 : -12)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, friction: 10, useNativeDriver: true }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 10,  useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -62,7 +69,7 @@ function MessageBubble({ message, showTime }) {
     <Animated.View style={[
       styles.bubbleRow,
       message.is_own ? styles.bubbleRowOwn : styles.bubbleRowTheir,
-      { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }
+      { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
     ]}>
       <View style={[styles.bubble, message.is_own ? styles.bubbleOwn : styles.bubbleTheir]}>
         <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
@@ -72,37 +79,37 @@ function MessageBubble({ message, showTime }) {
       {showTime && (
         <Text style={[styles.bubbleTime, message.is_own && styles.bubbleTimeOwn]}>
           {formatTime(message.created_at)}
-          {message.is_own && message.is_read && '  ✓'}
+          {message.is_own && message.is_read ? '  ✓' : ''}
         </Text>
       )}
     </Animated.View>
   );
-}
+});
 
-
-// ─── LIMIT BANNER ────────────────────────────────────────────
-function LimitBanner({ messagesLeft, onUnlock }) {
+// ─── Limit Banner ─────────────────────────────────────────────────────────────
+const LimitBanner = React.memo(({ messagesLeft, onUnlock }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (messagesLeft !== 0) return;
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.02, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,    duration: 800, useNativeDriver: true }),
       ])
     );
     pulse.start();
     return () => pulse.stop();
-  }, []);
+  }, [messagesLeft]);
 
   if (messagesLeft === null || messagesLeft > 5) return null;
 
   if (messagesLeft === 0) {
     return (
-      <Animated.View style={[styles.limitBanner, styles.limitBannerFull, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.limitBannerTitle}>Message limit reached</Text>
-        <Text style={styles.limitBannerBody}>Unlock this chat for $2 — no more limits, ever.</Text>
-        <TouchableOpacity style={styles.unlockBtn} onPress={onUnlock} activeOpacity={0.8}>
+      <Animated.View style={[styles.limitFull, { transform: [{ scale: pulseAnim }] }]}>
+        <Text style={styles.limitFullTitle}>Message limit reached</Text>
+        <Text style={styles.limitFullBody}>Unlock this chat for $2 — no more limits, ever.</Text>
+        <TouchableOpacity style={styles.unlockBtn} onPress={onUnlock} hitSlop={HIT_SLOP} activeOpacity={0.8}>
           <Text style={styles.unlockBtnText}>Unlock — $2</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -110,31 +117,30 @@ function LimitBanner({ messagesLeft, onUnlock }) {
   }
 
   return (
-    <View style={styles.limitBannerWarn}>
-      <Text style={styles.limitBannerWarnText}>
+    <View style={styles.limitWarn}>
+      <Text style={styles.limitWarnText}>
         {messagesLeft} free {messagesLeft === 1 ? 'message' : 'messages'} left
         {'  ·  '}
-        <Text style={styles.limitBannerLink} onPress={onUnlock}>Unlock $2</Text>
+        <Text style={styles.limitWarnLink} onPress={onUnlock}>Unlock $2</Text>
       </Text>
     </View>
   );
-}
+});
 
-
-// ─── REVEAL MODAL ────────────────────────────────────────────
-function RevealModal({ visible, chat, onAccept, onDecline, onRequest, onClose }) {
+// ─── Reveal Modal ─────────────────────────────────────────────────────────────
+const RevealModal = React.memo(({ visible, chat, onAccept, onDecline, onRequest, onClose }) => {
   if (!visible) return null;
 
-  const isPending  = chat?.reveal_status === 'pending';
-  const isInitiator = chat?.reveal_initiator;
-  const isAccepted = chat?.reveal_status === 'accepted';
+  const isPending    = chat?.reveal_status === 'pending';
+  const isInitiator  = chat?.reveal_initiator;
+  const isAccepted   = chat?.reveal_status === 'accepted';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.revealBackdrop}>
         <View style={styles.revealCard}>
           <Text style={styles.revealEmoji}>
-            {isAccepted ? '✨' : isPending && !isInitiator ? '👁' : '🌑'}
+            {isAccepted ? '✨' : (isPending && !isInitiator) ? '👁' : '🌑'}
           </Text>
 
           {isAccepted ? (
@@ -148,16 +154,16 @@ function RevealModal({ visible, chat, onAccept, onDecline, onRequest, onClose })
               <Text style={styles.revealBody}>
                 They're asking to show you who they really are. You don't have to say yes.
               </Text>
-              <TouchableOpacity style={styles.revealAcceptBtn} onPress={onAccept} activeOpacity={0.8}>
-                <Text style={styles.revealAcceptText}>Reveal each other</Text>
+              <TouchableOpacity style={styles.revealPrimaryBtn} onPress={onAccept} hitSlop={HIT_SLOP} activeOpacity={0.8}>
+                <Text style={styles.revealPrimaryText}>Reveal each other</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.revealDeclineBtn} onPress={onDecline} activeOpacity={0.8}>
-                <Text style={styles.revealDeclineText}>Stay anonymous</Text>
+              <TouchableOpacity style={styles.revealSecondaryBtn} onPress={onDecline} hitSlop={HIT_SLOP} activeOpacity={0.8}>
+                <Text style={styles.revealSecondaryText}>Stay anonymous</Text>
               </TouchableOpacity>
             </>
           ) : isPending && isInitiator ? (
             <>
-              <Text style={styles.revealTitle}>Waiting...</Text>
+              <Text style={styles.revealTitle}>Waiting…</Text>
               <Text style={styles.revealBody}>Your reveal request has been sent. Waiting for their response.</Text>
             </>
           ) : (
@@ -166,25 +172,25 @@ function RevealModal({ visible, chat, onAccept, onDecline, onRequest, onClose })
               <Text style={styles.revealBody}>
                 Send a request to reveal who you both are. They must agree for anything to be shown.
               </Text>
-              <TouchableOpacity style={styles.revealAcceptBtn} onPress={onRequest} activeOpacity={0.8}>
-                <Text style={styles.revealAcceptText}>Send reveal request</Text>
+              <TouchableOpacity style={styles.revealPrimaryBtn} onPress={onRequest} hitSlop={HIT_SLOP} activeOpacity={0.8}>
+                <Text style={styles.revealPrimaryText}>Send reveal request</Text>
               </TouchableOpacity>
             </>
           )}
 
-          <TouchableOpacity style={styles.revealCloseBtn} onPress={onClose}>
+          <TouchableOpacity style={styles.revealCloseBtn} onPress={onClose} hitSlop={HIT_SLOP}>
             <Text style={styles.revealCloseText}>Close</Text>
           </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
-}
+});
 
-
-// ─── MAIN SCREEN ──────────────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ChatScreen({ route, navigation }) {
   const { chatId, otherName, otherAvatar, otherAvatarColor } = route.params || {};
+  const { showToast } = useToast();
 
   const [messages, setMessages]           = useState([]);
   const [chatInfo, setChatInfo]           = useState(null);
@@ -197,19 +203,12 @@ export default function ChatScreen({ route, navigation }) {
   const flatListRef = useRef(null);
   const pollRef     = useRef(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadMessages();
-      pollRef.current = setInterval(loadMessages, 5000);
-      return () => clearInterval(pollRef.current);
-    }, [chatId])
-  );
-
-  const loadMessages = async () => {
+  // ── Load messages (also used as poll) ────────────────────────────────────────
+  const loadMessages = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
-      const res = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/messages`, {
+      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/messages`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -217,14 +216,25 @@ export default function ChatScreen({ route, navigation }) {
         setMessages(data.messages || []);
         setChatInfo(data.chat);
       }
-    } catch (e) {
-      console.log('Load messages error:', e);
+    } catch {
+      // silent — chat stays with last known state
     } finally {
       setLoading(false);
     }
-  };
+  }, [chatId]);
 
-  const sendMessage = async () => {
+  useFocusEffect(useCallback(() => {
+    loadMessages();
+    pollRef.current = setInterval(loadMessages, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [loadMessages]));
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, []);
+
+  // ── Send message ─────────────────────────────────────────────────────────────
+  const sendMessage = useCallback(async () => {
     const content = inputText.trim();
     if (!content || sending) return;
     if (chatInfo?.messages_left === 0 && !chatInfo?.is_unlocked) return;
@@ -232,7 +242,8 @@ export default function ChatScreen({ route, navigation }) {
     setSending(true);
     const tempId = `temp_${Date.now()}`;
 
-    setMessages((prev) => [...prev, {
+    // Optimistic update
+    setMessages(prev => [...prev, {
       id: tempId, content, is_own: true, is_read: false,
       created_at: new Date().toISOString(),
     }]);
@@ -242,176 +253,218 @@ export default function ChatScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
-      const res = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
-        method: 'POST',
+      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ chat_id: chatId, content }),
+        body:    JSON.stringify({ chat_id: chatId, content }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        if (res.status === 402) setChatInfo((prev) => ({ ...prev, messages_left: 0 }));
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        if (res.status === 402) {
+          setChatInfo(prev => ({ ...prev, messages_left: 0 }));
+          showToast({ type: 'warning', message: 'Message limit reached. Unlock to continue.' });
+        } else {
+          showToast({ type: 'error', message: 'Message could not be sent.' });
+        }
       } else {
         if (data.messages_left !== undefined) {
-          setChatInfo((prev) => ({ ...prev, messages_left: data.messages_left }));
+          setChatInfo(prev => ({ ...prev, messages_left: data.messages_left }));
         }
         loadMessages();
       }
-    } catch (e) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      showToast({ type: 'error', message: 'Message could not be sent.' });
     } finally {
       setSending(false);
     }
-  };
+  }, [inputText, sending, chatInfo, chatId, scrollToBottom, loadMessages, showToast]);
 
-  const scrollToBottom = () => {
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-  };
+  // ── Unlock ───────────────────────────────────────────────────────────────────
+  const handleUnlock = useCallback(() => {
+    navigation.navigate('UnlockPremium', { chatId, otherName });
+  }, [navigation, chatId, otherName]);
 
-  const handleUnlock = () => navigation.navigate('UnlockPremium', { chatId, otherName });
-
-  const handleRevealRequest = async () => {
+  // ── Reveal request ───────────────────────────────────────────────────────────
+  const handleRevealRequest = useCallback(async () => {
     setRevealLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
       const res = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/reveal/request`, {
-        method: 'POST',
+        method:  'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setChatInfo((prev) => ({ ...prev, reveal_status: 'pending', reveal_initiator: true }));
-    } catch (e) {
-      console.log('Reveal request error:', e);
+      if (res.ok) {
+        setChatInfo(prev => ({ ...prev, reveal_status: 'pending', reveal_initiator: true }));
+        showToast({ type: 'info', message: 'Reveal request sent.' });
+      } else {
+        showToast({ type: 'error', message: 'Could not send reveal request.' });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Could not send reveal request.' });
     } finally {
       setRevealLoading(false);
     }
-  };
+  }, [chatId, showToast]);
 
-  const handleRevealRespond = async (accept) => {
+  // ── Reveal respond ───────────────────────────────────────────────────────────
+  const handleRevealRespond = useCallback(async (accept) => {
     setRevealLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
-      const res = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/reveal/respond`, {
-        method: 'POST',
+      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/reveal/respond`, {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ reveal_id: chatId, accept }),
+        body:    JSON.stringify({ reveal_id: chatId, accept }),
       });
       const data = await res.json();
       if (res.ok) {
         if (accept && data.other_user) {
-          setChatInfo((prev) => ({ ...prev, reveal_status: 'accepted', revealed_other: data.other_user }));
+          setChatInfo(prev => ({ ...prev, reveal_status: 'accepted', revealed_other: data.other_user }));
+          showToast({ type: 'success', message: 'Identities revealed. ✨' });
         } else {
-          setChatInfo((prev) => ({ ...prev, reveal_status: 'declined' }));
+          setChatInfo(prev => ({ ...prev, reveal_status: 'declined' }));
           setShowReveal(false);
         }
+      } else {
+        showToast({ type: 'error', message: 'Could not respond to reveal.' });
       }
-    } catch (e) {
-      console.log('Reveal respond error:', e);
+    } catch {
+      showToast({ type: 'error', message: 'Could not respond to reveal.' });
     } finally {
       setRevealLoading(false);
     }
-  };
+  }, [chatId, showToast]);
 
-  const isBlocked = chatInfo?.messages_left === 0 && !chatInfo?.is_unlocked;
+  // ── Render helpers ───────────────────────────────────────────────────────────
+  const renderMessage = useCallback(({ item, index }) => {
+    const isLast  = index === messages.length - 1;
+    const nextMsg = messages[index + 1];
+    const showTime = isLast || (nextMsg && nextMsg.is_own !== item.is_own);
+    return <MessageBubble message={item} showTime={showTime} />;
+  }, [messages.length]);
 
+  const keyExtractor = useCallback((item) => item.id, []);
+
+  const isBlocked   = chatInfo?.messages_left === 0 && !chatInfo?.is_unlocked;
+  const avatarColor = otherAvatarColor || T.primary;
+
+  // ────────────────────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backBtnText}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <View style={[styles.headerAvatar, {
-            backgroundColor: (otherAvatarColor || '#FF634A') + '22',
-            borderColor: (otherAvatarColor || '#FF634A') + '55',
-          }]}>
-            <Text style={styles.headerAvatarEmoji}>{AVATAR_MAP[otherAvatar] || '👤'}</Text>
-          </View>
-          <View>
-            <Text style={styles.headerName}>{otherName || 'Anonymous'}</Text>
-            <Text style={styles.headerSub}>Anonymous connection</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={[styles.revealBtn, chatInfo?.reveal_status === 'pending' && styles.revealBtnPending]}
-          onPress={() => setShowReveal(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.revealBtnText}>
-            {chatInfo?.reveal_status === 'accepted' ? '✨' : '👁'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : rs(20)}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backBtnText}>←</Text>
+          </TouchableOpacity>
 
-      {/* Limit banner */}
-      <LimitBanner messagesLeft={chatInfo?.messages_left} onUnlock={handleUnlock} />
-
-      {/* Messages */}
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={THEME.primary} />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => {
-            const isLast  = index === messages.length - 1;
-            const nextMsg = messages[index + 1];
-            const showTime = isLast || (nextMsg && nextMsg.is_own !== item.is_own);
-            return <MessageBubble message={item} showTime={showTime} />;
-          }}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={scrollToBottom}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <Text style={styles.emptyChatEmoji}>🌑</Text>
-              <Text style={styles.emptyChatText}>You're connected. Say something.</Text>
+          <View style={styles.headerCenter}>
+            <View style={[
+              styles.headerAvatar,
+              { backgroundColor: avatarColor + '22', borderColor: avatarColor + '55' },
+            ]}>
+              <Text style={styles.headerAvatarEmoji}>
+                {AVATAR_MAP[otherAvatar] || '👤'}
+              </Text>
             </View>
-          }
-        />
-      )}
+            <View>
+              <Text style={styles.headerName}>{otherName || 'Anonymous'}</Text>
+              <Text style={styles.headerSub}>Anonymous connection</Text>
+            </View>
+          </View>
 
-      {/* Revealed identity banner */}
-      {chatInfo?.revealed_other && (
-        <View style={styles.revealedBanner}>
-          <Text style={styles.revealedBannerText}>✨ {chatInfo.revealed_other.username}</Text>
+          <TouchableOpacity
+            style={[
+              styles.revealBtn,
+              chatInfo?.reveal_status === 'pending' && styles.revealBtnPending,
+            ]}
+            onPress={() => setShowReveal(true)}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.revealBtnText}>
+              {chatInfo?.reveal_status === 'accepted' ? '✨' : '👁'}
+            </Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {/* Input */}
-      <View style={styles.inputBar}>
-        <TextInput
-          style={[styles.input, isBlocked && styles.inputBlocked]}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder={isBlocked ? 'Unlock to keep talking...' : 'Say something...'}
-          placeholderTextColor={THEME.textSecondary}
-          multiline
-          maxLength={500}
-          editable={!isBlocked}
-          onSubmitEditing={sendMessage}
-        />
-        <TouchableOpacity
-          style={[styles.sendBtn, (!inputText.trim() || sending || isBlocked) && styles.sendBtnDisabled]}
-          onPress={sendMessage}
-          disabled={!inputText.trim() || sending || isBlocked}
-          activeOpacity={0.8}
-        >
-          {sending
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.sendBtnText}>↑</Text>
-          }
-        </TouchableOpacity>
-      </View>
+        {/* Limit banner */}
+        <LimitBanner messagesLeft={chatInfo?.messages_left} onUnlock={handleUnlock} />
+
+        {/* Messages */}
+        {loading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator color={T.primary} />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={keyExtractor}
+            renderItem={renderMessage}
+            contentContainerStyle={styles.messagesList}
+            onContentSizeChange={scrollToBottom}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyChat}>
+                <Text style={styles.emptyChatEmoji}>🌑</Text>
+                <Text style={styles.emptyChatText}>You're connected. Say something.</Text>
+              </View>
+            }
+          />
+        )}
+
+        {/* Revealed identity banner */}
+        {chatInfo?.revealed_other && (
+          <View style={styles.revealedBanner}>
+            <Text style={styles.revealedBannerText}>✨ {chatInfo.revealed_other.username}</Text>
+          </View>
+        )}
+
+        {/* Input bar */}
+        <View style={styles.inputBar}>
+          <TextInput
+            style={[styles.input, isBlocked && styles.inputBlocked]}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder={isBlocked ? 'Unlock to keep talking…' : 'Say something…'}
+            placeholderTextColor={T.textSecondary}
+            multiline
+            maxLength={500}
+            editable={!isBlocked}
+            onSubmitEditing={sendMessage}
+            keyboardShouldPersistTaps="handled"
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendBtn,
+              (!inputText.trim() || sending || isBlocked) && styles.sendBtnDisabled,
+            ]}
+            onPress={sendMessage}
+            disabled={!inputText.trim() || sending || isBlocked}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.8}
+          >
+            {sending
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.sendBtnText}>↑</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
 
       {/* Reveal modal */}
       <RevealModal
@@ -422,79 +475,295 @@ export default function ChatScreen({ route, navigation }) {
         onRequest={handleRevealRequest}
         onClose={() => setShowReveal(false)}
       />
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
+  safe: {
+    flex: 1,
+    backgroundColor: T.background,
+  },
 
   // Header
-  header:            { flexDirection: 'row', alignItems: 'center', paddingTop: 56, paddingBottom: 14, paddingHorizontal: 16, backgroundColor: THEME.surface, borderBottomWidth: 1, borderBottomColor: THEME.border, gap: 12 },
-  backBtn:           { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  backBtnText:       { color: THEME.text, fontSize: 22 },
-  headerCenter:      { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerAvatar:      { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  headerAvatarEmoji: { fontSize: 18 },
-  headerName:        { fontSize: 15, fontWeight: '700', color: THEME.text },
-  headerSub:         { fontSize: 11, color: THEME.textSecondary, fontStyle: 'italic' },
-  revealBtn:         { width: 36, height: 36, borderRadius: 18, backgroundColor: THEME.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: THEME.border },
-  revealBtnPending:  { borderColor: THEME.primary, backgroundColor: 'rgba(255,99,74,0.1)' },
-  revealBtnText:     { fontSize: 16 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: T.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    gap: SPACING.sm,
+  },
+  backBtn: {
+    width: rs(36),
+    height: rs(36),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backBtnText: {
+    color: T.text,
+    fontSize: rf(22),
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  headerAvatar: {
+    width: rs(38),
+    height: rs(38),
+    borderRadius: rs(19),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  headerAvatarEmoji: { fontSize: rf(18) },
+  headerName: {
+    fontSize: FONT.md,
+    fontWeight: '700',
+    color: T.text,
+  },
+  headerSub: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+    fontStyle: 'italic',
+  },
+  revealBtn: {
+    width: rs(36),
+    height: rs(36),
+    borderRadius: rs(18),
+    backgroundColor: T.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  revealBtnPending: {
+    borderColor: T.primary,
+    backgroundColor: T.primaryDim,
+  },
+  revealBtnText: { fontSize: rf(16) },
 
   // Limit banners
-  limitBanner:         {},
-  limitBannerWarn:     { paddingHorizontal: 20, paddingVertical: 8, backgroundColor: 'rgba(255,99,74,0.06)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,99,74,0.12)', alignItems: 'center' },
-  limitBannerWarnText: { color: THEME.textSecondary, fontSize: 13 },
-  limitBannerLink:     { color: THEME.primary, fontWeight: '700' },
-  limitBannerFull:     { margin: 16, padding: 20, backgroundColor: THEME.surface, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)', gap: 10 },
-  limitBannerTitle:    { fontSize: 16, fontWeight: '800', color: THEME.text },
-  limitBannerBody:     { fontSize: 13, color: THEME.textSecondary, textAlign: 'center', lineHeight: 20 },
-  unlockBtn:           { backgroundColor: THEME.primary, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12, marginTop: 4, shadowColor: THEME.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  unlockBtnText:       { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  limitWarn: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: rp(8),
+    backgroundColor: T.primaryDim,
+    borderBottomWidth: 1,
+    borderBottomColor: T.primaryBorder,
+    alignItems: 'center',
+  },
+  limitWarnText: {
+    color: T.textSecondary,
+    fontSize: FONT.sm,
+  },
+  limitWarnLink: {
+    color: T.primary,
+    fontWeight: '700',
+  },
+  limitFull: {
+    margin: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: T.primaryBorder,
+    gap: SPACING.sm,
+  },
+  limitFullTitle: {
+    fontSize: FONT.md,
+    fontWeight: '800',
+    color: T.text,
+  },
+  limitFullBody: {
+    fontSize: FONT.sm,
+    color: T.textSecondary,
+    textAlign: 'center',
+    lineHeight: rf(20),
+  },
+  unlockBtn: {
+    backgroundColor: T.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: rp(12),
+    borderRadius: RADIUS.md,
+    marginTop: rp(4),
+  },
+  unlockBtnText: {
+    color: '#fff',
+    fontSize: FONT.md,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
 
   // Messages
-  messagesList:   { paddingHorizontal: 16, paddingVertical: 16, gap: 4, paddingBottom: 20 },
-  centered:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyChat:      { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
-  emptyChatEmoji: { fontSize: 40 },
-  emptyChatText:  { color: THEME.textSecondary, fontSize: 14, fontStyle: 'italic' },
+  messagesList: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    gap: rp(4),
+    paddingBottom: SPACING.md,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyChat: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: rs(80),
+    gap: SPACING.sm,
+  },
+  emptyChatEmoji: { fontSize: rf(40) },
+  emptyChatText: {
+    color: T.textSecondary,
+    fontSize: FONT.sm,
+    fontStyle: 'italic',
+  },
 
   // Bubbles
-  bubbleRow:      { marginVertical: 3, maxWidth: '80%' },
-  bubbleRowOwn:   { alignSelf: 'flex-end', alignItems: 'flex-end' },
-  bubbleRowTheir: { alignSelf: 'flex-start', alignItems: 'flex-start' },
-  bubble:         { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
-  bubbleOwn:      { backgroundColor: THEME.myBubble, borderBottomRightRadius: 4 },
-  bubbleTheir:    { backgroundColor: THEME.theirBubble, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: THEME.border },
-  bubbleText:     { fontSize: 15, color: THEME.textSecondary, lineHeight: 22 },
-  bubbleTextOwn:  { color: '#fff' },
-  bubbleTime:     { fontSize: 10, color: THEME.textSecondary, marginTop: 3, marginLeft: 4 },
-  bubbleTimeOwn:  { marginRight: 4, marginLeft: 0 },
+  bubbleRow: {
+    marginVertical: rp(3),
+    maxWidth: '80%',
+  },
+  bubbleRowOwn: {
+    alignSelf: 'flex-end',
+    alignItems: 'flex-end',
+  },
+  bubbleRowTheir: {
+    alignSelf: 'flex-start',
+    alignItems: 'flex-start',
+  },
+  bubble: {
+    paddingHorizontal: rp(14),
+    paddingVertical: rp(10),
+    borderRadius: RADIUS.lg,
+  },
+  bubbleOwn: {
+    backgroundColor: T.myBubble,
+    borderBottomRightRadius: rp(4),
+  },
+  bubbleTheir: {
+    backgroundColor: T.theirBubble,
+    borderBottomLeftRadius: rp(4),
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  bubbleText: {
+    fontSize: FONT.md,
+    color: T.textSecondary,
+    lineHeight: rf(22),
+  },
+  bubbleTextOwn: { color: '#fff' },
+  bubbleTime: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+    marginTop: rp(3),
+    marginLeft: rp(4),
+    opacity: 0.7,
+  },
+  bubbleTimeOwn: {
+    marginRight: rp(4),
+    marginLeft: 0,
+  },
 
   // Revealed banner
-  revealedBanner:     { backgroundColor: 'rgba(76,175,80,0.08)', borderTopWidth: 1, borderTopColor: 'rgba(76,175,80,0.15)', paddingVertical: 8, alignItems: 'center' },
-  revealedBannerText: { color: '#4CAF50', fontSize: 13, fontWeight: '600' },
+  revealedBanner: {
+    backgroundColor: T.successDim,
+    borderTopWidth: 1,
+    borderTopColor: T.successBorder,
+    paddingVertical: rp(8),
+    alignItems: 'center',
+  },
+  revealedBannerText: {
+    color: T.success,
+    fontSize: FONT.sm,
+    fontWeight: '600',
+  },
 
-  // Input
-  inputBar:       { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 28 : 12, gap: 10, backgroundColor: THEME.surface, borderTopWidth: 1, borderTopColor: THEME.border },
-  input:          { flex: 1, backgroundColor: THEME.surfaceAlt, borderRadius: 20, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, color: THEME.text, fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: THEME.border },
-  inputBlocked:   { opacity: 0.4 },
-  sendBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: THEME.primary, alignItems: 'center', justifyContent: 'center', shadowColor: THEME.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 3 },
-  sendBtnDisabled:{ backgroundColor: THEME.avatarBg, shadowOpacity: 0, elevation: 0 },
-  sendBtnText:    { color: '#fff', fontSize: 18, fontWeight: '800' },
+  // Input bar
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingBottom: Platform.OS === 'ios' ? rp(28) : SPACING.sm,
+    gap: SPACING.sm,
+    backgroundColor: T.surface,
+    borderTopWidth: 1,
+    borderTopColor: T.border,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: T.surfaceAlt,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingTop: rp(10),
+    paddingBottom: rp(10),
+    color: T.text,
+    fontSize: FONT.md,
+    maxHeight: rs(100),
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  inputBlocked: { opacity: 0.4 },
+  sendBtn: {
+    width: rs(40),
+    height: rs(40),
+    borderRadius: rs(20),
+    backgroundColor: T.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendBtnDisabled: { backgroundColor: '#1e2330' },
+  sendBtnText: {
+    color: '#fff',
+    fontSize: rf(18),
+    fontWeight: '800',
+  },
 
   // Reveal modal
-  revealBackdrop:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  revealCard:      { backgroundColor: THEME.surface, borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: THEME.border },
-  revealEmoji:     { fontSize: 48, marginBottom: 4 },
-  revealTitle:     { fontSize: 20, fontWeight: '800', color: THEME.text, textAlign: 'center' },
-  revealBody:      { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 8 },
-  revealAcceptBtn: { width: '100%', backgroundColor: THEME.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', shadowColor: THEME.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  revealAcceptText:{ color: '#fff', fontSize: 15, fontWeight: '700' },
-  revealDeclineBtn:{ width: '100%', paddingVertical: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: THEME.border },
-  revealDeclineText:{ color: THEME.textSecondary, fontSize: 14 },
-  revealCloseBtn:  { paddingVertical: 8, marginTop: 4 },
-  revealCloseText: { color: THEME.textSecondary, fontSize: 13 },
+  revealBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  revealCard: {
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    width: '100%',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  revealEmoji:       { fontSize: rf(48), marginBottom: rp(4) },
+  revealTitle:       { fontSize: FONT.xl, fontWeight: '800', color: T.text, textAlign: 'center' },
+  revealBody:        { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: rf(22), marginBottom: rp(8) },
+  revealPrimaryBtn: {
+    width: '100%',
+    backgroundColor: T.primary,
+    paddingVertical: rp(14),
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+  },
+  revealPrimaryText: { color: '#fff', fontSize: FONT.md, fontWeight: '700' },
+  revealSecondaryBtn: {
+    width: '100%',
+    paddingVertical: rp(12),
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  revealSecondaryText: { color: T.textSecondary, fontSize: FONT.sm },
+  revealCloseBtn:  { paddingVertical: rp(8), marginTop: rp(4) },
+  revealCloseText: { color: T.textSecondary, fontSize: FONT.sm },
 });

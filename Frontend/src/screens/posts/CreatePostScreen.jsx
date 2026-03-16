@@ -1,346 +1,601 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
-  Alert,
   ActivityIndicator,
-  StatusBar,
   Image,
-  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import {
-  X,
-  Image as ImageIcon,
-  Video as VideoIcon,
-  Trash2,
-} from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { X, Image as ImageIcon, Video as VideoIcon, Trash2 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
+import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 
-const { height, width } = Dimensions.get('window');
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
+// ─── Theme ────────────────────────────────────────────────────────────────────
+const T = {
+  background:    '#0b0f18',
+  surface:       '#151924',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255, 99, 74, 0.15)',
+  text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
+  border:        'rgba(255,255,255,0.06)',
+  inputBg:       'rgba(255,255,255,0.04)',
+  error:         '#ef4444',
 };
 
-const StarryBackground = () => {
-  const stars = useMemo(() => {
-    return Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      top: Math.random() * height,
-      left: Math.random() * width,
-      size: Math.random() * 3 + 1,
-      opacity: Math.random() * 0.6 + 0.2,
-    }));
-  }, []);
-
-  return (
-    <>
-      {stars.map((star) => (
-        <View
-          key={star.id}
-          style={{
-            position: 'absolute',
-            backgroundColor: THEME.primary,
-            borderRadius: 50,
-            top: star.top,
-            left: star.left,
-            width: star.size,
-            height: star.size,
-            opacity: star.opacity,
-          }}
-        />
-      ))}
-    </>
-  );
-};
-
-const CLOUDINARY_CLOUD_NAME = 'dojbdm2e1';
+// ─── Cloudinary config (module level) ────────────────────────────────────────
+const CLOUDINARY_CLOUD_NAME   = 'dojbdm2e1';
 const CLOUDINARY_UPLOAD_PRESET = 'anonix';
 
+const uploadToCloudinary = async (uri, resourceType = 'image') => {
+  const fileType = uri.split('.').pop();
+  const formData = new FormData();
+  formData.append('file', {
+    uri,
+    type: resourceType === 'video' ? `video/${fileType}` : `image/${fileType}`,
+    name: `upload.${fileType}`,
+  });
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+    { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' } }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+  return data.secure_url;
+};
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function CreatePostScreen({ navigation }) {
   const { isAuthenticated } = useAuth();
-  const [content, setContent] = useState('');
-  const [isAnonymous, setIsAnonymous] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const { showToast }       = useToast();
+
+  const [content, setContent]             = useState('');
+  const [isAnonymous, setIsAnonymous]     = useState(true);
+  const [loading, setLoading]             = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
-  const [images, setImages] = useState([]);
-  const [videoUri, setVideoUri] = useState(null);
+  const [images, setImages]               = useState([]);
+  const [videoUri, setVideoUri]           = useState(null);
 
-  const uploadToCloudinary = async (uri, resourceType = 'image') => {
-    const formData = new FormData();
-    const fileType = uri.split('.').pop();
-    formData.append('file', {
-      uri,
-      type: resourceType === 'video' ? `video/${fileType}` : `image/${fileType}`,
-      name: `upload.${fileType}`,
-    });
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
-      { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' } }
-    );
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Upload failed');
-    return data.secure_url;
-  };
-
-  const pickImage = async () => {
+  // ── Media pickers ────────────────────────────────────────────────────────────
+  const pickImage = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow access to your photos'); return; }
+    if (status !== 'granted') {
+      showToast({ type: 'warning', message: 'Photo access is needed to add images.' });
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
       quality: 0.8,
     });
     if (!result.canceled) {
-      if (images.length + result.assets.length > 5) { Alert.alert('Limit Reached', 'You can add up to 5 images'); return; }
-      setImages([...images, ...result.assets.map((a) => a.uri)]);
+      if (images.length + result.assets.length > 5) {
+        showToast({ type: 'warning', message: 'You can add up to 5 images.' });
+        return;
+      }
+      setImages(prev => [...prev, ...result.assets.map(a => a.uri)]);
     }
-  };
+  }, [images.length, showToast]);
 
-  const pickVideo = async () => {
+  const pickVideo = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow access to your videos'); return; }
+    if (status !== 'granted') {
+      showToast({ type: 'warning', message: 'Video access is needed to add a video.' });
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
       quality: 0.8,
     });
-    if (!result.canceled) { setVideoUri(result.assets[0].uri); setImages([]); }
-  };
+    if (!result.canceled) {
+      setVideoUri(result.assets[0].uri);
+      setImages([]);
+    }
+  }, [showToast]);
 
-  const handlePost = async () => {
+  const removeImage = useCallback((index) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const removeVideo = useCallback(() => setVideoUri(null), []);
+
+  const toggleAnonymous = useCallback(() => setIsAnonymous(v => !v), []);
+
+  // ── Post ─────────────────────────────────────────────────────────────────────
+  const handlePost = useCallback(async () => {
     if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to post', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign In', onPress: () => navigation.navigate('Auth', { screen: 'Login' }) },
-      ]);
+      showToast({ type: 'warning', message: 'Sign in to post your confession.' });
+      navigation.navigate('Auth', { screen: 'Login' });
       return;
     }
-    if (!content.trim()) { Alert.alert('Error', 'Please write something'); return; }
+    if (!content.trim()) {
+      showToast({ type: 'warning', message: 'Write something first.' });
+      return;
+    }
 
     setLoading(true);
-    setUploadProgress('Preparing post...');
+    setUploadProgress('Preparing…');
 
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) { Alert.alert('Error', 'Please log in again.'); return; }
+      if (!token) {
+        showToast({ type: 'error', message: 'Session expired. Please log in again.' });
+        return;
+      }
 
-      const postData = { content: content.trim(), topics: [], is_anonymous: isAnonymous };
+      const postData = {
+        content:      content.trim(),
+        topics:       [],
+        is_anonymous: isAnonymous,
+      };
 
       if (images.length > 0) {
         const urls = [];
         for (let i = 0; i < images.length; i++) {
-          setUploadProgress(`Uploading image ${i + 1}/${images.length}...`);
+          setUploadProgress(`Uploading image ${i + 1} of ${images.length}…`);
           urls.push(await uploadToCloudinary(images[i], 'image'));
         }
         postData.images = urls;
       }
 
       if (videoUri) {
-        setUploadProgress('Uploading video...');
+        setUploadProgress('Uploading video…');
         postData.video_url = await uploadToCloudinary(videoUri, 'video');
       }
 
-      setUploadProgress('Posting...');
-      const response = await fetch(`${API_BASE_URL}/api/v1/posts`, {
+      setUploadProgress('Posting…');
+      const res = await fetch(`${API_BASE_URL}/api/v1/posts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(postData),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || `Server error: ${response.status}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Server error ${res.status}`);
 
-      Alert.alert('Posted!', data.message || 'Your confession has been shared', [
-        { text: 'OK', onPress: () => { setContent(''); setImages([]); setVideoUri(null); navigation.navigate('Feed'); } },
-      ]);
-    } catch (error) {
-      Alert.alert('Post Failed', error.message || 'Failed to create post. Please try again.');
+      showToast({ type: 'success', title: 'Posted!', message: 'Your confession is out there.' });
+      setContent('');
+      setImages([]);
+      setVideoUri(null);
+      navigation.navigate('Feed');
+
+    } catch (err) {
+      showToast({ type: 'error', message: 'Could not post. Please try again.' });
     } finally {
       setLoading(false);
       setUploadProgress('');
     }
-  };
+  }, [isAuthenticated, content, images, videoUri, isAnonymous, navigation, showToast]);
 
+  // ── Char count color ─────────────────────────────────────────────────────────
+  const charColor = useMemo(() => {
+    if (content.length > 900) return T.error;
+    if (content.length > 750) return '#FB923C';
+    return T.textSecondary;
+  }, [content.length]);
+
+  const canPost = content.trim().length > 0 && !loading;
+
+  // ────────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-      <StarryBackground />
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={HIT_SLOP}
+            style={styles.closeBtn}
+          >
+            <X size={rs(22)} color={T.text} />
+          </TouchableOpacity>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <X size={24} color={THEME.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Confess</Text>
-        <TouchableOpacity
-          onPress={handlePost}
-          disabled={loading || !content.trim()}
-          style={[styles.postButton, (loading || !content.trim()) && styles.postButtonDisabled]}
+          <Text style={styles.headerTitle}>Confess</Text>
+
+          <TouchableOpacity
+            onPress={handlePost}
+            disabled={!canPost}
+            hitSlop={HIT_SLOP}
+            style={[styles.postBtn, !canPost && styles.postBtnDisabled]}
+          >
+            {loading
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.postBtnText}>Post</Text>
+            }
+          </TouchableOpacity>
+        </View>
+
+        {/* Upload progress banner */}
+        {!!uploadProgress && (
+          <View style={styles.progressBanner}>
+            <ActivityIndicator size="small" color={T.primary} />
+            <Text style={styles.progressText}>{uploadProgress}</Text>
+          </View>
+        )}
+
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.postButtonText}>Post</Text>
-          }
-        </TouchableOpacity>
-      </View>
-
-      {/* Upload Progress */}
-      {uploadProgress ? (
-        <View style={styles.uploadProgress}>
-          <ActivityIndicator size="small" color={THEME.primary} />
-          <Text style={styles.uploadProgressText}>{uploadProgress}</Text>
-        </View>
-      ) : null}
-
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Text Input */}
-        <View style={styles.textInputCard}>
-          <TextInput
-            value={content}
-            onChangeText={setContent}
-            placeholder="Say the unsayable..."
-            placeholderTextColor={THEME.textSecondary}
-            multiline
-            autoFocus
-            style={styles.textInput}
-            maxLength={1000}
-          />
-          <View style={styles.divider} />
-          <Text style={styles.charCount}>{content.length}/1000</Text>
-        </View>
-
-        {/* Media Buttons */}
-        <View style={styles.mediaButtons}>
-          <TouchableOpacity
-            onPress={pickImage}
-            disabled={!!videoUri || loading}
-            style={[styles.mediaButton, (videoUri || loading) && styles.mediaButtonDisabled]}
-          >
-            <ImageIcon size={20} color={videoUri || loading ? THEME.textSecondary : THEME.primary} />
-            <Text style={[styles.mediaButtonText, (videoUri || loading) && styles.mediaButtonTextDisabled]}>
-              Add Images
+          {/* ── Text input ── */}
+          <View style={styles.inputCard}>
+            <TextInput
+              value={content}
+              onChangeText={setContent}
+              placeholder="Say the unsayable…"
+              placeholderTextColor={T.textSecondary}
+              multiline
+              autoFocus
+              style={styles.textInput}
+              maxLength={1000}
+              textAlignVertical="top"
+              autoCorrect
+              autoCapitalize="sentences"
+            />
+            <View style={styles.inputDivider} />
+            <Text style={[styles.charCount, { color: charColor }]}>
+              {content.length}/1000
             </Text>
-          </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            onPress={pickVideo}
-            disabled={images.length > 0 || loading}
-            style={[styles.mediaButton, (images.length > 0 || loading) && styles.mediaButtonDisabled]}
-          >
-            <VideoIcon size={20} color={images.length > 0 || loading ? THEME.textSecondary : THEME.primary} />
-            <Text style={[styles.mediaButtonText, (images.length > 0 || loading) && styles.mediaButtonTextDisabled]}>
-              Add Video
-            </Text>
-          </TouchableOpacity>
-        </View>
+          {/* ── Media buttons ── */}
+          <View style={styles.mediaRow}>
+            <TouchableOpacity
+              onPress={pickImage}
+              disabled={!!videoUri || loading}
+              hitSlop={HIT_SLOP}
+              style={[styles.mediaBtn, (!!videoUri || loading) && styles.mediaBtnDisabled]}
+            >
+              <ImageIcon
+                size={rs(18)}
+                color={!!videoUri || loading ? T.textSecondary : T.primary}
+              />
+              <Text style={[
+                styles.mediaBtnText,
+                (!!videoUri || loading) && styles.mediaBtnTextDisabled,
+              ]}>
+                Add Images
+              </Text>
+            </TouchableOpacity>
 
-        {/* Image Previews */}
-        {images.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Images ({images.length}/5)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.imagesContainer}>
-                {images.map((uri, index) => (
-                  <View key={index} style={styles.imagePreview}>
-                    <Image source={{ uri }} style={styles.previewImage} />
-                    <TouchableOpacity onPress={() => setImages(images.filter((_, i) => i !== index))} style={styles.removeButton} disabled={loading}>
-                      <Trash2 size={16} color="#fff" />
+            <TouchableOpacity
+              onPress={pickVideo}
+              disabled={images.length > 0 || loading}
+              hitSlop={HIT_SLOP}
+              style={[styles.mediaBtn, (images.length > 0 || loading) && styles.mediaBtnDisabled]}
+            >
+              <VideoIcon
+                size={rs(18)}
+                color={images.length > 0 || loading ? T.textSecondary : T.primary}
+              />
+              <Text style={[
+                styles.mediaBtnText,
+                (images.length > 0 || loading) && styles.mediaBtnTextDisabled,
+              ]}>
+                Add Video
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Image previews ── */}
+          {images.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Images ({images.length}/5)</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imagesRow}
+              >
+                {images.map((uri, i) => (
+                  <View key={i} style={styles.imageThumb}>
+                    <Image source={{ uri }} style={styles.thumbImage} />
+                    <TouchableOpacity
+                      onPress={() => removeImage(i)}
+                      disabled={loading}
+                      hitSlop={HIT_SLOP}
+                      style={styles.removeBtn}
+                    >
+                      <Trash2 size={rs(14)} color="#fff" />
                     </TouchableOpacity>
                   </View>
                 ))}
-              </View>
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Video Preview */}
-        {videoUri && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Video</Text>
-            <View style={styles.videoPreview}>
-              <Image source={{ uri: videoUri }} style={styles.previewVideo} />
-              <TouchableOpacity onPress={() => setVideoUri(null)} style={styles.removeButton} disabled={loading}>
-                <Trash2 size={20} color="#fff" />
-              </TouchableOpacity>
+              </ScrollView>
             </View>
-          </View>
-        )}
+          )}
 
-        {/* Anonymous Toggle */}
-        <TouchableOpacity
-          onPress={() => setIsAnonymous(!isAnonymous)}
-          disabled={loading}
-          style={styles.toggleButton}
-        >
-          <View style={styles.toggleTextContainer}>
-            <Text style={styles.toggleText}>Post Anonymously</Text>
-            <Text style={styles.toggleSubtext}>
-              {isAnonymous ? "Nobody knows it's you" : 'Posting with your username'}
-            </Text>
-          </View>
-          <View style={[styles.toggle, { backgroundColor: isAnonymous ? THEME.primary : THEME.border }]}>
-            <View style={[styles.toggleDot, isAnonymous && styles.toggleDotActive]} />
-          </View>
-        </TouchableOpacity>
+          {/* ── Video preview ── */}
+          {!!videoUri && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Video</Text>
+              <View style={styles.videoThumb}>
+                <Image source={{ uri: videoUri }} style={styles.thumbVideo} />
+                <TouchableOpacity
+                  onPress={removeVideo}
+                  disabled={loading}
+                  hitSlop={HIT_SLOP}
+                  style={styles.removeBtn}
+                >
+                  <Trash2 size={rs(18)} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
-        {/* Helper */}
-        <View style={styles.helperBox}>
-          <Text style={styles.helperText}>No filters. No judgment. Just the raw truth.</Text>
-        </View>
-      </ScrollView>
+          {/* ── Anonymous toggle ── */}
+          <TouchableOpacity
+            onPress={toggleAnonymous}
+            disabled={loading}
+            hitSlop={HIT_SLOP}
+            style={styles.toggleRow}
+            activeOpacity={0.8}
+          >
+            <View style={styles.toggleInfo}>
+              <Text style={styles.toggleLabel}>Post Anonymously</Text>
+              <Text style={styles.toggleSub}>
+                {isAnonymous ? "Nobody knows it's you" : 'Posting with your username'}
+              </Text>
+            </View>
+            <View style={[styles.toggleTrack, isAnonymous && styles.toggleTrackActive]}>
+              <View style={[styles.toggleThumb, isAnonymous && styles.toggleThumbActive]} />
+            </View>
+          </TouchableOpacity>
+
+          {/* ── Tagline ── */}
+          <View style={styles.tagline}>
+            <Text style={styles.taglineText}>No filters. No judgment. Just the raw truth.</Text>
+          </View>
+
+          <View style={{ height: SPACING.xxl }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container:          { flex: 1, backgroundColor: THEME.background },
-  header:             { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, zIndex: 10 },
-  headerTitle:        { fontSize: 20, fontWeight: 'bold', color: THEME.text },
-  postButton:         { backgroundColor: THEME.primary, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 16, minWidth: 70, alignItems: 'center', shadowColor: THEME.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  postButtonDisabled: { backgroundColor: THEME.textSecondary, opacity: 0.5 },
-  postButtonText:     { color: '#fff', fontSize: 16, fontWeight: '700' },
-  uploadProgress:     { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: THEME.surface, marginHorizontal: 16, marginTop: 8, padding: 14, borderRadius: 12 },
-  uploadProgressText: { fontSize: 14, fontWeight: '500', color: THEME.text },
-  scrollView:         { flex: 1 },
-  textInputCard:      { backgroundColor: THEME.surface, margin: 16, padding: 20, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 6 },
-  textInput:          { fontSize: 18, lineHeight: 28, minHeight: 200, textAlignVertical: 'top', color: THEME.text },
-  divider:            { height: 1, backgroundColor: THEME.border, marginTop: 16, marginBottom: 12 },
-  charCount:          { fontSize: 12, color: THEME.textSecondary, textAlign: 'right' },
-  mediaButtons:       { flexDirection: 'row', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
-  mediaButton:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: THEME.surface, padding: 16, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
-  mediaButtonDisabled:{ opacity: 0.5 },
-  mediaButtonText:    { fontSize: 14, fontWeight: '600', color: THEME.text },
-  mediaButtonTextDisabled: { color: THEME.textSecondary },
-  section:            { paddingHorizontal: 16, marginBottom: 16 },
-  sectionTitle:       { fontSize: 14, fontWeight: '700', color: THEME.text, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
-  imagesContainer:    { flexDirection: 'row', gap: 12 },
-  imagePreview:       { position: 'relative' },
-  previewImage:       { width: 120, height: 120, borderRadius: 12 },
-  videoPreview:       { position: 'relative', borderRadius: 12, overflow: 'hidden' },
-  previewVideo:       { width: '100%', height: 200, borderRadius: 12 },
-  removeButton:       { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.7)', padding: 8, borderRadius: 20 },
-  toggleButton:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: THEME.surface, marginHorizontal: 16, marginBottom: 16, padding: 18, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4 },
-  toggleTextContainer:{ flex: 1 },
-  toggleText:         { fontSize: 16, fontWeight: '600', color: THEME.text, marginBottom: 4 },
-  toggleSubtext:      { fontSize: 12, color: THEME.textSecondary },
-  toggle:             { width: 50, height: 28, borderRadius: 14, padding: 2, justifyContent: 'center' },
-  toggleDot:          { width: 24, height: 24, backgroundColor: '#fff', borderRadius: 12 },
-  toggleDotActive:    { alignSelf: 'flex-end' },
-  helperBox:          { backgroundColor: THEME.surface, marginHorizontal: 16, marginBottom: 32, padding: 16, borderRadius: 12 },
-  helperText:         { fontSize: 14, lineHeight: 20, textAlign: 'center', color: THEME.textSecondary },
+  safe: {
+    flex: 1,
+    backgroundColor: T.background,
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  closeBtn: {
+    padding: rp(4),
+  },
+  headerTitle: {
+    fontSize: FONT.md,
+    fontWeight: '600',
+    color: T.text,
+    letterSpacing: 0.2,
+  },
+  postBtn: {
+    backgroundColor: T.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: rp(8),
+    borderRadius: RADIUS.full,
+    minWidth: rs(70),
+    alignItems: 'center',
+  },
+  postBtnDisabled: {
+    opacity: 0.4,
+  },
+  postBtnText: {
+    color: '#fff',
+    fontSize: FONT.sm,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  // Progress banner
+  progressBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: T.surface,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: rp(10),
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  progressText: {
+    fontSize: FONT.sm,
+    color: T.text,
+    fontWeight: '500',
+  },
+
+  // Scroll
+  scroll: { flex: 1 },
+  content: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.lg,
+  },
+
+  // Text input card
+  inputCard: {
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  textInput: {
+    fontSize: FONT.lg,
+    lineHeight: rf(28),
+    minHeight: rs(200),
+    color: T.text,
+    textAlignVertical: 'top',
+  },
+  inputDivider: {
+    height: 1,
+    backgroundColor: T.border,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  charCount: {
+    fontSize: FONT.xs,
+    textAlign: 'right',
+  },
+
+  // Media buttons
+  mediaRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  mediaBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    backgroundColor: T.surface,
+    paddingVertical: rp(14),
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  mediaBtnDisabled: { opacity: 0.4 },
+  mediaBtnText: {
+    fontSize: FONT.sm,
+    fontWeight: '600',
+    color: T.text,
+  },
+  mediaBtnTextDisabled: { color: T.textSecondary },
+
+  // Section
+  section: { marginBottom: SPACING.md },
+  sectionLabel: {
+    fontSize: FONT.xs,
+    fontWeight: '600',
+    color: T.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: SPACING.sm,
+  },
+
+  // Image previews
+  imagesRow: { flexDirection: 'row', gap: SPACING.sm },
+  imageThumb: { position: 'relative' },
+  thumbImage: {
+    width: rs(110),
+    height: rs(110),
+    borderRadius: RADIUS.md,
+  },
+
+  // Video preview
+  videoThumb: {
+    position: 'relative',
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+  },
+  thumbVideo: {
+    width: '100%',
+    height: rs(200),
+    borderRadius: RADIUS.md,
+  },
+
+  // Remove button
+  removeBtn: {
+    position: 'absolute',
+    top: rp(6),
+    right: rp(6),
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    padding: rp(6),
+    borderRadius: RADIUS.full,
+  },
+
+  // Anonymous toggle
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: T.surface,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.border,
+    marginBottom: SPACING.md,
+  },
+  toggleInfo: { flex: 1 },
+  toggleLabel: {
+    fontSize: FONT.md,
+    fontWeight: '600',
+    color: T.text,
+    marginBottom: rp(3),
+  },
+  toggleSub: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+  },
+  toggleTrack: {
+    width: rs(48),
+    height: rs(26),
+    borderRadius: rs(13),
+    backgroundColor: T.border,
+    padding: rp(2),
+    justifyContent: 'center',
+  },
+  toggleTrackActive: {
+    backgroundColor: T.primary,
+  },
+  toggleThumb: {
+    width: rs(22),
+    height: rs(22),
+    borderRadius: rs(11),
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
+  },
+
+  // Tagline
+  tagline: {
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  taglineText: {
+    fontSize: FONT.sm,
+    color: T.textSecondary,
+    textAlign: 'center',
+    lineHeight: rf(20),
+    fontStyle: 'italic',
+  },
 });

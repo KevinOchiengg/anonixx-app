@@ -4,9 +4,7 @@ from typing import List
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False
     )
 
     APP_NAME: str = "anonixx"
@@ -20,7 +18,9 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str = ""
 
     # AUTH
-    SECRET_KEY: str = "your-super-secret-key-change-in-production-at-least-32-characters-long"
+    SECRET_KEY: str = (
+        "your-super-secret-key-change-in-production-at-least-32-characters-long"
+    )
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -31,13 +31,22 @@ class Settings(BaseSettings):
 
     # STRIPE
     STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
 
     # M-PESA (Safaricom Daraja)
     MPESA_CONSUMER_KEY: str = ""
     MPESA_CONSUMER_SECRET: str = ""
-    MPESA_SHORTCODE: str = "174379"      # default: Safaricom sandbox shortcode
+    MPESA_SHORTCODE: str = "174379"
     MPESA_PASSKEY: str = ""
-    BASE_URL: str = "http://localhost:8000"  # change to your public URL in production
+    MPESA_ENVIRONMENT: str = "sandbox"  # sandbox | production
+    MPESA_CALLBACK_URL: str = "http://localhost:8000/api/v1/payments/mpesa/callback"
+
+    # AGORA
+    AGORA_APP_ID: str = ""
+    AGORA_APP_CERTIFICATE: str = ""
+
+    # APP
+    BASE_URL: str = "http://localhost:8000"
 
     # CORS
     CORS_ORIGINS: List[str] = [
@@ -48,7 +57,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8081",
         "http://192.168.100.22:8081",
         "http://192.168.100.22:8000",
-        "*"
+        "*",
     ]
 
 

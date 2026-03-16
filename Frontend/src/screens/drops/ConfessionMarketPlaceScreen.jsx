@@ -2,33 +2,34 @@
  * ConfessionMarketplaceScreen
  * Browse and unlock active confession cards from everyone.
  */
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, RefreshControl, TextInput, ScrollView,
-  Animated,
+  ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  ArrowLeft, Clock, Flame, Filter, Moon, Plus,
-  Search, Users, Zap,
-} from 'lucide-react-native';
+import { ArrowLeft, Clock, Flame, Moon, Plus, Users, Zap } from 'lucide-react-native';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  surfaceAlt: '#1a1f2e',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.06)',
+// ─── Theme ────────────────────────────────────────────────────────────────────
+const T = {
+  background:   '#0b0f18',
+  surface:      '#151924',
+  surfaceAlt:   '#1a1f2e',
+  primary:      '#FF634A',
+  text:         '#EAEAF0',
+  textSecondary:'#9A9AA3',
+  border:       'rgba(255,255,255,0.06)',
+  night:        '#9B8BFF',
+  nightDim:     'rgba(155,139,255,0.10)',
 };
 
+// ─── Static data (module level) ───────────────────────────────────────────────
 const CATEGORIES = [
-  { id: null,         label: 'All',        emoji: '✨' },
+  { id: null,         label: 'All',        emoji: '✨', color: T.primary  },
   { id: 'love',       label: 'Love',       emoji: '💔', color: '#FF6B8A' },
   { id: 'fun',        label: 'Fun',        emoji: '😈', color: '#FFB347' },
   { id: 'adventure',  label: 'Adventure',  emoji: '🌍', color: '#47B8FF' },
@@ -36,44 +37,196 @@ const CATEGORIES = [
   { id: 'spicy',      label: 'Spicy',      emoji: '🌶️', color: '#FF4747' },
 ];
 
-const getCatColor = (id) => CATEGORIES.find(c => c.id === id)?.color || THEME.primary;
-const getCatEmoji = (id) => CATEGORIES.find(c => c.id === id)?.emoji || '✨';
+const LIMIT = 20;
 
+const getCatColor = (id) => CATEGORIES.find(c => c.id === id)?.color ?? T.primary;
+const getCatEmoji = (id) => CATEGORIES.find(c => c.id === id)?.emoji ?? '✨';
+
+// ─── Drop Card ────────────────────────────────────────────────────────────────
+const DropCard = React.memo(({ item, onPress }) => {
+  const color = getCatColor(item.category);
+  const emoji = getCatEmoji(item.category);
+
+  const handlePress = useCallback(() => onPress(item.id), [onPress, item.id]);
+
+  return (
+    <TouchableOpacity
+      style={[styles.dropCard, { borderColor: color + '30' }]}
+      onPress={handlePress}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.85}
+    >
+      {/* Top row */}
+      <View style={styles.dropTop}>
+        <Text style={styles.dropEmoji}>{emoji}</Text>
+        <Text style={[styles.dropCat, { color }]}>
+          {item.category?.toUpperCase()}
+        </Text>
+        {item.is_night_mode && (
+          <View style={styles.nightTag}>
+            <Moon size={rs(11)} color={T.night} />
+            <Text style={styles.nightTagText}>Night</Text>
+          </View>
+        )}
+        {item.is_group && (
+          <View style={[styles.groupTag, { backgroundColor: color + '18' }]}>
+            <Users size={rs(11)} color={color} />
+            <Text style={[styles.groupTagText, { color }]}>
+              Group · {item.group_size}
+            </Text>
+          </View>
+        )}
+        <Text style={styles.dropTimeAgo}>{item.time_ago}</Text>
+      </View>
+
+      {/* Confession text */}
+      <Text style={styles.dropConfession} numberOfLines={3}>
+        "{item.confession}"
+      </Text>
+
+      {/* Reactions */}
+      {item.reactions?.length > 0 && (
+        <View style={styles.reactionsRow}>
+          {item.reactions.map((r, i) => (
+            <View key={i} style={styles.reactionBubble}>
+              <Text style={styles.reactionText}>{r}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Footer */}
+      <View style={styles.dropFooter}>
+        <View style={styles.dropMeta}>
+          <Clock size={rs(12)} color={T.textSecondary} />
+          <Text style={styles.dropMetaText}>{item.time_left}</Text>
+        </View>
+        <View style={styles.dropMeta}>
+          <Flame size={rs(12)} color={color} />
+          <Text style={[styles.dropMetaText, { color }]}>
+            {item.unlock_count} connected
+          </Text>
+        </View>
+        {item.already_unlocked ? (
+          <View style={[styles.unlockBadge, {
+            backgroundColor: color + '18',
+            borderColor:     color + '40',
+          }]}>
+            <Text style={[styles.unlockBadgeText, { color }]}>✓ Connected</Text>
+          </View>
+        ) : (
+          <View style={[styles.unlockBadge, {
+            backgroundColor: color + '12',
+            borderColor:     color + '30',
+          }]}>
+            <Zap size={rs(12)} color={color} />
+            <Text style={[styles.unlockBadgeText, { color }]}>${item.price}</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+// ─── List Header ──────────────────────────────────────────────────────────────
+const ListHeader = React.memo(({ category, setCategory, nightOnly, setNightOnly, groupOnly, setGroupOnly, total }) => (
+  <View>
+    {/* Category filter */}
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.catScroll}
+      contentContainerStyle={styles.catContent}
+    >
+      {CATEGORIES.map(cat => {
+        const active = category === cat.id;
+        const color  = cat.color;
+        return (
+          <TouchableOpacity
+            key={String(cat.id)}
+            style={[
+              styles.catChip,
+              active && { backgroundColor: color + '20', borderColor: color },
+            ]}
+            onPress={() => setCategory(cat.id)}
+            hitSlop={HIT_SLOP}
+          >
+            <Text style={styles.catChipEmoji}>{cat.emoji}</Text>
+            <Text style={[styles.catChipText, active && { color }]}>{cat.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+
+    {/* Filter toggles */}
+    <View style={styles.filterRow}>
+      <TouchableOpacity
+        style={[styles.filterChip, nightOnly && styles.filterChipNight]}
+        onPress={() => setNightOnly(v => !v)}
+        hitSlop={HIT_SLOP}
+      >
+        <Moon size={rs(13)} color={nightOnly ? T.night : T.textSecondary} />
+        <Text style={[styles.filterChipText, nightOnly && { color: T.night }]}>
+          Night only
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.filterChip, groupOnly && styles.filterChipActive]}
+        onPress={() => setGroupOnly(v => !v)}
+        hitSlop={HIT_SLOP}
+      >
+        <Users size={rs(13)} color={groupOnly ? T.primary : T.textSecondary} />
+        <Text style={[styles.filterChipText, groupOnly && { color: T.primary }]}>
+          Groups
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={styles.totalLabel}>{total} drops</Text>
+    </View>
+  </View>
+));
+
+// ─── Empty State ──────────────────────────────────────────────────────────────
+const EmptyState = React.memo(({ onCreateDrop }) => (
+  <View style={styles.empty}>
+    <Text style={styles.emptyIcon}>🌙</Text>
+    <Text style={styles.emptyTitle}>No drops right now</Text>
+    <Text style={styles.emptySub}>Be the first to drop a confession.</Text>
+    <TouchableOpacity style={styles.emptyBtn} onPress={onCreateDrop} hitSlop={HIT_SLOP}>
+      <Plus size={rs(16)} color="#fff" />
+      <Text style={styles.emptyBtnText}>Create a Drop</Text>
+    </TouchableOpacity>
+  </View>
+));
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ConfessionMarketplaceScreen({ navigation }) {
-  const insets = useSafeAreaInsets();
-  const [drops, setDrops] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
+
+  const [drops, setDrops]           = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore]       = useState(true);
 
-  const [category, setCategory] = useState(null);
+  const [category, setCategory]   = useState(null);
   const [nightOnly, setNightOnly] = useState(false);
   const [groupOnly, setGroupOnly] = useState(false);
-  const skip = useRef(0);
-  const LIMIT = 20;
 
-  useEffect(() => {
-    reset();
-  }, [category, nightOnly, groupOnly]);
+  const skipRef = useRef(0);
 
-  const reset = () => {
-    skip.current = 0;
-    setDrops([]);
-    setHasMore(true);
-    load(true);
-  };
-
-  const load = async (isFirst = false) => {
+  // ── Load ─────────────────────────────────────────────────────────────────────
+  const load = useCallback(async (isFirst = false) => {
     if (isFirst) setLoading(true);
-    else setLoadingMore(true);
+    else         setLoadingMore(true);
 
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token  = await AsyncStorage.getItem('token');
       const params = new URLSearchParams({
-        skip: skip.current,
+        skip:  skipRef.current,
         limit: LIMIT,
-        ...(category && { category }),
+        ...(category  && { category }),
         ...(nightOnly && { night_only: true }),
         ...(groupOnly && { is_group: true }),
       });
@@ -81,6 +234,7 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
       const res = await fetch(`${API_BASE_URL}/api/v1/drops/marketplace?${params}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+
       if (res.ok) {
         const data = await res.json();
         if (isFirst) {
@@ -92,291 +246,371 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
           });
         }
         setHasMore(data.has_more);
-        skip.current += data.drops.length;
+        skipRef.current += data.drops.length;
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  };
+    } catch {
+      if (isFirst) showToast({ type: 'error', message: 'Could not load drops.' });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+    }
+  }, [category, nightOnly, groupOnly, showToast]);
 
-  const onRefresh = () => { setRefreshing(true); reset(); };
+  // Reset when filters change
+  useEffect(() => {
+    skipRef.current = 0;
+    setDrops([]);
+    setHasMore(true);
+    load(true);
+  }, [category, nightOnly, groupOnly]);
 
-  const onEndReached = () => {
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    skipRef.current = 0;
+    setDrops([]);
+    setHasMore(true);
+    load(true);
+  }, [load]);
+
+  const onEndReached = useCallback(() => {
     if (!loadingMore && hasMore) load(false);
-  };
+  }, [loadingMore, hasMore, load]);
 
-  const renderDrop = ({ item }) => {
-    const color = getCatColor(item.category);
-    const emoji = getCatEmoji(item.category);
+  // ── Navigation handlers ───────────────────────────────────────────────────────
+  const handleDropPress = useCallback((dropId) => {
+    navigation.navigate('DropLanding', { dropId });
+  }, [navigation]);
 
-    return (
-      <TouchableOpacity
-        style={[styles.dropCard, { borderColor: `${color}30` }]}
-        onPress={() => navigation.navigate('DropLanding', { dropId: item.id })}
-        activeOpacity={0.85}
-      >
-        {/* Top row */}
-        <View style={styles.dropTop}>
-          <Text style={styles.dropEmoji}>{emoji}</Text>
-          <Text style={[styles.dropCat, { color }]}>{item.category?.toUpperCase()}</Text>
-          {item.is_night_mode && (
-            <View style={styles.nightTag}>
-              <Moon size={11} color="#9B8BFF" />
-              <Text style={styles.nightTagText}>Night</Text>
-            </View>
-          )}
-          {item.is_group && (
-            <View style={[styles.groupTag, { backgroundColor: `${color}18` }]}>
-              <Users size={11} color={color} />
-              <Text style={[styles.groupTagText, { color }]}>Group · {item.group_size}</Text>
-            </View>
-          )}
-          <Text style={styles.dropTimeAgo}>{item.time_ago}</Text>
-        </View>
+  const handleCreateDrop = useCallback(() => {
+    navigation.navigate('ShareCard');
+  }, [navigation]);
 
-        {/* Confession */}
-        <Text style={styles.dropConfession} numberOfLines={3}>
-          "{item.confession}"
-        </Text>
+  // ── Render helpers ───────────────────────────────────────────────────────────
+  const renderDrop = useCallback(({ item }) => (
+    <DropCard item={item} onPress={handleDropPress} />
+  ), [handleDropPress]);
 
-        {/* Reactions */}
-        {item.reactions?.length > 0 && (
-          <View style={styles.reactionsRow}>
-            {item.reactions.map((r, i) => (
-              <View key={i} style={styles.reactionBubble}>
-                <Text style={styles.reactionText}>{r}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+  const keyExtractor = useCallback((item) => item.id, []);
 
-        {/* Footer */}
-        <View style={styles.dropFooter}>
-          <View style={styles.dropMeta}>
-            <Clock size={12} color={THEME.textSecondary} />
-            <Text style={styles.dropMetaText}>{item.time_left}</Text>
-          </View>
-          <View style={styles.dropMeta}>
-            <Flame size={12} color={color} />
-            <Text style={[styles.dropMetaText, { color }]}>{item.unlock_count} connected</Text>
-          </View>
+  const ListHeaderComponent = useCallback(() => (
+    <ListHeader
+      category={category}   setCategory={setCategory}
+      nightOnly={nightOnly} setNightOnly={setNightOnly}
+      groupOnly={groupOnly} setGroupOnly={setGroupOnly}
+      total={drops.length}
+    />
+  ), [category, nightOnly, groupOnly, drops.length]);
 
-          {item.already_unlocked ? (
-            <View style={[styles.unlockBadge, { backgroundColor: `${color}18`, borderColor: `${color}40` }]}>
-              <Text style={[styles.unlockBadgeText, { color }]}>✓ Connected</Text>
-            </View>
-          ) : (
-            <View style={[styles.unlockBadge, { backgroundColor: `${color}12`, borderColor: `${color}30` }]}>
-              <Zap size={12} color={color} />
-              <Text style={[styles.unlockBadgeText, { color }]}>${item.price}</Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const ListFooterComponent = useCallback(() =>
+    loadingMore
+      ? <ActivityIndicator color={T.primary} style={{ marginVertical: SPACING.lg }} />
+      : null
+  , [loadingMore]);
 
-  const Header = () => (
-    <View>
-      {/* Category filter */}
-      <ScrollView
-        horizontal showsHorizontalScrollIndicator={false}
-        style={styles.catScroll} contentContainerStyle={styles.catContent}
-      >
-        {CATEGORIES.map(cat => {
-          const active = category === cat.id;
-          const color = cat.color || THEME.primary;
-          return (
-            <TouchableOpacity
-              key={String(cat.id)}
-              style={[
-                styles.catChip,
-                active && { backgroundColor: `${color}20`, borderColor: color },
-              ]}
-              onPress={() => setCategory(cat.id)}
-            >
-              <Text style={styles.catChipEmoji}>{cat.emoji}</Text>
-              <Text style={[styles.catChipText, active && { color }]}>{cat.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+  const ListEmptyComponent = useCallback(() =>
+    loading ? null : <EmptyState onCreateDrop={handleCreateDrop} />
+  , [loading, handleCreateDrop]);
 
-      {/* Filter toggles */}
-      <View style={styles.filterRow}>
-        <TouchableOpacity
-          style={[styles.filterChip, nightOnly && styles.filterChipActive]}
-          onPress={() => setNightOnly(v => !v)}
-        >
-          <Moon size={13} color={nightOnly ? '#9B8BFF' : THEME.textSecondary} />
-          <Text style={[styles.filterChipText, nightOnly && { color: '#9B8BFF' }]}>Night only</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterChip, groupOnly && styles.filterChipActive]}
-          onPress={() => setGroupOnly(v => !v)}
-        >
-          <Users size={13} color={groupOnly ? THEME.primary : THEME.textSecondary} />
-          <Text style={[styles.filterChipText, groupOnly && { color: THEME.primary }]}>Groups</Text>
-        </TouchableOpacity>
-        <Text style={styles.totalLabel}>{drops.length} drops</Text>
-      </View>
-    </View>
-  );
-
+  // ────────────────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={22} color={THEME.text} />
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.headerTitle}>Confession Market</Text>
-          <Text style={styles.headerSub}>Anonymous. Real. Anonymous.</Text>
-        </View>
         <TouchableOpacity
-          style={styles.createBtn}
-          onPress={() => navigation.navigate('ShareCard')}
+          onPress={() => navigation.goBack()}
+          hitSlop={HIT_SLOP}
+          style={styles.iconBtn}
         >
-          <Plus size={20} color={THEME.primary} />
+          <ArrowLeft size={rs(22)} color={T.text} />
+        </TouchableOpacity>
+
+        <View style={styles.headerText}>
+          <Text style={styles.headerTitle}>Confession Market</Text>
+          <Text style={styles.headerSub}>Anonymous. Real. Unfiltered.</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={handleCreateDrop}
+          hitSlop={HIT_SLOP}
+        >
+          <Plus size={rs(22)} color={T.primary} />
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator color={THEME.primary} size="large" />
+          <ActivityIndicator color={T.primary} size="large" />
         </View>
       ) : (
         <FlatList
           data={drops}
-          keyExtractor={item => item.id}
+          keyExtractor={keyExtractor}
           renderItem={renderDrop}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={<Header />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>🌙</Text>
-              <Text style={styles.emptyTitle}>No drops right now</Text>
-              <Text style={styles.emptySub}>Be the first to drop a confession.</Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                onPress={() => navigation.navigate('ShareCard')}
-              >
-                <Plus size={16} color="#fff" />
-                <Text style={styles.emptyBtnText}>Create a Drop</Text>
-              </TouchableOpacity>
-            </View>
-          }
-          ListFooterComponent={
-            loadingMore ? (
-              <ActivityIndicator color={THEME.primary} style={{ marginVertical: 20 }} />
-            ) : null
-          }
+          ListHeaderComponent={ListHeaderComponent}
+          ListEmptyComponent={ListEmptyComponent}
+          ListFooterComponent={ListFooterComponent}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.3}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.primary} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={T.primary}
+              colors={[T.primary]}
+            />
           }
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  safe: {
+    flex: 1,
+    backgroundColor: T.background,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
+  // Header
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: THEME.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.surface,
+  iconBtn: {
+    width: rs(38),
+    height: rs(38),
+    borderRadius: rs(19),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.surface,
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: THEME.text },
-  headerSub: { fontSize: 12, color: THEME.textSecondary, marginTop: 1 },
-  createBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.surface,
+  headerText: { flex: 1, alignItems: 'center' },
+  headerTitle: {
+    fontSize: FONT.md,
+    fontWeight: '700',
+    color: T.text,
+  },
+  headerSub: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+    marginTop: rp(2),
   },
 
-  catScroll: { marginTop: 16 },
-  catContent: { paddingHorizontal: 16, gap: 8 },
+  // List
+  list: {
+    paddingHorizontal: SPACING.md,
+    paddingBottom: rs(40),
+    gap: SPACING.sm,
+  },
+
+  // Category filter
+  catScroll:    { marginTop: SPACING.md },
+  catContent:   { paddingHorizontal: SPACING.md, gap: SPACING.xs },
   catChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14,
-    backgroundColor: THEME.surface, borderWidth: 1, borderColor: THEME.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(5),
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: rp(8),
+    borderRadius: RADIUS.md,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
   },
-  catChipEmoji: { fontSize: 15 },
-  catChipText: { fontSize: 13, fontWeight: '600', color: THEME.textSecondary },
+  catChipEmoji: { fontSize: rf(15) },
+  catChipText: {
+    fontSize: FONT.sm,
+    fontWeight: '600',
+    color: T.textSecondary,
+  },
 
+  // Filter toggles
   filterRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   filterChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10,
-    backgroundColor: THEME.surface, borderWidth: 1, borderColor: THEME.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(5),
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: rp(6),
+    borderRadius: RADIUS.sm,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
   },
-  filterChipActive: { borderColor: '#9B8BFF', backgroundColor: 'rgba(155,139,255,0.1)' },
-  filterChipText: { fontSize: 13, fontWeight: '500', color: THEME.textSecondary },
-  totalLabel: { marginLeft: 'auto', fontSize: 12, color: THEME.textSecondary },
+  filterChipActive: {
+    borderColor: T.primary,
+    backgroundColor: 'rgba(255,99,74,0.10)',
+  },
+  filterChipNight: {
+    borderColor: T.night,
+    backgroundColor: T.nightDim,
+  },
+  filterChipText: {
+    fontSize: FONT.sm,
+    fontWeight: '500',
+    color: T.textSecondary,
+  },
+  totalLabel: {
+    marginLeft: 'auto',
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+  },
 
-  list: { paddingHorizontal: 16, paddingBottom: 40, gap: 12 },
-
+  // Drop card
   dropCard: {
-    backgroundColor: THEME.surface, borderRadius: 18, padding: 18,
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
     borderWidth: 1,
   },
-  dropTop: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  dropEmoji: { fontSize: 18 },
-  dropCat: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  dropTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  dropEmoji:   { fontSize: rf(18) },
+  dropCat: {
+    fontSize: FONT.xs,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   nightTag: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: 'rgba(155,139,255,0.1)', borderRadius: 6,
-    paddingHorizontal: 6, paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(3),
+    backgroundColor: T.nightDim,
+    borderRadius: RADIUS.xs,
+    paddingHorizontal: rp(6),
+    paddingVertical: rp(2),
   },
-  nightTagText: { fontSize: 10, color: '#9B8BFF', fontWeight: '600' },
+  nightTagText: {
+    fontSize: FONT.xs,
+    color: T.night,
+    fontWeight: '600',
+  },
   groupTag: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(3),
+    borderRadius: RADIUS.xs,
+    paddingHorizontal: rp(6),
+    paddingVertical: rp(2),
   },
-  groupTagText: { fontSize: 10, fontWeight: '600' },
-  dropTimeAgo: { fontSize: 11, color: THEME.textSecondary, marginLeft: 'auto' },
-
+  groupTagText: {
+    fontSize: FONT.xs,
+    fontWeight: '600',
+  },
+  dropTimeAgo: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+    marginLeft: 'auto',
+  },
   dropConfession: {
-    fontSize: 17, lineHeight: 26, color: THEME.text,
-    fontStyle: 'italic', marginBottom: 12,
+    fontSize: FONT.md,
+    lineHeight: rf(26),
+    color: T.text,
+    fontStyle: 'italic',
+    marginBottom: SPACING.sm,
   },
-
-  reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 12 },
+  reactionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: rp(5),
+    marginBottom: SPACING.sm,
+  },
   reactionBubble: {
-    backgroundColor: THEME.surfaceAlt, borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: T.surfaceAlt,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: rp(8),
+    paddingVertical: rp(4),
   },
-  reactionText: { fontSize: 14 },
-
-  dropFooter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dropMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  dropMetaText: { fontSize: 12, color: THEME.textSecondary, fontWeight: '500' },
+  reactionText: { fontSize: rf(14) },
+  dropFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  dropMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(4),
+  },
+  dropMetaText: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+    fontWeight: '500',
+  },
   unlockBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto',
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(4),
+    marginLeft: 'auto',
+    paddingHorizontal: rp(10),
+    paddingVertical: rp(5),
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
   },
-  unlockBadgeText: { fontSize: 12, fontWeight: '700' },
+  unlockBadgeText: {
+    fontSize: FONT.xs,
+    fontWeight: '700',
+  },
 
-  empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32 },
-  emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: THEME.text, marginBottom: 8 },
-  emptySub: { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', marginBottom: 24 },
-  emptyBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: THEME.primary, borderRadius: 14,
-    paddingHorizontal: 20, paddingVertical: 12,
+  // Empty state
+  empty: {
+    alignItems: 'center',
+    paddingTop: rs(60),
+    paddingHorizontal: SPACING.xl,
   },
-  emptyBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  emptyIcon: {
+    fontSize: rf(48),
+    marginBottom: SPACING.md,
+  },
+  emptyTitle: {
+    fontSize: FONT.lg,
+    fontWeight: '700',
+    color: T.text,
+    marginBottom: SPACING.xs,
+  },
+  emptySub: {
+    fontSize: FONT.sm,
+    color: T.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: T.primary,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: rp(12),
+  },
+  emptyBtnText: {
+    fontSize: FONT.sm,
+    fontWeight: '700',
+    color: '#fff',
+  },
 });

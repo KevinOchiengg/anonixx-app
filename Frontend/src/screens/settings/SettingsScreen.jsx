@@ -1,208 +1,279 @@
-import React, { useMemo } from 'react'
+import React from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  StatusBar,
-  Dimensions,
-} from 'react-native'
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  User,
-  Heart,
-  MessageCircle,
-  LifeBuoy,
-  Calendar,
-  LogOut,
-  ChevronRight,
-  TrendingUp,
-} from 'lucide-react-native'
-import { useLogout } from '../../hooks/useLogout'
+  User, Heart, MessageCircle, LifeBuoy,
+  Calendar, LogOut, ChevronRight, TrendingUp,
+} from 'lucide-react-native';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { useLogout } from '../../hooks/useLogout';
 
-const { height, width } = Dimensions.get('window')
+// ─── Theme ────────────────────────────────────────────────────────────────────
+const T = {
+  background:   '#0b0f18',
+  surface:      '#151924',
+  primary:      '#FF634A',
+  primaryDim:   'rgba(255,99,74,0.08)',
+  primaryBorder:'rgba(255,99,74,0.2)',
+  text:         '#EAEAF0',
+  textSecondary:'#9A9AA3',
+  border:       'rgba(255,255,255,0.06)',
+  avatarBg:     '#1e2330',
+  iconBg:       '#1e2330',
+};
 
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  avatarBg: '#3a3f50',
-  avatarIcon: '#5a5f70',
-}
+// ─── Static data (module level) ───────────────────────────────────────────────
+const MENU_ITEMS = [
+  { title: 'Profile',            icon: User,         route: 'EditProfile',      description: 'Manage your account'   },
+  { title: 'Your Impact',        icon: TrendingUp,   route: 'ImpactDashboard',  description: 'See your contribution' },
+  { title: 'Saved Posts',        icon: Heart,        route: 'SavedPosts',       description: 'Your collection'       },
+  { title: 'Connections',        icon: MessageCircle,route: 'Connections',      description: 'Your conversations'    },
+  { title: 'Sunday Reflection',  icon: Calendar,     route: 'SundayReflection', description: 'Weekly mindfulness'    },
+  { title: 'Crisis Resources',   icon: LifeBuoy,     route: 'CrisisResources',  description: 'Get help now'          },
+];
 
-const StarryBackground = () => {
-  const stars = useMemo(() => {
-    return Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      top: Math.random() * height,
-      left: Math.random() * width,
-      size: Math.random() * 3 + 1,
-      opacity: Math.random() * 0.6 + 0.2,
-    }))
-  }, [])
+// ─── Menu Item (memoized) ─────────────────────────────────────────────────────
+const MenuItem = React.memo(({ title, icon: Icon, description, onPress }) => (
+  <TouchableOpacity
+    style={styles.menuItem}
+    onPress={onPress}
+    hitSlop={HIT_SLOP}
+    activeOpacity={0.8}
+  >
+    <View style={styles.menuIcon}>
+      <Icon size={rs(20)} color={T.text} />
+    </View>
+    <View style={styles.menuText}>
+      <Text style={styles.menuTitle}>{title}</Text>
+      <Text style={styles.menuDesc}>{description}</Text>
+    </View>
+    <ChevronRight size={rs(18)} color={T.textSecondary} />
+  </TouchableOpacity>
+));
 
-  return (
-    <>
-      {stars.map((star) => (
-        <View
-          key={star.id}
-          style={{
-            position: 'absolute',
-            backgroundColor: THEME.primary,
-            borderRadius: 50,
-            top: star.top,
-            left: star.left,
-            width: star.size,
-            height: star.size,
-            opacity: star.opacity,
-          }}
-        />
-      ))}
-    </>
-  )
-}
-
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function SettingsScreen({ navigation }) {
-  const { confirmLogout } = useLogout(navigation)
-
-  const menuItems = [
-    { title: 'Profile', icon: User, onPress: () => navigation.navigate('EditProfile'), description: 'Manage your account' },
-    { title: 'Your Impact', icon: TrendingUp, onPress: () => navigation.navigate('ImpactDashboard'), description: 'See your contribution' },
-    { title: 'Saved Posts', icon: Heart, onPress: () => navigation.navigate('SavedPosts'), description: 'Your collection' },
-    { title: 'Connections', icon: MessageCircle, onPress: () => navigation.navigate('Connections'), description: 'Your conversations' },
-    { title: 'Sunday Reflection', icon: Calendar, onPress: () => navigation.navigate('SundayReflection'), description: 'Weekly mindfulness' },
-    { title: 'Crisis Resources', icon: LifeBuoy, onPress: () => navigation.navigate('CrisisResources'), description: 'Get help now' },
-  ]
+  const { confirmLogout } = useLogout(navigation);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-      <StarryBackground />
-
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Settings</Text>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Profile Card */}
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
+        {/* Profile card */}
         <View style={styles.profileCard}>
           <View style={styles.profileAvatar}>
-            <User size={32} color={THEME.avatarIcon} />
+            <User size={rs(30)} color={T.textSecondary} />
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>Anonymous User</Text>
-            <Text style={styles.profileSubtext}>A space that heals, not hurts</Text>
+            <Text style={styles.profileTagline}>A space that heals, not hurts</Text>
           </View>
         </View>
 
-        {/* Menu Items */}
+        {/* Menu */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Space</Text>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={item.onPress}
-              style={styles.menuItem}
-              activeOpacity={0.8}
-            >
-              <View style={styles.menuIconContainer}>
-                <item.icon size={22} color={THEME.text} />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuText}>{item.title}</Text>
-                <Text style={styles.menuDescription}>{item.description}</Text>
-              </View>
-              <ChevronRight size={20} color={THEME.textSecondary} />
-            </TouchableOpacity>
+          <Text style={styles.sectionLabel}>Your Space</Text>
+          {MENU_ITEMS.map(item => (
+            <MenuItem
+              key={item.route}
+              title={item.title}
+              icon={item.icon}
+              description={item.description}
+              onPress={() => navigation.navigate(item.route)}
+            />
           ))}
         </View>
 
         {/* Logout */}
         <View style={styles.section}>
           <TouchableOpacity
+            style={styles.logoutBtn}
             onPress={confirmLogout}
-            style={styles.logoutButton}
+            hitSlop={HIT_SLOP}
             activeOpacity={0.8}
           >
-            <LogOut size={22} color={THEME.primary} />
+            <LogOut size={rs(20)} color={T.primary} />
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
 
-        {/* App Info */}
+        {/* App info */}
         <View style={styles.appInfo}>
           <Text style={styles.appName}>Anonixx</Text>
           <Text style={styles.appVersion}>Version 1.0.0</Text>
-          <View style={styles.dividerSmall} />
+          <View style={styles.appDivider} />
           <Text style={styles.appTagline}>A space that heals, not hurts</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
-  )
+  );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
-  header: { paddingHorizontal: 20, paddingVertical: 20, zIndex: 10 },
-  headerTitle: { fontSize: 32, fontWeight: '800', color: THEME.primary, letterSpacing: -0.5 },
-  scrollView: { flex: 1 },
+  safe: {
+    flex: 1,
+    backgroundColor: T.background,
+  },
+
+  // Header
+  header: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  headerTitle: {
+    fontSize: FONT.xxl,
+    fontWeight: '800',
+    color: T.primary,
+    letterSpacing: -0.5,
+  },
+
+  // Scroll
+  scroll: { flex: 1 },
+  content: {
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xxl,
+  },
+
+  // Profile card
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: THEME.surface,
-    margin: 16,
-    marginBottom: 24,
-    padding: 20,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 8,
+    backgroundColor: T.surface,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: T.border,
   },
   profileAvatar: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: THEME.avatarBg,
-    alignItems: 'center', justifyContent: 'center', marginRight: 16,
+    width: rs(60),
+    height: rs(60),
+    borderRadius: rs(30),
+    backgroundColor: T.avatarBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
   },
   profileInfo: { flex: 1 },
-  profileName: { fontSize: 20, fontWeight: '700', color: THEME.text, marginBottom: 4 },
-  profileSubtext: { fontSize: 14, color: THEME.textSecondary, fontStyle: 'italic' },
-  section: { paddingHorizontal: 16, marginBottom: 24 },
-  sectionTitle: {
-    fontSize: 13, fontWeight: '700', color: THEME.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, paddingHorizontal: 4,
+  profileName: {
+    fontSize: FONT.lg,
+    fontWeight: '700',
+    color: T.text,
+    marginBottom: rp(3),
   },
+  profileTagline: {
+    fontSize: FONT.sm,
+    color: T.textSecondary,
+    fontStyle: 'italic',
+  },
+
+  // Section
+  section: {
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  sectionLabel: {
+    fontSize: FONT.xs,
+    fontWeight: '700',
+    color: T.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: rp(4),
+  },
+
+  // Menu item
   menuItem: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: THEME.surface,
-    padding: 18, borderRadius: 16, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 12, elevation: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: T.surface,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: T.border,
   },
-  menuIconContainer: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: THEME.avatarBg,
-    alignItems: 'center', justifyContent: 'center', marginRight: 14,
+  menuIcon: {
+    width: rs(42),
+    height: rs(42),
+    borderRadius: rs(21),
+    backgroundColor: T.iconBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
   },
-  menuTextContainer: { flex: 1 },
-  menuText: { fontSize: 16, fontWeight: '600', color: THEME.text, marginBottom: 2 },
-  menuDescription: { fontSize: 13, color: THEME.textSecondary },
-  logoutButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: THEME.surface, padding: 18, borderRadius: 16, gap: 10,
-    shadowColor: THEME.primary, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
-    borderWidth: 1, borderColor: 'rgba(255, 99, 74, 0.2)',
+  menuText: { flex: 1 },
+  menuTitle: {
+    fontSize: FONT.md,
+    fontWeight: '600',
+    color: T.text,
+    marginBottom: rp(2),
   },
-  logoutText: { fontSize: 16, fontWeight: '700', color: THEME.primary },
-  appInfo: { padding: 32, alignItems: 'center', gap: 6, marginBottom: 20 },
-  appName: { fontSize: 18, fontWeight: '700', color: THEME.text },
-  appVersion: { fontSize: 13, color: THEME.textSecondary },
-  dividerSmall: { width: 40, height: 1, backgroundColor: THEME.border, marginVertical: 8 },
-  appTagline: { fontSize: 13, fontStyle: 'italic', color: THEME.textSecondary },
-})
+  menuDesc: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+  },
+
+  // Logout
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.surface,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: T.primaryBorder,
+  },
+  logoutText: {
+    fontSize: FONT.md,
+    fontWeight: '700',
+    color: T.primary,
+  },
+
+  // App info
+  appInfo: {
+    alignItems: 'center',
+    gap: rp(5),
+    paddingVertical: SPACING.lg,
+  },
+  appName: {
+    fontSize: FONT.md,
+    fontWeight: '700',
+    color: T.text,
+  },
+  appVersion: {
+    fontSize: FONT.xs,
+    color: T.textSecondary,
+  },
+  appDivider: {
+    width: rs(36),
+    height: 1,
+    backgroundColor: T.border,
+    marginVertical: rp(6),
+  },
+  appTagline: {
+    fontSize: FONT.xs,
+    fontStyle: 'italic',
+    color: T.textSecondary,
+  },
+});
