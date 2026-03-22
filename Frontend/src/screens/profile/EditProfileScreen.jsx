@@ -1,714 +1,582 @@
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  StatusBar,
-  Image,
-  Dimensions,
+  ActivityIndicator, Animated, Image, ScrollView,
+  StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  ArrowLeft,
-  Save,
-  User,
-  Mail,
-  AtSign,
-  Camera,
+  ArrowLeft, AtSign, Camera, Mail, Save, User,
 } from 'lucide-react-native';
-import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import {
+  rs, rf, rp, rh, SPACING, FONT, RADIUS, SCREEN,
+  BUTTON_HEIGHT, HIT_SLOP,
+} from '../../utils/responsive';
 
-const { height, width } = Dimensions.get('window');
-
-// NEW Cinematic Coral Theme
-const THEME = {
-  background: '#0b0f18',
-  backgroundDark: '#06080f',
-  surface: '#151924',
-  surfaceDark: '#10131c',
-  primary: '#FF634A',
-  primaryDark: '#ff3b2f',
-  text: '#EAEAF0',
+// ─── Theme ────────────────────────────────────────────────────
+const T = {
+  background:  '#0b0f18',
+  surface:     '#151924',
+  surfaceAlt:  '#1a1f2e',
+  primary:     '#FF634A',
+  primaryDim:  'rgba(255,99,74,0.12)',
+  primaryBorder: 'rgba(255,99,74,0.25)',
+  text:        '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  avatarBg: '#3a3f50',
-  avatarIcon: '#5a5f70',
-  input: 'rgba(30, 35, 45, 0.7)',
+  textMuted:   '#4a5068',
+  border:      'rgba(255,255,255,0.06)',
+  inputBg:     'rgba(255,255,255,0.04)',
 };
 
-// Starry Background Component
-const StarryBackground = () => {
-  const stars = useMemo(() => {
-    return Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      top: Math.random() * height,
-      left: Math.random() * width,
-      size: Math.random() * 3 + 1,
-      opacity: Math.random() * 0.6 + 0.2,
-    }));
-  }, []);
+// ─── Module-level star data (Rule 5) ──────────────────────────
+const STARS = Array.from({ length: 30 }, (_, i) => ({
+  id:      i,
+  top:     Math.random() * SCREEN.height,
+  left:    Math.random() * SCREEN.width,
+  size:    Math.random() * rs(2.5) + rs(0.5),
+  opacity: Math.random() * 0.35 + 0.08,
+}));
 
-  return (
-    <>
-      {stars.map((star) => (
-        <View
-          key={star.id}
-          style={{
-            position: 'absolute',
-            backgroundColor: THEME.primary,
-            borderRadius: 50,
-            top: star.top,
-            left: star.left,
-            width: star.size,
-            height: star.size,
-            opacity: star.opacity,
-          }}
-        />
-      ))}
-    </>
-  );
-};
-
-// Cloudinary config
-const CLOUDINARY_CLOUD_NAME = 'dojbdm2e1';
+// ─── Cloudinary config (module-level, Rule 5) ─────────────────
+const CLOUDINARY_CLOUD_NAME   = 'dojbdm2e1';
 const CLOUDINARY_UPLOAD_PRESET = 'anonix';
 
-export default function EditProfileScreen({ navigation }) {
-  const { theme } = useTheme();
-  const { user, updateUserProfile } = useAuth();
+// ─── StarryBackground (Rule 6 — React.memo) ───────────────────
+const StarryBackground = React.memo(() => (
+  <>
+    {STARS.map(s => (
+      <View key={s.id} style={{
+        position:        'absolute',
+        backgroundColor: T.primary,
+        borderRadius:    s.size,
+        top:             s.top,
+        left:            s.left,
+        width:           s.size,
+        height:          s.size,
+        opacity:         s.opacity,
+      }} />
+    ))}
+  </>
+));
 
-  const [username, setUsername] = useState(user?.username || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [avatarUri, setAvatarUri] = useState(user?.avatar_url || null);
-  const [loading, setLoading] = useState(false);
+// ─── Field card (Rule 6) ──────────────────────────────────────
+const FieldCard = React.memo(({ label, hint, children }) => (
+  <View style={styles.fieldCard}>
+    <View style={styles.fieldAccent} />
+    <View style={styles.fieldInner}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {children}
+      {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
+    </View>
+  </View>
+));
+
+// ─── Screen ───────────────────────────────────────────────────
+export default function EditProfileScreen({ navigation }) {
+  const { user, updateUserProfile } = useAuth();
+  const { showToast }               = useToast();
+
+  const [username,        setUsername]        = useState(user?.username || '');
+  const [email,           setEmail]           = useState(user?.email || '');
+  const [avatarUri,       setAvatarUri]       = useState(user?.avatar_url || null);
+  const [loading,         setLoading]         = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  // Upload to Cloudinary
-  const uploadToCloudinary = async (uri) => {
+  // Entrance animation (Rule 14)
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(rh(20))).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 420, delay: 80, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 420, delay: 80, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  // ── Cloudinary upload (Rule 7 — useCallback, Rule 11 — try/catch) ──
+  const uploadToCloudinary = useCallback(async (uri) => {
+    const uriParts = uri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+
+    const formData = new FormData();
+    formData.append('file', { uri, type: `image/${fileType}`, name: `avatar.${fileType}` });
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('folder', 'avatars');
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: 'POST', body: formData }
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error('upload_failed');
+    return data.secure_url;
+  }, []);
+
+  // ── Pick avatar (Rule 7, Rule 2, Rule 3, Rule 10) ─────────────
+  const pickAvatar = useCallback(async () => {
     try {
-      const formData = new FormData();
-
-      const uriParts = uri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
-
-      formData.append('file', {
-        uri,
-        type: `image/${fileType}`,
-        name: `avatar.${fileType}`,
-      });
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-      formData.append('folder', 'avatars');
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Upload failed');
-      }
-
-      return data.secure_url;
-    } catch (error) {
-      console.error('❌ Cloudinary upload error:', error);
-      throw error;
-    }
-  };
-
-  // Pick Avatar
-  const pickAvatar = async () => {
-    try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow access to your photos');
+        showToast({ type: 'warning', message: 'Allow photo access to change your avatar.' });
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes:    ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        aspect:        [1, 1],
+        quality:       0.8,
       });
 
-      if (!result.canceled) {
-        setUploadingAvatar(true);
+      if (result.canceled) return;
 
-        try {
-          const cloudinaryUrl = await uploadToCloudinary(result.assets[0].uri);
-          setAvatarUri(cloudinaryUrl);
-
-          Alert.alert(
-            'Success',
-            'Avatar uploaded! Click Save to update your profile.'
-          );
-        } catch (error) {
-          Alert.alert(
-            'Upload Failed',
-            'Could not upload avatar. You can still use it locally or try again.'
-          );
-          setAvatarUri(result.assets[0].uri);
-        } finally {
-          setUploadingAvatar(false);
-        }
+      setUploadingAvatar(true);
+      try {
+        const cloudUrl = await uploadToCloudinary(result.assets[0].uri);
+        setAvatarUri(cloudUrl);
+        showToast({ type: 'success', message: 'Avatar ready. Hit save to lock it in.' });
+      } catch {
+        // Fall back to local URI so the user still sees a preview
+        setAvatarUri(result.assets[0].uri);
+        showToast({ type: 'warning', message: 'Could not upload photo. Save to keep it local.' });
+      } finally {
+        setUploadingAvatar(false);
       }
-    } catch (error) {
-      console.error('❌ Pick avatar error:', error);
-      Alert.alert('Error', 'Failed to pick avatar');
+    } catch {
       setUploadingAvatar(false);
+      showToast({ type: 'error', message: 'Something went wrong. Try again.' });
     }
-  };
+  }, [uploadToCloudinary, showToast]);
 
-  const handleSave = async () => {
+  // ── Save profile (Rule 7, Rule 2, Rule 3, Rule 10, Rule 11) ───
+  const handleSave = useCallback(async () => {
     if (!username.trim()) {
-      Alert.alert('Error', 'Username cannot be empty');
+      showToast({ type: 'warning', message: 'Your name cannot be empty.' });
       return;
     }
-
     if (!email.trim()) {
-      Alert.alert('Error', 'Email cannot be empty');
+      showToast({ type: 'warning', message: 'An email is required.' });
       return;
     }
-
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      showToast({ type: 'warning', message: 'That email doesn\'t look right.' });
       return;
     }
 
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
+      const body  = { username: username.trim(), email: email.trim() };
+      if (avatarUri && avatarUri !== user?.avatar_url) body.avatar_url = avatarUri;
 
-      const updateData = {
-        username: username.trim(),
-        email: email.trim(),
-      };
+      const res  = await fetch(`${API_BASE_URL}/api/v1/auth/update-profile`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify(body),
+      });
+      const data = await res.json();
 
-      if (avatarUri && avatarUri !== user?.avatar_url) {
-        updateData.avatar_url = avatarUri;
+      if (!res.ok) {
+        showToast({ type: 'error', message: 'Could not save your profile. Try again.' });
+        return;
       }
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/auth/update-profile`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(updateData),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Failed to update profile');
-      }
-
-      if (updateUserProfile) {
-        updateUserProfile({
-          username: data.username,
-          email: data.email,
-          avatar_url: data.avatar_url,
-        });
-      }
-
-      Alert.alert('Success', 'Profile updated successfully!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
-    } catch (error) {
-      console.error('❌ Update profile error:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile');
+      updateUserProfile?.({ username: data.username, email: data.email, avatar_url: data.avatar_url });
+      showToast({ type: 'success', message: 'Profile updated.' });
+      navigation.goBack();
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong. Check your connection.' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [username, email, avatarUri, user, updateUserProfile, showToast, navigation]);
+
+  const isBusy = loading || uploadingAvatar;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="light-content" backgroundColor={T.background} />
       <StarryBackground />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backButton}
+          style={styles.backBtn}
+          hitSlop={HIT_SLOP}
         >
-          <ArrowLeft size={24} color={THEME.text} />
+          <ArrowLeft size={rs(20)} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.backBtn} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.content}
+        style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
       >
-        {/* Avatar Section */}
+        {/* ── Avatar ── */}
         <View style={styles.avatarSection}>
-          <View style={styles.avatarContainer}>
+          <View style={styles.avatarWrap}>
             {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <User size={48} color={THEME.avatarIcon} />
+                <User size={rs(44)} color={T.textMuted} strokeWidth={1.5} />
               </View>
             )}
 
             {uploadingAvatar && (
-              <View style={styles.uploadingOverlay}>
-                <ActivityIndicator size="large" color={THEME.primary} />
+              <View style={styles.avatarOverlay}>
+                <ActivityIndicator size="large" color={T.primary} />
               </View>
             )}
 
-            {/* Camera Button */}
             <TouchableOpacity
-              style={styles.cameraButton}
+              style={styles.cameraBtn}
               onPress={pickAvatar}
               disabled={uploadingAvatar}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.85}
             >
-              <Camera size={20} color="#fff" />
+              <Camera size={rs(16)} color="#fff" strokeWidth={2} />
             </TouchableOpacity>
           </View>
 
           <Text style={styles.avatarHint}>
-            {uploadingAvatar ? 'Uploading...' : 'Tap camera to change avatar'}
+            {uploadingAvatar ? 'uploading…' : 'tap to change your face'}
           </Text>
         </View>
 
-        {/* Form */}
+        {/* ── Form ── */}
         <View style={styles.form}>
-          {/* Username Card */}
-          <View style={styles.inputCardWrapper}>
-            <View style={styles.inputAccentBar} />
-            <View style={styles.inputCard}>
-              <Text style={styles.label}>Username</Text>
-              <View style={styles.inputContainer}>
-                <View style={styles.inputIcon}>
-                  <AtSign size={20} color={THEME.textSecondary} />
-                </View>
-                <TextInput
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder="Enter username"
-                  placeholderTextColor={THEME.textSecondary}
-                  style={styles.input}
-                  autoCapitalize="none"
-                />
-              </View>
-              <Text style={styles.hint}>This is how others will see you</Text>
+          <FieldCard label="Username" hint="how others see you in the dark">
+            <View style={styles.inputRow}>
+              <AtSign size={rs(16)} color={T.textSecondary} strokeWidth={1.8} />
+              <TextInput
+                value={username}
+                onChangeText={setUsername}
+                placeholder="your name here"
+                placeholderTextColor={T.textMuted}
+                autoCapitalize="none"
+                style={styles.inputText}
+              />
             </View>
-          </View>
+          </FieldCard>
 
-          {/* Email Card */}
-          <View style={styles.inputCardWrapper}>
-            <View style={styles.inputAccentBar} />
-            <View style={styles.inputCard}>
-              <Text style={styles.label}>Email</Text>
-              <View style={styles.inputContainer}>
-                <View style={styles.inputIcon}>
-                  <Mail size={20} color={THEME.textSecondary} />
-                </View>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Enter email"
-                  placeholderTextColor={THEME.textSecondary}
-                  style={styles.input}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-              <Text style={styles.hint}>We'll never share your email</Text>
+          <FieldCard label="Email" hint="kept private, always">
+            <View style={styles.inputRow}>
+              <Mail size={rs(16)} color={T.textSecondary} strokeWidth={1.8} />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="your@email.com"
+                placeholderTextColor={T.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={styles.inputText}
+              />
             </View>
-          </View>
+          </FieldCard>
 
-          {/* Anonymous Name Card (Read-only) */}
-          <View style={styles.inputCardWrapper}>
-            <View style={[styles.inputAccentBar, { opacity: 0.4 }]} />
-            <View style={[styles.inputCard, { opacity: 0.7 }]}>
-              <Text style={styles.label}>Anonymous Name</Text>
-              <View style={[styles.inputContainer, styles.disabledInput]}>
-                <View style={styles.inputIcon}>
-                  <User size={20} color={THEME.textSecondary} />
-                </View>
-                <TextInput
-                  value={user?.anonymous_name || 'Not set'}
-                  editable={false}
-                  style={[styles.input, styles.disabledText]}
-                />
-              </View>
-              <Text style={styles.hint}>Used when posting anonymously</Text>
+          <FieldCard label="Anonymous Name" hint="generated by the void — unchangeable">
+            <View style={[styles.inputRow, styles.inputRowDisabled]}>
+              <User size={rs(16)} color={T.textMuted} strokeWidth={1.8} />
+              <Text style={styles.disabledText}>{user?.anonymous_name || 'not set'}</Text>
             </View>
-          </View>
+          </FieldCard>
 
-          {/* Coins Display */}
-          <View style={styles.coinsWrapper}>
-            <View style={styles.coinsAccentBar} />
-            <View style={styles.coinsCard}>
-              <View style={styles.coinsIcon}>
-                <Text style={styles.coinEmoji}>💰</Text>
+          {/* Coins */}
+          <View style={styles.coinsCard}>
+            <View style={styles.coinsAccent} />
+            <View style={styles.coinsInner}>
+              <View style={styles.coinsIconWrap}>
+                <Text style={styles.coinsEmoji}>💰</Text>
               </View>
-              <View style={styles.coinsInfo}>
+              <View>
                 <Text style={styles.coinsLabel}>Your Coins</Text>
-                <Text style={styles.coinsValue}>
-                  {user?.coin_balance || 0} coins
-                </Text>
+                <Text style={styles.coinsValue}>{user?.coin_balance ?? 0}</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Save Button */}
-        <View style={styles.saveButtonWrapper}>
-          <View style={styles.saveAccentBar} />
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={loading || uploadingAvatar}
-            style={[
-              styles.saveButton,
-              (loading || uploadingAvatar) && styles.saveButtonDisabled,
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
+        {/* ── Save ── */}
+        <TouchableOpacity
+          style={[styles.saveBtn, isBusy && styles.saveBtnDisabled]}
+          onPress={handleSave}
+          disabled={isBusy}
+          activeOpacity={0.85}
+          hitSlop={HIT_SLOP}
+        >
+          {loading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : (
               <>
-                <Save size={20} color="#ffffff" />
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+                <Save size={rs(18)} color="#fff" strokeWidth={2.5} />
+                <Text style={styles.saveBtnText}>Save Changes</Text>
               </>
-            )}
-          </TouchableOpacity>
-        </View>
+            )
+          }
+        </TouchableOpacity>
 
-        {/* Info Box */}
-        <View style={styles.infoBoxWrapper}>
-          <View style={styles.infoAccentBar} />
-          <View style={styles.infoBox}>
-            <Text style={styles.infoIcon}>💡</Text>
-            <Text style={styles.infoText}>
-              Your username and email can be changed anytime. Your anonymous
-              name is generated automatically and cannot be changed.
-            </Text>
-          </View>
+        {/* ── Info note ── */}
+        <View style={styles.infoNote}>
+          <Text style={styles.infoText}>
+            💡  Username and email can change anytime.{'\n'}Your anonymous name is forever — generated by the void.
+          </Text>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEME.background,
-  },
+  safe: { flex: 1, backgroundColor: T.background },
+
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'transparent',
-    zIndex: 10,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(12),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+    zIndex:            10,
   },
-  backButton: {
-    padding: 8,
+  backBtn: {
+    width:           rs(36),
+    height:          rs(36),
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderRadius:    rs(18),
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: THEME.text,
+    fontSize:   FONT.md,
+    fontWeight: '700',
+    color:      T.text,
   },
-  scrollView: {
-    flex: 1,
+
+  content: {
+    paddingBottom: rh(48),
   },
-  // Avatar Section
+
+  // Avatar
   avatarSection: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    paddingBottom: 24,
+    alignItems:    'center',
+    paddingTop:    rh(28),
+    paddingBottom: rh(20),
   },
-  avatarContainer: {
-    position: 'relative',
-    width: 120,
-    height: 120,
-    marginBottom: 12,
+  avatarWrap: {
+    position:    'relative',
+    width:       rs(110),
+    height:      rs(110),
+    marginBottom: rp(12),
   },
   avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 60,
+    width:        '100%',
+    height:       '100%',
+    borderRadius: rs(55),
+    borderWidth:  rs(2),
+    borderColor:  T.primaryBorder,
   },
   avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 60,
-    backgroundColor: THEME.avatarBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: THEME.primary,
+    width:           '100%',
+    height:          '100%',
+    borderRadius:    rs(55),
+    backgroundColor: T.surfaceAlt,
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderWidth:     rs(2),
+    borderColor:     T.primaryBorder,
   },
-  uploadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
+  avatarOverlay: {
+    position:        'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius:    rs(55),
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-  cameraButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: THEME.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: THEME.background,
-    shadowColor: THEME.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+  cameraBtn: {
+    position:        'absolute',
+    bottom:          0,
+    right:           0,
+    width:           rs(34),
+    height:          rs(34),
+    borderRadius:    rs(17),
+    backgroundColor: T.primary,
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderWidth:     rs(2),
+    borderColor:     T.background,
+    shadowColor:     T.primary,
+    shadowOffset:    { width: 0, height: rs(4) },
+    shadowOpacity:   0.45,
+    shadowRadius:    rs(8),
+    elevation:       8,
   },
   avatarHint: {
-    fontSize: 13,
-    color: THEME.textSecondary,
+    fontSize:  FONT.xs,
+    color:     T.textMuted,
     fontStyle: 'italic',
   },
+
   // Form
   form: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.md,
+    gap:               SPACING.sm,
   },
-  inputCardWrapper: {
-    position: 'relative',
-    marginBottom: 16,
+  fieldCard: {
+    flexDirection:   'row',
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     T.border,
+    overflow:        'hidden',
   },
-  inputAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.6,
+  fieldAccent: {
+    width:           rs(2),
+    alignSelf:       'stretch',
+    backgroundColor: T.primary,
+    opacity:         0.7,
   },
-  inputCard: {
-    backgroundColor: THEME.surface,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
+  fieldInner: {
+    flex:    1,
+    padding: SPACING.md,
+    gap:     rp(6),
   },
-  label: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: THEME.text,
-    marginBottom: 10,
+  fieldLabel: {
+    fontSize:      rs(10),
+    fontWeight:    '700',
+    color:         T.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: rp(0.8),
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: THEME.input,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  inputIcon: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  input: {
-    flex: 1,
-    height: 48,
-    fontSize: 16,
-    color: THEME.text,
-    paddingRight: 16,
-  },
-  disabledInput: {
-    opacity: 0.6,
-  },
-  disabledText: {
+  fieldHint: {
+    fontSize:  rs(11),
+    color:     T.textMuted,
     fontStyle: 'italic',
-    color: THEME.textSecondary,
   },
-  hint: {
-    fontSize: 12,
-    color: THEME.textSecondary,
-    marginLeft: 4,
+  inputRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             SPACING.sm,
+    backgroundColor: T.inputBg,
+    borderRadius:    RADIUS.md,
+    paddingHorizontal: rp(12),
+    paddingVertical: rp(10),
+    borderWidth:     1,
+    borderColor:     T.border,
   },
-  // Coins Card
-  coinsWrapper: {
-    position: 'relative',
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  coinsAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.8,
-  },
-  coinsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: THEME.surface,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-    shadowColor: THEME.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 99, 74, 0.2)',
-  },
-  coinsIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255, 99, 74, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  coinEmoji: {
-    fontSize: 28,
-  },
-  coinsInfo: {
-    flex: 1,
-  },
-  coinsLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: THEME.primary,
-    marginBottom: 2,
-  },
-  coinsValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: THEME.text,
-  },
-  // Save Button
-  saveButtonWrapper: {
-    position: 'relative',
-    marginHorizontal: 16,
-    marginTop: 8,
-  },
-  saveAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.8,
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: THEME.primary,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-    gap: 10,
-    shadowColor: THEME.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  saveButtonDisabled: {
+  inputRowDisabled: {
     opacity: 0.5,
   },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
+  inputText: {
+    flex:      1,
+    fontSize:  FONT.md,
+    color:     T.text,
+    paddingVertical: 0,
   },
-  // Info Box
-  infoBoxWrapper: {
-    position: 'relative',
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 32,
+  disabledText: {
+    flex:      1,
+    fontSize:  FONT.md,
+    color:     T.textSecondary,
+    fontStyle: 'italic',
   },
-  infoAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.4,
+
+  // Coins card
+  coinsCard: {
+    flexDirection:   'row',
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     T.primaryBorder,
+    overflow:        'hidden',
   },
-  infoBox: {
+  coinsAccent: {
+    width:           rs(2),
+    alignSelf:       'stretch',
+    backgroundColor: T.primary,
+  },
+  coinsInner: {
+    flex:          1,
     flexDirection: 'row',
-    backgroundColor: THEME.surface,
-    padding: 16,
-    paddingLeft: 20,
-    borderRadius: 16,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
+    alignItems:    'center',
+    gap:           SPACING.md,
+    padding:       SPACING.md,
   },
-  infoIcon: {
-    fontSize: 20,
+  coinsIconWrap: {
+    width:           rs(46),
+    height:          rs(46),
+    borderRadius:    rs(23),
+    backgroundColor: T.primaryDim,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  coinsEmoji:  { fontSize: rf(24) },
+  coinsLabel: {
+    fontSize:   FONT.xs,
+    fontWeight: '600',
+    color:      T.primary,
+    marginBottom: rp(2),
+  },
+  coinsValue: {
+    fontSize:   FONT.xl,
+    fontWeight: '800',
+    color:      T.text,
+  },
+
+  // Save button
+  saveBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'center',
+    gap:               SPACING.sm,
+    marginHorizontal:  SPACING.md,
+    marginTop:         SPACING.lg,
+    height:            BUTTON_HEIGHT,
+    borderRadius:      RADIUS.lg,
+    backgroundColor:   T.primary,
+    shadowColor:       T.primary,
+    shadowOffset:      { width: 0, height: rs(6) },
+    shadowOpacity:     0.40,
+    shadowRadius:      rs(14),
+    elevation:         8,
+  },
+  saveBtnDisabled: { opacity: 0.45 },
+  saveBtnText: {
+    fontSize:   FONT.md,
+    fontWeight: '700',
+    color:      '#fff',
+  },
+
+  // Info note
+  infoNote: {
+    marginHorizontal: SPACING.md,
+    marginTop:        SPACING.lg,
+    padding:          SPACING.md,
+    backgroundColor:  T.surface,
+    borderRadius:     RADIUS.lg,
+    borderWidth:      1,
+    borderColor:      T.border,
   },
   infoText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    color: THEME.textSecondary,
+    fontSize:   FONT.xs,
+    color:      T.textSecondary,
+    lineHeight: rf(20),
   },
 });

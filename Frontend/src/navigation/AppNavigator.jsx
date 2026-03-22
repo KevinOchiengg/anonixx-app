@@ -4,6 +4,10 @@ import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import ChatScreen from '../screens/connect/ChatScreen';
 import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
+import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
+import EditProfileScreen from '../screens/profile/EditProfileScreen';
+import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 import ConfessionMarketPlaceScreen from '../screens/drops/ConfessionMarketPlaceScreen';
 import DropChatScreen from '../screens/drops/DropChatScreen';
 import DropLandingScreen from '../screens/drops/DropLandingScreen';
@@ -69,7 +73,11 @@ export default function AppNavigator() {
           component={ConfessionMarketPlaceScreen}
         />
         <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
-
+        {/* Accessible from HamburgerMenu across all tabs */}
+        <Stack.Screen name="Settings"       component={SettingsScreen} />
+        <Stack.Screen name="EditProfile"    component={EditProfileScreen} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+        <Stack.Screen name="SavedPosts"     component={SavedPostsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

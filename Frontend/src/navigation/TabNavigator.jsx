@@ -5,20 +5,18 @@ import {
   MessageCircle,
   Plus,
   Radio,
-  Settings,
+  Users,
 } from 'lucide-react-native';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUnread } from '../context/UnreadContext';
 
 // Feed
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SearchScreen from '../screens/feed/SearchScreen';
 import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
-import ImpactDashboardScreen from '../screens/impact/ImpactDashboardScreen';
 import PostDetailScreen from '../screens/posts/PostDetailScreen';
-import CrisisResourcesScreen from '../screens/resources/CrisisResourcesScreen';
-import SundayReflectionScreen from '../screens/rituals/SundayReflectionScreen';
 
 // Connect
 import ChatScreen from '../screens/connect/ChatScreen';
@@ -42,10 +40,8 @@ import CircleLiveScreen from '../screens/circles/CircleLiveScreen';
 import CircleAudioRoomScreen from '../screens/circles/CircleAudioRoomScreen';
 import CircleDashboardScreen from '../screens/circles/CircleDashboardScreen';
 
-// Settings
-import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
-import EditProfileScreen from '../screens/profile/EditProfileScreen';
-import SettingsScreen from '../screens/settings/SettingsScreen';
+// Messages
+import MessagesScreen from '../screens/connect/MessagesScreen';
 
 // Create
 import CreatePostScreen from '../screens/posts/CreatePostScreen';
@@ -64,15 +60,17 @@ const THEME = {
 };
 
 // ─── TAB BAR ICON ─────────────────────────────────────────────
-const TabBarIcon = ({ route, focused, color, size }) => {
+const TabBarIcon = ({ route, focused, color, size, unreadCount }) => {
   const icons = {
-    Feed: Home,
-    Connect: MessageCircle,
-    Circles: Radio,
-    Settings: Settings,
+    Feed:     Home,
+    Connect:  Users,
+    Circles:  Radio,
+    Messages: MessageCircle,
   };
   const IconComponent = icons[route.name];
   if (!IconComponent) return null;
+
+  const showBadge = route.name === 'Messages' && unreadCount > 0;
 
   return (
     <View style={styles.iconContainer}>
@@ -82,6 +80,13 @@ const TabBarIcon = ({ route, focused, color, size }) => {
         color={color}
         strokeWidth={focused ? 2.5 : 2}
       />
+      {showBadge && (
+        <View style={styles.tabBadge}>
+          <Text style={styles.tabBadgeText}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Text>
+        </View>
+      )}
       {focused && <View style={styles.activeDot} />}
     </View>
   );
@@ -110,12 +115,6 @@ function FeedStack() {
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ThreadView" component={ThreadViewScreen} />
-      <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen
-        name="SundayReflection"
-        component={SundayReflectionScreen}
-      />
-      <Stack.Screen name="CrisisResources" component={CrisisResourcesScreen} />
     </Stack.Navigator>
   );
 }
@@ -155,28 +154,21 @@ function CirclesStack() {
   );
 }
 
-// ─── SETTINGS STACK ───────────────────────────────────────────
-function SettingsStack() {
+// ─── MESSAGES STACK ───────────────────────────────────────────
+function MessagesStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="SettingsMain" component={SettingsScreen} />
-      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-      <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
-      <Stack.Screen name="ImpactDashboard" component={ImpactDashboardScreen} />
-      <Stack.Screen
-        name="SundayReflection"
-        component={SundayReflectionScreen}
-      />
-      <Stack.Screen name="CrisisResources" component={CrisisResourcesScreen} />
+      <Stack.Screen name="MessagesMain" component={MessagesScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
     </Stack.Navigator>
   );
 }
 
 // ─── TAB NAVIGATOR ────────────────────────────────────────────
 export default function TabNavigator() {
-  const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 16);
+  const insets      = useSafeAreaInsets();
+  const bottomPad   = Math.max(insets.bottom, 16);
+  const { unreadCount } = useUnread();
 
   return (
     <Tab.Navigator
@@ -199,6 +191,7 @@ export default function TabNavigator() {
               focused={focused}
               color={color}
               size={24}
+              unreadCount={unreadCount}
             />
           );
         },
@@ -223,14 +216,14 @@ export default function TabNavigator() {
         }}
       />
       <Tab.Screen
+        name="Messages"
+        component={MessagesStack}
+        options={{ tabBarLabel: 'Messages' }}
+      />
+      <Tab.Screen
         name="Circles"
         component={CirclesStack}
         options={{ tabBarLabel: 'Circles' }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsStack}
-        options={{ tabBarLabel: 'Settings' }}
       />
     </Tab.Navigator>
   );
@@ -277,6 +270,25 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: THEME.primary,
     marginTop: 4,
+  },
+  tabBadge: {
+    position:        'absolute',
+    top:             -4,
+    right:           -8,
+    backgroundColor: THEME.primary,
+    borderRadius:    8,
+    minWidth:        16,
+    height:          16,
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingHorizontal: 3,
+    borderWidth:     1.5,
+    borderColor:     THEME.background,
+  },
+  tabBadgeText: {
+    fontSize:   9,
+    fontWeight: '700',
+    color:      '#fff',
   },
   centerButtonContainer: {
     top: -20,

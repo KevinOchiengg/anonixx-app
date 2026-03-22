@@ -6,20 +6,14 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
   FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  PanResponder,
-  Platform,
   Share,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -30,35 +24,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   Bookmark,
-  ChevronDown,
   Heart,
   MessageCircle,
   Pause,
   Play,
-  Send,
   Share2,
   Volume2,
   VolumeX,
 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
-import { FEATURES } from '../../config/featureFlags';
-
-// expo-video stubs (same pattern as CalmPostCard)
-let VideoView = null;
-let useVideoPlayer = () => ({
-  play: () => {}, pause: () => {}, replace: () => {},
-  loop: false, muted: false, playing: false,
-  addListener: () => ({ remove: () => {} }),
-});
-let useEvent = (_p, _e, d) => d ?? {};
-
-if (FEATURES.nativeVideo) {
-  const ev = require('expo-video');
-  VideoView = ev.VideoView;
-  useVideoPlayer = ev.useVideoPlayer;
-  useEvent = ev.useEvent;
-}
+import Slider from '@react-native-community/slider';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
 
 const { width, height } = Dimensions.get('window');
 
@@ -73,129 +52,9 @@ const THEME = {
   avatarBg: '#1e2330',
 };
 
-// ─── COMMENT BOTTOM SHEET ─────────────────────────────────────
-const CommentSheet = ({ visible, postId, isAuthenticated, navigation, onClose, onCountChange }) => {
-  const [comments, setComments] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [text, setText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const slideAnim = useRef(new Animated.Value(height)).current;
-
-  useEffect(() => {
-    if (visible) {
-      setComments([]);
-      loadComments();
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 65 }).start();
-    } else {
-      Animated.timing(slideAnim, { toValue: height, duration: 220, useNativeDriver: true }).start();
-    }
-  }, [visible]);
-
-  const loadComments = async () => {
-    setLoading(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      if (res.ok) { setComments(data.threads || []); onCountChange?.(data.threads?.length || 0); }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
-
-  const submit = async () => {
-    if (!text.trim() || !isAuthenticated) return;
-    setSubmitting(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content: text.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setComments((prev) => [{ ...data, time_ago: 'just now' }, ...prev]);
-        onCountChange?.(comments.length + 1);
-        setText('');
-      }
-    } catch (e) { console.error(e); }
-    finally { setSubmitting(false); }
-  };
-
-  const handleClose = () =>
-    Animated.timing(slideAnim, { toValue: height, duration: 220, useNativeDriver: true }).start(onClose);
-
-  const pan = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx),
-    onPanResponderMove: (_, g) => { if (g.dy > 0) slideAnim.setValue(g.dy); },
-    onPanResponderRelease: (_, g) => {
-      if (g.dy > 80) handleClose();
-      else Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
-    },
-  })).current;
-
-  return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
-      <TouchableOpacity style={cs.backdrop} activeOpacity={1} onPress={handleClose} />
-      <Animated.View style={[cs.sheet, { transform: [{ translateY: slideAnim }] }]} {...pan.panHandlers}>
-        <View style={cs.handleRow}><View style={cs.handleBar} /></View>
-        <View style={cs.header}>
-          <Text style={cs.headerText}>{comments.length} {comments.length === 1 ? 'comment' : 'comments'}</Text>
-          <TouchableOpacity onPress={handleClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <ChevronDown size={20} color={THEME.textSecondary} />
-          </TouchableOpacity>
-        </View>
-        {loading ? (
-          <View style={cs.center}><ActivityIndicator color={THEME.primary} /></View>
-        ) : comments.length === 0 ? (
-          <View style={cs.center}><Text style={cs.emptyText}>no one has said anything yet. say something.</Text></View>
-        ) : (
-          <FlatList
-            data={comments}
-            keyExtractor={(item, i) => item.id || String(i)}
-            style={cs.list}
-            renderItem={({ item }) => (
-              <View style={cs.commentItem}>
-                <View style={cs.commentAvatar}>
-                  <Text style={cs.commentAvatarText}>{item.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
-                </View>
-                <View style={cs.commentBody}>
-                  <Text style={cs.commentAuthor}>{item.anonymous_name || 'Anonymous'}</Text>
-                  <Text style={cs.commentText}>{item.content}</Text>
-                  <Text style={cs.commentTime}>{item.time_ago}</Text>
-                </View>
-              </View>
-            )}
-          />
-        )}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={cs.inputRow}>
-            <TextInput
-              style={cs.input}
-              value={text}
-              onChangeText={setText}
-              placeholder={isAuthenticated ? 'say what you actually think...' : 'sign in to comment...'}
-              placeholderTextColor={THEME.textSecondary}
-              multiline maxLength={500}
-              editable={isAuthenticated}
-            />
-            <TouchableOpacity
-              style={[cs.sendBtn, (!text.trim() || submitting) && { opacity: 0.4 }]}
-              onPress={submit} disabled={!text.trim() || submitting}
-            >
-              {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={16} color="#fff" />}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Animated.View>
-    </Modal>
-  );
-};
 
 // ─── VIDEO SLIDE ──────────────────────────────────────────────
-const VideoSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, onComment, commentCount, navigation }) => {
+const VideoSlide = ({ post, isActive, initialTime, onLike, liked, likesCount, onSave, saved, onComment, commentCount, navigation }) => {
   const [muted, setMuted] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const controlsTimer = useRef(null);
@@ -203,18 +62,51 @@ const VideoSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, 
   const [showHeart, setShowHeart] = useState(false);
   const heartScale = useRef(new Animated.Value(0)).current;
   const heartOpacity = useRef(new Animated.Value(1)).current;
+  const likeScale = useRef(new Animated.Value(1)).current;
   const [expanded, setExpanded] = useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const isSeekingRef = useRef(false);
+  const hasSeededTime = useRef(false);
+  const controlsOpacity = useRef(new Animated.Value(0)).current;
 
   const player = useVideoPlayer(post.video_url, (p) => {
     p.loop = true;
-    p.muted = muted;
+    p.muted = false;
+    if (initialTime && initialTime > 0) {
+      p.seekBy(initialTime);
+    }
   });
 
-  const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: false });
+  const [isPlaying, setIsPlaying] = useState(false);
+  useEffect(() => {
+    const sub = player.addListener('playingChange', ({ isPlaying: playing }) => {
+      setIsPlaying(playing);
+    });
+    return () => sub.remove();
+  }, [player]);
+
+  // Poll currentTime + duration every 250 ms while active
+  useEffect(() => {
+    if (!isActive) return;
+    const id = setInterval(() => {
+      if (isSeekingRef.current) return;
+      const ct = player.currentTime;
+      const d  = player.duration;
+      if (typeof ct === 'number' && !isNaN(ct)) setVideoCurrentTime(ct);
+      if (typeof d  === 'number' && !isNaN(d) && d > 0) setVideoDuration(d);
+    }, 250);
+    return () => clearInterval(id);
+  }, [isActive, player]);
 
   useEffect(() => {
     if (isActive) {
       player.muted = muted;
+      // Seek to initialTime on first activation if not yet done
+      if (!hasSeededTime.current && initialTime > 0) {
+        hasSeededTime.current = true;
+        player.seekBy(initialTime);
+      }
       player.play();
     } else {
       player.pause();
@@ -225,25 +117,35 @@ const VideoSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, 
     player.muted = muted;
   }, [muted]);
 
-  const flashControls = () => {
+  const showControlsAnimated = () => {
     setShowControls(true);
+    Animated.timing(controlsOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
     clearTimeout(controlsTimer.current);
-    controlsTimer.current = setTimeout(() => setShowControls(false), 2500);
+    controlsTimer.current = setTimeout(() => {
+      Animated.timing(controlsOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => setShowControls(false));
+    }, 2200);
   };
 
   const handleTap = () => {
     const now = Date.now();
     if (lastTap.current && now - lastTap.current < 280) {
-      // Double tap — like
       triggerHeart();
-      if (!liked) onLike();
+      if (!liked) handleLikeWithAnim();
     } else {
       lastTap.current = now;
       setTimeout(() => {
-        if (Date.now() - lastTap.current >= 260) flashControls();
+        if (Date.now() - lastTap.current >= 260) showControlsAnimated();
       }, 290);
     }
     lastTap.current = now;
+  };
+
+  const handleLikeWithAnim = () => {
+    Animated.sequence([
+      Animated.spring(likeScale, { toValue: 1.4, friction: 3, useNativeDriver: true }),
+      Animated.spring(likeScale, { toValue: 1,   friction: 5, useNativeDriver: true }),
+    ]).start();
+    onLike();
   };
 
   const triggerHeart = () => {
@@ -259,14 +161,16 @@ const VideoSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, 
     ]).start(() => setShowHeart(false));
   };
 
-  const shouldTruncate = (post.content?.length || 0) > 80;
+  const formatTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  const shouldTruncate = (post.content?.length || 0) > 100;
   const displayContent = shouldTruncate && !expanded
-    ? post.content.substring(0, 80) + '...'
+    ? post.content.substring(0, 100) + '...'
     : post.content;
 
   return (
     <View style={ss.slide}>
-      {/* Video */}
+      {/* Video layer */}
       <TouchableWithoutFeedback onPress={handleTap}>
         <View style={StyleSheet.absoluteFill}>
           {VideoView ? (
@@ -277,62 +181,80 @@ const VideoSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, 
               nativeControls={false}
               allowsPictureInPicture={false}
             />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a0d14', alignItems: 'center', justifyContent: 'center' }]}>
-              <Text style={{ color: THEME.textSecondary, fontSize: 13 }}>Video available in build</Text>
-            </View>
-          )}
+          ) : null}
         </View>
       </TouchableWithoutFeedback>
 
-      {/* Dark gradient overlays */}
-      <View style={ss.gradientTop} pointerEvents="none" />
-      <View style={ss.gradientBottom} pointerEvents="none" />
+      {/* Gradients */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.55)', 'transparent']}
+        style={ss.gradientTop}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']}
+        style={ss.gradientBottom}
+        pointerEvents="none"
+      />
 
-      {/* Double-tap heart */}
+      {/* Double-tap heart burst */}
       {showHeart && (
         <Animated.View pointerEvents="none" style={[ss.heartBurst, { transform: [{ scale: heartScale }], opacity: heartOpacity }]}>
-          <Heart size={90} color={THEME.primary} fill={THEME.primary} />
+          <Heart size={100} color={THEME.primary} fill={THEME.primary} />
         </Animated.View>
       )}
 
-      {/* Play/pause overlay */}
+      {/* Play/pause overlay — fades in/out */}
       {showControls && (
-        <TouchableOpacity
-          style={ss.playOverlay}
-          onPress={() => { isPlaying ? player.pause() : player.play(); flashControls(); }}
-          activeOpacity={1}
-        >
-          <View style={ss.playBtn}>
-            {isPlaying
-              ? <Pause size={36} color="#fff" fill="#fff" />
-              : <Play size={36} color="#fff" fill="#fff" />}
-          </View>
-        </TouchableOpacity>
+        <Animated.View style={[ss.playOverlay, { opacity: controlsOpacity }]} pointerEvents="box-none">
+          <TouchableOpacity
+            onPress={() => { isPlaying ? player.pause() : player.play(); showControlsAnimated(); }}
+            activeOpacity={0.9}
+          >
+            <View style={ss.playBtn}>
+              {isPlaying
+                ? <Pause size={38} color="#fff" fill="#fff" />
+                : <Play  size={38} color="#fff" fill="#fff" />}
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
       )}
 
       {/* Right action rail */}
       <View style={ss.rail}>
-        <ActionBtn icon={<Heart size={26} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />} count={likesCount} onPress={onLike} active={liked} />
-        <ActionBtn icon={<MessageCircle size={26} color="#fff" />} count={commentCount} onPress={onComment} />
-        <ActionBtn icon={<Bookmark size={26} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />} count={null} onPress={onSave} active={saved} />
-        <ActionBtn icon={<Share2 size={26} color="#fff" />} count={null} onPress={async () => {
+        <AnimatedActionBtn
+          icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
+          count={likesCount}
+          onPress={handleLikeWithAnim}
+          active={liked}
+          scaleRef={likeScale}
+        />
+        <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+        <ActionBtn icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />} count={null} onPress={onSave} active={saved} />
+        <ActionBtn icon={<Share2 size={28} color="#fff" />} count={null} onPress={async () => {
           try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch (e) {}
         }} />
         <TouchableOpacity style={ss.muteBtn} onPress={() => setMuted(v => !v)}>
-          {muted ? <VolumeX size={22} color="rgba(255,255,255,0.85)" /> : <Volume2 size={22} color="rgba(255,255,255,0.85)" />}
+          {muted ? <VolumeX size={22} color="#fff" /> : <Volume2 size={22} color="#fff" />}
         </TouchableOpacity>
       </View>
 
       {/* Bottom info */}
       <View style={ss.bottomInfo}>
+        {/* Author */}
         <View style={ss.authorRow}>
-          <View style={ss.avatar}>
-            <Text style={ss.avatarText}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
+          <View style={ss.avatarGlow}>
+            <View style={ss.avatar}>
+              <Text style={ss.avatarText}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
+            </View>
           </View>
-          <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-          <Text style={ss.timeAgo}>{post.time_ago}</Text>
+          <View style={ss.authorMeta}>
+            <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
+            <Text style={ss.timeAgo}>{post.time_ago}</Text>
+          </View>
         </View>
+
+        {/* Caption */}
         {post.content ? (
           <TouchableOpacity onPress={() => setExpanded(v => !v)} activeOpacity={0.85}>
             <Text style={ss.contentText}>
@@ -343,16 +265,44 @@ const VideoSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, 
             </Text>
           </TouchableOpacity>
         ) : null}
+
+        {/* Topic pills */}
         {post.topics?.length > 0 && (
           <View style={ss.topicsRow}>
             {post.topics.filter(t => t !== 'general').slice(0, 3).map(t => (
               <View key={t} style={ss.topicTag}>
-                <Text style={ss.topicText}>{t}</Text>
+                <Text style={ss.topicText}>#{t}</Text>
               </View>
             ))}
           </View>
         )}
       </View>
+
+      {/* Bottom progress bar with time */}
+      {videoDuration > 0 && (
+        <View style={ss.progressWrap}>
+          <View style={ss.progressTimeRow}>
+            <Text style={ss.progressTime}>{formatTime(videoCurrentTime)}</Text>
+            <Text style={ss.progressTime}>{formatTime(videoDuration)}</Text>
+          </View>
+          <Slider
+            style={ss.progressSlider}
+            minimumValue={0}
+            maximumValue={videoDuration}
+            value={videoCurrentTime}
+            minimumTrackTintColor={THEME.primary}
+            maximumTrackTintColor="rgba(255,255,255,0.2)"
+            thumbTintColor={THEME.primary}
+            onSlidingStart={() => { isSeekingRef.current = true; }}
+            onValueChange={(val) => setVideoCurrentTime(val)}
+            onSlidingComplete={(val) => {
+              player.seekBy(val - player.currentTime);
+              setVideoCurrentTime(val);
+              isSeekingRef.current = false;
+            }}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -512,19 +462,38 @@ const AudioSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, 
   );
 };
 
-// ─── ACTION BUTTON (right rail) ───────────────────────────────
-const ActionBtn = ({ icon, count, onPress, active }) => (
-  <TouchableOpacity style={ss.actionBtn} onPress={onPress} activeOpacity={0.75}>
-    {icon}
+// ─── ACTION BUTTONS (right rail) ──────────────────────────────
+const ActionBtn = ({ icon, count, onPress, active }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 0.82, friction: 4, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1,    friction: 4, useNativeDriver: true }),
+    ]).start();
+    onPress?.();
+  };
+  return (
+    <TouchableOpacity style={ss.actionBtn} onPress={handlePress} activeOpacity={0.9}>
+      <Animated.View style={{ transform: [{ scale }] }}>{icon}</Animated.View>
+      {count !== null && count !== undefined && (
+        <Text style={[ss.actionCount, active && { color: THEME.primary }]}>{count >= 1000 ? `${(count/1000).toFixed(1)}k` : count}</Text>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef }) => (
+  <TouchableOpacity style={ss.actionBtn} onPress={onPress} activeOpacity={0.9}>
+    <Animated.View style={{ transform: [{ scale: scaleRef }] }}>{icon}</Animated.View>
     {count !== null && count !== undefined && (
-      <Text style={[ss.actionCount, active && { color: THEME.primary }]}>{count}</Text>
+      <Text style={[ss.actionCount, active && { color: THEME.primary }]}>{count >= 1000 ? `${(count/1000).toFixed(1)}k` : count}</Text>
     )}
   </TouchableOpacity>
 );
 
 // ─── MEDIA FEED SCREEN ────────────────────────────────────────
 export default function MediaFeedScreen({ route, navigation }) {
-  const { posts, startIndex = 0 } = route.params;
+  const { posts, startIndex = 0, startTime = 0 } = route.params;
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
 
@@ -627,7 +596,7 @@ export default function MediaFeedScreen({ route, navigation }) {
     };
 
     return item.video_url
-      ? <VideoSlide key={item.id} {...commonProps} />
+      ? <VideoSlide key={item.id} {...commonProps} initialTime={index === startIndex ? startTime : 0} />
       : <AudioSlide key={item.id} {...commonProps} />;
   }, [activeIndex, likeMap, saveMap, commentCounts, handleLike, handleSave]);
 
@@ -635,15 +604,21 @@ export default function MediaFeedScreen({ route, navigation }) {
 
   return (
     <View style={ss.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" translucent />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Back button */}
       <TouchableOpacity
-        style={[ss.backBtn, { top: insets.top + 12 }]}
+        style={[ss.backBtn, { top: insets.top + 10 }]}
         onPress={() => navigation.goBack()}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <ArrowLeft size={22} color="#fff" />
+        <ArrowLeft size={20} color="#fff" />
       </TouchableOpacity>
+
+      {/* Center "For You" pill */}
+      <View style={[ss.forYouPill, { top: insets.top + 14 }]}>
+        <Text style={ss.forYouText}>For You</Text>
+      </View>
 
       {/* Post counter */}
       <View style={[ss.counter, { top: insets.top + 14 }]}>
@@ -671,7 +646,7 @@ export default function MediaFeedScreen({ route, navigation }) {
       />
 
       {/* Comment sheet */}
-      <CommentSheet
+      <CommentBottomSheet
         visible={commentSheet.visible}
         postId={commentSheet.postId}
         isAuthenticated={isAuthenticated}
@@ -693,97 +668,118 @@ const ss = StyleSheet.create({
   slide: { width, height, backgroundColor: '#000' },
 
   gradientTop: {
-    position: 'absolute', top: 0, left: 0, right: 0, height: 120,
-    // Simulated gradient via opacity layers
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    position: 'absolute', top: 0, left: 0, right: 0, height: 140,
+    zIndex: 1,
   },
   gradientBottom: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, height: 280,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 340,
+    zIndex: 1,
   },
 
   // Right action rail
   rail: {
-    position: 'absolute', right: 14, bottom: 100,
-    alignItems: 'center', gap: 22,
+    position: 'absolute', right: 12, bottom: 110,
+    alignItems: 'center', gap: 24, zIndex: 10,
   },
-  actionBtn: { alignItems: 'center', gap: 4 },
-  actionCount: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  actionBtn: { alignItems: 'center', gap: 5 },
+  actionCount: { fontSize: 12, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   muteBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
-    marginTop: 6,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    marginTop: 4,
   },
 
   // Bottom info (video)
   bottomInfo: {
-    position: 'absolute', bottom: 40, left: 16, right: 72,
+    position: 'absolute', bottom: 52, left: 16, right: 76, zIndex: 10,
   },
-  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  avatarGlow: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(255,99,74,0.25)',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: THEME.primary, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8, shadowRadius: 10, elevation: 8,
+  },
   avatar: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 38, height: 38, borderRadius: 19,
     backgroundColor: THEME.avatarBg,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: THEME.primary,
   },
-  avatarText: { fontSize: 14, fontWeight: '700', color: THEME.primary },
-  authorName: { fontSize: 14, fontWeight: '700', color: '#fff' },
-  timeAgo: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginLeft: 6 },
-  contentText: { fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 20, marginBottom: 8 },
-  moreText: { color: THEME.primary, fontWeight: '600' },
+  avatarText: { fontSize: 15, fontWeight: '800', color: THEME.primary },
+  authorMeta: { flex: 1 },
+  authorName: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  timeAgo: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+  contentText: { fontSize: 14, color: 'rgba(255,255,255,0.92)', lineHeight: 21, marginBottom: 10, letterSpacing: 0.1 },
+  moreText: { color: THEME.primary, fontWeight: '700' },
   topicsRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   topicTag: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
-    backgroundColor: 'rgba(255,99,74,0.2)',
-    borderWidth: 1, borderColor: 'rgba(255,99,74,0.35)',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+    backgroundColor: 'rgba(255,99,74,0.18)',
+    borderWidth: 1, borderColor: 'rgba(255,99,74,0.4)',
   },
-  topicText: { fontSize: 11, color: THEME.primary, fontWeight: '600' },
+  topicText: { fontSize: 11, color: THEME.primary, fontWeight: '700', letterSpacing: 0.5 },
 
-  // Play overlay
+  // Progress bar
+  progressWrap: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 8, zIndex: 10 },
+  progressTimeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: -2 },
+  progressTime: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '600' },
+  progressSlider: { width: '100%', height: 30 },
+
+  // Play/pause overlay
   playOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 72, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center', zIndex: 5,
   },
   playBtn: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 78, height: 78, borderRadius: 39,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)',
   },
 
   // Heart burst
   heartBurst: {
     position: 'absolute', top: '50%', left: '50%',
-    marginLeft: -45, marginTop: -45, zIndex: 100,
+    marginLeft: -50, marginTop: -50, zIndex: 100,
   },
 
-  // Nav
+  // Nav overlay
   backBtn: {
-    position: 'absolute', left: 16, zIndex: 100,
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    position: 'absolute', left: 14, zIndex: 100,
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
+  forYouPill: {
+    position: 'absolute', alignSelf: 'center', left: 0, right: 0,
+    alignItems: 'center', zIndex: 100,
+  },
+  forYouText: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   counter: {
-    position: 'absolute', right: 16, zIndex: 100,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 12,
+    position: 'absolute', right: 14, zIndex: 100,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 9, paddingVertical: 4,
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  counterText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
+  counterText: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
 });
 
 // ─── AUDIO SLIDE STYLES ───────────────────────────────────────
 const as = StyleSheet.create({
   bgAccent: {
-    position: 'absolute', top: -100, left: -80,
-    width: 300, height: 300, borderRadius: 150,
-    backgroundColor: 'rgba(255,99,74,0.06)',
+    position: 'absolute', top: -120, left: -100,
+    width: 340, height: 340, borderRadius: 170,
+    backgroundColor: 'rgba(255,99,74,0.09)',
   },
   bgAccent2: {
-    position: 'absolute', bottom: -80, right: -60,
-    width: 250, height: 250, borderRadius: 125,
-    backgroundColor: 'rgba(255,99,74,0.04)',
+    position: 'absolute', bottom: -100, right: -80,
+    width: 300, height: 300, borderRadius: 150,
+    backgroundColor: 'rgba(255,99,74,0.06)',
   },
   center: {
     flex: 1, paddingHorizontal: 28, paddingTop: 100,
@@ -845,55 +841,3 @@ const as = StyleSheet.create({
   topicText: { fontSize: 12, color: THEME.primary, fontWeight: '600' },
 });
 
-// ─── COMMENT SHEET STYLES ─────────────────────────────────────
-const cs = StyleSheet.create({
-  backdrop: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  sheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    height: height * 0.60,
-    backgroundColor: THEME.surface,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    borderTopWidth: 1, borderTopColor: THEME.borderStrong,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.5, shadowRadius: 24, elevation: 20,
-  },
-  handleRow: { alignItems: 'center', paddingTop: 12, paddingBottom: 4 },
-  handleBar: { width: 36, height: 4, borderRadius: 2, backgroundColor: THEME.borderStrong },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: THEME.border,
-  },
-  headerText: { fontSize: 14, fontWeight: '700', color: THEME.text },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
-  emptyText: { fontSize: 14, color: THEME.textSecondary, fontStyle: 'italic', textAlign: 'center' },
-  list: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
-  commentItem: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  commentAvatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: THEME.avatarBg, alignItems: 'center', justifyContent: 'center',
-  },
-  commentAvatarText: { fontSize: 13, fontWeight: '700', color: THEME.primary },
-  commentBody: { flex: 1 },
-  commentAuthor: { fontSize: 13, fontWeight: '600', color: THEME.text, marginBottom: 3 },
-  commentText: { fontSize: 14, color: THEME.textSecondary, lineHeight: 20 },
-  commentTime: { fontSize: 11, color: THEME.textSecondary, marginTop: 3, opacity: 0.6 },
-  inputRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderTopWidth: 1, borderTopColor: THEME.border,
-  },
-  input: {
-    flex: 1, backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 14, color: THEME.text,
-    borderWidth: 1, borderColor: THEME.border, maxHeight: 80,
-  },
-  sendBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: THEME.primary, alignItems: 'center', justifyContent: 'center',
-  },
-});

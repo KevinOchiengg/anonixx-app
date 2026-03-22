@@ -4,6 +4,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 import random
+import re
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 
@@ -291,6 +292,49 @@ async def create_post(
 
     await db["posts"].insert_one(post_data)
     return {"id": str(post_data["_id"]), "message": "Your words might help someone tonight."}
+
+
+@router.get("/search")
+async def search_posts(
+    q:      str = Query(..., min_length=1, description="Search query"),
+    filter: str = Query("all", description="all | recent | popular"),
+    limit:  int = Query(20, le=50, ge=1),
+    skip:   int = Query(0, ge=0),
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database),
+):
+    """Full-text search across post content, name, and topics. Case-insensitive."""
+    query = q.strip()
+    if not query:
+        return {"results": [], "total": 0, "query": q}
+
+    # Escape special regex characters so literal text is always matched
+    safe_query = re.escape(query)
+    rx = {"$regex": safe_query, "$options": "i"}
+
+    base_filter: dict = {
+        "$or": [
+            {"content":          rx},
+            {"anonymous_name":   rx},
+            {"topics":           rx},
+        ]
+    }
+
+    if filter == "recent":
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        base_filter["created_at"] = {"$gte": cutoff}
+
+    sort_key = "likes_count" if filter == "popular" else "created_at"
+
+    total = await db["posts"].count_documents(base_filter)
+    raw   = await db["posts"].find(base_filter) \
+                .sort(sort_key, -1) \
+                .skip(skip) \
+                .limit(limit) \
+                .to_list(limit)
+
+    results = await batch_format_posts(raw, current_user_id, db)
+    return {"results": results, "total": total, "query": query, "filter": filter}
 
 
 @router.get("/calm-feed")

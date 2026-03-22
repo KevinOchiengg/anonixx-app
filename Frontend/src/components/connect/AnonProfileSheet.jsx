@@ -1,124 +1,181 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+/**
+ * AnonProfileSheet.jsx
+ * Anonymous user profile — slides up to 80% of screen.
+ * Full content always visible. No truncation. No cramping.
+ *
+ * Design: Like opening a letter from a stranger.
+ * You know their energy before you know their name.
+ * The aura color sets the entire atmosphere of the sheet.
+ */
+import React, {
+  useCallback, useEffect, useRef, useState,
+} from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Modal,
-  PanResponder,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  Dimensions,
+  Animated, Dimensions, Modal, PanResponder, ScrollView,
+  StyleSheet, Text, TouchableOpacity, View, ActivityIndicator,
 } from 'react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { X, MessageCircle, UserCheck, Clock } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
+import { useToast } from '../ui/Toast';
+import {
+  rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
+} from '../../utils/responsive';
 
-const { height } = Dimensions.get('window');
+const { height: H, width: W } = Dimensions.get('window');
 
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  surfaceAlt: '#1a1f2e',
-  primary: '#FF634A',
-  text: '#EAEAF0',
+// ─── Theme ────────────────────────────────────────────────────
+const T = {
+  background:    '#0b0f18',
+  surface:       '#151924',
+  surfaceAlt:    '#1a1f2e',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255,99,74,0.12)',
+  primaryBorder: 'rgba(255,99,74,0.25)',
+  text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.06)',
-  avatarBg: '#1e2330',
+  textMuted:     '#5a5f70',
+  border:        'rgba(255,255,255,0.06)',
+  borderStrong:  'rgba(255,255,255,0.10)',
+  avatarBg:      '#1e2330',
 };
 
+// ─── Static data ──────────────────────────────────────────────
 const AVATAR_MAP = {
-  ghost: '👻', shadow: '🌑', flame: '🔥', void: '🕳️',
-  storm: '⛈️', smoke: '💨', eclipse: '🌘', shard: '🔷',
-  moth: '🦋', raven: '🐦‍⬛',
+  ghost:   '👻', shadow: '🌑', flame: '🔥',   void:    '🕳️',
+  storm:   '⛈️', smoke:  '💨', eclipse: '🌘',  shard:   '🔷',
+  moth:    '🦋', raven:  '🐦', mirror: '🪞',   ember:   '🕯️',
+  current: '⚡', still:  '🌊', hollow: '🫙',   signal:  '📡',
 };
 
-export default function AnonProfileSheet({ visible, anonymousName, onClose, navigation }) {
-  const [profile, setProfile]             = useState(null);
-  const [loading, setLoading]             = useState(false);
+const CONNECT_COPY = {
+  default:  { label: 'I want to know you',  sub: "They won't know it's you." },
+  pending:  { label: 'Waiting for them…',    sub: 'Your request is out there.' },
+  chatting: { label: 'Open the conversation', sub: 'You\'re already connected.' },
+};
+
+// ─── Stat Item ────────────────────────────────────────────────
+const StatItem = React.memo(({ value, label }) => (
+  <View style={styles.statItem}>
+    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statLabel}>{label}</Text>
+  </View>
+));
+
+// ─── Vibe Tag ─────────────────────────────────────────────────
+const VibeTag = React.memo(({ tag, accentColor }) => (
+  <View style={[styles.vibeTag, {
+    backgroundColor: accentColor + '15',
+    borderColor:     accentColor + '35',
+  }]}>
+    <Text style={[styles.vibeTagText, { color: accentColor }]}>{tag}</Text>
+  </View>
+));
+
+// ─── Main Component ───────────────────────────────────────────
+export default function AnonProfileSheet({
+  visible, anonymousName, onClose, navigation,
+}) {
+  const { showToast }  = useToast();
+  const [profile,      setProfile]      = useState(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
   const [connectLoading, setConnectLoading] = useState(false);
-  const [error, setError]                 = useState(null);
-  const [toastMsg, setToastMsg]           = useState(null);
 
-  const slideAnim     = useRef(new Animated.Value(height)).current;
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const toastOpacity  = useRef(new Animated.Value(0)).current;
+  const slideAnim     = useRef(new Animated.Value(H)).current;
+  const backdropOp    = useRef(new Animated.Value(0)).current;
+  const avatarScale   = useRef(new Animated.Value(0.8)).current;
+  const contentOp     = useRef(new Animated.Value(0)).current;
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx),
-      onPanResponderMove: (_, g) => { if (g.dy > 0) slideAnim.setValue(g.dy); },
-      onPanResponderRelease: (_, g) => {
-        if (g.dy > 80) closeSheet();
-        else Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 10 }).start();
-      },
-    })
-  ).current;
+  // ── Pan responder (swipe to close) ───────────────────────
+  const panResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) =>
+      g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderMove: (_, g) => {
+      if (g.dy > 0) slideAnim.setValue(g.dy);
+    },
+    onPanResponderRelease: (_, g) => {
+      if (g.dy > 80) closeSheet();
+      else Animated.spring(slideAnim, {
+        toValue: 0, useNativeDriver: true, friction: 10,
+      }).start();
+    },
+  })).current;
 
-  useEffect(() => {
-    if (visible && anonymousName) {
-      openSheet();
-      loadProfile();
-    } else if (!visible) {
-      slideAnim.setValue(height);
-      backdropOpacity.setValue(0);
-    }
-  }, [visible, anonymousName]);
-
-  const openSheet = () => {
+  // ── Open / close ──────────────────────────────────────────
+  const openSheet = useCallback(() => {
     Animated.parallel([
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 10, tension: 60 }),
-      Animated.timing(backdropOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-    ]).start();
-  };
+      Animated.spring(slideAnim, {
+        toValue: 0, useNativeDriver: true, friction: 10, tension: 60,
+      }),
+      Animated.timing(backdropOp, { toValue: 1, duration: 300, useNativeDriver: true }),
+    ]).start(() => {
+      // Animate content in after sheet opens
+      Animated.parallel([
+        Animated.spring(avatarScale, {
+          toValue: 1, tension: 60, friction: 8, useNativeDriver: true,
+        }),
+        Animated.timing(contentOp, { toValue: 1, duration: 350, useNativeDriver: true }),
+      ]).start();
+    });
+  }, []);
 
-  const closeSheet = () => {
+  const closeSheet = useCallback(() => {
+    avatarScale.setValue(0.8);
+    contentOp.setValue(0);
     Animated.parallel([
-      Animated.timing(slideAnim, { toValue: height, duration: 260, useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: 0, duration: 260, useNativeDriver: true }),
+      Animated.timing(slideAnim,  { toValue: H, duration: 260, useNativeDriver: true }),
+      Animated.timing(backdropOp, { toValue: 0, duration: 260, useNativeDriver: true }),
     ]).start(() => onClose());
-  };
+  }, [onClose]);
 
-  const loadProfile = async () => {
+  // ── Load profile ──────────────────────────────────────────
+  const loadProfile = useCallback(async () => {
+    if (!anonymousName) return;
     setLoading(true);
     setError(null);
     setProfile(null);
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        setError('Please log in to view profiles');
+        setError('Sign in to view profiles.');
         return;
       }
-      const res = await fetch(
+      const res  = await fetch(
         `${API_BASE_URL}/api/v1/connect/profile/${encodeURIComponent(anonymousName)}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to load profile');
+      if (!res.ok) throw new Error(data.detail || 'Could not load profile.');
       setProfile(data);
     } catch (e) {
-      setError(e.message);
+      setError(e.message || 'Could not load profile.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [anonymousName]);
 
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    toastOpacity.setValue(1);
-    setTimeout(() => {
-      Animated.timing(toastOpacity, { toValue: 0, duration: 600, useNativeDriver: true }).start();
-    }, 2000);
-  };
+  useEffect(() => {
+    if (visible && anonymousName) {
+      openSheet();
+      loadProfile();
+    } else if (!visible) {
+      slideAnim.setValue(H);
+      backdropOp.setValue(0);
+      avatarScale.setValue(0.8);
+      contentOp.setValue(0);
+    }
+  }, [visible, anonymousName]);
 
-  const handleConnect = async () => {
+  // ── Connect ───────────────────────────────────────────────
+  const handleConnect = useCallback(async () => {
     if (!profile || connectLoading) return;
 
-    // Already chatting — open chat
     if (profile.connect_status === 'chatting' && profile.chat_id) {
       closeSheet();
       setTimeout(() => {
         navigation?.navigate('Chat', {
-          chatId: profile.chat_id,
+          chatId:    profile.chat_id,
           otherName: anonymousName,
         });
       }, 300);
@@ -130,130 +187,205 @@ export default function AnonProfileSheet({ visible, anonymousName, onClose, navi
     setConnectLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) { showToast('Please log in first'); return; }
-
-      const res = await fetch(`${API_BASE_URL}/api/v1/connect/request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ to_anonymous_name: anonymousName }),
+      if (!token) {
+        showToast({ type: 'error', message: 'Sign in to connect.' });
+        return;
+      }
+      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/request`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ to_anonymous_name: anonymousName }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to send request');
-
-      setProfile((p) => ({ ...p, connect_status: 'pending' }));
-      showToast('Request sent ✓');
+      if (!res.ok) throw new Error(data.detail || 'Could not send request.');
+      setProfile(p => ({ ...p, connect_status: 'pending' }));
+      showToast({ type: 'success', message: 'Request sent. Now wait.' });
     } catch (e) {
-      showToast(e.message);
+      showToast({ type: 'error', message: e.message || 'Could not send request.' });
     } finally {
       setConnectLoading(false);
     }
-  };
+  }, [profile, connectLoading, anonymousName, closeSheet, navigation, showToast]);
 
-  const connectButtonLabel = () => {
-    if (!profile) return 'Connect';
-    if (connectLoading) return '...';
-    switch (profile.connect_status) {
-      case 'pending':  return 'Pending...';
-      case 'chatting': return 'Open Chat';
-      default:         return 'Connect';
-    }
-  };
+  const accentColor = profile?.avatar_color ?? T.primary;
+  const connectStatus = profile?.connect_status ?? 'default';
+  const connectCopy   = CONNECT_COPY[connectStatus] ?? CONNECT_COPY.default;
+  const isDisabled    = connectStatus === 'pending' || connectLoading;
 
-  const connectButtonDisabled = () => profile?.connect_status === 'pending' || connectLoading;
-
+  // ──────────────────────────────────────────────────────────
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={closeSheet}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={closeSheet}
+    >
       {/* Backdrop */}
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+      <Animated.View style={[styles.backdrop, { opacity: backdropOp }]}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeSheet} />
       </Animated.View>
 
-      {/* Sheet */}
-      <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
+      {/* Sheet — 80% height */}
+      <Animated.View style={[
+        styles.sheet,
+        { transform: [{ translateY: slideAnim }] }
+      ]}>
+
+        {/* Aura glow from accent color */}
+        <View style={[styles.auraGlow, { backgroundColor: accentColor }]} />
+
+        {/* Drag handle area */}
         <View style={styles.handleArea} {...panResponder.panHandlers}>
           <View style={styles.handle} />
         </View>
 
+        {/* Close button */}
+        <TouchableOpacity
+          onPress={closeSheet}
+          hitSlop={HIT_SLOP}
+          style={styles.closeBtn}
+        >
+          <X size={rs(18)} color={T.textMuted} />
+        </TouchableOpacity>
+
+        {/* Loading */}
         {loading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator color={THEME.primary} size="large" />
+          <View style={styles.centered}>
+            <ActivityIndicator color={T.primary} size="large" />
+            <Text style={styles.loadingText}>Reading the aura…</Text>
           </View>
         )}
 
+        {/* Error */}
         {error && !loading && (
-          <View style={styles.loadingContainer}>
+          <View style={styles.centered}>
+            <Text style={styles.errorEmoji}>🌑</Text>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={loadProfile}>
-              <Text style={styles.retryText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {profile && !loading && (
-          <View style={styles.content}>
-            {/* Avatar */}
-            <View style={[styles.avatarCircle, {
-              backgroundColor: (profile.avatar_color || THEME.primary) + '22',
-              borderColor: (profile.avatar_color || THEME.primary) + '55',
-            }]}>
-              <Text style={styles.avatarEmoji}>{AVATAR_MAP[profile.avatar] || '👤'}</Text>
-              <View style={[styles.avatarGlow, { backgroundColor: (profile.avatar_color || THEME.primary) + '18' }]} />
-            </View>
-
-            <Text style={styles.name}>{profile.anonymous_name}</Text>
-
-            {/* Stats */}
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{profile.confession_count ?? 0}</Text>
-                <Text style={styles.statLabel}>confessions</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{profile.join_date || '—'}</Text>
-                <Text style={styles.statLabel}>member since</Text>
-              </View>
-            </View>
-
-            {/* Vibe tags */}
-            {profile.vibe_tags?.length > 0 && (
-              <View style={styles.vibesRow}>
-                {profile.vibe_tags.map((tag) => (
-                  <View key={tag} style={styles.vibeTag}>
-                    <Text style={styles.vibeTagText}>{tag}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Connect button */}
             <TouchableOpacity
-              style={[
-                styles.connectBtn,
-                connectButtonDisabled() && styles.connectBtnDisabled,
-                profile.connect_status === 'chatting' && styles.connectBtnChatting,
-              ]}
-              onPress={handleConnect}
-              disabled={connectButtonDisabled()}
-              activeOpacity={0.8}
+              style={styles.retryBtn}
+              onPress={loadProfile}
+              hitSlop={HIT_SLOP}
             >
-              <Text style={[styles.connectBtnText, connectButtonDisabled() && styles.connectBtnTextDisabled]}>
-                {connectButtonLabel()}
-              </Text>
+              <Text style={styles.retryText}>Try again</Text>
             </TouchableOpacity>
-
-            <Text style={styles.privacyNote}>
-              They won't know who you are until you both agree to reveal.
-            </Text>
           </View>
         )}
 
-        {toastMsg && (
-          <Animated.View style={[styles.toast, { opacity: toastOpacity }]}>
-            <Text style={styles.toastText}>{toastMsg}</Text>
+        {/* Profile content */}
+        {profile && !loading && (
+          <Animated.View style={[styles.contentWrap, { opacity: contentOp }]}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+              bounces={false}
+            >
+
+              {/* Avatar */}
+              <Animated.View style={[
+                styles.avatarCircle,
+                {
+                  backgroundColor: accentColor + '20',
+                  borderColor:     accentColor + '40',
+                  transform:       [{ scale: avatarScale }],
+                }
+              ]}>
+                <Text style={styles.avatarEmoji}>
+                  {AVATAR_MAP[profile.avatar] ?? '👤'}
+                </Text>
+                {/* Pulse ring */}
+                <View style={[
+                  styles.avatarGlow,
+                  { backgroundColor: accentColor + '12' }
+                ]} />
+              </Animated.View>
+
+              {/* Name */}
+              <Text style={styles.name}>{profile.anonymous_name}</Text>
+
+              {/* Vibe tags */}
+              {profile.vibe_tags?.length > 0 && (
+                <View style={styles.vibesRow}>
+                  {profile.vibe_tags.map(tag => (
+                    <VibeTag key={tag} tag={tag} accentColor={accentColor} />
+                  ))}
+                </View>
+              )}
+
+              {/* Stats */}
+              <View style={styles.statsRow}>
+                <StatItem
+                  value={profile.confession_count ?? 0}
+                  label="confessions"
+                />
+                <View style={styles.statDivider} />
+                <StatItem
+                  value={profile.join_date || '—'}
+                  label="member since"
+                />
+                {profile.connections_count != null && (
+                  <>
+                    <View style={styles.statDivider} />
+                    <StatItem
+                      value={profile.connections_count}
+                      label="connections"
+                    />
+                  </>
+                )}
+              </View>
+
+              {/* Bio / mood if present */}
+              {profile.mood && (
+                <View style={[styles.moodCard, { borderColor: accentColor + '25' }]}>
+                  <Text style={styles.moodLabel}>current mood</Text>
+                  <Text style={styles.moodText}>{profile.mood}</Text>
+                </View>
+              )}
+
+              {/* Connect button */}
+              <TouchableOpacity
+                style={[
+                  styles.connectBtn,
+                  { backgroundColor: accentColor },
+                  isDisabled       && styles.connectBtnDisabled,
+                  connectStatus === 'chatting' && [
+                    styles.connectBtnChatting,
+                    { borderColor: accentColor },
+                  ],
+                ]}
+                onPress={handleConnect}
+                disabled={isDisabled}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.85}
+              >
+                {connectLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <View style={styles.connectBtnInner}>
+                    {connectStatus === 'chatting' && (
+                      <MessageCircle size={rs(16)} color={accentColor} />
+                    )}
+                    {connectStatus === 'pending' && (
+                      <Clock size={rs(16)} color={T.textSecondary} />
+                    )}
+                    {connectStatus === 'default' && (
+                      <UserCheck size={rs(16)} color="#fff" />
+                    )}
+                    <Text style={[
+                      styles.connectBtnText,
+                      isDisabled && { color: T.textSecondary },
+                      connectStatus === 'chatting' && { color: accentColor },
+                    ]}>
+                      {connectCopy.label}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* Sub-copy */}
+              <Text style={styles.connectSub}>{connectCopy.sub}</Text>
+
+            </ScrollView>
           </Animated.View>
         )}
       </Animated.View>
@@ -261,34 +393,253 @@ export default function AnonProfileSheet({ visible, anonymousName, onClose, navi
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
-  sheet:            { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: THEME.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, minHeight: 360, paddingBottom: 40, borderTopWidth: 1, borderColor: THEME.border, shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 20 },
-  handleArea:       { alignItems: 'center', paddingVertical: 12 },
-  handle:           { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)' },
-  loadingContainer: { padding: 48, alignItems: 'center' },
-  errorText:        { color: THEME.textSecondary, fontSize: 14, marginBottom: 16, textAlign: 'center' },
-  retryBtn:         { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: THEME.primary },
-  retryText:        { color: THEME.primary, fontSize: 13 },
-  content:          { alignItems: 'center', paddingHorizontal: 24, paddingTop: 8 },
-  avatarCircle:     { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, marginBottom: 14, position: 'relative' },
-  avatarEmoji:      { fontSize: 36 },
-  avatarGlow:       { position: 'absolute', width: 96, height: 96, borderRadius: 48, top: -8, left: -8 },
-  name:             { fontSize: 22, fontWeight: '700', color: THEME.text, letterSpacing: 0.3, marginBottom: 20 },
-  statsRow:         { flexDirection: 'row', alignItems: 'center', marginBottom: 20, backgroundColor: THEME.surfaceAlt, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28, gap: 24, borderWidth: 1, borderColor: THEME.border },
-  statItem:         { alignItems: 'center', gap: 3 },
-  statValue:        { fontSize: 16, fontWeight: '700', color: THEME.text },
-  statLabel:        { fontSize: 11, color: THEME.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase' },
-  statDivider:      { width: 1, height: 28, backgroundColor: THEME.border },
-  vibesRow:         { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 28 },
-  vibeTag:          { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: THEME.avatarBg, borderWidth: 1, borderColor: 'rgba(255,99,74,0.25)' },
-  vibeTagText:      { color: THEME.primary, fontSize: 13, letterSpacing: 0.2 },
-  connectBtn:       { width: '100%', paddingVertical: 16, borderRadius: 14, backgroundColor: THEME.primary, alignItems: 'center', marginBottom: 14, shadowColor: THEME.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
-  connectBtnDisabled: { backgroundColor: THEME.avatarBg, shadowOpacity: 0, elevation: 0 },
-  connectBtnChatting: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: THEME.primary },
-  connectBtnText:   { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
-  connectBtnTextDisabled: { color: THEME.textSecondary },
-  privacyNote:      { color: THEME.textSecondary, fontSize: 12, textAlign: 'center', lineHeight: 18, paddingHorizontal: 16, fontStyle: 'italic' },
-  toast:            { position: 'absolute', bottom: 50, alignSelf: 'center', backgroundColor: 'rgba(255,99,74,0.15)', borderWidth: 1, borderColor: 'rgba(255,99,74,0.3)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-  toastText:        { color: THEME.primary, fontSize: 13, fontWeight: '600' },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+
+  sheet: {
+    position:             'absolute',
+    bottom:               0,
+    left:                 0,
+    right:                0,
+    height:               H * 0.80,        // ← 80% of screen
+    backgroundColor:      T.surface,
+    borderTopLeftRadius:  RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    borderTopWidth:       1,
+    borderColor:          T.borderStrong,
+    shadowColor:          '#000',
+    shadowOffset:         { width: 0, height: -rs(8) },
+    shadowOpacity:        0.5,
+    shadowRadius:         rs(24),
+    elevation:            20,
+    overflow:             'hidden',
+  },
+
+  // Aura glow
+  auraGlow: {
+    position:     'absolute',
+    top:          -rs(60),
+    alignSelf:    'center',
+    width:        W,
+    height:       rs(160),
+    opacity:      0.07,
+    borderRadius: rs(80),
+  },
+
+  // Handle
+  handleArea: {
+    alignItems:    'center',
+    paddingTop:    rp(12),
+    paddingBottom: rp(4),
+  },
+  handle: {
+    width:           rs(40),
+    height:          rp(4),
+    borderRadius:    rp(2),
+    backgroundColor: T.borderStrong,
+  },
+
+  // Close button
+  closeBtn: {
+    position:        'absolute',
+    top:             rp(14),
+    right:           rp(16),
+    width:           rs(32),
+    height:          rs(32),
+    borderRadius:    rs(16),
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    zIndex:          10,
+  },
+
+  // Loading / error
+  centered: {
+    flex:           1,
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            SPACING.sm,
+    paddingBottom:  rs(60),
+  },
+  loadingText: {
+    fontSize:  FONT.sm,
+    color:     T.textSecondary,
+    fontStyle: 'italic',
+  },
+  errorEmoji: { fontSize: rf(40) },
+  errorText:  {
+    color:     T.textSecondary,
+    fontSize:  FONT.sm,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.lg,
+  },
+  retryBtn: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    borderColor:       T.primary,
+  },
+  retryText: { color: T.primary, fontSize: FONT.sm, fontWeight: '600' },
+
+  // Content
+  contentWrap:   { flex: 1 },
+  scrollContent: {
+    alignItems:        'center',
+    paddingHorizontal: SPACING.lg,
+    paddingTop:        SPACING.sm,
+    paddingBottom:     rs(40),
+    gap:               SPACING.md,
+  },
+
+  // Avatar
+  avatarCircle: {
+    width:          rs(90),
+    height:         rs(90),
+    borderRadius:   rs(45),
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderWidth:    1.5,
+    position:       'relative',
+    marginBottom:   SPACING.xs,
+  },
+  avatarEmoji: { fontSize: rf(40) },
+  avatarGlow: {
+    position:     'absolute',
+    width:        rs(110),
+    height:       rs(110),
+    borderRadius: rs(55),
+    top:          -rs(10),
+    left:         -rs(10),
+  },
+
+  // Name
+  name: {
+    fontSize:      rf(24),
+    fontWeight:    '700',
+    color:         T.text,
+    letterSpacing: 0.3,
+    textAlign:     'center',
+    fontFamily:    'PlayfairDisplay-Bold',
+  },
+
+  // Vibe tags
+  vibesRow: {
+    flexDirection:  'row',
+    flexWrap:       'wrap',
+    justifyContent: 'center',
+    gap:            rp(8),
+  },
+  vibeTag: {
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(7),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+  },
+  vibeTagText: {
+    fontSize:      FONT.sm,
+    letterSpacing: 0.2,
+    fontWeight:    '500',
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    backgroundColor:   T.surfaceAlt,
+    borderRadius:      RADIUS.md,
+    paddingVertical:   rp(16),
+    paddingHorizontal: rp(24),
+    gap:               rp(20),
+    borderWidth:       1,
+    borderColor:       T.border,
+    width:             '100%',
+    justifyContent:    'center',
+  },
+  statItem:   { alignItems: 'center', gap: rp(4) },
+  statValue:  { fontSize: FONT.lg, fontWeight: '700', color: T.text },
+  statLabel:  {
+    fontSize:      FONT.xs,
+    color:         T.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  statDivider: {
+    width:           1,
+    height:          rp(28),
+    backgroundColor: T.border,
+  },
+
+  // Mood card
+  moodCard: {
+    width:             '100%',
+    backgroundColor:   T.surfaceAlt,
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    padding:           SPACING.md,
+    gap:               rp(4),
+  },
+  moodLabel: {
+    fontSize:      FONT.xs,
+    color:         T.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  moodText: {
+    fontSize:  FONT.md,
+    color:     T.text,
+    fontStyle: 'italic',
+    lineHeight: rf(22),
+    fontFamily: 'PlayfairDisplay-Italic',
+  },
+
+  // Connect button
+  connectBtn: {
+    width:          '100%',
+    height:         BUTTON_HEIGHT,
+    borderRadius:   RADIUS.md,
+    alignItems:     'center',
+    justifyContent: 'center',
+    shadowOffset:   { width: 0, height: rs(4) },
+    shadowOpacity:  0.35,
+    shadowRadius:   rs(10),
+    elevation:      6,
+    marginTop:      SPACING.xs,
+  },
+  connectBtnDisabled: {
+    backgroundColor: T.surfaceAlt,
+    shadowOpacity:   0,
+    elevation:       0,
+  },
+  connectBtnChatting: {
+    backgroundColor: 'transparent',
+    borderWidth:     1.5,
+    shadowOpacity:   0,
+    elevation:       0,
+  },
+  connectBtnInner: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           SPACING.xs,
+  },
+  connectBtnText: {
+    color:         '#fff',
+    fontSize:      FONT.md,
+    fontWeight:    '700',
+    letterSpacing: 0.3,
+  },
+
+  // Sub-copy
+  connectSub: {
+    color:             T.textMuted,
+    fontSize:          FONT.xs,
+    textAlign:         'center',
+    fontStyle:         'italic',
+    lineHeight:        rf(18),
+    paddingHorizontal: SPACING.md,
+  },
 });

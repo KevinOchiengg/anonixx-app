@@ -3,13 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '../config/api';
-import { FEATURES } from '../config/featureFlags';
 
-// expo-notifications only works in EAS builds, not Expo Go
 let Notifications = null;
-if (FEATURES.pushNotifications) {
-  Notifications = require('expo-notifications');
-}
+try { Notifications = require('expo-notifications'); } catch { /* not available */ }
 
 const AuthContext = createContext();
 
@@ -23,10 +19,7 @@ export const useAuth = () => {
 
 // ── Push token registration ──────────────────────────────────
 async function registerPushToken(token) {
-  if (!FEATURES.pushNotifications || !Notifications) {
-    console.log('ℹ️ Push notifications disabled — enable in featureFlags.js for EAS build');
-    return;
-  }
+  if (!Notifications) return;
 
   try {
     if (!Device.isDevice) return; // Skip on emulator
@@ -65,7 +58,7 @@ async function registerPushToken(token) {
 }
 
 // ── Notification handler (foreground) ───────────────────────
-if (FEATURES.pushNotifications && Notifications) {
+if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,

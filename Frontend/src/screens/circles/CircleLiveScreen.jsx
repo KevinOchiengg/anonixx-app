@@ -696,8 +696,8 @@ export default function CircleLiveScreen({ route, navigation }) {
     setHotSeatVisible(false);
     // Re-join as publisher with new token
     try {
-      const { ClientRoleType } = require('react-native-agora');
-      agoraEngine.current?.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+      const ClientRoleBroadcaster = 1;
+      agoraEngine.current?.setClientRole(ClientRoleBroadcaster);
       agoraEngine.current?.leaveChannel();
       agoraEngine.current?.joinChannel(data.token, data.channel, data.uid, {});
     } catch {}

@@ -1,231 +1,393 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
-} from 'react-native'
+  Animated,
+  Share,
+  Platform,
+} from 'react-native';
+import { Heart, MessageCircle, Share2, Eye, Bookmark } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../../config/api';
+import {
+  rs, rf, rp, rh, SPACING, FONT, RADIUS, SCREEN, HIT_SLOP,
+} from '../../utils/responsive';
 
-import { Heart, MessageCircle, Share2, Eye } from 'lucide-react-native'
-import { useTheme } from '../../context/ThemeContext'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { API_BASE_URL } from '../../config/api'
+// ─────────────────────────────────────────────
+// Design tokens (Cinematic Coral)
+// ─────────────────────────────────────────────
+const THEME = {
+  background:    '#0b0f18',
+  surface:       '#151924',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255,99,74,0.15)',
+  text:          '#EAEAF0',
+  textSecondary: '#9A9AA3',
+  border:        'rgba(255,255,255,0.06)',
+};
 
-const { width, height } = Dimensions.get('window')
+const TOPIC_META = {
+  relationships:  { emoji: '💔', label: 'Love'       },
+  anxiety:        { emoji: '😰', label: 'Anxiety'    },
+  depression:     { emoji: '😢', label: 'Low'        },
+  self_growth:    { emoji: '💪', label: 'Growth'     },
+  school_career:  { emoji: '🎓', label: 'Career'     },
+  family:         { emoji: '👨‍👩‍👧‍👦', label: 'Family'     },
+  lgbtq:          { emoji: '🏳️‍🌈', label: 'LGBTQ+'     },
+  addiction:      { emoji: '💊', label: 'Addiction'  },
+  sleep:          { emoji: '😴', label: 'Sleep'      },
+  identity:       { emoji: '🎭', label: 'Identity'   },
+  wins:           { emoji: '🎉', label: 'Win'        },
+  friendship:     { emoji: '🤝', label: 'Friends'    },
+  financial:      { emoji: '💰', label: 'Money'      },
+  health:         { emoji: '🏥', label: 'Health'     },
+  general:        { emoji: '🌟', label: 'General'    },
+};
 
-export default function FullScreenPostCard({ post, onReact, onComment }) {
-  const { theme } = useTheme()
+// ─────────────────────────────────────────────
+// ActionButton
+// ─────────────────────────────────────────────
+const ActionButton = React.memo(({ icon: Icon, count, onPress, active, activeColor }) => {
+  const scale = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    recordView()
-  }, [])
+  const handlePress = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 1.4, duration: 90,  useNativeDriver: true }),
+      Animated.spring(scale,  { toValue: 1,   friction: 5,   useNativeDriver: true }),
+    ]).start();
+    onPress?.();
+  }, [onPress, scale]);
 
-  const recordView = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token')
-      await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/view`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-    } catch (error) {
-      console.error('Failed to record view:', error)
-    }
-  }
-
-  // ✅ Fixed: Added fallback for null values
-  const displayName = post.is_anonymous
-    ? post.anonymous_name || 'Anonymous User'
-    : post.user?.username || 'Anonymous User'
-
-  const topicEmojis = {
-    relationships: '💔',
-    anxiety: '😰',
-    depression: '😢',
-    self_growth: '💪',
-    school_career: '🎓',
-    family: '👨‍👩‍👧‍👦',
-    lgbtq: '🏳️‍🌈',
-    addiction: '💊',
-    sleep: '😴',
-    identity: '🎭',
-    wins: '🎉',
-    friendship: '🤝',
-    financial: '💰',
-    health: '🏥',
-    general: '🌟',
-  }
+  const color = active ? activeColor : 'rgba(255,255,255,0.88)';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Background Gradient */}
-      <View
-        style={[styles.gradient, { backgroundColor: theme.primaryLight }]}
-      />
+    <TouchableOpacity
+      onPress={handlePress}
+      style={styles.actionBtn}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.75}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Icon
+          size={rs(28)}
+          color={color}
+          fill={active ? activeColor : 'transparent'}
+          strokeWidth={active ? 0 : 2}
+        />
+      </Animated.View>
+      {count !== undefined && (
+        <Text style={[styles.actionCount, { color }]}>
+          {count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
+});
 
-      {/* Content */}
-      <View style={styles.content}>
-        {/* Topics */}
-        {post.topics && post.topics.length > 0 && (
-          <View style={styles.topicsContainer}>
-            {post.topics.map((topic) => (
-              <View
-                key={topic}
-                style={[styles.topicBadge, { backgroundColor: theme.primary }]}
-              >
-                <Text style={styles.topicEmoji}>
-                  {topicEmojis[topic] || '🌟'}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
+// ─────────────────────────────────────────────
+// FullScreenPostCard
+// ─────────────────────────────────────────────
+function FullScreenPostCard({ post, onReact, onComment }) {
+  const [saved, setSaved] = useState(false);
 
-        {/* Post Content */}
-        <View style={styles.textContainer}>
-          <Text style={[styles.contentText, { color: theme.text }]}>
-            {post.content || 'No content'}
-          </Text>
-        </View>
+  const entranceY  = useRef(new Animated.Value(24)).current;
+  const entranceOp = useRef(new Animated.Value(0)).current;
 
-        {/* Author Info */}
-        <View style={styles.authorContainer}>
-          <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-            <Text style={styles.avatarText}>
-              {displayName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <Text style={[styles.authorName, { color: theme.text }]}>
-            {displayName}
-          </Text>
-        </View>
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(entranceOp, { toValue: 1, duration: 420, delay: 60,  useNativeDriver: true }),
+      Animated.timing(entranceY,  { toValue: 0, duration: 380, delay: 60,  useNativeDriver: true }),
+    ]).start();
+    recordView();
+  }, []);
+
+  const recordView = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+      await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/view`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch { /* silent */ }
+  }, [post.id]);
+
+  const handleShare = useCallback(async () => {
+    try {
+      await Share.share({
+        message: Platform.OS === 'ios'
+          ? post.content
+          : `${post.content}\n\nanonixx://confession/${post.id}`,
+        url:   `anonixx://confession/${post.id}`,
+        title: 'Anonymous confession on Anonixx',
+      });
+    } catch { /* silent */ }
+  }, [post.id, post.content]);
+
+  const handleSave = useCallback(() => setSaved((v) => !v), []);
+
+  const displayName  = post.is_anonymous
+    ? (post.anonymous_name || 'Anonymous')
+    : (post.user?.username  || 'Anonymous');
+  const avatarChar   = displayName.charAt(0).toUpperCase();
+  const primaryTopic = post.topics?.[0];
+  const topicMeta    = TOPIC_META[primaryTopic] ?? { emoji: '🌟', label: 'Confession' };
+  const isLong       = (post.content?.split(' ').length ?? 0) > 40;
+
+  return (
+    <View style={styles.container}>
+
+      {/* Gradient scrims */}
+      <View style={styles.scrimTop}    pointerEvents="none" />
+      <View style={styles.scrimBottom} pointerEvents="none" />
+
+      {/* Topic pill */}
+      <Animated.View style={[styles.topicPill, { opacity: entranceOp }]} pointerEvents="none">
+        <Text style={styles.topicEmoji}>{topicMeta.emoji}</Text>
+        <Text style={styles.topicLabel}>{topicMeta.label}</Text>
+      </Animated.View>
+
+      {/* Views badge */}
+      <View style={styles.viewsBadge} pointerEvents="none">
+        <Eye size={rs(11)} color="rgba(255,255,255,0.4)" strokeWidth={2} />
+        <Text style={styles.viewsText}>{post.views_count ?? 0}</Text>
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actions}>
-        {/* React Button */}
-        <TouchableOpacity
-          onPress={() => onReact(post.id)}
-          style={styles.actionButton}
-        >
-          <Heart
-            size={32}
-            color={post.user_reaction ? theme.error : '#ffffff'}
-            fill={post.user_reaction ? theme.error : 'transparent'}
+      {/* Confession text */}
+      <Animated.View
+        style={[
+          styles.centerContent,
+          { opacity: entranceOp, transform: [{ translateY: entranceY }] },
+        ]}
+        pointerEvents="none"
+      >
+        {/* Decorative quote behind text */}
+        <Text style={styles.quoteChar} pointerEvents="none">"</Text>
+
+        <Text style={[styles.confessionText, isLong && styles.confessionTextSmall]}>
+          {post.content || ''}
+        </Text>
+      </Animated.View>
+
+      {/* Bottom row */}
+      <Animated.View
+        style={[styles.bottomRow, { opacity: entranceOp, transform: [{ translateY: entranceY }] }]}
+      >
+        {/* Author */}
+        <View style={styles.authorBlock}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{avatarChar}</Text>
+          </View>
+          <View>
+            <Text style={styles.authorName}>{displayName}</Text>
+            {post.topics && post.topics.length > 1 && (
+              <Text style={styles.extraTopics}>
+                {post.topics.slice(1).map((t) => TOPIC_META[t]?.emoji ?? '🌟').join('  ')}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* Actions */}
+        <View style={styles.actions}>
+          <ActionButton
+            icon={Heart}
+            count={post.reactions_count ?? 0}
+            onPress={() => onReact(post.id)}
+            active={!!post.user_reaction}
+            activeColor={THEME.primary}
           />
-          <Text style={styles.actionText}>{post.reactions_count || 0}</Text>
-        </TouchableOpacity>
-
-        {/* Comment Button */}
-        <TouchableOpacity
-          onPress={() => onComment(post.id)}
-          style={styles.actionButton}
-        >
-          <MessageCircle size={32} color='#ffffff' />
-          <Text style={styles.actionText}>{post.comments_count || 0}</Text>
-        </TouchableOpacity>
-
-        {/* Share Button */}
-        <TouchableOpacity style={styles.actionButton}>
-          <Share2 size={32} color='#ffffff' />
-          <Text style={styles.actionText}>Share</Text>
-        </TouchableOpacity>
-
-        {/* Views */}
-        <View style={styles.actionButton}>
-          <Eye size={24} color='#ffffff' opacity={0.7} />
-          <Text style={[styles.actionText, { opacity: 0.7 }]}>
-            {post.views_count || 0}
-          </Text>
+          <ActionButton
+            icon={MessageCircle}
+            count={post.comments_count ?? 0}
+            onPress={() => onComment(post.id)}
+            active={false}
+            activeColor={THEME.primary}
+          />
+          <ActionButton
+            icon={Bookmark}
+            onPress={handleSave}
+            active={saved}
+            activeColor="#c9a84c"
+          />
+          <ActionButton
+            icon={Share2}
+            onPress={handleShare}
+            active={false}
+            activeColor={THEME.primary}
+          />
         </View>
-      </View>
+      </Animated.View>
+
     </View>
-  )
+  );
 }
 
+export default React.memo(FullScreenPostCard);
+
+// ─────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
-    width,
-    height,
-    position: 'relative',
+    width:           SCREEN.width,
+    height:          SCREEN.height,
+    backgroundColor: THEME.background,
+    overflow:        'hidden',
   },
-  gradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    opacity: 0.1,
+
+  scrimTop: {
+    position:        'absolute',
+    top:             0,
+    left:            0,
+    right:           0,
+    height:          SCREEN.height * 0.28,
+    backgroundColor: 'rgba(11,15,24,0.55)',
   },
-  content: {
-    flex: 1,
-    padding: 20,
-    justifyContent: 'center',
+  scrimBottom: {
+    position:        'absolute',
+    bottom:          0,
+    left:            0,
+    right:           0,
+    height:          SCREEN.height * 0.44,
+    backgroundColor: 'rgba(11,15,24,0.80)',
   },
-  topicsContainer: {
+
+  topicPill: {
+    position:          'absolute',
+    top:               rh(58),
+    left:              SPACING.lg,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               SPACING.xs,
+    backgroundColor:   'rgba(255,255,255,0.08)',
+    borderRadius:      RADIUS.full,
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(6),
+    borderWidth:       1,
+    borderColor:       'rgba(255,255,255,0.1)',
+  },
+  topicEmoji: { fontSize: rf(14) },
+  topicLabel: {
+    fontSize:      FONT.xs,
+    fontWeight:    '600',
+    color:         'rgba(255,255,255,0.7)',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+
+  viewsBadge: {
+    position:      'absolute',
+    top:           rh(62),
+    right:         SPACING.lg,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
+    alignItems:    'center',
+    gap:           4,
   },
-  topicBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topicEmoji: {
-    fontSize: 24,
-  },
-  textContainer: {
-    marginBottom: 40,
-  },
-  contentText: {
-    fontSize: 24,
-    lineHeight: 36,
+  viewsText: {
+    fontSize:   FONT.xs,
+    color:      'rgba(255,255,255,0.38)',
     fontWeight: '500',
-    textAlign: 'center',
   },
-  authorContainer: {
+
+  centerContent: {
+    position:          'absolute',
+    top:               0,
+    left:              0,
+    right:             0,
+    bottom:            0,
+    justifyContent:    'center',
+    alignItems:        'center',
+    paddingHorizontal: rp(36),
+    paddingVertical:   rh(120),
+  },
+  quoteChar: {
+    position:    'absolute',
+    top:         rh(-10),
+    left:        rp(16),
+    fontFamily:  'PlayfairDisplay_700Bold',
+    fontSize:    rf(110),
+    color:       'rgba(255,99,74,0.07)',
+    lineHeight:  rf(110),
+  },
+  confessionText: {
+    fontFamily:       'PlayfairDisplay_500Medium',
+    fontSize:         rf(25),
+    lineHeight:       rf(25) * 1.58,
+    color:            THEME.text,
+    textAlign:        'center',
+    letterSpacing:    0.15,
+    textShadowColor:  'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+  confessionTextSmall: {
+    fontSize:   rf(20),
+    lineHeight: rf(20) * 1.62,
+  },
+
+  bottomRow: {
+    position:       'absolute',
+    bottom:         rh(44),
+    left:           SPACING.lg,
+    right:          SPACING.lg,
+    flexDirection:  'row',
+    alignItems:     'flex-end',
+    justifyContent: 'space-between',
+  },
+
+  authorBlock: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems:    'center',
+    gap:           SPACING.sm,
+    flex:          1,
+    paddingRight:  SPACING.md,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width:           rs(42),
+    height:          rs(42),
+    borderRadius:    RADIUS.full,
+    backgroundColor: THEME.primary,
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderWidth:     1.5,
+    borderColor:     'rgba(255,255,255,0.12)',
   },
   avatarText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontSize:   rf(17),
+    fontWeight: '700',
+    color:      '#fff',
   },
   authorName: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize:     FONT.sm,
+    fontWeight:   '600',
+    color:        THEME.text,
+    marginBottom: 2,
   },
+  extraTopics: {
+    fontSize: rf(12),
+    opacity:  0.65,
+  },
+
   actions: {
-    position: 'absolute',
-    right: 16,
-    bottom: 100,
-    gap: 24,
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           SPACING.lg,
   },
-  actionButton: {
-    alignItems: 'center',
-    gap: 4,
+  actionBtn: {
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            3,
+    minWidth:       rs(32),
   },
-  actionText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+  actionCount: {
+    fontSize:         FONT.xs,
+    fontWeight:       '700',
+    color:            'rgba(255,255,255,0.88)',
+    textShadowColor:  'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
-})
+});

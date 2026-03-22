@@ -59,7 +59,7 @@ export default function AuthPromptModal({
             </Text>
 
             <Text style={[styles.subtitle, { color: theme.textTertiary }]}>
-              A space that heals, not hurts. Join our community.
+              Your truth, no name required. Join the community.
             </Text>
 
             {/* Buttons */}

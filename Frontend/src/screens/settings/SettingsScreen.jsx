@@ -1,279 +1,544 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
+  Animated, Linking, ScrollView, StyleSheet, Switch,
+  Text, TouchableOpacity, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  User, Heart, MessageCircle, LifeBuoy,
-  Calendar, LogOut, ChevronRight, TrendingUp,
+  ArrowLeft, Bell, BookOpen, ChevronRight, Database,
+  Eye, FileText, Globe, HelpCircle, Lock,
+  Monitor, Moon, ShieldAlert, Smartphone, Trash2,
+  User, Volume2, Zap,
 } from 'lucide-react-native';
-import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useLogout } from '../../hooks/useLogout';
+import { useToast } from '../../components/ui/Toast';
 
-// ─── Theme ────────────────────────────────────────────────────────────────────
+// ─── Theme ────────────────────────────────────────────────────
 const T = {
-  background:   '#0b0f18',
-  surface:      '#151924',
-  primary:      '#FF634A',
-  primaryDim:   'rgba(255,99,74,0.08)',
-  primaryBorder:'rgba(255,99,74,0.2)',
-  text:         '#EAEAF0',
-  textSecondary:'#9A9AA3',
-  border:       'rgba(255,255,255,0.06)',
-  avatarBg:     '#1e2330',
-  iconBg:       '#1e2330',
+  background:    '#0b0f18',
+  surface:       '#151924',
+  surfaceAlt:    '#1a1f2e',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255,99,74,0.10)',
+  primaryBorder: 'rgba(255,99,74,0.22)',
+  text:          '#EAEAF0',
+  textSecondary: '#9A9AA3',
+  textMuted:     '#4a5068',
+  border:        'rgba(255,255,255,0.06)',
+  borderStrong:  'rgba(255,255,255,0.10)',
+  danger:        '#ef4444',
+  dangerDim:     'rgba(239,68,68,0.10)',
+  dangerBorder:  'rgba(239,68,68,0.25)',
 };
 
-// ─── Static data (module level) ───────────────────────────────────────────────
-const MENU_ITEMS = [
-  { title: 'Profile',            icon: User,         route: 'EditProfile',      description: 'Manage your account'   },
-  { title: 'Your Impact',        icon: TrendingUp,   route: 'ImpactDashboard',  description: 'See your contribution' },
-  { title: 'Saved Posts',        icon: Heart,        route: 'SavedPosts',       description: 'Your collection'       },
-  { title: 'Connections',        icon: MessageCircle,route: 'Connections',      description: 'Your conversations'    },
-  { title: 'Sunday Reflection',  icon: Calendar,     route: 'SundayReflection', description: 'Weekly mindfulness'    },
-  { title: 'Crisis Resources',   icon: LifeBuoy,     route: 'CrisisResources',  description: 'Get help now'          },
-];
+// ─── Row components ───────────────────────────────────────────
 
-// ─── Menu Item (memoized) ─────────────────────────────────────────────────────
-const MenuItem = React.memo(({ title, icon: Icon, description, onPress }) => (
+const NavRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onPress, danger }) => (
   <TouchableOpacity
-    style={styles.menuItem}
+    style={row.wrap}
     onPress={onPress}
+    activeOpacity={0.75}
     hitSlop={HIT_SLOP}
-    activeOpacity={0.8}
   >
-    <View style={styles.menuIcon}>
-      <Icon size={rs(20)} color={T.text} />
+    <View style={[row.iconBox, danger && row.iconBoxDanger]}>
+      <Icon size={rs(17)} color={danger ? T.danger : (iconColor || T.text)} strokeWidth={1.8} />
     </View>
-    <View style={styles.menuText}>
-      <Text style={styles.menuTitle}>{title}</Text>
-      <Text style={styles.menuDesc}>{description}</Text>
+    <View style={row.body}>
+      <Text style={[row.label, danger && row.labelDanger]}>{label}</Text>
+      {desc ? <Text style={row.desc}>{desc}</Text> : null}
     </View>
-    <ChevronRight size={rs(18)} color={T.textSecondary} />
+    {value ? <Text style={row.value}>{value}</Text> : null}
+    <ChevronRight size={rs(15)} color={danger ? T.danger : T.textMuted} />
   </TouchableOpacity>
 ));
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
+const ToggleRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onToggle, indent }) => (
+  <View style={[row.wrap, indent && row.indent]}>
+    {!indent && (
+      <View style={row.iconBox}>
+        <Icon size={rs(17)} color={iconColor || T.text} strokeWidth={1.8} />
+      </View>
+    )}
+    {indent && <View style={row.indentLine} />}
+    <View style={row.body}>
+      <Text style={row.label}>{label}</Text>
+      {desc ? <Text style={row.desc}>{desc}</Text> : null}
+    </View>
+    <Switch
+      value={value}
+      onValueChange={onToggle}
+      trackColor={{ false: T.surfaceAlt, true: T.primary }}
+      thumbColor={value ? '#fff' : T.textMuted}
+      ios_backgroundColor={T.surfaceAlt}
+    />
+  </View>
+));
+
+const ActionRow = React.memo(({ icon: Icon, iconColor, label, desc, onPress, danger }) => (
+  <TouchableOpacity
+    style={row.wrap}
+    onPress={onPress}
+    activeOpacity={0.75}
+    hitSlop={HIT_SLOP}
+  >
+    <View style={[row.iconBox, danger && row.iconBoxDanger]}>
+      <Icon size={rs(17)} color={danger ? T.danger : (iconColor || T.text)} strokeWidth={1.8} />
+    </View>
+    <View style={row.body}>
+      <Text style={[row.label, danger && row.labelDanger]}>{label}</Text>
+      {desc ? <Text style={row.desc}>{desc}</Text> : null}
+    </View>
+  </TouchableOpacity>
+));
+
+// ─── Section wrapper ──────────────────────────────────────────
+const Section = React.memo(({ title, children }) => (
+  <View style={sec.wrap}>
+    {title ? <Text style={sec.title}>{title}</Text> : null}
+    <View style={sec.card}>{children}</View>
+  </View>
+));
+
+// ─── Screen ───────────────────────────────────────────────────
 export default function SettingsScreen({ navigation }) {
+  const insets            = useSafeAreaInsets();
   const { confirmLogout } = useLogout(navigation);
+  const { showToast }     = useToast();
+
+  // Entrance animation
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(rh(18))).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 420, delay: 60, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 420, delay: 60, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  // ── Toggle states ──────────────────────────────────────────
+  const [pushEnabled,      setPushEnabled]      = useState(true);
+  const [notifyRequests,   setNotifyRequests]   = useState(true);
+  const [notifyMessages,   setNotifyMessages]   = useState(true);
+  const [notifyGroup,      setNotifyGroup]      = useState(false);
+  const [notifyRealTalk,   setNotifyRealTalk]   = useState(true);
+  const [screenshotDetect, setScreenshotDetect] = useState(false);
+  const [dataSaver,        setDataSaver]        = useState(false);
+  const [modeB,            setModeB]            = useState(false);
+  const [haptics,          setHaptics]          = useState(true);
+  const [inAppSounds,      setInAppSounds]      = useState(true);
+  const [reduceAnimations, setReduceAnimations] = useState(false);
+
+  const handleDeleteAccount = useCallback(() => {
+    showToast({
+      type:    'warning',
+      title:   'Are you sure?',
+      message: 'Contact support to permanently delete your account and all your data.',
+    });
+  }, [showToast]);
+
+  const handleClearCache = useCallback(() => {
+    showToast({ type: 'success', message: 'Cache cleared.' });
+  }, [showToast]);
+
+  const openLink = useCallback((url) => {
+    Linking.openURL(url).catch(() => {
+      showToast({ type: 'error', message: 'Could not open link.' });
+    });
+  }, [showToast]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={HIT_SLOP}>
+          <ArrowLeft size={rs(20)} color={T.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
+        <View style={styles.backBtn} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + rh(40) }]}
+        style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
       >
-        {/* Profile card */}
-        <View style={styles.profileCard}>
-          <View style={styles.profileAvatar}>
-            <User size={rs(30)} color={T.textSecondary} />
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>Anonymous User</Text>
-            <Text style={styles.profileTagline}>A space that heals, not hurts</Text>
-          </View>
-        </View>
+        {/* ── Account ── */}
+        <Section title="Account">
+          <NavRow
+            icon={User}
+            label="Change Anonymous Name"
+            desc="Update how others see you"
+            onPress={() => navigation.navigate('EditProfile')}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={Lock}
+            label="Email & Password"
+            desc="Manage login credentials"
+            onPress={() => navigation.navigate('ChangePassword')}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={Trash2}
+            label="Delete Account"
+            desc="Permanently remove your data"
+            onPress={handleDeleteAccount}
+            danger
+          />
+        </Section>
 
-        {/* Menu */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Your Space</Text>
-          {MENU_ITEMS.map(item => (
-            <MenuItem
-              key={item.route}
-              title={item.title}
-              icon={item.icon}
-              description={item.description}
-              onPress={() => navigation.navigate(item.route)}
-            />
-          ))}
-        </View>
+        {/* ── Privacy & Safety ── */}
+        <Section title="Privacy & Safety">
+          <NavRow
+            icon={ShieldAlert}
+            label="Block List"
+            desc="Manage blocked users"
+            onPress={() => {}}
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Eye}
+            label="Screenshot Detection"
+            desc="Alert when your posts are screenshotted"
+            value={screenshotDetect}
+            onToggle={setScreenshotDetect}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={User}
+            label="Who Can Connect With Me"
+            value="Everyone"
+            onPress={() => {}}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={FileText}
+            label="Report & Moderation History"
+            desc="View your flagged content"
+            onPress={() => {}}
+          />
+        </Section>
 
-        {/* Logout */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={confirmLogout}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.8}
-          >
-            <LogOut size={rs(20)} color={T.primary} />
-            <Text style={styles.logoutText}>Logout</Text>
+        {/* ── Notifications ── */}
+        <Section title="Notifications">
+          <ToggleRow
+            icon={Bell}
+            label="Push Notifications"
+            desc="Master toggle for all alerts"
+            value={pushEnabled}
+            onToggle={setPushEnabled}
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Bell}
+            label="Connection Requests"
+            value={notifyRequests && pushEnabled}
+            onToggle={v => pushEnabled && setNotifyRequests(v)}
+            indent
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Bell}
+            label="New Messages"
+            value={notifyMessages && pushEnabled}
+            onToggle={v => pushEnabled && setNotifyMessages(v)}
+            indent
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Bell}
+            label="Group Activity"
+            value={notifyGroup && pushEnabled}
+            onToggle={v => pushEnabled && setNotifyGroup(v)}
+            indent
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Bell}
+            label="Real Talk Reminders"
+            value={notifyRealTalk && pushEnabled}
+            onToggle={v => pushEnabled && setNotifyRealTalk(v)}
+            indent
+          />
+        </Section>
+
+        {/* ── Feed Preferences ── */}
+        <Section title="Feed Preferences">
+          <NavRow
+            icon={Zap}
+            label="Video Autoplay"
+            value="Wi-Fi Only"
+            onPress={() => {}}
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Database}
+            label="Data Saver Mode"
+            desc="Reduce mobile data usage"
+            value={dataSaver}
+            onToggle={setDataSaver}
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Monitor}
+            label="Show Mode B Layout"
+            desc="Try the alternate feed style"
+            value={modeB}
+            onToggle={setModeB}
+          />
+        </Section>
+
+        {/* ── Language ── */}
+        <Section title="Language">
+          <NavRow
+            icon={Globe}
+            label="App Language"
+            value="English"
+            onPress={() => {}}
+          />
+        </Section>
+
+        {/* ── Sound & Haptics ── */}
+        <Section title="Sound & Haptics">
+          <ToggleRow
+            icon={Smartphone}
+            label="Haptic Feedback"
+            desc="Vibration on interactions"
+            value={haptics}
+            onToggle={setHaptics}
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Volume2}
+            label="In-App Sounds"
+            desc="UI sound effects"
+            value={inAppSounds}
+            onToggle={setInAppSounds}
+          />
+        </Section>
+
+        {/* ── Data & Storage ── */}
+        <Section title="Data & Storage">
+          <ActionRow
+            icon={Trash2}
+            label="Clear Cache"
+            desc="Free up local storage"
+            onPress={handleClearCache}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={Database}
+            label="Download Management"
+            onPress={() => {}}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={Database}
+            label="Storage Usage"
+            value="—"
+            onPress={() => {}}
+          />
+        </Section>
+
+        {/* ── Display ── */}
+        <Section title="Display">
+          <NavRow
+            icon={Monitor}
+            label="Font Size"
+            value="Medium"
+            onPress={() => {}}
+          />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Moon}
+            label="Reduce Animations"
+            desc="Minimise motion effects"
+            value={reduceAnimations}
+            onToggle={setReduceAnimations}
+          />
+        </Section>
+
+        {/* ── About ── */}
+        <Section title="About">
+          <View style={row.wrap}>
+            <View style={row.iconBox}>
+              <HelpCircle size={rs(17)} color={T.text} strokeWidth={1.8} />
+            </View>
+            <View style={row.body}>
+              <Text style={row.label}>Version</Text>
+            </View>
+            <Text style={row.value}>1.0.0</Text>
+          </View>
+          <View style={sec.divider} />
+          <NavRow
+            icon={FileText}
+            label="Terms of Service"
+            onPress={() => openLink('https://anonixx.app/terms')}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={Lock}
+            label="Privacy Policy"
+            onPress={() => openLink('https://anonixx.app/privacy')}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={BookOpen}
+            label="Community Guidelines"
+            onPress={() => openLink('https://anonixx.app/guidelines')}
+          />
+        </Section>
+
+        {/* ── Logout ── */}
+        <View style={styles.logoutWrap}>
+          <TouchableOpacity style={styles.logoutBtn} onPress={confirmLogout} activeOpacity={0.85}>
+            <Text style={styles.logoutText}>Log Out</Text>
           </TouchableOpacity>
+          <Text style={styles.footer}>anonixx · your truth, no name required.</Text>
         </View>
-
-        {/* App info */}
-        <View style={styles.appInfo}>
-          <Text style={styles.appName}>Anonixx</Text>
-          <Text style={styles.appVersion}>Version 1.0.0</Text>
-          <View style={styles.appDivider} />
-          <Text style={styles.appTagline}>A space that heals, not hurts</Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </Animated.ScrollView>
+    </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Row Styles ───────────────────────────────────────────────
+const row = StyleSheet.create({
+  wrap: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingVertical:   rp(13),
+    paddingHorizontal: SPACING.md,
+    gap:               SPACING.sm,
+  },
+  indent: {
+    paddingLeft: rp(20),
+  },
+  indentLine: {
+    width:           rs(2),
+    height:          rs(24),
+    borderRadius:    rs(1),
+    backgroundColor: T.border,
+    marginRight:     SPACING.xs,
+  },
+  iconBox: {
+    width:           rs(34),
+    height:          rs(34),
+    borderRadius:    rs(10),
+    backgroundColor: T.surfaceAlt,
+    alignItems:      'center',
+    justifyContent:  'center',
+    flexShrink:      0,
+  },
+  iconBoxDanger: {
+    backgroundColor: 'rgba(239,68,68,0.10)',
+  },
+  body: { flex: 1, gap: rp(2) },
+  label: {
+    fontSize:   FONT.sm,
+    fontWeight: '600',
+    color:      T.text,
+  },
+  labelDanger: { color: T.danger },
+  desc: {
+    fontSize: rs(12),
+    color:    T.textSecondary,
+  },
+  value: {
+    fontSize:    FONT.xs,
+    color:       T.textSecondary,
+    fontWeight:  '500',
+    marginRight: rp(4),
+  },
+});
+
+// ─── Section Styles ───────────────────────────────────────────
+const sec = StyleSheet.create({
+  wrap: {
+    marginBottom:      SPACING.md,
+    paddingHorizontal: SPACING.md,
+  },
+  title: {
+    fontSize:      rs(11),
+    fontWeight:    '700',
+    color:         T.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: rp(0.9),
+    marginBottom:  rp(8),
+    paddingLeft:   rp(4),
+  },
+  card: {
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     T.border,
+    overflow:        'hidden',
+  },
+  divider: {
+    height:          1,
+    backgroundColor: T.border,
+    marginLeft:      rs(34) + SPACING.sm + SPACING.md,
+  },
+});
+
+// ─── Screen Styles ────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: {
-    flex: 1,
+    flex:            1,
     backgroundColor: T.background,
   },
-
-  // Header
   header: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical:   rp(12),
     borderBottomWidth: 1,
-    borderBottomColor: T.border,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  backBtn: {
+    width:           rs(36),
+    height:          rs(36),
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderRadius:    rs(18),
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   headerTitle: {
-    fontSize: FONT.xxl,
-    fontWeight: '800',
-    color: T.primary,
-    letterSpacing: -0.5,
+    fontSize:   FONT.md,
+    fontWeight: '700',
+    color:      T.text,
   },
-
-  // Scroll
-  scroll: { flex: 1 },
   content: {
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.xxl,
+    paddingTop: SPACING.lg,
   },
-
-  // Profile card
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: T.surface,
-    marginHorizontal: SPACING.md,
-    marginBottom: SPACING.lg,
-    padding: SPACING.md,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: T.border,
-  },
-  profileAvatar: {
-    width: rs(60),
-    height: rs(60),
-    borderRadius: rs(30),
-    backgroundColor: T.avatarBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  profileInfo: { flex: 1 },
-  profileName: {
-    fontSize: FONT.lg,
-    fontWeight: '700',
-    color: T.text,
-    marginBottom: rp(3),
-  },
-  profileTagline: {
-    fontSize: FONT.sm,
-    color: T.textSecondary,
-    fontStyle: 'italic',
-  },
-
-  // Section
-  section: {
+  logoutWrap: {
     paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.lg,
+    alignItems:        'center',
+    gap:               SPACING.md,
+    marginTop:         SPACING.sm,
   },
-  sectionLabel: {
-    fontSize: FONT.xs,
-    fontWeight: '700',
-    color: T.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: SPACING.sm,
-    paddingHorizontal: rp(4),
-  },
-
-  // Menu item
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: T.surface,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: T.border,
-  },
-  menuIcon: {
-    width: rs(42),
-    height: rs(42),
-    borderRadius: rs(21),
-    backgroundColor: T.iconBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.sm,
-  },
-  menuText: { flex: 1 },
-  menuTitle: {
-    fontSize: FONT.md,
-    fontWeight: '600',
-    color: T.text,
-    marginBottom: rp(2),
-  },
-  menuDesc: {
-    fontSize: FONT.xs,
-    color: T.textSecondary,
-  },
-
-  // Logout
   logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: T.surface,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    gap: SPACING.sm,
-    borderWidth: 1,
-    borderColor: T.primaryBorder,
+    width:           '100%',
+    paddingVertical: rp(14),
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     'rgba(239,68,68,0.30)',
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    alignItems:      'center',
   },
   logoutText: {
-    fontSize: FONT.md,
-    fontWeight: '700',
-    color: T.primary,
+    fontSize:      FONT.md,
+    fontWeight:    '700',
+    color:         T.danger,
+    letterSpacing: rp(0.3),
   },
-
-  // App info
-  appInfo: {
-    alignItems: 'center',
-    gap: rp(5),
-    paddingVertical: SPACING.lg,
-  },
-  appName: {
-    fontSize: FONT.md,
-    fontWeight: '700',
-    color: T.text,
-  },
-  appVersion: {
-    fontSize: FONT.xs,
-    color: T.textSecondary,
-  },
-  appDivider: {
-    width: rs(36),
-    height: 1,
-    backgroundColor: T.border,
-    marginVertical: rp(6),
-  },
-  appTagline: {
-    fontSize: FONT.xs,
+  footer: {
+    fontSize:  rs(11),
+    color:     T.textMuted,
+    textAlign: 'center',
     fontStyle: 'italic',
-    color: T.textSecondary,
   },
 });

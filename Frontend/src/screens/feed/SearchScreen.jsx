@@ -1,738 +1,435 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+/**
+ * SearchScreen — full-text search across posts and confessions.
+ * Auto-focuses on open, persists history, supports All / Recent / Popular filters.
+ */
+import React, {
+  useState, useEffect, useCallback, useRef,
+} from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  StatusBar,
-  ActivityIndicator,
-  Dimensions,
-  Keyboard,
-  Vibration,
+  View, Text, TextInput, TouchableOpacity, FlatList,
+  StyleSheet, StatusBar, ActivityIndicator, Keyboard,
 } from 'react-native';
-import {
-  ArrowLeft,
-  Search,
-  X,
-  Clock,
-  TrendingUp,
-  Filter,
-  Calendar,
-} from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '../../context/ThemeContext';
+import { ArrowLeft, Clock, Search, X } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import CalmPostCard from '../../components/feed/CalmPostCard';
 import { API_BASE_URL } from '../../config/api';
+import {
+  rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP,
+} from '../../utils/responsive';
 
-const { height, width } = Dimensions.get('window');
-
-// NEW Cinematic Coral Theme
-const THEME = {
-  background: '#0b0f18',
-  backgroundDark: '#06080f',
-  surface: '#151924',
-  surfaceDark: '#10131c',
-  primary: '#FF634A',
-  primaryDark: '#ff3b2f',
-  text: '#EAEAF0',
+// ─── Theme ────────────────────────────────────────────────────
+const T = {
+  background:    '#0b0f18',
+  surface:       '#151924',
+  surfaceAlt:    '#1a1f2e',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255,99,74,0.10)',
+  primaryBorder: 'rgba(255,99,74,0.22)',
+  text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  input: 'rgba(30, 35, 45, 0.7)',
+  textMuted:     '#4a5068',
+  border:        'rgba(255,255,255,0.06)',
+  borderStrong:  'rgba(255,255,255,0.10)',
 };
 
-// Starry Background Component
-const StarryBackground = () => {
-  const stars = useMemo(() => {
-    return Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      top: Math.random() * height,
-      left: Math.random() * width,
-      size: Math.random() * 3 + 1,
-      opacity: Math.random() * 0.6 + 0.2,
-    }));
-  }, []);
+const HISTORY_KEY   = '@anonixx_search_history';
+const MAX_HISTORY   = 10;
+const FILTERS       = ['all', 'recent', 'popular'];
+const SUGGESTIONS   = ['anxiety', 'loneliness', 'hope', 'healing', 'relationships', 'family'];
 
-  return (
-    <>
-      {stars.map((star) => (
-        <View
-          key={star.id}
-          style={{
-            position: 'absolute',
-            backgroundColor: THEME.primary,
-            borderRadius: 50,
-            top: star.top,
-            left: star.left,
-            width: star.size,
-            height: star.size,
-            opacity: star.opacity,
-          }}
-        />
-      ))}
-    </>
-  );
-};
-
-const SEARCH_HISTORY_KEY = '@anonixx_search_history';
-
+// ─── Screen ───────────────────────────────────────────────────
 export default function SearchScreen({ navigation }) {
-  const { theme } = useTheme();
+  const insets            = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
+  const inputRef          = useRef(null);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchHistory, setSearchHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('all'); // all, recent, popular
+  const [query,      setQuery]      = useState('');
+  const [results,    setResults]    = useState([]);
+  const [history,    setHistory]    = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [searched,   setSearched]   = useState(false);
+  const [total,      setTotal]      = useState(0);
+  const [filter,     setFilter]     = useState('all');
 
+  // Load history on mount, auto-focus input
   useEffect(() => {
-    loadSearchHistory();
+    AsyncStorage.getItem(HISTORY_KEY).then(raw => {
+      if (raw) setHistory(JSON.parse(raw));
+    });
+    setTimeout(() => inputRef.current?.focus(), 120);
   }, []);
 
-  const loadSearchHistory = async () => {
-    try {
-      const history = await AsyncStorage.getItem(SEARCH_HISTORY_KEY);
-      if (history) {
-        setSearchHistory(JSON.parse(history));
-      }
-    } catch (error) {
-      console.error('Load search history error:', error);
-    }
-  };
+  const saveHistory = useCallback(async (q) => {
+    const updated = [q, ...history.filter(h => h !== q)].slice(0, MAX_HISTORY);
+    setHistory(updated);
+    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  }, [history]);
 
-  const saveSearchToHistory = async (query) => {
-    try {
-      const trimmedQuery = query.trim();
-      if (!trimmedQuery) return;
+  const clearHistory = useCallback(async () => {
+    setHistory([]);
+    await AsyncStorage.removeItem(HISTORY_KEY);
+  }, []);
 
-      // Remove duplicates and add to front
-      const updatedHistory = [
-        trimmedQuery,
-        ...searchHistory.filter((q) => q !== trimmedQuery),
-      ].slice(0, 10); // Keep last 10 searches
+  const removeHistoryItem = useCallback(async (item) => {
+    const updated = history.filter(h => h !== item);
+    setHistory(updated);
+    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  }, [history]);
 
-      setSearchHistory(updatedHistory);
-      await AsyncStorage.setItem(
-        SEARCH_HISTORY_KEY,
-        JSON.stringify(updatedHistory)
-      );
-    } catch (error) {
-      console.error('Save search history error:', error);
-    }
-  };
+  const doSearch = useCallback(async (q = query, f = filter) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
 
-  const clearSearchHistory = async () => {
-    try {
-      setSearchHistory([]);
-      await AsyncStorage.removeItem(SEARCH_HISTORY_KEY);
-      Vibration.vibrate(10);
-    } catch (error) {
-      console.error('Clear search history error:', error);
-    }
-  };
-
-  const handleSearch = async (query = searchQuery) => {
-    const trimmedQuery = query.trim();
-    if (!trimmedQuery) return;
-
-    Vibration.vibrate(10);
-    setLoading(true);
-    setHasSearched(true);
     Keyboard.dismiss();
-
-    // Save to history
-    await saveSearchToHistory(trimmedQuery);
+    setLoading(true);
+    setSearched(true);
+    await saveHistory(trimmed);
 
     try {
       const token = await AsyncStorage.getItem('token');
-      const headers = {};
-
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      // Build query params
-      const params = new URLSearchParams({
-        q: trimmedQuery,
-        filter: selectedFilter,
+      const params = new URLSearchParams({ q: trimmed, filter: f, limit: '30' });
+      const res = await fetch(`${API_BASE_URL}/api/v1/posts/search?${params}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/posts/search?${params}`,
-        { headers }
-      );
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSearchResults(data.results || data.posts || []);
+      const data = await res.json();
+      if (res.ok) {
+        setResults(data.results || []);
+        setTotal(data.total || 0);
       } else {
-        console.error('Search failed:', data);
-        setSearchResults([]);
+        setResults([]);
+        setTotal(0);
       }
-    } catch (error) {
-      console.error('Search error:', error);
-      setSearchResults([]);
+    } catch {
+      setResults([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [query, filter, saveHistory]);
 
-  const handleHistoryItemPress = (query) => {
-    setSearchQuery(query);
-    handleSearch(query);
-  };
+  const handleFilterChange = useCallback((f) => {
+    setFilter(f);
+    if (searched) doSearch(query, f);
+  }, [searched, query, doSearch]);
 
-  const handleClearSearch = () => {
-    setSearchQuery('');
-    setSearchResults([]);
-    setHasSearched(false);
-    Vibration.vibrate(10);
-  };
-
-  const handlePostPress = (post) => {
-    navigation.navigate('PostDetail', { post });
-  };
-
-  const handleResponse = useCallback(() => {
-    // Handle response actions
+  const handleClear = useCallback(() => {
+    setQuery('');
+    setResults([]);
+    setSearched(false);
+    setTotal(0);
+    inputRef.current?.focus();
   }, []);
 
-  const handleSave = useCallback(() => {
-    // Handle save actions
-  }, []);
+  const handleHistoryPress = useCallback((q) => {
+    setQuery(q);
+    doSearch(q, filter);
+  }, [filter, doSearch]);
 
-  const handleViewThread = useCallback((postId) => {
-    navigation.navigate('ThreadView', { postId });
-  }, []);
+  const handlePostPress    = useCallback((post) => navigation.navigate('PostDetail', { post }), [navigation]);
+  const handleViewThread   = useCallback((postId) => navigation.navigate('ThreadView', { postId }), [navigation]);
+  const handleResponse     = useCallback(() => {}, []);
+  const handleSave         = useCallback(() => {}, []);
+
+  const renderResult = useCallback(({ item }) => (
+    <CalmPostCard
+      post={item}
+      onResponse={handleResponse}
+      onSave={handleSave}
+      onViewThread={handleViewThread}
+      onPress={handlePostPress}
+      navigation={navigation}
+    />
+  ), [navigation, handleResponse, handleSave, handleViewThread, handlePostPress]);
+
+  const keyExtractor = useCallback((item, i) => item.id || String(i), []);
+
+  // ── Content: pre-search (history / suggestions) ────────────
+  const PreSearch = (
+    <View style={styles.preSearch}>
+      {history.length > 0 ? (
+        <>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionLabel}>Recent</Text>
+            <TouchableOpacity onPress={clearHistory} hitSlop={HIT_SLOP}>
+              <Text style={styles.clearAll}>Clear all</Text>
+            </TouchableOpacity>
+          </View>
+          {history.map((h) => (
+            <TouchableOpacity
+              key={h}
+              style={styles.historyItem}
+              onPress={() => handleHistoryPress(h)}
+              activeOpacity={0.75}
+            >
+              <Clock size={rs(14)} color={T.textMuted} />
+              <Text style={styles.historyText}>{h}</Text>
+              <TouchableOpacity
+                onPress={() => removeHistoryItem(h)}
+                hitSlop={HIT_SLOP}
+              >
+                <X size={rs(14)} color={T.textMuted} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+        </>
+      ) : (
+        <>
+          <Text style={styles.sectionLabel}>Try searching for</Text>
+          <View style={styles.chips}>
+            {SUGGESTIONS.map(s => (
+              <TouchableOpacity
+                key={s}
+                style={styles.chip}
+                onPress={() => { setQuery(s); doSearch(s, filter); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.chipText}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+    </View>
+  );
+
+  // ── Content: results or empty ───────────────────────────────
+  const PostSearch = loading ? (
+    <View style={styles.centered}>
+      <ActivityIndicator color={T.primary} size="large" />
+      <Text style={styles.loadingText}>searching…</Text>
+    </View>
+  ) : results.length > 0 ? (
+    <FlatList
+      data={results}
+      keyExtractor={keyExtractor}
+      renderItem={renderResult}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ paddingTop: rh(4), paddingBottom: rh(60) }}
+      ListHeaderComponent={
+        <Text style={styles.resultCount}>
+          {total} result{total !== 1 ? 's' : ''} for "{query.trim()}"
+        </Text>
+      }
+    />
+  ) : (
+    <View style={styles.centered}>
+      <Search size={rs(48)} color={T.textMuted} />
+      <Text style={styles.emptyTitle}>nothing found</Text>
+      <Text style={styles.emptyBody}>try different keywords or spelling</Text>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-      <StarryBackground />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="light-content" backgroundColor={T.background} />
 
-      {/* Header with Search Bar */}
+      {/* Header — back + input + clear */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backButton}
+          style={styles.backBtn}
+          hitSlop={HIT_SLOP}
         >
-          <ArrowLeft size={24} color={THEME.text} />
+          <ArrowLeft size={rs(20)} color={T.text} />
         </TouchableOpacity>
 
-        <View style={styles.searchBarWrapper}>
-          <View style={styles.searchAccentBar} />
-          <View style={styles.searchBar}>
-            <Search size={20} color={THEME.textSecondary} />
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search thoughts..."
-              placeholderTextColor={THEME.textSecondary}
-              style={styles.searchInput}
-              autoFocus
-              returnKeyType="search"
-              onSubmitEditing={() => handleSearch()}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={handleClearSearch}>
-                <X size={20} color={THEME.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          onPress={() => setShowFilters(!showFilters)}
-          style={styles.filterButton}
-        >
-          <Filter
-            size={20}
-            color={showFilters ? THEME.primary : THEME.textSecondary}
+        <View style={styles.inputWrap}>
+          <Search size={rs(15)} color={T.textMuted} />
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="search posts, confessions…"
+            placeholderTextColor={T.textMuted}
+            returnKeyType="search"
+            onSubmitEditing={() => doSearch()}
+            autoCorrect={false}
+            autoCapitalize="none"
           />
-        </TouchableOpacity>
+          {query.length > 0 && (
+            <TouchableOpacity onPress={handleClear} hitSlop={HIT_SLOP}>
+              <X size={rs(16)} color={T.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {/* Filters */}
-      {showFilters && (
-        <View style={styles.filtersWrapper}>
-          <View style={styles.filtersAccentBar} />
-          <View style={styles.filters}>
-            <TouchableOpacity
-              onPress={() => setSelectedFilter('all')}
-              style={[
-                styles.filterChip,
-                selectedFilter === 'all' && styles.filterChipActive,
-              ]}
-            >
-              <TrendingUp
-                size={16}
-                color={
-                  selectedFilter === 'all' ? THEME.primary : THEME.textSecondary
-                }
-              />
-              <Text
-                style={[
-                  styles.filterChipText,
-                  selectedFilter === 'all' && styles.filterChipTextActive,
-                ]}
-              >
-                All
-              </Text>
-            </TouchableOpacity>
+      {/* Filter chips — always visible */}
+      <View style={styles.filterRow}>
+        {FILTERS.map(f => (
+          <TouchableOpacity
+            key={f}
+            style={[styles.filterChip, filter === f && styles.filterChipActive]}
+            onPress={() => handleFilterChange(f)}
+            hitSlop={HIT_SLOP}
+          >
+            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-            <TouchableOpacity
-              onPress={() => setSelectedFilter('recent')}
-              style={[
-                styles.filterChip,
-                selectedFilter === 'recent' && styles.filterChipActive,
-              ]}
-            >
-              <Clock
-                size={16}
-                color={
-                  selectedFilter === 'recent'
-                    ? THEME.primary
-                    : THEME.textSecondary
-                }
-              />
-              <Text
-                style={[
-                  styles.filterChipText,
-                  selectedFilter === 'recent' && styles.filterChipTextActive,
-                ]}
-              >
-                Recent
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setSelectedFilter('popular')}
-              style={[
-                styles.filterChip,
-                selectedFilter === 'popular' && styles.filterChipActive,
-              ]}
-            >
-              <TrendingUp
-                size={16}
-                color={
-                  selectedFilter === 'popular'
-                    ? THEME.primary
-                    : THEME.textSecondary
-                }
-              />
-              <Text
-                style={[
-                  styles.filterChipText,
-                  selectedFilter === 'popular' && styles.filterChipTextActive,
-                ]}
-              >
-                Popular
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Search History / Suggestions */}
-        {!hasSearched && searchHistory.length > 0 && (
-          <View style={styles.historyWrapper}>
-            <View style={styles.historyAccentBar} />
-            <View style={styles.historySection}>
-              <View style={styles.historyHeader}>
-                <Clock size={18} color={THEME.primary} />
-                <Text style={styles.historyTitle}>Recent Searches</Text>
-                <TouchableOpacity onPress={clearSearchHistory}>
-                  <Text style={styles.clearButton}>Clear</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.historyList}>
-                {searchHistory.map((query, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    onPress={() => handleHistoryItemPress(query)}
-                    style={styles.historyItem}
-                  >
-                    <Clock size={16} color={THEME.textSecondary} />
-                    <Text style={styles.historyItemText}>{query}</Text>
-                    <X
-                      size={16}
-                      color={THEME.textSecondary}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        const updated = searchHistory.filter(
-                          (q) => q !== query
-                        );
-                        setSearchHistory(updated);
-                        AsyncStorage.setItem(
-                          SEARCH_HISTORY_KEY,
-                          JSON.stringify(updated)
-                        );
-                      }}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Search Suggestions (when no history) */}
-        {!hasSearched && searchHistory.length === 0 && (
-          <View style={styles.suggestionsWrapper}>
-            <View style={styles.suggestionsAccentBar} />
-            <View style={styles.suggestions}>
-              <Text style={styles.suggestionsTitle}>Try searching for:</Text>
-              <View style={styles.suggestionsList}>
-                {['anxiety', 'loneliness', 'hope', 'gratitude', 'healing'].map(
-                  (suggestion, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => {
-                        setSearchQuery(suggestion);
-                        handleSearch(suggestion);
-                      }}
-                      style={styles.suggestionChip}
-                    >
-                      <Text style={styles.suggestionChipText}>
-                        {suggestion}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                )}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={THEME.primary} />
-            <Text style={styles.loadingText}>Searching...</Text>
-          </View>
-        )}
-
-        {/* Search Results */}
-        {hasSearched && !loading && (
-          <>
-            {searchResults.length > 0 ? (
-              <>
-                <Text style={styles.resultsCount}>
-                  Found {searchResults.length} result
-                  {searchResults.length !== 1 ? 's' : ''}
-                </Text>
-                {searchResults.map((post) => (
-                  <CalmPostCard
-                    key={post.id}
-                    post={post}
-                    onResponse={handleResponse}
-                    onSave={handleSave}
-                    onViewThread={handleViewThread}
-                    onPress={handlePostPress}
-                    navigation={navigation}
-                  />
-                ))}
-              </>
-            ) : (
-              <View style={styles.emptyWrapper}>
-                <View style={styles.emptyAccentBar} />
-                <View style={styles.empty}>
-                  <Search size={64} color={THEME.textSecondary} opacity={0.3} />
-                  <Text style={styles.emptyTitle}>No results found</Text>
-                  <Text style={styles.emptyText}>
-                    Try different keywords or check your spelling
-                  </Text>
-                </View>
-              </View>
-            )}
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+      {/* Body */}
+      {searched ? PostSearch : PreSearch}
+    </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEME.background,
-  },
+  container: { flex: 1, backgroundColor: T.background },
+
+  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    backgroundColor: 'transparent',
-    zIndex: 10,
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(10),
+    gap:               SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  backButton: {
-    padding: 8,
-  },
-  searchBarWrapper: {
-    flex: 1,
-    position: 'relative',
-  },
-  searchAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
-    opacity: 0.6,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: THEME.surface,
-    paddingHorizontal: 16,
-    paddingLeft: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: THEME.text,
-  },
-  filterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: THEME.surface,
-    alignItems: 'center',
+  backBtn: {
+    width:          rs(36),
+    height:         rs(36),
+    alignItems:     'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
+  inputWrap: {
+    flex:            1,
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             rp(8),
+    backgroundColor: T.surfaceAlt,
+    borderRadius:    RADIUS.full,
+    paddingHorizontal: rp(14),
+    paddingVertical: rp(9),
+    borderWidth:     1,
+    borderColor:     T.borderStrong,
+  },
+  input: {
+    flex:     1,
+    fontSize: FONT.md,
+    color:    T.text,
+    paddingVertical: 0,
+  },
+
   // Filters
-  filtersWrapper: {
-    position: 'relative',
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  filtersAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
-    opacity: 0.4,
-  },
-  filters: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: THEME.surface,
-    padding: 12,
-    paddingLeft: 16,
-    borderRadius: 12,
+  filterRow: {
+    flexDirection:     'row',
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(12),
+    gap:               SPACING.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
   filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: THEME.input,
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(6),
+    borderRadius:      RADIUS.full,
+    backgroundColor:   T.surface,
+    borderWidth:       1,
+    borderColor:       T.border,
   },
   filterChipActive: {
-    backgroundColor: 'rgba(255, 99, 74, 0.15)',
+    backgroundColor: T.primaryDim,
+    borderColor:     T.primaryBorder,
   },
-  filterChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: THEME.textSecondary,
+  filterText:       { fontSize: FONT.sm, fontWeight: '600', color: T.textSecondary },
+  filterTextActive: { color: T.primary },
+
+  // Pre-search
+  preSearch: {
+    padding: SPACING.md,
   },
-  filterChipTextActive: {
-    color: THEME.primary,
+  sectionRow: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    alignItems:     'center',
+    marginBottom:   SPACING.sm,
   },
-  content: {
-    flex: 1,
+  sectionLabel: {
+    fontSize:      FONT.xs,
+    fontWeight:    '700',
+    color:         T.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  // History
-  historyWrapper: {
-    position: 'relative',
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  historyAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.6,
-  },
-  historySection: {
-    backgroundColor: THEME.surface,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  historyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
-  },
-  historyTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: THEME.text,
-  },
-  clearButton: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: THEME.primary,
-  },
-  historyList: {
-    gap: 12,
+  clearAll: {
+    fontSize:   FONT.xs,
+    color:      T.primary,
+    fontWeight: '500',
   },
   historyItem: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               SPACING.sm,
+    paddingVertical:   rp(11),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  historyText: {
+    flex:     1,
+    fontSize: FONT.sm,
+    color:    T.text,
+  },
+  chips: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
+    flexWrap:      'wrap',
+    gap:           SPACING.xs,
+    marginTop:     SPACING.sm,
   },
-  historyItemText: {
-    flex: 1,
-    fontSize: 15,
-    color: THEME.text,
+  chip: {
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.full,
+    backgroundColor:   T.surface,
+    borderWidth:       1,
+    borderColor:       T.border,
   },
-  // Suggestions
-  suggestionsWrapper: {
-    position: 'relative',
-    marginHorizontal: 16,
-    marginTop: 8,
-  },
-  suggestionsAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.4,
-  },
-  suggestions: {
-    backgroundColor: THEME.surface,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-  },
-  suggestionsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: THEME.textSecondary,
-    marginBottom: 12,
-  },
-  suggestionsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  suggestionChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: THEME.input,
-  },
-  suggestionChipText: {
-    fontSize: 14,
+  chipText: {
+    fontSize:   FONT.sm,
+    color:      T.text,
     fontWeight: '500',
-    color: THEME.text,
   },
-  // Loading
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 60,
+
+  // Results
+  resultCount: {
+    fontSize:          FONT.xs,
+    color:             T.textSecondary,
+    paddingHorizontal: SPACING.md,
+    paddingBottom:     rp(8),
+    fontStyle:         'italic',
+  },
+
+  // States
+  centered: {
+    flex:           1,
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            SPACING.sm,
+    paddingBottom:  rh(60),
   },
   loadingText: {
-    fontSize: 15,
-    color: THEME.textSecondary,
-    marginTop: 16,
+    fontSize:  FONT.sm,
+    color:     T.textSecondary,
     fontStyle: 'italic',
-  },
-  // Results
-  resultsCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: THEME.textSecondary,
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  // Empty State
-  emptyWrapper: {
-    position: 'relative',
-    marginHorizontal: 16,
-    marginTop: 40,
-  },
-  emptyAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.4,
-  },
-  empty: {
-    backgroundColor: THEME.surface,
-    padding: 40,
-    paddingLeft: 44,
-    borderRadius: 16,
-    alignItems: 'center',
+    marginTop: rp(8),
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize:   FONT.xl,
     fontWeight: '700',
-    color: THEME.text,
-    marginTop: 16,
-    marginBottom: 8,
+    color:      T.text,
+    marginTop:  SPACING.md,
   },
-  emptyText: {
-    fontSize: 15,
-    color: THEME.textSecondary,
+  emptyBody: {
+    fontSize: FONT.sm,
+    color:    T.textMuted,
     textAlign: 'center',
   },
 });

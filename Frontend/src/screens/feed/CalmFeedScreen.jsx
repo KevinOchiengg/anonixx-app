@@ -8,9 +8,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { LogIn, LogOut, Search, Flame, RefreshCw } from 'lucide-react-native';
+import { Search, Flame, RefreshCw, Menu } from 'lucide-react-native';
+import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useAuth } from '../../context/AuthContext';
-import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../components/ui/Toast';
 import CalmPostCard from '../../components/feed/CalmPostCard';
 import FeedDivider from '../../components/feed/FeedDivider';
@@ -159,7 +159,6 @@ const EmptyState = React.memo(({ onRefresh }) => (
 // ── Main screen ───────────────────────────────────────────────
 export default function CalmFeedScreen({ navigation }) {
   const { isAuthenticated, checkAuth } = useAuth();
-  const { confirmLogout }              = useLogout(navigation);
   const insets                         = useSafeAreaInsets();
   const { showToast }                  = useToast();
 
@@ -173,6 +172,7 @@ export default function CalmFeedScreen({ navigation }) {
   const [streakBanner, setStreakBanner]     = useState(null);
   const [activeVideoId, setActiveVideoId]   = useState(null);
   const [nextVideo, setNextVideo]           = useState(null);
+  const [menuVisible, setMenuVisible]       = useState(false);
 
   const flatListRef   = useRef(null);
   const postsRef      = useRef([]);
@@ -288,12 +288,12 @@ export default function CalmFeedScreen({ navigation }) {
     setAuthModalVisible(true);
   }, []);
 
-  const handleMediaPress = useCallback((post) => {
+  const handleMediaPress = useCallback((post, startTime = 0) => {
     const mediaPosts = postsRef.current.filter(
       (p) => p.type === 'post' && (p.video_url || p.audio_url)
     );
     const startIndex = mediaPosts.findIndex((p) => p.id === post.id);
-    navigation.navigate('MediaFeed', { posts: mediaPosts, startIndex: Math.max(0, startIndex) });
+    navigation.navigate('MediaFeed', { posts: mediaPosts, startIndex: Math.max(0, startIndex), startTime });
   }, [navigation]);
 
   const handleResponse = useCallback(async (postId, responseType) => {
@@ -406,10 +406,6 @@ export default function CalmFeedScreen({ navigation }) {
     loadFeed(false);
   }, [loadFeed]);
 
-  const handleHeaderAuthAction = useCallback(() => {
-    if (isAuthenticated) confirmLogout();
-    else navigation.navigate('Auth', { screen: 'Login' });
-  }, [isAuthenticated, confirmLogout, navigation]);
 
   const renderItem = useCallback(({ item }) => {
     if (item.type === 'divider')      return <FeedDivider text={item.text} />;
@@ -456,7 +452,11 @@ export default function CalmFeedScreen({ navigation }) {
         <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
         <StarryBackground />
         <View style={[styles.header, { paddingTop: insets.top + rh(8) }]}>
-          <Text style={styles.headerTitle}>Anonixx</Text>
+          <Text style={styles.headerLogo}>anonixx</Text>
+          <View style={styles.headerRight}>
+            <View style={styles.headerBtn} />
+            <View style={styles.headerBtn} />
+          </View>
         </View>
         <View style={styles.skeletonContainer}>
           {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
@@ -489,32 +489,23 @@ export default function CalmFeedScreen({ navigation }) {
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + rh(8) }]}>
-        <Text style={styles.headerTitle}>Anonixx</Text>
-        <View style={styles.headerActions}>
+        <Text style={styles.headerLogo}>anonixx</Text>
+
+        <View style={styles.headerRight}>
           <TouchableOpacity
             onPress={() => navigation.navigate('Search')}
-            style={styles.headerIconBtn}
+            style={styles.headerBtn}
             hitSlop={HIT_SLOP}
           >
             <Search size={rs(20)} color={THEME.textSecondary} />
           </TouchableOpacity>
+
           <TouchableOpacity
-            onPress={handleHeaderAuthAction}
-            style={styles.headerAuthBtn}
-            activeOpacity={0.8}
+            onPress={() => setMenuVisible(true)}
+            style={styles.headerBtn}
             hitSlop={HIT_SLOP}
           >
-            {isAuthenticated ? (
-              <>
-                <LogOut size={rs(15)} color={THEME.textSecondary} />
-                <Text style={styles.headerAuthText}>Logout</Text>
-              </>
-            ) : (
-              <>
-                <LogIn size={rs(15)} color={THEME.textSecondary} />
-                <Text style={styles.headerAuthText}>Login</Text>
-              </>
-            )}
+            <Menu size={rs(20)} color={THEME.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -553,6 +544,12 @@ export default function CalmFeedScreen({ navigation }) {
         onLogin={() => { setAuthModalVisible(false); navigation.navigate('Auth', { screen: 'Login' }); }}
         action={authModalAction}
       />
+
+      <HamburgerMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        navigation={navigation}
+      />
     </View>
   );
 }
@@ -561,38 +558,34 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.background },
 
   header: {
-    flexDirection:      'row',
-    alignItems:         'center',
-    justifyContent:     'space-between',
-    paddingHorizontal:  SPACING.lg,
-    paddingBottom:      rp(14),
-    zIndex:             10,
-  },
-  headerTitle: {
-    fontSize:      FONT.xxl,
-    fontWeight:    '800',
-    color:         THEME.primary,
-    letterSpacing: rs(-0.5),
-  },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  headerIconBtn: {
-    width:           rs(40),
-    height:          rs(40),
-    borderRadius:    RADIUS.full,
-    alignItems:      'center',
-    justifyContent:  'center',
-    backgroundColor: THEME.primaryDim,
-  },
-  headerAuthBtn: {
     flexDirection:     'row',
     alignItems:        'center',
-    gap:               rp(5),
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(7),
-    borderRadius:      RADIUS.full,
-    backgroundColor:   THEME.primaryDim,
+    justifyContent:    'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingBottom:     rp(12),
+    zIndex:            10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  headerAuthText: { fontSize: FONT.sm, fontWeight: '600', color: THEME.textSecondary },
+  headerLogo: {
+    fontSize:      FONT.lg,
+    fontWeight:    '800',
+    color:         THEME.primary,
+    letterSpacing: -0.3,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(4),
+  },
+  headerBtn: {
+    width:          rs(38),
+    height:         rs(38),
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderRadius:   rs(19),
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
 
   // Streak banner
   streakBanner: {

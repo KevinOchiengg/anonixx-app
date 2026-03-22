@@ -209,8 +209,8 @@ async def create_drop(
     if not data.confession.strip():
         raise HTTPException(status_code=400, detail="Confession cannot be empty")
 
-    if len(data.confession) > 280:
-        raise HTTPException(status_code=400, detail="Confession must be 280 characters or less")
+    if len(data.confession) > 160:
+        raise HTTPException(status_code=400, detail="Confession must be 160 characters or less")
 
     if data.is_group and (not data.group_size or data.group_size < 2 or data.group_size > 10):
         raise HTTPException(status_code=400, detail="Group size must be between 2 and 10")

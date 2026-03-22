@@ -35,6 +35,11 @@
             {
               "scheme": "anonixx",
               "host": "drop"
+            },
+
+            {
+              "scheme": "anonixx",
+              "host": "confession"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

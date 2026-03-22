@@ -17,7 +17,10 @@ import { useDispatch } from 'react-redux';
 import { login } from '../../store/slices/authSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
-import { rs, rf, rp, rh, SPACING, FONT, RADIUS, ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP } from '../../utils/responsive';
+import {
+  rs, rf, rp, rh, SPACING, FONT, RADIUS,
+  ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
+} from '../../utils/responsive';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 
 const THEME = {
@@ -29,11 +32,10 @@ const THEME = {
   textSecondary: '#9A9AA3',
   border:        'rgba(255,255,255,0.06)',
   inputBg:       'rgba(255,255,255,0.04)',
-  error:         '#ef4444',
 };
 
 const STARS = Array.from({ length: 40 }, (_, i) => ({
-  id: i,
+  id:      i,
   top:     Math.random() * SCREEN.height,
   left:    Math.random() * SCREEN.width,
   size:    Math.random() * rs(2.5) + rs(0.5),
@@ -69,12 +71,11 @@ export default function LoginScreen({ navigation }) {
   const { login: authContextLogin } = useAuth();
   const { showToast }               = useToast();
 
-  const [email, setEmail]           = useState('');
-  const [password, setPassword]     = useState('');
-  const [showPass, setShowPass]     = useState(false);
-  const [loading, setLoading]       = useState(false);
-  const [emailError, setEmailError] = useState('');
-  const [focused, setFocused]       = useState('');
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const [focused,  setFocused]  = useState('');
 
   const fadeAnim    = useRef(new Animated.Value(0)).current;
   const slideAnim   = useRef(new Animated.Value(rh(32))).current;
@@ -97,8 +98,7 @@ export default function LoginScreen({ navigation }) {
 
   const handleEmailChange    = useCallback((val) => {
     setEmail(val.slice(0, MAX_EMAIL_LENGTH));
-    if (emailError) setEmailError('');
-  }, [emailError]);
+  }, []);
 
   const handlePasswordChange = useCallback((val) => {
     setPassword(val.slice(0, MAX_PASSWORD_LENGTH));
@@ -108,7 +108,6 @@ export default function LoginScreen({ navigation }) {
     const trimmedEmail = email.trim();
     const err = validateEmail(trimmedEmail);
     if (err) {
-      setEmailError(err);
       showToast({ type: 'error', message: err });
       return;
     }
@@ -125,7 +124,7 @@ export default function LoginScreen({ navigation }) {
       })).unwrap();
 
       if (!result.access_token) {
-        showToast({ type: 'error', title: 'Login Failed', message: 'No token received. Please try again.' });
+        showToast({ type: 'error', message: 'No token received. Please try again.' });
         return;
       }
 
@@ -139,11 +138,11 @@ export default function LoginScreen({ navigation }) {
     } catch (error) {
       const msg = error?.detail || error?.message || '';
       if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('invalid')) {
-        showToast({ type: 'error', title: 'Login Failed', message: 'Incorrect email or password.' });
+        showToast({ type: 'error', message: 'Incorrect email or password.' });
       } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
-        showToast({ type: 'error', title: 'No Connection', message: 'Check your internet and try again.' });
+        showToast({ type: 'error', message: 'Check your internet and try again.' });
       } else {
-        showToast({ type: 'error', title: 'Login Failed', message: 'Something went wrong. Please try again.' });
+        showToast({ type: 'error', message: msg || 'Something went wrong. Please try again.' });
       }
     } finally {
       setLoading(false);
@@ -161,12 +160,11 @@ export default function LoginScreen({ navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <Animated.View
-          style={[styles.content, {
-            opacity:   fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          }]}
-        >
+        <Animated.View style={[styles.content, {
+          opacity:   fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        }]}>
+
           {/* Brand mark */}
           <View style={styles.brandMark}>
             <View style={styles.brandDot} />
@@ -187,8 +185,7 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.label}>Email</Text>
               <View style={[
                 styles.inputRow,
-                focused === 'email'    && styles.inputRowFocused,
-                emailError             && styles.inputRowError,
+                focused === 'email' && styles.inputRowFocused,
               ]}>
                 <Mail
                   size={ICON.md}
@@ -200,7 +197,7 @@ export default function LoginScreen({ navigation }) {
                   value={email}
                   onChangeText={handleEmailChange}
                   onFocus={() => setFocused('email')}
-                  onBlur={() => { setFocused(''); setEmailError(validateEmail(email.trim())); }}
+                  onBlur={() => setFocused('')}
                   onSubmitEditing={() => passwordRef.current?.focus()}
                   placeholder="your@email.com"
                   placeholderTextColor={THEME.textSecondary}
@@ -213,7 +210,6 @@ export default function LoginScreen({ navigation }) {
                   style={styles.input}
                 />
               </View>
-              {emailError ? <Text style={styles.fieldError}>{emailError}</Text> : null}
             </View>
 
             {/* Password */}
@@ -316,10 +312,10 @@ const styles = StyleSheet.create({
 
   kav:     { flex: 1 },
   content: {
-    flex:             1,
+    flex:              1,
     paddingHorizontal: SPACING.lg,
-    justifyContent:   'center',
-    paddingBottom:    SPACING.lg,
+    justifyContent:    'center',
+    paddingBottom:     SPACING.lg,
   },
 
   brandMark: {
@@ -348,13 +344,13 @@ const styles = StyleSheet.create({
   },
 
   header:   { marginBottom: SPACING.xl },
-  title:    {
-    fontSize:     FONT.hero,
-    fontWeight:   '800',
-    color:        THEME.text,
+  title: {
+    fontSize:      FONT.hero,
+    fontWeight:    '800',
+    color:         THEME.text,
     letterSpacing: rs(-1),
-    marginBottom: SPACING.sm,
-    lineHeight:   FONT.hero * 1.15,
+    marginBottom:  SPACING.sm,
+    lineHeight:    FONT.hero * 1.15,
   },
   subtitle: { fontSize: FONT.md, color: THEME.textSecondary, lineHeight: FONT.md * 1.6 },
 
@@ -379,9 +375,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: rp(14),
     height:            INPUT_HEIGHT,
   },
-  inputRowFocused: { borderColor: THEME.primary, backgroundColor: THEME.primaryDim },
-  inputRowError:   { borderColor: THEME.error },
-  fieldIcon:       { marginRight: rp(10) },
+  inputRowFocused: {
+    borderColor:     THEME.primary,
+    backgroundColor: THEME.primaryDim,
+  },
+  fieldIcon:  { marginRight: rp(10) },
   input: {
     flex:     1,
     fontSize: FONT.md,
@@ -389,13 +387,6 @@ const styles = StyleSheet.create({
     height:   INPUT_HEIGHT,
   },
   eyeButton: { padding: rp(4), marginLeft: rp(6) },
-  fieldError: {
-    color:      THEME.error,
-    fontSize:   rf(11),
-    marginTop:  SPACING.xs,
-    marginLeft: rp(4),
-    fontWeight: '500',
-  },
 
   loginBtn: {
     height:          BUTTON_HEIGHT,
