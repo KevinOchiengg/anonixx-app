@@ -1,433 +1,754 @@
 /**
- * DropsInboxScreen
- * Active cards you've sent + all connections (chats from drops).
+ * DropsInboxScreen — active confession cards + drop connections.
+ * All 17 Anonixx dev rules applied.
  */
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, {
+  useState, useEffect, useCallback, useRef, useMemo,
+} from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, RefreshControl, Animated,
+  ActivityIndicator, RefreshControl, Animated, Share,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ArrowLeft, Clock, Flame, MessageCircle, Plus,
-  Share2, Users, Zap, Eye, ChevronRight,
+  ArrowLeft, ChevronRight, Clock, Eye, Flame,
+  MessageCircle, Plus, Share2, Zap,
 } from 'lucide-react-native';
-import { Share } from 'react-native';
+import {
+  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT, SCREEN,
+} from '../../utils/responsive';
+import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  surfaceAlt: '#1a1f2e',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.06)',
+// ─── Theme (Rule 14) ─────────────────────────────────────────
+const T = {
+  background:  '#0b0f18',
+  surface:     '#151924',
+  surfaceAlt:  '#1a1f2e',
+  primary:     '#FF634A',
+  primaryDim:  'rgba(255,99,74,0.15)',
+  text:        '#EAEAF0',
+  textSecondary:'#9A9AA3',
+  textMuted:   '#4a5068',
+  border:      'rgba(255,255,255,0.06)',
+  inputBg:     'rgba(255,255,255,0.04)',
 };
 
+// ─── Static data (Rule 5) ────────────────────────────────────
 const CATEGORY_COLORS = {
-  love: '#FF6B8A', fun: '#FFB347', adventure: '#47B8FF',
-  friendship: '#47FFB8', spicy: '#FF4747',
+  love:       '#FF6B8A',
+  fun:        '#FFB347',
+  adventure:  '#47B8FF',
+  friendship: '#47FFB8',
+  spicy:      '#FF4747',
 };
 
 const TABS = ['Cards', 'Connections'];
 
+// ─── Module-level components (Rules 5, 6) ────────────────────
+const EmptyCards = React.memo(({ onPress }) => (
+  <View style={empty.wrap}>
+    <Text style={empty.glyph}>🔥</Text>
+    <Text style={empty.title}>nothing dropped yet</Text>
+    <Text style={empty.sub}>
+      write something you've never said out loud.{'\n'}someone will unlock it.
+    </Text>
+    <TouchableOpacity style={empty.btn} onPress={onPress} activeOpacity={0.85}>
+      <Plus size={rs(15)} color="#fff" strokeWidth={2.5} />
+      <Text style={empty.btnText}>create a drop</Text>
+    </TouchableOpacity>
+  </View>
+));
+
+const EmptyConnections = React.memo(({ onPress }) => (
+  <View style={empty.wrap}>
+    <Text style={empty.glyph}>💬</Text>
+    <Text style={empty.title}>no one's come through yet</Text>
+    <Text style={empty.sub}>
+      when someone pays to unlock your drop,{'\n'}they show up here.
+    </Text>
+    <TouchableOpacity style={empty.btn} onPress={onPress} activeOpacity={0.85}>
+      <Text style={empty.btnText}>browse confessions</Text>
+    </TouchableOpacity>
+  </View>
+));
+
+const DropCard = React.memo(({ item, onShare, onPress }) => {
+  const color    = CATEGORY_COLORS[item.category] || T.primary;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn  = useCallback(() => {
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, tension: 200, friction: 10 }).start();
+  }, [scaleAnim]);
+  const onPressOut = useCallback(() => {
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 10 }).start();
+  }, [scaleAnim]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={[card.wrap, { borderLeftColor: color }]}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        activeOpacity={1}
+      >
+        {/* Header row */}
+        <View style={card.header}>
+          <View style={[card.catDot, { backgroundColor: color }]} />
+          <Text style={[card.catLabel, { color }]}>{item.category}</Text>
+          {item.is_night_mode && (
+            <View style={card.nightPill}>
+              <Text style={card.nightPillText}>🌙 night mode</Text>
+            </View>
+          )}
+          <View style={card.timerPill}>
+            <Clock size={rs(10)} color={T.textSecondary} strokeWidth={2} />
+            <Text style={card.timerText}>{item.time_left}</Text>
+          </View>
+        </View>
+
+        {/* Confession */}
+        <Text style={card.confession} numberOfLines={2}>
+          "{item.confession}"
+        </Text>
+
+        {/* Stats + share */}
+        <View style={card.footer}>
+          <View style={card.stat}>
+            <Zap size={rs(13)} color={color} strokeWidth={2} />
+            <Text style={[card.statNum, { color }]}>{item.unlock_count}</Text>
+            <Text style={card.statLabel}>unlocks</Text>
+          </View>
+          <View style={card.stat}>
+            <Eye size={rs(13)} color={T.textSecondary} strokeWidth={2} />
+            <Text style={card.statNum}>{item.admirer_count}</Text>
+            <Text style={card.statLabel}>views</Text>
+          </View>
+          {item.reactions?.length > 0 && (
+            <Text style={card.reactions}>
+              {item.reactions.slice(-3).join(' ')}
+            </Text>
+          )}
+          <TouchableOpacity
+            style={[card.shareBtn, { borderColor: `${color}40` }]}
+            onPress={() => onShare(item)}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.75}
+          >
+            <Share2 size={rs(12)} color={color} strokeWidth={2} />
+            <Text style={[card.shareBtnText, { color }]}>share</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+const ConnectionItem = React.memo(({ item, onPress }) => {
+  const initial = item.other_anonymous_name?.[0]?.toUpperCase() || '?';
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn  = useCallback(() => {
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, tension: 200, friction: 10 }).start();
+  }, [scaleAnim]);
+  const onPressOut = useCallback(() => {
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 10 }).start();
+  }, [scaleAnim]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={conn.wrap}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        activeOpacity={1}
+      >
+        <View style={conn.avatar}>
+          <Text style={conn.avatarText}>{initial}</Text>
+          {item.is_revealed && <View style={conn.revealDot} />}
+        </View>
+
+        <View style={conn.info}>
+          <View style={conn.nameRow}>
+            <Text style={conn.name} numberOfLines={1}>{item.other_anonymous_name}</Text>
+            {item.is_revealed && (
+              <View style={conn.revealBadge}>
+                <Text style={conn.revealBadgeText}>revealed</Text>
+              </View>
+            )}
+          </View>
+          <Text style={conn.confession} numberOfLines={1}>"{item.confession}"</Text>
+          {item.last_message ? (
+            <Text style={conn.lastMsg} numberOfLines={1}>
+              {item.is_sender ? 'you: ' : ''}{item.last_message}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={conn.right}>
+          <Text style={conn.msgCount}>{item.message_count} msgs</Text>
+          <ChevronRight size={rs(14)} color={T.textMuted} strokeWidth={2} />
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+// ─── Screen ───────────────────────────────────────────────────
 export default function DropsInboxScreen({ navigation }) {
-  const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState(0);
-  const [data, setData] = useState({ active_drops: [], connections: [] });
-  const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
+
+  const [activeTab,  setActiveTab]  = useState(0);
+  const [data,       setData]       = useState({ active_drops: [], connections: [] });
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const tabIndicator = useState(new Animated.Value(0))[0];
 
-  useEffect(() => { load(); }, []);
+  // Animations (Rule 14)
+  const fadeAnim     = useRef(new Animated.Value(0)).current;
+  const slideAnim    = useRef(new Animated.Value(rs(18))).current;
+  const tabIndicator = useRef(new Animated.Value(0)).current;
 
-  const load = async (silent = false) => {
+  useEffect(() => {
+    load();
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 420, delay: 60, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 420, delay: 60, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  // Rule 11 — try/catch, Rule 3 — no console
+  const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/v1/drops/inbox`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setData(await res.json());
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
+      if (res.ok) {
+        setData(await res.json());
+      } else {
+        showToast({ type: 'error', message: 'Could not load your drops. Try again.' });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong. Please try again.' });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [showToast]);
 
-  const onRefresh = () => { setRefreshing(true); load(true); };
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    load(true);
+  }, [load]);
 
-  const switchTab = (i) => {
+  const switchTab = useCallback((i) => {
     setActiveTab(i);
-    Animated.spring(tabIndicator, { toValue: i, friction: 8, useNativeDriver: true }).start();
-  };
+    Animated.spring(tabIndicator, {
+      toValue: i * (SCREEN.width / 2),
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  }, [tabIndicator]);
 
-  const handleShare = async (drop) => {
+  // Rule 16 — HTTPS share link (tappable in messaging apps)
+  const handleShare = useCallback(async (item) => {
     try {
+      const url = `${API_BASE_URL}/api/v1/drops/${item.id}/open`;
       await Share.share({
-        message: `${drop.confession}\n\n— unlock to connect 👀\nanonixx://drop/${drop.id}`,
-        title: 'Anonixx Drop',
+        message: `someone dropped a confession on Anonixx — tap to see it:\n${url}`,
+        title:   'Anonixx Drop',
       });
-    } catch (e) {}
-  };
+    } catch {
+      // user cancelled — silent
+    }
+  }, []);
 
-  // ── Card item ──────────────────────────────────────────────
-  const renderCard = ({ item }) => {
-    const color = CATEGORY_COLORS[item.category] || THEME.primary;
-    return (
-      <TouchableOpacity
-        style={[styles.card, { borderLeftColor: color, borderLeftWidth: 3 }]}
-        onPress={() => navigation.navigate('ShareCard')}
-        activeOpacity={0.8}
-      >
-        <View style={styles.cardHeader}>
-          <View style={[styles.categoryDot, { backgroundColor: color }]} />
-          <Text style={styles.cardCategory}>{item.category}</Text>
-          {item.is_night_mode && (
-            <View style={styles.nightTag}>
-              <Text style={styles.nightTagText}>🌙 Night</Text>
-            </View>
-          )}
-          <View style={styles.timerTag}>
-            <Clock size={11} color={THEME.textSecondary} />
-            <Text style={styles.timerTagText}>{item.time_left}</Text>
-          </View>
-        </View>
+  const handleCardPress  = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
+  const handleConnPress  = useCallback((id) => navigation.navigate('DropChat', { connectionId: id }), [navigation]);
+  const handleNewDrop    = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
+  const handleMarketplace = useCallback(() => navigation.navigate('ConfessionMarketplace'), [navigation]);
+  const handleVibeScore  = useCallback(() => navigation.navigate('VibeScore'), [navigation]);
 
-        <Text style={styles.cardConfession} numberOfLines={2}>
-          "{item.confession}"
-        </Text>
+  // Memoised render functions (Rules 6, 7)
+  const renderCard = useCallback(({ item }) => (
+    <DropCard
+      item={item}
+      onShare={handleShare}
+      onPress={handleCardPress}
+    />
+  ), [handleShare, handleCardPress]);
 
-        <View style={styles.cardStats}>
-          <View style={styles.stat}>
-            <Zap size={13} color={color} />
-            <Text style={[styles.statNum, { color }]}>{item.unlock_count}</Text>
-            <Text style={styles.statLabel}>unlocks</Text>
-          </View>
-          <View style={styles.stat}>
-            <Eye size={13} color={THEME.textSecondary} />
-            <Text style={styles.statNum}>{item.admirer_count}</Text>
-            <Text style={styles.statLabel}>views</Text>
-          </View>
-          {item.reactions?.length > 0 && (
-            <View style={styles.stat}>
-              <Text style={styles.reactionPreview}>
-                {item.reactions.slice(-3).join(' ')}
-              </Text>
-            </View>
-          )}
-          <TouchableOpacity
-            style={[styles.shareBtn, { borderColor: color }]}
-            onPress={() => handleShare(item)}
-          >
-            <Share2 size={13} color={color} />
-            <Text style={[styles.shareBtnText, { color }]}>Share</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const renderConn = useCallback(({ item }) => (
+    <ConnectionItem
+      item={item}
+      onPress={() => handleConnPress(item.id)}
+    />
+  ), [handleConnPress]);
 
-  // ── Connection item ────────────────────────────────────────
-  const renderConnection = ({ item }) => {
-    const hasUnread = item.message_count > 0 && !item.last_message;
-    return (
-      <TouchableOpacity
-        style={styles.connItem}
-        onPress={() => navigation.navigate('DropChat', { connectionId: item.id })}
-        activeOpacity={0.8}
-      >
-        <View style={styles.connAvatar}>
-          <Text style={styles.connAvatarText}>
-            {item.other_anonymous_name?.[0]?.toUpperCase() || '?'}
-          </Text>
-          {item.is_revealed && (
-            <View style={styles.revealedDot} />
-          )}
-        </View>
+  const keyExtractor = useCallback((item) => item.id, []);
 
-        <View style={styles.connInfo}>
-          <View style={styles.connTitleRow}>
-            <Text style={styles.connName} numberOfLines={1}>
-              {item.other_anonymous_name}
-            </Text>
-            {item.is_revealed && (
-              <View style={styles.revealedBadge}>
-                <Text style={styles.revealedBadgeText}>Revealed</Text>
-              </View>
-            )}
-          </View>
-
-          <Text style={styles.connConfession} numberOfLines={1}>
-            "{item.confession}"
-          </Text>
-
-          {item.last_message && (
-            <Text style={styles.connLastMsg} numberOfLines={1}>
-              {item.is_sender ? 'You: ' : ''}{item.last_message}
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.connRight}>
-          <Text style={styles.connMsgCount}>{item.message_count} msgs</Text>
-          <ChevronRight size={16} color={THEME.textSecondary} />
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const EmptyCards = () => (
-    <View style={styles.empty}>
-      <Text style={styles.emptyIcon}>🔥</Text>
-      <Text style={styles.emptyTitle}>No active cards</Text>
-      <Text style={styles.emptySub}>Create a confession card and share it anywhere to get connections.</Text>
-      <TouchableOpacity
-        style={styles.emptyBtn}
-        onPress={() => navigation.navigate('ShareCard')}
-      >
-        <Plus size={16} color="#fff" />
-        <Text style={styles.emptyBtnText}>Create a Drop</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const EmptyConnections = () => (
-    <View style={styles.empty}>
-      <Text style={styles.emptyIcon}>💬</Text>
-      <Text style={styles.emptyTitle}>No connections yet</Text>
-      <Text style={styles.emptySub}>When someone pays to unlock your drop, they appear here.</Text>
-      <TouchableOpacity
-        style={styles.emptyBtn}
-        onPress={() => navigation.navigate('ConfessionMarketplace')}
-      >
-        <Text style={styles.emptyBtnText}>Browse Marketplace</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  // Counts for tab badges
+  const cardCount = useMemo(() => data.active_drops.length, [data.active_drops]);
+  const connCount = useMemo(() => data.connections.length,  [data.connections]);
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={THEME.primary} />
-      </View>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        <View style={styles.loadWrap}>
+          <ActivityIndicator color={T.primary} />
+          <Text style={styles.loadText}>pulling your drops…</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={22} color={THEME.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Drops Inbox</Text>
-        <TouchableOpacity
-          style={styles.createBtn}
-          onPress={() => navigation.navigate('ShareCard')}
-        >
-          <Plus size={20} color={THEME.primary} />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <Animated.View style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
-      {/* Vibe score strip */}
-      <TouchableOpacity
-        style={styles.vibeStrip}
-        onPress={() => navigation.navigate('VibeScore')}
-      >
-        <Flame size={16} color={THEME.primary} />
-        <Text style={styles.vibeStripText}>View your Vibe Score & admirers</Text>
-        <ChevronRight size={16} color={THEME.textSecondary} />
-      </TouchableOpacity>
-
-      {/* Tabs */}
-      <View style={styles.tabBar}>
-        {TABS.map((tab, i) => (
+        {/* Header */}
+        <View style={styles.header}>
           <TouchableOpacity
-            key={tab}
-            style={styles.tab}
-            onPress={() => switchTab(i)}
+            style={styles.iconBtn}
+            onPress={() => navigation.goBack()}
+            hitSlop={HIT_SLOP}
           >
-            <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>
-              {tab}
-            </Text>
-            {i === 0 && data.active_drops.length > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{data.active_drops.length}</Text>
-              </View>
-            )}
-            {i === 1 && data.connections.length > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{data.connections.length}</Text>
-              </View>
-            )}
+            <ArrowLeft size={rs(20)} color={T.text} strokeWidth={2} />
           </TouchableOpacity>
-        ))}
-        <Animated.View style={[
-          styles.tabIndicator,
-          {
-            transform: [{
-              translateX: tabIndicator.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 100],
-              })
-            }]
-          }
-        ]} />
-      </View>
+          <View>
+            <Text style={styles.headerTitle}>drops inbox</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={handleNewDrop}
+            hitSlop={HIT_SLOP}
+          >
+            <Plus size={rs(20)} color={T.primary} strokeWidth={2.5} />
+          </TouchableOpacity>
+        </View>
 
-      {/* Content */}
-      {activeTab === 0 ? (
-        <FlatList
-          data={data.active_drops}
-          keyExtractor={item => item.id}
-          renderItem={renderCard}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<EmptyCards />}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.primary} />
-          }
-        />
-      ) : (
-        <FlatList
-          data={data.connections}
-          keyExtractor={item => item.id}
-          renderItem={renderConnection}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<EmptyConnections />}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.primary} />
-          }
-        />
-      )}
-    </View>
+        {/* Vibe score strip */}
+        <TouchableOpacity
+          style={styles.vibeStrip}
+          onPress={handleVibeScore}
+          activeOpacity={0.8}
+        >
+          <Flame size={rs(15)} color={T.primary} strokeWidth={2} />
+          <Text style={styles.vibeStripText}>your vibe score & admirers</Text>
+          <ChevronRight size={rs(14)} color={T.textMuted} strokeWidth={2} />
+        </TouchableOpacity>
+
+        {/* Tab bar */}
+        <View style={styles.tabBar}>
+          {TABS.map((tab, i) => (
+            <TouchableOpacity
+              key={tab}
+              style={styles.tab}
+              onPress={() => switchTab(i)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>
+                {tab}
+              </Text>
+              {((i === 0 && cardCount > 0) || (i === 1 && connCount > 0)) && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>
+                    {i === 0 ? cardCount : connCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+          <Animated.View
+            style={[styles.tabIndicator, { transform: [{ translateX: tabIndicator }] }]}
+          />
+        </View>
+
+        {/* Lists */}
+        {activeTab === 0 ? (
+          <FlatList
+            data={data.active_drops}
+            keyExtractor={keyExtractor}
+            renderItem={renderCard}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews
+            maxToRenderPerBatch={5}
+            windowSize={3}
+            initialNumToRender={6}
+            ListEmptyComponent={<EmptyCards onPress={handleNewDrop} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={T.primary}
+              />
+            }
+          />
+        ) : (
+          <FlatList
+            data={data.connections}
+            keyExtractor={keyExtractor}
+            renderItem={renderConn}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews
+            maxToRenderPerBatch={5}
+            windowSize={3}
+            initialNumToRender={8}
+            ListEmptyComponent={<EmptyConnections onPress={handleMarketplace} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={T.primary}
+              />
+            }
+          />
+        )}
+
+      </Animated.View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
-  centered: { justifyContent: 'center', alignItems: 'center' },
-
+// ─── Drop Card Styles ─────────────────────────────────────────
+const card = StyleSheet.create({
+  wrap: {
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    padding:         rp(16),
+    borderWidth:     1,
+    borderColor:     T.border,
+    borderLeftWidth: 1,
+    borderLeftColor: T.primary,
+    marginBottom:    SPACING.sm,
+  },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: THEME.border,
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            rp(6),
+    marginBottom:   rp(10),
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.surface,
+  catDot: {
+    width:        rs(7),
+    height:       rs(7),
+    borderRadius: rs(4),
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: THEME.text },
-  createBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.surface,
+  catLabel: {
+    fontSize:      rf(11),
+    fontWeight:    '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    flex:          1,
   },
+  nightPill: {
+    backgroundColor: 'rgba(155,139,255,0.12)',
+    borderRadius:    RADIUS.sm,
+    paddingHorizontal: rp(6),
+    paddingVertical:   rp(2),
+  },
+  nightPillText: { fontSize: rf(10), color: '#9B8BFF' },
+  timerPill: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              rp(3),
+    backgroundColor:  T.surfaceAlt,
+    borderRadius:     RADIUS.sm,
+    paddingHorizontal: rp(6),
+    paddingVertical:   rp(2),
+  },
+  timerText: { fontSize: rf(10), color: T.textSecondary },
+  confession: {
+    fontSize:     rf(15),
+    color:        T.text,
+    fontStyle:    'italic',
+    lineHeight:   rf(23),
+    marginBottom: rp(14),
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(12),
+  },
+  stat: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(4),
+  },
+  statNum: {
+    fontSize:   rf(13),
+    fontWeight: '700',
+    color:      T.text,
+  },
+  statLabel: {
+    fontSize: rf(11),
+    color:    T.textSecondary,
+  },
+  reactions: {
+    fontSize:      rf(14),
+    letterSpacing: 2,
+  },
+  shareBtn: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              rp(4),
+    marginLeft:       'auto',
+    paddingHorizontal: rp(10),
+    paddingVertical:   rp(5),
+    borderRadius:     RADIUS.sm,
+    borderWidth:      1,
+  },
+  shareBtnText: {
+    fontSize:   rf(11),
+    fontWeight: '600',
+  },
+});
 
+// ─── Connection Item Styles ───────────────────────────────────
+const conn = StyleSheet.create({
+  wrap: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    padding:         rp(14),
+    borderWidth:     1,
+    borderColor:     T.border,
+    borderLeftWidth: 1,
+    borderLeftColor: T.primary,
+    gap:             rp(12),
+    marginBottom:    SPACING.sm,
+  },
+  avatar: {
+    width:           rs(46),
+    height:          rs(46),
+    borderRadius:    rs(23),
+    backgroundColor: T.surfaceAlt,
+    alignItems:      'center',
+    justifyContent:  'center',
+    position:        'relative',
+    borderWidth:     1,
+    borderColor:     'rgba(255,255,255,0.06)',
+  },
+  avatarText: {
+    fontSize:   rf(18),
+    fontWeight: '700',
+    color:      T.text,
+  },
+  revealDot: {
+    position:        'absolute',
+    bottom:          0,
+    right:           0,
+    width:           rs(13),
+    height:          rs(13),
+    borderRadius:    rs(7),
+    backgroundColor: '#47FFB8',
+    borderWidth:     2,
+    borderColor:     T.surface,
+  },
+  info:    { flex: 1, gap: rp(2) },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
+  name: {
+    fontSize:   rf(14),
+    fontWeight: '700',
+    color:      T.text,
+    flexShrink: 1,
+  },
+  revealBadge: {
+    backgroundColor:   'rgba(71,255,184,0.12)',
+    borderRadius:      RADIUS.sm,
+    paddingHorizontal: rp(6),
+    paddingVertical:   rp(2),
+  },
+  revealBadgeText: {
+    fontSize:   rf(9),
+    color:      '#47FFB8',
+    fontWeight: '600',
+  },
+  confession: {
+    fontSize:  rf(11),
+    color:     T.textSecondary,
+    fontStyle: 'italic',
+  },
+  lastMsg: {
+    fontSize: rf(12),
+    color:    T.textSecondary,
+  },
+  right: {
+    alignItems: 'flex-end',
+    gap:        rp(4),
+  },
+  msgCount: {
+    fontSize: rf(11),
+    color:    T.textMuted,
+  },
+});
+
+// ─── Empty State Styles ───────────────────────────────────────
+const empty = StyleSheet.create({
+  wrap: {
+    flex:             1,
+    alignItems:       'center',
+    justifyContent:   'center',
+    paddingVertical:  rp(60),
+    paddingHorizontal: SPACING.xl,
+  },
+  glyph: {
+    fontSize:     rf(44),
+    marginBottom: SPACING.md,
+  },
+  title: {
+    fontSize:     rf(17),
+    fontWeight:   '700',
+    color:        T.text,
+    marginBottom: rp(8),
+    textAlign:    'center',
+  },
+  sub: {
+    fontSize:     rf(13),
+    color:        T.textSecondary,
+    textAlign:    'center',
+    lineHeight:   rf(21),
+    marginBottom: SPACING.lg,
+  },
+  btn: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              rp(6),
+    backgroundColor:  T.primary,
+    borderRadius:     RADIUS.md,
+    paddingHorizontal: rp(20),
+    paddingVertical:   rp(12),
+    shadowColor:      T.primary,
+    shadowOffset:     { width: 0, height: rs(4) },
+    shadowOpacity:    0.35,
+    shadowRadius:     rs(10),
+    elevation:        5,
+  },
+  btnText: {
+    fontSize:   rf(13),
+    fontWeight: '700',
+    color:      '#fff',
+  },
+});
+
+// ─── Screen Styles ────────────────────────────────────────────
+const styles = StyleSheet.create({
+  safe: {
+    flex:            1,
+    backgroundColor: T.background,
+  },
+  inner: {
+    flex: 1,
+  },
+  loadWrap: {
+    flex:           1,
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            SPACING.sm,
+  },
+  loadText: {
+    fontSize:  rf(13),
+    color:     T.textSecondary,
+    fontStyle: 'italic',
+  },
+  header: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(12),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  iconBtn: {
+    width:           rs(38),
+    height:          rs(38),
+    borderRadius:    rs(19),
+    backgroundColor: T.surfaceAlt,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  headerTitle: {
+    fontSize:      rf(17),
+    fontWeight:    '700',
+    color:         T.text,
+    letterSpacing: 0.2,
+  },
   vibeStrip: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    margin: 16, backgroundColor: THEME.surface, borderRadius: 14,
-    padding: 14, borderWidth: 1, borderColor: THEME.border,
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              rp(8),
+    marginHorizontal: SPACING.md,
+    marginTop:        SPACING.md,
+    marginBottom:     SPACING.sm,
+    backgroundColor:  T.surfaceAlt,
+    borderRadius:     RADIUS.md,
+    padding:          rp(13),
+    borderWidth:      1,
+    borderColor:      T.border,
   },
-  vibeStripText: { flex: 1, fontSize: 14, fontWeight: '500', color: THEME.text },
-
+  vibeStripText: {
+    flex:       1,
+    fontSize:   rf(13),
+    fontWeight: '500',
+    color:      T.text,
+  },
   tabBar: {
-    flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: THEME.border,
-    position: 'relative',
+    flexDirection:     'row',
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    position:          'relative',
   },
   tab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, gap: 6,
+    flex:           1,
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'center',
+    paddingVertical: rp(13),
+    gap:            rp(6),
   },
-  tabText: { fontSize: 15, fontWeight: '500', color: THEME.textSecondary },
-  tabTextActive: { color: THEME.text, fontWeight: '700' },
+  tabText: {
+    fontSize:   rf(14),
+    fontWeight: '500',
+    color:      T.textSecondary,
+  },
+  tabTextActive: {
+    color:      T.text,
+    fontWeight: '700',
+  },
+  tabBadge: {
+    backgroundColor:   T.primary,
+    borderRadius:      rs(8),
+    minWidth:          rs(17),
+    height:            rs(17),
+    alignItems:        'center',
+    justifyContent:    'center',
+    paddingHorizontal: rp(3),
+  },
+  tabBadgeText: {
+    fontSize:   rf(10),
+    fontWeight: '700',
+    color:      '#fff',
+  },
   tabIndicator: {
-    position: 'absolute', bottom: 0, left: 0,
-    width: '50%', height: 2, backgroundColor: THEME.primary, borderRadius: 1,
+    position:        'absolute',
+    bottom:          0,
+    left:            0,
+    width:           SCREEN.width / 2,
+    height:          rs(2),
+    backgroundColor: T.primary,
+    borderRadius:    rs(1),
   },
-  badge: {
-    backgroundColor: THEME.primary, borderRadius: 8,
-    minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4,
+  listContent: {
+    padding:  SPACING.md,
+    flexGrow: 1,
   },
-  badgeText: { fontSize: 11, fontWeight: '700', color: '#fff' },
-
-  list: { padding: 16, gap: 12, flexGrow: 1 },
-
-  // Card item
-  card: {
-    backgroundColor: THEME.surface, borderRadius: 16,
-    padding: 16, borderWidth: 1, borderColor: THEME.border,
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  categoryDot: { width: 8, height: 8, borderRadius: 4 },
-  cardCategory: { fontSize: 12, fontWeight: '700', color: THEME.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8, flex: 1 },
-  nightTag: {
-    backgroundColor: 'rgba(155,139,255,0.12)', borderRadius: 6,
-    paddingHorizontal: 6, paddingVertical: 2,
-  },
-  nightTagText: { fontSize: 11, color: '#9B8BFF' },
-  timerTag: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: THEME.surfaceAlt, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
-  },
-  timerTagText: { fontSize: 11, color: THEME.textSecondary },
-
-  cardConfession: { fontSize: 16, color: THEME.text, fontStyle: 'italic', lineHeight: 22, marginBottom: 14 },
-
-  cardStats: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  stat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statNum: { fontSize: 14, fontWeight: '700', color: THEME.text },
-  statLabel: { fontSize: 12, color: THEME.textSecondary },
-  reactionPreview: { fontSize: 16, letterSpacing: 2 },
-  shareBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto',
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1,
-  },
-  shareBtnText: { fontSize: 12, fontWeight: '600' },
-
-  // Connection item
-  connItem: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: THEME.surface, borderRadius: 16,
-    padding: 14, borderWidth: 1, borderColor: THEME.border, gap: 12,
-  },
-  connAvatar: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: THEME.surfaceAlt,
-    alignItems: 'center', justifyContent: 'center',
-    position: 'relative',
-  },
-  connAvatarText: { fontSize: 20, fontWeight: '700', color: THEME.text },
-  revealedDot: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 14, height: 14, borderRadius: 7,
-    backgroundColor: '#47FFB8', borderWidth: 2, borderColor: THEME.surface,
-  },
-  connInfo: { flex: 1, gap: 3 },
-  connTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  connName: { fontSize: 15, fontWeight: '700', color: THEME.text },
-  revealedBadge: {
-    backgroundColor: 'rgba(71,255,184,0.12)', borderRadius: 6,
-    paddingHorizontal: 6, paddingVertical: 2,
-  },
-  revealedBadgeText: { fontSize: 10, color: '#47FFB8', fontWeight: '600' },
-  connConfession: { fontSize: 12, color: THEME.textSecondary, fontStyle: 'italic' },
-  connLastMsg: { fontSize: 13, color: THEME.textSecondary },
-  connRight: { alignItems: 'flex-end', gap: 4 },
-  connMsgCount: { fontSize: 12, color: THEME.textSecondary },
-
-  // Empty states
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 32 },
-  emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: THEME.text, marginBottom: 8, textAlign: 'center' },
-  emptySub: { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  emptyBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: THEME.primary, borderRadius: 14,
-    paddingHorizontal: 20, paddingVertical: 12,
-  },
-  emptyBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });
