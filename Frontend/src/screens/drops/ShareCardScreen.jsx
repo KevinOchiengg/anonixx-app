@@ -31,7 +31,7 @@ const SCREEN_W = Dimensions.get('window').width;
 const MAX_CHARS = 500;
 
 // ─── Confession Card ──────────────────────────────────────────
-const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef, dropUrl }) => {
+const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef }) => {
   const cardWidth = SCREEN_W - SPACING.md * 2;
   const remaining = MAX_CHARS - text.length;
   const warnColor = remaining <= 40
@@ -203,7 +203,7 @@ export default function ShareCardScreen({ navigation }) {
               setText={setText}
               captureRef={captureRef}
               inputRef={inputRef}
-              dropUrl={dropUrl}
+
             />
             <Text style={styles.hint}>
               tap the card to write · what you say here, only you know
