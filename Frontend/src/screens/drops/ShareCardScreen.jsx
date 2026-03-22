@@ -136,15 +136,15 @@ export default function ShareCardScreen({ navigation }) {
       setDropId(id);
       setImageUri(uri);
 
-      // Step 2: Share the drop as a tappable deep link
-      // Share.share sends a URL that is clickable in every messaging app
+      // Step 2: Share as a tappable HTTPS link.
+      // https:// URLs are auto-linked in every messaging app (WhatsApp, iMessage, Telegram…).
+      // The /open endpoint redirects to anonixx://drop/<id> so the app opens directly.
+      const shareUrl = `${API_BASE_URL}/api/v1/drops/${id}/open`;
       await Share.share({
         message: Platform.OS === 'android'
-          ? `I dropped a confession on Anonixx — tap to open:\nanonixx://drop/${id}`
+          ? `I dropped a confession on Anonixx — tap to open:\n${shareUrl}`
           : `I dropped a confession on Anonixx`,
-        url: Platform.OS === 'ios'
-          ? `anonixx://drop/${id}`   // iOS renders this as a tappable link
-          : undefined,
+        url: Platform.OS === 'ios' ? shareUrl : undefined,
         title: 'Anonixx Drop',
       });
 

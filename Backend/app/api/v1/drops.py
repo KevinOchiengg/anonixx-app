@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta, timezone
@@ -448,6 +449,79 @@ async def get_drop_landing(
         "is_own_drop": current_user_id == drop["sender_id"] if current_user_id else False,
         "time_ago": get_time_ago(drop["created_at"]),
     }
+
+
+# ==================== OPEN / DEEP LINK REDIRECT ====================
+
+@router.get("/{drop_id}/open", response_class=HTMLResponse)
+async def open_drop_redirect(drop_id: str):
+    """
+    HTTPS redirect page shared to social platforms.
+    When tapped, browser opens and immediately redirects to the deep link.
+    Messaging apps (WhatsApp, iMessage, Telegram) render https:// as tappable links.
+    """
+    deep_link  = f"anonixx://drop/{drop_id}"
+    store_ios  = "https://apps.apple.com/app/anonixx"
+    store_android = "https://play.google.com/store/apps/details?id=com.anonixx"
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta property="og:title" content="Someone dropped a confession on Anonixx">
+  <meta property="og:description" content="Open Anonixx to see what was dropped anonymously.">
+  <meta property="og:site_name" content="Anonixx">
+  <title>Opening Anonixx…</title>
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{
+      background: #0b0f18; color: #EAEAF0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px;
+    }}
+    .card {{
+      background: #151924; border-radius: 16px;
+      border-left: 2px solid #FF634A;
+      padding: 32px 28px; max-width: 380px; width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }}
+    .logo {{ color: #FF634A; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }}
+    .tagline {{ color: #9A9AA3; font-size: 13px; margin-bottom: 24px; font-style: italic; }}
+    .message {{ color: #EAEAF0; font-size: 15px; line-height: 1.6; margin-bottom: 28px; }}
+    .btn {{
+      display: block; background: #FF634A; color: #fff;
+      padding: 14px 24px; border-radius: 10px; text-align: center;
+      text-decoration: none; font-weight: 700; font-size: 15px;
+      margin-bottom: 12px;
+    }}
+    .btn-ghost {{
+      display: block; color: #9A9AA3;
+      padding: 12px 24px; border-radius: 10px; text-align: center;
+      text-decoration: none; font-size: 13px; border: 1px solid rgba(255,255,255,0.08);
+    }}
+  </style>
+  <script>
+    // Try to open the app immediately
+    window.location.href = "{deep_link}";
+    // If app not installed, show the page after 2s
+    setTimeout(function() {{
+      document.getElementById('content').style.display = 'block';
+    }}, 2000);
+  </script>
+</head>
+<body>
+  <div class="card" id="content" style="display:none">
+    <div class="logo">anonixx</div>
+    <div class="tagline">your truth, no name required.</div>
+    <div class="message">Someone dropped an anonymous confession. Open Anonixx to see it.</div>
+    <a class="btn" href="{deep_link}">Open in Anonixx</a>
+    <a class="btn-ghost" href="{store_ios}">Get the app →</a>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 # ==================== REACT (pre-payment) ====================
