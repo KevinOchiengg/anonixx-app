@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import ChatScreen from '../screens/connect/ChatScreen';
 import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
+import CoinsScreen from '../screens/profile/CoinsScreen';
+import ReferralScreen from '../screens/profile/ReferralScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
@@ -78,6 +80,8 @@ export default function AppNavigator() {
         <Stack.Screen name="EditProfile"    component={EditProfileScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
         <Stack.Screen name="SavedPosts"     component={SavedPostsScreen} />
+        <Stack.Screen name="Coins"          component={CoinsScreen} />
+        <Stack.Screen name="Referral"       component={ReferralScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

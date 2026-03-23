@@ -9,10 +9,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Bell, BookOpen, ChevronRight, Database, Eye,
+  Bell, BookOpen, ChevronRight, Coins, Database, Eye,
   FileText, Globe, Heart, HelpCircle, Lock,
   LogOut, Monitor, Moon, ShieldAlert, Smartphone,
-  Trash2, User, Volume2, X, Zap,
+  Trash2, User, Users, Volume2, X, Zap,
 } from 'lucide-react-native';
 import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/responsive';
 import { useAuth } from '../../context/AuthContext';
@@ -176,6 +176,14 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
             <NavRow icon={User}  label="Edit Profile"    onPress={() => go('EditProfile')} />
             <View style={sec.div} />
             <NavRow icon={Lock}  label="Change Password" onPress={() => go('ChangePassword')} />
+          </View>
+
+          {/* ── Wallet ── */}
+          <SectionHeader title="Wallet" />
+          <View style={sec.card}>
+            <NavRow icon={Coins} label="My Wallet"    onPress={() => go('Coins')} />
+            <View style={sec.div} />
+            <NavRow icon={Users} label="Refer & Earn" onPress={() => go('Referral')} />
           </View>
 
           {/* ── Content ── */}

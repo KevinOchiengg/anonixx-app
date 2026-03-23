@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection
 from app.api.v1 import payments
-from app.api.v1 import drops
+from app.api.v1 import drops, rewards, referrals
 from app.api.v1 import (
     auth,
     coins,
@@ -66,4 +66,6 @@ app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connect.router, prefix=settings.API_V1_PREFIX)
 app.include_router(payments.router, prefix=settings.API_V1_PREFIX)
 app.include_router(drops.router, prefix=settings.API_V1_PREFIX)
+app.include_router(rewards.router, prefix=settings.API_V1_PREFIX)
+app.include_router(referrals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(circles.router, prefix=settings.API_V1_PREFIX)
