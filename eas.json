@@ -7,17 +7,17 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "projectRootDirectory": "Frontend"
+      "projectRootDirectory": "."
     },
     "preview": {
       "distribution": "internal",
-      "projectRootDirectory": "Frontend",
+      "projectRootDirectory": ".",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
-      "projectRootDirectory": "Frontend",
+      "projectRootDirectory": ".",
       "android": {
         "buildType": "apk"
       }
