@@ -1,0 +1,4 @@
+Backend/
+.git/
+*.md
+*.code-workspace
