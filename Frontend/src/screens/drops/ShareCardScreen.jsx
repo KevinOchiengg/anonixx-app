@@ -12,9 +12,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { useDispatch } from 'react-redux';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { awardMilestone } from '../../store/slices/coinsSlice';
 
 // ─── Theme ────────────────────────────────────────────────────
 const T = {
@@ -89,6 +91,7 @@ const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef }) => {
 // ─── Screen ───────────────────────────────────────────────────
 export default function ShareCardScreen({ navigation }) {
   const { showToast } = useToast();
+  const dispatch      = useDispatch();
   const captureRef    = useRef(null);
   const inputRef      = useRef(null);
 
@@ -149,6 +152,7 @@ export default function ShareCardScreen({ navigation }) {
       });
 
       showToast({ type: 'success', title: 'Dropped!', message: 'Your card is live.' });
+      dispatch(awardMilestone('first_drop'));
 
     } catch (err) {
       // Share.share throws if user cancels — ignore cancel errors

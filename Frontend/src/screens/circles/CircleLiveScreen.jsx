@@ -26,9 +26,11 @@ import {
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
 } from '../../utils/responsive';
+import { useDispatch } from 'react-redux';
 import { useToast } from '../../components/ui/Toast';
 import CoinGate from '../../components/payments/CoinGate';
 import { API_BASE_URL } from '../../config/api';
+import { awardMilestone } from '../../store/slices/coinsSlice';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -450,6 +452,7 @@ export default function CircleLiveScreen({ route, navigation }) {
   } = route.params ?? {};
 
   const { showToast } = useToast();
+  const dispatch      = useDispatch();
   const accentColor   = circle?.aura_color ?? T.primary;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -827,7 +830,10 @@ export default function CircleLiveScreen({ route, navigation }) {
           actionLabel="Stay in this Circle"
           actionEmoji="🎙️"
           description="Circle live entry"
-          onConfirm={() => setPreviewSecs(null)}
+          onConfirm={() => {
+            setPreviewSecs(null);
+            dispatch(awardMilestone('first_circle'));
+          }}
           onClose={() => setEntryGate(false)}
         />
 

@@ -149,6 +149,26 @@ export const spendCoins = createAsyncThunk(
   }
 );
 
+// Fire-and-forget: awards one-time milestone coins. Server is idempotent — safe to call multiple times.
+export const awardMilestone = createAsyncThunk(
+  'coins/awardMilestone',
+  async (milestoneKey, { rejectWithValue }) => {
+    try {
+      const headers = await authHeaders();
+      const res     = await fetch(`${API_BASE_URL}/api/v1/rewards/milestone`, {
+        method:  'POST',
+        headers,
+        body:    JSON.stringify({ milestone_key: milestoneKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) return rejectWithValue(data);
+      return data;  // { already_claimed, coins, message }
+    } catch (e) {
+      return rejectWithValue({ detail: 'Network error' });
+    }
+  }
+);
+
 export const fetchReferralCode = createAsyncThunk(
   'coins/fetchReferralCode',
   async (_, { rejectWithValue }) => {
@@ -280,6 +300,13 @@ const coinsSlice = createSlice({
       // spendCoins
       .addCase(spendCoins.fulfilled, (state, action) => {
         state.balance = action.payload.new_balance;
+      })
+
+      // awardMilestone — update balance only if coins were actually awarded
+      .addCase(awardMilestone.fulfilled, (state, action) => {
+        if (!action.payload.already_claimed && action.payload.new_balance != null) {
+          state.balance = action.payload.new_balance;
+        }
       });
   },
 });

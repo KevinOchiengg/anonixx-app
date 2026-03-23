@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { Search, Flame, RefreshCw, Menu } from 'lucide-react-native';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
+import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import CalmPostCard from '../../components/feed/CalmPostCard';
@@ -516,6 +517,8 @@ export default function CalmFeedScreen({ navigation }) {
           onDismiss={() => setStreakBanner(null)}
         />
       )}
+
+      {isAuthenticated && <DailyRewardBanner />}
 
       <FlatList
         ref={flatListRef}

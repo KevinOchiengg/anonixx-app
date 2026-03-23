@@ -15,10 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Image as ImageIcon, Video as VideoIcon, Trash2 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useDispatch } from 'react-redux';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
+import { awardMilestone } from '../../store/slices/coinsSlice';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -60,6 +62,7 @@ const uploadToCloudinary = async (uri, resourceType = 'image') => {
 export default function CreatePostScreen({ navigation }) {
   const { isAuthenticated } = useAuth();
   const { showToast }       = useToast();
+  const dispatch            = useDispatch();
 
   const [content, setContent]             = useState('');
   const [isAnonymous, setIsAnonymous]     = useState(true);
@@ -169,6 +172,8 @@ export default function CreatePostScreen({ navigation }) {
       if (!res.ok) throw new Error(data.detail || `Server error ${res.status}`);
 
       showToast({ type: 'success', title: 'Posted!', message: 'Your confession is out there.' });
+      // Fire-and-forget — server is idempotent, only awards once per user
+      dispatch(awardMilestone('first_post'));
       setContent('');
       setImages([]);
       setVideoUri(null);
