@@ -27,6 +27,7 @@ import {
   rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
+import CoinGate from '../../components/payments/CoinGate';
 import { API_BASE_URL } from '../../config/api';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -462,6 +463,7 @@ export default function CircleLiveScreen({ route, navigation }) {
   const [vibeIndex,     setVibeIndex]     = useState(2);
   const [previewSecs,   setPreviewSecs]   = useState(null);
   const [showPayWall,   setShowPayWall]   = useState(false);
+  const [entryGate,     setEntryGate]     = useState(false);
   const [hotSeatVisible, setHotSeatVisible] = useState(false);
   const [ending,        setEnding]        = useState(false);
   const [pulseValue,    setPulseValue]    = useState(0);  // 0-100 energy meter
@@ -812,10 +814,22 @@ export default function CircleLiveScreen({ route, navigation }) {
         {!isCreator && previewSecs !== null && (
           <PreviewBanner
             secondsLeft={previewSecs}
-            onPay={() => navigation.replace('CircleProfile', { circleId })}
+            onPay={() => setEntryGate(true)}
             accentColor={accentColor}
           />
         )}
+
+        {/* ── Circle entry coin gate ── */}
+        <CoinGate
+          visible={entryGate}
+          reason="circle_entry"
+          cost={20}
+          actionLabel="Stay in this Circle"
+          actionEmoji="🎙️"
+          description="Circle live entry"
+          onConfirm={() => setPreviewSecs(null)}
+          onClose={() => setEntryGate(false)}
+        />
 
         {/* ── Vibe temperature ── */}
         <View style={styles.vibeWrap}>

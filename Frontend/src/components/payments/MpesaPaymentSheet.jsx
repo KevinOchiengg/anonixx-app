@@ -75,14 +75,14 @@ const THEME = {
 
 const SHEET_HEIGHT = SCREEN.height * 0.88;
 
-// ─── Package Card ─────────────────────────────────────────────
+// ─── Package Card (2×2 grid) ──────────────────────────────────
 const PackageCard = React.memo(({ pkg, selected, onSelect }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePress = useCallback(() => {
     Animated.sequence([
-      Animated.timing(scale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1,    duration: 120, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 0.96, duration: 70, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 1,    duration: 110, useNativeDriver: true }),
     ]).start();
     onSelect(pkg.id);
   }, [pkg.id, onSelect, scale]);
@@ -90,7 +90,7 @@ const PackageCard = React.memo(({ pkg, selected, onSelect }) => {
   const isSelected = selected === pkg.id;
 
   return (
-    <Animated.View style={{ transform: [{ scale }], flex: 1 }}>
+    <Animated.View style={[styles.packageCardWrap, { transform: [{ scale }] }]}>
       <TouchableOpacity
         onPress={handlePress}
         activeOpacity={0.85}
@@ -101,17 +101,31 @@ const PackageCard = React.memo(({ pkg, selected, onSelect }) => {
           pkg.id === 'popular' && !isSelected && styles.packageCardPopular,
         ]}
       >
+        {/* Selected tick */}
+        {isSelected && (
+          <View style={styles.selectedTick}>
+            <Text style={styles.selectedTickText}>✓</Text>
+          </View>
+        )}
+
+        {/* Tag badge */}
         {pkg.tag ? (
-          <View style={[styles.tagBadge, { backgroundColor: pkg.tagColor + '22', borderColor: pkg.tagColor + '44' }]}>
+          <View style={[styles.tagBadge, { backgroundColor: pkg.tagColor + '22', borderColor: pkg.tagColor + '50' }]}>
             <Text style={[styles.tagText, { color: pkg.tagColor }]}>{pkg.tag}</Text>
           </View>
-        ) : null}
+        ) : <View style={styles.tagSpacer} />}
 
-        <Coins size={rs(22)} color={THEME.gold} />
-        <Text style={styles.packageCoins}>{pkg.coins}</Text>
+        {/* Coin count — dominant */}
+        <View style={styles.pkgCoinRow}>
+          <Coins size={rs(18)} color={THEME.gold} />
+          <Text style={styles.packageCoins}>{pkg.coins}</Text>
+        </View>
         <Text style={styles.packageCoinsLabel}>coins</Text>
-        <View style={styles.packageDivider} />
-        <Text style={styles.packageKes}>KES {pkg.kes}</Text>
+
+        {/* Price */}
+        <View style={styles.packagePriceBadge}>
+          <Text style={styles.packageKes}>KES {pkg.kes}</Text>
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -454,9 +468,9 @@ export default function MpesaPaymentSheet({ visible, onClose }) {
             {/* ── Content ── */}
             {step === 'select' && (
               <View style={styles.content}>
-                {/* Packages */}
+                {/* Packages — 2×2 grid */}
                 <Text style={styles.sectionLabel}>Choose a package</Text>
-                <View style={styles.packagesRow}>
+                <View style={styles.packagesGrid}>
                   {COIN_PACKAGES.map((pkg) => (
                     <PackageCard
                       key={pkg.id}
@@ -634,58 +648,91 @@ const styles = StyleSheet.create({
     marginBottom:  rp(10),
     marginTop:     rp(4),
   },
-  packagesRow: {
+  // ── Package grid ──
+  packagesGrid: {
     flexDirection: 'row',
-    gap:           rs(8),
-    marginBottom:  rp(20),
+    flexWrap:      'wrap',
+    gap:           rs(10),
+    marginBottom:  rp(18),
+  },
+  packageCardWrap: {
+    width: '48%',          // 2 columns, gap handled by parent
   },
   packageCard: {
-    flex:            1,
     backgroundColor: THEME.surfaceAlt,
-    borderRadius:    rs(14),
+    borderRadius:    rs(16),
     borderWidth:     1.5,
     borderColor:     THEME.border,
     alignItems:      'center',
-    paddingVertical: rp(14),
-    paddingHorizontal: rp(6),
-    position:        'relative',
-    overflow:        'visible',
+    paddingVertical:   rp(18),
+    paddingHorizontal: rp(10),
+    position:          'relative',
+    minHeight:         rs(130),
+    justifyContent:    'center',
+    gap:               rp(4),
   },
   packageCardSelected: {
-    borderColor: THEME.primary,
+    borderColor:     THEME.primary,
     backgroundColor: 'rgba(255, 99, 74, 0.08)',
   },
   packageCardPopular: {
-    borderColor: 'rgba(168, 85, 247, 0.4)',
+    borderColor: 'rgba(168, 85, 247, 0.45)',
+  },
+  selectedTick: {
+    position:          'absolute',
+    top:               rp(8),
+    right:             rp(8),
+    width:             rs(20),
+    height:            rs(20),
+    borderRadius:      rs(10),
+    backgroundColor:   THEME.primary,
+    alignItems:        'center',
+    justifyContent:    'center',
+  },
+  selectedTickText: {
+    color:      '#fff',
+    fontSize:   rf(11),
+    fontWeight: '800',
   },
   tagBadge: {
-    position:        'absolute',
-    top:             rs(-10),
-    borderWidth:     1,
-    borderRadius:    rs(8),
-    paddingHorizontal: rp(6),
-    paddingVertical:   rp(2),
+    borderWidth:       1,
+    borderRadius:      rs(8),
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(3),
+    marginBottom:      rp(4),
+  },
+  tagSpacer: {
+    height: rp(22),       // same height as tagBadge so cards stay aligned
   },
   tagText: {
-    fontSize:   rf(9),
+    fontSize:   rf(10),
     fontWeight: '700',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
+  },
+  pkgCoinRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rs(5),
   },
   packageCoins: {
     color:      THEME.gold,
-    fontSize:   rf(18),
-    fontWeight: '800',
-    marginTop:  rp(6),
+    fontSize:   rf(24),
+    fontWeight: '900',
+    includeFontPadding: false,
   },
   packageCoinsLabel: {
     color:    THEME.textSub,
-    fontSize: rf(10),
+    fontSize: rf(11),
+    fontWeight: '500',
   },
-  packageDivider: {
-    width:           '60%',
-    height:          1,
-    backgroundColor: THEME.border,
-    marginVertical:  rp(8),
+  packagePriceBadge: {
+    marginTop:         rp(8),
+    backgroundColor:   THEME.bg,
+    borderRadius:      rs(20),
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(4),
+    borderWidth:       1,
+    borderColor:       THEME.border,
   },
   packageKes: {
     color:      THEME.text,

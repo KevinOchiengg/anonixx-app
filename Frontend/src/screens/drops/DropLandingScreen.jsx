@@ -16,6 +16,7 @@ import {
   Moon, Send, Users, Zap, CheckCircle,
 } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
+import { useDispatch, useSelector } from 'react-redux';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
@@ -57,6 +58,8 @@ const getCatEmoji = (cat) => CATEGORY_EMOJIS[cat] ?? '✨';
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function DropLandingScreen({ route, navigation }) {
+  const dispatch           = useDispatch();
+  const coinBalance        = useSelector((state) => state.coins.balance);
   const { dropId }         = route.params;
   const { isAuthenticated} = useAuth();
   const { showToast }      = useToast();
@@ -70,6 +73,7 @@ export default function DropLandingScreen({ route, navigation }) {
   const [payStep, setPayStep]         = useState(PAY.IDLE);
   const [phone, setPhone]             = useState('');
   const [connectionId, setConnectionId] = useState(null);
+  const [coinsLoading, setCoinsLoading] = useState(false);
 
   const pulseAnim    = useRef(new Animated.Value(1)).current;
   const fadeAnim     = useRef(new Animated.Value(0)).current;
@@ -169,6 +173,33 @@ export default function DropLandingScreen({ route, navigation }) {
       setPayStep(PAY.ENTERING_PHONE);
     }
   }, [phone, dropId, showToast]);
+
+  // ── Unlock via Coins ─────────────────────────────────────────────────────────
+  const handleUnlockCoins = useCallback(async () => {
+    if (coinsLoading) return;
+    setCoinsLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/unlock/coins`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setConnectionId(data.connection_id);
+        setPayStep(PAY.SUCCESS);
+        Animated.spring(successScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
+      } else if (res.status === 402) {
+        showToast({ type: 'warning', message: "Not enough coins. Top up your wallet first." });
+      } else {
+        showToast({ type: 'error', message: data.detail ?? 'Could not unlock. Try again.' });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong. Try again.' });
+    } finally {
+      setCoinsLoading(false);
+    }
+  }, [coinsLoading, dropId, showToast, successScale]);
 
   const startPolling = useCallback(() => {
     let attempts = 0;
@@ -514,19 +545,44 @@ export default function DropLandingScreen({ route, navigation }) {
 
                   ) : (
                     <View style={styles.payOptions}>
+                      {/* ── Coins option ── */}
+                      <TouchableOpacity
+                        style={[
+                          styles.mpesaBtn,
+                          { borderColor: coinBalance >= 30 ? '#fbbf24' : 'rgba(251,191,36,0.3)' },
+                        ]}
+                        onPress={handleUnlockCoins}
+                        disabled={coinsLoading}
+                        hitSlop={HIT_SLOP}
+                      >
+                        <Text style={styles.mpesaIcon}>🪙</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.mpesaBtnTitle, { color: '#fbbf24' }]}>
+                            {coinsLoading ? 'Unlocking…' : 'Pay with Coins · 30'}
+                          </Text>
+                          <Text style={styles.mpesaBtnSub}>
+                            {coinBalance >= 30
+                              ? `Balance: ${coinBalance} coins`
+                              : `Need ${30 - coinBalance} more coins — top up in Wallet`}
+                          </Text>
+                        </View>
+                        <Zap size={rs(18)} color="#fbbf24" />
+                      </TouchableOpacity>
+
+                      {/* ── M-Pesa option ── */}
                       <TouchableOpacity
                         style={[styles.mpesaBtn, { borderColor: catColor }]}
                         onPress={() => setPayStep(PAY.ENTERING_PHONE)}
                         hitSlop={HIT_SLOP}
                       >
                         <Text style={styles.mpesaIcon}>📱</Text>
-                        <View>
+                        <View style={{ flex: 1 }}>
                           <Text style={[styles.mpesaBtnTitle, { color: catColor }]}>
                             Pay with M-Pesa
                           </Text>
                           <Text style={styles.mpesaBtnSub}>STK push to your phone</Text>
                         </View>
-                        <Zap size={rs(18)} color={catColor} style={{ marginLeft: 'auto' }} />
+                        <Zap size={rs(18)} color={catColor} />
                       </TouchableOpacity>
                     </View>
                   )}

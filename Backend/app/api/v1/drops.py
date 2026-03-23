@@ -10,6 +10,7 @@ import random
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
+from app.utils.coin_service import debit_coins
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
@@ -595,6 +596,62 @@ async def react_to_drop(
     await update_vibe_score(drop["sender_id"], "reaction_received", db)
 
     return {"message": "Reaction sent", "reaction": reaction}
+
+
+# ==================== UNLOCK — COINS ====================
+
+COINS_UNLOCK_COST = 30   # coins required to unlock a drop
+
+@router.post("/{drop_id}/unlock/coins")
+async def unlock_drop_coins(
+    drop_id:         str,
+    current_user_id: str = Depends(get_current_user_id),
+    db               = Depends(get_database),
+):
+    """
+    Unlock a drop by spending coins.
+    Atomically debits 30 coins and creates the chat connection.
+    """
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if drop["sender_id"] == current_user_id:
+        raise HTTPException(status_code=400, detail="Cannot unlock your own drop.")
+    if drop["expires_at"] < now_utc():
+        raise HTTPException(status_code=400, detail="This drop has expired.")
+
+    # Idempotent: already unlocked?
+    existing = await db["drop_unlocks"].find_one({
+        "drop_id": drop_id, "unlocker_id": current_user_id,
+    })
+    if existing:
+        connection_id = existing.get("connection_id") or await _create_drop_connection(drop_id, drop, current_user_id, db)
+        return {"already_unlocked": True, "connection_id": connection_id}
+
+    # Debit coins (raises ValueError on insufficient balance)
+    try:
+        await debit_coins(
+            db          = db,
+            user_id     = current_user_id,
+            amount      = COINS_UNLOCK_COST,
+            reason      = "drop_reveal",
+            description = f"Unlocked a drop confession",
+            meta        = {"drop_id": drop_id},
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(status_code=402, detail="Not enough coins. Top up to unlock.")
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Complete unlock + create chat
+    await _complete_unlock(drop_id, current_user_id, drop, "coins", db)
+    connection_id = await _create_drop_connection(drop_id, drop, current_user_id, db)
+
+    return {"unlocked": True, "connection_id": connection_id, "coins_spent": COINS_UNLOCK_COST}
 
 
 # ==================== UNLOCK — M-PESA ====================

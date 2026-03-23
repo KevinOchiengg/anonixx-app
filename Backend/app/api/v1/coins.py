@@ -15,7 +15,7 @@ from bson import ObjectId
 
 from app.database import get_database
 from app.dependencies import get_current_user_id
-from app.utils.coin_service import credit_coins
+from app.utils.coin_service import credit_coins, debit_coins
 from app.utils.mpesa import MPesaClient
 
 router = APIRouter(prefix="/coins", tags=["coins"])
@@ -33,9 +33,20 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+SPEND_COSTS = {
+    "connect_unlock": 60,
+    "drop_reveal":    30,
+    "circle_entry":   20,
+    "streak_freeze":  50,
+}
+
 class BuyCoinsRequest(BaseModel):
     package_id:   str
     phone_number: str
+
+class SpendCoinsRequest(BaseModel):
+    reason:      str   # must be a key in SPEND_COSTS
+    description: str   # human-readable label stored in transaction
 
 class MpesaCallbackBody(BaseModel):
     Body: dict
@@ -77,6 +88,42 @@ async def get_transactions(
         }
         for t in txns
     ]
+
+
+@router.post("/spend")
+async def spend_coins(
+    data:            SpendCoinsRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db               = Depends(get_database),
+):
+    """
+    Deduct coins for a specific action (connect unlock, drop reveal, circle entry, etc.).
+    Returns the new balance.  Raises 402 if balance is insufficient.
+    """
+    amount = SPEND_COSTS.get(data.reason)
+    if amount is None:
+        raise HTTPException(status_code=400, detail="Unknown spend reason.")
+
+    try:
+        new_balance = await debit_coins(
+            db          = db,
+            user_id     = current_user_id,
+            amount      = amount,
+            reason      = data.reason,
+            description = data.description,
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(status_code=402, detail="Not enough coins.")
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return {"new_balance": new_balance, "spent": amount, "reason": data.reason}
+
+
+@router.get("/costs")
+async def get_spend_costs():
+    """Returns the coin cost for each action — used by the frontend to display prices."""
+    return {"costs": SPEND_COSTS}
 
 
 @router.post("/buy/mpesa")

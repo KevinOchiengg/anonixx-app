@@ -130,6 +130,25 @@ export const fetchReferralStats = createAsyncThunk(
   }
 );
 
+export const spendCoins = createAsyncThunk(
+  'coins/spendCoins',
+  async ({ reason, description }, { rejectWithValue }) => {
+    try {
+      const headers = await authHeaders();
+      const res     = await fetch(`${API_BASE_URL}/api/v1/coins/spend`, {
+        method:  'POST',
+        headers,
+        body:    JSON.stringify({ reason, description }),
+      });
+      const data = await res.json();
+      if (!res.ok) return rejectWithValue(data);
+      return data;  // { new_balance, spent, reason }
+    } catch (e) {
+      return rejectWithValue({ detail: 'Network error' });
+    }
+  }
+);
+
 export const fetchReferralCode = createAsyncThunk(
   'coins/fetchReferralCode',
   async (_, { rejectWithValue }) => {
@@ -256,6 +275,11 @@ const coinsSlice = createSlice({
       .addCase(fetchReferralCode.fulfilled, (state, action) => {
         state.referralCode = action.payload.code;
         state.shareLink    = action.payload.share_link;
+      })
+
+      // spendCoins
+      .addCase(spendCoins.fulfilled, (state, action) => {
+        state.balance = action.payload.new_balance;
       });
   },
 });
@@ -266,5 +290,6 @@ export const {
   clearPaymentState,
   setBalance,
 } = coinsSlice.actions;
+
 
 export default coinsSlice.reducer;

@@ -16,8 +16,10 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, MessageCircle, UserCheck, Clock } from 'lucide-react-native';
+import { useSelector } from 'react-redux';
 import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../ui/Toast';
+import CoinGate from '../payments/CoinGate';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
@@ -77,10 +79,12 @@ export default function AnonProfileSheet({
   visible, anonymousName, onClose, navigation,
 }) {
   const { showToast }  = useToast();
+  const balance        = useSelector((state) => state.coins.balance);
   const [profile,      setProfile]      = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
   const [connectLoading, setConnectLoading] = useState(false);
+  const [gateVisible,  setGateVisible]  = useState(false);
 
   const slideAnim     = useRef(new Animated.Value(H)).current;
   const backdropOp    = useRef(new Animated.Value(0)).current;
@@ -167,23 +171,8 @@ export default function AnonProfileSheet({
     }
   }, [visible, anonymousName]);
 
-  // ── Connect ───────────────────────────────────────────────
-  const handleConnect = useCallback(async () => {
-    if (!profile || connectLoading) return;
-
-    if (profile.connect_status === 'chatting' && profile.chat_id) {
-      closeSheet();
-      setTimeout(() => {
-        navigation?.navigate('Chat', {
-          chatId:    profile.chat_id,
-          otherName: anonymousName,
-        });
-      }, 300);
-      return;
-    }
-
-    if (profile.connect_status === 'pending') return;
-
+  // ── Send the actual request (called after coin gate confirms) ──
+  const sendConnectRequest = useCallback(async () => {
     setConnectLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
@@ -205,7 +194,29 @@ export default function AnonProfileSheet({
     } finally {
       setConnectLoading(false);
     }
-  }, [profile, connectLoading, anonymousName, closeSheet, navigation, showToast]);
+  }, [anonymousName, showToast]);
+
+  // ── Connect button handler ─────────────────────────────────
+  const handleConnect = useCallback(() => {
+    if (!profile || connectLoading) return;
+
+    // Already chatting → open chat directly (free)
+    if (profile.connect_status === 'chatting' && profile.chat_id) {
+      closeSheet();
+      setTimeout(() => {
+        navigation?.navigate('Chat', {
+          chatId:    profile.chat_id,
+          otherName: anonymousName,
+        });
+      }, 300);
+      return;
+    }
+
+    if (profile.connect_status === 'pending') return;
+
+    // New request → pay 60 coins via CoinGate
+    setGateVisible(true);
+  }, [profile, connectLoading, anonymousName, closeSheet, navigation]);
 
   const accentColor = profile?.avatar_color ?? T.primary;
   const connectStatus = profile?.connect_status ?? 'default';
@@ -271,6 +282,18 @@ export default function AnonProfileSheet({
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Coin gate — sits outside the sheet so it overlays correctly */}
+        <CoinGate
+          visible={gateVisible}
+          reason="connect_unlock"
+          cost={60}
+          actionLabel="Send connect request"
+          actionEmoji="🔗"
+          description={`Connect with ${anonymousName}`}
+          onConfirm={sendConnectRequest}
+          onClose={() => setGateVisible(false)}
+        />
 
         {/* Profile content */}
         {profile && !loading && (
