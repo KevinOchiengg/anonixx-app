@@ -6,18 +6,15 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "projectRootDirectory": "Frontend"
+      "distribution": "internal"
     },
     "preview": {
       "distribution": "internal",
-      "projectRootDirectory": "Frontend",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
-      "projectRootDirectory": "Frontend",
       "android": {
         "buildType": "apk"
       }
