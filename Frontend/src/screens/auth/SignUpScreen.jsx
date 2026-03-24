@@ -211,7 +211,7 @@ export default function SignUpScreen({ navigation }) {
                 focused === 'username' && styles.inputRowFocused,
                 errors.username       && styles.inputRowError,
               ]}>
-                <User size={ICON.md} color={focused === 'username' ? THEME.primary : THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
+                <User size={ICON.md} color={THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
                 <TextInput
                   value={formData.username}
                   onChangeText={(v) => updateField('username', v, MAX_USERNAME_LENGTH)}
@@ -241,7 +241,7 @@ export default function SignUpScreen({ navigation }) {
                 focused === 'email' && styles.inputRowFocused,
                 errors.email        && styles.inputRowError,
               ]}>
-                <Mail size={ICON.md} color={focused === 'email' ? THEME.primary : THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
+                <Mail size={ICON.md} color={THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
                 <TextInput
                   ref={emailRef}
                   value={formData.email}
@@ -270,7 +270,7 @@ export default function SignUpScreen({ navigation }) {
                 focused === 'password' && styles.inputRowFocused,
                 errors.password        && styles.inputRowError,
               ]}>
-                <Lock size={ICON.md} color={focused === 'password' ? THEME.primary : THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
+                <Lock size={ICON.md} color={THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
                 <TextInput
                   ref={passwordRef}
                   value={formData.password}
@@ -324,7 +324,7 @@ export default function SignUpScreen({ navigation }) {
                 focused === 'confirm' && styles.inputRowFocused,
                 errors.confirmPassword && styles.inputRowError,
               ]}>
-                <Lock size={ICON.md} color={focused === 'confirm' ? THEME.primary : THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
+                <Lock size={ICON.md} color={THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
                 <TextInput
                   ref={confirmPassRef}
                   value={formData.confirmPassword}
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: THEME.border,
     paddingHorizontal: rp(14), height: INPUT_HEIGHT,
   },
-  inputRowFocused: { borderColor: THEME.primary, backgroundColor: THEME.primaryDim },
+  inputRowFocused: { borderColor: 'rgba(255,255,255,0.20)', backgroundColor: 'rgba(255,255,255,0.06)' },
   inputRowError:   { borderColor: THEME.error },
   fieldIcon:       { marginRight: rp(10) },
   input:           { flex: 1, fontSize: FONT.md, color: THEME.text, height: INPUT_HEIGHT },

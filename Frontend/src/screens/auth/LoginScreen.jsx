@@ -189,7 +189,7 @@ export default function LoginScreen({ navigation }) {
               ]}>
                 <Mail
                   size={ICON.md}
-                  color={focused === 'email' ? THEME.primary : THEME.textSecondary}
+                  color={THEME.textSecondary}
                   strokeWidth={2}
                   style={styles.fieldIcon}
                 />
@@ -221,7 +221,7 @@ export default function LoginScreen({ navigation }) {
               ]}>
                 <Lock
                   size={ICON.md}
-                  color={focused === 'password' ? THEME.primary : THEME.textSecondary}
+                  color={THEME.textSecondary}
                   strokeWidth={2}
                   style={styles.fieldIcon}
                 />
@@ -376,8 +376,8 @@ const styles = StyleSheet.create({
     height:            INPUT_HEIGHT,
   },
   inputRowFocused: {
-    borderColor:     THEME.primary,
-    backgroundColor: THEME.primaryDim,
+    borderColor:     'rgba(255,255,255,0.20)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   fieldIcon:  { marginRight: rp(10) },
   input: {
