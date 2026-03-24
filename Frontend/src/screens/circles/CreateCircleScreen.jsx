@@ -1,22 +1,18 @@
 /**
  * CreateCircleScreen.jsx
  * The moment a creator steps into their own darkness and names it.
- *
- * Design: Intimate. Like filling out a confession card in the dark.
- * The aura color the creator picks bleeds through the entire screen.
- * Every choice feels intentional. Every word feels permanent.
  */
 import React, {
   useState, useCallback, useRef, useEffect,
 } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Animated, ActivityIndicator,
+  TextInput, Animated, ActivityIndicator, Modal, Pressable,
   KeyboardAvoidingView, Platform, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import { ArrowLeft, Check, Pencil } from 'lucide-react-native';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
@@ -31,8 +27,6 @@ const T = {
   surface:       '#151924',
   surfaceAlt:    '#1a1f2e',
   primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.12)',
-  primaryBorder: 'rgba(255,99,74,0.25)',
   text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
   textMuted:     '#5a5f70',
@@ -40,25 +34,20 @@ const T = {
   inputBg:       'rgba(255,255,255,0.04)',
 };
 
-// ─── Static data ──────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: 'confession', label: 'Confess',    emoji: '🕯️' },
-  { id: 'love',       label: 'Love',       emoji: '💔' },
-  { id: 'support',    label: 'Healing',    emoji: '🤍' },
-  { id: 'debate',     label: 'Debate',     emoji: '🔥' },
-  { id: 'fun',        label: 'Fun',        emoji: '😈' },
-  { id: 'midnight',   label: 'Midnight',   emoji: '🌙' },
-  { id: 'music',      label: 'Music',      emoji: '🎵' },
-  { id: 'spicy',      label: 'Spicy',      emoji: '🌶️' },
-];
-
+// ─── Static data (module level) ───────────────────────────────────────────────
 const AURA_COLORS = [
   '#FF634A', '#FF4B8B', '#A855F7', '#3B82F6', '#10B981',
   '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6',
 ];
 
+const AVATAR_EMOJIS = [
+  '🎭', '🌙', '🔥', '💔', '🕯️', '🌊', '🌑', '⚡',
+  '🖤', '💀', '🌹', '🎪', '🌫️', '🗝️', '🪞', '🔮',
+  '🌌', '🎵', '😈', '🤍', '🦋', '🌹', '🧿', '☁️',
+];
+
 const BIO_PLACEHOLDER = [
-  'A place for the thoughts you\'ve never said out loud.',
+  "A place for the thoughts you've never said out loud.",
   'Where the night owls gather.',
   'Speak truth. No names. No shame.',
   'For those who feel too much.',
@@ -72,8 +61,47 @@ const SectionLabel = React.memo(({ label, required }) => (
   </Text>
 ));
 
+// ─── Emoji Picker Modal ───────────────────────────────────────────────────────
+const EmojiPickerModal = React.memo(({ visible, selected, color, onSelect, onClose }) => (
+  <Modal
+    visible={visible}
+    transparent
+    animationType="fade"
+    statusBarTranslucent
+    onRequestClose={onClose}
+  >
+    <Pressable style={styles.modalBackdrop} onPress={onClose}>
+      <Pressable style={styles.emojiModalCard} onPress={() => {}}>
+        <View style={styles.emojiModalHandle} />
+        <Text style={styles.emojiModalTitle}>Choose an avatar</Text>
+        <View style={styles.emojiGrid}>
+          {AVATAR_EMOJIS.map(e => (
+            <TouchableOpacity
+              key={e}
+              onPress={() => { onSelect(e); onClose(); }}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.75}
+              style={[
+                styles.emojiBtn,
+                e === selected && { backgroundColor: color + '28', borderColor: color + '60' },
+              ]}
+            >
+              <Text style={styles.emojiText}>{e}</Text>
+              {e === selected && (
+                <View style={[styles.emojiCheckBadge, { backgroundColor: color }]}>
+                  <Check size={rs(8)} color="#fff" strokeWidth={3} />
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Pressable>
+    </Pressable>
+  </Modal>
+));
+
 // ─── Aura Preview ─────────────────────────────────────────────────────────────
-const AuraPreview = React.memo(({ name, bio, color }) => {
+const AuraPreview = React.memo(({ name, bio, emoji, color, onAvatarPress }) => {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -89,12 +117,18 @@ const AuraPreview = React.memo(({ name, bio, color }) => {
     <View style={styles.previewCard}>
       <View style={[styles.previewAccent, { backgroundColor: color }]} />
       <View style={styles.previewInner}>
-        <Animated.View style={[
-          styles.previewAvatar,
-          { backgroundColor: color + '22', borderColor: color + '33', transform: [{ scale: pulse }] },
-        ]}>
-          <Text style={styles.previewEmoji}>🎭</Text>
-        </Animated.View>
+        <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
+          <Animated.View style={[
+            styles.previewAvatar,
+            { backgroundColor: color + '22', borderColor: color + '44', transform: [{ scale: pulse }] },
+          ]}>
+            <Text style={styles.previewEmoji}>{emoji}</Text>
+          </Animated.View>
+          {/* Edit badge */}
+          <View style={[styles.editBadge, { backgroundColor: color }]}>
+            <Pencil size={rs(9)} color="#fff" strokeWidth={2.5} />
+          </View>
+        </TouchableOpacity>
         <View style={styles.previewText}>
           <Text style={styles.previewName} numberOfLines={1}>
             {name || 'Your circle name'}
@@ -112,11 +146,13 @@ const AuraPreview = React.memo(({ name, bio, color }) => {
 export default function CreateCircleScreen({ navigation }) {
   const { showToast } = useToast();
 
-  const [name,     setName]     = useState('');
-  const [bio,      setBio]      = useState('');
-  const [category, setCategory] = useState('');
-  const [color,    setColor]    = useState(AURA_COLORS[0]);
-  const [loading,  setLoading]  = useState(false);
+  const [name,        setName]        = useState('');
+  const [bio,         setBio]         = useState('');
+  const [category,    setCategory]    = useState('');
+  const [color,       setColor]       = useState(AURA_COLORS[0]);
+  const [emoji,       setEmoji]       = useState('🎭');
+  const [emojiModal,  setEmojiModal]  = useState(false);
+  const [loading,     setLoading]     = useState(false);
 
   // Entrance animations
   const headerOp = useRef(new Animated.Value(0)).current;
@@ -133,11 +169,10 @@ export default function CreateCircleScreen({ navigation }) {
     ]).start();
   }, []);
 
-  const canSubmit = name.trim() && bio.trim() && category;
+  const canSubmit = name.trim() && bio.trim() && category.trim();
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleColorSelect    = useCallback((c) => setColor(c), []);
-  const handleCategorySelect = useCallback((id) => setCategory(id), []);
+  const handleColorSelect = useCallback((c) => setColor(c), []);
 
   const handleCreate = useCallback(async () => {
     if (!name.trim()) {
@@ -148,7 +183,7 @@ export default function CreateCircleScreen({ navigation }) {
       showToast({ type: 'error', message: 'Tell people what your circle is about.' });
       return;
     }
-    if (!category) {
+    if (!category.trim()) {
       showToast({ type: 'error', message: 'Choose a category.' });
       return;
     }
@@ -160,10 +195,11 @@ export default function CreateCircleScreen({ navigation }) {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          name:       name.trim(),
-          bio:        bio.trim(),
-          category,
-          aura_color: color,
+          name:         name.trim(),
+          bio:          bio.trim(),
+          category:     category.trim().toLowerCase(),
+          aura_color:   color,
+          avatar_emoji: emoji,
         }),
       });
       const data = await res.json();
@@ -178,13 +214,12 @@ export default function CreateCircleScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [name, bio, category, color, navigation, showToast]);
+  }, [name, bio, category, color, emoji, navigation, showToast]);
 
   // ──────────────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
 
-      {/* Dynamic aura glow from selected color */}
       <View style={[styles.auraGlow, { backgroundColor: color }]} />
 
       {/* Header */}
@@ -214,11 +249,17 @@ export default function CreateCircleScreen({ navigation }) {
         >
           <Animated.View style={[
             styles.formWrap,
-            { transform: [{ translateY: formY }], opacity: formOp }
+            { transform: [{ translateY: formY }], opacity: formOp },
           ]}>
 
-            {/* Live preview */}
-            <AuraPreview name={name} bio={bio} color={color} />
+            {/* Live preview — tap the avatar circle to pick emoji */}
+            <AuraPreview
+              name={name}
+              bio={bio}
+              emoji={emoji}
+              color={color}
+              onAvatarPress={() => setEmojiModal(true)}
+            />
 
             {/* ── Name ── */}
             <View style={styles.field}>
@@ -254,45 +295,22 @@ export default function CreateCircleScreen({ navigation }) {
             {/* ── Category ── */}
             <View style={styles.field}>
               <SectionLabel label="Category" required />
-              <View style={styles.chipGrid}>
-                {CATEGORIES.map(cat => {
-                  const active = category === cat.id;
-                  return (
-                    <TouchableOpacity
-                      key={cat.id}
-                      onPress={() => handleCategorySelect(cat.id)}
-                      hitSlop={HIT_SLOP}
-                      style={[
-                        styles.categoryChip,
-                        active && {
-                          backgroundColor: color + '18',
-                          borderColor:     color + '40',
-                        },
-                      ]}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-                      <Text style={[
-                        styles.categoryLabel,
-                        active && { color: color, fontWeight: '700' },
-                      ]}>
-                        {cat.label}
-                      </Text>
-                      {active && (
-                        <Check size={rs(12)} color={color} strokeWidth={3} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <TextInput
+                value={category}
+                onChangeText={setCategory}
+                placeholder="e.g. love, healing, debate, midnight…"
+                placeholderTextColor={T.textMuted}
+                style={styles.input}
+                maxLength={30}
+                returnKeyType="next"
+                autoCapitalize="none"
+              />
             </View>
 
             {/* ── Aura Color ── */}
             <View style={styles.field}>
               <SectionLabel label="Aura Color" />
-              <Text style={styles.fieldHint}>
-                This color defines your circle's energy.
-              </Text>
+              <Text style={styles.fieldHint}>This color defines your circle's energy.</Text>
               <View style={styles.colorRow}>
                 {AURA_COLORS.map(c => (
                   <TouchableOpacity
@@ -306,34 +324,29 @@ export default function CreateCircleScreen({ navigation }) {
                     ]}
                     activeOpacity={0.8}
                   >
-                    {color === c && (
-                      <Check size={rs(12)} color="#fff" strokeWidth={3} />
-                    )}
+                    {color === c && <Check size={rs(12)} color="#fff" strokeWidth={3} />}
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
             {/* ── Create button ── */}
-            <View style={styles.createWrap}>
-              <View style={[styles.btnGlow, { backgroundColor: color }]} />
-              <TouchableOpacity
-                onPress={handleCreate}
-                disabled={loading || !canSubmit}
-                style={[
-                  styles.createBtn,
-                  { backgroundColor: color },
-                  (!canSubmit || loading) && styles.createBtnDisabled,
-                ]}
-                hitSlop={HIT_SLOP}
-                activeOpacity={0.85}
-              >
-                {loading
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.createBtnText}>Open the circle</Text>
-                }
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={handleCreate}
+              disabled={loading || !canSubmit}
+              style={[
+                styles.createBtn,
+                { backgroundColor: color },
+                (!canSubmit || loading) && styles.createBtnDisabled,
+              ]}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.85}
+            >
+              {loading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.createBtnText}>Open the circle</Text>
+              }
+            </TouchableOpacity>
 
             <Text style={styles.finePrint}>
               Your identity stays hidden. Your circle lives on.
@@ -342,6 +355,15 @@ export default function CreateCircleScreen({ navigation }) {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Emoji picker modal */}
+      <EmojiPickerModal
+        visible={emojiModal}
+        selected={emoji}
+        color={color}
+        onSelect={setEmoji}
+        onClose={() => setEmojiModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -371,7 +393,7 @@ const styles = StyleSheet.create({
   },
   backBtn:      { padding: rp(4) },
   headerCenter: { alignItems: 'center' },
-  headerTitle:  {
+  headerTitle: {
     fontSize:   FONT.lg,
     fontWeight: '700',
     color:      T.text,
@@ -391,7 +413,7 @@ const styles = StyleSheet.create({
   },
   formWrap: { gap: SPACING.lg },
 
-  // Live preview
+  // Preview card
   previewCard: {
     flexDirection:   'row',
     backgroundColor: T.surface,
@@ -401,7 +423,7 @@ const styles = StyleSheet.create({
     overflow:        'hidden',
     marginBottom:    SPACING.xs,
   },
-  previewAccent:     { width: rp(3), opacity: 0.8 },
+  previewAccent: { width: rp(3), opacity: 0.8 },
   previewInner: {
     flex:          1,
     flexDirection: 'row',
@@ -416,10 +438,21 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'center',
     borderWidth:    1,
-    overflow:       'hidden',
   },
-  previewEmoji:     { fontSize: rf(24) },
-  previewText:      { flex: 1 },
+  previewEmoji: { fontSize: rf(24) },
+  editBadge: {
+    position:       'absolute',
+    bottom:         0,
+    right:          0,
+    width:          rs(18),
+    height:         rs(18),
+    borderRadius:   rs(9),
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderWidth:    1.5,
+    borderColor:    T.background,
+  },
+  previewText: { flex: 1 },
   previewName: {
     fontSize:   FONT.md,
     fontWeight: '700',
@@ -433,6 +466,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  // Fields
   field:        { gap: rp(8) },
   sectionLabel: {
     fontSize:      FONT.xs,
@@ -477,29 +511,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  chipGrid: {
-    flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:           SPACING.xs,
-  },
-  categoryChip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(5),
-    paddingHorizontal: SPACING.sm,
-    paddingVertical:   rp(9),
-    borderRadius:      RADIUS.sm,
-    backgroundColor:   T.surfaceAlt,
-    borderWidth:       1,
-    borderColor:       T.border,
-  },
-  categoryEmoji: { fontSize: rf(14) },
-  categoryLabel: {
-    fontSize:   FONT.sm,
-    color:      T.textSecondary,
-    fontWeight: '500',
-  },
-
+  // Color swatches
   colorRow: {
     flexDirection: 'row',
     flexWrap:      'wrap',
@@ -513,36 +525,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   colorSwatchActive: {
-    transform:    [{ scale: 1.18 }],
-    shadowOffset: { width: 0, height: rp(3) },
+    transform:     [{ scale: 1.18 }],
+    shadowOffset:  { width: 0, height: rp(3) },
     shadowOpacity: 0.5,
     shadowRadius:  rp(6),
     elevation:     6,
   },
 
-  createWrap: {
-    position:   'relative',
-    alignItems: 'center',
-    marginTop:  SPACING.xs,
-  },
-  btnGlow: {
-    position:     'absolute',
-    width:        SCREEN_WIDTH * 0.6,
-    height:       rs(60),
-    borderRadius: rs(30),
-    opacity:      0.25,
-    top:          rs(10),
-  },
+  // Create button — single element, no wrapper glow
   createBtn: {
     width:          '100%',
     height:         BUTTON_HEIGHT,
     borderRadius:   RADIUS.md,
     alignItems:     'center',
     justifyContent: 'center',
-    shadowOffset:   { width: 0, height: rs(6) },
-    shadowOpacity:  0.4,
-    shadowRadius:   rs(14),
-    elevation:      8,
+    marginTop:      SPACING.xs,
   },
   createBtnDisabled: { opacity: 0.4 },
   createBtnText: {
@@ -558,6 +555,65 @@ const styles = StyleSheet.create({
     color:     T.textMuted,
     textAlign: 'center',
     fontStyle: 'italic',
-    marginTop: -SPACING.xs,
+  },
+
+  // Emoji picker modal
+  modalBackdrop: {
+    flex:            1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent:  'flex-end',
+  },
+  emojiModalCard: {
+    backgroundColor: T.surface,
+    borderTopLeftRadius:  rs(24),
+    borderTopRightRadius: rs(24),
+    paddingHorizontal: SPACING.md,
+    paddingBottom:     rs(32),
+    paddingTop:        rp(12),
+    borderTopWidth:    1,
+    borderColor:       T.border,
+  },
+  emojiModalHandle: {
+    alignSelf:       'center',
+    width:           rs(36),
+    height:          rs(4),
+    borderRadius:    rs(2),
+    backgroundColor: T.border,
+    marginBottom:    rp(16),
+  },
+  emojiModalTitle: {
+    fontSize:     FONT.md,
+    fontWeight:   '700',
+    color:        T.text,
+    textAlign:    'center',
+    marginBottom: rp(16),
+    fontFamily:   'PlayfairDisplay-Bold',
+  },
+  emojiGrid: {
+    flexDirection: 'row',
+    flexWrap:      'wrap',
+    gap:           SPACING.xs,
+    justifyContent: 'center',
+  },
+  emojiBtn: {
+    width:           rs(50),
+    height:          rs(50),
+    borderRadius:    RADIUS.sm,
+    backgroundColor: T.surfaceAlt,
+    borderWidth:     1,
+    borderColor:     T.border,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  emojiText: { fontSize: rf(24) },
+  emojiCheckBadge: {
+    position:       'absolute',
+    top:            rs(3),
+    right:          rs(3),
+    width:          rs(14),
+    height:         rs(14),
+    borderRadius:   rs(7),
+    alignItems:     'center',
+    justifyContent: 'center',
   },
 });
