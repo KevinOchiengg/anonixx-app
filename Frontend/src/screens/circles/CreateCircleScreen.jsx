@@ -88,8 +88,7 @@ const AuraPreview = React.memo(({ name, bio, avatarUri, color, onAvatarPress }) 
   }, []);
 
   return (
-    <View style={styles.previewCard}>
-      <View style={[styles.previewAccent, { backgroundColor: color }]} />
+    <View style={[styles.previewCard, { borderLeftColor: color }]}>
       <View style={styles.previewInner}>
         <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
           <Animated.View style={[
@@ -409,10 +408,10 @@ const styles = StyleSheet.create({
     borderRadius:    RADIUS.md,
     borderWidth:     1,
     borderColor:     T.border,
+    borderLeftWidth: 2,
     overflow:        'hidden',
     marginBottom:    SPACING.xs,
   },
-  previewAccent: { width: rp(3), opacity: 0.8 },
   previewInner: {
     flex:          1,
     flexDirection: 'row',
