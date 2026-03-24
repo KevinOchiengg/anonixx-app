@@ -137,6 +137,7 @@ def format_circle(circle: dict, member_doc: Optional[dict], user_id: str) -> dic
         "category":      circle.get("category"),
         "aura_color":    circle.get("aura_color", "#FF634A"),
         "avatar_emoji":  circle.get("avatar_emoji", "🎭"),
+        "avatar_url":    circle.get("avatar_url"),
         "member_count":  count,
         "member_range":  member_range_label(count),
         "is_creator":    is_creator,
@@ -227,7 +228,8 @@ class CircleCreate(BaseModel):
     bio:          str
     category:     str
     aura_color:   str = "#FF634A"
-    avatar_emoji: str = "🎭"
+    avatar_emoji: Optional[str] = "🎭"
+    avatar_url:   Optional[str] = None
 
 
 class EventSchedule(BaseModel):
@@ -267,7 +269,8 @@ async def create_circle(
         "bio":           data.bio.strip(),
         "category":      data.category,
         "aura_color":    data.aura_color,
-        "avatar_emoji":  data.avatar_emoji,
+        "avatar_emoji":  data.avatar_emoji or "🎭",
+        "avatar_url":    data.avatar_url,
         "creator_id":    str(current_user.id),
         "member_count":  1,
         "room_open":     False,

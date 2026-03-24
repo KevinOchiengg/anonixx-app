@@ -11,12 +11,13 @@ import React, {
 } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Animated, ActivityIndicator,
+  TextInput, Animated, ActivityIndicator, Image,
   KeyboardAvoidingView, Platform, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ArrowLeft, Camera, Check, ImageIcon } from 'lucide-react-native';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
@@ -24,6 +25,24 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// ─── Cloudinary ───────────────────────────────────────────────────────────────
+const CLOUDINARY_CLOUD_NAME    = 'dojbdm2e1';
+const CLOUDINARY_UPLOAD_PRESET = 'anonix';
+
+const uploadToCloudinary = async (uri) => {
+  const ext      = uri.split('.').pop();
+  const formData = new FormData();
+  formData.append('file', { uri, type: `image/${ext}`, name: `circle_avatar.${ext}` });
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const res  = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' } }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+  return data.secure_url;
+};
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -53,16 +72,8 @@ const CATEGORIES = [
 ];
 
 const AURA_COLORS = [
-  '#FF634A', // Coral — default
-  '#FF4B8B', // Rose
-  '#A855F7', // Violet
-  '#3B82F6', // Blue
-  '#10B981', // Emerald
-  '#F59E0B', // Amber
-  '#EF4444', // Red
-  '#EC4899', // Pink
-  '#6366F1', // Indigo
-  '#14B8A6', // Teal
+  '#FF634A', '#FF4B8B', '#A855F7', '#3B82F6', '#10B981',
+  '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6',
 ];
 
 const AVATAR_EMOJIS = [
@@ -87,7 +98,7 @@ const SectionLabel = React.memo(({ label, required }) => (
 ));
 
 // ─── Aura Preview ─────────────────────────────────────────────────────────────
-const AuraPreview = React.memo(({ name, bio, emoji, color }) => {
+const AuraPreview = React.memo(({ name, bio, emoji, color, avatarUri }) => {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -105,9 +116,13 @@ const AuraPreview = React.memo(({ name, bio, emoji, color }) => {
       <View style={styles.previewInner}>
         <Animated.View style={[
           styles.previewAvatar,
-          { backgroundColor: color + '22', borderColor: color + '33', transform: [{ scale: pulse }] }
+          { backgroundColor: color + '22', borderColor: color + '33', transform: [{ scale: pulse }] },
         ]}>
-          <Text style={styles.previewEmoji}>{emoji}</Text>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.previewAvatarImg} />
+          ) : (
+            <Text style={styles.previewEmoji}>{emoji}</Text>
+          )}
         </Animated.View>
         <View style={styles.previewText}>
           <Text style={styles.previewName} numberOfLines={1}>
@@ -126,12 +141,13 @@ const AuraPreview = React.memo(({ name, bio, emoji, color }) => {
 export default function CreateCircleScreen({ navigation }) {
   const { showToast } = useToast();
 
-  const [name,     setName]     = useState('');
-  const [bio,      setBio]      = useState('');
-  const [category, setCategory] = useState('');
-  const [color,    setColor]    = useState(AURA_COLORS[0]);
-  const [emoji,    setEmoji]    = useState('🎭');
-  const [loading,  setLoading]  = useState(false);
+  const [name,      setName]      = useState('');
+  const [bio,       setBio]       = useState('');
+  const [category,  setCategory]  = useState('');
+  const [color,     setColor]     = useState(AURA_COLORS[0]);
+  const [emoji,     setEmoji]     = useState('🎭');
+  const [avatarUri, setAvatarUri] = useState(null);   // local URI
+  const [loading,   setLoading]   = useState(false);
 
   // Entrance animations
   const headerOp = useRef(new Animated.Value(0)).current;
@@ -148,12 +164,47 @@ export default function CreateCircleScreen({ navigation }) {
     ]).start();
   }, []);
 
-  // Aura glow changes with selected color
   const canSubmit = name.trim() && bio.trim() && category;
 
+  // ── Photo Picker ──────────────────────────────────────────────────────────
+  const pickFromGallery = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      showToast({ type: 'warning', message: 'Photo access is needed to set an avatar.' });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  }, [showToast]);
+
+  const pickFromCamera = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      showToast({ type: 'warning', message: 'Camera access is needed to take a photo.' });
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  }, [showToast]);
+
+  const clearPhoto = useCallback(() => setAvatarUri(null), []);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleColorSelect = useCallback((c) => setColor(c), []);
-  const handleEmojiSelect = useCallback((e) => setEmoji(e), []);
+  const handleColorSelect    = useCallback((c) => setColor(c), []);
+  const handleEmojiSelect    = useCallback((e) => { setEmoji(e); setAvatarUri(null); }, []);
   const handleCategorySelect = useCallback((id) => setCategory(id), []);
 
   const handleCreate = useCallback(async () => {
@@ -173,7 +224,14 @@ export default function CreateCircleScreen({ navigation }) {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/circles/create`, {
+
+      let avatarUrl = null;
+      if (avatarUri) {
+        showToast({ type: 'info', message: 'Uploading avatar…' });
+        avatarUrl = await uploadToCloudinary(avatarUri);
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/v1/circles/create`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -181,7 +239,8 @@ export default function CreateCircleScreen({ navigation }) {
           bio:          bio.trim(),
           category,
           aura_color:   color,
-          avatar_emoji: emoji,
+          avatar_emoji: avatarUrl ? null : emoji,
+          avatar_url:   avatarUrl,
         }),
       });
       const data = await res.json();
@@ -189,14 +248,14 @@ export default function CreateCircleScreen({ navigation }) {
         showToast({ type: 'success', message: 'Your circle is alive.' });
         navigation.replace('CircleProfile', { circleId: data.id });
       } else {
-        showToast({ type: 'error', message: 'Could not create circle. Try again.' });
+        showToast({ type: 'error', message: data.detail || 'Could not create circle. Try again.' });
       }
     } catch {
       showToast({ type: 'error', message: 'Could not create circle. Try again.' });
     } finally {
       setLoading(false);
     }
-  }, [name, bio, category, color, emoji, navigation, showToast]);
+  }, [name, bio, category, color, emoji, avatarUri, navigation, showToast]);
 
   // ──────────────────────────────────────────────────────────────────────────
   return (
@@ -241,6 +300,7 @@ export default function CreateCircleScreen({ navigation }) {
               bio={bio}
               emoji={emoji}
               color={color}
+              avatarUri={avatarUri}
             />
 
             {/* ── Name ── */}
@@ -337,36 +397,96 @@ export default function CreateCircleScreen({ navigation }) {
               </View>
             </View>
 
-            {/* ── Avatar Emoji ── */}
+            {/* ── Avatar ── */}
             <View style={styles.field}>
               <SectionLabel label="Avatar" />
               <Text style={styles.fieldHint}>
-                The face of your circle. Nobody knows yours.
+                The face of your circle. Choose a photo or pick an emoji.
               </Text>
-              <View style={styles.emojiGrid}>
-                {AVATAR_EMOJIS.map(e => (
+
+              {/* Photo picker — big central avatar button */}
+              <View style={styles.avatarPickerRow}>
+                {/* Current avatar preview */}
+                <TouchableOpacity
+                  onPress={pickFromGallery}
+                  activeOpacity={0.85}
+                  style={[styles.avatarPickerCircle, { borderColor: color + '60' }]}
+                >
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatarPickerImg} />
+                  ) : (
+                    <Text style={styles.avatarPickerEmoji}>{emoji}</Text>
+                  )}
+                  {/* Camera badge overlay */}
+                  <View style={[styles.cameraBadge, { backgroundColor: color }]}>
+                    <Camera size={rs(12)} color="#fff" strokeWidth={2.5} />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Action buttons */}
+                <View style={styles.avatarActions}>
                   <TouchableOpacity
-                    key={e}
-                    onPress={() => handleEmojiSelect(e)}
-                    hitSlop={HIT_SLOP}
-                    style={[
-                      styles.emojiBtn,
-                      emoji === e && {
-                        backgroundColor: color + '20',
-                        borderColor:     color + '50',
-                      },
-                    ]}
+                    onPress={pickFromGallery}
                     activeOpacity={0.8}
+                    hitSlop={HIT_SLOP}
+                    style={[styles.avatarActionBtn, { borderColor: color + '40' }]}
                   >
-                    <Text style={styles.emojiText}>{e}</Text>
+                    <ImageIcon size={rs(15)} color={color} strokeWidth={2} />
+                    <Text style={[styles.avatarActionText, { color }]}>Gallery</Text>
                   </TouchableOpacity>
-                ))}
+
+                  <TouchableOpacity
+                    onPress={pickFromCamera}
+                    activeOpacity={0.8}
+                    hitSlop={HIT_SLOP}
+                    style={[styles.avatarActionBtn, { borderColor: color + '40' }]}
+                  >
+                    <Camera size={rs(15)} color={color} strokeWidth={2} />
+                    <Text style={[styles.avatarActionText, { color }]}>Camera</Text>
+                  </TouchableOpacity>
+
+                  {avatarUri && (
+                    <TouchableOpacity
+                      onPress={clearPhoto}
+                      activeOpacity={0.8}
+                      hitSlop={HIT_SLOP}
+                      style={styles.avatarClearBtn}
+                    >
+                      <Text style={styles.avatarClearText}>Use emoji instead</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
+
+              {/* Emoji fallback grid */}
+              {!avatarUri && (
+                <>
+                  <Text style={styles.orDivider}>— or pick an emoji —</Text>
+                  <View style={styles.emojiGrid}>
+                    {AVATAR_EMOJIS.map(e => (
+                      <TouchableOpacity
+                        key={e}
+                        onPress={() => handleEmojiSelect(e)}
+                        hitSlop={HIT_SLOP}
+                        style={[
+                          styles.emojiBtn,
+                          emoji === e && {
+                            backgroundColor: color + '20',
+                            borderColor:     color + '50',
+                          },
+                        ]}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.emojiText}>{e}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
             </View>
 
             {/* ── Create button ── */}
             <View style={styles.createWrap}>
-              {/* Glow behind button */}
               <View style={[styles.btnGlow, { backgroundColor: color }]} />
               <TouchableOpacity
                 onPress={handleCreate}
@@ -381,14 +501,11 @@ export default function CreateCircleScreen({ navigation }) {
               >
                 {loading
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.createBtnText}>
-                      Open the circle
-                    </Text>
+                  : <Text style={styles.createBtnText}>Open the circle</Text>
                 }
               </TouchableOpacity>
             </View>
 
-            {/* Fine print */}
             <Text style={styles.finePrint}>
               Your identity stays hidden. Your circle lives on.
             </Text>
@@ -404,7 +521,6 @@ export default function CreateCircleScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
 
-  // Aura glow
   auraGlow: {
     position:     'absolute',
     top:          -rs(100),
@@ -415,11 +531,10 @@ const styles = StyleSheet.create({
     borderRadius: rs(130),
   },
 
-  // Header
   header: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    justifyContent:   'space-between',
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: SPACING.md,
     paddingVertical:   SPACING.sm,
     borderBottomWidth: 1,
@@ -440,7 +555,6 @@ const styles = StyleSheet.create({
     marginTop: rp(2),
   },
 
-  // Content
   content: {
     paddingHorizontal: SPACING.md,
     paddingTop:        SPACING.md,
@@ -448,7 +562,7 @@ const styles = StyleSheet.create({
   },
   formWrap: { gap: SPACING.lg },
 
-  // Live preview card
+  // Live preview
   previewCard: {
     flexDirection:   'row',
     backgroundColor: T.surface,
@@ -458,10 +572,7 @@ const styles = StyleSheet.create({
     overflow:        'hidden',
     marginBottom:    SPACING.xs,
   },
-  previewAccent: {
-    width:   rp(3),
-    opacity: 0.8,
-  },
+  previewAccent:     { width: rp(3), opacity: 0.8 },
   previewInner: {
     flex:          1,
     flexDirection: 'row',
@@ -476,24 +587,25 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'center',
     borderWidth:    1,
+    overflow:       'hidden',
   },
-  previewEmoji:  { fontSize: rf(24) },
-  previewText:   { flex: 1 },
-  previewName:   {
+  previewAvatarImg: { width: '100%', height: '100%', borderRadius: rs(26) },
+  previewEmoji:     { fontSize: rf(24) },
+  previewText:      { flex: 1 },
+  previewName: {
     fontSize:   FONT.md,
     fontWeight: '700',
     color:      T.text,
     fontFamily: 'PlayfairDisplay-Bold',
   },
   previewBio: {
-    fontSize:   FONT.xs,
-    color:      T.textSecondary,
-    marginTop:  rp(3),
-    fontStyle:  'italic',
+    fontSize:  FONT.xs,
+    color:     T.textSecondary,
+    marginTop: rp(3),
+    fontStyle: 'italic',
   },
 
-  // Fields
-  field: { gap: rp(8) },
+  field:        { gap: rp(8) },
   sectionLabel: {
     fontSize:      FONT.xs,
     fontWeight:    '700',
@@ -502,13 +614,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   fieldHint: {
-    fontSize:   FONT.xs,
-    color:      T.textMuted,
-    marginTop:  -rp(4),
-    fontStyle:  'italic',
+    fontSize:  FONT.xs,
+    color:     T.textMuted,
+    marginTop: -rp(4),
+    fontStyle: 'italic',
   },
 
-  // Inputs
   input: {
     backgroundColor:   T.inputBg,
     borderRadius:      RADIUS.sm,
@@ -538,22 +649,21 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // Category chips
   chipGrid: {
     flexDirection: 'row',
     flexWrap:      'wrap',
     gap:           SPACING.xs,
   },
   categoryChip: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             rp(5),
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(5),
     paddingHorizontal: SPACING.sm,
     paddingVertical:   rp(9),
-    borderRadius:    RADIUS.sm,
-    backgroundColor: T.surfaceAlt,
-    borderWidth:     1,
-    borderColor:     T.border,
+    borderRadius:      RADIUS.sm,
+    backgroundColor:   T.surfaceAlt,
+    borderWidth:       1,
+    borderColor:       T.border,
   },
   categoryEmoji: { fontSize: rf(14) },
   categoryLabel: {
@@ -562,7 +672,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Color swatches
   colorRow: {
     flexDirection: 'row',
     flexWrap:      'wrap',
@@ -576,14 +685,85 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   colorSwatchActive: {
-    transform:   [{ scale: 1.18 }],
+    transform:    [{ scale: 1.18 }],
     shadowOffset: { width: 0, height: rp(3) },
     shadowOpacity: 0.5,
     shadowRadius:  rp(6),
     elevation:     6,
   },
 
-  // Emoji grid
+  // Avatar picker
+  avatarPickerRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           SPACING.md,
+    marginBottom:  rp(4),
+  },
+  avatarPickerCircle: {
+    width:        rs(88),
+    height:       rs(88),
+    borderRadius: rs(44),
+    backgroundColor: T.surfaceAlt,
+    borderWidth:  2,
+    borderStyle:  'dashed',
+    alignItems:   'center',
+    justifyContent: 'center',
+    overflow:     'visible',
+  },
+  avatarPickerImg: {
+    width:        rs(88),
+    height:       rs(88),
+    borderRadius: rs(44),
+  },
+  avatarPickerEmoji: { fontSize: rf(36) },
+  cameraBadge: {
+    position:       'absolute',
+    bottom:         0,
+    right:          0,
+    width:          rs(26),
+    height:         rs(26),
+    borderRadius:   rs(13),
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderWidth:    2,
+    borderColor:    T.background,
+  },
+
+  avatarActions: {
+    flex:      1,
+    gap:       rp(8),
+  },
+  avatarActionBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    paddingHorizontal: SPACING.sm,
+    paddingVertical:   rp(10),
+    borderRadius:      RADIUS.sm,
+    backgroundColor:   T.surfaceAlt,
+    borderWidth:       1,
+  },
+  avatarActionText: {
+    fontSize:   FONT.sm,
+    fontWeight: '600',
+  },
+  avatarClearBtn: {
+    paddingVertical: rp(4),
+  },
+  avatarClearText: {
+    fontSize:          FONT.xs,
+    color:             T.textMuted,
+    textDecorationLine: 'underline',
+  },
+
+  orDivider: {
+    textAlign:  'center',
+    color:      T.textMuted,
+    fontSize:   FONT.xs,
+    fontStyle:  'italic',
+    marginVertical: rp(4),
+  },
+
   emojiGrid: {
     flexDirection: 'row',
     flexWrap:      'wrap',
@@ -601,11 +781,10 @@ const styles = StyleSheet.create({
   },
   emojiText: { fontSize: rf(22) },
 
-  // Create button
   createWrap: {
-    position:       'relative',
-    alignItems:     'center',
-    marginTop:      SPACING.xs,
+    position:   'relative',
+    alignItems: 'center',
+    marginTop:  SPACING.xs,
   },
   btnGlow: {
     position:     'absolute',
@@ -635,7 +814,6 @@ const styles = StyleSheet.create({
     fontFamily:    'PlayfairDisplay-Bold',
   },
 
-  // Fine print
   finePrint: {
     fontSize:  FONT.xs,
     color:     T.textMuted,
