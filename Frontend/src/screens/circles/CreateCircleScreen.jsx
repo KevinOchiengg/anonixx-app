@@ -7,12 +7,13 @@ import React, {
 } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Animated, ActivityIndicator, Modal, Pressable,
+  TextInput, Animated, ActivityIndicator, Image,
   KeyboardAvoidingView, Platform, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Check, Pencil } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ArrowLeft, Camera, Check, ImageIcon } from 'lucide-react-native';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
@@ -34,16 +35,28 @@ const T = {
   inputBg:       'rgba(255,255,255,0.04)',
 };
 
+// ─── Cloudinary ───────────────────────────────────────────────────────────────
+const CLOUDINARY_CLOUD_NAME    = 'dojbdm2e1';
+const CLOUDINARY_UPLOAD_PRESET = 'anonix';
+
+const uploadToCloudinary = async (uri) => {
+  const ext      = uri.split('.').pop() || 'jpg';
+  const formData = new FormData();
+  formData.append('file', { uri, type: `image/${ext}`, name: `circle_avatar.${ext}` });
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const res  = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+  return data.secure_url;
+};
+
 // ─── Static data (module level) ───────────────────────────────────────────────
 const AURA_COLORS = [
   '#FF634A', '#FF4B8B', '#A855F7', '#3B82F6', '#10B981',
   '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6',
-];
-
-const AVATAR_EMOJIS = [
-  '🎭', '🌙', '🔥', '💔', '🕯️', '🌊', '🌑', '⚡',
-  '🖤', '💀', '🌹', '🎪', '🌫️', '🗝️', '🪞', '🔮',
-  '🌌', '🎵', '😈', '🤍', '🦋', '🌹', '🧿', '☁️',
 ];
 
 const BIO_PLACEHOLDER = [
@@ -61,47 +74,8 @@ const SectionLabel = React.memo(({ label, required }) => (
   </Text>
 ));
 
-// ─── Emoji Picker Modal ───────────────────────────────────────────────────────
-const EmojiPickerModal = React.memo(({ visible, selected, color, onSelect, onClose }) => (
-  <Modal
-    visible={visible}
-    transparent
-    animationType="fade"
-    statusBarTranslucent
-    onRequestClose={onClose}
-  >
-    <Pressable style={styles.modalBackdrop} onPress={onClose}>
-      <Pressable style={styles.emojiModalCard} onPress={() => {}}>
-        <View style={styles.emojiModalHandle} />
-        <Text style={styles.emojiModalTitle}>Choose an avatar</Text>
-        <View style={styles.emojiGrid}>
-          {AVATAR_EMOJIS.map(e => (
-            <TouchableOpacity
-              key={e}
-              onPress={() => { onSelect(e); onClose(); }}
-              hitSlop={HIT_SLOP}
-              activeOpacity={0.75}
-              style={[
-                styles.emojiBtn,
-                e === selected && { backgroundColor: color + '28', borderColor: color + '60' },
-              ]}
-            >
-              <Text style={styles.emojiText}>{e}</Text>
-              {e === selected && (
-                <View style={[styles.emojiCheckBadge, { backgroundColor: color }]}>
-                  <Check size={rs(8)} color="#fff" strokeWidth={3} />
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </Pressable>
-    </Pressable>
-  </Modal>
-));
-
 // ─── Aura Preview ─────────────────────────────────────────────────────────────
-const AuraPreview = React.memo(({ name, bio, emoji, color, onAvatarPress }) => {
+const AuraPreview = React.memo(({ name, bio, avatarUri, color, onAvatarPress }) => {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -122,11 +96,14 @@ const AuraPreview = React.memo(({ name, bio, emoji, color, onAvatarPress }) => {
             styles.previewAvatar,
             { backgroundColor: color + '22', borderColor: color + '44', transform: [{ scale: pulse }] },
           ]}>
-            <Text style={styles.previewEmoji}>{emoji}</Text>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.previewAvatarImg} />
+            ) : (
+              <ImageIcon size={rs(22)} color={color} strokeWidth={1.5} />
+            )}
           </Animated.View>
-          {/* Edit badge */}
           <View style={[styles.editBadge, { backgroundColor: color }]}>
-            <Pencil size={rs(9)} color="#fff" strokeWidth={2.5} />
+            <Camera size={rs(9)} color="#fff" strokeWidth={2.5} />
           </View>
         </TouchableOpacity>
         <View style={styles.previewText}>
@@ -146,13 +123,12 @@ const AuraPreview = React.memo(({ name, bio, emoji, color, onAvatarPress }) => {
 export default function CreateCircleScreen({ navigation }) {
   const { showToast } = useToast();
 
-  const [name,        setName]        = useState('');
-  const [bio,         setBio]         = useState('');
-  const [category,    setCategory]    = useState('');
-  const [color,       setColor]       = useState(AURA_COLORS[0]);
-  const [emoji,       setEmoji]       = useState('🎭');
-  const [emojiModal,  setEmojiModal]  = useState(false);
-  const [loading,     setLoading]     = useState(false);
+  const [name,      setName]      = useState('');
+  const [bio,       setBio]       = useState('');
+  const [category,  setCategory]  = useState('');
+  const [color,     setColor]     = useState(AURA_COLORS[0]);
+  const [avatarUri, setAvatarUri] = useState(null);
+  const [loading,   setLoading]   = useState(false);
 
   // Entrance animations
   const headerOp = useRef(new Animated.Value(0)).current;
@@ -170,6 +146,22 @@ export default function CreateCircleScreen({ navigation }) {
   }, []);
 
   const canSubmit = name.trim() && bio.trim() && category.trim();
+
+  // ── Photo picker ──────────────────────────────────────────────────────────
+  const handlePickAvatar = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      showToast({ type: 'warning', message: 'Photo access is needed to set an avatar.' });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) setAvatarUri(result.assets[0].uri);
+  }, [showToast]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleColorSelect = useCallback((c) => setColor(c), []);
@@ -191,15 +183,22 @@ export default function CreateCircleScreen({ navigation }) {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/circles/create`, {
+
+      let avatarUrl = null;
+      if (avatarUri) {
+        showToast({ type: 'info', message: 'Uploading avatar…' });
+        avatarUrl = await uploadToCloudinary(avatarUri);
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/v1/circles/create`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          name:         name.trim(),
-          bio:          bio.trim(),
-          category:     category.trim().toLowerCase(),
-          aura_color:   color,
-          avatar_emoji: emoji,
+          name:       name.trim(),
+          bio:        bio.trim(),
+          category:   category.trim().toLowerCase(),
+          aura_color: color,
+          avatar_url: avatarUrl,
         }),
       });
       const data = await res.json();
@@ -214,7 +213,7 @@ export default function CreateCircleScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [name, bio, category, color, emoji, navigation, showToast]);
+  }, [name, bio, category, color, avatarUri, navigation, showToast]);
 
   // ──────────────────────────────────────────────────────────────────────────
   return (
@@ -252,13 +251,13 @@ export default function CreateCircleScreen({ navigation }) {
             { transform: [{ translateY: formY }], opacity: formOp },
           ]}>
 
-            {/* Live preview — tap the avatar circle to pick emoji */}
+            {/* Live preview — tap the avatar circle to pick image */}
             <AuraPreview
               name={name}
               bio={bio}
-              emoji={emoji}
+              avatarUri={avatarUri}
               color={color}
-              onAvatarPress={() => setEmojiModal(true)}
+              onAvatarPress={handlePickAvatar}
             />
 
             {/* ── Name ── */}
@@ -356,14 +355,6 @@ export default function CreateCircleScreen({ navigation }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Emoji picker modal */}
-      <EmojiPickerModal
-        visible={emojiModal}
-        selected={emoji}
-        color={color}
-        onSelect={setEmoji}
-        onClose={() => setEmojiModal(false)}
-      />
     </SafeAreaView>
   );
 }
@@ -439,7 +430,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth:    1,
   },
-  previewEmoji: { fontSize: rf(24) },
+  previewAvatarImg: { width: '100%', height: '100%', borderRadius: rs(26) },
   editBadge: {
     position:       'absolute',
     bottom:         0,
@@ -557,63 +548,4 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Emoji picker modal
-  modalBackdrop: {
-    flex:            1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent:  'flex-end',
-  },
-  emojiModalCard: {
-    backgroundColor: T.surface,
-    borderTopLeftRadius:  rs(24),
-    borderTopRightRadius: rs(24),
-    paddingHorizontal: SPACING.md,
-    paddingBottom:     rs(32),
-    paddingTop:        rp(12),
-    borderTopWidth:    1,
-    borderColor:       T.border,
-  },
-  emojiModalHandle: {
-    alignSelf:       'center',
-    width:           rs(36),
-    height:          rs(4),
-    borderRadius:    rs(2),
-    backgroundColor: T.border,
-    marginBottom:    rp(16),
-  },
-  emojiModalTitle: {
-    fontSize:     FONT.md,
-    fontWeight:   '700',
-    color:        T.text,
-    textAlign:    'center',
-    marginBottom: rp(16),
-    fontFamily:   'PlayfairDisplay-Bold',
-  },
-  emojiGrid: {
-    flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:           SPACING.xs,
-    justifyContent: 'center',
-  },
-  emojiBtn: {
-    width:           rs(50),
-    height:          rs(50),
-    borderRadius:    RADIUS.sm,
-    backgroundColor: T.surfaceAlt,
-    borderWidth:     1,
-    borderColor:     T.border,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  emojiText: { fontSize: rf(24) },
-  emojiCheckBadge: {
-    position:       'absolute',
-    top:            rs(3),
-    right:          rs(3),
-    width:          rs(14),
-    height:         rs(14),
-    borderRadius:   rs(7),
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
 });
