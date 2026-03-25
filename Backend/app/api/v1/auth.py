@@ -37,6 +37,9 @@ class LoginRequest(BaseModel):
 class UpdateInterestsRequest(BaseModel):
     interests: list[str]
 
+class UpdateGenderRequest(BaseModel):
+    gender: str  # 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say'
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type:   str
@@ -238,6 +241,26 @@ async def update_interests(
         )
 
     return {"message": "Interests updated successfully", "interests": data.interests}
+
+
+@router.put("/gender")
+async def update_gender(
+    data: UpdateGenderRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db=Depends(get_database),
+):
+    VALID = {'male', 'female', 'nonbinary', 'prefer_not_to_say'}
+    if data.gender not in VALID:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid gender value")
+
+    result = await db["users"].update_one(
+        {"_id": ObjectId(current_user_id)},
+        {"$set": {"gender": data.gender, "updated_at": _now()}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return {"message": "Gender updated", "gender": data.gender}
 
 
 @router.post("/logout")

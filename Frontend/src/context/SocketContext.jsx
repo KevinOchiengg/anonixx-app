@@ -1,56 +1,47 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import { useSelector } from 'react-redux'
-import Storage from '../services/storage' // ← Add this
-import socketService from '../services/socket'
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import socketService from '../services/socket';
 
-const SocketContext = createContext()
+export const SocketContext = createContext(null);
 
 export const SocketProvider = ({ children }) => {
-  const { isAuthenticated } = useSelector((state) => state.auth)
-  const [socket, setSocket] = useState(null)
-  const [connected, setConnected] = useState(false)
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      initializeSocket()
-    } else {
-      disconnectSocket()
-    }
+    let mounted = true;
+
+    const init = async () => {
+      const token = await AsyncStorage.getItem('token');
+      if (!token || !mounted) return;
+
+      try {
+        const sock = await socketService.connect();
+        sock.on('connect',    () => { if (mounted) setConnected(true);  });
+        sock.on('disconnect', () => { if (mounted) setConnected(false); });
+        if (sock.connected && mounted) setConnected(true);
+      } catch {
+        // silent — polling fallback keeps the app working
+      }
+    };
+
+    init();
 
     return () => {
-      disconnectSocket()
-    }
-  }, [isAuthenticated])
-
-  const initializeSocket = async () => {
-    try {
-      const socketInstance = await socketService.connect()
-      setSocket(socketInstance)
-      setConnected(true)
-    } catch (error) {
-      console.error('Socket connection failed:', error)
-    }
-  }
-
-  const disconnectSocket = () => {
-    if (socket) {
-      socketService.disconnect()
-      setSocket(null)
-      setConnected(false)
-    }
-  }
+      mounted = false;
+      socketService.disconnect();
+      setConnected(false);
+    };
+  }, []);
 
   return (
-    <SocketContext.Provider value={{ socket, connected, socketService }}>
+    <SocketContext.Provider value={{ socketService, connected }}>
       {children}
     </SocketContext.Provider>
-  )
-}
+  );
+};
 
 export const useSocket = () => {
-  const context = useContext(SocketContext)
-  if (!context) {
-    throw new Error('useSocket must be used within SocketProvider')
-  }
-  return context
-}
+  const ctx = useContext(SocketContext);
+  if (!ctx) throw new Error('useSocket must be used within SocketProvider');
+  return ctx;
+};

@@ -56,6 +56,10 @@ class RenewDropRequest(BaseModel):
     drop_id: str
 
 
+class CardImageRequest(BaseModel):
+    card_image_url: str
+
+
 # ==================== HELPERS ====================
 
 def now_utc() -> datetime:
@@ -211,8 +215,8 @@ async def create_drop(
     if not data.confession.strip():
         raise HTTPException(status_code=400, detail="Confession cannot be empty")
 
-    if len(data.confession) > 160:
-        raise HTTPException(status_code=400, detail="Confession must be 160 characters or less")
+    if len(data.confession) > 200:
+        raise HTTPException(status_code=400, detail="Confession must be 200 characters or less")
 
     if data.is_group and (not data.group_size or data.group_size < 2 or data.group_size > 10):
         raise HTTPException(status_code=400, detail="Group size must be between 2 and 10")
@@ -239,6 +243,7 @@ async def create_drop(
         "unlock_count": 0,
         "admirer_count": 0,
         "reactions": [],
+        "card_image_url": None,
         "created_at": now_utc(),
     }
 
@@ -452,18 +457,56 @@ async def get_drop_landing(
     }
 
 
+# ==================== CARD IMAGE ====================
+
+@router.patch("/{drop_id}/card-image")
+async def set_card_image(
+    drop_id: str,
+    data: CardImageRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Attach a Cloudinary card-image URL to an existing drop (owner only)."""
+    if not ObjectId.is_valid(drop_id):
+        raise HTTPException(status_code=400, detail="Invalid drop ID")
+    result = await db["drops"].update_one(
+        {"_id": ObjectId(drop_id), "sender_id": current_user_id},
+        {"$set": {"card_image_url": data.card_image_url}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Drop not found or not yours")
+    return {"ok": True}
+
+
 # ==================== OPEN / DEEP LINK REDIRECT ====================
 
 @router.get("/{drop_id}/open", response_class=HTMLResponse)
-async def open_drop_redirect(drop_id: str):
+async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     """
     HTTPS redirect page shared to social platforms.
     When tapped, browser opens and immediately redirects to the deep link.
     Messaging apps (WhatsApp, iMessage, Telegram) render https:// as tappable links.
     """
-    deep_link  = f"anonixx://drop/{drop_id}"
-    store_ios  = "https://apps.apple.com/app/anonixx"
+    deep_link     = f"anonixx://drop/{drop_id}"
+    store_ios     = "https://apps.apple.com/app/anonixx"
     store_android = "https://play.google.com/store/apps/details?id=com.anonixx"
+
+    # Pull card image URL so og:image shows the confession card in link previews
+    card_image_url = ""
+    if ObjectId.is_valid(drop_id):
+        drop_doc = await db["drops"].find_one(
+            {"_id": ObjectId(drop_id)},
+            {"card_image_url": 1},
+        )
+        if drop_doc:
+            card_image_url = drop_doc.get("card_image_url") or ""
+
+    og_image_tag = f'  <meta property="og:image" content="{card_image_url}">' if card_image_url else ""
+    card_img_block = (
+        f'<a href="{deep_link}" style="display:block;margin-bottom:20px;">'
+        f'<img src="{card_image_url}" alt="Confession card" '
+        f'style="width:100%;border-radius:12px;display:block;"></a>'
+    ) if card_image_url else ""
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -473,6 +516,7 @@ async def open_drop_redirect(drop_id: str):
   <meta property="og:title" content="Someone dropped a confession on Anonixx">
   <meta property="og:description" content="Open Anonixx to see what was dropped anonymously.">
   <meta property="og:site_name" content="Anonixx">
+{og_image_tag}
   <title>Opening Anonixx…</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -516,6 +560,7 @@ async def open_drop_redirect(drop_id: str):
   <div class="card" id="content" style="display:none">
     <div class="logo">anonixx</div>
     <div class="tagline">your truth, no name required.</div>
+    {card_img_block}
     <div class="message">Someone dropped an anonymous confession. Open Anonixx to see it.</div>
     <a class="btn" href="{deep_link}">Open in Anonixx</a>
     <a class="btn-ghost" href="{store_ios}">Get the app →</a>

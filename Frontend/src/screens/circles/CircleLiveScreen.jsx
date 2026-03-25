@@ -1025,28 +1025,24 @@ export default function CircleLiveScreen({ route, navigation }) {
               autoFocus
             />
             <Text style={styles.charCount}>{confDropText.length}/120</Text>
-            <View style={styles.confDropButtons}>
-              <TouchableOpacity
-                onPress={() => setShowConfDrop(false)}
-                hitSlop={HIT_SLOP}
-                style={styles.confDropCancelBtn}
-              >
-                <Text style={styles.confDropCancelText}>Keep it in</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleSendConfDrop}
-                disabled={!confDropText.trim()}
-                style={[
-                  styles.confDropSendBtn,
-                  { backgroundColor: accentColor },
-                  !confDropText.trim() && { opacity: 0.4 },
-                ]}
-                hitSlop={HIT_SLOP}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.confDropSendText}>Drop it</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={handleSendConfDrop}
+              disabled={!confDropText.trim()}
+              style={[
+                styles.confDropSendBtn,
+                { backgroundColor: accentColor },
+                !confDropText.trim() && { opacity: 0.4 },
+              ]}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.confDropSendText}>Drop it</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowConfDrop(false)}
+              hitSlop={HIT_SLOP}
+            >
+              <Text style={styles.confDropCancelText}>Keep it in</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1560,36 +1556,23 @@ const styles = StyleSheet.create({
     color:     T.textMuted,
     alignSelf: 'flex-end',
   },
-  confDropButtons: {
-    flexDirection: 'row',
-    gap:           SPACING.sm,
-    width:         '100%',
-    marginTop:     SPACING.xs,
-  },
-  confDropCancelBtn: {
-    flex:            1,
-    alignItems:      'center',
-    paddingVertical: rp(13),
-    borderRadius:    RADIUS.md,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth:     1,
-    borderColor:     T.border,
-  },
-  confDropCancelText: {
-    fontSize:   FONT.sm,
-    color:      T.textSecondary,
-    fontWeight: '600',
-  },
   confDropSendBtn: {
-    flex:            2,
+    width:           '100%',
     alignItems:      'center',
-    paddingVertical: rp(13),
+    paddingVertical: rp(14),
     borderRadius:    RADIUS.md,
+    marginTop:       SPACING.xs,
   },
   confDropSendText: {
     fontSize:   FONT.md,
     fontWeight: '700',
     color:      '#fff',
+  },
+  confDropCancelText: {
+    fontSize:  FONT.sm,
+    color:     T.textSecondary,
+    textAlign: 'center',
+    paddingVertical: rp(6),
   },
 
   // Paywall

@@ -6,12 +6,11 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Keyboard, Platform, Dimensions,
-  KeyboardAvoidingView, Share,
+  KeyboardAvoidingView, Share, ScrollView, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import { useDispatch } from 'react-redux';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -30,14 +29,14 @@ const T = {
 };
 
 const SCREEN_W = Dimensions.get('window').width;
-const MAX_CHARS = 500;
+const MAX_CHARS = 200;
+const CARD_W = SCREEN_W - SPACING.md * 2;
 
 // ─── Confession Card ──────────────────────────────────────────
-const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef }) => {
-  const cardWidth = SCREEN_W - SPACING.md * 2;
+const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef, readOnly }) => {
   const remaining = MAX_CHARS - text.length;
-  const warnColor = remaining <= 40
-    ? (remaining <= 15 ? '#ef4444' : '#FB923C')
+  const warnColor = remaining <= 30
+    ? (remaining <= 10 ? '#ef4444' : '#FB923C')
     : T.textMuted;
 
   return (
@@ -45,7 +44,7 @@ const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef }) => {
       ref={captureRef}
       options={{ format: 'png', quality: 1.0 }}
     >
-      <View style={[card.wrap, { width: cardWidth }]}>
+      <View style={[card.wrap, { width: CARD_W }]}>
 
         {/* Brand row */}
         <View style={card.brandRow}>
@@ -61,7 +60,7 @@ const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef }) => {
           ref={inputRef}
           style={card.input}
           value={text}
-          onChangeText={setText}
+          onChangeText={readOnly ? undefined : setText}
           placeholder="say what you've been holding in…"
           placeholderTextColor="rgba(154,154,163,0.3)"
           multiline
@@ -70,6 +69,7 @@ const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef }) => {
           autoCorrect
           autoCapitalize="sentences"
           scrollEnabled={false}
+          editable={!readOnly}
         />
 
         <View style={card.divider} />
@@ -77,7 +77,9 @@ const ConfessionCard = React.memo(({ text, setText, captureRef, inputRef }) => {
         {/* Footer */}
         <View style={card.footerRow}>
           <Text style={card.anonTag}>— Anonymous</Text>
-          <Text style={[card.remaining, { color: warnColor }]}>{remaining}</Text>
+          {!readOnly && (
+            <Text style={[card.remaining, { color: warnColor }]}>{remaining}</Text>
+          )}
         </View>
 
         {/* Watermark */}
@@ -95,12 +97,27 @@ export default function ShareCardScreen({ navigation }) {
   const captureRef    = useRef(null);
   const inputRef      = useRef(null);
 
-  const [text,      setText]      = useState('');
-  const [loading,   setLoading]   = useState(false);
-  const [dropId,    setDropId]    = useState(null);
-  const [imageUri,  setImageUri]  = useState(null);
+  const [text,    setText]    = useState('');
+  const [loading, setLoading] = useState(false);
+  const [dropId,  setDropId]  = useState(null);
 
-  // Step 1: Post the drop and capture the card image
+  const shareLink = useCallback(async (id) => {
+    const shareUrl = `${API_BASE_URL}/api/v1/drops/${id}/open`;
+    try {
+      await Share.share({
+        message: Platform.OS === 'android'
+          ? `I dropped a confession on Anonixx — tap to open:\n${shareUrl}`
+          : `I dropped a confession on Anonixx`,
+        url: Platform.OS === 'ios' ? shareUrl : undefined,
+        title: 'Anonixx Drop',
+      });
+    } catch (err) {
+      if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
+      showToast({ type: 'error', message: 'Could not share link.' });
+    }
+  }, [showToast]);
+
+  // Post drop → capture card → upload image → patch drop → share link
   const handleDrop = useCallback(async () => {
     if (!text.trim()) {
       showToast({ type: 'warning', message: 'Write your confession first.' });
@@ -109,9 +126,9 @@ export default function ShareCardScreen({ navigation }) {
 
     setLoading(true);
     try {
-      // AuthContext does not expose token — read from AsyncStorage directly
       const token = await AsyncStorage.getItem('token');
 
+      // 1. Create the drop
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
         method:  'POST',
         headers: {
@@ -130,57 +147,61 @@ export default function ShareCardScreen({ navigation }) {
       const id   = data?.id || data?._id || data?.drop_id;
       if (!id) throw new Error('No drop ID returned from server.');
 
-      // Capture card image (before sharing, for "Save image" option)
+      // 2. Capture card image
       Keyboard.dismiss();
       inputRef.current?.blur();
       await new Promise(r => setTimeout(r, 160));
       const uri = await captureRef.current.capture();
 
-      setDropId(id);
-      setImageUri(uri);
+      // 3. Upload card image to Cloudinary
+      try {
+        const formData = new FormData();
+        formData.append('file', { uri, name: 'card.png', type: 'image/png' });
+        const uploadRes = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
+          method:  'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body:    formData,
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          const cloudUrl   = uploadData?.url;
+          if (cloudUrl) {
+            // 4. Patch drop with card_image_url (og:image for link preview)
+            await fetch(`${API_BASE_URL}/api/v1/drops/${id}/card-image`, {
+              method:  'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization:  `Bearer ${token}`,
+              },
+              body: JSON.stringify({ card_image_url: cloudUrl }),
+            });
+          }
+        }
+      } catch {
+        // Image upload is best-effort — drop is already live
+      }
 
-      // Step 2: Share as a tappable HTTPS link.
-      // https:// URLs are auto-linked in every messaging app (WhatsApp, iMessage, Telegram…).
-      // The /open endpoint redirects to anonixx://drop/<id> so the app opens directly.
-      const shareUrl = `${API_BASE_URL}/api/v1/drops/${id}/open`;
-      await Share.share({
-        message: Platform.OS === 'android'
-          ? `I dropped a confession on Anonixx — tap to open:\n${shareUrl}`
-          : `I dropped a confession on Anonixx`,
-        url: Platform.OS === 'ios' ? shareUrl : undefined,
-        title: 'Anonixx Drop',
-      });
+      setDropId(id);
+
+      // 5. Share the HTTPS link
+      await shareLink(id);
 
       showToast({ type: 'success', title: 'Dropped!', message: 'Your card is live.' });
       dispatch(awardMilestone('first_drop'));
 
     } catch (err) {
-      // Share.share throws if user cancels — ignore cancel errors
       if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
       showToast({ type: 'error', message: err.message || 'Could not create your drop. Try again.' });
     } finally {
       setLoading(false);
     }
-  }, [text, showToast]);
+  }, [text, showToast, shareLink]);
 
-  // Optional: share the card image separately after drop is created
-  const handleShareImage = useCallback(async () => {
-    if (!imageUri) return;
-    try {
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
-        showToast({ type: 'error', message: 'Sharing not available on this device.' });
-        return;
-      }
-      await Sharing.shareAsync(imageUri, {
-        mimeType:    'image/png',
-        UTI:         'public.png',
-        dialogTitle: 'Share card image',
-      });
-    } catch {
-      showToast({ type: 'error', message: 'Could not share image.' });
-    }
-  }, [imageUri, showToast]);
+  const handleShareAgain = useCallback(() => {
+    if (dropId) shareLink(dropId);
+  }, [dropId, shareLink]);
+
+  const dropped = !!dropId;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -199,46 +220,63 @@ export default function ShareCardScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Body */}
-        <View style={styles.body}>
-          <View style={styles.cardArea}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Card */}
+          <TouchableOpacity
+            activeOpacity={dropped ? 0.85 : 1}
+            onPress={dropped ? handleShareAgain : undefined}
+            style={styles.cardWrap}
+          >
             <ConfessionCard
               text={text}
               setText={setText}
               captureRef={captureRef}
               inputRef={inputRef}
-
+              readOnly={dropped}
             />
-            <Text style={styles.hint}>
-              tap the card to write · what you say here, only you know
-            </Text>
-          </View>
+            {dropped && (
+              <View style={styles.tapOverlay}>
+                <Text style={styles.tapLabel}>tap to share again  ↗</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
+          <Text style={styles.hint}>
+            {dropped
+              ? 'Your drop is live · share it anywhere'
+              : 'tap the card to write · what you say here, only you know'}
+          </Text>
+
+          {/* Actions immediately after card */}
           <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.dropBtn, (!text.trim() || loading) && styles.dropBtnDisabled]}
-              onPress={handleDrop}
-              disabled={!text.trim() || loading}
-              activeOpacity={0.85}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.dropBtnText}>Drop It  ↗</Text>
-              }
-            </TouchableOpacity>
-
-            {/* After drop is created, offer sharing the card image too */}
-            {imageUri && !loading && (
+            {!dropped ? (
               <TouchableOpacity
-                style={styles.imageShareBtn}
-                onPress={handleShareImage}
-                activeOpacity={0.75}
+                style={[styles.dropBtn, (!text.trim() || loading) && styles.dropBtnDisabled]}
+                onPress={handleDrop}
+                disabled={!text.trim() || loading}
+                activeOpacity={0.85}
               >
-                <Text style={styles.imageShareBtnText}>Share Card Image</Text>
+                {loading
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.dropBtnText}>Drop It  ↗</Text>
+                }
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.dropBtn}
+                onPress={handleShareAgain}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.dropBtnText}>Share Again  ↗</Text>
               </TouchableOpacity>
             )}
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -357,24 +395,38 @@ const styles = StyleSheet.create({
     color:      T.primary,
     fontWeight: '500',
   },
-  body: {
-    flex:           1,
-    paddingBottom:  SPACING.lg,
-    justifyContent: 'space-between',
-  },
-  cardArea: {
+  scrollContent: {
     paddingHorizontal: SPACING.md,
     paddingTop:        SPACING.xl,
+    paddingBottom:     SPACING.lg,
+  },
+  cardWrap: {
+    position: 'relative',
+  },
+  tapOverlay: {
+    position:        'absolute',
+    bottom:          rp(12),
+    right:           rp(16),
+    backgroundColor: 'rgba(11,15,24,0.72)',
+    borderRadius:    RADIUS.sm,
+    paddingVertical:   rp(4),
+    paddingHorizontal: rp(10),
+  },
+  tapLabel: {
+    fontSize:   FONT.xs,
+    color:      T.primary,
+    fontWeight: '600',
   },
   hint: {
     fontSize:      FONT.xs,
     color:         T.textMuted,
     textAlign:     'center',
     marginTop:     SPACING.sm,
+    marginBottom:  SPACING.md,
     letterSpacing: 0.3,
   },
   actions: {
-    paddingHorizontal: SPACING.md,
+    // sits directly below hint — no flex push
   },
   dropBtn: {
     backgroundColor: T.primary,
@@ -396,18 +448,5 @@ const styles = StyleSheet.create({
     fontWeight:    '700',
     color:         '#fff',
     letterSpacing: 0.5,
-  },
-  imageShareBtn: {
-    marginTop:         SPACING.sm,
-    paddingVertical:   rp(12),
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       'rgba(255,255,255,0.10)',
-    alignItems:        'center',
-  },
-  imageShareBtnText: {
-    fontSize:   FONT.sm,
-    color:      T.textSecondary,
-    fontWeight: '500',
   },
 });

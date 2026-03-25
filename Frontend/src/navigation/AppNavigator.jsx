@@ -2,6 +2,16 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+
+// Inline splash — shown as a screen inside the navigator while auth hydrates.
+// Keeping NavigationContainer always mounted means deep-link URLs are never dropped.
+function SplashScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0b0f18' }}>
+      <ActivityIndicator size="large" color="#FF634A" />
+    </View>
+  );
+}
 import ChatScreen from '../screens/connect/ChatScreen';
 import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
@@ -35,25 +45,16 @@ const linking = {
 export default function AppNavigator() {
   const { loading } = useAuth();
 
-  if (loading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#0A0A12',
-        }}
-      >
-        <ActivityIndicator size="large" color="#6B7FFF" />
-      </View>
-    );
-  }
-
   return (
     <NavigationContainer linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Main" component={TabNavigator} />
+        {/* Splash is the initial screen while auth state is loading from storage.
+            NavigationContainer is always mounted so deep-link initial URLs are
+            captured immediately — before the auth check completes. */}
+        {loading
+          ? <Stack.Screen name="Splash" component={SplashScreen} />
+          : <Stack.Screen name="Main" component={TabNavigator} />
+        }
         <Stack.Screen name="Auth" component={AuthNavigator} />
         <Stack.Screen
           name="InterestSelection"

@@ -43,6 +43,12 @@ const T = {
 };
 
 // ─── Static data ──────────────────────────────────────────────
+const GENDER_BADGE = {
+  male:     { symbol: '♂', label: 'Male' },
+  female:   { symbol: '♀', label: 'Female' },
+  nonbinary: { symbol: '⚧', label: 'Non-binary' },
+};
+
 const AVATAR_MAP = {
   ghost:   '👻', shadow: '🌑', flame: '🔥',   void:    '🕳️',
   storm:   '⛈️', smoke:  '💨', eclipse: '🌘',  shard:   '🔷',
@@ -326,6 +332,15 @@ export default function AnonProfileSheet({
               {/* Name */}
               <Text style={styles.name}>{profile.anonymous_name}</Text>
 
+              {/* Gender badge — only shown if gender is set and not prefer_not_to_say */}
+              {profile.gender && GENDER_BADGE[profile.gender] && (
+                <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
+                  <Text style={[styles.genderBadgeText, { color: accentColor }]}>
+                    {GENDER_BADGE[profile.gender].symbol}{'  '}{GENDER_BADGE[profile.gender].label}
+                  </Text>
+                </View>
+              )}
+
               {/* Vibe tags */}
               {profile.vibe_tags?.length > 0 && (
                 <View style={styles.vibesRow}>
@@ -548,6 +563,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     textAlign:     'center',
     fontFamily:    'PlayfairDisplay-Bold',
+  },
+
+  // Gender badge
+  genderBadge: {
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(5),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    backgroundColor:   'rgba(255,255,255,0.04)',
+  },
+  genderBadgeText: {
+    fontSize:      FONT.sm,
+    fontWeight:    '600',
+    letterSpacing: 0.3,
   },
 
   // Vibe tags

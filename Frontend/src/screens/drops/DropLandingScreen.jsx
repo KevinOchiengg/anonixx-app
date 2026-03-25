@@ -66,6 +66,7 @@ export default function DropLandingScreen({ route, navigation }) {
 
   const [drop, setDrop]           = useState(null);
   const [loading, setLoading]     = useState(true);
+  const [fetchError, setFetchError] = useState(null); // 'not_found' | 'network'
   const [reaction, setReaction]   = useState('');
   const [reacted, setReacted]     = useState(false);
   const [reactLoading, setReactLoading] = useState(false);
@@ -101,18 +102,31 @@ export default function DropLandingScreen({ route, navigation }) {
 
   // ── Load drop ─────────────────────────────────────────────────────────────────
   const loadDrop = useCallback(async () => {
+    if (!dropId) {
+      setFetchError('not_found');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setFetchError(null);
     try {
       const token = await AsyncStorage.getItem('token');
       const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/landing`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      const data = await res.json();
-      if (res.ok) {
-        setDrop(data);
-        if (data.already_unlocked) setPayStep(PAY.SUCCESS);
+      if (res.status === 404) {
+        setFetchError('not_found');
+        return;
       }
+      if (!res.ok) {
+        setFetchError('network');
+        return;
+      }
+      const data = await res.json();
+      setDrop(data);
+      if (data.already_unlocked) setPayStep(PAY.SUCCESS);
     } catch {
-      // silent — shows empty state
+      setFetchError('network');
     } finally {
       setLoading(false);
     }
@@ -250,13 +264,29 @@ export default function DropLandingScreen({ route, navigation }) {
     );
   }
 
-  // Not found
-  if (!drop) {
+  // Error state
+  if (!drop && fetchError) {
+    const isNetworkErr = fetchError === 'network';
     return (
       <SafeAreaView style={[styles.safe, styles.centered]} edges={['top', 'left', 'right']}>
-        <Text style={styles.errorText}>This drop doesn't exist.</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
-          <Text style={styles.errorLink}>Go Back</Text>
+        <Text style={styles.errorEmoji}>{isNetworkErr ? '📡' : '🌑'}</Text>
+        <Text style={styles.errorText}>
+          {isNetworkErr
+            ? "Couldn't reach the server."
+            : "This drop doesn't exist."}
+        </Text>
+        <Text style={styles.errorSub}>
+          {isNetworkErr
+            ? 'Check your connection and try again.'
+            : 'It may have expired or been removed.'}
+        </Text>
+        {isNetworkErr && (
+          <TouchableOpacity style={styles.retryBtn} onPress={loadDrop} hitSlop={HIT_SLOP}>
+            <Text style={styles.retryBtnText}>Try again</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main')} hitSlop={HIT_SLOP} style={{ marginTop: rp(8) }}>
+          <Text style={styles.errorLink}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -920,6 +950,16 @@ const styles = StyleSheet.create({
   cancelPollText:  { fontSize: FONT.sm, color: T.textSecondary },
 
   // Error state
-  errorText: { fontSize: FONT.md, color: T.textSecondary, marginBottom: SPACING.md },
-  errorLink:  { fontSize: FONT.md, color: T.primary, fontWeight: '600' },
+  errorEmoji: { fontSize: rf(40), marginBottom: SPACING.sm },
+  errorText:  { fontSize: FONT.lg, color: T.text, fontWeight: '700', textAlign: 'center', marginBottom: rp(6) },
+  errorSub:   { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', marginBottom: SPACING.md, lineHeight: rf(20) },
+  errorLink:  { fontSize: FONT.sm, color: T.textSecondary },
+  retryBtn: {
+    backgroundColor: T.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical:   rp(12),
+    borderRadius:      RADIUS.md,
+    marginBottom:      SPACING.sm,
+  },
+  retryBtnText: { color: '#fff', fontSize: FONT.md, fontWeight: '700' },
 });

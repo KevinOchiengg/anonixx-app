@@ -113,6 +113,7 @@ function FeedStack() {
       <Stack.Screen name="FeedMain" component={CalmFeedScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
+      <Stack.Screen name="CreatePost" component={CreatePostScreen} />
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ThreadView" component={ThreadViewScreen} />
     </Stack.Navigator>
