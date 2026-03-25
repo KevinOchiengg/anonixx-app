@@ -32,6 +32,14 @@ const T = {
   inputBg:     'rgba(255,255,255,0.04)',
 };
 
+// ─── Module-level static data (Rule 5) ───────────────────────
+const GENDER_OPTIONS = [
+  { id: 'male',              label: 'Male',              symbol: '♂' },
+  { id: 'female',            label: 'Female',            symbol: '♀' },
+  { id: 'nonbinary',         label: 'Non-binary',        symbol: '⚧' },
+  { id: 'prefer_not_to_say', label: 'Prefer not to say', symbol: '—' },
+];
+
 // ─── Module-level star data (Rule 5) ──────────────────────────
 const STARS = Array.from({ length: 30 }, (_, i) => ({
   id:      i,
@@ -82,6 +90,7 @@ export default function EditProfileScreen({ navigation }) {
 
   const [username,        setUsername]        = useState(user?.username || '');
   const [email,           setEmail]           = useState(user?.email || '');
+  const [gender,          setGender]          = useState(user?.gender || null);
   const [avatarUri,       setAvatarUri]       = useState(user?.avatar_url || null);
   const [loading,         setLoading]         = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -186,7 +195,16 @@ export default function EditProfileScreen({ navigation }) {
         return;
       }
 
-      updateUserProfile?.({ username: data.username, email: data.email, avatar_url: data.avatar_url });
+      // Save gender separately (optional, non-blocking)
+      if (gender && gender !== user?.gender) {
+        await fetch(`${API_BASE_URL}/api/v1/auth/gender`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body:    JSON.stringify({ gender }),
+        });
+      }
+
+      updateUserProfile?.({ username: data.username, email: data.email, avatar_url: data.avatar_url, gender });
       showToast({ type: 'success', message: 'Profile updated.' });
       navigation.goBack();
     } catch {
@@ -294,6 +312,27 @@ export default function EditProfileScreen({ navigation }) {
             <View style={[styles.inputRow, styles.inputRowDisabled]}>
               <User size={rs(16)} color={T.textMuted} strokeWidth={1.8} />
               <Text style={styles.disabledText}>{user?.anonymous_name || 'not set'}</Text>
+            </View>
+          </FieldCard>
+
+          <FieldCard label="Gender" hint="only visible on your anonymous connect profile">
+            <View style={styles.genderRow}>
+              {GENDER_OPTIONS.map((opt) => {
+                const isSelected = gender === opt.id;
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    onPress={() => setGender(isSelected ? null : opt.id)}
+                    style={[styles.genderChip, isSelected && styles.genderChipSelected]}
+                    activeOpacity={0.8}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                  >
+                    <Text style={[styles.genderChipText, isSelected && styles.genderChipTextSelected]}>
+                      {opt.symbol}{'  '}{opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </FieldCard>
 
@@ -562,6 +601,34 @@ const styles = StyleSheet.create({
     fontSize:   FONT.md,
     fontWeight: '700',
     color:      '#fff',
+  },
+
+  // Gender selector
+  genderRow: {
+    flexDirection: 'row',
+    flexWrap:      'wrap',
+    gap:           rp(8),
+  },
+  genderChip: {
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.full,
+    backgroundColor:   T.inputBg,
+    borderWidth:       1,
+    borderColor:       T.border,
+  },
+  genderChipSelected: {
+    backgroundColor: 'rgba(255,99,74,0.12)',
+    borderColor:     'rgba(255,99,74,0.45)',
+  },
+  genderChipText: {
+    fontSize:   FONT.sm,
+    color:      T.textSecondary,
+    fontWeight: '500',
+  },
+  genderChipTextSelected: {
+    color:      T.primary,
+    fontWeight: '700',
   },
 
   // Info note

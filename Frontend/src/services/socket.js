@@ -1,125 +1,66 @@
-import io from 'socket.io-client'
-import Storage from './storage' // ← Change this
-
-const WS_URL = __DEV__ ? 'ws://localhost:3000' : 'wss://ws.echo.app'
+import io from 'socket.io-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config/api';
 
 class SocketService {
   constructor() {
-    this.socket = null
-    this.listeners = new Map()
+    this.socket = null;
   }
 
   async connect() {
-    const token = await Storage.getItem('authToken') // ← Use Storage
+    if (this.socket?.connected) return this.socket;
 
-    this.socket = io(WS_URL, {
-      auth: { token },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
-    })
+    const token = await AsyncStorage.getItem('token');
 
-    this.socket.on('connect', () => {
-      console.log('Socket connected')
-    })
+    this.socket = io(API_BASE_URL, {
+      auth:                { token },
+      transports:          ['websocket'],
+      reconnection:        true,
+      reconnectionDelay:   1500,
+      reconnectionAttempts: 8,
+    });
 
-    this.socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason)
-    })
-
-    this.socket.on('error', (error) => {
-      console.error('Socket error:', error)
-    })
-
-    return this.socket
+    return this.socket;
   }
 
   disconnect() {
     if (this.socket) {
-      this.socket.disconnect()
-      this.socket = null
+      this.socket.disconnect();
+      this.socket = null;
     }
   }
 
-  emit(event, data) {
-    if (this.socket) {
-      this.socket.emit(event, data)
-    }
-  }
-
-  on(event, callback) {
-    if (this.socket) {
-      this.socket.on(event, callback)
-
-      if (!this.listeners.has(event)) {
-        this.listeners.set(event, [])
-      }
-      this.listeners.get(event).push(callback)
-    }
-  }
-
-  off(event, callback) {
-    if (this.socket) {
-      this.socket.off(event, callback)
-
-      const callbacks = this.listeners.get(event)
-      if (callbacks) {
-        const index = callbacks.indexOf(callback)
-        if (index > -1) {
-          callbacks.splice(index, 1)
-        }
-      }
-    }
-  }
+  // ── Emit helpers ──────────────────────────────────────────────────────────
 
   joinChat(chatId) {
-    this.emit('join_chat', { chatId })
+    this.socket?.emit('join_chat', { chatId });
   }
 
   leaveChat(chatId) {
-    this.emit('leave_chat', { chatId })
+    this.socket?.emit('leave_chat', { chatId });
   }
 
-  sendMessage(chatId, message) {
-    this.emit('send_message', { chatId, message })
+  markRead(chatId) {
+    this.socket?.emit('messages_read', { chatId });
   }
 
-  typing(chatId, isTyping) {
-    this.emit('typing', { chatId, isTyping })
+  // ── Listener helpers ──────────────────────────────────────────────────────
+
+  on(event, cb) {
+    this.socket?.on(event, cb);
   }
 
-  readMessage(chatId, messageId) {
-    this.emit('read_message', { chatId, messageId })
+  off(event, cb) {
+    this.socket?.off(event, cb);
   }
 
-  reactToMessage(chatId, messageId, reaction) {
-    this.emit('react_message', { chatId, messageId, reaction })
-  }
+  onNewMessage(cb)          { this.on('new_message',        cb); }
+  onMessagesDelivered(cb)   { this.on('messages_delivered', cb); }
+  onMessagesRead(cb)        { this.on('messages_read',      cb); }
 
-  onMessage(callback) {
-    this.on('message', callback)
-  }
-
-  onTyping(callback) {
-    this.on('typing', callback)
-  }
-
-  onMessageRead(callback) {
-    this.on('message_read', callback)
-  }
-
-  onReaction(callback) {
-    this.on('reaction', callback)
-  }
-
-  onMatch(callback) {
-    this.on('match', callback)
-  }
-
-  onNotification(callback) {
-    this.on('notification', callback)
-  }
+  offNewMessage(cb)         { this.off('new_message',        cb); }
+  offMessagesDelivered(cb)  { this.off('messages_delivered', cb); }
+  offMessagesRead(cb)       { this.off('messages_read',      cb); }
 }
 
-export default new SocketService()
+export default new SocketService();

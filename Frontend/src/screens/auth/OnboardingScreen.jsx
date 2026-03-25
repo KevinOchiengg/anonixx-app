@@ -1,8 +1,7 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -19,19 +18,32 @@ import {
   BUTTON_HEIGHT, SCREEN, HIT_SLOP, isSmallDevice,
 } from '../../utils/responsive';
 
-const THEME = {
+// ─── THEME ──────────────────────────────────────────────────────────────────
+const T = {
   background:    '#0b0f18',
   surface:       '#151924',
-  surfaceHigh:   '#1e2330',
   primary:       '#FF634A',
-  primaryDim:    'rgba(255, 99, 74, 0.15)',
+  primaryDim:    'rgba(255,99,74,0.15)',
   text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
   border:        'rgba(255,255,255,0.06)',
-  inputBg:       'rgba(255,255,255,0.04)',
 };
 
-const MAX_BIO_LENGTH = 150;
+// ─── STATIC DATA ─────────────────────────────────────────────────────────────
+const STARS = Array.from({ length: 36 }, (_, i) => ({
+  id:      i,
+  top:     Math.random() * SCREEN.height,
+  left:    Math.random() * SCREEN.width,
+  size:    Math.random() * rs(2.5) + rs(0.5),
+  opacity: Math.random() * 0.35 + 0.08,
+}));
+
+const GENDER_OPTIONS = [
+  { id: 'male',              label: 'Male',              symbol: '♂' },
+  { id: 'female',            label: 'Female',            symbol: '♀' },
+  { id: 'nonbinary',         label: 'Non-binary',        symbol: '⚧' },
+  { id: 'prefer_not_to_say', label: 'Prefer not to say', symbol: '—' },
+];
 
 const INTERESTS = [
   { label: 'Relationships', emoji: '💞' },
@@ -51,381 +63,417 @@ const INTERESTS = [
   { label: 'General',       emoji: '💬' },
 ];
 
-const STARS = Array.from({ length: 40 }, (_, i) => ({
-  id: i,
-  top:     Math.random() * SCREEN.height,
-  left:    Math.random() * SCREEN.width,
-  size:    Math.random() * rs(2.5) + rs(0.5),
-  opacity: Math.random() * 0.4 + 0.1,
-}));
+const STEP_META = [
+  {
+    title:    'Who are you?',
+    subtitle: 'Optional. Only shows on your anonymous profile during Connect.',
+    skip:     true,
+  },
+  {
+    title:    'What weighs on you?',
+    subtitle: 'Pick up to 5 topics. We\'ll show you what matters.',
+    skip:     true,
+  },
+];
 
+const MAX_INTERESTS = 5;
+const TOTAL_STEPS   = 2;
+
+// ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
 const StarryBackground = React.memo(() => (
   <>
     {STARS.map((s) => (
-      <View key={s.id} style={{
-        position: 'absolute', backgroundColor: THEME.primary,
-        borderRadius: s.size, top: s.top, left: s.left,
-        width: s.size, height: s.size, opacity: s.opacity,
-      }} />
+      <View
+        key={s.id}
+        style={{
+          position:        'absolute',
+          backgroundColor: T.primary,
+          borderRadius:    s.size,
+          top:             s.top,
+          left:            s.left,
+          width:           s.size,
+          height:          s.size,
+          opacity:         s.opacity,
+        }}
+      />
     ))}
   </>
 ));
 
-// Animated progress step dot
-const StepDot = React.memo(({ active, done }) => {
-  const scaleAnim = useRef(new Animated.Value(active ? 1 : 0.7)).current;
-  useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: active || done ? 1 : 0.7,
-      tension: 80, friction: 8, useNativeDriver: true,
-    }).start();
-  }, [active, done]);
-
-  return (
-    <Animated.View style={[
-      styles.stepDot,
-      active && styles.stepDotActive,
-      done   && styles.stepDotDone,
-      { transform: [{ scale: scaleAnim }] },
-    ]} />
-  );
-});
-
-// Interest tag with press animation
-const InterestTag = React.memo(({ item, active, onPress }) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+const GenderCard = React.memo(({ option, selected, onPress }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const isSelected = selected === option.id;
 
   const handlePress = useCallback(() => {
     Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.93, duration: 80, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 8, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 0.95, duration: 70, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, tension: 220, friction: 7, useNativeDriver: true }),
     ]).start();
-    onPress(item.label);
-  }, [item.label, onPress]);
+    onPress(option.id);
+  }, [option.id, onPress, scale]);
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View style={{ transform: [{ scale }] }}>
       <TouchableOpacity
         onPress={handlePress}
-        style={[styles.tag, active && styles.tagActive]}
         activeOpacity={1}
+        style={[styles.genderCard, isSelected && styles.genderCardActive]}
       >
-        <Text style={styles.tagEmoji}>{item.emoji}</Text>
-        <Text style={[styles.tagText, active && styles.tagTextActive]}>
-          {item.label}
+        <Text style={[styles.genderSymbol, isSelected && styles.genderSymbolActive]}>
+          {option.symbol}
         </Text>
+        <Text style={[styles.genderLabel, isSelected && styles.genderLabelActive]}>
+          {option.label}
+        </Text>
+        {isSelected && <View style={styles.genderDot} />}
       </TouchableOpacity>
     </Animated.View>
   );
 });
 
+const InterestTag = React.memo(({ item, active, onPress }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePress = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 0.9, duration: 70, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, tension: 220, friction: 7, useNativeDriver: true }),
+    ]).start();
+    onPress(item.label);
+  }, [item.label, onPress, scale]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={1}
+        style={[styles.tag, active && styles.tagActive]}
+      >
+        <Text style={styles.tagEmoji}>{item.emoji}</Text>
+        <Text style={[styles.tagText, active && styles.tagTextActive]}>{item.label}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+// ─── SCREEN ──────────────────────────────────────────────────────────────────
 export default function OnboardingScreen({ navigation }) {
   const insets        = useSafeAreaInsets();
   const { showToast } = useToast();
 
-  const [step, setStep]         = useState(1);
-  const [bio, setBio]           = useState('');
-  const [selected, setSelected] = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [bioFocused, setBioFocused] = useState(false);
+  const [step,      setStep]      = useState(0);
+  const [gender,    setGender]    = useState(null);
+  const [interests, setInterests] = useState([]);
+  const [loading,   setLoading]   = useState(false);
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(rh(20))).current;
+  const slideAnim = useRef(new Animated.Value(rh(18))).current;
 
-  // Animate on mount and on step change
   useEffect(() => {
     fadeAnim.setValue(0);
-    slideAnim.setValue(rh(20));
+    slideAnim.setValue(rh(18));
     Animated.parallel([
       Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, tension: 70, friction: 11, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }),
     ]).start();
   }, [step]);
 
+  const goTo = useCallback((next) => setStep(next), []);
+
+  const handleGenderPress = useCallback((id) => {
+    setGender((prev) => (prev === id ? null : id));
+  }, []);
+
   const toggleInterest = useCallback((label) => {
-    setSelected((prev) =>
-      prev.includes(label) ? prev.filter((i) => i !== label) : [...prev, label]
-    );
-  }, []);
+    setInterests((prev) => {
+      if (prev.includes(label)) return prev.filter((i) => i !== label);
+      if (prev.length >= MAX_INTERESTS) {
+        showToast({ type: 'warning', message: `Pick what you actually carry. Up to ${MAX_INTERESTS}.` });
+        return prev;
+      }
+      return [...prev, label];
+    });
+  }, [showToast]);
 
-  const canContinue = useMemo(() => {
-    if (step === 1) return bio.trim().length >= 10;
-    return selected.length >= 3;
-  }, [step, bio, selected]);
-
-  const handleBioChange = useCallback((val) => {
-    setBio(val.slice(0, MAX_BIO_LENGTH));
-  }, []);
-
-  const handleComplete = useCallback(async () => {
+  const handleFinish = useCallback(async () => {
     if (loading) return;
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        showToast({ type: 'error', message: 'Session expired. Please sign in again.' });
+        showToast({ type: 'error', message: 'Session expired. Sign in again.' });
         navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/users/onboarding`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ bio: bio.trim(), interests: selected }),
-      });
-
-      if (!response.ok && response.status !== 404) {
-        // Non-blocking — navigate even if onboarding save fails
-        showToast({ type: 'warning', message: "Couldn't save preferences. You can update them later." });
-      } else {
-        showToast({ type: 'success', message: "You're all set. Welcome to Anonixx 🌑" });
+      if (gender) {
+        fetch(`${API_BASE_URL}/api/v1/auth/gender`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body:    JSON.stringify({ gender }),
+        }).catch(() => {});
       }
 
+      if (interests.length > 0) {
+        const res = await fetch(`${API_BASE_URL}/api/v1/auth/interests`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body:    JSON.stringify({ interests }),
+        });
+        if (!res.ok) {
+          showToast({ type: 'warning', message: "Couldn't save your topics. Update in settings anytime." });
+        }
+      }
+
+      showToast({ type: 'success', message: "You're in. Welcome to Anonixx." });
       setTimeout(() => {
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      }, 600);
+      }, 500);
 
-    } catch (err) {
-      // Network error — still let them in
+    } catch {
       showToast({ type: 'warning', message: "Couldn't save preferences. You can update them later." });
       setTimeout(() => {
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      }, 800);
+      }, 600);
     } finally {
       setLoading(false);
     }
-  }, [bio, selected, loading, navigation, showToast]);
+  }, [loading, gender, interests, navigation, showToast]);
 
-  const handleContinue = useCallback(() => {
-    if (step === 1 && bio.trim().length < 10) {
-      showToast({ type: 'error', message: 'Write at least 10 characters about yourself.' });
-      return;
+  const handleNext = useCallback(() => {
+    if (step === TOTAL_STEPS - 1) {
+      handleFinish();
+    } else {
+      goTo(step + 1);
     }
-    setStep(2);
-  }, [step, bio, showToast]);
+  }, [step, handleFinish, goTo]);
 
-  const bioCharLeft = MAX_BIO_LENGTH - bio.length;
-  const bioColor    = bioCharLeft <= 20 ? '#f59e0b' : bioCharLeft <= 10 ? '#ef4444' : THEME.textSecondary;
+  const meta       = STEP_META[step];
+  const isLastStep = step === TOTAL_STEPS - 1;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={T.background} />
       <StarryBackground />
-
-      {/* Glow orb */}
       <View style={styles.glowOrb} />
 
-      {/* Progress bar */}
-      <View style={[styles.progressRow, { paddingTop: Math.max(insets.top, rh(16)) }]}>
-        {/* Step dots */}
-        <View style={styles.stepDots}>
-          <StepDot active={step === 1} done={step > 1} />
-          <View style={[styles.stepConnector, step > 1 && styles.stepConnectorActive]} />
-          <StepDot active={step === 2} done={false} />
+      {/* Progress */}
+      <View style={[styles.progressWrap, { paddingTop: Math.max(insets.top, rh(12)) }]}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${((step + 1) / TOTAL_STEPS) * 100}%` }]} />
         </View>
-        {/* Step label */}
-        <Text style={styles.stepLabel}>Step {step} of 2</Text>
-      </View>
-
-      {/* Progress track */}
-      <View style={styles.progressTrack}>
-        <Animated.View style={[styles.progressFill, { width: step === 1 ? '50%' : '100%' }]} />
+        <Text style={styles.progressLabel}>{step + 1} / {TOTAL_STEPS}</Text>
       </View>
 
       <ScrollView
         style={styles.scroll}
-        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          {step > 0 && (
+            <TouchableOpacity
+              onPress={() => goTo(step - 1)}
+              style={styles.backBtn}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.backBtnText}>← Back</Text>
+            </TouchableOpacity>
+          )}
 
-          {step === 1 ? (
-            <>
-              <Text style={styles.title}>Tell us about you</Text>
-              <Text style={styles.subtitle}>
-                A few words. Nobody knows who you are anyway.
-              </Text>
+          <Text style={styles.title}>{meta.title}</Text>
+          <Text style={styles.subtitle}>{meta.subtitle}</Text>
 
-              <View style={[styles.card, bioFocused && styles.cardFocused]}>
-                <Text style={styles.label}>Your Bio</Text>
-                <TextInput
-                  value={bio}
-                  onChangeText={handleBioChange}
-                  onFocus={() => setBioFocused(true)}
-                  onBlur={() => setBioFocused(false)}
-                  placeholder="What's on your mind? What brought you here?"
-                  placeholderTextColor={THEME.textSecondary}
-                  multiline
-                  maxLength={MAX_BIO_LENGTH}
-                  textAlignVertical="top"
-                  style={styles.textArea}
+          {/* ── STEP 0: GENDER ── */}
+          {step === 0 && (
+            <View style={styles.genderList}>
+              {GENDER_OPTIONS.map((opt) => (
+                <GenderCard
+                  key={opt.id}
+                  option={opt}
+                  selected={gender}
+                  onPress={handleGenderPress}
                 />
-                <View style={styles.bioFooter}>
-                  <Text style={styles.bioHint}>
-                    {bio.trim().length < 10 ? `${10 - bio.trim().length} more characters needed` : '✓ Looks good'}
-                  </Text>
-                  <Text style={[styles.charCount, { color: bioColor }]}>
-                    {bio.length}/{MAX_BIO_LENGTH}
-                  </Text>
-                </View>
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.title}>What weighs on you?</Text>
-              <Text style={styles.subtitle}>
-                Pick at least 3. We'll show you what matters.
-              </Text>
+              ))}
+            </View>
+          )}
 
-              {/* Selected count badge */}
-              {selected.length > 0 && (
-                <View style={styles.selectedBadge}>
-                  <View style={styles.selectedDot} />
-                  <Text style={styles.selectedBadgeText}>
-                    {selected.length} selected{selected.length < 3 ? ` — pick ${3 - selected.length} more` : ' — you\'re good to go'}
-                  </Text>
+          {/* ── STEP 1: INTERESTS ── */}
+          {step === 1 && (
+            <>
+              {interests.length > 0 && (
+                <View style={styles.badge}>
+                  <View style={styles.badgeDot} />
+                  <Text style={styles.badgeText}>{interests.length} selected</Text>
                 </View>
               )}
-
-              <View style={styles.tagsContainer}>
+              <View style={styles.tagWrap}>
                 {INTERESTS.map((item) => (
                   <InterestTag
                     key={item.label}
                     item={item}
-                    active={selected.includes(item.label)}
+                    active={interests.includes(item.label)}
                     onPress={toggleInterest}
                   />
                 ))}
               </View>
             </>
           )}
+
         </Animated.View>
       </ScrollView>
 
       {/* Footer */}
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, rh(24)) }]}>
-        {step > 1 && (
-          <TouchableOpacity
-            onPress={() => setStep(1)}
-            style={styles.backBtn}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.backBtnText}>← Back</Text>
-          </TouchableOpacity>
-        )}
-
         <TouchableOpacity
-          onPress={step === 1 ? handleContinue : handleComplete}
-          disabled={!canContinue || loading}
-          style={[styles.primaryBtn, (!canContinue || loading) && styles.primaryBtnDisabled]}
+          onPress={handleNext}
+          disabled={loading}
+          style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
           activeOpacity={0.85}
         >
           {loading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <Text style={styles.primaryBtnText}>
-              {step === 1 ? 'Continue →' : 'Get Started'}
+              {isLastStep ? 'Enter Anonixx' : 'Continue →'}
             </Text>
           )}
         </TouchableOpacity>
+
+        {meta.skip && !loading && (
+          <TouchableOpacity
+            onPress={handleNext}
+            style={styles.skipBtn}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.skipBtnText}>
+              {isLastStep ? 'Skip & enter' : 'Skip for now'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
+  root: { flex: 1, backgroundColor: T.background },
 
   glowOrb: {
     position:        'absolute',
-    width:           rs(360),
-    height:          rs(360),
-    borderRadius:    rs(180),
-    backgroundColor: THEME.primary,
-    opacity:         0.05,
-    bottom:          rh(-100),
+    bottom:          rh(-80),
     alignSelf:       'center',
+    width:           rs(340),
+    height:          rs(340),
+    borderRadius:    rs(170),
+    backgroundColor: T.primary,
+    opacity:         0.04,
   },
 
   // Progress
-  progressRow: {
+  progressWrap: {
     flexDirection:     'row',
     alignItems:        'center',
-    justifyContent:    'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingBottom:     rh(12),
+    paddingBottom:     rh(10),
+    gap:               rp(12),
   },
-  stepDots:        { flexDirection: 'row', alignItems: 'center' },
-  stepDot:         { width: rs(10), height: rs(10), borderRadius: rs(5), backgroundColor: THEME.border, borderWidth: 1.5, borderColor: THEME.border },
-  stepDotActive:   { backgroundColor: THEME.primary, borderColor: THEME.primary, shadowColor: THEME.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: rs(6), elevation: 4 },
-  stepDotDone:     { backgroundColor: '#22c55e', borderColor: '#22c55e' },
-  stepConnector:   { width: rs(32), height: rs(2), backgroundColor: THEME.border, marginHorizontal: rp(6) },
-  stepConnectorActive: { backgroundColor: '#22c55e' },
-  stepLabel:       { fontSize: rf(12), color: THEME.textSecondary, fontWeight: '600' },
-
-  progressTrack: { height: rh(3), backgroundColor: THEME.border, marginHorizontal: SPACING.lg, borderRadius: rh(2), marginBottom: rh(4) },
-  progressFill:  { height: '100%', backgroundColor: THEME.primary, borderRadius: rh(2) },
+  progressTrack: {
+    flex:           1,
+    height:         rh(3),
+    backgroundColor: T.border,
+    borderRadius:   rh(2),
+    overflow:       'hidden',
+  },
+  progressFill: {
+    height:          '100%',
+    backgroundColor: T.primary,
+    borderRadius:    rh(2),
+  },
+  progressLabel: {
+    fontSize:   rf(12),
+    color:      T.textSecondary,
+    fontWeight: '600',
+    minWidth:   rs(28),
+    textAlign:  'right',
+  },
 
   // Scroll
   scroll:        { flex: 1 },
-  scrollContent: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.xl },
-
-  title:    { fontSize: isSmallDevice ? FONT.xxl : FONT.display, fontWeight: '800', color: THEME.primary, marginBottom: SPACING.sm, letterSpacing: rs(-0.5), lineHeight: (isSmallDevice ? FONT.xxl : FONT.display) * 1.2 },
-  subtitle: { fontSize: FONT.md, color: THEME.textSecondary, marginBottom: SPACING.xl, lineHeight: FONT.md * 1.6 },
-
-  // Bio card
-  card: {
-    backgroundColor: THEME.surface,
-    borderRadius:    RADIUS.xl,
-    padding:         rp(18),
-    borderWidth:     1.5,
-    borderColor:     THEME.border,
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: rh(6) },
-    shadowOpacity:   0.25,
-    shadowRadius:    rs(16),
-    elevation:       6,
+  scrollContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop:        SPACING.md,
+    paddingBottom:     SPACING.xl,
   },
-  cardFocused: { borderColor: THEME.primary },
-  label:       { fontSize: rf(11), fontWeight: '700', color: THEME.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase', letterSpacing: rs(1) },
-  textArea: {
-    backgroundColor: THEME.inputBg,
-    color:           THEME.text,
+
+  // Back
+  backBtn:     { marginBottom: SPACING.sm },
+  backBtnText: { fontSize: FONT.md, color: T.textSecondary, fontWeight: '600' },
+
+  // Heading
+  title: {
+    fontSize:    isSmallDevice ? FONT.xxl : FONT.display,
+    fontWeight:  '800',
+    color:       T.primary,
+    marginBottom: SPACING.sm,
+    letterSpacing: rs(-0.5),
+    lineHeight:  (isSmallDevice ? FONT.xxl : FONT.display) * 1.2,
+    fontFamily:  'PlayfairDisplay-Bold',
+  },
+  subtitle: {
+    fontSize:     FONT.md,
+    color:        T.textSecondary,
+    marginBottom: SPACING.xl,
+    lineHeight:   FONT.md * 1.6,
+  },
+
+  // Gender
+  genderList: { gap: rp(10) },
+  genderCard: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(16),
+    paddingHorizontal: rp(20),
+    paddingVertical:   rp(18),
+    borderRadius:      RADIUS.xl,
+    backgroundColor:   T.surface,
+    borderWidth:       1.5,
+    borderColor:       T.border,
+  },
+  genderCardActive:   { backgroundColor: T.primaryDim, borderColor: 'rgba(255,99,74,0.4)' },
+  genderSymbol:       { fontSize: rf(20), color: T.textSecondary, width: rs(28), textAlign: 'center' },
+  genderSymbolActive: { color: T.primary },
+  genderLabel:        { flex: 1, fontSize: FONT.md, fontWeight: '600', color: T.text },
+  genderLabelActive:  { color: T.primary },
+  genderDot: {
+    width:           rs(8),
+    height:          rs(8),
+    borderRadius:    rs(4),
+    backgroundColor: T.primary,
+  },
+
+  // Badge (selected count)
+  badge: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    alignSelf:         'flex-start',
+    backgroundColor:   T.primaryDim,
+    borderRadius:      RADIUS.full,
     paddingHorizontal: rp(14),
-    paddingVertical:   rp(12),
-    borderRadius:    RADIUS.md,
-    fontSize:        FONT.md,
-    minHeight:       rh(120),
-    textAlignVertical: 'top',
-    lineHeight:      FONT.md * 1.6,
+    paddingVertical:   rp(7),
+    marginBottom:      SPACING.md,
+    gap:               rp(6),
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.3)',
   },
-  bioFooter:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: SPACING.sm },
-  bioHint:    { fontSize: rf(11), color: THEME.textSecondary, flex: 1 },
-  charCount:  { fontSize: rf(11), fontWeight: '600' },
+  badgeDot:  { width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.primary },
+  badgeText: { fontSize: rf(12), color: T.primary, fontWeight: '600' },
 
   // Tags
-  selectedBadge: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    backgroundColor: THEME.primaryDim,
-    borderRadius:    RADIUS.full,
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(8),
-    alignSelf:       'flex-start',
-    marginBottom:    SPACING.md,
-    gap:             rp(6),
-    borderWidth:     1,
-    borderColor:     'rgba(255,99,74,0.3)',
-  },
-  selectedDot:       { width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: THEME.primary },
-  selectedBadgeText: { fontSize: rf(12), color: THEME.primary, fontWeight: '600' },
-
-  tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(10) },
+  tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(10) },
   tag: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -433,35 +481,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: rp(14),
     paddingVertical:   rp(10),
     borderRadius:      RADIUS.full,
+    backgroundColor:   T.surface,
     borderWidth:       1.5,
-    borderColor:       THEME.border,
-    backgroundColor:   THEME.surface,
+    borderColor:       T.border,
   },
-  tagActive:      { backgroundColor: THEME.primary, borderColor: THEME.primary },
-  tagEmoji:       { fontSize: rf(14) },
-  tagText:        { color: THEME.textSecondary, fontWeight: '600', fontSize: FONT.sm },
-  tagTextActive:  { color: '#fff' },
+  tagActive:     { backgroundColor: T.primary, borderColor: T.primary },
+  tagEmoji:      { fontSize: rf(14) },
+  tagText:       { fontSize: FONT.sm, fontWeight: '600', color: T.textSecondary },
+  tagTextActive: { color: '#fff' },
 
   // Footer
   footer: {
     paddingHorizontal: SPACING.lg,
-    paddingTop:        SPACING.md,
-    gap:               SPACING.sm,
+    paddingTop:        SPACING.sm,
+    gap:               SPACING.xs,
   },
   primaryBtn: {
     height:          BUTTON_HEIGHT,
     borderRadius:    RADIUS.lg,
     alignItems:      'center',
     justifyContent:  'center',
-    backgroundColor: THEME.primary,
-    shadowColor:     THEME.primary,
+    backgroundColor: T.primary,
+    shadowColor:     T.primary,
     shadowOffset:    { width: 0, height: rh(8) },
     shadowOpacity:   0.45,
     shadowRadius:    rs(20),
     elevation:       10,
   },
-  primaryBtnDisabled: { opacity: 0.45, shadowOpacity: 0 },
-  primaryBtnText:     { color: '#fff', fontSize: FONT.lg, fontWeight: '700', letterSpacing: rs(0.3) },
-  backBtn:            { alignItems: 'center', paddingVertical: rp(6) },
-  backBtnText:        { color: THEME.textSecondary, fontSize: FONT.md, fontWeight: '600' },
+  primaryBtnDisabled: { opacity: 0.4, shadowOpacity: 0 },
+  primaryBtnText: {
+    color:         '#fff',
+    fontSize:      FONT.lg,
+    fontWeight:    '700',
+    letterSpacing: rs(0.3),
+  },
+  skipBtn:     { alignItems: 'center', paddingVertical: rp(8) },
+  skipBtnText: { fontSize: FONT.md, color: T.textSecondary, fontWeight: '500' },
 });

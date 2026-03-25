@@ -661,6 +661,67 @@ async def view_post(
     return {"status": "success"}
 
 
+# ==================== EDIT / DELETE ====================
+
+class EditPostRequest(BaseModel):
+    content: str
+
+
+@router.patch("/{post_id}")
+async def edit_post(
+    post_id: str,
+    data: EditPostRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="Content cannot be empty.")
+
+    try:
+        oid = ObjectId(post_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid post ID.")
+
+    post = await db["posts"].find_one({"_id": oid})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    if post["user_id"] != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own posts.")
+
+    await db["posts"].update_one(
+        {"_id": oid},
+        {"$set": {"content": data.content.strip(), "edited_at": now_utc()}}
+    )
+    return {"message": "Post updated."}
+
+
+@router.delete("/{post_id}")
+async def delete_post(
+    post_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    try:
+        oid = ObjectId(post_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid post ID.")
+
+    post = await db["posts"].find_one({"_id": oid})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    if post["user_id"] != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own posts.")
+
+    # Cascade delete
+    await db["posts"].delete_one({"_id": oid})
+    await db["post_threads"].delete_many({"post_id": post_id})
+    await db["threads"].delete_many({"post_id": oid})
+    await db["saved_posts"].delete_many({"post_id": post_id})
+    await db["post_views"].delete_many({"post_id": oid})
+
+    return {"message": "Post deleted."}
+
+
 # ==================== TOPICS ====================
 
 @router.get("/topics")

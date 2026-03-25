@@ -20,8 +20,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { Check, CheckCheck } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
+import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -53,6 +55,20 @@ function formatTime(isoString) {
   return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// ─── Message Status Ticks ─────────────────────────────────────────────────────
+// Single gray  = sent (not yet received by device)
+// Double gray  = delivered (device received, not yet opened)
+// Double blue  = read (recipient opened the chat)
+const MessageStatus = React.memo(({ isDelivered, isRead }) => {
+  if (isRead) {
+    return <CheckCheck size={rs(13)} color="#4FC3F7" strokeWidth={2.5} />;
+  }
+  if (isDelivered) {
+    return <CheckCheck size={rs(13)} color="rgba(255,255,255,0.38)" strokeWidth={2.5} />;
+  }
+  return <Check size={rs(13)} color="rgba(255,255,255,0.38)" strokeWidth={2.5} />;
+});
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 const MessageBubble = React.memo(({ message, showTime }) => {
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -77,10 +93,14 @@ const MessageBubble = React.memo(({ message, showTime }) => {
         </Text>
       </View>
       {showTime && (
-        <Text style={[styles.bubbleTime, message.is_own && styles.bubbleTimeOwn]}>
-          {formatTime(message.created_at)}
-          {message.is_own && message.is_read ? '  ✓' : ''}
-        </Text>
+        <View style={[styles.bubbleFooter, message.is_own && styles.bubbleFooterOwn]}>
+          <Text style={[styles.bubbleTime, message.is_own && styles.bubbleTimeOwn]}>
+            {formatTime(message.created_at)}
+          </Text>
+          {message.is_own && (
+            <MessageStatus isDelivered={message.is_delivered} isRead={message.is_read} />
+          )}
+        </View>
       )}
     </Animated.View>
   );
@@ -190,7 +210,8 @@ const RevealModal = React.memo(({ visible, chat, onAccept, onDecline, onRequest,
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ChatScreen({ route, navigation }) {
   const { chatId, otherName, otherAvatar, otherAvatarColor } = route.params || {};
-  const { showToast } = useToast();
+  const { showToast }     = useToast();
+  const { socketService } = useSocket();
 
   const [messages, setMessages]           = useState([]);
   const [chatInfo, setChatInfo]           = useState(null);
@@ -215,19 +236,68 @@ export default function ChatScreen({ route, navigation }) {
       if (res.ok) {
         setMessages(data.messages || []);
         setChatInfo(data.chat);
+        // Tell sender we read their messages (instant blue ticks via socket)
+        socketService?.markRead(chatId);
       }
     } catch {
       // silent — chat stays with last known state
     } finally {
       setLoading(false);
     }
-  }, [chatId]);
+  }, [chatId, socketService]);
 
   useFocusEffect(useCallback(() => {
     loadMessages();
-    pollRef.current = setInterval(loadMessages, 5000);
+    // Poll as reliable fallback; socket events handle instant updates
+    pollRef.current = setInterval(loadMessages, 10000);
     return () => clearInterval(pollRef.current);
   }, [loadMessages]));
+
+  // ── Socket: join room + real-time listeners ───────────────────────────────
+  useEffect(() => {
+    if (!socketService || !chatId) return;
+
+    socketService.joinChat(chatId);
+
+    const handleNewMessage = (msg) => {
+      if (msg.chat_id !== chatId) return;
+      setMessages(prev => {
+        // Avoid duplicates (HTTP poll may also bring it in)
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev, { ...msg, is_own: false }];
+      });
+      scrollToBottom();
+      // Signal to sender that we received it (triggers delivered acks via server)
+      socketService.markRead(chatId);
+    };
+
+    const handleDelivered = ({ chatId: cid, messageIds }) => {
+      if (cid !== chatId) return;
+      const ids = new Set(messageIds);
+      setMessages(prev =>
+        prev.map(m => ids.has(m.id) ? { ...m, is_delivered: true } : m)
+      );
+    };
+
+    const handleRead = ({ chatId: cid, messageIds }) => {
+      if (cid !== chatId) return;
+      const ids = new Set(messageIds);
+      setMessages(prev =>
+        prev.map(m => ids.has(m.id) ? { ...m, is_delivered: true, is_read: true } : m)
+      );
+    };
+
+    socketService.onNewMessage(handleNewMessage);
+    socketService.onMessagesDelivered(handleDelivered);
+    socketService.onMessagesRead(handleRead);
+
+    return () => {
+      socketService.offNewMessage(handleNewMessage);
+      socketService.offMessagesDelivered(handleDelivered);
+      socketService.offMessagesRead(handleRead);
+      socketService.leaveChat(chatId);
+    };
+  }, [socketService, chatId, scrollToBottom]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -244,7 +314,7 @@ export default function ChatScreen({ route, navigation }) {
 
     // Optimistic update
     setMessages(prev => [...prev, {
-      id: tempId, content, is_own: true, is_read: false,
+      id: tempId, content, is_own: true, is_delivered: false, is_read: false,
       created_at: new Date().toISOString(),
     }]);
     setInputText('');
@@ -659,17 +729,24 @@ const styles = StyleSheet.create({
     lineHeight: rf(22),
   },
   bubbleTextOwn: { color: '#fff' },
+  bubbleFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(4),
+    marginTop: rp(3),
+    marginLeft: rp(4),
+  },
+  bubbleFooterOwn: {
+    justifyContent: 'flex-end',
+    marginLeft: 0,
+    marginRight: rp(4),
+  },
   bubbleTime: {
     fontSize: FONT.xs,
     color: T.textSecondary,
-    marginTop: rp(3),
-    marginLeft: rp(4),
     opacity: 0.7,
   },
-  bubbleTimeOwn: {
-    marginRight: rp(4),
-    marginLeft: 0,
-  },
+  bubbleTimeOwn: {},
 
   // Revealed banner
   revealedBanner: {

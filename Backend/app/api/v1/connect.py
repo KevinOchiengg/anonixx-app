@@ -148,7 +148,8 @@ async def get_anonymous_profile(
         "confession_count": confession_count,
         "join_date": join_date,
         "connect_status": connect_status,   # null | "pending" | "chatting"
-        "chat_id": chat_id                  # set if already chatting
+        "chat_id": chat_id,                 # set if already chatting
+        "gender": user.get("gender"),       # male | female | nonbinary | prefer_not_to_say | null
     }
 
 
@@ -493,11 +494,28 @@ async def get_chat_messages(
         "chat_id": chat_id
     }).sort("created_at", 1).skip(skip).limit(limit).to_list(None)
 
-    # Mark incoming as read
-    await db["connect_messages"].update_many(
+    # Collect unread incoming message IDs before marking
+    unread_docs = await db["connect_messages"].find(
         {"chat_id": chat_id, "sender_id": {"$ne": current_user_id}, "is_read": False},
-        {"$set": {"is_read": True}}
-    )
+        {"_id": 1, "sender_id": 1},
+    ).to_list(length=200)
+
+    if unread_docs:
+        await db["connect_messages"].update_many(
+            {"_id": {"$in": [m["_id"] for m in unread_docs]}},
+            {"$set": {"is_read": True, "is_delivered": True, "read_at": datetime.now(timezone.utc)}},
+        )
+        # Notify the sender in real time (fallback path — socket event also fires from frontend)
+        from app.sio import sio
+        sender_id = unread_docs[0]["sender_id"]
+        await sio.emit(
+            "messages_read",
+            {
+                "chatId":     chat_id,
+                "messageIds": [str(m["_id"]) for m in unread_docs],
+            },
+            room=f"user_{sender_id}",
+        )
 
     is_sender = chat["from_user_id"] == current_user_id
     other_name = chat["to_anonymous_name"] if is_sender else chat["from_anonymous_name"]
@@ -511,11 +529,12 @@ async def get_chat_messages(
     return {
         "messages": [
             {
-                "id": str(m["_id"]),
-                "content": m["content"],
-                "is_own": m["sender_id"] == current_user_id,
-                "is_read": m.get("is_read", False),
-                "created_at": m["created_at"].isoformat()
+                "id":           str(m["_id"]),
+                "content":      m["content"],
+                "is_own":       m["sender_id"] == current_user_id,
+                "is_delivered": m.get("is_delivered", False),
+                "is_read":      m.get("is_read", False),
+                "created_at":   m["created_at"].isoformat()
             }
             for m in messages
         ],
@@ -563,15 +582,32 @@ async def send_message(
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     message = {
-        "_id": ObjectId(),
-        "chat_id": chat_id,
-        "sender_id": current_user_id,
-        "content": data.content.strip(),
-        "is_read": False,
-        "created_at": datetime.now(timezone.utc)
+        "_id":          ObjectId(),
+        "chat_id":      chat_id,
+        "sender_id":    current_user_id,
+        "content":      data.content.strip(),
+        "is_delivered": False,
+        "is_read":      False,
+        "created_at":   datetime.now(timezone.utc),
     }
 
     await db["connect_messages"].insert_one(message)
+
+    # Emit real-time event to the recipient
+    from app.sio import sio
+    await sio.emit(
+        "new_message",
+        {
+            "id":           str(message["_id"]),
+            "chat_id":      chat_id,
+            "content":      message["content"],
+            "is_own":       False,
+            "is_delivered": False,
+            "is_read":      False,
+            "created_at":   message["created_at"].isoformat(),
+        },
+        room=f"user_{other_participant(chat, current_user_id)}",
+    )
 
     await db["connect_chats"].update_one(
         {"_id": ObjectId(chat_id)},

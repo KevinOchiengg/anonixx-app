@@ -26,7 +26,7 @@ import {
   ChevronDown, MoreHorizontal, CornerDownRight,
 } from 'lucide-react-native';
 import {
-  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
+  rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP,
 } from '../../utils/responsive';
 import { useToast }  from '../../components/ui/Toast';
 import { useAuth }   from '../../context/AuthContext';
@@ -489,6 +489,8 @@ export default function PostDetailScreen({ route, navigation }) {
   const [galleryIndex,   setGalleryIndex]   = useState(0);
   const [relatedPosts,   setRelatedPosts]   = useState([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
+  const [showOptions,    setShowOptions]    = useState(false);
+  const [deleting,       setDeleting]       = useState(false);
 
   const likeScaleAnim = useRef(new Animated.Value(1)).current;
   const headerOp      = useRef(new Animated.Value(0)).current;
@@ -600,6 +602,34 @@ export default function PostDetailScreen({ route, navigation }) {
   const openGallery  = useCallback((i) => { setGalleryIndex(i); setGalleryVisible(true);  }, []);
   const closeGallery = useCallback(() => setGalleryVisible(false), []);
 
+  const handleEdit = useCallback(() => {
+    setShowOptions(false);
+    navigation.navigate('CreatePost', {
+      editMode:       true,
+      postId:         post.id,
+      initialContent: post.content,
+    });
+  }, [post.id, post.content, navigation]);
+
+  const handleDelete = useCallback(async () => {
+    setDeleting(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      setShowOptions(false);
+      showToast({ type: 'success', message: 'Post deleted.' });
+      navigation.goBack();
+    } catch {
+      showToast({ type: 'error', message: 'Could not delete. Try again.' });
+    } finally {
+      setDeleting(false);
+    }
+  }, [post.id, navigation, showToast]);
+
   // ── Related → navigate to Feed tab, scroll to that post ───
   const handleRelatedPress = useCallback((relPost) => {
     navigation.navigate('Feed', {
@@ -637,9 +667,15 @@ export default function PostDetailScreen({ route, navigation }) {
                 <Text style={styles.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
                 <Text style={styles.timestamp}>{post.time_ago}</Text>
               </View>
-              <TouchableOpacity hitSlop={HIT_SLOP} style={styles.moreBtn}>
-                <MoreHorizontal size={rs(18)} color={T.textSecondary} />
-              </TouchableOpacity>
+              {post.is_own_post && (
+                <TouchableOpacity
+                  onPress={() => setShowOptions(true)}
+                  hitSlop={HIT_SLOP}
+                  style={styles.moreBtn}
+                >
+                  <MoreHorizontal size={rs(18)} color={T.textSecondary} />
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.divider} />
@@ -732,6 +768,57 @@ export default function PostDetailScreen({ route, navigation }) {
           onClose={closeGallery}
         />
       )}
+
+      {/* ── Post options sheet (own posts only) ─────────────── */}
+      <Modal
+        visible={showOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowOptions(false)}
+      >
+        <TouchableOpacity
+          style={optStyles.backdrop}
+          activeOpacity={1}
+          onPress={() => setShowOptions(false)}
+        >
+          <View style={optStyles.sheet}>
+            <View style={optStyles.handle} />
+
+            <TouchableOpacity
+              onPress={handleEdit}
+              style={optStyles.option}
+              activeOpacity={0.7}
+            >
+              <Text style={optStyles.optionText}>Edit post</Text>
+            </TouchableOpacity>
+
+            <View style={optStyles.divider} />
+
+            <TouchableOpacity
+              onPress={handleDelete}
+              disabled={deleting}
+              style={optStyles.option}
+              activeOpacity={0.7}
+            >
+              {deleting
+                ? <ActivityIndicator size="small" color="#ef4444" />
+                : <Text style={[optStyles.optionText, optStyles.optionDestructive]}>Delete post</Text>
+              }
+            </TouchableOpacity>
+
+            <View style={optStyles.divider} />
+
+            <TouchableOpacity
+              onPress={() => setShowOptions(false)}
+              style={optStyles.option}
+              activeOpacity={0.7}
+            >
+              <Text style={optStyles.optionCancel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -851,4 +938,36 @@ const styles = StyleSheet.create({
   relatedLabel:  { fontSize: FONT.xs, fontWeight: '600', color: T.textSecondary, letterSpacing: 1, textTransform: 'uppercase' },
   relatedSub:    { fontSize: FONT.xs, color: T.textMuted, fontStyle: 'italic', textAlign: 'center', marginBottom: SPACING.md },
   noRelated:     { textAlign: 'center', fontSize: FONT.sm, color: T.textSecondary, fontStyle: 'italic', marginVertical: SPACING.lg },
+});
+
+const optStyles = StyleSheet.create({
+  backdrop: {
+    flex:            1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent:  'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#1a1f2e',
+    borderTopLeftRadius:  RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingBottom:   rp(32),
+    paddingTop:      rp(12),
+  },
+  handle: {
+    width:           rs(36),
+    height:          rp(4),
+    borderRadius:    rp(2),
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignSelf:       'center',
+    marginBottom:    rp(8),
+  },
+  option: {
+    paddingVertical:   rp(18),
+    paddingHorizontal: SPACING.lg,
+    alignItems:        'center',
+  },
+  divider:           { height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
+  optionText:        { fontSize: FONT.md, fontWeight: '600', color: T.text },
+  optionDestructive: { color: '#ef4444' },
+  optionCancel:      { fontSize: FONT.md, color: T.textSecondary, fontWeight: '500' },
 });

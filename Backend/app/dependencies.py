@@ -66,6 +66,34 @@ async def get_current_user_id(
         )
 
 
+async def require_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db = Depends(get_database),
+) -> str:
+    """Authenticate + verify is_admin=True. Returns user_id."""
+    try:
+        payload = decode_token(credentials.credentials)
+        user_id = payload.get("sub") if payload else None
+        if not user_id:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+
+        user = await db["users"].find_one(
+            {"_id": ObjectId(user_id)},
+            {"is_admin": 1, "is_active": 1},
+        )
+        if not user:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
+        if not user.get("is_admin"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin access required")
+
+        return user_id
+
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication failed")
+
+
 async def get_optional_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
     db = Depends(get_database)
