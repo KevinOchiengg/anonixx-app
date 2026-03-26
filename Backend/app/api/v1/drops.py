@@ -501,7 +501,19 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
         if drop_doc:
             card_image_url = drop_doc.get("card_image_url") or ""
 
-    og_image_tag = f'  <meta property="og:image" content="{card_image_url}">' if card_image_url else ""
+    open_url = f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open"
+
+    if card_image_url:
+        og_image_tags = f"""  <meta property="og:image"        content="{card_image_url}">
+  <meta property="og:image:secure_url" content="{card_image_url}">
+  <meta property="og:image:type"   content="image/png">
+  <meta property="og:image:width"  content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:image"       content="{card_image_url}">"""
+    else:
+        og_image_tags = ""
+
     card_img_block = (
         f'<a href="{deep_link}" style="display:block;margin-bottom:20px;">'
         f'<img src="{card_image_url}" alt="Confession card" '
@@ -513,10 +525,10 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta property="og:title" content="Someone dropped a confession on Anonixx">
-  <meta property="og:description" content="Open Anonixx to see what was dropped anonymously.">
+  <meta property="og:type"      content="website">
+  <meta property="og:url"       content="{open_url}">
   <meta property="og:site_name" content="Anonixx">
-{og_image_tag}
+{og_image_tags}
   <title>Opening Anonixx…</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}

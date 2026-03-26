@@ -74,7 +74,6 @@ const StarryBackground = React.memo(() => (
 // ─── Field card (Rule 6) ──────────────────────────────────────
 const FieldCard = React.memo(({ label, hint, children }) => (
   <View style={styles.fieldCard}>
-    <View style={styles.fieldAccent} />
     <View style={styles.fieldInner}>
       <Text style={styles.fieldLabel}>{label}</Text>
       {children}
@@ -338,7 +337,6 @@ export default function EditProfileScreen({ navigation }) {
 
           {/* Coins */}
           <View style={styles.coinsCard}>
-            <View style={styles.coinsAccent} />
             <View style={styles.coinsInner}>
               <View style={styles.coinsIconWrap}>
                 <Text style={styles.coinsEmoji}>💰</Text>
