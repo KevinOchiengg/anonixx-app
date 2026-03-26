@@ -51,18 +51,14 @@ def now_utc() -> datetime:
 def get_time_ago(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    delta = now_utc() - dt
-    if delta.days > 365:
-        return f"{delta.days // 365}y ago"
-    elif delta.days > 30:
-        return f"{delta.days // 30}mo ago"
-    elif delta.days > 0:
-        return f"{delta.days}d ago"
-    elif delta.seconds > 3600:
-        return f"{delta.seconds // 3600}h ago"
-    elif delta.seconds > 60:
-        return f"{delta.seconds // 60}m ago"
-    return "just now"
+    diff = int((now_utc() - dt).total_seconds())
+    if diff < 60:       return "just now"
+    if diff < 3600:     return f"{diff // 60}m ago"
+    if diff < 86400:    return f"{diff // 3600}h ago"
+    if diff < 604800:   return f"{diff // 86400}d ago"
+    if diff < 2592000:  return f"{diff // 604800}w ago"
+    if diff < 31536000: return f"{diff // 2592000} months ago"
+    return dt.strftime("%b %Y")
 
 
 def is_heavy(post) -> bool:
