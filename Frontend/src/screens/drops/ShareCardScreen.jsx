@@ -112,7 +112,7 @@ export default function ShareCardScreen({ navigation }) {
   // WhatsApp renders *bold*, _italic_, and URLs as clickable links — works on every device.
   const shareText = useCallback(async (id, confession) => {
     const shareUrl = `${API_BASE_URL}/api/v1/drops/${id}/open`;
-    const body = `❤️‍🔥 *anonixx.drop*\n\n_"${confession}"_\n\n*someone just confessed this. anonymously.*\n*who is it? unlock them →* ${shareUrl}`;
+    const body = `🎭 *anonixx.drop*\n\n_"${confession}"_\n\n*someone just confessed this. anonymously.*\n*find out here →* ${shareUrl}`;
     try {
       const { Share } = require('react-native');
       await Share.share(
