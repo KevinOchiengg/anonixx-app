@@ -589,13 +589,13 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleShare = useCallback(async () => {
     try {
-      const link = `anonixx://confession/${post.id}`;
-      const preview = post.content?.substring(0, 100) ?? '';
-      const ellipsis = (post.content?.length ?? 0) > 100 ? '…' : '';
-      await Share.share({
-        message: `"${preview}${ellipsis}"\n\nRead on Anonixx 👇\n${link}`,
-        url: link,
-      });
+      const shareUrl = `${API_BASE_URL}/api/v1/posts/${post.id}/open`;
+      const preview  = post.content?.substring(0, 120) ?? '';
+      const ellipsis = (post.content?.length ?? 0) > 120 ? '…' : '';
+      const body = `🎭 *anonixx.confession*\n\n_"${preview}${ellipsis}"_\n\n*someone just said this. anonymously.*\n*find out here →* ${shareUrl}`;
+      await Share.share(
+        Platform.OS === 'ios' ? { message: body, url: shareUrl } : { message: body },
+      );
     } catch {}
   }, [post.id, post.content]);
 
