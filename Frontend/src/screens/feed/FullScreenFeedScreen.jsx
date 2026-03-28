@@ -11,6 +11,7 @@ import FullScreenPostCard from '../../components/feed/FullScreenPostCard';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import {
+import StarryBackground from '../../components/common/StarryBackground';
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
@@ -45,6 +46,7 @@ const SkeletonFullCard = React.memo(() => {
   return (
     <Animated.View style={[styles.skeletonCard, { opacity }]}>
       <View style={styles.skeletonAvatar} />
+      <StarryBackground />
       <View style={styles.skeletonBody}>
         <View style={[styles.skeletonLine, { width: '80%' }]} />
         <View style={[styles.skeletonLine, { width: '65%', marginTop: rh(10) }]} />

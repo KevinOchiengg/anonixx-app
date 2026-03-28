@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 
 import { Check, Crown } from 'lucide-react-native'
+import StarryBackground from '../../components/common/StarryBackground';
 
 const features = [
   'Unlimited swipes',
@@ -42,6 +43,7 @@ export default function PremiumScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StarryBackground />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Echo Premium</Text>
       </View>

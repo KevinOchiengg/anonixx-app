@@ -43,6 +43,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { FEATURES } from '../../config/featureFlags';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // expo-video stubs (same pattern as CalmPostCard)
 let VideoView = null;
@@ -140,7 +141,8 @@ const CommentSheet = ({ visible, postId, isAuthenticated, navigation, onClose, o
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
       <TouchableOpacity style={cs.backdrop} activeOpacity={1} onPress={handleClose} />
       <Animated.View style={[cs.sheet, { transform: [{ translateY: slideAnim }] }]} {...pan.panHandlers}>
-        <View style={cs.handleRow}><View style={cs.handleBar} /></View>
+        <View style={cs.handleRow}>
+      <StarryBackground /><View style={cs.handleBar} /></View>
         <View style={cs.header}>
           <Text style={cs.headerText}>{comments.length} {comments.length === 1 ? 'comment' : 'comments'}</Text>
           <TouchableOpacity onPress={handleClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>

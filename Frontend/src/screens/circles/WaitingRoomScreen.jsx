@@ -27,6 +27,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -375,6 +376,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
   if (eventStatus === 'ended') {
     return (
       <View style={styles.safe}>
+      <StarryBackground />
         <View style={styles.endedWrap}>
           <Text style={styles.endedEmoji}>🌑</Text>
           <Text style={styles.endedTitle}>The circle closed.</Text>

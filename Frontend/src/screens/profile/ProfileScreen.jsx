@@ -17,6 +17,7 @@ import {
 import { useSelector } from 'react-redux'
 import Avatar from '../../components/common/Avatar'
 import CoinBadge from '../../components/common/CoinBadge'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function ProfileScreen({ navigation }) {
   const { user } = useSelector((state) => state.auth)
@@ -24,6 +25,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StarryBackground />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Settings')}>

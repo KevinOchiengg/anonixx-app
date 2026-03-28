@@ -10,6 +10,7 @@ import {
 } from 'react-native'
 import { MessageCircle } from 'lucide-react-native'
 import { useSelector } from 'react-redux'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function MatchesScreen({ navigation }) {
   const { matches } = useSelector((state) => state.dating)
@@ -35,6 +36,7 @@ export default function MatchesScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StarryBackground />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Matches</Text>
         <Text style={styles.matchCount}>{matches.length} matches</Text>

@@ -16,6 +16,7 @@ import { Flame, Inbox, ShoppingBag } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -117,6 +118,7 @@ const RequestCard = React.memo(({ request, onAccept, onDecline, accepting }) => 
         styles.requestAvatar,
         { backgroundColor: avatarColor + '22', borderColor: avatarColor + '55' },
       ]}>
+      <StarryBackground />
         <Text style={styles.requestAvatarEmoji}>{getAvatar(request.from_avatar)}</Text>
       </View>
 

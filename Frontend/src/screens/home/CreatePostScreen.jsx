@@ -29,6 +29,7 @@ import {
   stopRecording,
 } from '../../services/upload'
 import { createPost } from '../../store/slices/postsSlice'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function CreatePostScreen({ navigation }) {
   const dispatch = useDispatch()
@@ -162,6 +163,7 @@ export default function CreatePostScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StarryBackground />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity

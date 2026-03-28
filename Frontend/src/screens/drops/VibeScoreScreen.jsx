@@ -15,6 +15,7 @@ import {
   TrendingUp, Award, Calendar,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const THEME = {
   background: '#0b0f18',
@@ -87,6 +88,7 @@ export default function VibeScoreScreen({ navigation }) {
   if (loading) {
     return (
       <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
+      <StarryBackground />
         <ActivityIndicator color={THEME.primary} size="large" />
       </View>
     );

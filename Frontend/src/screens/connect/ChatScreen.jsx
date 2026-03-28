@@ -23,6 +23,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -72,6 +73,7 @@ const MessageBubble = React.memo(({ message, showTime }) => {
       { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
     ]}>
       <View style={[styles.bubble, message.is_own ? styles.bubbleOwn : styles.bubbleTheir]}>
+      <StarryBackground />
         <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
           {message.content}
         </Text>

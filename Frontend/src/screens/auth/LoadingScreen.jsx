@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native'
 import Storage from '../../services/storage' // ← CHANGE THIS LINE
 import { useDispatch } from 'react-redux'
 import { fetchProfile } from '../../store/slices/authSlice'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function LoadingScreen() {
   const navigation = useNavigation()
@@ -65,6 +66,7 @@ export default function LoadingScreen() {
 
   return (
     <View className='flex-1 bg-echo-dark items-center justify-center'>
+      <StarryBackground />
       <Animated.View
         style={{
           opacity: fadeAnim,

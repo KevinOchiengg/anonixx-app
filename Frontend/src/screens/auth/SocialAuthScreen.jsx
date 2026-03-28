@@ -6,6 +6,7 @@ import { socialLogin } from '../../store/slices/authSlice'
 import Button from '../../components/common/Button'
 import * as Google from 'expo-auth-session/providers/google'
 import * as AppleAuthentication from 'expo-apple-authentication'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function SocialAuthScreen({ navigation }) {
   const dispatch = useDispatch()
@@ -52,6 +53,7 @@ export default function SocialAuthScreen({ navigation }) {
 
   return (
     <SafeAreaView className='flex-1 bg-echo-dark px-6'>
+      <StarryBackground />
       <View className='flex-1 justify-center'>
         <Text className='text-4xl font-bold text-white mb-2'>
           Continue with

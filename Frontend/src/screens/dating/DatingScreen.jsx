@@ -11,6 +11,7 @@ import {
 import { X, Heart, MapPin } from 'lucide-react-native'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchProfiles, swipeProfile } from '../../store/slices/datingSlice'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function DatingScreen({ navigation }) {
   const dispatch = useDispatch()
@@ -38,6 +39,7 @@ export default function DatingScreen({ navigation }) {
   if (!currentProfile) {
     return (
       <SafeAreaView style={styles.container}>
+      <StarryBackground />
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No more profiles</Text>
           <TouchableOpacity style={styles.reloadButton}>

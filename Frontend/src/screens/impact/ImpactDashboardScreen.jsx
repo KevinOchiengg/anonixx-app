@@ -20,6 +20,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../context/ThemeContext'
 import { API_BASE_URL } from '../../config/api'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function ImpactDashboardScreen({ navigation }) {
   const { theme } = useTheme()
@@ -58,6 +59,7 @@ export default function ImpactDashboardScreen({ navigation }) {
       <SafeAreaView
         style={[styles.container, { backgroundColor: theme.background }]}
       >
+      <StarryBackground />
         <StatusBar barStyle={theme.statusBar} />
         <View style={styles.centered}>
           <ActivityIndicator size='large' color={theme.primary} />

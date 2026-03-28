@@ -11,6 +11,7 @@ import {
 import { Coins, TrendingUp, Award } from 'lucide-react-native'
 import { useSelector } from 'react-redux'
 import CoinBadge from '../../components/common/CoinBadge'
+import StarryBackground from '../../components/common/StarryBackground';
 
 const coinPacks = [
   { id: '100', coins: 100, price: '$0.99', popular: false },
@@ -48,6 +49,7 @@ export default function CoinsScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StarryBackground />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Coins</Text>
       </View>

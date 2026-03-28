@@ -25,6 +25,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -109,6 +110,7 @@ const LivePulse = React.memo(({ color }) => {
 
   return (
     <View style={styles.livePulseWrap}>
+      <StarryBackground />
       <Animated.View style={[
         styles.livePulseRing,
         { borderColor: color, transform: [{ scale: ring1 }], opacity: op1 }

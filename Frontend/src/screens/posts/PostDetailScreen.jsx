@@ -16,6 +16,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/respons
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -48,6 +49,7 @@ const ImageGalleryModal = React.memo(({ visible, images, initialIndex, onClose }
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={galleryStyles.overlay}>
+      <StarryBackground />
         <TouchableOpacity style={galleryStyles.closeBtn} onPress={onClose} hitSlop={HIT_SLOP}>
           <X size={rs(26)} color="#fff" />
         </TouchableOpacity>

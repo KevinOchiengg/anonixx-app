@@ -13,6 +13,7 @@ import { ArrowLeft, Clock, Flame, Moon, Plus, Users, Zap } from 'lucide-react-na
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -58,6 +59,7 @@ const DropCard = React.memo(({ item, onPress }) => {
     >
       {/* Top row */}
       <View style={styles.dropTop}>
+      <StarryBackground />
         <Text style={styles.dropEmoji}>{emoji}</Text>
         <Text style={[styles.dropCat, { color }]}>
           {item.category?.toUpperCase()}

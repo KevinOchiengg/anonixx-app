@@ -19,6 +19,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../.
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -194,6 +195,7 @@ export default function CreatePostScreen({ navigation }) {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <StarryBackground />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

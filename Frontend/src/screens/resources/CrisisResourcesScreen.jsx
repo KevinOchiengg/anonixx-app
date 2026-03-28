@@ -18,6 +18,7 @@ import {
   Heart,
 } from 'lucide-react-native'
 import { useTheme } from '../../context/ThemeContext'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function CrisisResourcesScreen({ navigation }) {
   const { theme } = useTheme()
@@ -83,6 +84,7 @@ export default function CrisisResourcesScreen({ navigation }) {
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.background }]}
     >
+      <StarryBackground />
       <StatusBar barStyle={theme.statusBar} />
 
       {/* Header */}

@@ -14,6 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ArrowLeft, Save, Lock, Eye, EyeOff } from 'lucide-react-native'
 import { API_BASE_URL } from '../../config/api'
+import StarryBackground from '../../components/common/StarryBackground';
 
 
 export default function ChangePasswordScreen({ navigation }) {
@@ -91,6 +92,7 @@ export default function ChangePasswordScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StarryBackground />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity

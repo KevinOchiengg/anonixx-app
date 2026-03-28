@@ -17,6 +17,7 @@ import {
   Eye, Clock,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const THEME = {
   background: '#0b0f18',
@@ -167,6 +168,7 @@ export default function DropChatScreen({ route, navigation }) {
     const isOwn = item.is_own;
     return (
       <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
+      <StarryBackground />
         <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleTheir]}>
           <Text style={[styles.bubbleText, isOwn && styles.bubbleTextOwn]}>
             {item.content}

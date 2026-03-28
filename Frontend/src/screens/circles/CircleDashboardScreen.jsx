@@ -25,6 +25,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: W } = Dimensions.get('window');
 
@@ -102,6 +103,7 @@ const StatCard = React.memo(({ label, value, sub, icon: Icon, accentColor, index
       { borderColor: accentColor + '25', transform: [{ scale }], opacity }
     ]}>
       <View style={[styles.statIconWrap, { backgroundColor: accentColor + '15' }]}>
+      <StarryBackground />
         <Icon size={rs(18)} color={accentColor} />
       </View>
       <Text style={styles.statValue}>{value}</Text>

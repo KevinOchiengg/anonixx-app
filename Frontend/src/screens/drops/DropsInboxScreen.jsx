@@ -16,6 +16,7 @@ import {
 } from 'lucide-react-native';
 import { Share } from 'react-native';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const THEME = {
   background: '#0b0f18',
@@ -82,6 +83,7 @@ export default function DropsInboxScreen({ navigation }) {
         activeOpacity={0.8}
       >
         <View style={styles.cardHeader}>
+      <StarryBackground />
           <View style={[styles.categoryDot, { backgroundColor: color }]} />
           <Text style={styles.cardCategory}>{item.category}</Text>
           {item.is_night_mode && (

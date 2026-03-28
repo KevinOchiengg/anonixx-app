@@ -27,6 +27,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: W } = Dimensions.get('window');
 
@@ -152,6 +153,7 @@ const SpeakerAura = React.memo(({ speaker, index, isSpeaking, isCreator }) => {
         </Text>
         {isCreator && (
           <View style={[styles.crownBadge, { backgroundColor: color }]}>
+      <StarryBackground />
             <Text style={styles.crownEmoji}>👑</Text>
           </View>
         )}

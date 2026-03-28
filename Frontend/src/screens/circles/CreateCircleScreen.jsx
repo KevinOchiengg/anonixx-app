@@ -22,6 +22,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -101,6 +102,7 @@ const AuraPreview = React.memo(({ name, bio, emoji, color }) => {
 
   return (
     <View style={styles.previewCard}>
+      <StarryBackground />
       <View style={[styles.previewAccent, { backgroundColor: color }]} />
       <View style={styles.previewInner}>
         <Animated.View style={[

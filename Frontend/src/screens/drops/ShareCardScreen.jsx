@@ -20,6 +20,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../.
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -65,6 +66,7 @@ const ConfessionCard = React.memo(({ text, prompt, cardStyle, captureRef }) => {
       options={{ format: 'png', quality: 1.0 }}
       style={{ borderRadius: RADIUS.lg, overflow: 'hidden' }}
     >
+      <StarryBackground />
       <View style={[cardStyles.card, { backgroundColor: style.bg, width: cardWidth }]}>
         {/* Top accent bar */}
         <View style={[cardStyles.accentBar, { backgroundColor: style.accent }]} />

@@ -19,6 +19,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../.
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -214,6 +215,7 @@ export default function DropLandingScreen({ route, navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, styles.centered]} edges={['top', 'left', 'right']}>
+      <StarryBackground />
         <ActivityIndicator color={T.primary} size="large" />
       </SafeAreaView>
     );

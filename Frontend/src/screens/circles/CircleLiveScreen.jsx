@@ -28,6 +28,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -240,6 +241,7 @@ const HotSeatModal = React.memo(({
   return (
     <Modal visible={visible} transparent animationType="none">
       <View style={styles.hotSeatBackdrop}>
+      <StarryBackground />
         <Animated.View style={[
           styles.hotSeatSheet,
           { transform: [{ scale: scaleAnim }], opacity: opacityAnim }

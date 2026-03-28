@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { datingAPI } from '../../services/api'
 import Button from '../../components/common/Button'
 import CoinBadge from '../../components/common/CoinBadge'
+import StarryBackground from '../../components/common/StarryBackground';
 
 const REVEAL_COST = 200
 
@@ -36,6 +37,7 @@ export default function ProfileRevealScreen({ route, navigation }) {
 
   return (
     <SafeAreaView className='flex-1 bg-echo-dark'>
+      <StarryBackground />
       <ScrollView className='flex-1 px-4 py-6'>
         <View className='items-center mb-6'>
           <View className='relative mb-4'>

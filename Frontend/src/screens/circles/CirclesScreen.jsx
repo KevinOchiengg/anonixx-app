@@ -21,6 +21,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -435,6 +436,7 @@ export default function CirclesScreen({ navigation }) {
   // ──────────────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <StarryBackground />
 
       {/* Atmospheric background glow */}
       <View style={styles.bgGlow} />

@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const T = {
@@ -137,6 +138,7 @@ const MpesaForm = React.memo(({ chatId, onSuccess, onError }) => {
   if (polling) {
     return (
       <View style={styles.waitingBox}>
+      <StarryBackground />
         <ActivityIndicator size="large" color={T.mpesa} />
         <Text style={styles.waitingTitle}>Check your phone</Text>
         <Text style={styles.waitingBody}>Enter your M-Pesa PIN to complete the payment.</Text>

@@ -23,6 +23,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import StarryBackground from '../../components/common/StarryBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -142,6 +143,7 @@ const TimePicker = React.memo(({ date, onChange, accentColor }) => {
             { transform: [{ translateY: sheetY }] }
           ]}>
             <View style={styles.pickerHandle} />
+      <StarryBackground />
             <Text style={styles.pickerTitle}>When is your live?</Text>
 
             {/* Day / Hour / Minute spinners */}

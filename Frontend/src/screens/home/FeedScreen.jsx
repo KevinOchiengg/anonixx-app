@@ -15,6 +15,7 @@ import { PlusCircle } from 'lucide-react-native'
 import PostCard from '../../components/feed/PostCard'
 import { fetchFeed } from '../../store/slices/postsSlice'
 import { useTheme } from '../../context/ThemeContext'
+import StarryBackground from '../../components/common/StarryBackground';
 
 export default function FeedScreen({ navigation }) {
   const dispatch = useDispatch()
@@ -34,6 +35,7 @@ export default function FeedScreen({ navigation }) {
   if (loading && feed.length === 0) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
+      <StarryBackground />
         <StatusBar barStyle={theme.statusBar} />
         <ActivityIndicator size='large' color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
