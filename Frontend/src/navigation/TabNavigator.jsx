@@ -175,6 +175,7 @@ export default function TabNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        sceneContainerStyle: { backgroundColor: THEME.background },
         tabBarStyle: {
           ...styles.tabBar,
           height: 60 + bottomPad,

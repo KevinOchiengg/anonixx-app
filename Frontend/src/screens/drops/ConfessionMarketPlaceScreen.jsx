@@ -5,11 +5,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, RefreshControl, ScrollView,
+  ActivityIndicator, RefreshControl, ScrollView, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Clock, Flame, Moon, Plus, Users, Zap } from 'lucide-react-native';
+import { ArrowLeft, Clock, Film, Flame, Moon, Plus, Users, Zap } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
@@ -79,10 +79,27 @@ const DropCard = React.memo(({ item, onPress }) => {
         <Text style={styles.dropTimeAgo}>{item.time_ago}</Text>
       </View>
 
-      {/* Confession text */}
-      <Text style={styles.dropConfession} numberOfLines={3}>
-        "{item.confession}"
-      </Text>
+      {/* Confession / Media */}
+      {item.media_type === 'image' && item.media_url ? (
+        <View style={styles.mediaThumbWrap}>
+          <Image source={{ uri: item.media_url }} style={styles.mediaThumb} resizeMode="cover" />
+          {item.confession ? (
+            <Text style={styles.dropConfession} numberOfLines={2}>"{item.confession}"</Text>
+          ) : null}
+        </View>
+      ) : item.media_type === 'video' ? (
+        <View style={styles.videoThumbWrap}>
+          <Film size={rs(18)} color={color} />
+          <Text style={[styles.videoThumbLabel, { color }]}>Video Drop</Text>
+          {item.confession ? (
+            <Text style={styles.dropConfession} numberOfLines={1}>"{item.confession}"</Text>
+          ) : null}
+        </View>
+      ) : (
+        <Text style={styles.dropConfession} numberOfLines={3}>
+          "{item.confession}"
+        </Text>
+      )}
 
       {/* Reactions */}
       {item.reactions?.length > 0 && (
@@ -534,6 +551,16 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: SPACING.sm,
   },
+  mediaThumbWrap: { marginBottom: SPACING.sm, borderRadius: RADIUS.md, overflow: 'hidden' },
+  mediaThumb:     { width: '100%', height: rs(140) },
+  videoThumbWrap: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             rp(6),
+    paddingVertical: rp(10),
+    marginBottom:    SPACING.sm,
+  },
+  videoThumbLabel: { fontSize: FONT.sm, fontWeight: '600' },
   reactionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

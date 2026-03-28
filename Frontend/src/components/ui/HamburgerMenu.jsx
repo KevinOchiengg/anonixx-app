@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Bell, BookOpen, ChevronRight, Coins, Database, Eye,
   FileText, Globe, Heart, HelpCircle, Lock,
-  LogOut, Monitor, Moon, ShieldAlert, Smartphone,
+  LogIn, LogOut, Monitor, Moon, ShieldAlert, Smartphone,
   Trash2, User, Users, Volume2, X, Zap,
 } from 'lucide-react-native';
 import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/responsive';
@@ -274,8 +274,8 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
             <NavRow icon={BookOpen} label="Community Guidelines" onPress={() => openLink('https://anonixx.app/guidelines')} />
           </View>
 
-          {/* ── Logout ── */}
-          {isAuthenticated && (
+          {/* ── Logout / Login ── */}
+          {isAuthenticated ? (
             <TouchableOpacity
               style={styles.logoutBtn}
               onPress={handleLogout}
@@ -284,6 +284,16 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
             >
               <LogOut size={rs(16)} color={T.danger} />
               <Text style={styles.logoutText}>Log Out</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.loginBtn}
+              onPress={() => { onClose(); setTimeout(() => navigation.navigate('Auth', { screen: 'Login' }), 220); }}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.8}
+            >
+              <LogIn size={rs(16)} color={T.primary} />
+              <Text style={styles.loginText}>Log In</Text>
             </TouchableOpacity>
           )}
 
@@ -427,6 +437,7 @@ const styles = StyleSheet.create({
   logoutBtn: {
     flexDirection:     'row',
     alignItems:        'center',
+    justifyContent:    'center',
     gap:               SPACING.sm,
     marginTop:         rp(20),
     paddingVertical:   rp(13),
@@ -440,6 +451,24 @@ const styles = StyleSheet.create({
     fontSize:   FONT.sm,
     fontWeight: '700',
     color:      T.danger,
+  },
+  loginBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'center',
+    gap:               SPACING.sm,
+    marginTop:         rp(20),
+    paddingVertical:   rp(13),
+    paddingHorizontal: rp(12),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.primaryBorder,
+    backgroundColor:   'rgba(255,99,74,0.06)',
+  },
+  loginText: {
+    fontSize:   FONT.sm,
+    fontWeight: '700',
+    color:      T.primary,
   },
   version: {
     fontSize:   rf(10),

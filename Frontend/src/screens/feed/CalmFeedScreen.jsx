@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import {
   View, FlatList, ActivityIndicator, StyleSheet,
-  StatusBar, Text, TouchableOpacity, Animated,
+  StatusBar, Text, TouchableOpacity, Animated, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,12 +36,12 @@ const THEME = {
 };
 
 // ── Stars ─────────────────────────────────────────────────────
-const STARS = Array.from({ length: 35 }, (_, i) => ({
+const STARS = Array.from({ length: 80 }, (_, i) => ({
   id: i,
-  top:     Math.random() * SCREEN.height,
+  top:     Math.random() * SCREEN.height * 3,
   left:    Math.random() * SCREEN.width,
-  size:    Math.random() * rs(2.5) + rs(0.5),
-  opacity: Math.random() * 0.4 + 0.1,
+  size:    Math.random() * rs(4) + rs(1),
+  opacity: Math.random() * 0.45 + 0.1,
 }));
 
 const StarryBackground = React.memo(() => (
@@ -158,7 +158,7 @@ const EmptyState = React.memo(({ onRefresh }) => (
 ));
 
 // ── Main screen ───────────────────────────────────────────────
-export default function CalmFeedScreen({ navigation }) {
+export default function CalmFeedScreen({ navigation, route }) {
   const { isAuthenticated, checkAuth } = useAuth();
   const insets                         = useSafeAreaInsets();
   const { showToast }                  = useToast();
@@ -208,8 +208,11 @@ export default function CalmFeedScreen({ navigation }) {
       if (!hasLoadedRef.current) {
         hasLoadedRef.current = true;
         loadFeed(true);
+      } else if (route?.params?.refresh) {
+        loadFeed(true);
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
       }
-    }, [])
+    }, [route?.params?.refresh])
   );
 
   const loadFeed = useCallback(async (reset = false) => {
@@ -532,6 +535,14 @@ export default function CalmFeedScreen({ navigation }) {
         windowSize={3}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading && posts.length > 0}
+            onRefresh={refreshFeed}
+            tintColor={THEME.primary}
+            colors={[THEME.primary]}
+          />
+        }
         ListFooterComponent={ListFooter}
         ListEmptyComponent={<EmptyState onRefresh={refreshFeed} />}
         showsVerticalScrollIndicator={false}

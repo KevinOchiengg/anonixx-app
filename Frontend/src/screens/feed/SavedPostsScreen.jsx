@@ -1,405 +1,397 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+/**
+ * SavedPostsScreen — thoughts worth returning to.
+ */
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  StyleSheet,
-  ActivityIndicator,
-  StatusBar,
-  Dimensions,
-  RefreshControl,
-  Vibration,
+  View, Text, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Animated, FlatList, RefreshControl, StatusBar,
 } from 'react-native';
-import { ArrowLeft, Heart, Calendar, Bookmark } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ArrowLeft, Bookmark } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '../../context/ThemeContext';
 import { API_BASE_URL } from '../../config/api';
+import { useToast } from '../../components/ui/Toast';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { formatTimeAgo } from '../../utils/helpers';
 
-const { height, width } = Dimensions.get('window');
-
-// NEW Cinematic Coral Theme
-const THEME = {
-  background: '#0b0f18',
-  backgroundDark: '#06080f',
-  surface: '#151924',
-  surfaceDark: '#10131c',
-  primary: '#FF634A',
-  primaryDark: '#ff3b2f',
-  text: '#EAEAF0',
+// ─── Theme ────────────────────────────────────────────────────
+const T = {
+  background:    '#0b0f18',
+  surface:       '#151924',
+  surfaceAlt:    '#1a1f2e',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255,99,74,0.15)',
+  text:          '#EAEAF0',
   textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
+  textMuted:     '#4a4f62',
+  border:        'rgba(255,255,255,0.06)',
 };
 
-// Starry Background Component
-const StarryBackground = () => {
-  const stars = useMemo(() => {
-    return Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      top: Math.random() * height,
-      left: Math.random() * width,
-      size: Math.random() * 3 + 1,
-      opacity: Math.random() * 0.6 + 0.2,
-    }));
-  }, []);
+// ─── Static data at module level (Rule 5) ─────────────────────
+// Golden-ratio distribution — deterministic, no Math.random()
+const STARS = Array.from({ length: 28 }, (_, i) => ({
+  id:      i,
+  top:     ((i * 137.5) % 100).toFixed(2),
+  left:    ((i * 97.3)  % 100).toFixed(2),
+  size:    (i % 3) + 3,
+  opacity: 0.10 + (i % 5) * 0.05,
+}));
+
+// ─── StarryBg ─────────────────────────────────────────────────
+const StarryBg = React.memo(() => (
+  <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    {STARS.map((s) => (
+      <View
+        key={s.id}
+        style={{
+          position:        'absolute',
+          top:             `${s.top}%`,
+          left:            `${s.left}%`,
+          width:           s.size,
+          height:          s.size,
+          borderRadius:    s.size,
+          backgroundColor: T.primary,
+          opacity:         s.opacity,
+        }}
+      />
+    ))}
+  </View>
+));
+
+// ─── PostCard ─────────────────────────────────────────────────
+const PostCard = React.memo(({ post, onPress }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = useCallback(() => {
+    Animated.spring(scale, { toValue: 0.975, useNativeDriver: true, speed: 30 }).start();
+  }, [scale]);
+
+  const onPressOut = useCallback(() => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
+  }, [scale]);
+
+  const timeLabel = post.saved_at
+    ? formatTimeAgo(post.saved_at)
+    : post.saved_days_ago === 0
+      ? 'today'
+      : post.saved_days_ago === 1
+        ? 'yesterday'
+        : `${post.saved_days_ago}d ago`;
 
   return (
-    <>
-      {stars.map((star) => (
-        <View
-          key={star.id}
-          style={{
-            position: 'absolute',
-            backgroundColor: THEME.primary,
-            borderRadius: 50,
-            top: star.top,
-            left: star.left,
-            width: star.size,
-            height: star.size,
-            opacity: star.opacity,
-          }}
-        />
-      ))}
-    </>
+    <Animated.View style={[styles.cardWrap, { transform: [{ scale }] }]}>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        activeOpacity={1}
+        style={styles.card}
+      >
+        {/* Card header */}
+        <View style={styles.cardHeader}>
+          <View style={styles.savedBadge}>
+            <Bookmark size={rs(12)} color={T.primary} fill={T.primary} />
+            <Text style={styles.savedBadgeText}>saved</Text>
+          </View>
+          <Text style={styles.cardTime}>{timeLabel}</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Confession text — Playfair Display for emotional weight */}
+        <Text style={styles.cardContent} numberOfLines={6}>
+          {post.content}
+        </Text>
+
+        {post.content?.length > 200 && (
+          <Text style={styles.readMore}>read more →</Text>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
-};
+});
 
+// ─── Screen ───────────────────────────────────────────────────
 export default function SavedPostsScreen({ navigation }) {
-  const { theme } = useTheme();
-  const [savedPosts, setSavedPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { showToast }                     = useToast();
+  const [savedPosts, setSavedPosts]       = useState([]);
+  const [loading,    setLoading]          = useState(true);
+  const [refreshing, setRefreshing]       = useState(false);
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(rs(28))).current;
 
-  useEffect(() => {
-    loadSavedPosts();
-  }, []);
-
-  const loadSavedPosts = async () => {
+  const loadSavedPosts = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/api/v1/posts/saved`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/saved`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSavedPosts(data.saved_posts);
+      const data = await res.json();
+      if (res.ok) {
+        setSavedPosts(data.saved_posts ?? []);
+      } else {
+        showToast({ type: 'error', message: 'Could not load your saved thoughts.' });
       }
-    } catch (error) {
-      console.error('❌ Load saved posts error:', error);
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong. Please try again.' });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    loadSavedPosts();
+  }, [loadSavedPosts]);
+
+  // Entrance animation after load
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 420, delay: 60,  useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 420, delay: 60,  useNativeDriver: true }),
+      ]).start();
+    }
+  }, [loading, fadeAnim, slideAnim]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Vibration.vibrate(10); // Haptic feedback
     loadSavedPosts();
-  }, []);
+  }, [loadSavedPosts]);
 
-  const handlePostPress = (post) => {
-    Vibration.vibrate(10);
+  const handlePostPress = useCallback((post) => {
     navigation.navigate('PostDetail', { post });
-  };
+  }, [navigation]);
+
+  const renderItem = useCallback(({ item }) => (
+    <PostCard post={item} onPress={() => handlePostPress(item)} />
+  ), [handlePostPress]);
+
+  const keyExtractor = useCallback((item) => String(item.id ?? item._id), []);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-      <StarryBackground />
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="light-content" backgroundColor={T.background} />
+      <StarryBg />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color={THEME.text} />
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
+          <ArrowLeft size={rs(22)} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Saved Thoughts</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: rs(22) }} />
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={THEME.primary} />
-          <Text style={styles.loadingText}>Loading your saved thoughts...</Text>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={T.primary} />
+          <Text style={styles.loadingText}>retrieving what you held onto…</Text>
         </View>
       ) : savedPosts.length === 0 ? (
-        <View style={styles.centered}>
-          <View style={styles.emptyIconContainer}>
-            <Bookmark size={64} color={THEME.primary} />
+        <Animated.View
+          style={[styles.center, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          <View style={styles.emptyIconWrap}>
+            <Bookmark size={rs(38)} color={T.primary} />
           </View>
-          <Text style={styles.emptyText}>No saved thoughts yet</Text>
-          <Text style={styles.emptySubtext}>
-            Save posts to revisit when you need comfort.
+          <Text style={styles.emptyTitle}>nothing saved yet</Text>
+          <Text style={styles.emptyBody}>
+            some words deserve a second read.{'\n'}bookmark any thought to find it here.
           </Text>
-          <Text style={styles.emptyHint}>
-            Tap the bookmark icon on any post to save it here.
-          </Text>
-        </View>
+        </Animated.View>
       ) : (
-        <>
-          {/* Stats Header */}
-          <View style={styles.statsWrapper}>
-            <View style={styles.statsAccentBar} />
-            <View style={styles.statsCard}>
-              <View style={styles.statItem}>
-                <Heart size={20} color={THEME.primary} />
-                <Text style={styles.statValue}>{savedPosts.length}</Text>
-                <Text style={styles.statLabel}>
-                  Saved {savedPosts.length === 1 ? 'Thought' : 'Thoughts'}
-                </Text>
-              </View>
-            </View>
+        <Animated.View
+          style={[{ flex: 1 }, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          {/* Count strip */}
+          <View style={styles.countStrip}>
+            <Bookmark size={rs(13)} color={T.primary} fill={T.primary} />
+            <Text style={styles.countText}>
+              <Text style={styles.countNum}>{savedPosts.length}</Text>
+              {'  '}
+              {savedPosts.length === 1 ? 'saved thought' : 'saved thoughts'}
+            </Text>
           </View>
 
-          <ScrollView
-            style={styles.scrollView}
+          <FlatList
+            data={savedPosts}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews
+            maxToRenderPerBatch={5}
+            windowSize={3}
+            initialNumToRender={8}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                tintColor={THEME.primary}
-                colors={[THEME.primary]}
+                tintColor={T.primary}
+                colors={[T.primary]}
               />
             }
-          >
-            <View style={styles.postsContainer}>
-              {savedPosts.map((post) => (
-                <View key={post.id} style={styles.postCardWrapper}>
-                  <View style={styles.postAccentBar} />
-                  <TouchableOpacity
-                    onPress={() => handlePostPress(post)}
-                    style={styles.postCard}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.postHeader}>
-                      <View style={styles.savedBadge}>
-                        <Bookmark
-                          size={14}
-                          color={THEME.primary}
-                          fill={THEME.primary}
-                        />
-                        <Text style={styles.savedBadgeText}>Saved</Text>
-                      </View>
-                      <View style={styles.postDate}>
-                        <Calendar size={14} color={THEME.textSecondary} />
-                        <Text style={styles.postDateText}>
-                          {post.saved_days_ago === 0
-                            ? 'Today'
-                            : post.saved_days_ago === 1
-                              ? 'Yesterday'
-                              : `${post.saved_days_ago} days ago`}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    <Text style={styles.postContent} numberOfLines={6}>
-                      {post.content}
-                    </Text>
-
-                    {post.content.length > 200 && (
-                      <Text style={styles.readMore}>Tap to read more</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        </>
+          />
+        </Animated.View>
       )}
     </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEME.background,
+  safe: {
+    flex:            1,
+    backgroundColor: T.background,
   },
+
+  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'transparent',
-    zIndex: 10,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: THEME.text,
+    fontSize:      FONT.md,
+    fontWeight:    '600',
+    color:         T.text,
+    letterSpacing: 0.3,
+    fontFamily:    'DMSans-SemiBold',
   },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
+
+  // Loading / empty
+  center: {
+    flex:              1,
+    justifyContent:    'center',
+    alignItems:        'center',
+    paddingHorizontal: SPACING.xl,
   },
   loadingText: {
-    fontSize: 15,
-    color: THEME.textSecondary,
-    marginTop: 16,
-    fontStyle: 'italic',
+    fontSize:   FONT.sm,
+    color:      T.textSecondary,
+    marginTop:  SPACING.sm,
+    fontStyle:  'italic',
+    fontFamily: 'DMSans-Regular',
   },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255, 99, 74, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
+  emptyIconWrap: {
+    width:           rs(88),
+    height:          rs(88),
+    borderRadius:    rs(44),
+    backgroundColor: T.primaryDim,
+    alignItems:      'center',
+    justifyContent:  'center',
+    marginBottom:    SPACING.lg,
   },
-  emptyText: {
-    fontSize: 22,
+  emptyTitle: {
+    fontSize:      rf(22),
+    fontWeight:    '700',
+    color:         T.text,
+    marginBottom:  SPACING.xs,
+    textAlign:     'center',
+    fontFamily:    'PlayfairDisplay-Bold',
+  },
+  emptyBody: {
+    fontSize:      FONT.sm,
+    color:         T.textSecondary,
+    textAlign:     'center',
+    lineHeight:    rf(22),
+    fontFamily:    'DMSans-Regular',
+  },
+
+  // Count strip
+  countStrip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(6),
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(10),
+  },
+  countText: {
+    fontSize:   FONT.sm,
+    color:      T.textSecondary,
+    fontFamily: 'DMSans-Regular',
+  },
+  countNum: {
+    color:      T.primary,
     fontWeight: '700',
-    color: THEME.text,
-    marginBottom: 8,
-    textAlign: 'center',
+    fontFamily: 'DMSans-Bold',
   },
-  emptySubtext: {
-    fontSize: 15,
-    color: THEME.textSecondary,
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 22,
+
+  // List
+  listContent: {
+    paddingHorizontal: SPACING.md,
+    paddingBottom:     SPACING.xl,
   },
-  emptyHint: {
-    fontSize: 13,
-    color: THEME.textSecondary,
-    textAlign: 'center',
-    fontStyle: 'italic',
-    opacity: 0.7,
+
+  // Card
+  cardWrap: {
+    marginBottom: SPACING.sm,
   },
-  // Stats Header
-  statsWrapper: {
-    position: 'relative',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
+  card: {
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     T.border,
+    borderLeftWidth: 1,
+    borderLeftColor: T.primary,
+    paddingVertical:   rp(16),
+    paddingHorizontal: rp(18),
+    paddingLeft:       rp(18),
+    shadowColor:       '#000',
+    shadowOffset:      { width: 0, height: rs(4) },
+    shadowOpacity:     0.25,
+    shadowRadius:      rs(12),
+    elevation:         4,
   },
-  statsAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.6,
-  },
-  statsCard: {
-    backgroundColor: THEME.surface,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: THEME.primary,
-  },
-  statLabel: {
-    fontSize: 15,
-    color: THEME.text,
-    fontWeight: '500',
-  },
-  // Posts List
-  scrollView: {
-    flex: 1,
-  },
-  postsContainer: {
-    padding: 16,
-  },
-  postCardWrapper: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  postAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    opacity: 0.6,
-  },
-  postCard: {
-    backgroundColor: THEME.surface,
-    padding: 18,
-    paddingLeft: 22,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  postHeader: {
-    flexDirection: 'row',
+  cardHeader: {
+    flexDirection:  'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems:     'center',
+    marginBottom:   rp(10),
   },
   savedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 99, 74, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(5),
+    backgroundColor:   T.primaryDim,
+    paddingHorizontal: rp(9),
+    paddingVertical:   rp(4),
+    borderRadius:      RADIUS.sm,
   },
   savedBadgeText: {
-    fontSize: 12,
+    fontSize:   FONT.xs,
     fontWeight: '600',
-    color: THEME.primary,
+    color:      T.primary,
+    fontFamily: 'DMSans-SemiBold',
   },
-  postDate: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  postDateText: {
-    fontSize: 13,
-    color: THEME.textSecondary,
+  cardTime: {
+    fontSize:   FONT.xs,
+    color:      T.textMuted,
+    fontFamily: 'DMSans-Regular',
   },
   divider: {
-    height: 1,
-    backgroundColor: THEME.border,
-    marginBottom: 14,
+    height:          1,
+    backgroundColor: T.border,
+    marginBottom:    rp(12),
   },
-  postContent: {
-    fontSize: 16,
-    lineHeight: 26,
-    color: THEME.text,
-    letterSpacing: 0.2,
+  cardContent: {
+    fontSize:      rf(16),
+    lineHeight:    rf(26),
+    color:         T.text,
+    letterSpacing: 0.15,
+    fontFamily:    'PlayfairDisplay-Regular',
   },
   readMore: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: THEME.primary,
-    marginTop: 10,
+    fontSize:   FONT.xs,
+    fontWeight: '600',
+    color:      T.primary,
+    marginTop:  rp(8),
+    fontFamily: 'DMSans-SemiBold',
   },
 });

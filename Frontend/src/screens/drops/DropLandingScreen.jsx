@@ -7,8 +7,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Animated, TextInput,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -60,7 +61,7 @@ const getCatEmoji = (cat) => CATEGORY_EMOJIS[cat] ?? '✨';
 export default function DropLandingScreen({ route, navigation }) {
   const dispatch           = useDispatch();
   const coinBalance        = useSelector((state) => state.coins.balance);
-  const { dropId }         = route.params;
+  const { dropId }         = route.params ?? {};
   const { isAuthenticated} = useAuth();
   const { showToast }      = useToast();
 
@@ -398,7 +399,29 @@ export default function DropLandingScreen({ route, navigation }) {
                   )}
                 </View>
 
-                <Text style={styles.confession}>"{drop.confession}"</Text>
+                {drop.media_type === 'image' && drop.media_url ? (
+                  <View style={styles.mediaWrap}>
+                    <Image source={{ uri: drop.media_url }} style={styles.mediaImage} resizeMode="cover" />
+                    {drop.confession ? (
+                      <Text style={styles.confession}>"{drop.confession}"</Text>
+                    ) : null}
+                  </View>
+                ) : drop.media_type === 'video' && drop.media_url ? (
+                  <View style={styles.mediaWrap}>
+                    <Video
+                      source={{ uri: drop.media_url }}
+                      style={styles.mediaVideo}
+                      resizeMode={ResizeMode.COVER}
+                      useNativeControls
+                      shouldPlay={false}
+                    />
+                    {drop.confession ? (
+                      <Text style={styles.confession}>"{drop.confession}"</Text>
+                    ) : null}
+                  </View>
+                ) : (
+                  <Text style={styles.confession}>"{drop.confession}"</Text>
+                )}
 
                 <View style={styles.cardMeta}>
                   <View style={styles.metaItem}>
@@ -729,6 +752,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     letterSpacing: 0.2,
   },
+  mediaWrap:  { marginBottom: SPACING.md, borderRadius: RADIUS.md, overflow: 'hidden' },
+  mediaImage: { width: '100%', height: rs(220), borderRadius: RADIUS.md },
+  mediaVideo: { width: '100%', height: rs(220), borderRadius: RADIUS.md },
   cardMeta: {
     flexDirection: 'row',
     alignItems: 'center',

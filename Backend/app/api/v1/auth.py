@@ -6,11 +6,14 @@ from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from bson import ObjectId
+import secrets
+import hashlib
 
 from app.database import get_database
 from app.config import settings
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins
+from app.utils.email import send_password_reset_otp
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -266,3 +269,120 @@ async def update_gender(
 @router.post("/logout")
 async def logout(current_user_id: str = Depends(get_current_user_id)):
     return {"message": "Logged out successfully", "status": "success"}
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password:     str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email:        EmailStr
+    otp:          str
+    new_password: str
+
+
+@router.put("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db=Depends(get_database),
+):
+    if len(data.new_password) < 8:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="New password must be at least 8 characters")
+
+    if data.current_password == data.new_password:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="New password must differ from current password")
+
+    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if not verify_password(data.current_password, user["password"]):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+
+    await db["users"].update_one(
+        {"_id": ObjectId(current_user_id)},
+        {"$set": {"password": get_password_hash(data.new_password), "updated_at": _now()}},
+    )
+    return {"message": "Password changed successfully"}
+
+
+# ─── Helpers ──────────────────────────────────────────────────
+OTP_TTL_MINUTES  = 15
+OTP_MAX_ATTEMPTS = 5
+
+def _generate_otp() -> str:
+    """Cryptographically secure 6-digit OTP."""
+    return str(secrets.randbelow(900_000) + 100_000)
+
+def _hash_otp(otp: str) -> str:
+    return hashlib.sha256(otp.encode()).hexdigest()
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_database)):
+    """
+    Always returns 200 regardless of whether the email exists
+    to prevent account enumeration attacks.
+    """
+    user = await db["users"].find_one({"email": data.email})
+    if user:
+        otp     = _generate_otp()
+        expires = _now() + timedelta(minutes=OTP_TTL_MINUTES)
+
+        await db["users"].update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "reset_otp_hash":     _hash_otp(otp),
+                "reset_otp_expires":  expires,
+                "reset_otp_attempts": 0,
+            }},
+        )
+        send_password_reset_otp(str(user["email"]), otp)
+
+    return {"message": "If that email is registered, a reset code is on its way."}
+
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordRequest, db=Depends(get_database)):
+    if len(data.new_password) < 8:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters")
+
+    user = await db["users"].find_one({"email": data.email})
+    if not user or not user.get("reset_otp_hash"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+
+    # Check expiry
+    expires = user.get("reset_otp_expires")
+    if not expires or _now() > expires.replace(tzinfo=timezone.utc):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Code has expired. Request a new one.")
+
+    # Check attempt limit
+    attempts = user.get("reset_otp_attempts", 0)
+    if attempts >= OTP_MAX_ATTEMPTS:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many attempts. Request a new code.")
+
+    # Verify OTP
+    if _hash_otp(data.otp.strip()) != user["reset_otp_hash"]:
+        await db["users"].update_one(
+            {"_id": user["_id"]},
+            {"$inc": {"reset_otp_attempts": 1}},
+        )
+        remaining = OTP_MAX_ATTEMPTS - attempts - 1
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Incorrect code. {remaining} attempt{'s' if remaining != 1 else ''} left.",
+        )
+
+    # Success — update password, clear OTP fields
+    await db["users"].update_one(
+        {"_id": user["_id"]},
+        {
+            "$set":   {"password": get_password_hash(data.new_password), "updated_at": _now()},
+            "$unset": {"reset_otp_hash": "", "reset_otp_expires": "", "reset_otp_attempts": ""},
+        },
+    )
+    return {"message": "Password reset successfully"}
