@@ -188,9 +188,6 @@ const CircleCard = React.memo(({ circle, index, onPress }) => {
           styles.card,
           isLive && { borderColor: auraColor + '30' },
         ]}>
-          {/* Left accent bar */}
-          <View style={[styles.cardAccent, { backgroundColor: auraColor }]} />
-
           <View style={styles.cardBody}>
             {/* Avatar + status */}
             <View style={styles.cardLeft}>
@@ -737,10 +734,6 @@ const styles = StyleSheet.create({
     borderColor:     T.border,
     overflow:        'hidden',
     flexDirection:   'row',
-  },
-  cardAccent: {
-    width:   rp(3),
-    opacity: 0.7,
   },
   cardBody: {
     flex:           1,
