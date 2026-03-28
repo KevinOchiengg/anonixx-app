@@ -22,7 +22,9 @@ import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
-import { User, Mail, Lock, Eye, EyeOff, CheckCircle2 } from 'lucide-react-native';
+import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../../config/api';
 
 const THEME = {
   background:    '#0b0f18',
@@ -63,7 +65,8 @@ const StarryBackground = React.memo(() => (
 
 const GlowOrb = React.memo(() => <View style={styles.glowOrb} />);
 
-const INITIAL_FORM = { username: '', email: '', password: '', confirmPassword: '' };
+const INITIAL_FORM = { username: '', email: '', password: '', confirmPassword: '', referralCode: '' };
+const MAX_REFERRAL_LENGTH = 20;
 
 // Password strength checker
 function getPasswordStrength(password) {
@@ -97,6 +100,7 @@ export default function SignUpScreen({ navigation }) {
   const emailRef        = useRef(null);
   const passwordRef     = useRef(null);
   const confirmPassRef  = useRef(null);
+  const referralRef     = useRef(null);
 
   useEffect(() => {
     Animated.parallel([
@@ -151,6 +155,21 @@ export default function SignUpScreen({ navigation }) {
       })).unwrap();
 
       await authContextLogin(result.token, result.user);
+
+      const code = formData.referralCode.trim().toUpperCase();
+      if (code) {
+        try {
+          const applyRes = await fetch(`${API_BASE_URL}/api/v1/referrals/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${result.token}` },
+            body: JSON.stringify({ code }),
+          });
+          if (applyRes.ok) {
+            await AsyncStorage.setItem('pendingReferralComplete', '1');
+          }
+        } catch { /* fire-and-forget */ }
+      }
+
       showToast({ type: 'success', title: 'Account created!', message: "Welcome to Anonixx 🌑" });
 
       setTimeout(() => {
@@ -331,13 +350,13 @@ export default function SignUpScreen({ navigation }) {
                   onChangeText={(v) => updateField('confirmPassword', v, MAX_PASSWORD_LENGTH)}
                   onFocus={() => setFocused('confirm')}
                   onBlur={() => setFocused('')}
-                  onSubmitEditing={handleSignUp}
+                  onSubmitEditing={() => referralRef.current?.focus()}
                   placeholder="Re-enter your password"
                   placeholderTextColor={THEME.textSecondary}
                   secureTextEntry={!showConfirm}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  returnKeyType="done"
+                  returnKeyType="next"
                   textContentType="newPassword"
                   style={styles.input}
                 />
@@ -349,6 +368,34 @@ export default function SignUpScreen({ navigation }) {
                 </Pressable>
               </View>
               {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
+            </View>
+
+            {/* Referral Code (optional) */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Referral Code <Text style={styles.labelOptional}>(optional)</Text></Text>
+              <View style={[
+                styles.inputRow,
+                focused === 'referral' && styles.inputRowFocused,
+              ]}>
+                <Gift size={ICON.md} color={THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
+                <TextInput
+                  ref={referralRef}
+                  value={formData.referralCode}
+                  onChangeText={(v) => updateField('referralCode', v.toUpperCase(), MAX_REFERRAL_LENGTH)}
+                  onFocus={() => setFocused('referral')}
+                  onBlur={() => setFocused('')}
+                  onSubmitEditing={handleSignUp}
+                  placeholder="e.g. ABC12XYZ"
+                  placeholderTextColor={THEME.textSecondary}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  style={styles.input}
+                />
+                {formData.referralCode.length >= 4 && (
+                  <CheckCircle2 size={ICON.md} color="#22c55e" strokeWidth={2} style={styles.fieldIcon} />
+                )}
+              </View>
             </View>
 
             {/* Submit */}
@@ -403,6 +450,7 @@ const styles = StyleSheet.create({
 
   fieldGroup:   { marginBottom: SPACING.md },
   label:        { fontSize: rf(11), fontWeight: '700', color: THEME.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase', letterSpacing: rs(1) },
+  labelOptional: { fontWeight: '400', textTransform: 'none', letterSpacing: 0, opacity: 0.7 },
 
   inputRow: {
     flexDirection: 'row', alignItems: 'center',

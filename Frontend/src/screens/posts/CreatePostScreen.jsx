@@ -13,12 +13,12 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, ImageIcon, Film, Trash2, Lock, Unlock } from 'lucide-react-native';
+import { X, ImageIcon, Film, Trash2, Lock, Unlock, BarChart2, Plus } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDispatch } from 'react-redux';
 import {
-  rs, rf, rp, rh, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
+  rs, rf, rp, rh, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP, SCREEN,
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
@@ -40,12 +40,37 @@ const T = {
 };
 
 // ─── STATIC ──────────────────────────────────────────────────────────────────
-const CLOUDINARY_CLOUD_NAME    = 'dojbdm2e1';
-const CLOUDINARY_UPLOAD_PRESET = 'anonix';
+const STARS = Array.from({ length: 40 }, (_, i) => ({
+  id:      i,
+  top:     Math.random() * SCREEN.height,
+  left:    Math.random() * SCREEN.width,
+  size:    Math.random() * rs(2.5) + rs(0.5),
+  opacity: Math.random() * 0.4 + 0.06,
+}));
+
+const StarryBackground = React.memo(() => (
+  <>
+    {STARS.map((s) => (
+      <View
+        key={s.id}
+        pointerEvents="none"
+        style={{
+          position:        'absolute',
+          backgroundColor: T.primary,
+          borderRadius:    s.size,
+          top: s.top, left: s.left,
+          width: s.size, height: s.size,
+          opacity: s.opacity,
+        }}
+      />
+    ))}
+  </>
+));
+
 const MAX_IMAGES               = 5;
 const MAX_CHARS                = 1000;
+const MAX_POLL_OPTIONS         = 4;
 
-// Prompts that name real emotional states — not generic copy
 const PROMPTS = [
   'the thing you\'ve been carrying alone…',
   'what you can\'t say out loud…',
@@ -59,18 +84,27 @@ const PROMPTS = [
   'what you wish someone would just ask you about…',
 ];
 
-const uploadToCloudinary = async (uri, resourceType = 'image') => {
-  const fileType = uri.split('.').pop();
+const uploadToCloudinary = async (uri, resourceType = 'image', token) => {
+  // Get short-lived signed params from our backend (JWT-gated)
+  const signRes = await fetch(
+    `${API_BASE_URL}/api/v1/upload/sign?folder=anonixx/posts`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!signRes.ok) throw new Error('Could not get upload signature.');
+  const { signature, timestamp, api_key, cloud_name, folder } = await signRes.json();
+
+  const ext      = uri.split('?')[0].split('.').pop()?.toLowerCase() || '';
+  const mimeType = resourceType === 'video' ? `video/${ext || 'mp4'}` : `image/${ext || 'jpeg'}`;
   const formData = new FormData();
-  formData.append('file', {
-    uri,
-    type: resourceType === 'video' ? `video/${fileType}` : `image/${fileType}`,
-    name: `upload.${fileType}`,
-  });
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  formData.append('file',      { uri, type: mimeType, name: `upload.${ext}` });
+  formData.append('api_key',   api_key);
+  formData.append('timestamp', String(timestamp));
+  formData.append('signature', signature);
+  formData.append('folder',    folder);
+
   const res  = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
-    { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' } },
+    `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
+    { method: 'POST', body: formData },
   );
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
@@ -96,21 +130,25 @@ export default function CreatePostScreen({ route, navigation }) {
   const [promptIndex,    setPromptIndex]    = useState(0);
   const [isFocused,      setIsFocused]      = useState(false);
 
-  // Animations
-  const entranceFade  = useRef(new Animated.Value(0)).current;
-  const promptFade    = useRef(new Animated.Value(1)).current;
-  const thumbAnim     = useRef(new Animated.Value(1)).current; // 1=anon
-  const postBtnScale  = useRef(new Animated.Value(0.95)).current;
-  const postBtnOpacity = useRef(new Animated.Value(0.4)).current;
+  // Poll state
+  const [pollEnabled,    setPollEnabled]    = useState(false);
+  const [pollQuestion,   setPollQuestion]   = useState('');
+  const [pollOptions,    setPollOptions]    = useState(['', '']);
 
-  // Entrance animation
+  // Animations
+  const entranceFade   = useRef(new Animated.Value(0)).current;
+  const promptFade     = useRef(new Animated.Value(1)).current;
+  const thumbAnim      = useRef(new Animated.Value(1)).current;
+  const postBtnScale   = useRef(new Animated.Value(0.95)).current;
+  const postBtnOpacity = useRef(new Animated.Value(0.4)).current;
+  const pollAnim       = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     Animated.timing(entranceFade, {
       toValue: 1, duration: 380, useNativeDriver: true,
     }).start();
   }, []);
 
-  // Rotate placeholder every 4s when empty and unfocused
   useEffect(() => {
     if (content.length > 0 || isFocused) return;
     const interval = setInterval(() => {
@@ -123,12 +161,28 @@ export default function CreatePostScreen({ route, navigation }) {
     return () => clearInterval(interval);
   }, [content.length, isFocused, promptFade]);
 
+  // Animate poll section in/out
+  useEffect(() => {
+    Animated.spring(pollAnim, {
+      toValue:  pollEnabled ? 1 : 0,
+      tension:  100,
+      friction: 12,
+      useNativeDriver: true,
+    }).start();
+  }, [pollEnabled, pollAnim]);
+
+  const pollValid = useMemo(() => {
+    if (!pollEnabled) return true;
+    const filledOptions = pollOptions.filter(o => o.trim().length > 0);
+    return pollQuestion.trim().length > 0 && filledOptions.length >= 2;
+  }, [pollEnabled, pollQuestion, pollOptions]);
+
   const canPost = useMemo(() => {
     if (loading) return false;
+    if (!pollValid) return false;
     return content.trim().length > 0 || images.length > 0 || !!videoUri;
-  }, [loading, content, images.length, videoUri]);
+  }, [loading, content, images.length, videoUri, pollValid]);
 
-  // Post button animates when ready
   useEffect(() => {
     Animated.spring(postBtnScale, {
       toValue:  canPost ? 1 : 0.95,
@@ -159,15 +213,52 @@ export default function CreatePostScreen({ route, navigation }) {
     });
   }, [thumbAnim]);
 
+  const togglePoll = useCallback(() => {
+    setPollEnabled(prev => {
+      if (prev) {
+        setPollQuestion('');
+        setPollOptions(['', '']);
+      }
+      return !prev;
+    });
+  }, []);
+
+  const updatePollOption = useCallback((index, value) => {
+    setPollOptions(prev => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }, []);
+
+  const addPollOption = useCallback(() => {
+    setPollOptions(prev => {
+      if (prev.length >= MAX_POLL_OPTIONS) return prev;
+      return [...prev, ''];
+    });
+  }, []);
+
+  const removePollOption = useCallback((index) => {
+    setPollOptions(prev => {
+      if (prev.length <= 2) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
   // ── Media pickers ────────────────────────────────────────────────────────
   const pickImage = useCallback(async () => {
+    if (pollEnabled) {
+      setPollEnabled(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+    }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       showToast({ type: 'warning', message: 'Photo access is needed to add images.' });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes:              ImagePicker.MediaTypeOptions.Images,
+      mediaTypes:              'images',
       allowsMultipleSelection: true,
       quality:                 0.85,
     });
@@ -179,23 +270,28 @@ export default function CreatePostScreen({ route, navigation }) {
       }
       setImages((prev) => [...prev, ...result.assets.slice(0, slots).map((a) => a.uri)]);
     }
-  }, [images.length, showToast]);
+  }, [images.length, pollEnabled, showToast]);
 
   const pickVideo = useCallback(async () => {
+    if (pollEnabled) {
+      setPollEnabled(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+    }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       showToast({ type: 'warning', message: 'Video access is needed.' });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: 'videos',
       quality:    0.85,
     });
     if (!result.canceled) {
       setVideoUri(result.assets[0].uri);
       setImages([]);
     }
-  }, [showToast]);
+  }, [pollEnabled, showToast]);
 
   const removeImage = useCallback((index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
@@ -222,7 +318,6 @@ export default function CreatePostScreen({ route, navigation }) {
         return;
       }
 
-      // ── Edit mode: PATCH content only ──────────────────────
       if (editMode) {
         const res = await fetch(`${API_BASE_URL}/api/v1/posts/${editPostId}`, {
           method:  'PATCH',
@@ -245,14 +340,24 @@ export default function CreatePostScreen({ route, navigation }) {
         const urls = [];
         for (let i = 0; i < images.length; i++) {
           setUploadProgress(`Uploading image ${i + 1} of ${images.length}…`);
-          urls.push(await uploadToCloudinary(images[i], 'image'));
+          urls.push(await uploadToCloudinary(images[i], 'image', token));
         }
         postData.images = urls;
       }
 
       if (videoUri) {
         setUploadProgress('Uploading video…');
-        postData.video_url = await uploadToCloudinary(videoUri, 'video');
+        postData.video_url = await uploadToCloudinary(videoUri, 'video', token);
+      }
+
+      if (pollEnabled && pollQuestion.trim()) {
+        const validOptions = pollOptions.map(o => o.trim()).filter(o => o.length > 0);
+        if (validOptions.length >= 2) {
+          postData.poll = {
+            question: pollQuestion.trim(),
+            options:  validOptions,
+          };
+        }
       }
 
       setUploadProgress('Releasing…');
@@ -269,17 +374,21 @@ export default function CreatePostScreen({ route, navigation }) {
       setContent('');
       setImages([]);
       setVideoUri(null);
-      navigation.navigate('Feed');
+      setPollEnabled(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      navigation.navigate('Feed', { screen: 'FeedMain', params: { refresh: Date.now() } });
 
-    } catch {
-      showToast({ type: 'error', message: 'Couldn\'t post. Please try again.' });
+    } catch (err) {
+      showToast({ type: 'error', message: err?.message || 'Couldn\'t post. Please try again.' });
     } finally {
       setLoading(false);
       setUploadProgress('');
     }
   }, [
     isAuthenticated, canPost, content, images,
-    videoUri, isAnonymous, navigation, showToast, dispatch,
+    videoUri, isAnonymous, pollEnabled, pollQuestion, pollOptions,
+    navigation, showToast, dispatch,
   ]);
 
   const charColor = useMemo(() => {
@@ -293,8 +402,12 @@ export default function CreatePostScreen({ route, navigation }) {
     outputRange: [rs(2), rs(24)],
   });
 
+  const pollScale   = pollAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
+  const pollOpacity = pollAnim;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <StarryBackground />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -313,8 +426,6 @@ export default function CreatePostScreen({ route, navigation }) {
             </TouchableOpacity>
 
             <Text style={styles.headerTitle}>say it.</Text>
-
-            {/* Spacer to balance the X on the left */}
             <View style={styles.headerRight} />
           </View>
 
@@ -334,7 +445,6 @@ export default function CreatePostScreen({ route, navigation }) {
           >
             {/* ── Text input card ───────────────────────────────────────── */}
             <View style={styles.inputCard}>
-              {/* Safety note — only when empty and unfocused */}
               {content.length === 0 && !isFocused && (
                 <View style={styles.safetyRow}>
                   <Lock size={rs(11)} color={T.primary} strokeWidth={2.5} />
@@ -342,7 +452,6 @@ export default function CreatePostScreen({ route, navigation }) {
                 </View>
               )}
 
-              {/* Animated rotating placeholder */}
               {content.length === 0 && (
                 <Animated.View
                   style={[styles.placeholderWrap, { opacity: promptFade }]}
@@ -373,7 +482,7 @@ export default function CreatePostScreen({ route, navigation }) {
               </Text>
             </View>
 
-            {/* ── Media buttons ─────────────────────────────────────────── */}
+            {/* ── Media + Poll buttons ───────────────────────────────────── */}
             <View style={styles.mediaRow}>
               <TouchableOpacity
                 onPress={pickImage}
@@ -388,7 +497,7 @@ export default function CreatePostScreen({ route, navigation }) {
                   strokeWidth={1.5}
                 />
                 <Text style={[styles.mediaBtnText, (!!videoUri || loading) && styles.mediaBtnTextDim]}>
-                  Add Images
+                  Images
                 </Text>
               </TouchableOpacity>
 
@@ -405,7 +514,32 @@ export default function CreatePostScreen({ route, navigation }) {
                   strokeWidth={1.5}
                 />
                 <Text style={[styles.mediaBtnText, (images.length > 0 || loading) && styles.mediaBtnTextDim]}>
-                  Add Video
+                  Video
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={togglePoll}
+                disabled={images.length > 0 || !!videoUri || loading}
+                hitSlop={HIT_SLOP}
+                style={[
+                  styles.mediaBtn,
+                  pollEnabled && styles.mediaBtnActive,
+                  (images.length > 0 || !!videoUri || loading) && styles.mediaBtnDisabled,
+                ]}
+                activeOpacity={0.8}
+              >
+                <BarChart2
+                  size={rs(17)}
+                  color={
+                    images.length > 0 || !!videoUri || loading
+                      ? T.textSecondary
+                      : pollEnabled ? T.primary : T.primary
+                  }
+                  strokeWidth={1.5}
+                />
+                <Text style={[styles.mediaBtnText, pollEnabled && styles.mediaBtnTextActive]}>
+                  Poll
                 </Text>
               </TouchableOpacity>
             </View>
@@ -459,6 +593,75 @@ export default function CreatePostScreen({ route, navigation }) {
                   </TouchableOpacity>
                 </View>
               </View>
+            )}
+
+            {/* ── Poll builder ──────────────────────────────────────────── */}
+            {pollEnabled && (
+              <Animated.View
+                style={[
+                  styles.pollCard,
+                  { opacity: pollOpacity, transform: [{ scale: pollScale }] },
+                ]}
+              >
+                <View style={styles.pollHeader}>
+                  <BarChart2 size={rs(14)} color={T.primary} strokeWidth={1.5} />
+                  <Text style={styles.pollHeaderText}>Poll · expires in 24h</Text>
+                </View>
+
+                <TextInput
+                  value={pollQuestion}
+                  onChangeText={setPollQuestion}
+                  placeholder="Ask a question…"
+                  placeholderTextColor={T.textMuted}
+                  style={styles.pollQuestionInput}
+                  maxLength={120}
+                  selectionColor={T.primary}
+                  autoCorrect
+                  autoCapitalize="sentences"
+                />
+
+                <View style={styles.pollDivider} />
+
+                {pollOptions.map((opt, i) => (
+                  <View key={i} style={styles.pollOptionRow}>
+                    <View style={styles.pollOptionDot} />
+                    <TextInput
+                      value={opt}
+                      onChangeText={(v) => updatePollOption(i, v)}
+                      placeholder={`Option ${i + 1}${i < 2 ? ' (required)' : ''}`}
+                      placeholderTextColor={T.textMuted}
+                      style={styles.pollOptionInput}
+                      maxLength={60}
+                      selectionColor={T.primary}
+                    />
+                    {pollOptions.length > 2 && (
+                      <TouchableOpacity
+                        onPress={() => removePollOption(i)}
+                        hitSlop={HIT_SLOP}
+                        activeOpacity={0.7}
+                      >
+                        <X size={rs(14)} color={T.textSecondary} strokeWidth={2} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+
+                {pollOptions.length < MAX_POLL_OPTIONS && (
+                  <TouchableOpacity
+                    onPress={addPollOption}
+                    hitSlop={HIT_SLOP}
+                    style={styles.addOptionBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Plus size={rs(13)} color={T.primary} strokeWidth={2.5} />
+                    <Text style={styles.addOptionText}>Add option</Text>
+                  </TouchableOpacity>
+                )}
+
+                {pollEnabled && !pollValid && (
+                  <Text style={styles.pollHint}>Add a question + at least 2 options</Text>
+                )}
+              </Animated.View>
             )}
 
             {/* ── Anonymous toggle ──────────────────────────────────────── */}
@@ -530,7 +733,6 @@ export default function CreatePostScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
 
-  // Header
   header: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -550,9 +752,8 @@ const styles = StyleSheet.create({
     fontFamily:    'PlayfairDisplay-Bold',
   },
 
-  // Release button
   releaseBtn: {
-    marginBottom: SPACING.md,
+    marginBottom:    SPACING.md,
     height:          BUTTON_HEIGHT,
     borderRadius:    RADIUS.lg,
     backgroundColor: T.primary,
@@ -571,7 +772,6 @@ const styles = StyleSheet.create({
     letterSpacing: rs(0.5),
   },
 
-  // Progress
   progressBanner: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -587,11 +787,9 @@ const styles = StyleSheet.create({
   },
   progressText: { fontSize: FONT.sm, color: T.text, fontWeight: '500' },
 
-  // Scroll
   scroll:        { flex: 1 },
   scrollContent: { paddingHorizontal: SPACING.md, paddingTop: SPACING.lg },
 
-  // Input card
   inputCard: {
     backgroundColor: T.surface,
     borderRadius:    RADIUS.lg,
@@ -602,12 +800,11 @@ const styles = StyleSheet.create({
     minHeight:       rh(200),
   },
 
-  // Safety note
   safetyRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            rp(5),
-    marginBottom:   SPACING.sm,
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(5),
+    marginBottom:  SPACING.sm,
   },
   safetyText: {
     fontSize:  rf(11),
@@ -616,10 +813,9 @@ const styles = StyleSheet.create({
     opacity:   0.85,
   },
 
-  // Rotating placeholder
   placeholderWrap: {
     position: 'absolute',
-    top:      SPACING.md + rp(28), // below safety note
+    top:      SPACING.md + rp(28),
     left:     SPACING.md,
     right:    SPACING.md,
   },
@@ -631,7 +827,6 @@ const styles = StyleSheet.create({
     fontStyle:  'italic',
   },
 
-  // Text input
   textInput: {
     fontSize:          FONT.lg,
     lineHeight:        rf(28),
@@ -648,29 +843,29 @@ const styles = StyleSheet.create({
   },
   charCount: { fontSize: FONT.xs, textAlign: 'right' },
 
-  // Media buttons
   mediaRow: {
     flexDirection: 'row',
     gap:           SPACING.sm,
     marginBottom:  SPACING.md,
   },
   mediaBtn: {
-    flex:           1,
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'center',
-    gap:            SPACING.xs,
+    flex:            1,
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             SPACING.xs,
     backgroundColor: T.surface,
     paddingVertical: rp(14),
-    borderRadius:   RADIUS.md,
-    borderWidth:    1,
-    borderColor:    T.border,
+    borderRadius:    RADIUS.md,
+    borderWidth:     1,
+    borderColor:     T.border,
   },
+  mediaBtnActive:   { borderColor: T.primary, backgroundColor: T.primaryDim },
   mediaBtnDisabled: { opacity: 0.4 },
   mediaBtnText:     { fontSize: FONT.sm, fontWeight: '600', color: T.text },
   mediaBtnTextDim:  { color: T.textSecondary },
+  mediaBtnTextActive: { color: T.primary },
 
-  // Section
   section:      { marginBottom: SPACING.md },
   sectionLabel: {
     fontSize:      FONT.xs,
@@ -681,7 +876,6 @@ const styles = StyleSheet.create({
     marginBottom:  SPACING.sm,
   },
 
-  // Image previews
   imagesRow:  { flexDirection: 'row', gap: SPACING.sm },
   imageThumb: { position: 'relative' },
   thumbImage: {
@@ -698,7 +892,6 @@ const styles = StyleSheet.create({
     borderRadius:    RADIUS.full,
   },
 
-  // Video preview
   videoRow: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -713,7 +906,83 @@ const styles = StyleSheet.create({
   videoName:    { flex: 1, fontSize: FONT.sm, color: T.textSecondary, fontWeight: '500' },
   removeInline: { padding: rp(4) },
 
-  // Anonymous toggle
+  // ── Poll card ──────────────────────────────────────────────────────────────
+  pollCard: {
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    padding:         SPACING.md,
+    marginBottom:    SPACING.md,
+    borderWidth:     1,
+    borderColor:     'rgba(255,99,74,0.25)',
+  },
+  pollHeader: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            rp(6),
+    marginBottom:   SPACING.sm,
+  },
+  pollHeaderText: {
+    fontSize:   FONT.xs,
+    fontWeight: '700',
+    color:      T.primary,
+    textTransform: 'uppercase',
+    letterSpacing: rs(0.8),
+  },
+  pollQuestionInput: {
+    fontSize:   FONT.md,
+    color:      T.text,
+    fontFamily: 'DMSans-Medium',
+    paddingVertical: rp(8),
+    minHeight:  rh(44),
+  },
+  pollDivider: {
+    height:          1,
+    backgroundColor: T.border,
+    marginBottom:    SPACING.sm,
+  },
+  pollOptionRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            SPACING.sm,
+    marginBottom:   SPACING.xs,
+  },
+  pollOptionDot: {
+    width:           rs(7),
+    height:          rs(7),
+    borderRadius:    rs(4),
+    borderWidth:     1.5,
+    borderColor:     T.textSecondary,
+    flexShrink:      0,
+  },
+  pollOptionInput: {
+    flex:            1,
+    fontSize:        FONT.sm,
+    color:           T.text,
+    fontFamily:      'DMSans-Regular',
+    paddingVertical: rp(10),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  addOptionBtn: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            rp(5),
+    paddingVertical: rp(10),
+    marginTop:      SPACING.xs,
+  },
+  addOptionText: {
+    fontSize:   FONT.sm,
+    color:      T.primary,
+    fontWeight: '600',
+  },
+  pollHint: {
+    fontSize:  FONT.xs,
+    color:     T.textSecondary,
+    marginTop: SPACING.sm,
+    fontStyle: 'italic',
+  },
+
+  // ── Toggle ────────────────────────────────────────────────────────────────
   toggleRow: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -725,11 +994,11 @@ const styles = StyleSheet.create({
     borderColor:       T.border,
     marginBottom:      SPACING.md,
   },
-  toggleInfo:     { flex: 1 },
-  toggleLabelRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6), marginBottom: rp(3) },
-  toggleLabel:    { fontSize: FONT.md, fontWeight: '700', color: T.text },
+  toggleInfo:        { flex: 1 },
+  toggleLabelRow:    { flexDirection: 'row', alignItems: 'center', gap: rp(6), marginBottom: rp(3) },
+  toggleLabel:       { fontSize: FONT.md, fontWeight: '700', color: T.text },
   toggleLabelActive: { color: T.primary },
-  toggleSub:      { fontSize: FONT.xs, color: T.textSecondary },
+  toggleSub:         { fontSize: FONT.xs, color: T.textSecondary },
 
   toggleTrack: {
     width:           rs(48),
@@ -751,7 +1020,6 @@ const styles = StyleSheet.create({
     elevation:       3,
   },
 
-  // Tagline
   tagline: {
     backgroundColor: T.surface,
     borderRadius:    RADIUS.md,
@@ -760,10 +1028,10 @@ const styles = StyleSheet.create({
     borderColor:     T.border,
   },
   taglineText: {
-    fontSize:  FONT.sm,
-    color:     T.textSecondary,
-    textAlign: 'center',
+    fontSize:   FONT.sm,
+    color:      T.textSecondary,
+    textAlign:  'center',
     lineHeight: rf(20),
-    fontStyle: 'italic',
+    fontStyle:  'italic',
   },
 });

@@ -92,7 +92,31 @@ export default function VibeScoreScreen({ navigation }) {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <ArrowLeft size={22} color={THEME.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Vibe Score</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.centered}>
+          <Star size={40} color={THEME.textSecondary} strokeWidth={1.5} />
+          <Text style={styles.errorTitle}>No score yet</Text>
+          <Text style={styles.errorSub}>Start creating drops to build your vibe score.</Text>
+          <TouchableOpacity
+            style={styles.createDropBtn}
+            onPress={() => navigation.navigate('ShareCard')}
+          >
+            <Flame size={18} color="#fff" />
+            <Text style={styles.createDropBtnText}>Create your first Drop</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const tier = getTier(data.score);
   const nextTier = TIERS[TIERS.indexOf(tier) + 1];
@@ -253,7 +277,9 @@ export default function VibeScoreScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.background },
-  centered: { justifyContent: 'center', alignItems: 'center' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 },
+  errorTitle: { fontSize: 17, fontWeight: '700', color: THEME.text, marginTop: 8 },
+  errorSub: { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 21 },
   content: { padding: 20, gap: 20 },
 
   header: {

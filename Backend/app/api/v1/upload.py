@@ -4,8 +4,13 @@ from app.models.user import User
 from app.config import settings
 from jose import JWTError, jwt
 from bson import ObjectId
+import asyncio
+import hashlib
+import hmac
+import time
 import cloudinary
 import cloudinary.uploader
+import cloudinary.utils
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -58,6 +63,24 @@ async def get_user_from_token(authorization: str = Header(None)) -> User:
     except JWTError:
         raise HTTPException(status_code=401, detail="Could not validate token")
 
+@router.get("/sign")
+async def get_upload_signature(
+    folder: str = "anonixx/drops",
+    current_user: User = Depends(get_user_from_token),
+):
+    """Return short-lived signed params for a direct-to-Cloudinary upload."""
+    timestamp = int(time.time())
+    params    = {"folder": folder, "timestamp": timestamp}
+    signature = cloudinary.utils.api_sign_request(params, settings.CLOUDINARY_API_SECRET)
+    return {
+        "signature":  signature,
+        "timestamp":  timestamp,
+        "api_key":    settings.CLOUDINARY_API_KEY,
+        "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
+        "folder":     folder,
+    }
+
+
 @router.post("/image")
 async def upload_image(
     file: UploadFile = File(...),
@@ -83,11 +106,14 @@ async def upload_image(
             raise HTTPException(status_code=400, detail="File too large. Max 5MB")
         
         # Upload to Cloudinary
-        result = cloudinary.uploader.upload(
-            contents,
-            folder="echo/images",
-            resource_type="image",
-            allowed_formats=["jpg", "jpeg", "png", "gif", "webp"]
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: cloudinary.uploader.upload(
+                contents,
+                folder="echo/images",
+                resource_type="image",
+                allowed_formats=["jpg", "jpeg", "png", "gif", "webp"],
+            ),
         )
         
         print(f"✅ Upload successful: {result['secure_url']}")
@@ -127,10 +153,13 @@ async def upload_audio(
             raise HTTPException(status_code=400, detail="File too large. Max 10MB")
         
         # Upload to Cloudinary as audio
-        result = cloudinary.uploader.upload(
-            contents,
-            folder="echo/audio",
-            resource_type="auto",
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: cloudinary.uploader.upload(
+                contents,
+                folder="echo/audio",
+                resource_type="auto",
+            ),
         )
         
         print(f"✅ Upload successful: {result['secure_url']}")
@@ -171,12 +200,15 @@ async def upload_video(
             raise HTTPException(status_code=400, detail="File too large. Max 50MB")
         
         print("🚀 Uploading to Cloudinary...")
-        
-        # Upload to Cloudinary as video
-        result = cloudinary.uploader.upload(
-            contents,
-            folder="echo/videos",
-            resource_type="video",
+
+        # Run blocking Cloudinary upload in a thread so the event loop isn't blocked
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: cloudinary.uploader.upload(
+                contents,
+                folder="echo/videos",
+                resource_type="video",
+            ),
         )
         
         print(f"✅ Upload successful: {result['secure_url']}")

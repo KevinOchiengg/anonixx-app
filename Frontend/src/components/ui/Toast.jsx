@@ -55,26 +55,26 @@ const TOAST_CONFIG = {
   success: {
     icon: CheckCircle,
     color: '#22c55e',
-    bg: 'rgba(34, 197, 94, 0.12)',
-    border: 'rgba(34, 197, 94, 0.3)',
+    bg: '#1a2a1e',
+    border: 'rgba(34, 197, 94, 0.45)',
   },
   error: {
     icon: XCircle,
     color: '#ef4444',
-    bg: 'rgba(239, 68, 68, 0.12)',
-    border: 'rgba(239, 68, 68, 0.3)',
+    bg: '#261818',
+    border: 'rgba(239, 68, 68, 0.45)',
   },
   info: {
     icon: Info,
     color: '#3b82f6',
-    bg: 'rgba(59, 130, 246, 0.12)',
-    border: 'rgba(59, 130, 246, 0.3)',
+    bg: '#161e2e',
+    border: 'rgba(59, 130, 246, 0.45)',
   },
   warning: {
     icon: AlertTriangle,
     color: '#f59e0b',
-    bg: 'rgba(245, 158, 11, 0.12)',
-    border: 'rgba(245, 158, 11, 0.3)',
+    bg: '#231f10',
+    border: 'rgba(245, 158, 11, 0.45)',
   },
 };
 
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   toastMessage: {
     fontSize: 13,
-    color: THEME.textSecondary,
+    color: THEME.text,
     lineHeight: 18,
   },
   dismissButton: {

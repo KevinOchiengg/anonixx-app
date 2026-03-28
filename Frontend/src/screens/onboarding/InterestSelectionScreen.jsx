@@ -282,6 +282,17 @@ export default function InterestSelectionScreen({ navigation }) {
         }).catch(() => {});
       }
 
+      const pendingReferral = await AsyncStorage.getItem('pendingReferralComplete');
+      if (pendingReferral) {
+        try {
+          await fetch(`${API_BASE_URL}/api/v1/referrals/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          });
+        } catch { /* fire-and-forget */ }
+        await AsyncStorage.removeItem('pendingReferralComplete');
+      }
+
       showToast({ type: 'success', message: 'Saved. Your feed will feel different now.' });
       if (navigation.canGoBack()) {
         navigation.goBack();

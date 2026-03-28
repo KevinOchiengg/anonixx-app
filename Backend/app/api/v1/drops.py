@@ -212,11 +212,17 @@ async def create_drop(
     if data.category not in CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Category must be one of: {', '.join(CATEGORIES)}")
 
-    if not data.confession.strip():
+    if not data.confession and not data.media_url:
+        raise HTTPException(status_code=400, detail="Provide a confession text or attach an image/video")
+
+    if data.confession and len(data.confession.strip()) == 0:
         raise HTTPException(status_code=400, detail="Confession cannot be empty")
 
-    if len(data.confession) > 200:
+    if data.confession and len(data.confession) > 200:
         raise HTTPException(status_code=400, detail="Confession must be 200 characters or less")
+
+    if data.media_url and data.media_type not in ("image", "video"):
+        raise HTTPException(status_code=400, detail="media_type must be 'image' or 'video'")
 
     if data.is_group and (not data.group_size or data.group_size < 2 or data.group_size > 10):
         raise HTTPException(status_code=400, detail="Group size must be between 2 and 10")
@@ -232,7 +238,9 @@ async def create_drop(
         "_id": ObjectId(),
         "sender_id": current_user_id,
         "sender_anonymous_name": user.get("anonymous_name", "Anonymous"),
-        "confession": data.confession.strip(),
+        "confession": data.confession.strip() if data.confession else None,
+        "media_url": data.media_url or None,
+        "media_type": data.media_type or None,
         "category": data.category,
         "is_group": data.is_group,
         "group_size": data.group_size if data.is_group else None,
@@ -257,10 +265,11 @@ async def create_drop(
 
     drop_id = str(drop["_id"])
 
+    preview = data.confession.strip() if data.confession else ("📷 image drop" if data.media_type == "image" else "🎥 video drop")
     return {
         "id": drop_id,
         "share_link": f"anonixx://drop/{drop_id}",
-        "share_text": f"{data.confession}\n\n— unlock to connect 👀\nanonixx://drop/{drop_id}",
+        "share_text": f"{preview}\n\n— unlock to connect 👀\nanonixx://drop/{drop_id}",
         "expires_at": drop["expires_at"].isoformat(),
         "time_left": get_time_left(drop["expires_at"]),
         "is_night_mode": night,
@@ -358,7 +367,9 @@ async def get_marketplace(
 
         drops.append({
             "id": drop_id,
-            "confession": drop["confession"],
+            "confession": drop.get("confession"),
+            "media_url": drop.get("media_url"),
+            "media_type": drop.get("media_type"),
             "category": drop["category"],
             "is_group": drop["is_group"],
             "group_size": drop.get("group_size"),
@@ -440,7 +451,9 @@ async def get_drop_landing(
 
     return {
         "id": drop_id,
-        "confession": drop["confession"],
+        "confession": drop.get("confession"),
+        "media_url": drop.get("media_url"),
+        "media_type": drop.get("media_type"),
         "category": drop["category"],
         "is_group": drop["is_group"],
         "group_size": drop.get("group_size"),

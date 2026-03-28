@@ -21,7 +21,7 @@ import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react-native';
 
 const THEME = {
   background:    '#0b0f18',
@@ -255,6 +255,16 @@ export default function LoginScreen({ navigation }) {
               </View>
             </View>
 
+            {/* Forgot password */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('ForgotPassword')}
+              style={styles.forgotBtn}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.forgotText}>forgot password?</Text>
+            </TouchableOpacity>
+
             {/* Login button */}
             <TouchableOpacity
               onPress={handleLogin}
@@ -412,6 +422,9 @@ const styles = StyleSheet.create({
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: THEME.border },
   dividerText: { fontSize: FONT.sm, color: THEME.textSecondary },
+
+  forgotBtn:  { alignSelf: 'flex-end', paddingVertical: rp(6), marginBottom: SPACING.xs },
+  forgotText: { fontSize: FONT.sm, color: THEME.textSecondary, fontWeight: '500' },
 
   signupBtn:      { alignItems: 'center', paddingVertical: rp(4) },
   signupText:     { fontSize: FONT.md, color: THEME.textSecondary },

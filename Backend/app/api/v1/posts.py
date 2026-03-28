@@ -25,6 +25,13 @@ LIGHT_TOPICS  = {"wins", "self_growth", "friendship", "general"}
 
 # ==================== REQUEST MODELS ====================
 
+class PollOptionInput(BaseModel):
+    text: str
+
+class PollInput(BaseModel):
+    question: str
+    options: List[str]  # 2–4 items
+
 class CreatePostRequest(BaseModel):
     content: str
     is_anonymous: bool = True
@@ -32,7 +39,10 @@ class CreatePostRequest(BaseModel):
     images: List[str] = []
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
+    poll: Optional[PollInput] = None
 
+class VoteRequest(BaseModel):
+    option_index: int
 
 class ThreadReplyRequest(BaseModel):
     content: str
@@ -109,6 +119,7 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
 
     saved_set = set()
     liked_set = set()
+    voted_map: dict[str, int] = {}  # post_id -> option_index
 
     if current_user_id:
         async for s in db["saved_posts"].find({
@@ -123,9 +134,36 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
         ):
             liked_set.add(str(p["_id"]))
 
+        async for v in db["poll_votes"].find({
+            "post_id": {"$in": post_ids_str},
+            "user_id": current_user_id
+        }):
+            voted_map[v["post_id"]] = v["option_index"]
+
     formatted = []
     for post in posts:
         pid = str(post["_id"])
+        raw_poll = post.get("poll")
+        poll_out = None
+        if raw_poll:
+            voted_option = voted_map.get(pid)
+            options_out = []
+            total = raw_poll.get("total_votes", 0)
+            for i, opt in enumerate(raw_poll.get("options", [])):
+                votes = opt.get("votes", 0)
+                options_out.append({
+                    "text": opt["text"],
+                    "votes": votes if voted_option is not None else None,
+                    "percent": round(votes / total * 100) if total > 0 and voted_option is not None else None,
+                })
+            poll_out = {
+                "question": raw_poll["question"],
+                "options": options_out,
+                "total_votes": total,
+                "ends_at": raw_poll.get("ends_at"),
+                "voted_option": voted_option,
+                "expired": raw_poll.get("ends_at") is not None and raw_poll["ends_at"] < now_utc().isoformat(),
+            }
         formatted.append({
             "id": pid,
             "content": post["content"],
@@ -135,6 +173,7 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
             "images": post.get("images", []),
             "video_url": post.get("video_url"),
             "audio_url": post.get("audio_url"),
+            "poll": poll_out,
             "thread_count": thread_counts.get(pid, 0),
             "views_count": post.get("views_count", 0),
             "saves_count": post.get("saves_count", 0),
@@ -270,6 +309,20 @@ async def create_post(
 
     valid_topics = [t for t in data.topics if t in AVAILABLE_TOPICS] or ["general"]
 
+    poll_data = None
+    if data.poll:
+        options = [o.strip() for o in data.poll.options if o.strip()]
+        if len(options) < 2 or len(options) > 4:
+            raise HTTPException(status_code=400, detail="Poll requires 2–4 options.")
+        if not data.poll.question.strip():
+            raise HTTPException(status_code=400, detail="Poll question cannot be empty.")
+        poll_data = {
+            "question": data.poll.question.strip(),
+            "options": [{"text": o, "votes": 0} for o in options],
+            "ends_at": (now_utc() + timedelta(hours=24)).isoformat(),
+            "total_votes": 0,
+        }
+
     post_data = {
         "_id": ObjectId(),
         "user_id": current_user_id,
@@ -280,6 +333,7 @@ async def create_post(
         "images": data.images,
         "video_url": data.video_url,
         "audio_url": data.audio_url,
+        "poll": poll_data,
         "thread_count": 0,
         "views_count": 0,
         "saves_count": 0,
@@ -420,6 +474,75 @@ async def get_calm_feed(
         "session_posts": new_session_posts,
         "is_guest": current_user_id is None,
         "streak": streak_info,
+    }
+
+
+# ==================== POLL VOTE ====================
+
+@router.post("/{post_id}/vote")
+async def vote_on_poll(
+    post_id: str,
+    data: VoteRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    try:
+        oid = ObjectId(post_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid post ID.")
+
+    post = await db["posts"].find_one({"_id": oid})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+
+    poll = post.get("poll")
+    if not poll:
+        raise HTTPException(status_code=400, detail="This post has no poll.")
+
+    if poll.get("ends_at") and poll["ends_at"] < now_utc().isoformat():
+        raise HTTPException(status_code=400, detail="This poll has ended.")
+
+    options = poll.get("options", [])
+    if data.option_index < 0 or data.option_index >= len(options):
+        raise HTTPException(status_code=400, detail="Invalid option.")
+
+    existing = await db["poll_votes"].find_one({"post_id": post_id, "user_id": current_user_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="You've already voted on this poll.")
+
+    await db["poll_votes"].insert_one({
+        "post_id": post_id,
+        "user_id": current_user_id,
+        "option_index": data.option_index,
+        "created_at": now_utc(),
+    })
+
+    await db["posts"].update_one(
+        {"_id": oid},
+        {
+            "$inc": {
+                f"poll.options.{data.option_index}.votes": 1,
+                "poll.total_votes": 1,
+            }
+        }
+    )
+
+    updated_post = await db["posts"].find_one({"_id": oid})
+    updated_poll = updated_post["poll"]
+    total = updated_poll["total_votes"]
+    options_out = [
+        {
+            "text": o["text"],
+            "votes": o.get("votes", 0),
+            "percent": round(o.get("votes", 0) / total * 100) if total > 0 else 0,
+        }
+        for o in updated_poll["options"]
+    ]
+
+    return {
+        "voted_option": data.option_index,
+        "total_votes": total,
+        "options": options_out,
     }
 
 

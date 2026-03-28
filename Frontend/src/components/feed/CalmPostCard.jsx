@@ -13,7 +13,7 @@ import { Audio } from 'expo-av';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
-  Bookmark, ChevronDown, EyeOff, Flag, Heart, Link,
+  BarChart2, Bookmark, ChevronDown, EyeOff, Flag, Heart, Link,
   MessageCircle, MoreHorizontal, Play, Send, Share2,
   UserX, VolumeX, X, CornerDownRight,
 } from 'lucide-react-native';
@@ -273,6 +273,100 @@ const VideoPlayer = React.memo(({ videoUrl, isActive, viewCount, onMediaPress })
 });
 
 
+// ─── Poll Card ────────────────────────────────────────────────
+const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) => {
+  const barAnims = useRef(
+    poll.options.map(() => new Animated.Value(0))
+  ).current;
+
+  const hasVoted  = poll.voted_option !== null && poll.voted_option !== undefined;
+  const isExpired = poll.expired;
+
+  // Animate bars after voting
+  useEffect(() => {
+    if (!hasVoted) return;
+    const anims = poll.options.map((opt, i) =>
+      Animated.spring(barAnims[i], {
+        toValue:  opt.percent ?? 0,
+        tension:  80,
+        friction: 10,
+        useNativeDriver: false,
+      })
+    );
+    Animated.stagger(60, anims).start();
+  }, [hasVoted]);
+
+  return (
+    <View style={styles.pollWrap}>
+      <View style={styles.pollTopRow}>
+        <BarChart2 size={rs(12)} color={T.primary} strokeWidth={1.5} />
+        <Text style={styles.pollLabel}>
+          {isExpired ? 'poll ended' : 'poll · 24h'}
+        </Text>
+        {hasVoted && (
+          <Text style={styles.pollVoteCount}>{poll.total_votes} vote{poll.total_votes !== 1 ? 's' : ''}</Text>
+        )}
+      </View>
+
+      <Text style={styles.pollQuestion}>{poll.question}</Text>
+
+      <View style={styles.pollOptions}>
+        {poll.options.map((opt, i) => {
+          const isChosen = poll.voted_option === i;
+          const canVote  = !hasVoted && !isExpired && isAuthenticated;
+
+          if (hasVoted) {
+            const barWidth = barAnims[i].interpolate({
+              inputRange:  [0, 100],
+              outputRange: ['0%', '100%'],
+              extrapolate: 'clamp',
+            });
+            return (
+              <View key={i} style={styles.pollResultRow}>
+                <View style={[styles.pollResultBar, isChosen && styles.pollResultBarChosen]}>
+                  <Animated.View
+                    style={[
+                      styles.pollResultFill,
+                      { width: barWidth },
+                      isChosen && styles.pollResultFillChosen,
+                    ]}
+                  />
+                  <Text
+                    style={[styles.pollResultText, isChosen && styles.pollResultTextChosen]}
+                    numberOfLines={1}
+                  >
+                    {opt.text}
+                  </Text>
+                </View>
+                <Text style={[styles.pollPercent, isChosen && styles.pollPercentChosen]}>
+                  {opt.percent ?? 0}%
+                </Text>
+              </View>
+            );
+          }
+
+          return (
+            <TouchableOpacity
+              key={i}
+              onPress={() => canVote && onVote(i)}
+              disabled={!canVote}
+              hitSlop={HIT_SLOP}
+              style={[styles.pollOption, !canVote && styles.pollOptionDim]}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.pollOptionText}>{opt.text}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {!hasVoted && !isExpired && !isAuthenticated && (
+        <Text style={styles.pollSignInHint}>Sign in to vote</Text>
+      )}
+    </View>
+  );
+});
+
 // ─── Menu Item ────────────────────────────────────────────────
 const MenuItem = React.memo(({ item }) => (
   <TouchableOpacity style={styles.menuItem} onPress={item.onPress} hitSlop={HIT_SLOP}>
@@ -298,6 +392,7 @@ function CalmPostCard({
   const [liked,               setLiked]               = useState(post.is_liked || false);
   const [likesCount,          setLikesCount]          = useState(post.likes_count || 0);
   const [animating,           setAnimating]           = useState(false);
+  const [poll,                setPoll]                = useState(post.poll || null);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -354,6 +449,39 @@ function CalmPostCard({
       if (res.ok) { setLiked(data.liked); setLikesCount(data.likes_count); }
     } catch {}
   }, [liked, isAuthenticated, post.id, scaleAnim]);
+
+  // ── Poll vote ───────────────────────────────────────────────
+  const handleVote = useCallback(async (optionIndex) => {
+    if (!isAuthenticated) {
+      showToast({ type: 'info', message: 'Sign in to vote.' });
+      return;
+    }
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/vote`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ option_index: optionIndex }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPoll(prev => ({
+          ...prev,
+          voted_option: data.voted_option,
+          total_votes:  data.total_votes,
+          options: prev.options.map((o, i) => ({
+            ...o,
+            votes:   data.options[i].votes,
+            percent: data.options[i].percent,
+          })),
+        }));
+      } else {
+        showToast({ type: 'error', message: data.detail || 'Could not submit vote.' });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Could not submit vote.' });
+    }
+  }, [isAuthenticated, post.id, showToast]);
 
   // ── Share ───────────────────────────────────────────────────
   const handleShare = useCallback(async () => {
@@ -510,6 +638,15 @@ function CalmPostCard({
 
             {post.audio_url && <AudioPlayer onMediaPress={handleMediaPress} />}
 
+            {poll && (
+              <PollCard
+                poll={poll}
+                postId={post.id}
+                isAuthenticated={isAuthenticated}
+                onVote={handleVote}
+              />
+            )}
+
             <View style={styles.divider} />
 
             {isTextOnly && <Text style={styles.hint}>say something if it hits.</Text>}
@@ -635,17 +772,39 @@ const styles = StyleSheet.create({
   menuItemText:     { fontSize: FONT.md, fontWeight: '500', color: T.text },
   cancelBtn:        { margin: rp(16), padding: rp(16), borderRadius: RADIUS.md, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)' },
   cancelText:       { fontSize: FONT.md, fontWeight: '600', color: T.textSecondary },
+
+  // ── Poll ──────────────────────────────────────────────────
+  pollWrap:             { marginTop: rp(4), marginBottom: rp(14), padding: rp(14), backgroundColor: 'rgba(255,99,74,0.06)', borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(255,99,74,0.15)' },
+  pollTopRow:           { flexDirection: 'row', alignItems: 'center', gap: rp(5), marginBottom: rp(8) },
+  pollLabel:            { fontSize: rf(10), fontWeight: '700', color: T.primary, textTransform: 'uppercase', letterSpacing: rs(0.7), flex: 1 },
+  pollVoteCount:        { fontSize: rf(10), color: T.textSecondary },
+  pollQuestion:         { fontSize: FONT.sm, fontWeight: '600', color: T.text, fontFamily: 'DMSans-Medium', marginBottom: rp(12), lineHeight: rf(20) },
+  pollOptions:          { gap: rp(8) },
+  pollOption:           { paddingVertical: rp(11), paddingHorizontal: rp(14), borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', backgroundColor: 'rgba(255,255,255,0.03)' },
+  pollOptionDim:        { opacity: 0.55 },
+  pollOptionText:       { fontSize: FONT.sm, color: T.text, fontFamily: 'DMSans-Regular' },
+  pollResultRow:        { flexDirection: 'row', alignItems: 'center', gap: rp(8), marginBottom: rp(2) },
+  pollResultBar:        { flex: 1, height: rs(34), borderRadius: RADIUS.md, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', justifyContent: 'center' },
+  pollResultBarChosen:  { borderColor: 'rgba(255,99,74,0.35)' },
+  pollResultFill:       { position: 'absolute', top: 0, left: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: RADIUS.md },
+  pollResultFillChosen: { backgroundColor: 'rgba(255,99,74,0.22)' },
+  pollResultText:       { fontSize: FONT.sm, color: T.textSecondary, paddingHorizontal: rp(10), fontFamily: 'DMSans-Regular' },
+  pollResultTextChosen: { color: T.text, fontWeight: '600' },
+  pollPercent:          { fontSize: FONT.xs, color: T.textSecondary, fontWeight: '600', minWidth: rs(32), textAlign: 'right' },
+  pollPercentChosen:    { color: T.primary },
+  pollSignInHint:       { fontSize: FONT.xs, color: T.textSecondary, fontStyle: 'italic', marginTop: rp(8), textAlign: 'center' },
 });
 
 
 // ─── Memo comparison ──────────────────────────────────────────
 const areEqual = (prev, next) =>
-  prev.post.id           === next.post.id           &&
-  prev.post.is_saved     === next.post.is_saved      &&
-  prev.post.is_liked     === next.post.is_liked      &&
-  prev.post.likes_count  === next.post.likes_count   &&
-  prev.post.thread_count === next.post.thread_count  &&
-  // Only re-render if THIS card's active state changed
+  prev.post.id                          === next.post.id                          &&
+  prev.post.is_saved                    === next.post.is_saved                    &&
+  prev.post.is_liked                    === next.post.is_liked                    &&
+  prev.post.likes_count                 === next.post.likes_count                 &&
+  prev.post.thread_count                === next.post.thread_count                &&
+  prev.post.poll?.total_votes           === next.post.poll?.total_votes           &&
+  prev.post.poll?.voted_option          === next.post.poll?.voted_option          &&
   (prev.activeVideoId === prev.post.id) === (next.activeVideoId === next.post.id);
 
 export default React.memo(CalmPostCard, areEqual);
