@@ -49,8 +49,8 @@ const PERKS = [
 ];
 
 const PAYMENT_METHODS = [
-  { id: 'mpesa',  label: 'M-Pesa', color: T.mpesa,  flag: '🇰🇪' },
-  { id: 'stripe', label: 'Card',   color: T.stripe,  flag: '💳'  },
+  { id: 'mpesa',  label: 'M-Pesa', color: T.mpesa,  flag: '📱' },
+  { id: 'stripe', label: 'Card',   color: T.stripe,  flag: '💳' },
 ];
 
 // ─── Perk Item ────────────────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ const MpesaForm = React.memo(({ chatId, onSuccess, onError }) => {
       >
         {loading
           ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.payBtnText}>Pay KES 260 via M-Pesa</Text>
+          : <Text style={styles.payBtnText}>Pay KSh 49 via M-Pesa</Text>
         }
       </TouchableOpacity>
     </View>
@@ -214,7 +214,7 @@ const StripeForm = React.memo(({ chatId, onSuccess, onError }) => {
       >
         {loading
           ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.payBtnText}>Pay $2.00 by Card</Text>
+          : <Text style={styles.payBtnText}>Pay KSh 49 by Card</Text>
         }
       </TouchableOpacity>
     </View>
@@ -298,7 +298,7 @@ export default function UnlockPremiumScreen({ route, navigation }) {
         {/* Price badge */}
         <View style={styles.priceBadge}>
           <Unlock size={rs(18)} color={T.gold} />
-          <Text style={styles.priceText}>One-time unlock · $2</Text>
+          <Text style={styles.priceText}>One-time unlock · KSh 49</Text>
         </View>
 
         <Text style={styles.tagline}>One payment. Both of you unlock. Forever.</Text>

@@ -90,6 +90,55 @@ const DoubleTapLike = React.memo(({ children, onDoubleTap }) => {
   );
 });
 
+// ─── Image Carousel ───────────────────────────────────────────
+const ImageCarousel = React.memo(({ images }) => {
+  const [activeIndex, setActiveIndex]       = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const handleLayout = useCallback((e) => {
+    setContainerWidth(e.nativeEvent.layout.width);
+  }, []);
+
+  const handleScrollEnd = useCallback((e) => {
+    if (!containerWidth) return;
+    const idx = Math.round(e.nativeEvent.contentOffset.x / containerWidth);
+    setActiveIndex(idx);
+  }, [containerWidth]);
+
+  if (!images?.length) return null;
+
+  return (
+    <View style={styles.carouselWrap} onLayout={handleLayout}>
+      {containerWidth > 0 && (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScrollEnd}
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+        >
+          {images.map((url, i) => (
+            <Image
+              key={i}
+              source={{ uri: url }}
+              style={[styles.carouselImage, { width: containerWidth }]}
+              resizeMode="cover"
+            />
+          ))}
+        </ScrollView>
+      )}
+      {images.length > 1 && containerWidth > 0 && (
+        <View style={styles.dotsRow}>
+          {images.map((_, i) => (
+            <View key={i} style={[styles.dot, i === activeIndex && styles.dotActive]} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+});
+
 // ─── Audio Player ─────────────────────────────────────────────
 const BARS = Array.from({ length: 28 }, (_, i) => ({
   id:     i,
@@ -388,6 +437,7 @@ function CalmPostCard({
   const [menuVisible,         setMenuVisible]         = useState(false);
   const [profileSheetVisible, setProfileSheetVisible] = useState(false);
   const [showFullContent,     setShowFullContent]     = useState(false);
+  const [textTruncated,       setTextTruncated]       = useState(false);
   const [showComments,        setShowComments]        = useState(false);
   const [liked,               setLiked]               = useState(post.is_liked || false);
   const [likesCount,          setLikesCount]          = useState(post.likes_count || 0);
@@ -540,10 +590,6 @@ function CalmPostCard({
   const handleMediaPress    = useCallback((time) => onMediaPress?.(post, time), [onMediaPress, post]);
 
   const isTextOnly     = !post.images?.length && !post.video_url && !post.audio_url;
-  const shouldTruncate = (post.content?.length ?? 0) > 400;
-  const displayContent = shouldTruncate && !showFullContent
-    ? post.content.substring(0, 400) + '...'
-    : post.content;
 
   const menuItems = useMemo(() => [
     {
@@ -604,13 +650,30 @@ function CalmPostCard({
           <TouchableOpacity style={styles.body} onPress={handlePostPress} activeOpacity={0.97}>
             {post.content ? (
               <>
-                <Text style={styles.content}>{displayContent}</Text>
-                {shouldTruncate && !showFullContent && (
+                {/* Hidden measurer — no numberOfLines, gives true line count */}
+                <Text
+                  style={[styles.content, { position: 'absolute', opacity: 0 }]}
+                  onTextLayout={(e) => {
+                    if (!textTruncated && e.nativeEvent.lines.length > 5) {
+                      setTextTruncated(true);
+                    }
+                  }}
+                >
+                  {post.content}
+                </Text>
+                {/* Visible text */}
+                <Text
+                  style={styles.content}
+                  numberOfLines={showFullContent ? undefined : 5}
+                >
+                  {post.content}
+                </Text>
+                {textTruncated && !showFullContent && (
                   <TouchableOpacity onPress={handleReadMore} hitSlop={HIT_SLOP}>
                     <Text style={styles.readMore}>Read more</Text>
                   </TouchableOpacity>
                 )}
-                {shouldTruncate && showFullContent && (
+                {textTruncated && showFullContent && (
                   <TouchableOpacity onPress={handleShowLess} hitSlop={HIT_SLOP}>
                     <Text style={styles.readMore}>Show less</Text>
                   </TouchableOpacity>
@@ -619,11 +682,7 @@ function CalmPostCard({
             ) : null}
 
             {post.images?.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
-                {post.images.map((url, i) => (
-                  <Image key={i} source={{ uri: url }} style={styles.postImage} resizeMode="cover" />
-                ))}
-              </ScrollView>
+              <ImageCarousel images={post.images} />
             )}
 
             {post.video_url && (
@@ -731,8 +790,11 @@ const styles = StyleSheet.create({
   body:             { paddingBottom: rp(4) },
   content:          { fontSize: FONT.md, lineHeight: rf(26), color: T.text, letterSpacing: 0.2, marginBottom: rp(10), fontFamily: 'PlayfairDisplay-Regular' },
   readMore:         { fontSize: FONT.sm, fontWeight: '500', color: T.primary, marginBottom: rp(12) },
-  imagesScroll:     { marginBottom: rp(14) },
-  postImage:        { width: W - rs(90), height: rs(200), borderRadius: RADIUS.md, marginRight: rp(8) },
+  carouselWrap:     { marginBottom: rp(14), borderRadius: RADIUS.md, overflow: 'hidden' },
+  carouselImage:    { height: rs(220), borderRadius: RADIUS.md },
+  dotsRow:          { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: rp(5), paddingTop: rp(8) },
+  dot:              { width: rs(5), height: rs(5), borderRadius: rs(3), backgroundColor: 'rgba(255,255,255,0.2)' },
+  dotActive:        { backgroundColor: T.primary, width: rs(16), borderRadius: rs(3) },
   videoWrap:        { position: 'relative', marginBottom: rp(14), borderRadius: RADIUS.lg, overflow: 'hidden', height: rs(240), backgroundColor: '#06080f', borderWidth: 1, borderColor: 'rgba(255,99,74,0.15)' },
   videoFill:        { width: '100%', height: '100%' },
   hidden:           { position: 'absolute', opacity: 0 },

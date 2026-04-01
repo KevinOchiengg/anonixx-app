@@ -51,7 +51,7 @@ const INTERESTS = [
   { id: 'anxiety',        emoji: '🌀', name: 'Anxiety'        },
   { id: 'depression',     emoji: '🌧️', name: 'Depression'     },
   { id: 'self_growth',    emoji: '🌱', name: 'Self-Growth'    },
-  { id: 'school_career',  emoji: '🎓', name: 'School/Career'  },
+  { id: 'school_career',  emoji: '😓', name: 'Work & School'  },
   { id: 'family',         emoji: '🏠', name: 'Family'         },
   { id: 'lgbtq',          emoji: '🌈', name: 'LGBTQ+'         },
   { id: 'addiction',      emoji: '🔗', name: 'Addiction'      },
@@ -59,9 +59,11 @@ const INTERESTS = [
   { id: 'identity',       emoji: '🪞', name: 'Identity'       },
   { id: 'wins',           emoji: '✨', name: 'Wins'           },
   { id: 'friendship',     emoji: '🤝', name: 'Friendship'     },
-  { id: 'financial',      emoji: '💸', name: 'Financial'      },
-  { id: 'health',         emoji: '🫀', name: 'Health'         },
-  { id: 'general',        emoji: '💬', name: 'General'        },
+  { id: 'financial',      emoji: '🪙', name: 'Money Stress'   },
+  { id: 'health',         emoji: '💊', name: 'Body & Health'  },
+  { id: 'grief',          emoji: '🕯️', name: 'Grief & Loss'   },
+  { id: 'loneliness',     emoji: '🫥', name: 'Loneliness'     },
+  { id: 'trauma',         emoji: '🌑', name: 'Trauma'         },
 ];
 
 const VIBE_TAGS = [

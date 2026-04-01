@@ -88,9 +88,18 @@ const DropCard = React.memo(({ item, onPress }) => {
           ) : null}
         </View>
       ) : item.media_type === 'video' ? (
-        <View style={styles.videoThumbWrap}>
-          <Film size={rs(18)} color={color} />
-          <Text style={[styles.videoThumbLabel, { color }]}>Video Drop</Text>
+        <View style={styles.mediaThumbWrap}>
+          {item.card_image_url ? (
+            <Image source={{ uri: item.card_image_url }} style={styles.mediaThumb} resizeMode="cover" />
+          ) : (
+            <View style={styles.videoPlaceholder}>
+              <Film size={rs(28)} color={color} />
+            </View>
+          )}
+          <View style={styles.videoOverlay}>
+            <Film size={rs(13)} color="#fff" />
+            <Text style={styles.videoOverlayText}>Video</Text>
+          </View>
           {item.confession ? (
             <Text style={styles.dropConfession} numberOfLines={1}>"{item.confession}"</Text>
           ) : null}
@@ -551,16 +560,11 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: SPACING.sm,
   },
-  mediaThumbWrap: { marginBottom: SPACING.sm, borderRadius: RADIUS.md, overflow: 'hidden' },
-  mediaThumb:     { width: '100%', height: rs(140) },
-  videoThumbWrap: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             rp(6),
-    paddingVertical: rp(10),
-    marginBottom:    SPACING.sm,
-  },
-  videoThumbLabel: { fontSize: FONT.sm, fontWeight: '600' },
+  mediaThumbWrap:    { marginBottom: SPACING.sm, borderRadius: RADIUS.md, overflow: 'hidden', position: 'relative' },
+  mediaThumb:        { width: '100%', height: rs(140) },
+  videoPlaceholder:  { width: '100%', height: rs(140), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  videoOverlay:      { position: 'absolute', top: rp(8), left: rp(8), flexDirection: 'row', alignItems: 'center', gap: rp(4), backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: rp(8), paddingVertical: rp(4), borderRadius: RADIUS.sm },
+  videoOverlayText:  { fontSize: rf(11), color: '#fff', fontWeight: '600' },
   reactionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

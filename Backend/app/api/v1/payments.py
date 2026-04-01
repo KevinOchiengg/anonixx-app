@@ -2,7 +2,7 @@
 payments.py — Anonixx Payments Router
 
 Two payment flows:
-  1. Connect unlock — M-Pesa (KES 260) or Stripe ($2 USD)
+  1. Connect unlock — M-Pesa (KES 49)
   2. Group entry    — handled in groups.py, not here
 
 Collections:
@@ -24,8 +24,7 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
-UNLOCK_AMOUNT_KES = 260
-UNLOCK_AMOUNT_USD = 2.00
+UNLOCK_AMOUNT_KES = 49
 
 
 # ─── Request models ───────────────────────────────────────────────────────────
@@ -226,7 +225,7 @@ async def unlock_with_stripe(
         import stripe
         stripe.api_key = settings.STRIPE_SECRET_KEY
         intent = stripe.PaymentIntent.create(
-            amount=int(UNLOCK_AMOUNT_USD * 100),  # cents
+            amount=49,  # KES 49 in cents equivalent (kept for Stripe fallback)
             currency="usd",
             payment_method=data.payment_method_id,
             confirm=True,
@@ -248,7 +247,7 @@ async def unlock_with_stripe(
         "user_id":           current_user_id,
         "provider":          "stripe",
         "payment_intent_id": intent.id,
-        "amount_usd":        UNLOCK_AMOUNT_USD,
+        "amount_kes":        UNLOCK_AMOUNT_KES,
         "status":            "pending",
         "created_at":        _now(),
         "completed_at":      None,

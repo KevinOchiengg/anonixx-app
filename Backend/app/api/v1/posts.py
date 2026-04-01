@@ -16,11 +16,13 @@ AVAILABLE_TOPICS = [
     "relationships", "anxiety", "depression", "self_growth",
     "school_career", "family", "lgbtq", "addiction",
     "sleep", "identity", "wins", "friendship",
-    "financial", "health", "general"
+    "financial", "health", "grief", "loneliness", "trauma",
+    # kept for backwards-compat with existing posts
+    "general"
 ]
 
-HEAVY_TOPICS = {"depression", "anxiety", "addiction", "self_harm"}
-LIGHT_TOPICS  = {"wins", "self_growth", "friendship", "general"}
+HEAVY_TOPICS = {"depression", "anxiety", "addiction", "self_harm", "grief", "trauma"}
+LIGHT_TOPICS  = {"wins", "self_growth", "friendship"}
 
 
 # ==================== REQUEST MODELS ====================
@@ -164,9 +166,14 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
                 "voted_option": voted_option,
                 "expired": raw_poll.get("ends_at") is not None and raw_poll["ends_at"] < now_utc().isoformat(),
             }
+        content = post.get("content")
+        created_at = post.get("created_at")
+        if not content or not created_at:
+            continue
+        created_at_iso = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
         formatted.append({
             "id": pid,
-            "content": post["content"],
+            "content": content,
             "is_anonymous": post.get("is_anonymous", True),
             "anonymous_name": post.get("anonymous_name"),
             "topics": post.get("topics", []),
@@ -180,9 +187,9 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
             "likes_count": post.get("likes_count", 0),
             "is_liked": pid in liked_set,
             "is_saved": pid in saved_set,
-            "created_at": post["created_at"].isoformat(),
-            "time_ago": get_time_ago(post["created_at"]),
-            "is_own_post": post["user_id"] == current_user_id if current_user_id else False,
+            "created_at": created_at_iso,
+            "time_ago": get_time_ago(created_at),
+            "is_own_post": post.get("user_id") == current_user_id if current_user_id else False,
             "type": "post"
         })
 

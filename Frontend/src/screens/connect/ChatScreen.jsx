@@ -1,7 +1,7 @@
 /**
  * ChatScreen.jsx
  * Anonymous chat between two connected users.
- * Features: message limit, $2 unlock, identity reveal request/response.
+ * Features: message limit, KSh 49 unlock, identity reveal request/response.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -70,7 +70,7 @@ const MessageStatus = React.memo(({ isDelivered, isRead }) => {
 });
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
-const MessageBubble = React.memo(({ message, showTime }) => {
+const MessageBubble = React.memo(({ message }) => {
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(message.is_own ? 12 : -12)).current;
 
@@ -92,16 +92,14 @@ const MessageBubble = React.memo(({ message, showTime }) => {
           {message.content}
         </Text>
       </View>
-      {showTime && (
-        <View style={[styles.bubbleFooter, message.is_own && styles.bubbleFooterOwn]}>
-          <Text style={[styles.bubbleTime, message.is_own && styles.bubbleTimeOwn]}>
-            {formatTime(message.created_at)}
-          </Text>
-          {message.is_own && (
-            <MessageStatus isDelivered={message.is_delivered} isRead={message.is_read} />
-          )}
-        </View>
-      )}
+      <View style={[styles.bubbleFooter, message.is_own && styles.bubbleFooterOwn]}>
+        <Text style={[styles.bubbleTime, message.is_own && styles.bubbleTimeOwn]}>
+          {formatTime(message.created_at)}
+        </Text>
+        {message.is_own && (
+          <MessageStatus isDelivered={message.is_delivered} isRead={message.is_read} />
+        )}
+      </View>
     </Animated.View>
   );
 });
@@ -128,9 +126,9 @@ const LimitBanner = React.memo(({ messagesLeft, onUnlock }) => {
     return (
       <Animated.View style={[styles.limitFull, { transform: [{ scale: pulseAnim }] }]}>
         <Text style={styles.limitFullTitle}>Message limit reached</Text>
-        <Text style={styles.limitFullBody}>Unlock this chat for $2 — no more limits, ever.</Text>
+        <Text style={styles.limitFullBody}>Unlock this chat for KSh 49 — no more limits, ever.</Text>
         <TouchableOpacity style={styles.unlockBtn} onPress={onUnlock} hitSlop={HIT_SLOP} activeOpacity={0.8}>
-          <Text style={styles.unlockBtnText}>Unlock — $2</Text>
+          <Text style={styles.unlockBtnText}>Unlock — KSh 49</Text>
         </TouchableOpacity>
       </Animated.View>
     );
@@ -141,7 +139,7 @@ const LimitBanner = React.memo(({ messagesLeft, onUnlock }) => {
       <Text style={styles.limitWarnText}>
         {messagesLeft} free {messagesLeft === 1 ? 'message' : 'messages'} left
         {'  ·  '}
-        <Text style={styles.limitWarnLink} onPress={onUnlock}>Unlock $2</Text>
+        <Text style={styles.limitWarnLink} onPress={onUnlock}>Unlock KSh 49</Text>
       </Text>
     </View>
   );
@@ -410,12 +408,9 @@ export default function ChatScreen({ route, navigation }) {
   }, [chatId, showToast]);
 
   // ── Render helpers ───────────────────────────────────────────────────────────
-  const renderMessage = useCallback(({ item, index }) => {
-    const isLast  = index === messages.length - 1;
-    const nextMsg = messages[index + 1];
-    const showTime = isLast || (nextMsg && nextMsg.is_own !== item.is_own);
-    return <MessageBubble message={item} showTime={showTime} />;
-  }, [messages.length]);
+  const renderMessage = useCallback(({ item }) => {
+    return <MessageBubble message={item} showTime />;
+  }, []);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
@@ -456,19 +451,21 @@ export default function ChatScreen({ route, navigation }) {
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.revealBtn,
-              chatInfo?.reveal_status === 'pending' && styles.revealBtnPending,
-            ]}
-            onPress={() => setShowReveal(true)}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.revealBtnText}>
-              {chatInfo?.reveal_status === 'accepted' ? '✨' : '👁'}
-            </Text>
-          </TouchableOpacity>
+          {chatInfo?.is_unlocked && (
+            <TouchableOpacity
+              style={[
+                styles.revealBtn,
+                chatInfo?.reveal_status === 'pending' && styles.revealBtnPending,
+              ]}
+              onPress={() => setShowReveal(true)}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.revealBtnText}>
+                {chatInfo?.reveal_status === 'accepted' ? '✨' : '👁'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Limit banner */}

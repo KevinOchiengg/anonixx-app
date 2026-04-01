@@ -575,7 +575,7 @@ async def send_message(
         if chat.get("message_count", 0) >= FREE_MESSAGE_LIMIT:
             raise HTTPException(
                 status_code=402,
-                detail=f"Message limit reached ({FREE_MESSAGE_LIMIT} free messages). Unlock for $2."
+                detail=f"Message limit reached ({FREE_MESSAGE_LIMIT} free messages). Unlock for KSh 49."
             )
 
     if not data.content.strip():

@@ -109,6 +109,11 @@ def member_range_label(count: int) -> str:
 
 
 def generate_agora_token(channel: str, uid: int, role: str = "publisher") -> str:
+    if not settings.AGORA_APP_ID or not settings.AGORA_APP_CERTIFICATE:
+        raise HTTPException(
+            status_code=503,
+            detail="Audio rooms are not configured yet. Add AGORA_APP_ID and AGORA_APP_CERTIFICATE to your .env file."
+        )
     from agora_token_builder import RtcTokenBuilder
     expire_at  = int(_now().timestamp()) + TOKEN_EXPIRY
     agora_role = 1 if role == "publisher" else 2
@@ -602,6 +607,28 @@ async def raise_hand(
         "raised_at": _now(),
     })
     return {"message": "Hand raised. Waiting for the host."}
+
+
+@router.get("/{circle_id}/room/raises")
+async def get_pending_raises(
+    circle_id:    str,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_creator_or_admin(db, circle, str(current_user.id))
+
+    raises = await db.circle_hand_raises.find(
+        {"circle_id": circle_id, "status": "pending"}
+    ).sort("raised_at", 1).to_list(50)
+
+    result = []
+    for r in raises:
+        user = await db.users.find_one({"_id": oid(r["user_id"])})
+        anon_name = (user or {}).get("anonymous_name") or "Anonymous"
+        result.append({"id": r["user_id"], "anon_name": anon_name})
+
+    return {"raises": result}
 
 
 @router.post("/{circle_id}/room/approve/{user_id}")

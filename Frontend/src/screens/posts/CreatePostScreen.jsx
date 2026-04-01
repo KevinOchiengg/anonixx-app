@@ -68,7 +68,7 @@ const StarryBackground = React.memo(() => (
 ));
 
 const MAX_IMAGES               = 5;
-const MAX_CHARS                = 1000;
+const MAX_CHARS                = 2000;
 const MAX_POLL_OPTIONS         = 4;
 
 const PROMPTS = [
@@ -198,7 +198,8 @@ export default function CreatePostScreen({ route, navigation }) {
   }, [canPost, postBtnScale, postBtnOpacity]);
 
   const handleContentChange = useCallback((val) => {
-    setContent(val.slice(0, MAX_CHARS));
+    const cleaned = val.trimStart().replace(/\n{3,}/g, '\n\n');
+    setContent(cleaned.slice(0, MAX_CHARS));
   }, []);
 
   const toggleAnonymous = useCallback(() => {
@@ -410,7 +411,7 @@ export default function CreatePostScreen({ route, navigation }) {
       <StarryBackground />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Animated.View style={[{ flex: 1 }, { opacity: entranceFade }]}>
 
@@ -474,6 +475,7 @@ export default function CreatePostScreen({ route, navigation }) {
                 autoCorrect
                 autoCapitalize="sentences"
                 selectionColor={T.primary}
+                scrollEnabled
               />
 
               <View style={styles.inputDivider} />
@@ -831,6 +833,7 @@ const styles = StyleSheet.create({
     fontSize:          FONT.lg,
     lineHeight:        rf(28),
     minHeight:         rh(160),
+    maxHeight:         rh(340),
     color:             T.text,
     textAlignVertical: 'top',
     fontFamily:        'PlayfairDisplay-Regular',
