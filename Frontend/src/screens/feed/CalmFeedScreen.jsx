@@ -226,10 +226,13 @@ export default function CalmFeedScreen({ navigation, route }) {
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const currentOffset = reset ? 0 : sessionPosts;
 
-      const response = await fetch(
+      const controller = new AbortController();
+      const timeout    = setTimeout(() => controller.abort(), 15000);
+      const response   = await fetch(
         `${API_BASE_URL}/api/v1/posts/calm-feed?session_posts=${currentOffset}`,
-        { headers }
+        { headers, signal: controller.signal }
       );
+      clearTimeout(timeout);
 
       if (!response.ok) {
         if (response.status === 401) {

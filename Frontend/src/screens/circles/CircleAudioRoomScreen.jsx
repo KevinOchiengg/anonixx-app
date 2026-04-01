@@ -396,13 +396,25 @@ export default function CircleAudioRoomScreen({ route, navigation }) {
   useEffect(() => {
     const init = async () => {
       try {
+        // Request microphone permission first
+        if (Platform.OS !== 'web') {
+          const { Audio } = await import('expo-av');
+          const { status } = await Audio.requestPermissionsAsync();
+          if (status !== 'granted') {
+            showToast({ type: 'error', message: 'Microphone permission is required to join the room.' });
+            navigation.goBack();
+            return;
+          }
+        }
+
         const token = await AsyncStorage.getItem('token');
         const res   = await fetch(
           `${API_BASE_URL}/api/v1/circles/${circleId}/room/token`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
-          showToast({ type: 'error', message: 'Could not join the room.' });
+          const err = await res.json().catch(() => ({}));
+          showToast({ type: 'error', message: err.detail || 'Could not join the room.' });
           navigation.goBack();
           return;
         }
@@ -418,6 +430,7 @@ export default function CircleAudioRoomScreen({ route, navigation }) {
           const engine = createAgoraRtcEngine();
           agoraEngine.current = engine;
           engine.initialize({ appId: data.app_id });
+          engine.enableAudio();
           engine.setChannelProfile(
             ChannelProfileType.ChannelProfileLiveBroadcasting
           );
@@ -426,6 +439,7 @@ export default function CircleAudioRoomScreen({ route, navigation }) {
               ? ClientRoleType.ClientRoleBroadcaster
               : ClientRoleType.ClientRoleAudience
           );
+          engine.muteLocalAudioStream(data.role !== 'publisher');
           engine.joinChannel(data.token, data.channel, data.uid, {});
 
           if (data.role === 'publisher') setIsMuted(false);
@@ -487,6 +501,25 @@ export default function CircleAudioRoomScreen({ route, navigation }) {
     return () => clearInterval(pollRef.current);
   }, [pollRoomStatus]);
 
+  // ── Upgrade Agora role when hand raise is approved ────────────────────────
+  const prevHandStatus = useRef(null);
+  useEffect(() => {
+    const prev = prevHandStatus.current;
+    prevHandStatus.current = myHandStatus;
+
+    if (prev !== 'approved' && myHandStatus === 'approved' && agoraEngine.current) {
+      (async () => {
+        try {
+          const { ClientRoleType } = await import('react-native-agora');
+          agoraEngine.current.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+          agoraEngine.current.muteLocalAudioStream(false);
+          setIsMuted(false);
+          showToast({ type: 'success', message: "You're now a speaker. Unmuted!" });
+        } catch {}
+      })();
+    }
+  }, [myHandStatus, showToast]);
+
   // ── Raise / lower hand ────────────────────────────────────────────────────
   const handleRaiseHand = useCallback(async () => {
     if (myHandStatus === 'pending') return;
@@ -513,11 +546,17 @@ export default function CircleAudioRoomScreen({ route, navigation }) {
   const handleViewRaises = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      // We'll approximate — in production you'd have a dedicated endpoint
-      // For now show placeholder
-      setShowRaises(true);
+      const res   = await fetch(
+        `${API_BASE_URL}/api/v1/circles/${circleId}/room/raises`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setPendingList(data.raises || []);
+      }
     } catch {}
-  }, []);
+    setShowRaises(true);
+  }, [circleId]);
 
   const handleApprove = useCallback(async (userId) => {
     try {

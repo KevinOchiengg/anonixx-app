@@ -26,10 +26,12 @@ CATEGORIES = ["love", "fun", "adventure", "friendship", "spicy"]
 # ==================== REQUEST MODELS ====================
 
 class CreateDropRequest(BaseModel):
-    confession: str
+    confession: Optional[str] = None
     category: str = "love"
     is_group: bool = False
     group_size: Optional[int] = None  # e.g. 4 for "looking for a 4th"
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None  # "image" or "video"
 
 
 class ReactToDropRequest(BaseModel):
@@ -200,6 +202,36 @@ async def trigger_mpesa_stk(phone: str, amount: float, account_ref: str, descrip
         return {"success": False, "error": str(e)}
 
 
+# ==================== HELPERS ============================
+
+def _media_preview_url(media_url: Optional[str], media_type: Optional[str]) -> Optional[str]:
+    """
+    Returns a static image URL suitable for og:image.
+    - Images: use the URL as-is (already a Cloudinary image URL).
+    - Videos: transform the Cloudinary video URL into a JPG thumbnail
+      by injecting 'w_1200,h_630,c_fill,so_0' and swapping the extension.
+    """
+    if not media_url:
+        return None
+    if media_type == "image":
+        return media_url
+    if media_type == "video":
+        # Cloudinary video URL → poster frame thumbnail
+        # e.g. .../video/upload/v123/folder/file.mp4
+        #   →  .../video/upload/w_1200,h_630,c_fill,so_0/v123/folder/file.jpg
+        import re
+        url = re.sub(
+            r"(/video/upload/)(v\d+/)?",
+            lambda m: f"{m.group(1)}w_1200,h_630,c_fill,so_0/{m.group(2) or ''}",
+            media_url,
+            count=1,
+        )
+        # swap extension to .jpg
+        url = re.sub(r"\.\w+$", ".jpg", url)
+        return url
+    return None
+
+
 # ==================== CREATE DROP ========================
 
 @router.post("")
@@ -251,7 +283,7 @@ async def create_drop(
         "unlock_count": 0,
         "admirer_count": 0,
         "reactions": [],
-        "card_image_url": None,
+        "card_image_url": _media_preview_url(data.media_url, data.media_type),
         "created_at": now_utc(),
     }
 
@@ -370,6 +402,7 @@ async def get_marketplace(
             "confession": drop.get("confession"),
             "media_url": drop.get("media_url"),
             "media_type": drop.get("media_type"),
+            "card_image_url": drop.get("card_image_url"),
             "category": drop["category"],
             "is_group": drop["is_group"],
             "group_size": drop.get("group_size"),
@@ -377,7 +410,7 @@ async def get_marketplace(
             "is_night_mode": drop.get("is_night_mode", False),
             "unlock_count": drop.get("unlock_count", 0),
             "admirer_count": drop.get("admirer_count", 0),
-            "reactions": drop.get("reactions", [])[-5:],  # last 5 reactions
+            "reactions": drop.get("reactions", [])[-5:],
             "time_left": get_time_left(drop["expires_at"]),
             "time_ago": get_time_ago(drop["created_at"]),
             "already_unlocked": already_unlocked,
@@ -504,22 +537,36 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     store_ios     = "https://apps.apple.com/app/anonixx"
     store_android = "https://play.google.com/store/apps/details?id=com.anonixx"
 
-    # Pull card image URL so og:image shows the confession card in link previews
+    # Pull drop data for og tags
     card_image_url = ""
+    og_title       = "Someone dropped an anonymous confession"
+    og_description = "Open Anonixx to see what they couldn't say out loud."
+
     if ObjectId.is_valid(drop_id):
         drop_doc = await db["drops"].find_one(
             {"_id": ObjectId(drop_id)},
-            {"card_image_url": 1},
+            {"card_image_url": 1, "confession": 1, "media_type": 1},
         )
         if drop_doc:
             card_image_url = drop_doc.get("card_image_url") or ""
+            confession     = drop_doc.get("confession") or ""
+            media_type     = drop_doc.get("media_type") or ""
+            if confession:
+                # truncate to 100 chars for og:description
+                snippet        = confession[:100] + ("…" if len(confession) > 100 else "")
+                og_description = f'"{snippet}"'
+            elif media_type == "image":
+                og_description = "An anonymous image drop. Tap to see it."
+            elif media_type == "video":
+                og_description = "An anonymous video drop. Tap to see it."
 
     open_url = f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open"
 
     if card_image_url:
+        img_type = "video/mp4" if card_image_url.endswith(".mp4") else "image/jpeg"
         og_image_tags = f"""  <meta property="og:image"        content="{card_image_url}">
   <meta property="og:image:secure_url" content="{card_image_url}">
-  <meta property="og:image:type"   content="image/png">
+  <meta property="og:image:type"   content="{img_type}">
   <meta property="og:image:width"  content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card"        content="summary_large_image">
@@ -538,11 +585,16 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta property="og:type"      content="website">
-  <meta property="og:url"       content="{open_url}">
-  <meta property="og:site_name" content="Anonixx">
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="{open_url}">
+  <meta property="og:site_name"   content="Anonixx">
+  <meta property="og:title"       content="{og_title}">
+  <meta property="og:description" content="{og_description}">
+  <meta name="description"        content="{og_description}">
+  <meta name="twitter:title"      content="{og_title}">
+  <meta name="twitter:description" content="{og_description}">
 {og_image_tags}
-  <title>Opening Anonixx…</title>
+  <title>{og_title} · Anonixx</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{
@@ -1387,7 +1439,10 @@ async def get_drops_inbox(
     }).sort("created_at", -1):
         active_drops.append({
             "id": str(drop["_id"]),
-            "confession": drop["confession"],
+            "confession": drop.get("confession"),
+            "media_url": drop.get("media_url"),
+            "media_type": drop.get("media_type"),
+            "card_image_url": drop.get("card_image_url"),
             "category": drop["category"],
             "unlock_count": drop.get("unlock_count", 0),
             "admirer_count": drop.get("admirer_count", 0),

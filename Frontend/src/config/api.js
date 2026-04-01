@@ -1,4 +1,4 @@
-const BACKENDS = {
+export const BACKENDS = {
   production: 'https://anonixx-app.onrender.com',
   ngrok: 'https://ulysses-apronlike-alethia.ngrok-free.dev',
   localhost: 'http://192.168.100.55:8000',

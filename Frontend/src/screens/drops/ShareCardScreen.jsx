@@ -19,7 +19,7 @@ import { useDispatch } from 'react-redux';
 import { FileImage, Film, Type, X } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
-import { API_BASE_URL } from '../../config/api';
+import { API_BASE_URL, BACKENDS } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
 
 // ─── Theme ────────────────────────────────────────────────────
@@ -194,7 +194,7 @@ export default function ShareCardScreen({ navigation }) {
   }, []);
 
   const shareLink = useCallback(async (id, preview) => {
-    const shareUrl = `${API_BASE_URL}/api/v1/drops/${id}/open`;
+    const shareUrl = `${BACKENDS.production}/api/v1/drops/${id}/open`;
     const body = `🎭 *anonixx.drop*\n\n_"${preview}"_\n\n*someone just dropped this. anonymously.*\n*find out here →* ${shareUrl}`;
     try {
       const { Share } = require('react-native');
@@ -303,7 +303,10 @@ export default function ShareCardScreen({ navigation }) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err?.detail || `Server error ${res.status}`);
+        const detail = Array.isArray(err?.detail)
+          ? err.detail.map(e => e.msg || String(e)).join('. ')
+          : err?.detail;
+        throw new Error(detail || `Server error ${res.status}`);
       }
 
       const data = await res.json();
@@ -399,7 +402,7 @@ export default function ShareCardScreen({ navigation }) {
                 captureRef={captureRef}
                 inputRef={inputRef}
                 readOnly={dropped}
-                shareUrl={dropped ? `${API_BASE_URL}/api/v1/drops/${dropId}/open` : null}
+                shareUrl={dropped ? `${BACKENDS.production}/api/v1/drops/${dropId}/open` : null}
               />
               {dropped && (
                 <View style={styles.tapOverlay}>
@@ -506,7 +509,7 @@ export default function ShareCardScreen({ navigation }) {
                 <TouchableOpacity
                   style={styles.copyBtn}
                   onPress={async () => {
-                    await Clipboard.setStringAsync(`${API_BASE_URL}/api/v1/drops/${dropId}/open`);
+                    await Clipboard.setStringAsync(`${BACKENDS.production}/api/v1/drops/${dropId}/open`);
                     showToast({ type: 'success', message: 'Link copied.' });
                   }}
                   activeOpacity={0.75}

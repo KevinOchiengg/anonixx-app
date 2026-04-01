@@ -16,10 +16,8 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, MessageCircle, UserCheck, Clock } from 'lucide-react-native';
-import { useSelector } from 'react-redux';
 import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../ui/Toast';
-import CoinGate from '../payments/CoinGate';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
@@ -85,12 +83,10 @@ export default function AnonProfileSheet({
   visible, anonymousName, onClose, navigation,
 }) {
   const { showToast }  = useToast();
-  const balance        = useSelector((state) => state.coins.balance);
   const [profile,      setProfile]      = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
   const [connectLoading, setConnectLoading] = useState(false);
-  const [gateVisible,  setGateVisible]  = useState(false);
 
   const slideAnim     = useRef(new Animated.Value(H)).current;
   const backdropOp    = useRef(new Animated.Value(0)).current;
@@ -220,8 +216,8 @@ export default function AnonProfileSheet({
 
     if (profile.connect_status === 'pending') return;
 
-    // New request → pay 60 coins via CoinGate
-    setGateVisible(true);
+    // New request → send directly, no coin cost
+    sendConnectRequest();
   }, [profile, connectLoading, anonymousName, closeSheet, navigation]);
 
   const accentColor = profile?.avatar_color ?? T.primary;
@@ -288,18 +284,6 @@ export default function AnonProfileSheet({
             </TouchableOpacity>
           </View>
         )}
-
-        {/* Coin gate — sits outside the sheet so it overlays correctly */}
-        <CoinGate
-          visible={gateVisible}
-          reason="connect_unlock"
-          cost={60}
-          actionLabel="Send connect request"
-          actionEmoji="🔗"
-          description={`Connect with ${anonymousName}`}
-          onConfirm={sendConnectRequest}
-          onClose={() => setGateVisible(false)}
-        />
 
         {/* Profile content */}
         {profile && !loading && (

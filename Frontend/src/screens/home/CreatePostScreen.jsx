@@ -222,15 +222,15 @@ export default function CreatePostScreen({ navigation }) {
         {/* Content Input */}
         <TextInput
           value={content}
-          onChangeText={setContent}
+          onChangeText={(val) => setContent(val.trimStart().replace(/\n{3,}/g, '\n\n'))}
           placeholder="What's on your mind?"
           placeholderTextColor='#6b7280'
           multiline
           style={styles.textInput}
-          maxLength={1000}
+          maxLength={2000}
         />
 
-        <Text style={styles.charCount}>{content.length}/1000</Text>
+        <Text style={styles.charCount}>{content.length}/2000</Text>
 
         {/* Media Preview */}
         {mediaUri && (

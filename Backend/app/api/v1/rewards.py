@@ -49,6 +49,15 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _as_utc(dt: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware (UTC). MongoDB stores naive datetimes."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _current_month(dt: datetime) -> str:
     return dt.strftime("%Y-%m")
 
@@ -74,7 +83,7 @@ def _compute_streak(last_claim_at: Optional[datetime], current_streak: int, now:
     """
     if not last_claim_at:
         return 1
-    hours_since = (now - last_claim_at).total_seconds() / 3600
+    hours_since = (now - _as_utc(last_claim_at)).total_seconds() / 3600
     if hours_since <= STREAK_RESET_HRS:
         return current_streak + 1
     return 1
@@ -94,7 +103,7 @@ async def claim_daily_reward(
         raise HTTPException(status_code=404, detail="User not found.")
 
     # ── Guard 1: Account age ──────────────────────────────────
-    created_at = user.get("created_at", now)
+    created_at = _as_utc(user.get("created_at", now))
     if (now - created_at).days < ACCOUNT_AGE_DAYS:
         days_left = ACCOUNT_AGE_DAYS - (now - created_at).days
         raise HTTPException(
@@ -103,7 +112,7 @@ async def claim_daily_reward(
         )
 
     # ── Guard 2: 22-hour cooldown ─────────────────────────────
-    last_claim_at: Optional[datetime] = user.get("last_claim_at")
+    last_claim_at: Optional[datetime] = _as_utc(user.get("last_claim_at"))
     if last_claim_at:
         hours_since = (now - last_claim_at).total_seconds() / 3600
         if hours_since < CLAIM_COOLDOWN_HRS:
@@ -185,9 +194,9 @@ async def get_streak(
         raise HTTPException(status_code=404, detail="User not found.")
 
     now          = _now()
-    last_claim   = user.get("last_claim_at")
+    last_claim   = _as_utc(user.get("last_claim_at"))
     streak       = user.get("streak_count", 0)
-    created_at   = user.get("created_at", now)
+    created_at   = _as_utc(user.get("created_at", now))
     account_days = (now - created_at).days
 
     # Can they claim right now?
