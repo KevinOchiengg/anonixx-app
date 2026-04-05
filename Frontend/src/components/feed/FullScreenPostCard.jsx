@@ -15,9 +15,8 @@ import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
 
-// ─────────────────────────────────────────────
-// Design tokens (Cinematic Coral)
-// ─────────────────────────────────────────────
+const BASE_URL = 'https://anonixx-app.onrender.com';
+
 const THEME = {
   background:    '#0b0f18',
   surface:       '#151924',
@@ -46,9 +45,7 @@ const TOPIC_META = {
   general:        { emoji: '🌟', label: 'General'    },
 };
 
-// ─────────────────────────────────────────────
-// ActionButton
-// ─────────────────────────────────────────────
+// ─── ActionButton ─────────────────────────────────────────────
 const ActionButton = React.memo(({ icon: Icon, count, onPress, active, activeColor }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -86,9 +83,7 @@ const ActionButton = React.memo(({ icon: Icon, count, onPress, active, activeCol
   );
 });
 
-// ─────────────────────────────────────────────
-// FullScreenPostCard
-// ─────────────────────────────────────────────
+// ─── FullScreenPostCard ───────────────────────────────────────
 function FullScreenPostCard({ post, onReact, onComment }) {
   const [saved, setSaved] = useState(false);
 
@@ -114,14 +109,16 @@ function FullScreenPostCard({ post, onReact, onComment }) {
     } catch { /* silent */ }
   }, [post.id]);
 
+  // ── Share — HTTPS link so it's tappable in WhatsApp/SMS ────
   const handleShare = useCallback(async () => {
     try {
+      const link     = `${BASE_URL}/api/v1/posts/${post.id}/open`;
+      const preview  = post.content?.substring(0, 100) ?? '';
+      const ellipsis = (post.content?.length ?? 0) > 100 ? '…' : '';
       await Share.share({
-        message: Platform.OS === 'ios'
-          ? post.content
-          : `${post.content}\n\nanonixx://confession/${post.id}`,
-        url:   `anonixx://confession/${post.id}`,
-        title: 'Anonymous confession on Anonixx',
+        message: `"${preview}${ellipsis}"\n\nRead on Anonixx 👇\n${link}`,
+        url:     link,
+        title:   'Anonymous confession on Anonixx',
       });
     } catch { /* silent */ }
   }, [post.id, post.content]);
@@ -139,23 +136,19 @@ function FullScreenPostCard({ post, onReact, onComment }) {
   return (
     <View style={styles.container}>
 
-      {/* Gradient scrims */}
       <View style={styles.scrimTop}    pointerEvents="none" />
       <View style={styles.scrimBottom} pointerEvents="none" />
 
-      {/* Topic pill */}
       <Animated.View style={[styles.topicPill, { opacity: entranceOp }]} pointerEvents="none">
         <Text style={styles.topicEmoji}>{topicMeta.emoji}</Text>
         <Text style={styles.topicLabel}>{topicMeta.label}</Text>
       </Animated.View>
 
-      {/* Views badge */}
       <View style={styles.viewsBadge} pointerEvents="none">
         <Eye size={rs(11)} color="rgba(255,255,255,0.4)" strokeWidth={2} />
         <Text style={styles.viewsText}>{post.views_count ?? 0}</Text>
       </View>
 
-      {/* Confession text */}
       <Animated.View
         style={[
           styles.centerContent,
@@ -163,19 +156,15 @@ function FullScreenPostCard({ post, onReact, onComment }) {
         ]}
         pointerEvents="none"
       >
-        {/* Decorative quote behind text */}
         <Text style={styles.quoteChar} pointerEvents="none">"</Text>
-
         <Text style={[styles.confessionText, isLong && styles.confessionTextSmall]}>
           {post.content || ''}
         </Text>
       </Animated.View>
 
-      {/* Bottom row */}
       <Animated.View
         style={[styles.bottomRow, { opacity: entranceOp, transform: [{ translateY: entranceY }] }]}
       >
-        {/* Author */}
         <View style={styles.authorBlock}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{avatarChar}</Text>
@@ -190,7 +179,6 @@ function FullScreenPostCard({ post, onReact, onComment }) {
           </View>
         </View>
 
-        {/* Actions */}
         <View style={styles.actions}>
           <ActionButton
             icon={Heart}
@@ -227,9 +215,6 @@ function FullScreenPostCard({ post, onReact, onComment }) {
 
 export default React.memo(FullScreenPostCard);
 
-// ─────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     width:           SCREEN.width,
@@ -237,24 +222,18 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.background,
     overflow:        'hidden',
   },
-
   scrimTop: {
     position:        'absolute',
-    top:             0,
-    left:            0,
-    right:           0,
+    top:             0, left: 0, right: 0,
     height:          SCREEN.height * 0.28,
     backgroundColor: 'rgba(11,15,24,0.55)',
   },
   scrimBottom: {
     position:        'absolute',
-    bottom:          0,
-    left:            0,
-    right:           0,
+    bottom:          0, left: 0, right: 0,
     height:          SCREEN.height * 0.44,
     backgroundColor: 'rgba(11,15,24,0.80)',
   },
-
   topicPill: {
     position:          'absolute',
     top:               rh(58),
@@ -277,7 +256,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-
   viewsBadge: {
     position:      'absolute',
     top:           rh(62),
@@ -291,13 +269,9 @@ const styles = StyleSheet.create({
     color:      'rgba(255,255,255,0.38)',
     fontWeight: '500',
   },
-
   centerContent: {
     position:          'absolute',
-    top:               0,
-    left:              0,
-    right:             0,
-    bottom:            0,
+    top: 0, left: 0, right: 0, bottom: 0,
     justifyContent:    'center',
     alignItems:        'center',
     paddingHorizontal: rp(36),
@@ -327,7 +301,6 @@ const styles = StyleSheet.create({
     fontSize:   rf(20),
     lineHeight: rf(20) * 1.62,
   },
-
   bottomRow: {
     position:       'absolute',
     bottom:         rh(44),
@@ -337,7 +310,6 @@ const styles = StyleSheet.create({
     alignItems:     'flex-end',
     justifyContent: 'space-between',
   },
-
   authorBlock: {
     flexDirection: 'row',
     alignItems:    'center',
@@ -370,7 +342,6 @@ const styles = StyleSheet.create({
     fontSize: rf(12),
     opacity:  0.65,
   },
-
   actions: {
     flexDirection: 'row',
     alignItems:    'center',

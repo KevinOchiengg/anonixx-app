@@ -166,9 +166,10 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
                 "voted_option": voted_option,
                 "expired": raw_poll.get("ends_at") is not None and raw_poll["ends_at"] < now_utc().isoformat(),
             }
-        content = post.get("content")
+        content = post.get("content") or ""
         created_at = post.get("created_at")
-        if not content or not created_at:
+        has_media = bool(post.get("images") or post.get("video_url") or post.get("audio_url"))
+        if (not content and not has_media) or not created_at:
             continue
         created_at_iso = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
         formatted.append({
@@ -690,9 +691,14 @@ async def add_to_thread(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    content = data.get("content", "").strip()
-    if not content:
-        raise HTTPException(status_code=400, detail="Content is required")
+    content   = data.get("content", "").strip()
+    gif_url   = data.get("gif_url",   "").strip() if data.get("gif_url")   else None
+    image_url = data.get("image_url", "").strip() if data.get("image_url") else None
+    parent_id = data.get("parent_id")
+
+    # Require at least one of: text, gif, or image
+    if not content and not gif_url and not image_url:
+        raise HTTPException(status_code=400, detail="Comment must have text, a GIF, or an image.")
 
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
@@ -707,13 +713,22 @@ async def add_to_thread(
         raise HTTPException(status_code=404, detail="User not found")
 
     thread_doc = {
-        "post_id": ObjectId(post_id),
-        "user_id": ObjectId(current_user_id),
-        "content": content,
+        "post_id":        ObjectId(post_id),
+        "user_id":        ObjectId(current_user_id),
+        "content":        content,
         "anonymous_name": user.get("anonymous_name", "Anonymous"),
-        "depth": 0,
-        "created_at": now_utc()
+        "depth":          0,
+        "created_at":     now_utc(),
     }
+    if gif_url:
+        thread_doc["gif_url"] = gif_url
+    if image_url:
+        thread_doc["image_url"] = image_url
+    if parent_id:
+        try:
+            thread_doc["parent_id"] = ObjectId(parent_id)
+        except:
+            pass
 
     result = await db["threads"].insert_one(thread_doc)
     await db["posts"].update_one({"_id": ObjectId(post_id)}, {"$inc": {"thread_count": 1}})
@@ -728,13 +743,21 @@ async def add_to_thread(
             db
         )
 
-    return {
-        "id": str(result.inserted_id),
-        "content": content,
+    response = {
+        "id":             str(result.inserted_id),
+        "content":        content,
         "anonymous_name": user.get("anonymous_name", "Anonymous"),
-        "time_ago": "just now",
-        "message": "Reply added",
+        "time_ago":       "just now",
+        "likes_count":    0,
+        "liked_by_me":    False,
+        "replies":        [],
+        "message":        "Reply added",
     }
+    if gif_url:
+        response["gif_url"] = gif_url
+    if image_url:
+        response["image_url"] = image_url
+    return response
 
 
 @router.get("/{post_id}/thread")

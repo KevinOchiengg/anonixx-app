@@ -13,6 +13,7 @@ import { useUnread } from '../context/UnreadContext';
 
 // Feed
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen';
+import MediaFeedScreen from '../screens/feed/MediaFeedScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SearchScreen from '../screens/feed/SearchScreen';
 import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
@@ -111,6 +112,7 @@ function FeedStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="FeedMain" component={CalmFeedScreen} />
+      <Stack.Screen name="MediaFeed" component={MediaFeedScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
       <Stack.Screen name="CreatePost" component={CreatePostScreen} />
@@ -168,7 +170,6 @@ function MessagesStack() {
 // ─── TAB NAVIGATOR ────────────────────────────────────────────
 export default function TabNavigator() {
   const insets      = useSafeAreaInsets();
-  const bottomPad   = Math.max(insets.bottom, 16);
   const { unreadCount } = useUnread();
 
   return (
@@ -178,8 +179,8 @@ export default function TabNavigator() {
         sceneContainerStyle: { backgroundColor: THEME.background },
         tabBarStyle: {
           ...styles.tabBar,
-          height: 60 + bottomPad,
-          paddingBottom: bottomPad,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom,
         },
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.inactive,
@@ -242,6 +243,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 20,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255,255,255,0.08)'
   },
   tabBarLabel: {
     fontSize: 11,
@@ -274,23 +277,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tabBadge: {
-    position:        'absolute',
-    top:             -4,
-    right:           -8,
+    position: 'absolute',
+    top: -4,
+    right: -8,
     backgroundColor: THEME.primary,
-    borderRadius:    8,
-    minWidth:        16,
-    height:          16,
-    alignItems:      'center',
-    justifyContent:  'center',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 3,
-    borderWidth:     1.5,
-    borderColor:     THEME.background,
+    borderWidth: 1.5,
+    borderColor: THEME.background,
   },
   tabBadgeText: {
-    fontSize:   9,
+    fontSize: 9,
     fontWeight: '700',
-    color:      '#fff',
+    color: '#fff',
   },
   centerButtonContainer: {
     top: -20,

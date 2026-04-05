@@ -39,6 +39,29 @@ const THEME = {
 const MESSAGE_LIMIT = 50;
 const WARN_AT = 40;
 
+const formatMessageTime = (raw) => {
+  if (!raw) return '';
+  try {
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return raw;
+    const now = new Date();
+    const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return 'Yesterday ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffDays < 7) {
+      return d.toLocaleDateString([], { weekday: 'short' }) + ' ' +
+             d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+             d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  } catch {
+    return '';
+  }
+};
+
 // ─────────────────────────────────────────────
 // STARRY BACKGROUND
 // ─────────────────────────────────────────────
@@ -255,9 +278,7 @@ export default function ChatScreen({ route, navigation }) {
           if (conn.message_count !== undefined) {
             setMessageCount(conn.message_count)
           }
-        } catch (err) {
-          console.warn('Could not refresh connection status:', err)
-        }
+        } catch { /* silent */ }
       }
 
       refreshStatus()
@@ -295,7 +316,7 @@ export default function ChatScreen({ route, navigation }) {
           <View style={[styles.messageBubble, isOwn ? styles.ownBubble : styles.theirBubble]}>
             {!isOwn && <Text style={styles.senderName}>{item.senderName}</Text>}
             <Text style={styles.messageText}>{item.content}</Text>
-            <Text style={styles.messageTime}>{item.createdAt}</Text>
+            <Text style={styles.messageTime}>{formatMessageTime(item.createdAt)}</Text>
           </View>
         </View>
       </View>

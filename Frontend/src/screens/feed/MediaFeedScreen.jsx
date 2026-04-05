@@ -6,7 +6,6 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -29,11 +28,14 @@ import {
   Pause,
   Play,
   Share2,
+  Trash2,
   Volume2,
   VolumeX,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import Slider from '@react-native-community/slider';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -54,7 +56,7 @@ const THEME = {
 
 
 // ─── VIDEO SLIDE ──────────────────────────────────────────────
-const VideoSlide = ({ post, isActive, initialTime, onLike, liked, likesCount, onSave, saved, onComment, commentCount, navigation }) => {
+const VideoSlide = ({ post, isActive, initialTime, onLike, liked, likesCount, onSave, saved, onComment, commentCount, navigation, isOwnPost, onDelete }) => {
   const [muted, setMuted] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const controlsTimer = useRef(null);
@@ -102,7 +104,6 @@ const VideoSlide = ({ post, isActive, initialTime, onLike, liked, likesCount, on
   useEffect(() => {
     if (isActive) {
       player.muted = muted;
-      // Seek to initialTime on first activation if not yet done
       if (!hasSeededTime.current && initialTime > 0) {
         hasSeededTime.current = true;
         player.seekBy(initialTime);
@@ -110,6 +111,8 @@ const VideoSlide = ({ post, isActive, initialTime, onLike, liked, likesCount, on
       player.play();
     } else {
       player.pause();
+      setVideoCurrentTime(0);
+      setVideoDuration(0);
     }
   }, [isActive]);
 
@@ -234,6 +237,7 @@ const VideoSlide = ({ post, isActive, initialTime, onLike, liked, likesCount, on
         <ActionBtn icon={<Share2 size={28} color="#fff" />} count={null} onPress={async () => {
           try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch (e) {}
         }} />
+        {isOwnPost && <DeleteBtn onDelete={onDelete} />}
         <TouchableOpacity style={ss.muteBtn} onPress={() => setMuted(v => !v)}>
           {muted ? <VolumeX size={22} color="#fff" /> : <Volume2 size={22} color="#fff" />}
         </TouchableOpacity>
@@ -308,7 +312,7 @@ const VideoSlide = ({ post, isActive, initialTime, onLike, liked, likesCount, on
 };
 
 // ─── AUDIO SLIDE ──────────────────────────────────────────────
-const AudioSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, onComment, commentCount }) => {
+const AudioSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, onComment, commentCount, isOwnPost, onDelete }) => {
   const soundRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -388,6 +392,7 @@ const AudioSlide = ({ post, isActive, onLike, liked, likesCount, onSave, saved, 
         <ActionBtn icon={<Share2 size={26} color="#fff" />} count={null} onPress={async () => {
           try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch (e) {}
         }} />
+        {isOwnPost && <DeleteBtn onDelete={onDelete} />}
       </View>
 
       {/* Center audio player */}
@@ -491,11 +496,42 @@ const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef }) => (
   </TouchableOpacity>
 );
 
+const DeleteBtn = React.memo(({ onDelete }) => {
+  const [confirming, setConfirming] = useState(false);
+  const timerRef = useRef(null);
+
+  const handlePress = () => {
+    if (confirming) {
+      clearTimeout(timerRef.current);
+      setConfirming(false);
+      onDelete();
+    } else {
+      setConfirming(true);
+      timerRef.current = setTimeout(() => setConfirming(false), 2500);
+    }
+  };
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  return (
+    <TouchableOpacity style={ss.actionBtn} onPress={handlePress} activeOpacity={0.9}>
+      <Trash2 size={26} color={confirming ? '#ef4444' : '#fff'} />
+      <Text style={[ss.actionCount, confirming && { color: '#ef4444' }]}>
+        {confirming ? 'confirm' : 'delete'}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
 // ─── MEDIA FEED SCREEN ────────────────────────────────────────
 export default function MediaFeedScreen({ route, navigation }) {
   const { posts, startIndex = 0, startTime = 0 } = route.params;
   const { isAuthenticated } = useAuth();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+  const slideHeight = height - tabBarHeight;
+  const [listHeight, setListHeight] = useState(slideHeight);
 
   const [activeIndex, setActiveIndex] = useState(startIndex);
   const [likeMap, setLikeMap] = useState(() => {
@@ -536,10 +572,8 @@ export default function MediaFeedScreen({ route, navigation }) {
 
   const handleLike = useCallback(async (postId) => {
     if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to like', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign In', onPress: () => navigation.navigate('Auth', { screen: 'Login' }) },
-      ]);
+      showToast({ type: 'info', message: 'Sign in to like this.' });
+      navigation.navigate('Auth', { screen: 'Login' });
       return;
     }
     const current = likeMap[postId];
@@ -557,6 +591,21 @@ export default function MediaFeedScreen({ route, navigation }) {
     }
   }, [isAuthenticated, likeMap]);
 
+  const handleDelete = useCallback(async (postId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      showToast({ type: 'success', message: 'Post deleted.' });
+      navigation.goBack();
+    } catch {
+      showToast({ type: 'error', message: 'Could not delete. Try again.' });
+    }
+  }, [navigation, showToast]);
+
   const handleSave = useCallback(async (postId) => {
     if (!isAuthenticated) return;
     const wasSaved = saveMap[postId];
@@ -573,10 +622,10 @@ export default function MediaFeedScreen({ route, navigation }) {
   }, [isAuthenticated, saveMap]);
 
   const getItemLayout = useCallback((_, index) => ({
-    length: height,
-    offset: height * index,
+    length: listHeight,
+    offset: listHeight * index,
     index,
-  }), []);
+  }), [listHeight]);
 
   const renderItem = useCallback(({ item, index }) => {
     const isActive = index === activeIndex;
@@ -592,13 +641,16 @@ export default function MediaFeedScreen({ route, navigation }) {
       onLike: () => handleLike(item.id),
       onSave: () => handleSave(item.id),
       onComment: () => setCommentSheet({ visible: true, postId: item.id }),
+      isOwnPost: item.is_own_post || false,
+      onDelete: () => handleDelete(item.id),
       navigation,
     };
 
-    return item.video_url
+    const slide = item.video_url
       ? <VideoSlide key={item.id} {...commonProps} initialTime={index === startIndex ? startTime : 0} />
       : <AudioSlide key={item.id} {...commonProps} />;
-  }, [activeIndex, likeMap, saveMap, commentCounts, handleLike, handleSave]);
+    return <View style={{ height: listHeight, width }}>{slide}</View>;
+  }, [activeIndex, likeMap, saveMap, commentCounts, handleLike, handleSave, listHeight]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
@@ -620,10 +672,6 @@ export default function MediaFeedScreen({ route, navigation }) {
         <Text style={ss.forYouText}>For You</Text>
       </View>
 
-      {/* Post counter */}
-      <View style={[ss.counter, { top: insets.top + 14 }]}>
-        <Text style={ss.counterText}>{activeIndex + 1} / {posts.length}</Text>
-      </View>
 
       <FlatList
         ref={flatListRef}
@@ -631,7 +679,11 @@ export default function MediaFeedScreen({ route, navigation }) {
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         pagingEnabled
-        snapToInterval={height}
+        snapToInterval={listHeight}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0 && h !== listHeight) setListHeight(h);
+        }}
         snapToAlignment="start"
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
@@ -665,7 +717,7 @@ export default function MediaFeedScreen({ route, navigation }) {
 // ─── SLIDE STYLES ─────────────────────────────────────────────
 const ss = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  slide: { width, height, backgroundColor: '#000' },
+  slide: { width, height: '100%', backgroundColor: '#000' },
 
   gradientTop: {
     position: 'absolute', top: 0, left: 0, right: 0, height: 140,
@@ -724,7 +776,7 @@ const ss = StyleSheet.create({
   topicText: { fontSize: 11, color: THEME.primary, fontWeight: '700', letterSpacing: 0.5 },
 
   // Progress bar
-  progressWrap: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 8, zIndex: 10 },
+  progressWrap: { position: 'absolute', bottom: 12, left: 0, right: 0, paddingHorizontal: 8, zIndex: 10 },
   progressTimeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: -2 },
   progressTime: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '600' },
   progressSlider: { width: '100%', height: 30 },
@@ -760,13 +812,6 @@ const ss = StyleSheet.create({
     alignItems: 'center', zIndex: 100,
   },
   forYouText: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
-  counter: {
-    position: 'absolute', right: 14, zIndex: 100,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingHorizontal: 9, paddingVertical: 4,
-    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-  },
-  counterText: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
 });
 
 // ─── AUDIO SLIDE STYLES ───────────────────────────────────────
@@ -840,4 +885,5 @@ const as = StyleSheet.create({
   },
   topicText: { fontSize: 12, color: THEME.primary, fontWeight: '600' },
 });
+
 

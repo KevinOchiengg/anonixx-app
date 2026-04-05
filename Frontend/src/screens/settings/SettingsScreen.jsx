@@ -7,14 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft, Bell, BookOpen, ChevronRight, Database,
   Eye, FileText, Globe, HelpCircle, Lock,
-  Monitor, Moon, ShieldAlert, Smartphone, Trash2,
-  User, Volume2, Zap,
+  Monitor, ShieldAlert, Smartphone, User, Volume2, Zap, Trash2,
 } from 'lucide-react-native';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../components/ui/Toast';
 
-// ─── Theme ────────────────────────────────────────────────────
 const T = {
   background:    '#0b0f18',
   surface:       '#151924',
@@ -32,15 +30,8 @@ const T = {
   dangerBorder:  'rgba(239,68,68,0.25)',
 };
 
-// ─── Row components ───────────────────────────────────────────
-
 const NavRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onPress, danger }) => (
-  <TouchableOpacity
-    style={row.wrap}
-    onPress={onPress}
-    activeOpacity={0.75}
-    hitSlop={HIT_SLOP}
-  >
+  <TouchableOpacity style={row.wrap} onPress={onPress} activeOpacity={0.75} hitSlop={HIT_SLOP}>
     <View style={[row.iconBox, danger && row.iconBoxDanger]}>
       <Icon size={rs(17)} color={danger ? T.danger : (iconColor || T.text)} strokeWidth={1.8} />
     </View>
@@ -75,24 +66,6 @@ const ToggleRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onTog
   </View>
 ));
 
-const ActionRow = React.memo(({ icon: Icon, iconColor, label, desc, onPress, danger }) => (
-  <TouchableOpacity
-    style={row.wrap}
-    onPress={onPress}
-    activeOpacity={0.75}
-    hitSlop={HIT_SLOP}
-  >
-    <View style={[row.iconBox, danger && row.iconBoxDanger]}>
-      <Icon size={rs(17)} color={danger ? T.danger : (iconColor || T.text)} strokeWidth={1.8} />
-    </View>
-    <View style={row.body}>
-      <Text style={[row.label, danger && row.labelDanger]}>{label}</Text>
-      {desc ? <Text style={row.desc}>{desc}</Text> : null}
-    </View>
-  </TouchableOpacity>
-));
-
-// ─── Section wrapper ──────────────────────────────────────────
 const Section = React.memo(({ title, children }) => (
   <View style={sec.wrap}>
     {title ? <Text style={sec.title}>{title}</Text> : null}
@@ -100,13 +73,11 @@ const Section = React.memo(({ title, children }) => (
   </View>
 ));
 
-// ─── Screen ───────────────────────────────────────────────────
 export default function SettingsScreen({ navigation }) {
   const insets            = useSafeAreaInsets();
   const { confirmLogout } = useLogout(navigation);
   const { showToast }     = useToast();
 
-  // Entrance animation
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(rh(18))).current;
 
@@ -117,18 +88,12 @@ export default function SettingsScreen({ navigation }) {
     ]).start();
   }, []);
 
-  // ── Toggle states ──────────────────────────────────────────
   const [pushEnabled,      setPushEnabled]      = useState(true);
   const [notifyRequests,   setNotifyRequests]   = useState(true);
-  const [notifyMessages,   setNotifyMessages]   = useState(true);
   const [notifyGroup,      setNotifyGroup]      = useState(false);
-  const [notifyRealTalk,   setNotifyRealTalk]   = useState(true);
   const [screenshotDetect, setScreenshotDetect] = useState(false);
-  const [dataSaver,        setDataSaver]        = useState(false);
-  const [modeB,            setModeB]            = useState(false);
   const [haptics,          setHaptics]          = useState(true);
   const [inAppSounds,      setInAppSounds]      = useState(true);
-  const [reduceAnimations, setReduceAnimations] = useState(false);
 
   const handleDeleteAccount = useCallback(() => {
     showToast({
@@ -136,10 +101,6 @@ export default function SettingsScreen({ navigation }) {
       title:   'Are you sure?',
       message: 'Contact support to permanently delete your account and all your data.',
     });
-  }, [showToast]);
-
-  const handleClearCache = useCallback(() => {
-    showToast({ type: 'success', message: 'Cache cleared.' });
   }, [showToast]);
 
   const openLink = useCallback((url) => {
@@ -242,25 +203,9 @@ export default function SettingsScreen({ navigation }) {
           <View style={sec.divider} />
           <ToggleRow
             icon={Bell}
-            label="New Messages"
-            value={notifyMessages && pushEnabled}
-            onToggle={v => pushEnabled && setNotifyMessages(v)}
-            indent
-          />
-          <View style={sec.divider} />
-          <ToggleRow
-            icon={Bell}
             label="Group Activity"
             value={notifyGroup && pushEnabled}
             onToggle={v => pushEnabled && setNotifyGroup(v)}
-            indent
-          />
-          <View style={sec.divider} />
-          <ToggleRow
-            icon={Bell}
-            label="Real Talk Reminders"
-            value={notifyRealTalk && pushEnabled}
-            onToggle={v => pushEnabled && setNotifyRealTalk(v)}
             indent
           />
         </Section>
@@ -272,22 +217,6 @@ export default function SettingsScreen({ navigation }) {
             label="Video Autoplay"
             value="Wi-Fi Only"
             onPress={() => {}}
-          />
-          <View style={sec.divider} />
-          <ToggleRow
-            icon={Database}
-            label="Data Saver Mode"
-            desc="Reduce mobile data usage"
-            value={dataSaver}
-            onToggle={setDataSaver}
-          />
-          <View style={sec.divider} />
-          <ToggleRow
-            icon={Monitor}
-            label="Show Mode B Layout"
-            desc="Try the alternate feed style"
-            value={modeB}
-            onToggle={setModeB}
           />
         </Section>
 
@@ -322,23 +251,9 @@ export default function SettingsScreen({ navigation }) {
 
         {/* ── Data & Storage ── */}
         <Section title="Data & Storage">
-          <ActionRow
-            icon={Trash2}
-            label="Clear Cache"
-            desc="Free up local storage"
-            onPress={handleClearCache}
-          />
-          <View style={sec.divider} />
           <NavRow
             icon={Database}
             label="Download Management"
-            onPress={() => {}}
-          />
-          <View style={sec.divider} />
-          <NavRow
-            icon={Database}
-            label="Storage Usage"
-            value="—"
             onPress={() => {}}
           />
         </Section>
@@ -350,14 +265,6 @@ export default function SettingsScreen({ navigation }) {
             label="Font Size"
             value="Medium"
             onPress={() => {}}
-          />
-          <View style={sec.divider} />
-          <ToggleRow
-            icon={Moon}
-            label="Reduce Animations"
-            desc="Minimise motion effects"
-            value={reduceAnimations}
-            onToggle={setReduceAnimations}
           />
         </Section>
 
@@ -376,19 +283,19 @@ export default function SettingsScreen({ navigation }) {
           <NavRow
             icon={FileText}
             label="Terms of Service"
-            onPress={() => openLink('https://anonixx.app/terms')}
+            onPress={() => navigation.navigate('Legal', { type: 'terms' })}
           />
           <View style={sec.divider} />
           <NavRow
             icon={Lock}
             label="Privacy Policy"
-            onPress={() => openLink('https://anonixx.app/privacy')}
+            onPress={() => navigation.navigate('Legal', { type: 'privacy' })}
           />
           <View style={sec.divider} />
           <NavRow
             icon={BookOpen}
             label="Community Guidelines"
-            onPress={() => openLink('https://anonixx.app/guidelines')}
+            onPress={() => navigation.navigate('Legal', { type: 'guidelines' })}
           />
         </Section>
 
@@ -404,7 +311,6 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
-// ─── Row Styles ───────────────────────────────────────────────
 const row = StyleSheet.create({
   wrap: {
     flexDirection:     'row',
@@ -413,9 +319,7 @@ const row = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     gap:               SPACING.sm,
   },
-  indent: {
-    paddingLeft: rp(20),
-  },
+  indent: { paddingLeft: rp(20) },
   indentLine: {
     width:           rs(2),
     height:          rs(24),
@@ -432,34 +336,16 @@ const row = StyleSheet.create({
     justifyContent:  'center',
     flexShrink:      0,
   },
-  iconBoxDanger: {
-    backgroundColor: 'rgba(239,68,68,0.10)',
-  },
-  body: { flex: 1, gap: rp(2) },
-  label: {
-    fontSize:   FONT.sm,
-    fontWeight: '600',
-    color:      T.text,
-  },
-  labelDanger: { color: T.danger },
-  desc: {
-    fontSize: rs(12),
-    color:    T.textSecondary,
-  },
-  value: {
-    fontSize:    FONT.xs,
-    color:       T.textSecondary,
-    fontWeight:  '500',
-    marginRight: rp(4),
-  },
+  iconBoxDanger:  { backgroundColor: 'rgba(239,68,68,0.10)' },
+  body:           { flex: 1, gap: rp(2) },
+  label:          { fontSize: FONT.sm, fontWeight: '600', color: T.text },
+  labelDanger:    { color: T.danger },
+  desc:           { fontSize: rs(12), color: T.textSecondary },
+  value:          { fontSize: FONT.xs, color: T.textSecondary, fontWeight: '500', marginRight: rp(4) },
 });
 
-// ─── Section Styles ───────────────────────────────────────────
 const sec = StyleSheet.create({
-  wrap: {
-    marginBottom:      SPACING.md,
-    paddingHorizontal: SPACING.md,
-  },
+  wrap:    { marginBottom: SPACING.md, paddingHorizontal: SPACING.md },
   title: {
     fontSize:      rs(11),
     fontWeight:    '700',
@@ -483,12 +369,8 @@ const sec = StyleSheet.create({
   },
 });
 
-// ─── Screen Styles ────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: {
-    flex:            1,
-    backgroundColor: T.background,
-  },
+  safe:        { flex: 1, backgroundColor: T.background },
   header: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -506,14 +388,8 @@ const styles = StyleSheet.create({
     borderRadius:    rs(18),
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  headerTitle: {
-    fontSize:   FONT.md,
-    fontWeight: '700',
-    color:      T.text,
-  },
-  content: {
-    paddingTop: SPACING.lg,
-  },
+  headerTitle: { fontSize: FONT.md, fontWeight: '700', color: T.text },
+  content:     { paddingTop: SPACING.lg },
   logoutWrap: {
     paddingHorizontal: SPACING.md,
     alignItems:        'center',
@@ -529,16 +405,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239,68,68,0.08)',
     alignItems:      'center',
   },
-  logoutText: {
-    fontSize:      FONT.md,
-    fontWeight:    '700',
-    color:         T.danger,
-    letterSpacing: rp(0.3),
-  },
-  footer: {
-    fontSize:  rs(11),
-    color:     T.textMuted,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
+  logoutText: { fontSize: FONT.md, fontWeight: '700', color: T.danger, letterSpacing: rp(0.3) },
+  footer:     { fontSize: rs(11), color: T.textMuted, textAlign: 'center', fontStyle: 'italic' },
 });
