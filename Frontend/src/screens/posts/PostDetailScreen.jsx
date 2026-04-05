@@ -448,6 +448,9 @@ const CommentBottomSheet = React.memo(({
 const RelatedCard = React.memo(({ post, onPress }) => {
   const preview     = (post.content?.length ?? 0) > 120 ? post.content.substring(0, 120) + '…' : post.content;
   const handlePress = useCallback(() => onPress(post), [post, onPress]);
+  const hasCaption  = (post.content?.length ?? 0) > 0;
+  const hasImage    = (post.images?.length ?? 0) > 0;
+  const hasVideo    = !!post.video_url;
 
   return (
     <TouchableOpacity style={rStyles.card} onPress={handlePress} activeOpacity={0.85} hitSlop={HIT_SLOP}>
@@ -461,7 +464,21 @@ const RelatedCard = React.memo(({ post, onPress }) => {
         </View>
         <Text style={rStyles.arrow}>→</Text>
       </View>
-      <Text style={rStyles.content}>{preview}</Text>
+      {hasCaption ? (
+        <Text style={rStyles.content}>{preview}</Text>
+      ) : null}
+      {!hasCaption && hasImage ? (
+        <Image
+          source={{ uri: post.images[0] }}
+          style={rStyles.mediaThumb}
+          resizeMode="cover"
+        />
+      ) : !hasCaption && hasVideo ? (
+        <View style={rStyles.videoThumb}>
+          <Text style={rStyles.videoThumbIcon}>▶</Text>
+          <Text style={rStyles.videoThumbLabel}>video</Text>
+        </View>
+      ) : null}
       {post.topics?.length > 0 && (
         <View style={rStyles.tagsRow}>
           {post.topics.slice(0, 3).map(t => (
@@ -489,8 +506,9 @@ export default function PostDetailScreen({ route, navigation }) {
   const [galleryIndex,   setGalleryIndex]   = useState(0);
   const [relatedPosts,   setRelatedPosts]   = useState([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
-  const [showOptions,    setShowOptions]    = useState(false);
-  const [deleting,       setDeleting]       = useState(false);
+  const [showOptions,      setShowOptions]      = useState(false);
+  const [deleting,         setDeleting]         = useState(false);
+  const [contentExpanded,  setContentExpanded]  = useState(false);
 
   const likeScaleAnim = useRef(new Animated.Value(1)).current;
   const headerOp      = useRef(new Animated.Value(0)).current;
@@ -679,7 +697,28 @@ export default function PostDetailScreen({ route, navigation }) {
             </View>
 
             <View style={styles.divider} />
-            <Text style={styles.content}>{post.content}</Text>
+            {(() => {
+              const LIMIT = 280;
+              const isLong = (post.content?.length || 0) > LIMIT;
+              const displayed = isLong && !contentExpanded
+                ? post.content.substring(0, LIMIT) + '…'
+                : post.content;
+              return (
+                <TouchableOpacity
+                  onPress={() => setContentExpanded(v => !v)}
+                  activeOpacity={isLong ? 0.85 : 1}
+                >
+                  <Text style={styles.content}>
+                    {displayed}
+                    {isLong && (
+                      <Text style={styles.readMore}>
+                        {contentExpanded ? ' less' : ' more'}
+                      </Text>
+                    )}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
 
             {post.topics?.length > 0 && (
               <View style={styles.topicsRow}>
@@ -904,6 +943,10 @@ const rStyles = StyleSheet.create({
   tagsRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6) },
   tag:        { paddingHorizontal: rp(8), paddingVertical: rp(3), borderRadius: RADIUS.sm, backgroundColor: T.primaryDim, borderWidth: 1, borderColor: T.primaryBorder },
   tagText:    { fontSize: FONT.xs, color: T.primary, fontWeight: '500' },
+  mediaThumb: { width: '100%', height: rs(120), borderRadius: RADIUS.sm, backgroundColor: T.surfaceAlt, marginBottom: SPACING.sm },
+  videoThumb: { width: '100%', height: rs(80), borderRadius: RADIUS.sm, backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', gap: rp(6), flexDirection: 'row', marginBottom: SPACING.sm },
+  videoThumbIcon: { fontSize: rf(20), color: T.primary },
+  videoThumbLabel: { fontSize: FONT.xs, color: T.textSecondary, fontWeight: '600' },
 });
 
 const styles = StyleSheet.create({
@@ -922,6 +965,7 @@ const styles = StyleSheet.create({
   moreBtn:     { padding: rp(4) },
   divider:     { height: 1, backgroundColor: T.border, marginVertical: SPACING.sm },
   content:     { fontSize: rf(17), lineHeight: rf(28), color: T.text, letterSpacing: 0.2, marginBottom: SPACING.sm, fontFamily: 'PlayfairDisplay-Regular' },
+  readMore:    { color: T.primary, fontWeight: '700', fontSize: rf(15) },
   topicsRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs, marginBottom: SPACING.md },
   topicTag:    { paddingHorizontal: rp(10), paddingVertical: rp(4), borderRadius: RADIUS.sm, backgroundColor: T.primaryDim, borderWidth: 1, borderColor: T.primaryBorder },
   topicTagText:{ fontSize: FONT.xs, color: T.primary, fontWeight: '500' },

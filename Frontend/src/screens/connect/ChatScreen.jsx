@@ -52,7 +52,19 @@ const AVATAR_MAP = {
 };
 
 function formatTime(isoString) {
-  return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (!isoString) return '';
+  try {
+    // Python sometimes omits timezone suffix or uses space separator.
+    // Normalise so JS always treats it as UTC → converts to device local time.
+    const normalised = isoString.replace(' ', 'T').replace(/(\.\d+)?$/, (m) =>
+      /[Z+\-]\d/.test(isoString) ? m : m + 'Z'
+    );
+    const d = new Date(normalised);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
 }
 
 // ─── Message Status Ticks ─────────────────────────────────────────────────────

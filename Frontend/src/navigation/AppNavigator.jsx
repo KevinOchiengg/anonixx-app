@@ -17,6 +17,7 @@ import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
 import CoinsScreen from '../screens/profile/CoinsScreen';
 import ReferralScreen from '../screens/profile/ReferralScreen';
+import LegalScreen from '../screens/settings/LegalScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
@@ -26,7 +27,6 @@ import DropLandingScreen from '../screens/drops/DropLandingScreen';
 import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
 import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
-import MediaFeedScreen from '../screens/feed/MediaFeedScreen';
 import InterestSelectionScreen from '../screens/onboarding/InterestSelectionScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
@@ -62,11 +62,6 @@ export default function AppNavigator() {
         />
         <Stack.Screen name="UnlockPremium" component={UnlockPremiumScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
-        <Stack.Screen
-          name="MediaFeed"
-          component={MediaFeedScreen}
-          options={{ animation: 'fade' }}
-        />
         <Stack.Screen name="ShareCard" component={ShareCardScreen} />
         <Stack.Screen name="DropLanding" component={DropLandingScreen} />
         <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
@@ -83,6 +78,7 @@ export default function AppNavigator() {
         <Stack.Screen name="SavedPosts"     component={SavedPostsScreen} />
         <Stack.Screen name="Coins"          component={CoinsScreen} />
         <Stack.Screen name="Referral"       component={ReferralScreen} />
+        <Stack.Screen name="Legal"          component={LegalScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

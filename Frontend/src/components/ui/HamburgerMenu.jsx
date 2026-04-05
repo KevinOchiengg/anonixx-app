@@ -9,11 +9,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Bell, BookOpen, ChevronRight, Coins, Database, Eye,
+  Bell, BookOpen, ChevronRight, Coins, Eye,
   FileText, Globe, Heart, HelpCircle, Lock,
-  LogIn, LogOut, Monitor, Moon, ShieldAlert, Smartphone,
-  Trash2, User, Users, Volume2, X, Zap,
+  LogIn, LogOut, ShieldAlert, Smartphone,
+  User, Users, Volume2, X, Zap,
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/responsive';
 import { useAuth } from '../../context/AuthContext';
 import { useLogout } from '../../hooks/useLogout';
@@ -85,15 +86,24 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
   // ── Toggle states ──────────────────────────────────────────
   const [pushEnabled,      setPushEnabled]      = useState(true);
   const [notifyRequests,   setNotifyRequests]   = useState(true);
-  const [notifyMessages,   setNotifyMessages]   = useState(true);
   const [notifyGroup,      setNotifyGroup]      = useState(false);
-  const [notifyRealTalk,   setNotifyRealTalk]   = useState(true);
   const [screenshotDetect, setScreenshotDetect] = useState(false);
-  const [dataSaver,        setDataSaver]        = useState(false);
-  const [modeB,            setModeB]            = useState(false);
   const [haptics,          setHaptics]          = useState(true);
   const [inAppSounds,      setInAppSounds]      = useState(true);
-  const [reduceAnimations, setReduceAnimations] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('pref_screenshot_detect').then(val => {
+      if (val === 'true') setScreenshotDetect(true);
+    }).catch(() => {});
+  }, []);
+
+  const handleScreenshotToggle = useCallback((v) => {
+    setScreenshotDetect(v);
+    AsyncStorage.setItem('pref_screenshot_detect', v ? 'true' : 'false').catch(() => {});
+    if (v) {
+      showToast({ type: 'info', title: 'Detection On', message: "You'll be alerted when someone screenshots your posts." });
+    }
+  }, [showToast]);
 
   useEffect(() => {
     if (visible) {
@@ -109,19 +119,15 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
     }
   }, [visible]);
 
-  const go = useCallback((route) => {
+  const go = useCallback((route, params) => {
     onClose();
-    setTimeout(() => navigation.navigate(route), 220);
+    setTimeout(() => navigation.navigate(route, params), 220);
   }, [onClose, navigation]);
 
   const handleLogout = useCallback(() => {
     onClose();
     setTimeout(() => confirmLogout(), 220);
   }, [onClose, confirmLogout]);
-
-  const handleClearCache = useCallback(() => {
-    showToast({ type: 'success', message: 'Cache cleared.' });
-  }, [showToast]);
 
   const openLink = useCallback((url) => {
     Linking.openURL(url).catch(() => {
@@ -154,7 +160,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
         {/* Brand */}
         <View style={styles.brand}>
           <View>
-            <Text style={styles.logo}>anonixx</Text>
+            <Text style={styles.logo}>Settings</Text>
             <Text style={styles.tagline}>your truth, no name required.</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={HIT_SLOP} style={styles.closeBtn}>
@@ -197,7 +203,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           <View style={sec.card}>
             <NavRow icon={ShieldAlert} label="Block List"           onPress={() => {}} />
             <View style={sec.div} />
-            <ToggleRow icon={Eye} label="Screenshot Detection" value={screenshotDetect} onToggle={setScreenshotDetect} />
+            <ToggleRow icon={Eye} label="Screenshot Detection" value={screenshotDetect} onToggle={handleScreenshotToggle} />
             <View style={sec.div} />
             <NavRow icon={User} label="Who Can Connect" value="Everyone" onPress={() => {}} />
             <View style={sec.div} />
@@ -211,29 +217,13 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
             <View style={sec.div} />
             <ToggleRow icon={Bell} label="Connection Requests" value={notifyRequests && pushEnabled} onToggle={v => pushEnabled && setNotifyRequests(v)} indent />
             <View style={sec.div} />
-            <ToggleRow icon={Bell} label="New Messages"        value={notifyMessages && pushEnabled} onToggle={v => pushEnabled && setNotifyMessages(v)} indent />
-            <View style={sec.div} />
             <ToggleRow icon={Bell} label="Group Activity"      value={notifyGroup && pushEnabled}    onToggle={v => pushEnabled && setNotifyGroup(v)}    indent />
-            <View style={sec.div} />
-            <ToggleRow icon={Bell} label="Real Talk Reminders" value={notifyRealTalk && pushEnabled} onToggle={v => pushEnabled && setNotifyRealTalk(v)} indent />
           </View>
 
           {/* ── Feed ── */}
           <SectionHeader title="Feed" />
           <View style={sec.card}>
             <NavRow    icon={Zap}      label="Video Autoplay"   value="Wi-Fi Only" onPress={() => {}} />
-            <View style={sec.div} />
-            <ToggleRow icon={Database} label="Data Saver"        value={dataSaver}  onToggle={setDataSaver} />
-            <View style={sec.div} />
-            <ToggleRow icon={Monitor}  label="Mode B Layout"     value={modeB}      onToggle={setModeB} />
-          </View>
-
-          {/* ── Display ── */}
-          <SectionHeader title="Display" />
-          <View style={sec.card}>
-            <NavRow    icon={Monitor} label="Font Size"          value="Medium"         onPress={() => {}} />
-            <View style={sec.div} />
-            <ToggleRow icon={Moon}    label="Reduce Animations"  value={reduceAnimations} onToggle={setReduceAnimations} />
           </View>
 
           {/* ── Sound & Haptics ── */}
@@ -250,14 +240,6 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
             <NavRow icon={Globe} label="App Language" value="English" onPress={() => {}} />
           </View>
 
-          {/* ── Data & Storage ── */}
-          <SectionHeader title="Data & Storage" />
-          <View style={sec.card}>
-            <NavRow icon={Trash2}    label="Clear Cache"    onPress={handleClearCache} />
-            <View style={sec.div} />
-            <NavRow icon={Database}  label="Storage Usage"  value="—" onPress={() => {}} />
-          </View>
-
           {/* ── About ── */}
           <SectionHeader title="About" />
           <View style={sec.card}>
@@ -267,11 +249,11 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
               <Text style={row.value}>1.0.0</Text>
             </View>
             <View style={sec.div} />
-            <NavRow icon={FileText} label="Terms of Service"     onPress={() => openLink('https://anonixx.app/terms')} />
+            <NavRow icon={FileText} label="Terms of Service"     onPress={() => go('Legal', { type: 'terms' })} />
             <View style={sec.div} />
-            <NavRow icon={Lock}     label="Privacy Policy"       onPress={() => openLink('https://anonixx.app/privacy')} />
+            <NavRow icon={Lock}     label="Privacy Policy"       onPress={() => go('Legal', { type: 'privacy' })} />
             <View style={sec.div} />
-            <NavRow icon={BookOpen} label="Community Guidelines" onPress={() => openLink('https://anonixx.app/guidelines')} />
+            <NavRow icon={BookOpen} label="Community Guidelines" onPress={() => go('Legal', { type: 'guidelines' })} />
           </View>
 
           {/* ── Logout / Login ── */}
