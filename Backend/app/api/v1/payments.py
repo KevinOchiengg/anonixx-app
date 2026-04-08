@@ -80,6 +80,39 @@ async def mark_chat_unlocked(chat_id: str, user_id: str, payment_ref: str, provi
     )
 
 
+# ─── M-Pesa: sandbox health-check (remove before production) ─────────────────
+
+@router.get("/mpesa/test")
+async def test_mpesa_connection(
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """
+    Quick diagnostic — call this to verify M-Pesa credentials are working.
+    Returns the raw access-token response from Safaricom.
+    Safe to remove once sandbox is confirmed working.
+    """
+    from app.utils.mpesa import MPesaClient
+    mpesa = MPesaClient()
+    import httpx, base64
+    url = f"{mpesa.base_url}/oauth/v1/generate?grant_type=client_credentials"
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(
+                url,
+                auth=(mpesa.consumer_key, mpesa.consumer_secret),
+                timeout=10.0,
+            )
+            return {
+                "env":         settings.MPESA_ENVIRONMENT,
+                "base_url":    mpesa.base_url,
+                "shortcode":   mpesa.shortcode,
+                "http_status": r.status_code,
+                "safaricom":   r.json(),
+            }
+        except Exception as exc:
+            return {"error": str(exc)}
+
+
 # ─── M-Pesa: initiate STK push ────────────────────────────────────────────────
 
 @router.post("/unlock/mpesa")
@@ -102,7 +135,9 @@ async def unlock_with_mpesa(
         raise HTTPException(status_code=400, detail="Invalid M-Pesa number.")
 
     from app.utils.mpesa import MPesaClient
-    mpesa    = MPesaClient()
+    # Use the connect-unlock–specific callback, not the coins callback
+    connect_callback = f"{settings.BASE_URL}/api/v1/payments/mpesa/callback"
+    mpesa    = MPesaClient(callback_url=connect_callback)
     response = await mpesa.stk_push(
         phone=phone,
         amount=UNLOCK_AMOUNT_KES,
@@ -111,7 +146,8 @@ async def unlock_with_mpesa(
     )
 
     if not response.get("success"):
-        raise HTTPException(status_code=502, detail="Could not initiate M-Pesa payment.")
+        detail = response.get("message", "Could not initiate M-Pesa payment.")
+        raise HTTPException(status_code=502, detail=detail)
 
     checkout_id = response.get("CheckoutRequestID")
     if not checkout_id:

@@ -291,7 +291,7 @@ export default function DropChatScreen({ route, navigation }) {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       keyboardVerticalOffset={0}
     >
       {/* Header */}

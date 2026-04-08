@@ -10,9 +10,12 @@ from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 from enum import Enum
 
+import asyncio
+
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.notifications import send_push_notification
+from app.websockets.intensity import calculate_and_emit as calc_intensity
 
 router = APIRouter(prefix="/connect", tags=["Connect"])
 
@@ -547,7 +550,8 @@ async def get_chat_messages(
             "messages_left": messages_left,
             "reveal_status": chat.get("reveal_status"),
             "reveal_initiator": chat.get("reveal_initiator_id") == current_user_id,
-            "message_count": chat.get("message_count", 0)
+            "message_count":   chat.get("message_count", 0),
+            "intensity_score": chat.get("intensity_score", 0.0),
         }
     }
 
@@ -615,6 +619,11 @@ async def send_message(
             "$inc": {"message_count": 1},
             "$set": {"last_message_at": datetime.now(timezone.utc)}
         }
+    )
+
+    # Recalculate and broadcast intensity — fire-and-forget, never blocks response
+    asyncio.create_task(
+        calc_intensity(db, chat_id, [chat["from_user_id"], chat["to_user_id"]])
     )
 
     messages_left = None

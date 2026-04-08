@@ -179,8 +179,8 @@ export default function TabNavigator() {
         sceneContainerStyle: { backgroundColor: THEME.background },
         tabBarStyle: {
           ...styles.tabBar,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom,
+          height: 68 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 10),
         },
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.inactive,
@@ -243,12 +243,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 20,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255,255,255,0.08)'
   },
   tabBarLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '500',
     marginTop: 4,
     letterSpacing: 0.3,
   },

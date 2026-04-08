@@ -1,10 +1,11 @@
 import './global.css';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Provider } from 'react-redux';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import store from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SocketProvider } from './src/context/SocketContext';
@@ -42,31 +43,19 @@ class ErrorBoundary extends React.Component {
 }
 
 const styles = StyleSheet.create({
-  errorWrap: {
-    flex: 1,
-    backgroundColor: '#0b0f18',
-    padding: 20,
-    paddingTop: 60,
-  },
-  errorTitle: {
-    color: '#FF634A',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  errorMsg: {
-    color: '#EAEAF0',
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  errorStack: {
-    color: '#9A9AA3',
-    fontSize: 11,
-    lineHeight: 18,
-  },
+  errorWrap:  { flex: 1, backgroundColor: '#0b0f18', padding: 20, paddingTop: 60 },
+  errorTitle: { color: '#FF634A', fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  errorMsg:   { color: '#EAEAF0', fontSize: 13, marginBottom: 12 },
+  errorStack: { color: '#9A9AA3', fontSize: 11, lineHeight: 18 },
 });
 
 export default function App() {
+  useEffect(() => {
+    // Match Android phone navigation bar to Anonixx surface color
+    NavigationBar.setBackgroundColorAsync('#151924');
+    NavigationBar.setButtonStyleAsync('light');
+  }, []);
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>

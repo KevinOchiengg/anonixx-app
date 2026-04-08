@@ -1,17 +1,8 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import DynamicSplash from '../components/common/DynamicSplash';
 
-// Inline splash — shown as a screen inside the navigator while auth hydrates.
-// Keeping NavigationContainer always mounted means deep-link URLs are never dropped.
-function SplashScreen() {
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0b0f18' }}>
-      <ActivityIndicator size="large" color="#FF634A" />
-    </View>
-  );
-}
 import ChatScreen from '../screens/connect/ChatScreen';
 import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
@@ -52,7 +43,7 @@ export default function AppNavigator() {
             NavigationContainer is always mounted so deep-link initial URLs are
             captured immediately — before the auth check completes. */}
         {loading
-          ? <Stack.Screen name="Splash" component={SplashScreen} />
+          ? <Stack.Screen name="Splash" component={DynamicSplash} />
           : <Stack.Screen name="Main" component={TabNavigator} />
         }
         <Stack.Screen name="Auth" component={AuthNavigator} />

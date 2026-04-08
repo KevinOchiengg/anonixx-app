@@ -27,6 +27,8 @@
       },
       "permissions": ["NOTIFICATIONS", "RECEIVE_BOOT_COMPLETED", "VIBRATE"],
       "package": "com.anonixx.app",
+      "navigationBarColor": "#151924",
+      "navigationBarStyle": "dark",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -36,7 +38,6 @@
               "scheme": "anonixx",
               "host": "drop"
             },
-
             {
               "scheme": "anonixx",
               "host": "confession"
@@ -49,7 +50,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-asset", "expo-video"],
+    "plugins": ["expo-asset", "expo-video", "expo-navigation-bar"],
     "extra": {
       "eas": {
         "projectId": "e6e5b944-ee40-4251-8b89-ff8a3e733ec2"

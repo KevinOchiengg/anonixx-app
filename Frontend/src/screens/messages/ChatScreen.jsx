@@ -365,7 +365,7 @@ export default function ChatScreen({ route, navigation }) {
 
       {/* Input */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
         style={styles.inputContainerWrapper}
       >
         <View style={styles.inputAccentBar} />
