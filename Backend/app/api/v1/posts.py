@@ -776,19 +776,40 @@ async def get_thread(
 
     thread_docs = await db["threads"].find(
         {"post_id": ObjectId(post_id)}
-    ).sort("created_at", -1).to_list(None)
+    ).sort("created_at", 1).to_list(None)
 
-    threads = [{
-        "id": str(t["_id"]),
-        "content": t["content"],
-        "anonymous_name": t["anonymous_name"],
-        "created_at": t["created_at"].isoformat(),
-        "time_ago": get_time_ago(t["created_at"]),
-        "depth": t.get("depth", 0),
-        "is_own_reply": str(t["user_id"]) == current_user_id if current_user_id else False
-    } for t in thread_docs]
+    def fmt(t):
+        d = {
+            "id":             str(t["_id"]),
+            "content":        t.get("content", ""),
+            "anonymous_name": t.get("anonymous_name", "Anonymous"),
+            "created_at":     t["created_at"].isoformat(),
+            "time_ago":       get_time_ago(t["created_at"]),
+            "depth":          t.get("depth", 0),
+            "likes_count":    t.get("likes_count", 0),
+            "liked_by_me":    current_user_id in t.get("liked_by", []) if current_user_id else False,
+            "is_own_reply":   str(t["user_id"]) == current_user_id if current_user_id else False,
+            "replies":        [],
+        }
+        if t.get("gif_url"):
+            d["gif_url"] = t["gif_url"]
+        if t.get("image_url"):
+            d["image_url"] = t["image_url"]
+        return d
 
-    return {"threads": threads, "thread_count": len(threads)}
+    by_id    = {t["id"]: t for t in map(fmt, thread_docs)}
+    top      = []
+    for tid, t in by_id.items():
+        raw = next(d for d in thread_docs if str(d["_id"]) == tid)
+        pid = raw.get("parent_id")
+        if pid and str(pid) in by_id:
+            by_id[str(pid)]["replies"].append(t)
+        else:
+            top.append(t)
+
+    top.sort(key=lambda x: x["created_at"], reverse=True)
+
+    return {"threads": top, "thread_count": len(top)}
 
 
 # ==================== VIEW TRACKING ====================

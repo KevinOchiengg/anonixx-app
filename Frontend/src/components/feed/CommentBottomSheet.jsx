@@ -696,7 +696,7 @@ const st = StyleSheet.create({
   hotBadgeText:   { fontSize: 10, fontWeight: '700', color: '#FF634A' },
   commentText:    { fontSize: 14, color: T.textSecondary, lineHeight: 21 },
   commentGif:     { width: 160, height: 100, borderRadius: 10, marginTop: 6 },
-  commentImage:   { width: 220, height: 165, borderRadius: 12, marginTop: 8, borderWidth: 1, borderColor: T.borderStrong },
+  commentImage:   { width: 72, height: 54, borderRadius: 6, marginTop: 4, borderWidth: 1, borderColor: T.borderStrong },
   commentActions:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   commentActionsLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   commentActionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
