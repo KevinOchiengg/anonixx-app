@@ -88,6 +88,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuth = async () => {
+    const start = Date.now();
     try {
       const token = await AsyncStorage.getItem('token');
       const userData = await AsyncStorage.getItem('user');
@@ -95,17 +96,19 @@ export const AuthProvider = ({ children }) => {
       if (token && userData) {
         setIsAuthenticated(true);
         setUser(JSON.parse(userData));
-        console.log('✅ User authenticated from storage:', JSON.parse(userData).username);
       } else {
         setIsAuthenticated(false);
         setUser(null);
-        console.log('❌ No auth found in storage');
       }
     } catch (error) {
-      console.error('Auth check error:', error);
       setIsAuthenticated(false);
       setUser(null);
     } finally {
+      // Guarantee at least 2.5 s for the dynamic splash to be meaningful
+      const elapsed = Date.now() - start;
+      if (elapsed < 2500) {
+        await new Promise(r => setTimeout(r, 2500 - elapsed));
+      }
       setLoading(false);
     }
   };

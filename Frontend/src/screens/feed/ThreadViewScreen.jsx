@@ -235,7 +235,7 @@ export default function ThreadViewScreen({ route, navigation }) {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
         style={{ flex: 1 }}
       >
         {loading ? (

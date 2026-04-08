@@ -5,6 +5,7 @@ from bson import ObjectId
 
 from app.database import get_database
 from app.dependencies import get_current_user_id
+from app.websockets.activity import emit_profile_viewed
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -60,5 +61,36 @@ async def update_profile(
     
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return {"message": "Profile updated successfully"}
+
+
+@router.get("/{user_id}")
+async def get_public_profile(
+    user_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    """Get another user's public profile. Emits profile_viewed to the target user."""
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    user = await db["users"].find_one({"_id": oid})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Notify the target that their profile was viewed (fire-and-forget)
+    if user_id != current_user_id:
+        try:
+            await emit_profile_viewed(user_id, viewer_user_id=current_user_id)
+        except Exception:
+            pass
+
+    return {
+        "id":             str(user["_id"]),
+        "username":       user.get("username"),
+        "anonymous_name": user.get("anonymous_name"),
+        "interests":      user.get("interests", []),
+    }

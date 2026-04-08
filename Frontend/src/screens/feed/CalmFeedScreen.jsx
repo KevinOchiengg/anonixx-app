@@ -18,6 +18,7 @@ import FeedDivider from '../../components/feed/FeedDivider';
 import MoodBalancer from '../../components/feed/MoodBalancer';
 import AuthPromptModal from '../../components/modals/AuthPromptModal';
 import { API_BASE_URL } from '../../config/api';
+import DynamicSplash from '../../components/common/DynamicSplash';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   BUTTON_HEIGHT, SCREEN, HIT_SLOP, isSmallDevice,
@@ -91,29 +92,6 @@ const StreakBanner = React.memo(({ message, onDismiss }) => {
   );
 });
 
-// ── Skeleton loader ───────────────────────────────────────────
-const SkeletonCard = React.memo(() => {
-  const shimmer = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.6] });
-  return (
-    <Animated.View style={[styles.skeletonCard, { opacity }]}>
-      <View style={styles.skeletonAvatar} />
-      <View style={styles.skeletonLines}>
-        <View style={[styles.skeletonLine, { width: '75%' }]} />
-        <View style={[styles.skeletonLine, { width: '55%', marginTop: rh(8) }]} />
-        <View style={[styles.skeletonLine, { width: '40%', marginTop: rh(8) }]} />
-      </View>
-    </Animated.View>
-  );
-});
 
 // ── Session limit screen ───────────────────────────────────────
 const SessionLimitView = React.memo(({ hasMore, onContinue, onClose }) => (
@@ -140,22 +118,6 @@ const SessionLimitView = React.memo(({ hasMore, onContinue, onClose }) => (
   </View>
 ));
 
-// ── Empty state ───────────────────────────────────────────────
-const EmptyState = React.memo(({ onRefresh }) => (
-  <View style={styles.centeredView}>
-    <View style={styles.emptyCard}>
-      <Text style={styles.emptyEmoji}>✨</Text>
-      <Text style={styles.emptyTitle}>Nothing here yet</Text>
-      <Text style={styles.emptySubtitle}>
-        The feed is quiet. Be the first to confess something real.
-      </Text>
-      <TouchableOpacity onPress={onRefresh} style={styles.emptyRefreshBtn} activeOpacity={0.8}>
-        <RefreshCw size={rs(16)} color={THEME.primary} />
-        <Text style={styles.emptyRefreshText}>Refresh</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-));
 
 // ── Main screen ───────────────────────────────────────────────
 export default function CalmFeedScreen({ navigation, route }) {
@@ -452,26 +414,9 @@ export default function CalmFeedScreen({ navigation, route }) {
     if (hasMore && !loading) loadFeed(false);
   }, [hasMore, loading, loadFeed]);
 
-  // ── Loading state — skeletons ──────────────────────────────
-  if (loading && posts.length === 0) {
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-        <StarryBackground />
-        <View style={[styles.header, { paddingTop: insets.top + rh(8) }]}>
-          <Text style={styles.headerLogo}>anonixx</Text>
-          <View style={styles.headerRight}>
-            <View style={styles.headerBtn} />
-            <View style={styles.headerBtn} />
-          </View>
-        </View>
-        <View style={styles.skeletonContainer}>
-          {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
-          <Text style={styles.loadingText}>Loading the unsayable...</Text>
-        </View>
-      </View>
-    );
-  }
+
+  // ── Initial loading / refresh ─────────────────────────────
+  if (loading && posts.length === 0) return <DynamicSplash />;
 
   // ── Session limit state ────────────────────────────────────
   if (sessionLimitReached) {
@@ -547,7 +492,6 @@ export default function CalmFeedScreen({ navigation, route }) {
           />
         }
         ListFooterComponent={ListFooter}
-        ListEmptyComponent={<EmptyState onRefresh={refreshFeed} />}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.feedContent, { paddingBottom: insets.bottom + rh(40) }]}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -626,32 +570,6 @@ const styles = StyleSheet.create({
   feedContent:  { paddingTop: rh(8) },
   feedFooter:   { height: rh(80), justifyContent: 'center', alignItems: 'center' },
 
-  // Skeleton
-  skeletonContainer: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg },
-  skeletonCard: {
-    flexDirection:   'row',
-    backgroundColor: THEME.surface,
-    borderRadius:    RADIUS.lg,
-    padding:         rp(16),
-    marginBottom:    SPACING.md,
-    gap:             SPACING.sm,
-  },
-  skeletonAvatar: {
-    width:           rs(44),
-    height:          rs(44),
-    borderRadius:    RADIUS.full,
-    backgroundColor: THEME.surfaceAlt,
-  },
-  skeletonLines: { flex: 1, justifyContent: 'center' },
-  skeletonLine:  { height: rh(12), borderRadius: RADIUS.sm, backgroundColor: THEME.surfaceAlt },
-  loadingText: {
-    fontSize:    FONT.sm,
-    fontStyle:   'italic',
-    color:       THEME.textSecondary,
-    textAlign:   'center',
-    marginTop:   SPACING.xl,
-    opacity:     0.7,
-  },
 
   // Centered wrapper (limit + empty)
   centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
@@ -677,19 +595,5 @@ const styles = StyleSheet.create({
   limitBtnPrimary:      { flex: 1, height: BUTTON_HEIGHT, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.primary, shadowColor: THEME.primary, shadowOffset: { width: 0, height: rh(4) }, shadowOpacity: 0.4, shadowRadius: rs(12), elevation: 6 },
   limitBtnPrimaryText:  { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
 
-  // Empty state card
-  emptyCard: {
-    width:           '100%',
-    backgroundColor: THEME.surface,
-    borderRadius:    RADIUS.xl,
-    padding:         rp(32),
-    alignItems:      'center',
-    borderWidth:     1,
-    borderColor:     THEME.border,
-  },
-  emptyEmoji:       { fontSize: rf(40), marginBottom: SPACING.md },
-  emptyTitle:       { fontSize: FONT.xl, fontWeight: '700', color: THEME.text, marginBottom: SPACING.sm },
-  emptySubtitle:    { fontSize: FONT.md, color: THEME.textSecondary, textAlign: 'center', lineHeight: FONT.md * 1.6, marginBottom: SPACING.xl },
-  emptyRefreshBtn:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: rp(20), paddingVertical: rp(12), borderRadius: RADIUS.full, backgroundColor: THEME.primaryDim, borderWidth: 1, borderColor: 'rgba(255,99,74,0.25)' },
-  emptyRefreshText: { fontSize: FONT.sm, fontWeight: '700', color: THEME.primary },
+
 });

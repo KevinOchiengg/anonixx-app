@@ -165,17 +165,28 @@ async def trigger_mpesa_stk(phone: str, amount: float, account_ref: str, descrip
         passkey = settings.MPESA_PASSKEY
         password = base64.b64encode(f"{shortcode}{passkey}{timestamp}".encode()).decode()
 
+        # Select correct Safaricom base URL based on environment
+        mpesa_base = (
+            "https://sandbox.safaricom.co.ke"
+            if settings.MPESA_ENVIRONMENT == "sandbox"
+            else "https://api.safaricom.co.ke"
+        )
+
         # Get access token
         async with httpx.AsyncClient() as client:
             auth_res = await client.get(
-                "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+                f"{mpesa_base}/oauth/v1/generate?grant_type=client_credentials",
                 auth=(settings.MPESA_CONSUMER_KEY, settings.MPESA_CONSUMER_SECRET),
                 timeout=10.0
             )
-            access_token = auth_res.json().get("access_token")
+            token_data   = auth_res.json()
+            access_token = token_data.get("access_token")
+            if not access_token:
+                print(f"⚠️ M-Pesa access token failed | status={auth_res.status_code} body={token_data}")
+                return {"success": False, "error": "Failed to get M-Pesa access token"}
 
             stk_res = await client.post(
-                "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+                f"{mpesa_base}/mpesa/stkpush/v1/processrequest",
                 headers={"Authorization": f"Bearer {access_token}"},
                 json={
                     "BusinessShortCode": shortcode,
@@ -193,9 +204,15 @@ async def trigger_mpesa_stk(phone: str, amount: float, account_ref: str, descrip
                 timeout=15.0
             )
             data = stk_res.json()
+            print(f"📲 STK Push response | status={stk_res.status_code} body={data}")
             if data.get("ResponseCode") == "0":
                 return {"success": True, "checkout_request_id": data.get("CheckoutRequestID")}
-            return {"success": False, "error": data.get("ResponseDescription", "STK push failed")}
+            safaricom_error = (
+                data.get("errorMessage")
+                or data.get("ResponseDescription")
+                or "STK push failed"
+            )
+            return {"success": False, "error": safaricom_error, "raw": data}
 
     except Exception as e:
         print(f"⚠️ M-Pesa STK error: {e}")

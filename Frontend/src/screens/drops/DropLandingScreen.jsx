@@ -19,7 +19,11 @@ import {
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useDispatch, useSelector } from 'react-redux';
 import { useToast } from '../../components/ui/Toast';
-import { API_BASE_URL } from '../../config/api';
+import { BACKENDS } from '../../config/api';
+
+// Drop landing always fetches from production — links are shared to external users
+// who cannot reach a local dev server.
+const DROP_API = BACKENDS.production;
 import { useAuth } from '../../context/AuthContext';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -112,7 +116,7 @@ export default function DropLandingScreen({ route, navigation }) {
     setFetchError(null);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/landing`, {
+      const res   = await fetch(`${DROP_API}/api/v1/drops/${dropId}/landing`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.status === 404) {
@@ -146,7 +150,7 @@ export default function DropLandingScreen({ route, navigation }) {
     setReactLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/react`, {
+      const res   = await fetch(`${DROP_API}/api/v1/drops/${dropId}/react`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ reaction: reaction.trim() }),
@@ -170,7 +174,7 @@ export default function DropLandingScreen({ route, navigation }) {
     setPayStep(PAY.WAITING);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/unlock/mpesa`, {
+      const res   = await fetch(`${DROP_API}/api/v1/drops/${dropId}/unlock/mpesa`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ phone_number: phone.trim() }),
@@ -195,7 +199,7 @@ export default function DropLandingScreen({ route, navigation }) {
     setCoinsLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/unlock/coins`, {
+      const res   = await fetch(`${DROP_API}/api/v1/drops/${dropId}/unlock/coins`, {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -227,7 +231,7 @@ export default function DropLandingScreen({ route, navigation }) {
       }
       try {
         const token = await AsyncStorage.getItem('token');
-        const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/unlock/status`, {
+        const res   = await fetch(`${DROP_API}/api/v1/drops/${dropId}/unlock/status`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();

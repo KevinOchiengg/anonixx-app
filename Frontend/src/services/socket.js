@@ -54,6 +54,10 @@ class SocketService {
     this.socket?.off(event, cb);
   }
 
+  sendTyping(chatId, recipientId) {
+    this.socket?.emit('user_typing', { chatId, recipientId });
+  }
+
   onNewMessage(cb)          { this.on('new_message',        cb); }
   onMessagesDelivered(cb)   { this.on('messages_delivered', cb); }
   onMessagesRead(cb)        { this.on('messages_read',      cb); }

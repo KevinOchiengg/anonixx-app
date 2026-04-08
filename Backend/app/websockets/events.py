@@ -18,6 +18,7 @@ from bson import ObjectId
 from app.sio import sio
 from app.database import db as _db_holder
 from app.core.jwt import decode_token
+from app.websockets.activity import emit_high_activity
 
 
 def _now() -> datetime:
@@ -31,6 +32,12 @@ def _db():
 
 # sid → user_id — in-memory; reset on server restart (acceptable for chat)
 _sid_to_user: dict[str, str] = {}
+
+# Currently online user IDs
+_online_users: set[str] = set()
+
+# Threshold for high-activity signal
+_HIGH_ACTIVITY_THRESHOLD = 5
 
 
 # ─── Connection lifecycle ─────────────────────────────────────────────────────
@@ -51,13 +58,28 @@ async def connect(sid: str, environ: dict, auth: dict):
         return False
 
     _sid_to_user[sid] = user_id
+    _online_users.add(user_id)
+
     # Personal room so the server can reach this user directly
     await sio.enter_room(sid, f"user_{user_id}")
+
+    # Tell all OTHER connected users someone just came online
+    await sio.emit(
+        "user_online",
+        {"count": len(_online_users)},
+        skip_sid=sid,
+    )
+
+    # Tell the newly connected user if space is busy
+    if len(_online_users) >= _HIGH_ACTIVITY_THRESHOLD:
+        await emit_high_activity(user_id, online_count=len(_online_users))
 
 
 @sio.event
 async def disconnect(sid: str):
-    _sid_to_user.pop(sid, None)
+    user_id = _sid_to_user.pop(sid, None)
+    if user_id:
+        _online_users.discard(user_id)
 
 
 # ─── Chat room management ─────────────────────────────────────────────────────
@@ -166,4 +188,29 @@ async def messages_read(sid: str, data: dict):
         "messages_read",
         {"chatId": chat_id, "messageIds": msg_ids},
         room=f"user_{sender_id}",
+    )
+
+
+# ─── Typing indicator ─────────────────────────────────────────────────────────
+
+@sio.event
+async def user_typing(sid: str, data: dict):
+    """
+    Client signals they are typing in a chat.
+    Forwards a `user_typing` event to the recipient.
+
+    Client emits: user_typing { chatId, recipientId }
+    """
+    sender_id = _sid_to_user.get(sid)
+    if not sender_id:
+        return
+
+    recipient_id = data.get("recipientId")
+    if not recipient_id:
+        return
+
+    await sio.emit(
+        "user_typing",
+        {"userId": sender_id, "chatId": data.get("chatId")},
+        room=f"user_{recipient_id}",
     )
