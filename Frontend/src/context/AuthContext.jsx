@@ -12,7 +12,7 @@ const AuthContext = createContext();
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+    return { isAuthenticated: false, user: null, loading: true, login: async () => {}, logout: async () => {}, checkAuth: async () => {} };
   }
   return context;
 };
@@ -88,7 +88,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuth = async () => {
-    const start = Date.now();
     try {
       const token = await AsyncStorage.getItem('token');
       const userData = await AsyncStorage.getItem('user');
@@ -104,11 +103,6 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(false);
       setUser(null);
     } finally {
-      // Guarantee at least 2.5 s for the dynamic splash to be meaningful
-      const elapsed = Date.now() - start;
-      if (elapsed < 2500) {
-        await new Promise(r => setTimeout(r, 2500 - elapsed));
-      }
       setLoading(false);
     }
   };

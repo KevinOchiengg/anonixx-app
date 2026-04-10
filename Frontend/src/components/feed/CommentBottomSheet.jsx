@@ -116,7 +116,7 @@ const CommentItem = React.memo(({
         </View>
         {item.content ? <Text style={st.commentText}>{item.content}</Text> : null}
         {item.gif_url   ? <Image source={{ uri: item.gif_url   }} style={st.commentGif}   resizeMode="cover" /> : null}
-        {item.image_url ? <Image source={{ uri: item.image_url }} style={st.commentImage} resizeMode="cover" /> : null}
+        {item.image_url ? <Image source={{ uri: item.image_url }} style={st.commentImage} resizeMode="contain" /> : null}
         <View style={st.commentActions}>
           <View style={st.commentActionsLeft}>
             {depth === 0 && (
@@ -279,8 +279,11 @@ export const CommentBottomSheet = React.memo(({
         ),
       );
     } else {
-      setComments(prev => [optimistic, ...prev]);
-      onCountChange?.(comments.length + 1);
+      setComments(prev => {
+        const next = [optimistic, ...prev];
+        onCountChange?.(next.length);
+        return next;
+      });
     }
 
     try {
@@ -320,12 +323,19 @@ export const CommentBottomSheet = React.memo(({
             ),
           );
         } else {
-          setComments(prev => prev.filter(c => c.id !== optimisticId));
-          onCountChange?.(comments.length);
+          setComments(prev => {
+            const next = prev.filter(c => c.id !== optimisticId);
+            onCountChange?.(next.length);
+            return next;
+          });
         }
       }
     } catch {
-      setComments(prev => prev.filter(c => c.id !== optimisticId));
+      setComments(prev => {
+        const next = prev.filter(c => c.id !== optimisticId);
+        onCountChange?.(next.length);
+        return next;
+      });
     } finally {
       setSubmitting(false);
     }
@@ -696,7 +706,7 @@ const st = StyleSheet.create({
   hotBadgeText:   { fontSize: 10, fontWeight: '700', color: '#FF634A' },
   commentText:    { fontSize: 14, color: T.textSecondary, lineHeight: 21 },
   commentGif:     { width: 160, height: 100, borderRadius: 10, marginTop: 6 },
-  commentImage:   { width: 220, height: 165, borderRadius: 12, marginTop: 8, borderWidth: 1, borderColor: T.borderStrong },
+  commentImage:   { width: 160, height: 120, borderRadius: 10, marginTop: 6, borderWidth: 1, borderColor: T.borderStrong },
   commentActions:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   commentActionsLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   commentActionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
