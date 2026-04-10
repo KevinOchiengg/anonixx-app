@@ -4,7 +4,7 @@ export const BACKENDS = {
   localhost: 'http://192.168.100.22:8000',
 };
 
-export const API_BASE_URL = __DEV__ ? BACKENDS.localhost : BACKENDS.production;
+export const API_BASE_URL = BACKENDS.production;
 
 if (__DEV__) {
   console.log('🔗 Backend:', API_BASE_URL);

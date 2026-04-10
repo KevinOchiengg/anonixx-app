@@ -462,15 +462,6 @@ export default function CalmFeedScreen({ navigation, route }) {
         </View>
       </View>
 
-      {streakBanner && (
-        <StreakBanner
-          message={streakBanner.message}
-          onDismiss={() => setStreakBanner(null)}
-        />
-      )}
-
-      {isAuthenticated && <DailyRewardBanner />}
-
       <FlatList
         ref={flatListRef}
         data={posts}
@@ -490,6 +481,17 @@ export default function CalmFeedScreen({ navigation, route }) {
             tintColor={THEME.primary}
             colors={[THEME.primary]}
           />
+        }
+        ListHeaderComponent={
+          <>
+            {streakBanner && (
+              <StreakBanner
+                message={streakBanner.message}
+                onDismiss={() => setStreakBanner(null)}
+              />
+            )}
+            {isAuthenticated && <DailyRewardBanner />}
+          </>
         }
         ListFooterComponent={ListFooter}
         showsVerticalScrollIndicator={false}

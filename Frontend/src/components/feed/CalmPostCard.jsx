@@ -79,15 +79,33 @@ const DoubleTapLike = React.memo(({ children, onDoubleTap }) => {
 });
 
 // ─── Image Carousel ───────────────────────────────────────────
-const ImageCarousel = React.memo(({ images }) => {
-  const [activeIndex,     setActiveIndex]     = useState(0);
-  const [containerWidth,  setContainerWidth]  = useState(0);
+const MAX_IMG_HEIGHT = rs(420);
 
-  const handleLayout   = useCallback((e) => setContainerWidth(e.nativeEvent.layout.width), []);
+const ImageCarousel = React.memo(({ images }) => {
+  const [activeIndex,    setActiveIndex]    = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [imgHeights,     setImgHeights]     = useState({});
+
+  const handleLayout    = useCallback((e) => setContainerWidth(e.nativeEvent.layout.width), []);
   const handleScrollEnd = useCallback((e) => {
     if (!containerWidth) return;
     setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / containerWidth));
   }, [containerWidth]);
+
+  useEffect(() => {
+    if (!containerWidth) return;
+    images.forEach((url, i) => {
+      if (imgHeights[i] !== undefined) return;
+      Image.getSize(url, (w, h) => {
+        const ratio = h / w;
+        setImgHeights(prev => ({ ...prev, [i]: Math.min(containerWidth * ratio, MAX_IMG_HEIGHT) }));
+      }, () => {
+        setImgHeights(prev => ({ ...prev, [i]: rs(240) }));
+      });
+    });
+  }, [containerWidth, images]);
+
+  const cardHeight = imgHeights[activeIndex] ?? rs(240);
 
   if (!images?.length) return null;
   return (
@@ -96,7 +114,12 @@ const ImageCarousel = React.memo(({ images }) => {
         <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={handleScrollEnd} scrollEventThrottle={16} decelerationRate="fast">
           {images.map((url, i) => (
-            <Image key={i} source={{ uri: url }} style={[styles.carouselImage, { width: containerWidth }]} resizeMode="cover" />
+            <Image
+              key={i}
+              source={{ uri: url }}
+              style={{ width: containerWidth, height: imgHeights[i] ?? rs(240), borderRadius: RADIUS.md }}
+              resizeMode="contain"
+            />
           ))}
         </ScrollView>
       )}

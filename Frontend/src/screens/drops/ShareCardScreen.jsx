@@ -11,12 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
+import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch } from 'react-redux';
 import { FileImage, Film, Type, X } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL, BACKENDS } from '../../config/api';
@@ -54,20 +55,29 @@ const TextCard = React.memo(({ text, setText, captureRef, inputRef, readOnly, sh
 
   return (
     <ViewShot ref={captureRef} options={{ format: 'png', quality: 1.0 }}>
-      <View style={[card.wrap, { width: CARD_W }]}>
-        <View style={card.brandRow}>
-          <Text style={card.brandName}>anonixx</Text>
-          <View style={card.brandSepDot} />
-          <Text style={card.brandTag}>drop</Text>
-        </View>
-        <View style={card.divider} />
+      <LinearGradient
+        colors={['#12151f', '#0c0f18', '#111420']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[card.wrap, { width: CARD_W }]}
+      >
+        {/* Giant ghost quote — background texture */}
+        <Text style={card.ghostQuote}>"</Text>
+
+        {/* Label */}
+        <Text style={card.secretTag}>someone said this</Text>
+
+        {/* Short red accent line */}
+        <View style={card.accentLine} />
+
+        {/* Confession — large serif italic */}
         <TextInput
           ref={inputRef}
           style={card.input}
           value={text}
           onChangeText={readOnly ? undefined : setText}
-          placeholder="say what you've been holding in…"
-          placeholderTextColor="rgba(154,154,163,0.3)"
+          placeholder={"say what you've been\nholding in…"}
+          placeholderTextColor="rgba(234,234,240,0.22)"
           multiline
           maxLength={MAX_CHARS}
           textAlignVertical="top"
@@ -76,18 +86,23 @@ const TextCard = React.memo(({ text, setText, captureRef, inputRef, readOnly, sh
           scrollEnabled={false}
           editable={!readOnly}
         />
-        <View style={card.divider} />
+
+        {/* Tension break — right-leaning partial line */}
+        <View style={card.tensionLine} />
+
+        {/* Footer */}
         <View style={card.footerRow}>
-          <Text style={card.anonTag}>— Anonymous</Text>
+          <Text style={card.anonTag}>— someone</Text>
           {!readOnly && (
             <Text style={[card.remaining, { color: warnColor }]}>{remaining}</Text>
           )}
         </View>
-        {shareUrl
-          ? <Text style={card.shareUrl}>{shareUrl}</Text>
-          : <Text style={card.watermark}>anonixx.app</Text>
-        }
-      </View>
+
+        {/* Brand signature */}
+        <Text style={card.brandSig}>anonixx</Text>
+
+
+      </LinearGradient>
     </ViewShot>
   );
 });
@@ -193,33 +208,47 @@ export default function ShareCardScreen({ navigation }) {
     setThumbUri(null);
   }, []);
 
-  const shareLink = useCallback(async (id, preview) => {
-    const shareUrl = `${BACKENDS.production}/api/v1/drops/${id}/open`;
-    const body = `🎭 *anonixx.drop*\n\n_"${preview}"_\n\n*someone just dropped this. anonymously.*\n*find out here →* ${shareUrl}`;
+  const shareDropCard = useCallback(async (id) => {
+    const dropUrl = `${BACKENDS.production}/api/v1/drops/${id}/open`;
     try {
-      const { Share } = require('react-native');
-      await Share.share(
-        Platform.OS === 'ios' ? { message: body, url: shareUrl } : { message: body },
-        { dialogTitle: 'Share your drop' },
-      );
-    } catch (err) {
-      if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
-      showToast({ type: 'error', message: 'Could not share.' });
-    }
-  }, [showToast]);
+      const token = await AsyncStorage.getItem('token');
 
-  const shareCardImage = useCallback(async () => {
-    try {
+      // 1. Capture the card as an image file
+      await new Promise(r => setTimeout(r, 200));
+      const localUri = await captureRef.current.capture();
+
+      // 2. Copy link to clipboard first, then share the card image.
+      //    User pastes the link below the image in WhatsApp — it appears tappable.
+      await Clipboard.setStringAsync(dropUrl);
+      showToast({ type: 'info', title: 'Link copied!', message: 'Paste it in the chat so people can tap it.' });
+
       const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) return;
-      await new Promise(r => setTimeout(r, 80));
-      const uri = await captureRef.current.capture();
-      await Sharing.shareAsync(uri, {
-        mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share card image',
-      });
+      if (canShare) {
+        await Sharing.shareAsync(localUri, { mimeType: 'image/png', dialogTitle: 'Share your drop' });
+      }
+
+      // 3. Upload in background so OG tags work for future link shares
+      (async () => {
+        try {
+          const form = new FormData();
+          form.append('file', { uri: localUri, name: 'card.png', type: 'image/png' });
+          const up = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
+            method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+          });
+          const upData = await up.json();
+          if (upData?.url) {
+            await fetch(`${API_BASE_URL}/api/v1/drops/${id}/card-image`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ card_image_url: upData.url }),
+            });
+          }
+        } catch {}
+      })();
+
     } catch (err) {
       if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
-      showToast({ type: 'error', message: 'Could not share image.' });
+      showToast({ type: 'error', message: 'Could not share your drop.' });
     }
   }, [showToast]);
 
@@ -316,14 +345,10 @@ export default function ShareCardScreen({ navigation }) {
       Keyboard.dismiss();
       setDropId(id);
 
-      const preview = mode === 'text'
-        ? text.trim()
-        : (caption.trim() || (mode === 'image' ? '📷 image drop' : '🎥 video drop'));
-
-      await shareLink(id, preview);
-
       showToast({ type: 'success', title: 'Dropped!', message: 'Your card is live. Share it anywhere.' });
       dispatch(awardMilestone('first_drop'));
+
+      await shareDropCard(id);
 
     } catch (err) {
       if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
@@ -331,15 +356,12 @@ export default function ShareCardScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [mode, text, caption, mediaUri, uploadMedia, shareLink, showToast, dispatch]);
+  }, [mode, text, caption, mediaUri, uploadMedia, shareDropCard, showToast, dispatch, dropId]);
 
-  const handleShareAgain = useCallback(() => {
+  const handleShareAgain = useCallback(async () => {
     if (!dropId) return;
-    const preview = mode === 'text'
-      ? text.trim()
-      : (caption.trim() || (mode === 'image' ? '📷 image drop' : '🎥 video drop'));
-    shareLink(dropId, preview);
-  }, [dropId, mode, text, caption, shareLink]);
+    await shareDropCard(dropId);
+  }, [dropId, shareDropCard]);
 
   const dropped = !!dropId;
   const canDrop = mode === 'text' ? !!text.trim() : !!mediaUri;
@@ -494,18 +516,8 @@ export default function ShareCardScreen({ navigation }) {
                   onPress={handleShareAgain}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.dropBtnText}>Share Again  ↗</Text>
+                  <Text style={styles.dropBtnText}>Share Card  ↗</Text>
                 </TouchableOpacity>
-                {mode === 'text' && (
-                  <TouchableOpacity
-                    style={styles.secondaryBtn}
-                    onPress={shareCardImage}
-                    activeOpacity={0.75}
-                    hitSlop={HIT_SLOP}
-                  >
-                    <Text style={styles.secondaryBtnText}>Share Card Image</Text>
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity
                   style={styles.copyBtn}
                   onPress={async () => {
@@ -529,36 +541,85 @@ export default function ShareCardScreen({ navigation }) {
 // ─── Card Styles ──────────────────────────────────────────────
 const card = StyleSheet.create({
   wrap: {
-    backgroundColor: T.surface,
-    borderRadius:    RADIUS.lg,
-    borderWidth:     1,
-    borderColor:     'rgba(255,255,255,0.08)',
-    borderLeftWidth: 1,
-    borderLeftColor: T.primary,
-    paddingVertical:   rp(20),
-    paddingHorizontal: rp(20),
-    paddingLeft:       rp(22),
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: rs(8) },
-    shadowOpacity:   0.4,
-    shadowRadius:    rs(24),
-    elevation:       8,
+    borderRadius:  rp(4),
+    paddingTop:    rp(28),
+    paddingBottom: rp(28),
+    paddingLeft:   rp(24),
+    paddingRight:  rp(24),
+    shadowColor:   '#000',
+    shadowOffset:  { width: 0, height: rs(20) },
+    shadowOpacity: 0.85,
+    shadowRadius:  rs(40),
+    elevation:     18,
+    overflow:      'hidden',
+    borderWidth:   1,
+    borderColor:   'rgba(255,255,255,0.04)',
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6), marginBottom: rp(12) },
-  brandName: { fontSize: FONT.xs, fontWeight: '700', color: T.primary, letterSpacing: 1.2 },
-  brandSepDot: { width: rs(3), height: rs(3), borderRadius: rs(2), backgroundColor: T.textMuted },
-  brandTag: { fontSize: FONT.xs, color: T.textSecondary, letterSpacing: 0.4 },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginBottom: rp(12) },
+  ghostQuote: {
+    position:   'absolute',
+    top:        rp(-18),
+    left:       rp(10),
+    fontSize:   rf(180),
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    color:      'rgba(255,255,255,0.03)',
+    lineHeight: rf(180),
+  },
+  secretTag: {
+    fontSize:      rf(10),
+    color:         'rgba(255,99,74,0.60)',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+    fontStyle:     'italic',
+    marginBottom:  rp(14),
+  },
+  accentLine: {
+    width:           rp(36),
+    height:          1.5,
+    backgroundColor: T.primary,
+    opacity:         0.7,
+    marginBottom:    rp(22),
+  },
   input: {
-    fontSize: rf(16), fontWeight: '400', color: T.text,
-    lineHeight: rf(26), letterSpacing: 0.15,
-    minHeight: rs(120), paddingVertical: 0, paddingHorizontal: 0, marginBottom: rp(12),
+    fontSize:          rf(24),
+    fontFamily:        Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontStyle:         'italic',
+    color:             '#E8E8EE',
+    lineHeight:        rf(38),
+    letterSpacing:     0.3,
+    minHeight:         rs(120),
+    paddingVertical:   0,
+    paddingHorizontal: 0,
+    marginBottom:      rp(24),
   },
-  footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: rp(8) },
-  anonTag: { fontSize: FONT.sm, color: T.textSecondary, fontStyle: 'italic' },
+  tensionLine: {
+    width:           '62%',
+    height:          1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignSelf:       'flex-end',
+    marginBottom:    rp(18),
+  },
+  footerRow: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    alignItems:     'center',
+    marginBottom:   rp(22),
+  },
+  anonTag: {
+    fontSize:      rf(11),
+    fontFamily:    Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontStyle:     'italic',
+    color:         'rgba(255,255,255,0.38)',
+    letterSpacing: 0.5,
+  },
   remaining: { fontSize: rf(11), fontWeight: '600' },
-  watermark: { fontSize: rf(9), color: T.textSecondary, letterSpacing: 0.3, marginTop: rp(6), opacity: 0.5, textAlign: 'right' },
-  shareUrl: { fontSize: rf(9), color: T.primary, marginTop: rp(8), letterSpacing: 0.2, textAlign: 'center', opacity: 0.85 },
+  brandSig: {
+    fontSize:      rf(10),
+    color:         'rgba(255,255,255,0.20)',
+    letterSpacing: 5,
+    fontStyle:     'italic',
+    textAlign:     'right',
+    marginRight:   rp(4),
+  },
 });
 
 // ─── Media Picker Styles ──────────────────────────────────────

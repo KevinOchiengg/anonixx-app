@@ -597,6 +597,12 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
         f'style="width:100%;border-radius:12px;display:block;"></a>'
     ) if card_image_url else ""
 
+    confession_html = ""
+    if confession:
+        confession_html = f'<div class="confession">&ldquo;{confession}&rdquo;</div>'
+    elif card_image_url:
+        confession_html = f'<img src="{card_image_url}" alt="Drop card" style="width:100%;border-radius:12px;margin-bottom:24px;display:block;">'
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -621,43 +627,70 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
       min-height: 100vh; padding: 24px;
     }}
     .card {{
-      background: #151924; border-radius: 16px;
-      border-left: 2px solid #FF634A;
-      padding: 32px 28px; max-width: 380px; width: 100%;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      background: #111520;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-top: 2px solid #FF634A;
+      padding: 32px 28px;
+      max-width: 420px; width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
     }}
-    .logo {{ color: #FF634A; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }}
-    .tagline {{ color: #9A9AA3; font-size: 13px; margin-bottom: 24px; font-style: italic; }}
-    .message {{ color: #EAEAF0; font-size: 15px; line-height: 1.6; margin-bottom: 28px; }}
+    .logo {{
+      color: #FF634A; font-size: 13px; font-weight: 700;
+      letter-spacing: 3px; text-transform: uppercase;
+      margin-bottom: 6px; opacity: 0.8;
+    }}
+    .label {{
+      color: rgba(255,255,255,0.25); font-size: 11px;
+      letter-spacing: 2px; text-transform: uppercase;
+      font-style: italic; margin-bottom: 28px;
+    }}
+    .confession {{
+      font-family: Georgia, serif;
+      font-size: 22px; font-style: italic;
+      color: #E8E8EE; line-height: 1.7;
+      margin-bottom: 32px; letter-spacing: 0.2px;
+    }}
+    .divider {{
+      height: 1px; background: rgba(255,255,255,0.07);
+      margin-bottom: 24px;
+    }}
+    .someone {{
+      font-size: 12px; color: rgba(255,255,255,0.3);
+      font-style: italic; margin-bottom: 28px;
+      font-family: Georgia, serif;
+    }}
     .btn {{
       display: block; background: #FF634A; color: #fff;
-      padding: 14px 24px; border-radius: 10px; text-align: center;
+      padding: 15px 24px; border-radius: 10px; text-align: center;
       text-decoration: none; font-weight: 700; font-size: 15px;
-      margin-bottom: 12px;
+      margin-bottom: 12px; letter-spacing: 0.3px;
     }}
     .btn-ghost {{
-      display: block; color: #9A9AA3;
+      display: block; color: rgba(255,255,255,0.35);
       padding: 12px 24px; border-radius: 10px; text-align: center;
-      text-decoration: none; font-size: 13px; border: 1px solid rgba(255,255,255,0.08);
+      text-decoration: none; font-size: 13px;
+      border: 1px solid rgba(255,255,255,0.08);
     }}
   </style>
   <script>
-    // Try to open the app immediately
+    // Try deep link — if app is installed it opens immediately
     window.location.href = "{deep_link}";
-    // If app not installed, show the page after 2s
-    setTimeout(function() {{
+    // Show page right away regardless — don't make users wait
+    document.addEventListener('DOMContentLoaded', function() {{
       document.getElementById('content').style.display = 'block';
-    }}, 2000);
+    }});
   </script>
 </head>
 <body>
-  <div class="card" id="content" style="display:none">
+  <div class="card" id="content">
     <div class="logo">anonixx</div>
-    <div class="tagline">your truth, no name required.</div>
-    {card_img_block}
-    <div class="message">Someone dropped an anonymous confession. Open Anonixx to see it.</div>
-    <a class="btn" href="{deep_link}">Open in Anonixx</a>
-    <a class="btn-ghost" href="{store_ios}">Get the app →</a>
+    <div class="label">someone said this</div>
+    {confession_html}
+    <div class="divider"></div>
+    <div class="someone">— anonymous</div>
+    <a class="btn" href="{deep_link}">Open in Anonixx ↗</a>
+    <a class="btn-ghost" href="{store_android}">Get the app</a>
   </div>
 </body>
 </html>"""

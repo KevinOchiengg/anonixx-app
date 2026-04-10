@@ -5,7 +5,6 @@ import { Provider } from 'react-redux';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import * as NavigationBar from 'expo-navigation-bar';
 import store from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SocketProvider } from './src/context/SocketContext';
@@ -50,11 +49,6 @@ const styles = StyleSheet.create({
 });
 
 export default function App() {
-  useEffect(() => {
-    // Match Android phone navigation bar to Anonixx surface color
-    NavigationBar.setBackgroundColorAsync('#151924');
-    NavigationBar.setButtonStyleAsync('light');
-  }, []);
 
   return (
     <ErrorBoundary>
