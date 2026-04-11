@@ -632,12 +632,10 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
       min-height: 100vh; padding: 24px;
     }}
     .card {{
-      background: #111520;
-      border-radius: 16px;
+      background: #111520; border-radius: 16px;
       border: 1px solid rgba(255,255,255,0.06);
       border-top: 2px solid #FF634A;
-      padding: 32px 28px;
-      max-width: 420px; width: 100%;
+      padding: 32px 28px; max-width: 420px; width: 100%;
       box-shadow: 0 20px 60px rgba(0,0,0,0.6);
     }}
     .logo {{
@@ -651,25 +649,24 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
       font-style: italic; margin-bottom: 28px;
     }}
     .confession {{
-      font-family: Georgia, serif;
-      font-size: 22px; font-style: italic;
-      color: #E8E8EE; line-height: 1.7;
-      margin-bottom: 32px; letter-spacing: 0.2px;
+      font-family: Georgia, serif; font-size: 22px; font-style: italic;
+      color: #E8E8EE; line-height: 1.7; margin-bottom: 32px; letter-spacing: 0.2px;
     }}
-    .divider {{
-      height: 1px; background: rgba(255,255,255,0.07);
-      margin-bottom: 24px;
-    }}
+    .divider {{ height: 1px; background: rgba(255,255,255,0.07); margin-bottom: 24px; }}
     .someone {{
       font-size: 12px; color: rgba(255,255,255,0.3);
-      font-style: italic; margin-bottom: 28px;
-      font-family: Georgia, serif;
+      font-style: italic; margin-bottom: 28px; font-family: Georgia, serif;
+    }}
+    .status {{
+      font-size: 13px; color: rgba(255,255,255,0.4); text-align: center;
+      margin-bottom: 20px; font-style: italic;
     }}
     .btn {{
       display: block; background: #FF634A; color: #fff;
       padding: 15px 24px; border-radius: 10px; text-align: center;
       text-decoration: none; font-weight: 700; font-size: 15px;
-      margin-bottom: 12px; letter-spacing: 0.3px;
+      margin-bottom: 12px; letter-spacing: 0.3px; cursor: pointer;
+      border: none; width: 100%;
     }}
     .btn-ghost {{
       display: block; color: rgba(255,255,255,0.35);
@@ -677,29 +674,58 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
       text-decoration: none; font-size: 13px;
       border: 1px solid rgba(255,255,255,0.08);
     }}
+    #download-section {{ display: none; }}
   </style>
   <script>
-    function openApp() {{
-      var isAndroid = /android/i.test(navigator.userAgent);
+    var isAndroid = /android/i.test(navigator.userAgent);
+    var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+    function tryOpenApp() {{
       if (isAndroid) {{
-        // Intent URL: opens app if installed, falls back to Play Store — no Chrome error
+        // Intent URL opens app if installed, silently goes to Play Store if not — no Chrome error
         window.location.href = "{android_intent}";
-      }} else {{
-        // iOS / other — standard deep link
+        // After 2.5s if still here, show download section
+        setTimeout(showDownload, 2500);
+      }} else if (isIOS) {{
         window.location.href = "{deep_link}";
+        // After 1.5s if still here, app not installed — show App Store
+        setTimeout(showDownload, 1500);
+      }} else {{
+        // Desktop — just show download section immediately
+        showDownload();
       }}
     }}
+
+    function showDownload() {{
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('download-section').style.display = 'block';
+    }}
+
+    // Auto-attempt as soon as page loads
+    window.addEventListener('load', function() {{
+      setTimeout(tryOpenApp, 400);
+    }});
   </script>
 </head>
 <body>
-  <div class="card" id="content">
+  <div class="card">
     <div class="logo">anonixx</div>
     <div class="label">someone said this</div>
     {confession_html}
     <div class="divider"></div>
     <div class="someone">— anonymous</div>
-    <a class="btn" href="{deep_link}" onclick="openApp(); return false;">Open in Anonixx ↗</a>
-    <a class="btn-ghost" href="{store_android}">Get the app</a>
+
+    <!-- Shown while trying to open the app -->
+    <p class="status" id="status">Opening Anonixx…</p>
+
+    <!-- Shown if app is not installed -->
+    <div id="download-section">
+      <p style="font-size:13px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:20px;">
+        Get the app to see the full drop &amp; connect anonymously
+      </p>
+      <a class="btn" href="{store_android}">Download for Android ↓</a>
+      <a class="btn-ghost" href="{store_ios}">Download for iOS</a>
+    </div>
   </div>
 </body>
 </html>"""
