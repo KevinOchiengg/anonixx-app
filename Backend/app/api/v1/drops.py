@@ -317,8 +317,8 @@ async def create_drop(
     preview = data.confession.strip() if data.confession else ("📷 image drop" if data.media_type == "image" else "🎥 video drop")
     return {
         "id": drop_id,
-        "share_link": f"anonixx://drop/{drop_id}",
-        "share_text": f"{preview}\n\n— unlock to connect 👀\nanonixx://drop/{drop_id}",
+        "share_link": f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open",
+        "share_text": f"{preview}\n\n— unlock to connect 👀\n{settings.BASE_URL}/api/v1/drops/{drop_id}/open",
         "expires_at": drop["expires_at"].isoformat(),
         "time_left": get_time_left(drop["expires_at"]),
         "is_night_mode": night,
@@ -1546,7 +1546,7 @@ async def get_drops_inbox(
             "reactions": drop.get("reactions", []),
             "time_left": get_time_left(drop["expires_at"]),
             "is_night_mode": drop.get("is_night_mode", False),
-            "share_link": f"anonixx://drop/{str(drop['_id'])}",
+            "share_link": f"{settings.BASE_URL}/api/v1/drops/{str(drop['_id'])}/open",
         })
 
     # Connections (chats)
