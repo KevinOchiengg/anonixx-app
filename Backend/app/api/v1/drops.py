@@ -65,7 +65,8 @@ class CardImageRequest(BaseModel):
 # ==================== HELPERS ====================
 
 def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    # Returns naive UTC datetime — matches what MongoDB stores
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def is_night_mode() -> bool:
