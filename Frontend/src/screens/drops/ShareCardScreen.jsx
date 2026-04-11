@@ -243,7 +243,7 @@ export default function ShareCardScreen({ navigation }) {
         await Linking.openURL(whatsappUrl);
       } else {
         // WhatsApp not installed — fallback: show toast with link already in clipboard
-        showToast({ type: 'info', message: 'Link copied — paste it alongside your card.' });
+        showToast({ type: 'info', title: 'Link copied!', message: 'Drop the card, then paste this right under it 👇' });
       }
 
       // 3. Upload in background so OG tags work for future link shares
@@ -541,7 +541,7 @@ export default function ShareCardScreen({ navigation }) {
                   style={styles.copyBtn}
                   onPress={async () => {
                     await Clipboard.setStringAsync(`${BACKENDS.production}/api/v1/drops/${dropId}/open`);
-                    showToast({ type: 'success', message: 'Link copied.' });
+                    showToast({ type: 'success', title: 'Link copied!', message: 'Send the card, then paste this right under it 👇' });
                   }}
                   activeOpacity={0.75}
                   hitSlop={HIT_SLOP}
