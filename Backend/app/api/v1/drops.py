@@ -674,12 +674,11 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     }}
   </style>
   <script>
-    // Try deep link — if app is installed it opens immediately
-    window.location.href = "{deep_link}";
-    // Show page right away regardless — don't make users wait
-    document.addEventListener('DOMContentLoaded', function() {{
-      document.getElementById('content').style.display = 'block';
-    }});
+    // Attempt deep link only when user taps the button — never auto-redirect
+    // (auto-redirect breaks the page on browsers where the app isn't installed)
+    function openApp() {{
+      window.location.href = "{deep_link}";
+    }}
   </script>
 </head>
 <body>
@@ -689,7 +688,7 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     {confession_html}
     <div class="divider"></div>
     <div class="someone">— anonymous</div>
-    <a class="btn" href="{deep_link}">Open in Anonixx ↗</a>
+    <a class="btn" href="{deep_link}" onclick="openApp(); return false;">Open in Anonixx ↗</a>
     <a class="btn-ghost" href="{store_android}">Get the app</a>
   </div>
 </body>

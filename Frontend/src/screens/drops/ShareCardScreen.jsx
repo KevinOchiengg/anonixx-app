@@ -6,7 +6,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Keyboard, Dimensions,
-  KeyboardAvoidingView, ScrollView, Platform, Image,
+  KeyboardAvoidingView, ScrollView, Platform, Image, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -101,6 +101,15 @@ const TextCard = React.memo(({ text, setText, captureRef, inputRef, readOnly, sh
         {/* Brand signature */}
         <Text style={card.brandSig}>anonixx</Text>
 
+        {/* Drop link — baked into the captured image so it shares automatically */}
+        {shareUrl ? (
+          <View style={card.linkRow}>
+            <View style={card.linkDot} />
+            <Text style={card.linkText} numberOfLines={1}>
+              {shareUrl.replace('https://', '')}
+            </Text>
+          </View>
+        ) : null}
 
       </LinearGradient>
     </ViewShot>
@@ -213,18 +222,28 @@ export default function ShareCardScreen({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // 1. Capture the card as an image file
-      await new Promise(r => setTimeout(r, 200));
+      // 1. Wait for the card to re-render with the baked link, then capture
+      await new Promise(r => setTimeout(r, 400));
       const localUri = await captureRef.current.capture();
 
-      // 2. Copy link to clipboard first, then share the card image.
-      //    User pastes the link below the image in WhatsApp — it appears tappable.
+      // 2. Copy link to clipboard silently
       await Clipboard.setStringAsync(dropUrl);
-      showToast({ type: 'info', title: 'Link copied!', message: 'Paste it in the chat so people can tap it.' });
 
+      // 3. Share the card image — when sheet closes, auto-send the link via WhatsApp
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(localUri, { mimeType: 'image/png', dialogTitle: 'Share your drop' });
+      }
+
+      // 4. Auto-open WhatsApp with the link pre-filled so user just hits send
+      //    (two messages: card image + link — back to back, no manual paste)
+      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(dropUrl)}`;
+      const canOpenWhatsApp = await Linking.canOpenURL(whatsappUrl).catch(() => false);
+      if (canOpenWhatsApp) {
+        await Linking.openURL(whatsappUrl);
+      } else {
+        // WhatsApp not installed — fallback: show toast with link already in clipboard
+        showToast({ type: 'info', message: 'Link copied — paste it alongside your card.' });
       }
 
       // 3. Upload in background so OG tags work for future link shares
@@ -619,6 +638,25 @@ const card = StyleSheet.create({
     fontStyle:     'italic',
     textAlign:     'right',
     marginRight:   rp(4),
+  },
+  linkRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginTop:      rp(12),
+    gap:            rp(6),
+  },
+  linkDot: {
+    width:           rp(5),
+    height:          rp(5),
+    borderRadius:    rp(3),
+    backgroundColor: 'rgba(255,99,74,0.55)',
+  },
+  linkText: {
+    flex:          1,
+    fontSize:      rf(9),
+    color:         'rgba(255,99,74,0.65)',
+    letterSpacing: 0.4,
+    fontStyle:     'italic',
   },
 });
 
