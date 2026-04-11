@@ -601,17 +601,16 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     else:
         og_image_tags = ""
 
-    card_img_block = (
-        f'<a href="{deep_link}" style="display:block;margin-bottom:20px;">'
-        f'<img src="{card_image_url}" alt="Confession card" '
-        f'style="width:100%;border-radius:12px;display:block;"></a>'
-    ) if card_image_url else ""
-
-    confession_html = ""
+    # Build confession/media content block
     if confession:
-        confession_html = f'<div class="confession">&ldquo;{confession}&rdquo;</div>'
+        content_block = f'<p class="confession">{confession}</p>'
     elif card_image_url:
-        confession_html = f'<img src="{card_image_url}" alt="Drop card" style="width:100%;border-radius:12px;margin-bottom:24px;display:block;">'
+        content_block = f'<img src="{card_image_url}" alt="Drop" class="drop-media">'
+    else:
+        content_block = '<p class="confession" style="color:rgba(255,255,255,0.2);font-style:italic;">something anonymous…</p>'
+
+    # Short domain for the link row baked into card
+    open_domain = open_url.replace("https://", "").replace("http://", "")
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -628,56 +627,132 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
   <meta name="twitter:description" content="{og_description}">
 {og_image_tags}
   <title>{og_title} · Anonixx</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital@0;1&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{
       background: #0b0f18; color: #EAEAF0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      display: flex; align-items: center; justify-content: center;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
       min-height: 100vh; padding: 24px;
     }}
+
+    /* ── The card — matches TextCard in ShareCardScreen.jsx ── */
     .card {{
-      background: #111520; border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-top: 2px solid #FF634A;
-      padding: 32px 28px; max-width: 420px; width: 100%;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      position: relative; overflow: hidden;
+      background: linear-gradient(135deg, #12151f 0%, #0c0f18 55%, #111420 100%);
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.04);
+      padding: 32px 28px 28px;
+      max-width: 420px; width: 100%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.85);
     }}
-    .logo {{
-      color: #FF634A; font-size: 13px; font-weight: 700;
-      letter-spacing: 3px; text-transform: uppercase;
-      margin-bottom: 6px; opacity: 0.8;
+
+    /* Ghost " — background texture */
+    .ghost-quote {{
+      position: absolute; top: -28px; left: 10px;
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 200px; line-height: 200px;
+      color: rgba(255,255,255,0.03);
+      pointer-events: none; user-select: none;
     }}
-    .label {{
-      color: rgba(255,255,255,0.25); font-size: 11px;
-      letter-spacing: 2px; text-transform: uppercase;
-      font-style: italic; margin-bottom: 28px;
+
+    /* "someone said this" label */
+    .secret-tag {{
+      font-size: 10px; color: rgba(255,99,74,0.60);
+      letter-spacing: 2.5px; text-transform: uppercase;
+      font-style: italic; margin-bottom: 14px;
+      font-family: 'DM Sans', sans-serif;
     }}
+
+    /* Short red accent line */
+    .accent-line {{
+      width: 36px; height: 1.5px;
+      background: #FF634A; opacity: 0.7;
+      margin-bottom: 22px;
+    }}
+
+    /* Confession text */
     .confession {{
-      font-family: Georgia, serif; font-size: 22px; font-style: italic;
-      color: #E8E8EE; line-height: 1.7; margin-bottom: 32px; letter-spacing: 0.2px;
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 22px; font-style: italic;
+      color: #E8E8EE; line-height: 1.72;
+      letter-spacing: 0.3px; margin-bottom: 28px;
     }}
-    .divider {{ height: 1px; background: rgba(255,255,255,0.07); margin-bottom: 24px; }}
-    .someone {{
-      font-size: 12px; color: rgba(255,255,255,0.3);
-      font-style: italic; margin-bottom: 28px; font-family: Georgia, serif;
+
+    /* Media drop */
+    .drop-media {{
+      width: 100%; border-radius: 10px;
+      display: block; margin-bottom: 28px;
+    }}
+
+    /* Tension break — right-leaning partial line */
+    .tension-line {{
+      width: 62%; height: 1px;
+      background: rgba(255,255,255,0.08);
+      margin-left: auto; margin-bottom: 18px;
+    }}
+
+    /* Footer row */
+    .footer-row {{
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 22px;
+    }}
+    .anon-tag {{
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 11px; font-style: italic;
+      color: rgba(255,255,255,0.38); letter-spacing: 0.5px;
+    }}
+
+    /* Brand signature */
+    .brand-sig {{
+      font-size: 10px; color: rgba(255,255,255,0.20);
+      letter-spacing: 5px; font-style: italic;
+      text-align: right; margin-bottom: 14px;
+      font-family: 'DM Sans', sans-serif;
+    }}
+
+    /* Link row baked into card */
+    .link-row {{
+      display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+    }}
+    .link-dot {{
+      width: 5px; height: 5px; border-radius: 50%;
+      background: rgba(255,99,74,0.55); flex-shrink: 0;
+    }}
+    .link-text {{
+      font-size: 9px; color: rgba(255,99,74,0.65);
+      letter-spacing: 0.4px; font-style: italic;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: 'DM Sans', sans-serif;
+    }}
+
+    /* ── Below-card actions ── */
+    .actions {{
+      max-width: 420px; width: 100%; margin-top: 20px;
     }}
     .status {{
-      font-size: 13px; color: rgba(255,255,255,0.4); text-align: center;
-      margin-bottom: 20px; font-style: italic;
+      font-size: 13px; color: rgba(255,255,255,0.35);
+      text-align: center; font-style: italic;
+      margin-bottom: 0; font-family: 'DM Sans', sans-serif;
     }}
     .btn {{
       display: block; background: #FF634A; color: #fff;
-      padding: 15px 24px; border-radius: 10px; text-align: center;
+      padding: 15px 24px; border-radius: 12px; text-align: center;
       text-decoration: none; font-weight: 700; font-size: 15px;
-      margin-bottom: 12px; letter-spacing: 0.3px; cursor: pointer;
+      margin-bottom: 10px; letter-spacing: 0.3px; cursor: pointer;
       border: none; width: 100%;
+      font-family: 'DM Sans', sans-serif;
+      box-shadow: 0 4px 20px rgba(255,99,74,0.35);
     }}
     .btn-ghost {{
       display: block; color: rgba(255,255,255,0.35);
-      padding: 12px 24px; border-radius: 10px; text-align: center;
+      padding: 12px 24px; border-radius: 12px; text-align: center;
       text-decoration: none; font-size: 13px;
       border: 1px solid rgba(255,255,255,0.08);
+      font-family: 'DM Sans', sans-serif;
     }}
     #download-section {{ display: none; }}
   </style>
@@ -685,30 +760,22 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     var isAndroid = /android/i.test(navigator.userAgent);
     var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
-    // Detect if the app opened — browser loses focus or goes hidden when another app launches
+    // Detect if the app opened — browser loses focus when OS switches to the app
     var appOpened = false;
     document.addEventListener('visibilitychange', function() {{
       if (document.hidden) appOpened = true;
     }});
-    window.addEventListener('blur', function() {{
-      appOpened = true;
-    }});
-    window.addEventListener('pagehide', function() {{
-      appOpened = true;
-    }});
+    window.addEventListener('blur', function() {{ appOpened = true; }});
+    window.addEventListener('pagehide', function() {{ appOpened = true; }});
 
     function tryOpenApp() {{
       if (isAndroid) {{
-        // Intent URL opens app if installed, goes to Play Store if not — no Chrome error
         window.location.href = "{android_intent}";
-        // After 2.5s, only show download if the app did NOT open
         setTimeout(function() {{ if (!appOpened) showDownload(); }}, 2500);
       }} else if (isIOS) {{
         window.location.href = "{deep_link}";
-        // After 1.5s, only show App Store if the app did NOT open
         setTimeout(function() {{ if (!appOpened) showDownload(); }}, 1500);
       }} else {{
-        // Desktop — just show download section immediately
         showDownload();
       }}
     }}
@@ -718,26 +785,32 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
       document.getElementById('download-section').style.display = 'block';
     }}
 
-    // Auto-attempt as soon as page loads
-    window.addEventListener('load', function() {{
-      setTimeout(tryOpenApp, 400);
-    }});
+    window.addEventListener('load', function() {{ setTimeout(tryOpenApp, 400); }});
   </script>
 </head>
 <body>
+  <!-- The card — visually identical to TextCard in ShareCardScreen.jsx -->
   <div class="card">
-    <div class="logo">anonixx</div>
-    <div class="label">someone said this</div>
-    {confession_html}
-    <div class="divider"></div>
-    <div class="someone">— anonymous</div>
+    <span class="ghost-quote">&ldquo;</span>
+    <p class="secret-tag">someone said this</p>
+    <div class="accent-line"></div>
+    {content_block}
+    <div class="tension-line"></div>
+    <div class="footer-row">
+      <span class="anon-tag">— someone</span>
+    </div>
+    <p class="brand-sig">anonixx</p>
+    <div class="link-row">
+      <span class="link-dot"></span>
+      <span class="link-text">{open_domain}</span>
+    </div>
+  </div>
 
-    <!-- Shown while trying to open the app -->
+  <!-- Below-card status / download -->
+  <div class="actions">
     <p class="status" id="status">Opening Anonixx…</p>
-
-    <!-- Shown only if app is not installed -->
     <div id="download-section">
-      <p style="font-size:13px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:20px;">
+      <p style="font-size:13px;color:rgba(255,255,255,0.40);text-align:center;margin-bottom:20px;font-style:italic;">
         Get the app to unlock the full drop &amp; connect anonymously
       </p>
       <a class="btn" href="{store_android}">Get it on Android ↓</a>
