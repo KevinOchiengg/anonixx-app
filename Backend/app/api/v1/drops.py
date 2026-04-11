@@ -65,8 +65,14 @@ class CardImageRequest(BaseModel):
 # ==================== HELPERS ====================
 
 def now_utc() -> datetime:
-    # Returns naive UTC datetime — matches what MongoDB stores
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc)
+
+
+def _ensure_aware(dt: datetime) -> datetime:
+    """Make a datetime timezone-aware (UTC) if it isn't already."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def is_night_mode() -> bool:
@@ -92,9 +98,7 @@ def get_time_ago(dt: datetime) -> str:
 
 
 def get_time_left(expires_at: datetime) -> str:
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    delta = expires_at - now_utc()
+    delta = _ensure_aware(expires_at) - now_utc()
     if delta.total_seconds() <= 0:
         return "expired"
     hours = int(delta.total_seconds() // 3600)
@@ -461,7 +465,7 @@ async def get_drop_landing(
     if not drop:
         raise HTTPException(status_code=404, detail="Drop not found")
 
-    is_expired = drop["expires_at"] < now_utc() or not drop.get("is_active", True)
+    is_expired = _ensure_aware(drop["expires_at"]) < now_utc() or not drop.get("is_active", True)
 
     # Track admirer (anonymous view)
     if current_user_id and current_user_id != drop["sender_id"]:
@@ -772,7 +776,7 @@ async def react_to_drop(
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot react to your own drop")
 
-    if drop["expires_at"] < now_utc():
+    if _ensure_aware(drop["expires_at"]) < now_utc():
         raise HTTPException(status_code=400, detail="This drop has expired")
 
     # One reaction per user per drop
@@ -841,7 +845,7 @@ async def unlock_drop_coins(
         raise HTTPException(status_code=404, detail="Drop not found.")
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop.")
-    if drop["expires_at"] < now_utc():
+    if _ensure_aware(drop["expires_at"]) < now_utc():
         raise HTTPException(status_code=400, detail="This drop has expired.")
 
     # Idempotent: already unlocked?
@@ -894,7 +898,7 @@ async def unlock_drop_mpesa(
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
 
-    if drop["expires_at"] < now_utc():
+    if _ensure_aware(drop["expires_at"]) < now_utc():
         raise HTTPException(status_code=400, detail="This drop has expired")
 
     # Already unlocked?
@@ -956,7 +960,7 @@ async def unlock_drop_stripe(
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
 
-    if drop["expires_at"] < now_utc():
+    if _ensure_aware(drop["expires_at"]) < now_utc():
         raise HTTPException(status_code=400, detail="This drop has expired")
 
     existing = await db["drop_unlocks"].find_one({
