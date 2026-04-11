@@ -680,16 +680,28 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     var isAndroid = /android/i.test(navigator.userAgent);
     var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
+    // Detect if the app opened — browser loses focus or goes hidden when another app launches
+    var appOpened = false;
+    document.addEventListener('visibilitychange', function() {{
+      if (document.hidden) appOpened = true;
+    }});
+    window.addEventListener('blur', function() {{
+      appOpened = true;
+    }});
+    window.addEventListener('pagehide', function() {{
+      appOpened = true;
+    }});
+
     function tryOpenApp() {{
       if (isAndroid) {{
-        // Intent URL opens app if installed, silently goes to Play Store if not — no Chrome error
+        // Intent URL opens app if installed, goes to Play Store if not — no Chrome error
         window.location.href = "{android_intent}";
-        // After 2.5s if still here, show download section
-        setTimeout(showDownload, 2500);
+        // After 2.5s, only show download if the app did NOT open
+        setTimeout(function() {{ if (!appOpened) showDownload(); }}, 2500);
       }} else if (isIOS) {{
         window.location.href = "{deep_link}";
-        // After 1.5s if still here, app not installed — show App Store
-        setTimeout(showDownload, 1500);
+        // After 1.5s, only show App Store if the app did NOT open
+        setTimeout(function() {{ if (!appOpened) showDownload(); }}, 1500);
       }} else {{
         // Desktop — just show download section immediately
         showDownload();
@@ -718,13 +730,13 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     <!-- Shown while trying to open the app -->
     <p class="status" id="status">Opening Anonixx…</p>
 
-    <!-- Shown if app is not installed -->
+    <!-- Shown only if app is not installed -->
     <div id="download-section">
       <p style="font-size:13px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:20px;">
-        Get the app to see the full drop &amp; connect anonymously
+        Get the app to unlock the full drop &amp; connect anonymously
       </p>
-      <a class="btn" href="{store_android}">Download for Android ↓</a>
-      <a class="btn-ghost" href="{store_ios}">Download for iOS</a>
+      <a class="btn" href="{store_android}">Get it on Android ↓</a>
+      <a class="btn-ghost" href="{store_ios}">Get it on iOS</a>
     </div>
   </div>
 </body>
