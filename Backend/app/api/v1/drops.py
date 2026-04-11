@@ -552,7 +552,12 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     """
     deep_link     = f"anonixx://drop/{drop_id}"
     store_ios     = "https://apps.apple.com/app/anonixx"
-    store_android = "https://play.google.com/store/apps/details?id=com.anonixx"
+    store_android = "https://play.google.com/store/apps/details?id=com.anonixx.app"
+    # Android Intent URL — prevents "Couldn't reach the server" error in Chrome
+    # Falls back to Play Store if app not installed
+    from urllib.parse import quote
+    fallback      = quote(store_android, safe='')
+    android_intent = f"intent://drop/{drop_id}#Intent;scheme=anonixx;package=com.anonixx.app;S.browser_fallback_url={fallback};end"
 
     # Pull drop data for og tags
     card_image_url = ""
@@ -674,10 +679,15 @@ async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
     }}
   </style>
   <script>
-    // Attempt deep link only when user taps the button — never auto-redirect
-    // (auto-redirect breaks the page on browsers where the app isn't installed)
     function openApp() {{
-      window.location.href = "{deep_link}";
+      var isAndroid = /android/i.test(navigator.userAgent);
+      if (isAndroid) {{
+        // Intent URL: opens app if installed, falls back to Play Store — no Chrome error
+        window.location.href = "{android_intent}";
+      }} else {{
+        // iOS / other — standard deep link
+        window.location.href = "{deep_link}";
+      }}
     }}
   </script>
 </head>
