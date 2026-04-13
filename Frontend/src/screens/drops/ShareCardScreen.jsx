@@ -54,6 +54,13 @@ const AUDIENCE = [
 const STORE_IOS     = 'https://apps.apple.com/app/anonixx';
 const STORE_ANDROID = 'https://play.google.com/store/apps/details?id=com.anonixx.app';
 
+const INTENTS = [
+  { id: 'open to connection',       label: 'Open to connection',        emoji: '🤲' },
+  { id: 'just need to be heard',    label: 'Just need to be heard',     emoji: '🌙' },
+  { id: 'looking for something real', label: 'Looking for something real', emoji: '❤️' },
+  { id: 'late night thoughts',      label: 'Late night thoughts',       emoji: '🌃' },
+];
+
 // ─── Text Confession Card ─────────────────────────────────────
 const TextCard = React.memo(({ text, setText, captureRef, inputRef, readOnly, shareUrl }) => {
   const remaining = MAX_CHARS - text.length;
@@ -189,6 +196,9 @@ export default function ShareCardScreen({ navigation }) {
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimer = useRef(null);
 
+  // Intent — what the sender is open to (marketplace drops only)
+  const [intent, setIntent] = useState(null);
+
   const handleModeChange = useCallback((m) => {
     setMode(m);
     setDropId(null);
@@ -208,7 +218,7 @@ export default function ShareCardScreen({ navigation }) {
     setUserQuery(q);
     setTargetUser(null);
     clearTimeout(searchTimer.current);
-    if (q.trim().length < 2) { setUserResults([]); return; }
+    if (!q.trim()) { setUserResults([]); return; }
     searchTimer.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
@@ -223,7 +233,7 @@ export default function ShareCardScreen({ navigation }) {
         }
       } catch { /* silent */ }
       finally { setSearchLoading(false); }
-    }, 350);
+    }, 200);
   }, []);
 
   const handleSelectUser = useCallback((u) => {
@@ -412,6 +422,7 @@ export default function ShareCardScreen({ navigation }) {
             }
         ),
         ...(audience === 'someone' && targetUser ? { target_user_id: targetUser.id } : {}),
+        ...(audience === 'marketplace' && intent ? { intent } : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
@@ -528,45 +539,89 @@ export default function ShareCardScreen({ navigation }) {
           </View>
         )}
 
+        {/* Intent picker (Marketplace mode only) */}
+        {!dropped && audience === 'marketplace' && (
+          <View style={styles.intentWrap}>
+            <Text style={styles.intentLabel}>What are you open to? <Text style={styles.intentOptional}>(optional)</Text></Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.intentScroll}>
+              {INTENTS.map(({ id, label, emoji }) => (
+                <TouchableOpacity
+                  key={id}
+                  style={[styles.intentChip, intent === id && styles.intentChipActive]}
+                  onPress={() => setIntent(prev => prev === id ? null : id)}
+                  hitSlop={HIT_SLOP}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.intentChipEmoji}>{emoji}</Text>
+                  <Text style={[styles.intentChipText, intent === id && styles.intentChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* User search (Send to Someone mode) */}
         {!dropped && audience === 'someone' && (
           <View style={styles.userSearchWrap}>
+            {/* Input row */}
             <View style={styles.userSearchRow}>
               <Search size={rs(15)} color={T.textMuted} />
               <TextInput
                 style={styles.userSearchInput}
                 value={userQuery}
                 onChangeText={handleUserSearch}
-                placeholder="Search by username…"
+                placeholder="Type a username…"
                 placeholderTextColor={T.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoFocus={false}
               />
-              {searchLoading && <ActivityIndicator size="small" color={T.primary} />}
+              {searchLoading
+                ? <ActivityIndicator size="small" color={T.primary} />
+                : userQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => { setUserQuery(''); setUserResults([]); setTargetUser(null); }} hitSlop={HIT_SLOP}>
+                    <X size={rs(14)} color={T.textMuted} />
+                  </TouchableOpacity>
+                )
+              }
             </View>
-            {userResults.length > 0 && (
+
+            {/* Floating dropdown — absolute so it overlays content below */}
+            {userResults.length > 0 && !targetUser && (
               <View style={styles.userResultsList}>
-                {userResults.map((u) => (
+                {userResults.map((u, idx) => (
                   <TouchableOpacity
                     key={u.id}
-                    style={styles.userResultItem}
+                    style={[styles.userResultItem, idx === userResults.length - 1 && { borderBottomWidth: 0 }]}
                     onPress={() => handleSelectUser(u)}
-                    hitSlop={HIT_SLOP}
-                    activeOpacity={0.75}
+                    activeOpacity={0.7}
                   >
                     <View style={styles.userResultAvatar}>
                       <Text style={styles.userResultInitial}>
                         {u.username?.[0]?.toUpperCase() || '?'}
                       </Text>
                     </View>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.userResultName}>@{u.username}</Text>
-                      <Text style={styles.userResultAnon}>{u.anonymous_name}</Text>
+                      {u.anonymous_name ? (
+                        <Text style={styles.userResultAnon}>{u.anonymous_name}</Text>
+                      ) : null}
                     </View>
                   </TouchableOpacity>
                 ))}
               </View>
             )}
+
+            {/* Empty state — typed something but no matches */}
+            {!searchLoading && userQuery.length > 0 && userResults.length === 0 && !targetUser && (
+              <View style={styles.userNoResults}>
+                <Text style={styles.userNoResultsText}>No users found for "{userQuery}"</Text>
+              </View>
+            )}
+
+            {/* Selected user confirm strip */}
             {targetUser && (
               <View style={styles.targetConfirm}>
                 <Text style={styles.targetConfirmText}>
@@ -585,7 +640,7 @@ export default function ShareCardScreen({ navigation }) {
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
           {/* Text mode */}
@@ -1016,6 +1071,7 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.md,
     marginTop:        SPACING.sm,
     marginBottom:     rp(4),
+    zIndex:           50,        // float above ScrollView content below
   },
   userSearchRow: {
     flexDirection:     'row',
@@ -1032,13 +1088,24 @@ const styles = StyleSheet.create({
     flex:      1,
     fontSize:  FONT.md,
     color:     T.text,
+    paddingVertical: 0,          // prevent Android extra padding
   },
   userResultsList: {
+    position:        'absolute',
+    top:             rs(44) + rp(4),   // right below the input row
+    left:            0,
+    right:           0,
     backgroundColor: T.surface,
     borderRadius:    RADIUS.md,
     borderWidth:     1,
     borderColor:     T.border,
-    marginTop:       rp(4),
+    zIndex:          100,
+    elevation:       12,               // Android shadow/z-order
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: rs(4) },
+    shadowOpacity:   0.35,
+    shadowRadius:    rs(10),
+    maxHeight:       rs(220),
     overflow:        'hidden',
   },
   userResultItem: {
@@ -1046,21 +1113,26 @@ const styles = StyleSheet.create({
     alignItems:        'center',
     gap:               rp(10),
     paddingHorizontal: rp(14),
-    paddingVertical:   rp(10),
+    paddingVertical:   rp(12),
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
   userResultAvatar: {
-    width:           rs(36),
-    height:          rs(36),
-    borderRadius:    rs(18),
+    width:           rs(34),
+    height:          rs(34),
+    borderRadius:    rs(17),
     backgroundColor: 'rgba(255,99,74,0.12)',
     alignItems:      'center',
     justifyContent:  'center',
   },
-  userResultInitial: { fontSize: rf(15), fontWeight: '700', color: T.primary },
+  userResultInitial: { fontSize: rf(14), fontWeight: '700', color: T.primary },
   userResultName:    { fontSize: FONT.sm, fontWeight: '700', color: T.text },
-  userResultAnon:    { fontSize: rf(11), color: T.textMuted, fontStyle: 'italic' },
+  userResultAnon:    { fontSize: rf(11), color: T.textMuted, fontStyle: 'italic', marginTop: rp(1) },
+  userNoResults: {
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(10),
+  },
+  userNoResultsText: { fontSize: FONT.sm, color: T.textMuted, fontStyle: 'italic' },
 
   targetConfirm: {
     flexDirection:     'row',

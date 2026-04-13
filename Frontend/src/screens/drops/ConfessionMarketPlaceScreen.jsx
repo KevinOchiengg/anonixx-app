@@ -29,12 +29,19 @@ const T = {
 
 // ─── Static data (module level) ───────────────────────────────────────────────
 const CATEGORIES = [
-  { id: null,         label: 'All',        emoji: '✨', color: T.primary  },
-  { id: 'love',       label: 'Love',       emoji: '💔', color: '#FF6B8A' },
-  { id: 'fun',        label: 'Fun',        emoji: '😈', color: '#FFB347' },
-  { id: 'adventure',  label: 'Adventure',  emoji: '🌍', color: '#47B8FF' },
-  { id: 'friendship', label: 'Friendship', emoji: '🤝', color: '#47FFB8' },
-  { id: 'spicy',      label: 'Spicy',      emoji: '🌶️', color: '#FF4747' },
+  { id: null,                    label: 'All',              emoji: '✨', color: T.primary  },
+  // Emotional / situational
+  { id: 'open to connection',    label: 'Open to Connect',  emoji: '🤲', color: '#A78BFA' },
+  { id: 'carrying this alone',   label: 'Carrying This',    emoji: '💛', color: '#FBBF24' },
+  { id: 'starting over',         label: 'Starting Over',    emoji: '🌱', color: '#34D399' },
+  { id: 'need stability',        label: 'Need Stability',   emoji: '🏠', color: '#60A5FA' },
+  { id: 'just need to be heard', label: 'Need to Be Heard', emoji: '🌙', color: '#F9A8D4' },
+  // Social
+  { id: 'love',                  label: 'Love',             emoji: '💔', color: '#FF6B8A' },
+  { id: 'fun',                   label: 'Fun',              emoji: '😈', color: '#FFB347' },
+  { id: 'adventure',             label: 'Adventure',        emoji: '🌍', color: '#47B8FF' },
+  { id: 'friendship',            label: 'Friendship',       emoji: '🤝', color: '#47FFB8' },
+  { id: 'spicy',                 label: 'Spicy',            emoji: '🌶️', color: '#FF4747' },
 ];
 
 const LIMIT = 20;
@@ -239,6 +246,7 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
   const [category, setCategory]   = useState(null);
   const [nightOnly, setNightOnly] = useState(false);
   const [groupOnly, setGroupOnly] = useState(false);
+  const [openToConnect, setOpenToConnect] = useState([]);
 
   const skipRef = useRef(0);
 
@@ -283,6 +291,22 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
     }
   }, [category, nightOnly, groupOnly, showToast]);
 
+  // Load "Open to Connect" spotlight section once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/api/v1/drops/marketplace/open-to-connect?limit=6`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setOpenToConnect(data.drops || []);
+        }
+      } catch { /* silent */ }
+    })();
+  }, []);
+
   // Reset when filters change
   useEffect(() => {
     skipRef.current = 0;
@@ -320,13 +344,55 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
   const keyExtractor = useCallback((item) => item.id, []);
 
   const ListHeaderComponent = useCallback(() => (
-    <ListHeader
-      category={category}   setCategory={setCategory}
-      nightOnly={nightOnly} setNightOnly={setNightOnly}
-      groupOnly={groupOnly} setGroupOnly={setGroupOnly}
-      total={drops.length}
-    />
-  ), [category, nightOnly, groupOnly, drops.length]);
+    <>
+      {/* Open to Connect spotlight — only show when browsing All */}
+      {!category && openToConnect.length > 0 && (
+        <View style={styles.spotlightSection}>
+          <View style={styles.spotlightHeader}>
+            <Text style={styles.spotlightEmoji}>🤲</Text>
+            <View>
+              <Text style={styles.spotlightTitle}>Open to Connection</Text>
+              <Text style={styles.spotlightSub}>People who said something real — and mean it</Text>
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.spotlightScroll}
+          >
+            {openToConnect.map(item => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.spotlightCard}
+                onPress={() => handleDropPress(item.id)}
+                activeOpacity={0.85}
+                hitSlop={HIT_SLOP}
+              >
+                <Text style={styles.spotlightCatEmoji}>
+                  {getCatEmoji(item.category)}
+                </Text>
+                <Text style={styles.spotlightConfession} numberOfLines={4}>
+                  "{item.confession || 'tap to see'}"
+                </Text>
+                {item.intent && (
+                  <View style={styles.intentBadge}>
+                    <Text style={styles.intentBadgeText}>{item.intent}</Text>
+                  </View>
+                )}
+                <Text style={styles.spotlightTime}>{item.time_ago}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+      <ListHeader
+        category={category}   setCategory={setCategory}
+        nightOnly={nightOnly} setNightOnly={setNightOnly}
+        groupOnly={groupOnly} setGroupOnly={setGroupOnly}
+        total={drops.length}
+      />
+    </>
+  ), [category, openToConnect, nightOnly, groupOnly, drops.length, handleDropPress]);
 
   const ListFooterComponent = useCallback(() =>
     loadingMore
@@ -501,6 +567,68 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
     fontSize: FONT.xs,
     color: T.textSecondary,
+  },
+
+  // Open to Connect spotlight
+  spotlightSection: {
+    marginBottom: SPACING.md,
+    paddingTop:   SPACING.md,
+  },
+  spotlightHeader: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(10),
+    paddingHorizontal: SPACING.md,
+    marginBottom:      SPACING.sm,
+  },
+  spotlightEmoji: { fontSize: rf(26) },
+  spotlightTitle: {
+    fontSize:   FONT.md,
+    fontWeight: '700',
+    color:      T.text,
+  },
+  spotlightSub: {
+    fontSize:  FONT.xs,
+    color:     T.textSecondary,
+    marginTop: rp(2),
+  },
+  spotlightScroll: {
+    paddingHorizontal: SPACING.md,
+    gap:               rp(10),
+  },
+  spotlightCard: {
+    width:           rs(200),
+    backgroundColor: '#1a1430',
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     'rgba(167,139,250,0.2)',
+    padding:         rp(16),
+    gap:             rp(8),
+  },
+  spotlightCatEmoji:   { fontSize: rf(22) },
+  spotlightConfession: {
+    fontSize:   rf(13),
+    color:      T.text,
+    fontStyle:  'italic',
+    lineHeight: rf(20),
+  },
+  intentBadge: {
+    alignSelf:         'flex-start',
+    backgroundColor:   'rgba(167,139,250,0.12)',
+    borderRadius:      RADIUS.sm,
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(3),
+    borderWidth:       1,
+    borderColor:       'rgba(167,139,250,0.25)',
+  },
+  intentBadgeText: {
+    fontSize:   rf(10),
+    color:      '#A78BFA',
+    fontWeight: '600',
+  },
+  spotlightTime: {
+    fontSize: rf(10),
+    color:    T.textMuted,
   },
 
   // Drop card
