@@ -138,6 +138,7 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
             "email":          user["email"],
             "username":       user["username"],
             "anonymous_name": user["anonymous_name"],
+            "avatar_url":     user.get("avatar_url"),
             "coin_balance":   WELCOME_BONUS,
         },
     }
@@ -158,6 +159,7 @@ async def login(data: LoginRequest, db=Depends(get_database)):
             "email":          user["email"],
             "username":       user.get("username"),
             "anonymous_name": user.get("anonymous_name"),
+            "avatar_url":     user.get("avatar_url"),
         },
     }
 
@@ -183,6 +185,7 @@ async def login_for_access_token(
             "email":          user["email"],
             "username":       user.get("username"),
             "anonymous_name": user.get("anonymous_name"),
+            "avatar_url":     user.get("avatar_url"),
         },
     }
 

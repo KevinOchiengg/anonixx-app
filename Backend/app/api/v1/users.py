@@ -27,12 +27,13 @@ async def get_current_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     return {
-        "id": str(user["_id"]),
-        "email": user["email"],
-        "username": user.get("username"),
+        "id":             str(user["_id"]),
+        "email":          user["email"],
+        "username":       user.get("username"),
         "anonymous_name": user.get("anonymous_name"),
-        "interests": user.get("interests", []),
-        "created_at": user["created_at"].isoformat()
+        "avatar_url":     user.get("avatar_url"),
+        "interests":      user.get("interests", []),
+        "created_at":     user["created_at"].isoformat(),
     }
 
 

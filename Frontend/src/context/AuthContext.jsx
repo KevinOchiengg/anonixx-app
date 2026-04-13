@@ -122,7 +122,12 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.multiRemove(['token', 'user']);
     setIsAuthenticated(false);
     setUser(null);
-    console.log('✅ User logged out from context');
+  };
+
+  const updateUserProfile = async (updates) => {
+    const updated = { ...user, ...updates };
+    setUser(updated);
+    await AsyncStorage.setItem('user', JSON.stringify(updated));
   };
 
   return (
@@ -134,6 +139,7 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         checkAuth,
+        updateUserProfile,
       }}
     >
       {children}

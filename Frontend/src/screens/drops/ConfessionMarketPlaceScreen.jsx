@@ -29,19 +29,19 @@ const T = {
 
 // ─── Static data (module level) ───────────────────────────────────────────────
 const CATEGORIES = [
-  { id: null,                    label: 'All',              emoji: '✨', color: T.primary  },
+  { id: null,                    label: 'All',              emoji: '✨', color: T.primary },
   // Emotional / situational
-  { id: 'open to connection',    label: 'Open to Connect',  emoji: '🤲', color: '#A78BFA' },
-  { id: 'carrying this alone',   label: 'Carrying This',    emoji: '💛', color: '#FBBF24' },
-  { id: 'starting over',         label: 'Starting Over',    emoji: '🌱', color: '#34D399' },
-  { id: 'need stability',        label: 'Need Stability',   emoji: '🏠', color: '#60A5FA' },
-  { id: 'just need to be heard', label: 'Need to Be Heard', emoji: '🌙', color: '#F9A8D4' },
+  { id: 'open to connection',    label: 'Open to Connect',  emoji: '🤲', color: T.primary },
+  { id: 'carrying this alone',   label: 'Carrying This',    emoji: '💛', color: T.primary },
+  { id: 'starting over',         label: 'Starting Over',    emoji: '🌱', color: T.primary },
+  { id: 'need stability',        label: 'Need Stability',   emoji: '🏠', color: T.primary },
+  { id: 'just need to be heard', label: 'Need to Be Heard', emoji: '🌙', color: T.primary },
   // Social
-  { id: 'love',                  label: 'Love',             emoji: '💔', color: '#FF6B8A' },
-  { id: 'fun',                   label: 'Fun',              emoji: '😈', color: '#FFB347' },
-  { id: 'adventure',             label: 'Adventure',        emoji: '🌍', color: '#47B8FF' },
-  { id: 'friendship',            label: 'Friendship',       emoji: '🤝', color: '#47FFB8' },
-  { id: 'spicy',                 label: 'Spicy',            emoji: '🌶️', color: '#FF4747' },
+  { id: 'love',                  label: 'Love',             emoji: '💔', color: T.primary },
+  { id: 'fun',                   label: 'Fun',              emoji: '😈', color: T.primary },
+  { id: 'adventure',             label: 'Adventure',        emoji: '🌍', color: T.primary },
+  { id: 'friendship',            label: 'Friendship',       emoji: '🤝', color: T.primary },
+  { id: 'spicy',                 label: 'Spicy',            emoji: '🌶️', color: T.primary },
 ];
 
 const LIMIT = 20;

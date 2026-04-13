@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working Style
+
+**NEVER use git worktrees or create isolated branches for this project.** Always work directly on the current branch (usually `main`). The developer needs to see changes in real time without merging steps. Do not use `isolation: "worktree"` when spawning agents. Make edits directly to the files in the working directory.
+
+---
+
 ## Project Overview
 
 **Anonixx** is a cross-platform anonymous mental health support app. It has two separate codebases:

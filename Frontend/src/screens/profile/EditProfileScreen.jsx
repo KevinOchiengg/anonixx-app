@@ -150,18 +150,23 @@ export default function EditProfileScreen({ navigation }) {
     }
     setNameStatus('checking');
     nameTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
       try {
         const token = await AsyncStorage.getItem('token');
         const res   = await fetch(
           `${API_BASE_URL}/api/v1/auth/check-name?name=${encodeURIComponent(text.trim())}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
         );
+        clearTimeout(timeout);
         if (res.ok) {
           const data = await res.json();
           setNameStatus(data.available ? 'available' : 'taken');
           setNameMessage(data.available ? '' : (data.message || 'Name already taken'));
+        } else {
+          setNameStatus('idle');
         }
-      } catch { setNameStatus('idle'); }
+      } catch { clearTimeout(timeout); setNameStatus('idle'); }
     }, 400);
   }, [user?.anonymous_name]);
 
