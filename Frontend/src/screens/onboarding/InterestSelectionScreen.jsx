@@ -39,29 +39,29 @@ const GENDER_OPTIONS = [
   {
     id:    'male',
     label: 'Man',
-    emoji: '🌊',
-    color: '#3B82F6',
+    symbol: '♂',
+    color: '#5B9CF6',
     desc:  'identifying as male',
   },
   {
     id:    'female',
     label: 'Woman',
-    emoji: '🌸',
-    color: '#EC4899',
+    symbol: '♀',
+    color: '#F472B6',
     desc:  'identifying as female',
   },
   {
     id:    'nonbinary',
     label: 'Non-binary',
-    emoji: '🌈',
-    color: '#8B5CF6',
+    symbol: '⚧',
+    color: '#A78BFA',
     desc:  'beyond the binary',
   },
   {
     id:    'prefer_not_to_say',
     label: 'Prefer not to say',
-    emoji: '🌑',
-    color: '#6B7280',
+    symbol: '—',
+    color: '#9CA3AF',
     desc:  'keep it private',
   },
 ];
@@ -174,13 +174,18 @@ const GenderCard = React.memo(({ option, selected, onPress }) => {
   });
 
   return (
-    <Animated.View style={[{ transform: [{ scale }] }, styles.genderCardOuter]}>
-      <TouchableOpacity onPress={handlePress} activeOpacity={1}>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <TouchableOpacity onPress={handlePress} activeOpacity={0.85} hitSlop={HIT_SLOP}>
         <Animated.View style={[styles.genderCard, { borderColor, backgroundColor: bgColor }]}>
-          {/* Emoji circle */}
-          <View style={[styles.genderEmojiWrap, isSelected && { backgroundColor: option.color + '28' }]}>
-            <Text style={styles.genderEmoji}>{option.emoji}</Text>
-          </View>
+          {/* Symbol circle */}
+          <Animated.View style={[
+            styles.genderSymbolWrap,
+            { borderColor, backgroundColor: isSelected ? option.color + '22' : 'rgba(255,255,255,0.04)' },
+          ]}>
+            <Text style={[styles.genderSymbol, { color: isSelected ? option.color : T.textSecondary }]}>
+              {option.symbol}
+            </Text>
+          </Animated.View>
 
           {/* Labels */}
           <View style={styles.genderTextWrap}>
@@ -191,11 +196,12 @@ const GenderCard = React.memo(({ option, selected, onPress }) => {
           </View>
 
           {/* Check mark */}
-          {isSelected && (
-            <View style={[styles.genderCheck, { backgroundColor: option.color }]}>
-              <Text style={styles.genderCheckMark}>✓</Text>
-            </View>
-          )}
+          <View style={[
+            styles.genderCheck,
+            { backgroundColor: isSelected ? option.color : 'rgba(255,255,255,0.06)' },
+          ]}>
+            <Text style={[styles.genderCheckMark, { opacity: isSelected ? 1 : 0 }]}>✓</Text>
+          </View>
         </Animated.View>
       </TouchableOpacity>
     </Animated.View>
@@ -304,18 +310,23 @@ export default function InterestSelectionScreen({ navigation }) {
     }
     setNameStatus('checking');
     nameCheckTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
       try {
         const token = await AsyncStorage.getItem('token');
         const res   = await fetch(
           `${API_BASE_URL}/api/v1/auth/check-name?name=${encodeURIComponent(text.trim())}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
         );
+        clearTimeout(timeout);
         if (res.ok) {
           const data = await res.json();
           setNameStatus(data.available ? 'available' : 'taken');
           setNameMessage(data.message || (data.available ? '' : 'Name already taken'));
+        } else {
+          setNameStatus('idle');
         }
-      } catch { setNameStatus('idle'); }
+      } catch { clearTimeout(timeout); setNameStatus('idle'); }
     }, 400);
   }, []);
 
@@ -776,29 +787,32 @@ const styles = StyleSheet.create({
   },
 
   // Gender
-  genderList:      { gap: rp(12) },
-  genderCardOuter: { borderRadius: RADIUS.xl, overflow: 'hidden' },
+  genderList: { gap: rp(10) },
   genderCard: {
     flexDirection:     'row',
     alignItems:        'center',
-    gap:               rp(16),
-    paddingHorizontal: rp(20),
-    paddingVertical:   rp(20),
+    gap:               rp(14),
+    paddingHorizontal: rp(18),
+    paddingVertical:   rp(16),
     borderRadius:      RADIUS.xl,
     borderWidth:       1.5,
   },
-  genderEmojiWrap: {
-    width:           rs(52),
-    height:          rs(52),
-    borderRadius:    rs(26),
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    alignItems:      'center',
-    justifyContent:  'center',
+  genderSymbolWrap: {
+    width:          rs(48),
+    height:         rs(48),
+    borderRadius:   rs(24),
+    borderWidth:    1,
+    alignItems:     'center',
+    justifyContent: 'center',
   },
-  genderEmoji:   { fontSize: rf(26) },
-  genderTextWrap: { flex: 1, gap: rp(3) },
+  genderSymbol: {
+    fontSize:   rf(22),
+    fontWeight: '600',
+    lineHeight: rf(26),
+  },
+  genderTextWrap: { flex: 1, gap: rp(2) },
   genderLabel: {
-    fontSize:   FONT.lg,
+    fontSize:   FONT.md,
     fontWeight: '700',
     color:      T.text,
     fontFamily: 'PlayfairDisplay-Bold',
@@ -809,13 +823,13 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   genderCheck: {
-    width:          rs(26),
-    height:         rs(26),
-    borderRadius:   rs(13),
+    width:          rs(24),
+    height:         rs(24),
+    borderRadius:   rs(12),
     alignItems:     'center',
     justifyContent: 'center',
   },
-  genderCheckMark: { color: '#fff', fontSize: rf(13), fontWeight: '800' },
+  genderCheckMark: { color: '#fff', fontSize: rf(12), fontWeight: '800' },
 
   // Badge
   badge: {
