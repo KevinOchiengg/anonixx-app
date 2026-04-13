@@ -98,6 +98,12 @@ export default function EditProfileScreen({ navigation }) {
   const [avatarUri,       setAvatarUri]       = useState(user?.avatar_url || null);
   const [loading,         setLoading]         = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [showPhotoDisclaimer, setShowPhotoDisclaimer] = useState(false);
+
+  // Name availability check
+  const [nameStatus,  setNameStatus]  = useState('idle'); // idle|checking|available|taken|invalid
+  const [nameMessage, setNameMessage] = useState('');
+  const nameTimer = useRef(null);
 
   // Entrance animation (Rule 14)
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -129,6 +135,35 @@ export default function EditProfileScreen({ navigation }) {
     if (!response.ok) throw new Error('upload_failed');
     return data.secure_url;
   }, []);
+
+  // ── Anonymous name live check ──────────────────────────────────
+  const handleNameChange = useCallback((text) => {
+    setAnonymousName(text);
+    clearTimeout(nameTimer.current);
+    if (!text.trim() || text.trim() === user?.anonymous_name) {
+      setNameStatus('idle'); setNameMessage(''); return;
+    }
+    if (!/^[a-zA-Z0-9._-]{3,30}$/.test(text.trim())) {
+      setNameStatus('invalid');
+      setNameMessage('3–30 chars · letters, numbers, . - _ only');
+      return;
+    }
+    setNameStatus('checking');
+    nameTimer.current = setTimeout(async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res   = await fetch(
+          `${API_BASE_URL}/api/v1/auth/check-name?name=${encodeURIComponent(text.trim())}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setNameStatus(data.available ? 'available' : 'taken');
+          setNameMessage(data.available ? '' : (data.message || 'Name already taken'));
+        }
+      } catch { setNameStatus('idle'); }
+    }, 400);
+  }, [user?.anonymous_name]);
 
   // ── Pick avatar (Rule 7, Rule 2, Rule 3, Rule 10) ─────────────
   const pickAvatar = useCallback(async () => {
@@ -181,6 +216,14 @@ export default function EditProfileScreen({ navigation }) {
       showToast({ type: 'warning', message: 'That email doesn\'t look right.' });
       return;
     }
+    if (nameStatus === 'taken' || nameStatus === 'invalid') {
+      showToast({ type: 'warning', message: nameMessage || 'Fix your anonymous name first.' });
+      return;
+    }
+    if (nameStatus === 'checking') {
+      showToast({ type: 'info', message: 'Still checking name availability…' });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -199,7 +242,8 @@ export default function EditProfileScreen({ navigation }) {
       const data = await res.json();
 
       if (!res.ok) {
-        showToast({ type: 'error', message: 'Could not save your profile. Try again.' });
+        const errMsg = data?.detail || 'Could not save your profile. Try again.';
+        showToast({ type: 'error', message: errMsg });
         return;
       }
 
@@ -212,7 +256,13 @@ export default function EditProfileScreen({ navigation }) {
         });
       }
 
-      updateUserProfile?.({ username: data.username, email: data.email, avatar_url: data.avatar_url, gender });
+      updateUserProfile?.({
+        username:       data.username,
+        email:          data.email,
+        avatar_url:     data.avatar_url,
+        anonymous_name: data.anonymous_name,
+        gender,
+      });
       showToast({ type: 'success', message: 'Profile updated.' });
       navigation.goBack();
     } catch {
@@ -252,26 +302,20 @@ export default function EditProfileScreen({ navigation }) {
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrap}>
             {avatarUri ? (
-              <Image
-                source={{ uri: avatarUri }}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} resizeMode="cover" />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <User size={rs(44)} color={T.textMuted} strokeWidth={1.5} />
               </View>
             )}
-
             {uploadingAvatar && (
               <View style={styles.avatarOverlay}>
                 <ActivityIndicator size="large" color={T.primary} />
               </View>
             )}
-
             <TouchableOpacity
               style={styles.cameraBtn}
-              onPress={pickAvatar}
+              onPress={() => avatarUri ? pickAvatar() : setShowPhotoDisclaimer(d => !d)}
               disabled={uploadingAvatar}
               hitSlop={HIT_SLOP}
               activeOpacity={0.85}
@@ -279,10 +323,33 @@ export default function EditProfileScreen({ navigation }) {
               <Camera size={rs(16)} color="#fff" strokeWidth={2} />
             </TouchableOpacity>
           </View>
-
           <Text style={styles.avatarHint}>
-            {uploadingAvatar ? 'uploading…' : 'tap to change your face'}
+            {uploadingAvatar ? 'uploading…' : 'tap to set a photo'}
           </Text>
+
+          {/* Photo disclaimer — shown inline before first upload */}
+          {showPhotoDisclaimer && !avatarUri && (
+            <View style={styles.photoDisclaimer}>
+              <Text style={styles.photoDisclaimerTitle}>⚠️  Before you upload</Text>
+              <Text style={styles.photoDisclaimerBody}>
+                A real photo makes you identifiable to anyone who sees your profile.
+                Anonixx is built for anonymous expression — we recommend keeping this blank.
+                If you proceed, this is visible to other users.
+              </Text>
+              <View style={styles.photoDisclaimerActions}>
+                <TouchableOpacity
+                  style={styles.photoDisclaimerConfirm}
+                  onPress={() => { setShowPhotoDisclaimer(false); pickAvatar(); }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.photoDisclaimerConfirmText}>I understand, pick a photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowPhotoDisclaimer(false)} hitSlop={HIT_SLOP}>
+                  <Text style={styles.photoDisclaimerCancel}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* ── Form ── */}
@@ -316,18 +383,34 @@ export default function EditProfileScreen({ navigation }) {
             </View>
           </FieldCard>
 
-          <FieldCard label="Anonymous Name" hint="how the void knows you — choose wisely">
-            <View style={styles.inputRow}>
+          <FieldCard
+            label="Anonymous Name"
+            hint={
+              nameStatus === 'available' ? '✓ Available' :
+              nameStatus === 'taken'     ? '✗ ' + nameMessage :
+              nameStatus === 'invalid'   ? '✗ ' + nameMessage :
+              nameStatus === 'checking'  ? 'Checking…' :
+              'how the void knows you — changeable every 30 days'
+            }
+          >
+            <View style={[
+              styles.inputRow,
+              nameStatus === 'available' && { borderColor: '#10B981' },
+              (nameStatus === 'taken' || nameStatus === 'invalid') && { borderColor: '#EF4444' },
+            ]}>
               <User size={rs(16)} color={T.textSecondary} strokeWidth={1.8} />
               <TextInput
                 value={anonymousName}
-                onChangeText={setAnonymousName}
+                onChangeText={handleNameChange}
                 placeholder="your alias in the dark"
                 placeholderTextColor={T.textMuted}
                 autoCapitalize="none"
                 maxLength={30}
                 style={styles.inputText}
               />
+              {nameStatus === 'checking'  && <ActivityIndicator size="small" color={T.primary} />}
+              {nameStatus === 'available' && <Text style={{ color: '#10B981', fontWeight: '800', fontSize: rf(16) }}>✓</Text>}
+              {(nameStatus === 'taken' || nameStatus === 'invalid') && <Text style={{ color: '#EF4444', fontWeight: '800', fontSize: rf(16) }}>✗</Text>}
             </View>
           </FieldCard>
 
@@ -388,7 +471,7 @@ export default function EditProfileScreen({ navigation }) {
         {/* ── Info note ── */}
         <View style={styles.infoNote}>
           <Text style={styles.infoText}>
-            💡  Username, email, and anonymous name can all be changed anytime.{'\n'}Choose a name that feels like you.
+            💡  Anonymous name can be changed once every 30 days.{'\n'}Choose something that feels like you — you're stuck with it for a while.
           </Text>
         </View>
       </Animated.ScrollView>
@@ -660,5 +743,28 @@ const styles = StyleSheet.create({
     fontSize:   FONT.xs,
     color:      T.textSecondary,
     lineHeight: rf(20),
+  },
+
+  // Photo disclaimer
+  photoDisclaimer: {
+    marginHorizontal: SPACING.md,
+    marginTop:        SPACING.sm,
+    padding:          SPACING.md,
+    backgroundColor:  'rgba(251,191,36,0.07)',
+    borderRadius:     RADIUS.lg,
+    borderWidth:      1,
+    borderColor:      'rgba(251,191,36,0.25)',
+    gap:              rp(8),
+  },
+  photoDisclaimerTitle: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
+  photoDisclaimerBody:  { fontSize: rf(12), color: T.textSecondary, lineHeight: rf(18) },
+  photoDisclaimerActions: { gap: rp(8), marginTop: rp(4) },
+  photoDisclaimerConfirm: {
+    backgroundColor: T.primary, borderRadius: RADIUS.md,
+    paddingVertical: rp(11), alignItems: 'center',
+  },
+  photoDisclaimerConfirmText: { color: '#fff', fontWeight: '700', fontSize: FONT.sm },
+  photoDisclaimerCancel: {
+    color: T.textSecondary, fontSize: FONT.sm, textAlign: 'center', paddingVertical: rp(6),
   },
 });
