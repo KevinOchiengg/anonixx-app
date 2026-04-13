@@ -65,6 +65,40 @@ async def update_profile(
     return {"message": "Profile updated successfully"}
 
 
+@router.get("/search")
+async def search_users(
+    q: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    """
+    Search users by username for anonymous drop targeting.
+    Returns id + username + anonymous_name only — no email, no sensitive data.
+    Excludes the requester themselves.
+    """
+    q = q.strip()
+    if not q:
+        return {"users": []}
+
+    cursor = db["users"].find(
+        {
+            "username": {"$regex": q, "$options": "i"},
+            "_id": {"$ne": ObjectId(current_user_id)},
+        },
+        {"_id": 1, "username": 1, "anonymous_name": 1},
+    ).limit(10)
+
+    users = []
+    async for u in cursor:
+        users.append({
+            "id":             str(u["_id"]),
+            "username":       u.get("username", ""),
+            "anonymous_name": u.get("anonymous_name", "Anonymous"),
+        })
+
+    return {"users": users}
+
+
 @router.get("/{user_id}")
 async def get_public_profile(
     user_id: str,

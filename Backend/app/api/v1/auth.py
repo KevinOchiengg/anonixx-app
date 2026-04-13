@@ -8,6 +8,7 @@ from jose import JWTError, jwt
 from bson import ObjectId
 import secrets
 import hashlib
+import re
 
 from app.database import get_database
 from app.config import settings
@@ -42,6 +43,14 @@ class UpdateInterestsRequest(BaseModel):
 
 class UpdateGenderRequest(BaseModel):
     gender: str  # 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say'
+
+class UpdateProfileRequest(BaseModel):
+    username:       Optional[str]     = None
+    email:          Optional[EmailStr]= None
+    anonymous_name: Optional[str]     = None
+    avatar_url:     Optional[str]     = None   # Cloudinary URL for real photo
+    avatar:         Optional[str]     = None   # Emoji avatar ID (e.g. "ghost", "owl")
+    avatar_color:   Optional[str]     = None   # Hex color for preset avatar
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -192,6 +201,153 @@ async def get_current_user(
         "username":       user.get("username"),
         "anonymous_name": user.get("anonymous_name"),
         "created_at":     user["created_at"].isoformat(),
+    }
+
+
+# ─── Anonymous name helpers ───────────────────────────────────
+_ANON_NAME_RE = re.compile(r'^[a-zA-Z0-9._-]{3,30}$')
+
+_PROFANITY_BLOCKLIST = {
+    "nigger","nigga","faggot","chink","spic","kike","retard",
+    "cunt","whore","bitch","slut","rape","penis","vagina","porn",
+    "sex","naked","nude","ass","fuck","shit","damn","cock","dick",
+}
+
+def _contains_profanity(name: str) -> bool:
+    lower = name.lower()
+    return any(word in lower for word in _PROFANITY_BLOCKLIST)
+
+NAME_CHANGE_COOLDOWN_DAYS = 30
+
+
+@router.get("/check-name")
+async def check_anonymous_name(
+    name: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db=Depends(get_database),
+):
+    """Real-time availability check for anonymous names (used in onboarding + profile edit)."""
+    name = name.strip()
+    if not name:
+        return {"available": False, "reason": "empty"}
+
+    if not _ANON_NAME_RE.match(name):
+        return {
+            "available": False,
+            "reason":    "invalid",
+            "message":   "3–30 chars · letters, numbers, dots, hyphens only",
+        }
+
+    if _contains_profanity(name):
+        return {"available": False, "reason": "profanity", "message": "That name isn't allowed"}
+
+    existing = await db["users"].find_one(
+        {
+            "anonymous_name": {"$regex": f"^{re.escape(name)}$", "$options": "i"},
+            "_id": {"$ne": ObjectId(current_user_id)},
+        }
+    )
+    return {"available": existing is None}
+
+
+@router.put("/update-profile")
+async def update_profile(
+    data: UpdateProfileRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db=Depends(get_database),
+):
+    """
+    Unified profile update.
+    Handles username, email, anonymous_name (with cooldown + uniqueness),
+    avatar_url (real photo), and preset avatar emoji/color.
+    """
+    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    update: dict = {}
+
+    # ── Username ──────────────────────────────────────────────
+    if data.username is not None:
+        uname = data.username.strip()
+        if not re.match(r'^[a-zA-Z0-9_]{3,30}$', uname):
+            raise HTTPException(400, detail="Username must be 3–30 chars, letters/numbers/underscores only")
+        clash = await db["users"].find_one(
+            {"username": uname, "_id": {"$ne": ObjectId(current_user_id)}}
+        )
+        if clash:
+            raise HTTPException(400, detail="Username already taken")
+        update["username"] = uname
+
+    # ── Email ─────────────────────────────────────────────────
+    if data.email is not None:
+        new_email = str(data.email).strip().lower()
+        clash = await db["users"].find_one(
+            {"email": new_email, "_id": {"$ne": ObjectId(current_user_id)}}
+        )
+        if clash:
+            raise HTTPException(400, detail="Email already in use by another account")
+        update["email"] = new_email
+
+    # ── Anonymous name ────────────────────────────────────────
+    if data.anonymous_name is not None:
+        aname = data.anonymous_name.strip()
+        if not _ANON_NAME_RE.match(aname):
+            raise HTTPException(400, detail="Name must be 3–30 chars. Letters, numbers, dots, hyphens only.")
+        if _contains_profanity(aname):
+            raise HTTPException(400, detail="That name isn't allowed. Try something else.")
+
+        # 30-day cooldown (skip on first-time set)
+        changed_at = user.get("anonymous_name_changed_at")
+        if changed_at and user.get("anonymous_name") != generate_anonymous_name.__doc__:
+            if isinstance(changed_at, str):
+                changed_at = datetime.fromisoformat(changed_at)
+            if getattr(changed_at, "tzinfo", None) is None:
+                changed_at = changed_at.replace(tzinfo=timezone.utc)
+            elapsed = _now() - changed_at
+            if elapsed < timedelta(days=NAME_CHANGE_COOLDOWN_DAYS):
+                days_left = NAME_CHANGE_COOLDOWN_DAYS - elapsed.days
+                raise HTTPException(
+                    400,
+                    detail=f"You can change your name again in {days_left} day{'s' if days_left != 1 else ''}."
+                )
+
+        clash = await db["users"].find_one(
+            {
+                "anonymous_name": {"$regex": f"^{re.escape(aname)}$", "$options": "i"},
+                "_id": {"$ne": ObjectId(current_user_id)},
+            }
+        )
+        if clash:
+            raise HTTPException(400, detail="That name is taken. Try something different.")
+
+        update["anonymous_name"]            = aname
+        update["anonymous_name_changed_at"] = _now()
+
+    # ── Avatar (preset emoji) ─────────────────────────────────
+    if data.avatar is not None:
+        update["avatar"] = data.avatar
+    if data.avatar_color is not None:
+        update["avatar_color"] = data.avatar_color
+
+    # ── Profile photo (Cloudinary URL) ───────────────────────
+    if data.avatar_url is not None:
+        update["avatar_url"] = data.avatar_url
+
+    if not update:
+        return {"message": "Nothing to update"}
+
+    update["updated_at"] = _now()
+    await db["users"].update_one({"_id": ObjectId(current_user_id)}, {"$set": update})
+
+    refreshed = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    return {
+        "username":       refreshed.get("username"),
+        "email":          refreshed.get("email"),
+        "anonymous_name": refreshed.get("anonymous_name"),
+        "avatar_url":     refreshed.get("avatar_url"),
+        "avatar":         refreshed.get("avatar"),
+        "avatar_color":   refreshed.get("avatar_color"),
     }
 
 

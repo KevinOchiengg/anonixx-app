@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft, ChevronRight, Clock, Eye, Flame,
-  MessageCircle, Plus, Share2, Zap,
+  Lock, MessageCircle, Plus, Share2, Zap,
 } from 'lucide-react-native';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT, SCREEN,
@@ -44,7 +44,7 @@ const CATEGORY_COLORS = {
   spicy:      '#FF4747',
 };
 
-const TABS = ['Cards', 'Connections'];
+const TABS = ['Cards', 'Connections', 'Received'];
 
 // ─── Module-level components (Rules 5, 6) ────────────────────
 const EmptyCards = React.memo(({ onPress }) => (
@@ -73,6 +73,74 @@ const EmptyConnections = React.memo(({ onPress }) => (
     </TouchableOpacity>
   </View>
 ));
+
+const EmptyReceived = React.memo(() => (
+  <View style={empty.wrap}>
+    <Text style={empty.glyph}>👀</Text>
+    <Text style={empty.title}>nothing waiting for you… yet</Text>
+    <Text style={empty.sub}>
+      when someone sends you an anonymous{'\n'}confession, it shows up here.
+    </Text>
+  </View>
+));
+
+const ReceivedDropItem = React.memo(({ item, onPress }) => {
+  const color = CATEGORY_COLORS[item.category] || '#FF634A';
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn  = useCallback(() => {
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, tension: 200, friction: 10 }).start();
+  }, [scaleAnim]);
+  const onPressOut = useCallback(() => {
+    Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, tension: 200, friction: 10 }).start();
+  }, [scaleAnim]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={[recv.wrap, { borderLeftColor: color }]}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        activeOpacity={1}
+      >
+        <View style={recv.header}>
+          <View style={[recv.catDot, { backgroundColor: color }]} />
+          <Text style={[recv.catLabel, { color }]}>{item.category}</Text>
+          {item.is_expired ? (
+            <View style={recv.expiredPill}>
+              <Text style={recv.expiredText}>expired</Text>
+            </View>
+          ) : (
+            <View style={recv.timerPill}>
+              <Clock size={rs(10)} color="#9A9AA3" strokeWidth={2} />
+              <Text style={recv.timerText}>{item.time_left}</Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={recv.teaser} numberOfLines={2}>
+          {item.already_unlocked
+            ? `"${item.confession || 'media confession'}"`
+            : 'Someone has something to say to you… 👀'}
+        </Text>
+
+        <View style={recv.footer}>
+          {item.already_unlocked ? (
+            <View style={recv.unlockedBadge}>
+              <Text style={recv.unlockedText}>✓ unlocked · tap to chat</Text>
+            </View>
+          ) : (
+            <View style={recv.lockRow}>
+              <Lock size={rs(13)} color={color} strokeWidth={2} />
+              <Text style={[recv.lockText, { color }]}>unlock for ${item.price}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
 
 const DropCard = React.memo(({ item, onShare, onPress }) => {
   const color    = CATEGORY_COLORS[item.category] || T.primary;
@@ -202,7 +270,7 @@ export default function DropsInboxScreen({ navigation }) {
   const { showToast } = useToast();
 
   const [activeTab,  setActiveTab]  = useState(0);
-  const [data,       setData]       = useState({ active_drops: [], connections: [] });
+  const [data,       setData]       = useState({ active_drops: [], connections: [], received: [] });
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -224,14 +292,21 @@ export default function DropsInboxScreen({ navigation }) {
     if (!silent) setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/drops/inbox`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const [inboxRes, receivedRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v1/drops/inbox`,    { headers }),
+        fetch(`${API_BASE_URL}/api/v1/drops/received`, { headers }),
+      ]);
+
+      const inbox    = inboxRes.ok    ? await inboxRes.json()    : { active_drops: [], connections: [] };
+      const received = receivedRes.ok ? await receivedRes.json() : { received: [] };
+
+      setData({
+        active_drops: inbox.active_drops   || [],
+        connections:  inbox.connections    || [],
+        received:     received.received    || [],
       });
-      if (res.ok) {
-        setData(await res.json());
-      } else {
-        showToast({ type: 'error', message: 'Could not load your drops. Try again.' });
-      }
     } catch {
       showToast({ type: 'error', message: 'Something went wrong. Please try again.' });
     } finally {
@@ -248,7 +323,7 @@ export default function DropsInboxScreen({ navigation }) {
   const switchTab = useCallback((i) => {
     setActiveTab(i);
     Animated.spring(tabIndicator, {
-      toValue: i * (SCREEN.width / 2),
+      toValue: i * (SCREEN.width / 3),
       friction: 8,
       useNativeDriver: true,
     }).start();
@@ -267,11 +342,12 @@ export default function DropsInboxScreen({ navigation }) {
     }
   }, []);
 
-  const handleCardPress  = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
-  const handleConnPress  = useCallback((id) => navigation.navigate('DropChat', { connectionId: id }), [navigation]);
-  const handleNewDrop    = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
+  const handleCardPress   = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
+  const handleConnPress   = useCallback((id) => navigation.navigate('DropChat', { connectionId: id }), [navigation]);
+  const handleRecvPress   = useCallback((id) => navigation.navigate('DropLanding', { dropId: id }), [navigation]);
+  const handleNewDrop     = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
   const handleMarketplace = useCallback(() => navigation.navigate('ConfessionMarketplace'), [navigation]);
-  const handleVibeScore  = useCallback(() => navigation.navigate('VibeScore'), [navigation]);
+  const handleVibeScore   = useCallback(() => navigation.navigate('VibeScore'), [navigation]);
 
   // Memoised render functions (Rules 6, 7)
   const renderCard = useCallback(({ item }) => (
@@ -289,11 +365,19 @@ export default function DropsInboxScreen({ navigation }) {
     />
   ), [handleConnPress]);
 
+  const renderReceived = useCallback(({ item }) => (
+    <ReceivedDropItem
+      item={item}
+      onPress={() => handleRecvPress(item.id)}
+    />
+  ), [handleRecvPress]);
+
   const keyExtractor = useCallback((item) => item.id, []);
 
   // Counts for tab badges
-  const cardCount = useMemo(() => data.active_drops.length, [data.active_drops]);
-  const connCount = useMemo(() => data.connections.length,  [data.connections]);
+  const cardCount     = useMemo(() => data.active_drops.length, [data.active_drops]);
+  const connCount     = useMemo(() => data.connections.length,  [data.connections]);
+  const receivedCount = useMemo(() => data.received.filter(r => !r.already_unlocked).length, [data.received]);
 
   if (loading) {
     return (
@@ -354,10 +438,10 @@ export default function DropsInboxScreen({ navigation }) {
               <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>
                 {tab}
               </Text>
-              {((i === 0 && cardCount > 0) || (i === 1 && connCount > 0)) && (
+              {((i === 0 && cardCount > 0) || (i === 1 && connCount > 0) || (i === 2 && receivedCount > 0)) && (
                 <View style={styles.tabBadge}>
                   <Text style={styles.tabBadgeText}>
-                    {i === 0 ? cardCount : connCount}
+                    {i === 0 ? cardCount : i === 1 ? connCount : receivedCount}
                   </Text>
                 </View>
               )}
@@ -383,14 +467,10 @@ export default function DropsInboxScreen({ navigation }) {
             initialNumToRender={6}
             ListEmptyComponent={<EmptyCards onPress={handleNewDrop} />}
             refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={T.primary}
-              />
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
             }
           />
-        ) : (
+        ) : activeTab === 1 ? (
           <FlatList
             data={data.connections}
             keyExtractor={keyExtractor}
@@ -404,11 +484,24 @@ export default function DropsInboxScreen({ navigation }) {
             initialNumToRender={8}
             ListEmptyComponent={<EmptyConnections onPress={handleMarketplace} />}
             refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={T.primary}
-              />
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
+            }
+          />
+        ) : (
+          <FlatList
+            data={data.received}
+            keyExtractor={keyExtractor}
+            renderItem={renderReceived}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews
+            maxToRenderPerBatch={5}
+            windowSize={3}
+            initialNumToRender={8}
+            ListEmptyComponent={<EmptyReceived />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
             }
           />
         )}
@@ -639,6 +732,70 @@ const empty = StyleSheet.create({
   },
 });
 
+// ─── Received Drop Styles ────────────────────────────────────
+const recv = StyleSheet.create({
+  wrap: {
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    padding:         rp(16),
+    borderWidth:     1,
+    borderColor:     T.border,
+    borderLeftWidth: 3,
+    marginBottom:    SPACING.sm,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(6),
+    marginBottom:  rp(10),
+  },
+  catDot: {
+    width:        rs(7),
+    height:       rs(7),
+    borderRadius: rs(4),
+  },
+  catLabel: {
+    fontSize:      rf(11),
+    fontWeight:    '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    flex:          1,
+  },
+  timerPill: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              rp(3),
+    backgroundColor:  T.surfaceAlt,
+    borderRadius:     RADIUS.sm,
+    paddingHorizontal: rp(6),
+    paddingVertical:   rp(2),
+  },
+  timerText:    { fontSize: rf(10), color: T.textSecondary },
+  expiredPill:  { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: RADIUS.sm, paddingHorizontal: rp(6), paddingVertical: rp(2) },
+  expiredText:  { fontSize: rf(10), color: T.textMuted },
+  teaser: {
+    fontSize:     rf(15),
+    color:        T.text,
+    fontStyle:    'italic',
+    lineHeight:   rf(23),
+    marginBottom: rp(12),
+  },
+  footer: { flexDirection: 'row', alignItems: 'center' },
+  lockRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(5),
+  },
+  lockText:    { fontSize: rf(13), fontWeight: '600' },
+  unlockedBadge: {
+    backgroundColor:   'rgba(71,255,184,0.10)',
+    borderRadius:      RADIUS.sm,
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(4),
+  },
+  unlockedText: { fontSize: rf(12), color: '#47FFB8', fontWeight: '600' },
+});
+
 // ─── Screen Styles ────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: {
@@ -742,7 +899,7 @@ const styles = StyleSheet.create({
     position:        'absolute',
     bottom:          0,
     left:            0,
-    width:           SCREEN.width / 2,
+    width:           SCREEN.width / 3,
     height:          rs(2),
     backgroundColor: T.primary,
     borderRadius:    rs(1),
