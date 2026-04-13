@@ -6,7 +6,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Keyboard, Dimensions,
-  KeyboardAvoidingView, ScrollView, Platform, Image, Linking,
+  KeyboardAvoidingView, ScrollView, Platform, Image, Linking, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,7 +16,7 @@ import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch } from 'react-redux';
-import { FileImage, Film, Type, X } from 'lucide-react-native';
+import { FileImage, Film, Globe, Search, Type, User, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -45,6 +45,14 @@ const MODES = [
   { id: 'image', label: 'Image', Icon: FileImage  },
   { id: 'video', label: 'Video', Icon: Film       },
 ];
+
+const AUDIENCE = [
+  { id: 'marketplace', label: 'Marketplace', Icon: Globe,   desc: 'Anyone can find it'     },
+  { id: 'someone',     label: 'Send to Someone', Icon: User, desc: 'Goes to their inbox'   },
+];
+
+const STORE_IOS     = 'https://apps.apple.com/app/anonixx';
+const STORE_ANDROID = 'https://play.google.com/store/apps/details?id=com.anonixx.app';
 
 // ─── Text Confession Card ─────────────────────────────────────
 const TextCard = React.memo(({ text, setText, captureRef, inputRef, readOnly, shareUrl }) => {
@@ -173,12 +181,66 @@ export default function ShareCardScreen({ navigation }) {
   const [loading,  setLoading]  = useState(false);
   const [dropId,   setDropId]   = useState(null);
 
+  // Audience targeting
+  const [audience,      setAudience]      = useState('marketplace');
+  const [userQuery,     setUserQuery]     = useState('');
+  const [userResults,   setUserResults]   = useState([]);
+  const [targetUser,    setTargetUser]    = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimer = useRef(null);
+
   const handleModeChange = useCallback((m) => {
     setMode(m);
     setDropId(null);
     setMediaUri(null);
     setThumbUri(null);
     setCaption('');
+  }, []);
+
+  const handleAudienceChange = useCallback((a) => {
+    setAudience(a);
+    setTargetUser(null);
+    setUserQuery('');
+    setUserResults([]);
+  }, []);
+
+  const handleUserSearch = useCallback((q) => {
+    setUserQuery(q);
+    setTargetUser(null);
+    clearTimeout(searchTimer.current);
+    if (q.trim().length < 2) { setUserResults([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res   = await fetch(
+          `${API_BASE_URL}/api/v1/users/search?q=${encodeURIComponent(q.trim())}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setUserResults(data.users || []);
+        }
+      } catch { /* silent */ }
+      finally { setSearchLoading(false); }
+    }, 350);
+  }, []);
+
+  const handleSelectUser = useCallback((u) => {
+    setTargetUser(u);
+    setUserQuery(u.username);
+    setUserResults([]);
+    Keyboard.dismiss();
+  }, []);
+
+  // Mystery invite — promotes Anonixx without revealing who sent to whom
+  const shareMysteryInvite = useCallback(async () => {
+    const storeLink = Platform.OS === 'ios' ? STORE_IOS : STORE_ANDROID;
+    try {
+      await Share.share({
+        message: `I just dropped an anonymous confession on Anonixx 👀\n\nDo you have one waiting for you? Find out → ${storeLink}`,
+      });
+    } catch { /* user cancelled */ }
   }, []);
 
   const handlePickMedia = useCallback(async () => {
@@ -217,36 +279,43 @@ export default function ShareCardScreen({ navigation }) {
     setThumbUri(null);
   }, []);
 
-  const shareDropCard = useCallback(async (id) => {
+  const shareDropCard = useCallback(async (id, isTargeted = false) => {
     const dropUrl = `${BACKENDS.production}/api/v1/drops/${id}/open`;
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // 1. Wait for the card to re-render with the baked link, then capture
+      if (isTargeted) {
+        // Targeted drop — never share the direct link (it would reveal who you're targeting).
+        // Instead share a mystery invite that promotes the app without any sender/recipient info.
+        await shareMysteryInvite();
+        return;
+      }
+
+      // Public marketplace drop — share the card image + link
+      // 1. Wait for card to re-render with the baked link, then capture
       await new Promise(r => setTimeout(r, 400));
       const localUri = await captureRef.current.capture();
 
       // 2. Copy link to clipboard silently
       await Clipboard.setStringAsync(dropUrl);
 
-      // 3. Share the card image — when sheet closes, auto-send the link via WhatsApp
+      // 3. Share card image
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(localUri, { mimeType: 'image/png', dialogTitle: 'Share your drop' });
       }
 
-      // 4. Auto-open WhatsApp with the link pre-filled so user just hits send
-      //    (two messages: card image + link — back to back, no manual paste)
-      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(dropUrl)}`;
+      // 4. Open WhatsApp with mystery invite text — no sender identity in the message
+      const mysteryText = `someone dropped something on Anonixx 👀 could it be for you?\n${dropUrl}`;
+      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(mysteryText)}`;
       const canOpenWhatsApp = await Linking.canOpenURL(whatsappUrl).catch(() => false);
       if (canOpenWhatsApp) {
         await Linking.openURL(whatsappUrl);
       } else {
-        // WhatsApp not installed — fallback: show toast with link already in clipboard
-        showToast({ type: 'info', title: 'Link copied!', message: 'Drop the card, then paste this right under it 👇' });
+        showToast({ type: 'info', title: 'Link copied!', message: 'Send the card, then paste this right under it 👇' });
       }
 
-      // 3. Upload in background so OG tags work for future link shares
+      // 5. Upload card image in background so OG tags work
       (async () => {
         try {
           const form = new FormData();
@@ -269,7 +338,7 @@ export default function ShareCardScreen({ navigation }) {
       if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
       showToast({ type: 'error', message: 'Could not share your drop.' });
     }
-  }, [showToast]);
+  }, [showToast, shareMysteryInvite]);
 
   const uploadMedia = useCallback(async (token) => {
     const resourceType = mode === 'image' ? 'image' : 'video';
@@ -315,6 +384,10 @@ export default function ShareCardScreen({ navigation }) {
       showToast({ type: 'warning', message: `Pick ${mode === 'image' ? 'an image' : 'a video'} first.` });
       return;
     }
+    if (audience === 'someone' && !targetUser) {
+      showToast({ type: 'warning', message: 'Search and select someone to send this to.' });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -338,6 +411,7 @@ export default function ShareCardScreen({ navigation }) {
               ...(caption.trim() ? { confession: caption.trim() } : {}),
             }
         ),
+        ...(audience === 'someone' && targetUser ? { target_user_id: targetUser.id } : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
@@ -364,10 +438,17 @@ export default function ShareCardScreen({ navigation }) {
       Keyboard.dismiss();
       setDropId(id);
 
-      showToast({ type: 'success', title: 'Dropped!', message: 'Your card is live. Share it anywhere.' });
+      const isTargeted = audience === 'someone' && !!targetUser;
+      showToast({
+        type: 'success',
+        title: isTargeted ? 'Confession sent 👀' : 'Dropped!',
+        message: isTargeted
+          ? `${targetUser.username} has no idea it's you.`
+          : 'Your card is live. Share it anywhere.',
+      });
       dispatch(awardMilestone('first_drop'));
 
-      await shareDropCard(id);
+      await shareDropCard(id, isTargeted);
 
     } catch (err) {
       if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
@@ -421,6 +502,83 @@ export default function ShareCardScreen({ navigation }) {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        )}
+
+        {/* Audience toggle */}
+        {!dropped && (
+          <View style={styles.audienceRow}>
+            {AUDIENCE.map(({ id, label, Icon }) => {
+              const active = audience === id;
+              return (
+                <TouchableOpacity
+                  key={id}
+                  style={[styles.audienceBtn, active && styles.audienceBtnActive]}
+                  onPress={() => handleAudienceChange(id)}
+                  hitSlop={HIT_SLOP}
+                  activeOpacity={0.8}
+                >
+                  <Icon size={rs(13)} color={active ? T.primary : T.textMuted} />
+                  <Text style={[styles.audienceBtnText, active && styles.audienceBtnTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* User search (Send to Someone mode) */}
+        {!dropped && audience === 'someone' && (
+          <View style={styles.userSearchWrap}>
+            <View style={styles.userSearchRow}>
+              <Search size={rs(15)} color={T.textMuted} />
+              <TextInput
+                style={styles.userSearchInput}
+                value={userQuery}
+                onChangeText={handleUserSearch}
+                placeholder="Search by username…"
+                placeholderTextColor={T.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {searchLoading && <ActivityIndicator size="small" color={T.primary} />}
+            </View>
+            {userResults.length > 0 && (
+              <View style={styles.userResultsList}>
+                {userResults.map((u) => (
+                  <TouchableOpacity
+                    key={u.id}
+                    style={styles.userResultItem}
+                    onPress={() => handleSelectUser(u)}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.userResultAvatar}>
+                      <Text style={styles.userResultInitial}>
+                        {u.username?.[0]?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                    <View>
+                      <Text style={styles.userResultName}>@{u.username}</Text>
+                      <Text style={styles.userResultAnon}>{u.anonymous_name}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {targetUser && (
+              <View style={styles.targetConfirm}>
+                <Text style={styles.targetConfirmText}>
+                  🔒 Sending anonymously to{' '}
+                  <Text style={{ color: T.primary }}>@{targetUser.username}</Text>
+                  {' '}— they'll never know it's you
+                </Text>
+                <TouchableOpacity onPress={() => { setTargetUser(null); setUserQuery(''); }} hitSlop={HIT_SLOP}>
+                  <X size={rs(14)} color={T.textMuted} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -824,4 +982,102 @@ const styles = StyleSheet.create({
 
   copyBtn:     { marginTop: SPACING.sm, alignItems: 'center', paddingVertical: rp(10) },
   copyBtnText: { fontSize: FONT.sm, color: T.textMuted, fontWeight: '500' },
+
+  // Audience toggle
+  audienceRow: {
+    flexDirection:     'row',
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(8),
+    gap:               SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  audienceBtn: {
+    flex:              1,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'center',
+    gap:               rp(5),
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+    backgroundColor:   'transparent',
+  },
+  audienceBtnActive: {
+    borderColor:       T.primary,
+    backgroundColor:   'rgba(255,99,74,0.08)',
+  },
+  audienceBtnText:       { fontSize: FONT.sm, color: T.textMuted, fontWeight: '500' },
+  audienceBtnTextActive: { color: T.primary, fontWeight: '700' },
+
+  // User search
+  userSearchWrap: {
+    marginHorizontal: SPACING.md,
+    marginTop:        SPACING.sm,
+    marginBottom:     rp(4),
+  },
+  userSearchRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    backgroundColor:   T.surface,
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(10),
+  },
+  userSearchInput: {
+    flex:      1,
+    fontSize:  FONT.md,
+    color:     T.text,
+  },
+  userResultsList: {
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.md,
+    borderWidth:     1,
+    borderColor:     T.border,
+    marginTop:       rp(4),
+    overflow:        'hidden',
+  },
+  userResultItem: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(10),
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(10),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  userResultAvatar: {
+    width:           rs(36),
+    height:          rs(36),
+    borderRadius:    rs(18),
+    backgroundColor: 'rgba(255,99,74,0.12)',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  userResultInitial: { fontSize: rf(15), fontWeight: '700', color: T.primary },
+  userResultName:    { fontSize: FONT.sm, fontWeight: '700', color: T.text },
+  userResultAnon:    { fontSize: rf(11), color: T.textMuted, fontStyle: 'italic' },
+
+  targetConfirm: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    marginTop:         rp(8),
+    backgroundColor:   'rgba(255,99,74,0.07)',
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.2)',
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(10),
+  },
+  targetConfirmText: {
+    flex:      1,
+    fontSize:  rf(12),
+    color:     T.textSecondary,
+    lineHeight: rf(18),
+  },
 });
