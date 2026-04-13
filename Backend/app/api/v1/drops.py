@@ -21,17 +21,35 @@ CARD_EXPIRY_HOURS = 24
 NIGHT_MODE_START = 22  # 10pm
 NIGHT_MODE_END = 3     # 3am
 
-CATEGORIES = ["love", "fun", "adventure", "friendship", "spicy"]
+CATEGORIES = [
+    # Social
+    "love", "fun", "adventure", "friendship", "spicy",
+    # Emotional / situational
+    "carrying this alone", "starting over", "need stability",
+    "open to connection", "just need to be heard",
+]
+
+# Categories that surface in the "Open to Connect" dedicated section
+CONNECTION_CATEGORIES = {"open to connection", "need stability", "carrying this alone", "starting over"}
 
 # ==================== REQUEST MODELS ====================
+
+VALID_INTENTS = [
+    "open to connection",   # ready to meet someone
+    "just need to be heard", # wants empathy, not necessarily romance
+    "looking for something real", # serious intent
+    "late night thoughts",  # reflective, no specific need
+]
 
 class CreateDropRequest(BaseModel):
     confession: Optional[str] = None
     category: str = "love"
     is_group: bool = False
-    group_size: Optional[int] = None  # e.g. 4 for "looking for a 4th"
+    group_size: Optional[int] = None
     media_url: Optional[str] = None
     media_type: Optional[str] = None  # "image" or "video"
+    target_user_id: Optional[str] = None  # private targeted drop
+    intent: Optional[str] = None  # what the sender is open to
 
 
 class ReactToDropRequest(BaseModel):
@@ -281,6 +299,18 @@ async def create_drop(
     if data.is_group and (not data.group_size or data.group_size < 2 or data.group_size > 10):
         raise HTTPException(status_code=400, detail="Group size must be between 2 and 10")
 
+    # Validate target user if specified
+    if data.target_user_id:
+        if data.target_user_id == current_user_id:
+            raise HTTPException(status_code=400, detail="You cannot send a drop to yourself")
+        if not ObjectId.is_valid(data.target_user_id):
+            raise HTTPException(status_code=400, detail="Invalid target user")
+        target_exists = await db["users"].find_one(
+            {"_id": ObjectId(data.target_user_id)}, {"_id": 1}
+        )
+        if not target_exists:
+            raise HTTPException(status_code=404, detail="Target user not found")
+
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -306,10 +336,21 @@ async def create_drop(
         "admirer_count": 0,
         "reactions": [],
         "card_image_url": _media_preview_url(data.media_url, data.media_type),
+        "target_user_id": data.target_user_id or None,
+        "intent": data.intent if data.intent in VALID_INTENTS else None,
         "created_at": now_utc(),
     }
 
     await db["drops"].insert_one(drop)
+
+    # Notify target user privately — they see no sender identity
+    if data.target_user_id:
+        await send_push_notification(
+            data.target_user_id,
+            "Someone has a confession for you 👀",
+            "They said something they couldn't say out loud. Tap to see it.",
+            db,
+        )
 
     # Update vibe score
     await update_vibe_score(current_user_id, "card_created", db)
@@ -389,6 +430,7 @@ async def get_marketplace(
     query = {
         "is_active": True,
         "expires_at": {"$gt": now_utc()},
+        "target_user_id": None,  # only public drops appear in marketplace
     }
 
     if category and category in CATEGORIES:
@@ -436,6 +478,7 @@ async def get_marketplace(
             "time_left": get_time_left(drop["expires_at"]),
             "time_ago": get_time_ago(drop["created_at"]),
             "already_unlocked": already_unlocked,
+            "intent": drop.get("intent"),
         })
 
     return {
@@ -443,6 +486,58 @@ async def get_marketplace(
         "total": total,
         "has_more": skip + limit < total,
     }
+
+
+# ==================== OPEN TO CONNECT SECTION ====================
+
+@router.get("/marketplace/open-to-connect")
+async def get_open_to_connect(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, le=20),
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database)
+):
+    """
+    Dedicated section for drops from people open to real connection.
+    Surfaces drops with connection-oriented categories or explicit intent.
+    """
+    query = {
+        "is_active": True,
+        "expires_at": {"$gt": now_utc()},
+        "target_user_id": None,
+        "$or": [
+            {"category": {"$in": list(CONNECTION_CATEGORIES)}},
+            {"intent": {"$in": VALID_INTENTS[:3]}},  # open to connection, need to be heard, looking for something real
+        ]
+    }
+    if current_user_id:
+        query["sender_id"] = {"$ne": current_user_id}
+
+    drops = []
+    async for drop in db["drops"].find(query).sort("created_at", -1).skip(skip).limit(limit):
+        drop_id = str(drop["_id"])
+        already_unlocked = False
+        if current_user_id:
+            unlock = await db["drop_unlocks"].find_one({"drop_id": drop_id, "unlocker_id": current_user_id})
+            already_unlocked = unlock is not None
+        drops.append({
+            "id":             drop_id,
+            "confession":     drop.get("confession"),
+            "media_url":      drop.get("media_url"),
+            "media_type":     drop.get("media_type"),
+            "card_image_url": drop.get("card_image_url"),
+            "category":       drop["category"],
+            "intent":         drop.get("intent"),
+            "price":          drop["price"],
+            "is_night_mode":  drop.get("is_night_mode", False),
+            "unlock_count":   drop.get("unlock_count", 0),
+            "reactions":      drop.get("reactions", [])[-5:],
+            "time_left":      get_time_left(drop["expires_at"]),
+            "time_ago":       get_time_ago(drop["created_at"]),
+            "already_unlocked": already_unlocked,
+        })
+
+    return {"drops": drops, "has_more": len(drops) == limit}
 
 
 # ==================== DROP LANDING (deep link) ====================
@@ -1653,6 +1748,46 @@ async def get_drops_inbox(
         "active_drops": active_drops,
         "connections": connections,
     }
+
+
+# ==================== RECEIVED (targeted drops) ====================
+
+@router.get("/received")
+async def get_received_drops(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    """
+    Drops that were anonymously targeted at the current user.
+    Sender identity is never exposed — not even after unlock.
+    """
+    received = []
+    async for drop in db["drops"].find({
+        "target_user_id": current_user_id,
+        "is_active": True,
+    }).sort("created_at", -1).limit(50):
+        # Check if already unlocked by this user
+        already_unlocked = await db["drop_connections"].find_one({
+            "drop_id": str(drop["_id"]),
+            "unlocker_id": current_user_id,
+        })
+        received.append({
+            "id":             str(drop["_id"]),
+            "confession":     drop.get("confession"),
+            "media_url":      drop.get("media_url"),
+            "media_type":     drop.get("media_type"),
+            "card_image_url": drop.get("card_image_url"),
+            "category":       drop["category"],
+            "is_night_mode":  drop.get("is_night_mode", False),
+            "is_expired":     _ensure_aware(drop["expires_at"]) < now_utc(),
+            "time_left":      get_time_left(drop["expires_at"]),
+            "unlock_count":   drop.get("unlock_count", 0),
+            "reactions":      drop.get("reactions", []),
+            "already_unlocked": bool(already_unlocked),
+            "price":          drop.get("price", 2),
+        })
+
+    return {"received": received}
 
 
 # ==================== VIBE SCORE ====================

@@ -63,7 +63,7 @@ class UpdateVibesRequest(BaseModel):
 
 # ==================== HELPERS ====================
 
-FREE_MESSAGE_LIMIT = 10
+REVEAL_MESSAGE_THRESHOLD = 30   # must exchange 30 messages before reveal is unlocked
 
 async def get_user_by_anonymous_name(anonymous_name: str, db):
     """Look up a user by their anonymous_name"""
@@ -159,16 +159,43 @@ async def get_anonymous_profile(
 # ==================== VIBE TAGS ====================
 
 VALID_VIBE_TAGS = [
-    "carries a lot", "dark humor", "night owl", "been through it",
-    "overthinker", "healing slowly", "blunt", "soft inside",
-    "loud silence", "complicated", "lost", "still standing",
-    "open book", "hard to reach", "always listening"
+    # Situation — where you are
+    "raising kids alone", "starting over", "been through a lot",
+    "healing in progress", "carrying a lot", "still standing",
+    "lost right now", "rebuilding myself",
+    # Need — what you need
+    "need someone steady", "looking for something real",
+    "just need to be heard", "open to connection",
+    "not looking for games", "no rush",
+    # Voice — how you show up
+    "emotionally available", "blunt but caring",
+    "soft but strong", "overthinks everything",
+    "here for the long run", "ready to try again",
 ]
 
 @router.get("/vibes/options")
 async def get_vibe_options():
-    """Get all available vibe tags for onboarding/settings"""
-    return {"vibe_tags": VALID_VIBE_TAGS}
+    """Get all available emotional signal tags"""
+    return {
+        "vibe_tags": VALID_VIBE_TAGS,
+        "groups": {
+            "situation": [
+                "raising kids alone", "starting over", "been through a lot",
+                "healing in progress", "carrying a lot", "still standing",
+                "lost right now", "rebuilding myself",
+            ],
+            "need": [
+                "need someone steady", "looking for something real",
+                "just need to be heard", "open to connection",
+                "not looking for games", "no rush",
+            ],
+            "voice": [
+                "emotionally available", "blunt but caring",
+                "soft but strong", "overthinks everything",
+                "here for the long run", "ready to try again",
+            ],
+        }
+    }
 
 @router.put("/vibes")
 async def update_vibe_tags(
@@ -176,14 +203,14 @@ async def update_vibe_tags(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """Update user's vibe tags (max 3)"""
+    """Update user's vibe tags (max 5)"""
     # Validate
     invalid = [t for t in data.vibe_tags if t not in VALID_VIBE_TAGS]
     if invalid:
         raise HTTPException(status_code=400, detail=f"Invalid vibe tags: {invalid}")
 
-    if len(data.vibe_tags) > 3:
-        raise HTTPException(status_code=400, detail="Maximum 3 vibe tags allowed")
+    if len(data.vibe_tags) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 vibe tags allowed")
 
     await db["users"].update_one(
         {"_id": ObjectId(current_user_id)},
@@ -376,7 +403,8 @@ async def accept_request(
         "reveal_status": None,      # None | "pending" | "accepted" | "declined"
         "reveal_initiator_id": None,
         "created_at": datetime.now(timezone.utc),
-        "last_message_at": datetime.now(timezone.utc)
+        "last_message_at": datetime.now(timezone.utc),
+        "chat_expires_at": datetime.now(timezone.utc) + timedelta(days=30),  # Deep Connection window
     }
 
     await db["connect_chats"].insert_one(chat)
@@ -434,6 +462,38 @@ async def get_chats(
         "status": {"$in": [ChatStatus.ACTIVE, ChatStatus.UNLOCKED]}
     }).sort("last_message_at", -1).to_list(None)
 
+    # Batch-fetch active drops for all other participants (marketplace + targeted at me)
+    now = datetime.now(timezone.utc)
+    other_user_ids = []
+    for chat in chats:
+        is_sender = chat["from_user_id"] == current_user_id
+        other_id = chat["to_user_id"] if is_sender else chat["from_user_id"]
+        other_user_ids.append(other_id)
+
+    # Active public drops by any of the other users  (or drops targeted at current_user from them)
+    drops_cursor = db["drops"].find({
+        "$or": [
+            {
+                "user_id": {"$in": other_user_ids},
+                "expires_at": {"$gt": now},
+                "target_user_id": None,
+            },
+            {
+                "user_id": {"$in": other_user_ids},
+                "expires_at": {"$gt": now},
+                "target_user_id": current_user_id,
+            },
+        ]
+    }, {"user_id": 1, "_id": 1, "target_user_id": 1})
+
+    # Build map: other_user_id → list of drop_ids
+    drop_map: dict = {}
+    async for drop in drops_cursor:
+        uid = drop["user_id"]
+        if uid not in drop_map:
+            drop_map[uid] = []
+        drop_map[uid].append(str(drop["_id"]))
+
     result = []
     for chat in chats:
         is_sender = chat["from_user_id"] == current_user_id
@@ -442,6 +502,7 @@ async def get_chats(
         other_name = chat["to_anonymous_name"] if is_sender else chat["from_anonymous_name"]
         other_avatar = chat["to_avatar"] if is_sender else chat["from_avatar"]
         other_color = chat["to_avatar_color"] if is_sender else chat["from_avatar_color"]
+        other_id = chat["to_user_id"] if is_sender else chat["from_user_id"]
 
         # Last message
         last_msg = await db["connect_messages"].find_one(
@@ -456,9 +517,8 @@ async def get_chats(
             "is_read": False
         })
 
-        messages_left = None
-        if not chat.get("is_unlocked"):
-            messages_left = max(0, FREE_MESSAGE_LIMIT - chat.get("message_count", 0))
+        # Drop context
+        other_drops = drop_map.get(other_id, [])
 
         result.append({
             "chat_id": str(chat["_id"]),
@@ -469,9 +529,13 @@ async def get_chats(
             "last_message_at": chat["last_message_at"].isoformat(),
             "unread_count": unread,
             "is_unlocked": chat.get("is_unlocked", False),
-            "messages_left": messages_left,
             "reveal_status": chat.get("reveal_status"),
-            "reveal_initiator": chat.get("reveal_initiator_id") == current_user_id
+            "reveal_initiator": chat.get("reveal_initiator_id") == current_user_id,
+            "message_count": chat.get("message_count", 0),
+            "reveal_unlocked": chat.get("message_count", 0) >= REVEAL_MESSAGE_THRESHOLD,
+            "has_active_drop": len(other_drops) > 0,
+            "drop_id": other_drops[0] if other_drops else None,
+            "chat_expires_at": chat["chat_expires_at"].isoformat() if chat.get("chat_expires_at") else None,
         })
 
     return {"chats": result, "count": len(result)}
@@ -524,10 +588,24 @@ async def get_chat_messages(
     other_name = chat["to_anonymous_name"] if is_sender else chat["from_anonymous_name"]
     other_avatar = chat["to_avatar"] if is_sender else chat["from_avatar"]
     other_color = chat["to_avatar_color"] if is_sender else chat["from_avatar_color"]
+    other_user_id = chat["to_user_id"] if is_sender else chat["from_user_id"]
 
-    messages_left = None
-    if not chat.get("is_unlocked"):
-        messages_left = max(0, FREE_MESSAGE_LIMIT - chat.get("message_count", 0))
+    msg_count = chat.get("message_count", 0)
+    now = datetime.now(timezone.utc)
+
+    # Drop context — check if other user has active public/targeted drops
+    other_drop = await db["drops"].find_one(
+        {
+            "user_id": other_user_id,
+            "expires_at": {"$gt": now},
+            "$or": [
+                {"target_user_id": None},
+                {"target_user_id": current_user_id},
+            ],
+        },
+        {"_id": 1}
+    )
+    drop_id = str(other_drop["_id"]) if other_drop else None
 
     return {
         "messages": [
@@ -547,11 +625,14 @@ async def get_chat_messages(
             "other_avatar": other_avatar,
             "other_avatar_color": other_color,
             "is_unlocked": chat.get("is_unlocked", False),
-            "messages_left": messages_left,
             "reveal_status": chat.get("reveal_status"),
             "reveal_initiator": chat.get("reveal_initiator_id") == current_user_id,
-            "message_count":   chat.get("message_count", 0),
-            "intensity_score": chat.get("intensity_score", 0.0),
+            "message_count":    msg_count,
+            "intensity_score":  chat.get("intensity_score", 0.0),
+            "reveal_unlocked":  msg_count >= REVEAL_MESSAGE_THRESHOLD,
+            "has_active_drop":   drop_id is not None,
+            "drop_id":           drop_id,
+            "chat_expires_at":   chat["chat_expires_at"].isoformat() if chat.get("chat_expires_at") else None,
         }
     }
 
@@ -573,14 +654,6 @@ async def send_message(
 
     if chat["status"] == ChatStatus.BLOCKED:
         raise HTTPException(status_code=403, detail="Chat is blocked")
-
-    # Enforce message limit for locked chats
-    if not chat.get("is_unlocked"):
-        if chat.get("message_count", 0) >= FREE_MESSAGE_LIMIT:
-            raise HTTPException(
-                status_code=402,
-                detail=f"Message limit reached ({FREE_MESSAGE_LIMIT} free messages). Unlock for KSh 49."
-            )
 
     if not data.content.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -626,10 +699,6 @@ async def send_message(
         calc_intensity(db, chat_id, [chat["from_user_id"], chat["to_user_id"]])
     )
 
-    messages_left = None
-    if not chat.get("is_unlocked"):
-        messages_left = max(0, FREE_MESSAGE_LIMIT - chat.get("message_count", 0) - 1)
-
     # Notify other participant
     other_id = other_participant(chat, current_user_id)
     await send_push_notification(
@@ -639,10 +708,7 @@ async def send_message(
         extra_data={"chat_id": chat_id}
     )
 
-    return {
-        "message_id": str(message["_id"]),
-        "messages_left": messages_left
-    }
+    return {"message_id": str(message["_id"])}
 
 
 # ==================== UNLOCK ====================
@@ -701,6 +767,12 @@ async def request_reveal(
 
     if not is_participant(chat, current_user_id):
         raise HTTPException(status_code=403, detail="Not your chat")
+
+    if chat.get("message_count", 0) < REVEAL_MESSAGE_THRESHOLD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Keep the conversation going. Reveal unlocks after {REVEAL_MESSAGE_THRESHOLD} messages ({REVEAL_MESSAGE_THRESHOLD - chat.get('message_count', 0)} to go)."
+        )
 
     if chat.get("reveal_status") in ["pending", "accepted"]:
         raise HTTPException(status_code=400, detail="Reveal already in progress or completed")

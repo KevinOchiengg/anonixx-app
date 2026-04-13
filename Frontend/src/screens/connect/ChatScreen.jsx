@@ -241,47 +241,30 @@ const IntensityMeter = React.memo(({ messageCount, isUnlocked }) => {
   );
 });
 
-// ─── Limit Banner ─────────────────────────────────────────────
-const LimitBanner = React.memo(({ messagesLeft, onUnlock }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+// ─── Reveal Progress Banner ───────────────────────────────────
+const RevealProgressBanner = React.memo(({ messageCount, revealUnlocked }) => {
+  const THRESHOLD = 30;
+  if (revealUnlocked || messageCount === 0) return null;
 
-  useEffect(() => {
-    if (messagesLeft !== 0) return;
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.02, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,    duration: 900, useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [messagesLeft]);
+  const remaining = THRESHOLD - messageCount;
+  const progress  = Math.min(messageCount / THRESHOLD, 1);
 
-  if (messagesLeft === null || messagesLeft > 5) return null;
-
-  if (messagesLeft === 0) {
-    return (
-      <Animated.View style={[styles.limitFull, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.limitFullEmoji}>🔒</Text>
-        <Text style={styles.limitFullTitle}>this conversation wants to continue.</Text>
-        <Text style={styles.limitFullBody}>
-          10 free messages. you've used them all.{'\n'}unlock once — no more limits, ever.
-        </Text>
-        <TouchableOpacity style={styles.unlockBtn} onPress={onUnlock} hitSlop={HIT_SLOP} activeOpacity={0.85}>
-          <Text style={styles.unlockBtnText}>Unlock — KSh 49</Text>
-        </TouchableOpacity>
-        <Text style={styles.limitFullHint}>they're still waiting.</Text>
-      </Animated.View>
-    );
-  }
+  // Only show in the last 10 messages before unlock, or exactly at unlock
+  if (remaining > 10) return null;
 
   return (
-    <View style={styles.limitWarn}>
-      <Text style={styles.limitWarnText}>
-        {messagesLeft} free {messagesLeft === 1 ? 'message' : 'messages'} remaining
-        {'  ·  '}
-        <Text style={styles.limitWarnLink} onPress={onUnlock}>Unlock KSh 49</Text>
-      </Text>
+    <View style={styles.revealProgressBanner}>
+      <Text style={styles.revealProgressEmoji}>👁</Text>
+      <View style={styles.revealProgressBody}>
+        <Text style={styles.revealProgressText}>
+          {remaining === 0
+            ? 'identity reveal is now unlocked ✨'
+            : `${remaining} more ${remaining === 1 ? 'message' : 'messages'} to unlock reveal`}
+        </Text>
+        <View style={styles.revealProgressTrack}>
+          <View style={[styles.revealProgressFill, { width: `${progress * 100}%` }]} />
+        </View>
+      </View>
     </View>
   );
 });
@@ -351,6 +334,51 @@ const RevealModal = React.memo(({ visible, chat, onAccept, onDecline, onRequest,
         </View>
       </View>
     </Modal>
+  );
+});
+
+// ─── Deep Connection Countdown ────────────────────────────────
+function useCountdown(expiresAt) {
+  const [timeLeft, setTimeLeft] = useState(null);
+  useEffect(() => {
+    if (!expiresAt) return;
+    const tick = () => {
+      const diff = new Date(expiresAt) - new Date();
+      if (diff <= 0) { setTimeLeft(null); return; }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      setTimeLeft({ d, h, m, diff });
+    };
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+  return timeLeft;
+}
+
+const DeepConnectionCountdown = React.memo(({ expiresAt, revealUnlocked, onReveal }) => {
+  const tl = useCountdown(expiresAt);
+  if (!tl) return null;
+
+  const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+  const ONE_DAY    = 24 * 60 * 60 * 1000;
+  if (tl.diff > THREE_DAYS) return null;   // only show in the last 3 days
+
+  const urgent = tl.diff < ONE_DAY;
+  const label  = tl.d > 0 ? `${tl.d}d ${tl.h}h left` : `${tl.h}h ${tl.m}m left`;
+
+  return (
+    <View style={[styles.countdownBanner, urgent && styles.countdownBannerUrgent]}>
+      <Text style={[styles.countdownText, urgent && styles.countdownTextUrgent]}>
+        ⏳ this connection closes in {label}
+      </Text>
+      {revealUnlocked && (
+        <TouchableOpacity onPress={onReveal} hitSlop={HIT_SLOP} style={styles.countdownRevealBtn}>
+          <Text style={styles.countdownRevealText}>reveal & continue →</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 });
 
@@ -504,7 +532,6 @@ export default function ChatScreen({ route, navigation }) {
   const sendMessage = useCallback(async () => {
     const content = inputText.trim();
     if (!content || sending) return;
-    if (chatInfo?.messages_left === 0 && !chatInfo?.is_unlocked) return;
 
     setSending(true);
     const tempId = `temp_${Date.now()}`;
@@ -529,19 +556,10 @@ export default function ChatScreen({ route, navigation }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ chat_id: chatId, content }),
       });
-      const data = await res.json();
       if (!res.ok) {
         setMessages(prev => prev.filter(m => m.id !== tempId));
-        if (res.status === 402) {
-          setChatInfo(prev => ({ ...prev, messages_left: 0 }));
-          showToast({ type: 'warning', message: 'Limit reached. Unlock to continue.' });
-        } else {
-          showToast({ type: 'error', message: 'Message could not be sent.' });
-        }
+        showToast({ type: 'error', message: 'Message could not be sent.' });
       } else {
-        if (data.messages_left !== undefined) {
-          setChatInfo(prev => ({ ...prev, messages_left: data.messages_left }));
-        }
         loadMessages();
       }
     } catch {
@@ -634,8 +652,8 @@ export default function ChatScreen({ route, navigation }) {
 
   const keyExtractor = useCallback((item) => item.id, []);
 
-  const isBlocked    = chatInfo?.messages_left === 0 && !chatInfo?.is_unlocked;
-  const messageCount = chatInfo?.message_count || 0;
+  const messageCount    = chatInfo?.message_count || 0;
+  const revealUnlocked  = chatInfo?.reveal_unlocked || messageCount >= 30;
   const unlockedFeatures = getUnlockedFeatures(messageCount);
   const hasVoiceNote = unlockedFeatures.some(f => f.label === 'Voice notes');
   const hasMedia     = unlockedFeatures.some(f => f.label === 'Images');
@@ -694,7 +712,7 @@ export default function ChatScreen({ route, navigation }) {
               {!hasVideoCall && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
             </TouchableOpacity>
             {/* Reveal */}
-            {chatInfo?.is_unlocked && (
+            {revealUnlocked && (
               <TouchableOpacity
                 style={[styles.headerActionBtn, chatInfo?.reveal_status === 'pending' && styles.headerActionBtnPending]}
                 onPress={() => setShowReveal(true)}
@@ -709,10 +727,31 @@ export default function ChatScreen({ route, navigation }) {
         </View>
 
         {/* ── Intensity meter ── */}
-        <IntensityMeter messageCount={messageCount} isUnlocked={chatInfo?.is_unlocked} />
+        <IntensityMeter messageCount={messageCount} isUnlocked={revealUnlocked} />
 
-        {/* ── Limit banner ── */}
-        <LimitBanner messagesLeft={chatInfo?.messages_left} onUnlock={handleUnlock} />
+        {/* ── Reveal progress banner ── */}
+        <RevealProgressBanner messageCount={messageCount} revealUnlocked={revealUnlocked} />
+
+        {/* ── Deep connection countdown ── */}
+        <DeepConnectionCountdown
+          expiresAt={chatInfo?.chat_expires_at}
+          revealUnlocked={revealUnlocked}
+          onReveal={() => setShowReveal(true)}
+        />
+
+        {/* ── Drop nudge — they have a confession ── */}
+        {chatInfo?.has_active_drop && chatInfo?.drop_id && (
+          <TouchableOpacity
+            style={styles.dropNudgeBanner}
+            onPress={() => navigation.navigate('DropLanding', { dropId: chatInfo.drop_id })}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.dropNudgeText}>
+              🌑 they have a confession on the board · <Text style={styles.dropNudgeLink}>read it</Text>
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* ── Messages ── */}
         {loading ? (
@@ -769,14 +808,13 @@ export default function ChatScreen({ route, navigation }) {
 
           {/* Text input */}
           <TextInput
-            style={[styles.input, isBlocked && styles.inputBlocked]}
+            style={styles.input}
             value={inputText}
             onChangeText={handleInputChange}
-            placeholder={isBlocked ? 'unlock to keep talking…' : 'say something…'}
+            placeholder="say something…"
             placeholderTextColor={T.textMuted}
             multiline
             maxLength={500}
-            editable={!isBlocked}
             returnKeyType="default"
             selectionColor={T.primary}
           />
@@ -793,9 +831,9 @@ export default function ChatScreen({ route, navigation }) {
 
           {/* Send */}
           <TouchableOpacity
-            style={[styles.sendBtn, (!inputText.trim() || sending || isBlocked) && styles.sendBtnDisabled]}
+            style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
             onPress={sendMessage}
-            disabled={!inputText.trim() || sending || isBlocked}
+            disabled={!inputText.trim() || sending}
             hitSlop={HIT_SLOP}
             activeOpacity={0.85}
           >
@@ -888,30 +926,49 @@ const styles = StyleSheet.create({
   intensityMilestoneAt: { fontSize: FONT.xs, color: T.textMuted, fontWeight: '600' },
   intensityMilestoneLocked: { color: T.textMuted, opacity: 0.5 },
 
-  // Limit banners
-  limitWarn: {
-    paddingHorizontal: SPACING.md, paddingVertical: rp(8),
-    backgroundColor: T.primaryDim, borderBottomWidth: 1, borderBottomColor: T.primaryBorder,
+  // Deep connection countdown
+  countdownBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md, paddingVertical: rp(7),
+    backgroundColor: 'rgba(251,191,36,0.08)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(251,191,36,0.18)',
+    gap: SPACING.sm,
+  },
+  countdownBannerUrgent: {
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderBottomColor: 'rgba(239,68,68,0.2)',
+  },
+  countdownText:        { color: T.textSecondary, fontSize: FONT.xs, flex: 1 },
+  countdownTextUrgent:  { color: '#EF4444' },
+  countdownRevealBtn:   { paddingHorizontal: rp(10), paddingVertical: rp(4), backgroundColor: T.primary, borderRadius: RADIUS.sm },
+  countdownRevealText:  { color: '#fff', fontSize: FONT.xs, fontWeight: '700' },
+
+  // Drop nudge banner
+  dropNudgeBanner: {
+    paddingHorizontal: SPACING.md, paddingVertical: rp(7),
+    backgroundColor: 'rgba(139,92,246,0.08)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(139,92,246,0.15)',
     alignItems: 'center',
   },
-  limitWarnText: { color: T.textSecondary, fontSize: FONT.sm },
-  limitWarnLink: { color: T.primary, fontWeight: '700' },
-  limitFull: {
-    margin: SPACING.md, padding: SPACING.lg,
-    backgroundColor: T.surface, borderRadius: RADIUS.lg,
-    alignItems: 'center', borderWidth: 1, borderColor: T.primaryBorder, gap: SPACING.sm,
+  dropNudgeText: { color: T.textSecondary, fontSize: FONT.xs },
+  dropNudgeLink: { color: '#8B5CF6', fontWeight: '700' },
+
+  // Reveal progress banner
+  revealProgressBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    paddingHorizontal: SPACING.md, paddingVertical: rp(8),
+    backgroundColor: 'rgba(255,99,74,0.08)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,99,74,0.18)',
   },
-  limitFullEmoji: { fontSize: rf(36) },
-  limitFullTitle: { fontSize: FONT.md, fontWeight: '800', color: T.text, textAlign: 'center' },
-  limitFullBody:  { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: rf(20) },
-  limitFullHint:  { fontSize: rf(11), color: T.textMuted, fontStyle: 'italic' },
-  unlockBtn: {
-    backgroundColor: T.primary, paddingHorizontal: SPACING.xl, paddingVertical: rp(14),
-    borderRadius: RADIUS.md, marginTop: rp(4),
-    shadowColor: T.primary, shadowOffset: { width: 0, height: rs(6) },
-    shadowOpacity: 0.4, shadowRadius: rs(12), elevation: 8,
+  revealProgressEmoji: { fontSize: rf(16) },
+  revealProgressBody:  { flex: 1, gap: rp(4) },
+  revealProgressText:  { color: T.textSecondary, fontSize: FONT.xs },
+  revealProgressTrack: {
+    height: rp(3), backgroundColor: T.border, borderRadius: rp(2), overflow: 'hidden',
   },
-  unlockBtnText: { color: '#fff', fontSize: FONT.md, fontWeight: '800', letterSpacing: 0.3 },
+  revealProgressFill: {
+    height: '100%', backgroundColor: T.primary, borderRadius: rp(2),
+  },
 
   // Messages
   messagesList: {
@@ -989,7 +1046,6 @@ const styles = StyleSheet.create({
     color: T.text, fontSize: FONT.md, maxHeight: rs(100),
     borderWidth: 1, borderColor: T.border,
   },
-  inputBlocked: { opacity: 0.4 },
   sendBtn: {
     width: rs(40), height: rs(40), borderRadius: rs(20),
     backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',

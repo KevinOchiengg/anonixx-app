@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 import random
+import math
 import re
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
@@ -289,6 +290,109 @@ async def send_push_notification(user_id: str, title: str, body: str, db):
         print(f"⚠️ Push notification failed: {e}")
 
 
+# ==================== FEED SCORING ====================
+
+# Maps vibe tags (user profile) → topic categories (post metadata)
+_VIBE_TO_TOPIC: dict[str, str] = {
+    "raising kids alone":    "family",
+    "starting over":         "self_growth",
+    "been through a lot":    "trauma",
+    "healing in progress":   "self_growth",
+    "carrying a lot":        "anxiety",
+    "still standing":        "self_growth",
+    "lost right now":        "depression",
+    "rebuilding myself":     "self_growth",
+    "need someone steady":   "relationships",
+    "looking for something real": "relationships",
+    "just need to be heard": "loneliness",
+    "open to connection":    "relationships",
+    "not looking for games": "relationships",
+    "no rush":               "relationships",
+    "emotionally available": "relationships",
+    "blunt but caring":      "relationships",
+    "soft but strong":       "self_growth",
+    "overthinks everything": "anxiety",
+    "here for the long run": "relationships",
+    "ready to try again":    "relationships",
+}
+
+
+def _score_post(
+    post: dict,
+    user_vibe_topics: set[str],
+    user_affinities: dict[str, float],
+    now: datetime,
+) -> float:
+    """
+    Returns a relevance score for a single post.
+
+    Weights (approximate ceiling):
+      vibe overlap   — 40 pts per matching topic  (signal: "this is for someone like me")
+      affinity       — up to 30 pts per topic      (signal: "you've engaged with this before")
+      recency        — up to 25 pts                (decays linearly over 7 days)
+      engagement     — up to 15 pts (log-scaled)   (signal: "others found it worth reacting to")
+    """
+    score = 0.0
+    post_topics = set(post.get("topics", []))
+
+    # 1. Vibe-tag overlap (high weight)
+    for topic in user_vibe_topics & post_topics:
+        score += 40
+
+    # 2. Behavioural affinity (medium-high weight, capped per topic)
+    for topic in post_topics:
+        score += min(user_affinities.get(topic, 0) * 2, 30)
+
+    # 3. Recency decay — full score at 0 h, linear to 0 at 168 h (7 days)
+    created_at = post.get("created_at")
+    if created_at:
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        age_hours = (now - created_at).total_seconds() / 3600
+        score += 25 * max(0.0, 1.0 - age_hours / 168)
+
+    # 4. Engagement — log-scaled so viral posts don't dominate
+    engagement = (
+        post.get("likes_count", 0)
+        + post.get("saves_count", 0) * 1.5
+        + post.get("thread_count", 0) * 2
+    )
+    score += min(math.log1p(engagement) * 3, 15)
+
+    return score
+
+
+def _weighted_shuffle(
+    posts: list,
+    user_vibe_topics: set[str],
+    user_affinities: dict[str, float],
+) -> list:
+    """
+    Score every post, bucket into three tiers, shuffle within each tier,
+    then concatenate: high → medium → low.
+
+    Tier thresholds (roughly):
+      high   ≥ 50  — strong vibe/affinity match or very recent + engaged
+      medium 20–49 — some overlap or moderately recent
+      low    < 20  — cold / old / unseen territory (still gets shown for serendipity)
+    """
+    now = datetime.now(timezone.utc)
+    scored = [
+        (_score_post(p, user_vibe_topics, user_affinities, now), p)
+        for p in posts
+    ]
+
+    high   = [p for s, p in scored if s >= 50]
+    medium = [p for s, p in scored if 20 <= s < 50]
+    low    = [p for s, p in scored if s < 20]
+
+    random.shuffle(high)
+    random.shuffle(medium)
+    random.shuffle(low)
+
+    return high + medium + low
+
+
 # ==================== ENDPOINTS ====================
 
 @router.post("/push-token")
@@ -430,19 +534,42 @@ async def get_calm_feed(
     posts_to_load = min(BATCH_SIZE, SESSION_LIMIT - session_posts)
 
     streak_info = None
+    user_vibe_topics: set[str] = set()
+    user_affinities: dict[str, float] = {}
+
     if current_user_id:
         streak_info = await track_streak(current_user_id, db)
+
+        # Fetch vibe tags → map to topic categories for scoring
+        user_doc = await db["users"].find_one(
+            {"_id": ObjectId(current_user_id)},
+            {"vibe_tags": 1}
+        )
+        if user_doc:
+            for tag in user_doc.get("vibe_tags", []):
+                mapped = _VIBE_TO_TOPIC.get(tag)
+                if mapped:
+                    user_vibe_topics.add(mapped)
+
+        user_affinities = await get_behavioral_interests(current_user_id, db)
 
     # Count total posts for accurate has_more
     total_posts = await db["posts"].count_documents({})
 
-    # Reliable pagination with skip/limit, newest first
-    posts = await db["posts"].find({}) \
+    # Fetch a larger pool so the shuffle has meaningful material to work with.
+    # We pull 6× the batch size (min 60) then score+shuffle and slice to posts_to_load.
+    POOL_SIZE = max(60, posts_to_load * 6)
+    pool = await db["posts"].find({}) \
         .sort("created_at", -1) \
         .skip(session_posts) \
-        .limit(posts_to_load) \
+        .limit(POOL_SIZE) \
         .to_list(None)
 
+    # Weighted shuffle — relevance-tiered but randomised within each tier
+    shuffled = _weighted_shuffle(pool, user_vibe_topics, user_affinities)
+
+    # Slice to the requested batch size, then apply emotion interleaving
+    posts = shuffled[:posts_to_load]
     posts = interleave_by_emotion(posts)
     formatted_posts = await batch_format_posts(posts, current_user_id, db)
 
