@@ -80,9 +80,6 @@ function timeAgo(isoString) {
 // ─── Drops Hero ───────────────────────────────────────────────
 const DropsHero = React.memo(({ navigation }) => (
   <View style={hero.wrap}>
-    {/* Glow blob */}
-    <View style={hero.glow} />
-
     {/* Top row: title + drop button */}
     <View style={hero.topRow}>
       <View style={hero.titleBlock}>
@@ -454,17 +451,6 @@ const hero = StyleSheet.create({
     overflow:         'hidden',
     padding:          SPACING.md,
   },
-  glow: {
-    position:        'absolute',
-    bottom:          -30,
-    left:            '10%',
-    width:           '80%',
-    height:          80,
-    borderRadius:    40,
-    backgroundColor: T.primary,
-    opacity:         0.07,
-  },
-
   topRow: {
     flexDirection:  'row',
     alignItems:     'flex-start',
