@@ -519,8 +519,6 @@ const card = StyleSheet.create({
     padding:         rp(16),
     borderWidth:     1,
     borderColor:     T.border,
-    borderLeftWidth: 1,
-    borderLeftColor: T.primary,
     marginBottom:    SPACING.sm,
   },
   header: {
@@ -560,7 +558,7 @@ const card = StyleSheet.create({
   timerText: { fontSize: rf(10), color: T.textSecondary },
   confession: {
     fontSize:     rf(15),
-    color:        T.text,
+    color:        T.textSecondary,
     fontStyle:    'italic',
     lineHeight:   rf(23),
     marginBottom: rp(14),
