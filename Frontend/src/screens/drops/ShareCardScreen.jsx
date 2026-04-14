@@ -1134,6 +1134,54 @@ const styles = StyleSheet.create({
   },
   userNoResultsText: { fontSize: FONT.sm, color: T.textMuted, fontStyle: 'italic' },
 
+  // Intent picker
+  intentWrap: {
+    marginTop:  rp(14),
+    gap:        rp(8),
+  },
+  intentLabel: {
+    fontSize:   FONT.sm,
+    fontWeight: '600',
+    color:      T.textSecondary,
+  },
+  intentOptional: {
+    fontSize:   rf(11),
+    fontWeight: '400',
+    color:      T.textMuted,
+    fontStyle:  'italic',
+  },
+  intentScroll: {
+    gap:            rp(8),
+    paddingVertical: rp(2),
+  },
+  intentChip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(6),
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.full,
+    backgroundColor:   'rgba(255,255,255,0.04)',
+    borderWidth:       1,
+    borderColor:       T.border,
+  },
+  intentChipActive: {
+    backgroundColor: 'rgba(255,99,74,0.12)',
+    borderColor:     'rgba(255,99,74,0.40)',
+  },
+  intentChipEmoji: {
+    fontSize: rf(14),
+  },
+  intentChipText: {
+    fontSize:   FONT.sm,
+    color:      T.textSecondary,
+    fontWeight: '500',
+  },
+  intentChipTextActive: {
+    color:      T.primary,
+    fontWeight: '700',
+  },
+
   targetConfirm: {
     flexDirection:     'row',
     alignItems:        'center',
