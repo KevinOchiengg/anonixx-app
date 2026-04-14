@@ -37,11 +37,11 @@ const T = {
 
 // ─── Static data (Rule 5) ────────────────────────────────────
 const CATEGORY_COLORS = {
-  love:       '#FF6B8A',
-  fun:        '#FFB347',
-  adventure:  '#47B8FF',
-  friendship: '#47FFB8',
-  spicy:      '#FF4747',
+  love:       '#FF634A',
+  fun:        '#FF634A',
+  adventure:  '#FF634A',
+  friendship: '#FF634A',
+  spicy:      '#FF634A',
 };
 
 const TABS = ['Cards', 'Connections', 'Received'];
@@ -638,7 +638,7 @@ const conn = StyleSheet.create({
     width:           rs(13),
     height:          rs(13),
     borderRadius:    rs(7),
-    backgroundColor: '#47FFB8',
+    backgroundColor: T.primary,
     borderWidth:     2,
     borderColor:     T.surface,
   },
@@ -658,7 +658,7 @@ const conn = StyleSheet.create({
   },
   revealBadgeText: {
     fontSize:   rf(9),
-    color:      '#47FFB8',
+    color:      T.primary,
     fontWeight: '600',
   },
   confession: {
