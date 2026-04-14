@@ -245,9 +245,6 @@ export default function AnonProfileSheet({
         { transform: [{ translateY: slideAnim }] }
       ]}>
 
-        {/* Aura glow from accent color */}
-        <View style={[styles.auraGlow, { backgroundColor: accentColor }]} />
-
         {/* Drag handle area */}
         <View style={styles.handleArea} {...panResponder.panHandlers}>
           <View style={styles.handle} />
@@ -439,17 +436,6 @@ const styles = StyleSheet.create({
     shadowRadius:         rs(24),
     elevation:            20,
     overflow:             'hidden',
-  },
-
-  // Aura glow
-  auraGlow: {
-    position:     'absolute',
-    top:          -rs(60),
-    alignSelf:    'center',
-    width:        W,
-    height:       rs(160),
-    opacity:      0.07,
-    borderRadius: rs(80),
   },
 
   // Handle
