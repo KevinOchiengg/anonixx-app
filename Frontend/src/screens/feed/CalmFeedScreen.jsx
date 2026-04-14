@@ -174,6 +174,8 @@ export default function CalmFeedScreen({ navigation, route }) {
         loadFeed(true);
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
       }
+      // Pause any playing video when the screen loses focus
+      return () => setActiveVideoId(null);
     }, [route?.params?.refresh])
   );
 
