@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import { useActiveVideo } from '../../context/VideoFeedContext';
 import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/responsive';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
 import { useToast } from '../ui/Toast';
@@ -158,7 +159,9 @@ const AudioPlayer = React.memo(({ onMediaPress }) => (
 // FIX: VideoView uses Android SurfaceView which renders above all RN views.
 // Solution: pointerEvents="none" on VideoView + transparent TouchableOpacity overlay
 // for navigation, with mute/slider rendered after (on top of) the overlay.
-const VideoPlayer = React.memo(({ videoUrl, isActive, viewCount, onMediaPress }) => {
+const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) => {
+  const { activeVideoId } = useActiveVideo() || {};
+  const isActive = activeVideoId === postId;
   const [thumbnail,   setThumbnail]   = useState(null);
   const [thumbLoading,setThumbLoading]= useState(true);
   const [isPlaying,   setIsPlaying]   = useState(false);
@@ -379,7 +382,7 @@ const MenuItem = React.memo(({ item }) => (
 // ─── Main Card ────────────────────────────────────────────────
 function CalmPostCard({
   post, onResponse, onSave, onViewThread, onPress,
-  onMediaPress, navigation, activeVideoId, nextVideo, onVideoChange,
+  onMediaPress, navigation,
 }) {
   const { isAuthenticated } = useAuth();
   const { showToast }       = useToast();
@@ -574,7 +577,6 @@ function CalmPostCard({
             {post.video_url && (
               <VideoPlayer
                 videoUrl={post.video_url}
-                isActive={activeVideoId === post.id}
                 postId={post.id}
                 viewCount={post.views_count || 0}
                 onMediaPress={handleMediaPress}
@@ -735,6 +737,8 @@ const styles = StyleSheet.create({
   pollSignInHint:       { fontSize: FONT.xs, color: T.textSecondary, fontStyle: 'italic', marginTop: rp(8), textAlign: 'center' },
 });
 
+// activeVideoId is now consumed via VideoFeedContext directly inside VideoPlayer,
+// so it is NOT a prop of CalmPostCard and does not need to be compared here.
 const areEqual = (prev, next) =>
   prev.post.id                          === next.post.id                          &&
   prev.post.is_saved                    === next.post.is_saved                    &&
@@ -742,7 +746,6 @@ const areEqual = (prev, next) =>
   prev.post.likes_count                 === next.post.likes_count                 &&
   prev.post.thread_count                === next.post.thread_count                &&
   prev.post.poll?.total_votes           === next.post.poll?.total_votes           &&
-  prev.post.poll?.voted_option          === next.post.poll?.voted_option          &&
-  (prev.activeVideoId === prev.post.id) === (next.activeVideoId === next.post.id);
+  prev.post.poll?.voted_option          === next.post.poll?.voted_option;
 
 export default React.memo(CalmPostCard, areEqual);

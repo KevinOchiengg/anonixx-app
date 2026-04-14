@@ -12,6 +12,7 @@ import { Search, Flame, RefreshCw, Menu } from 'lucide-react-native';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
+import { ActiveVideoContext } from '../../context/VideoFeedContext';
 import { useToast } from '../../components/ui/Toast';
 import CalmPostCard from '../../components/feed/CalmPostCard';
 import FeedDivider from '../../components/feed/FeedDivider';
@@ -378,8 +379,11 @@ export default function CalmFeedScreen({ navigation, route }) {
   }, [loadFeed]);
 
 
+  // renderItem is stable — activeVideoId is provided via ActiveVideoContext below,
+  // so changing which video is active does NOT invalidate this function or force
+  // VirtualizedList to reconcile every visible cell on each scroll tick.
   const renderItem = useCallback(({ item }) => {
-    if (item.type === 'divider')      return <FeedDivider text={item.text} />;
+    if (item.type === 'divider')       return <FeedDivider text={item.text} />;
     if (item.type === 'mood_balancer') return <MoodBalancer text={item.text} />;
     if (item.type === 'post') {
       return (
@@ -391,15 +395,11 @@ export default function CalmFeedScreen({ navigation, route }) {
           onPress={handlePostPress}
           onMediaPress={handleMediaPress}
           navigation={navigation}
-          activeVideoId={activeVideoId}
-          nextVideo={item.video_url && item.id === activeVideoId ? nextVideo : null}
-          onVideoChange={handleVideoChange}
         />
       );
     }
     return null;
-  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress,
-      navigation, activeVideoId, nextVideo, handleVideoChange]);
+  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, navigation]);
 
   const keyExtractor = useCallback((item, index) => `${item.id || item.type}-${index}`, []);
 
@@ -412,9 +412,29 @@ export default function CalmFeedScreen({ navigation, route }) {
     );
   }, [loading, hasMore, posts.length]);
 
+  // Memoized header so it doesn't recreate on every render (streak/auth changes
+  // are the only reasons it should update).
+  const ListHeader = useMemo(() => (
+    <>
+      {streakBanner && (
+        <StreakBanner
+          message={streakBanner.message}
+          onDismiss={() => setStreakBanner(null)}
+        />
+      )}
+      {isAuthenticated && <DailyRewardBanner />}
+    </>
+  ), [streakBanner, isAuthenticated]);
+
+  // Use refs for the end-reached guard so the callback never changes reference.
+  const hasMoreRef  = useRef(hasMore);
+  const loadingRef2 = useRef(loading);
+  useEffect(() => { hasMoreRef.current  = hasMore;  }, [hasMore]);
+  useEffect(() => { loadingRef2.current = loading;  }, [loading]);
+
   const handleEndReached = useCallback(() => {
-    if (hasMore && !loading) loadFeed(false);
-  }, [hasMore, loading, loadFeed]);
+    if (hasMoreRef.current && !loadingRef2.current) loadFeed(false);
+  }, [loadFeed]);
 
 
   // ── Initial loading / refresh ─────────────────────────────
@@ -464,43 +484,35 @@ export default function CalmFeedScreen({ navigation, route }) {
         </View>
       </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={posts}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        removeClippedSubviews
-        maxToRenderPerBatch={5}
-        updateCellsBatchingPeriod={100}
-        initialNumToRender={5}
-        windowSize={3}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
-        refreshControl={
-          <RefreshControl
-            refreshing={loading && posts.length > 0}
-            onRefresh={refreshFeed}
-            tintColor={THEME.primary}
-            colors={[THEME.primary]}
-          />
-        }
-        ListHeaderComponent={
-          <>
-            {streakBanner && (
-              <StreakBanner
-                message={streakBanner.message}
-                onDismiss={() => setStreakBanner(null)}
-              />
-            )}
-            {isAuthenticated && <DailyRewardBanner />}
-          </>
-        }
-        ListFooterComponent={ListFooter}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.feedContent, { paddingBottom: insets.bottom + rh(40) }]}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-      />
+      <ActiveVideoContext.Provider value={{ activeVideoId }}>
+        <FlatList
+          ref={flatListRef}
+          data={posts}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          removeClippedSubviews
+          maxToRenderPerBatch={4}
+          updateCellsBatchingPeriod={80}
+          initialNumToRender={4}
+          windowSize={5}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.6}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading && posts.length > 0}
+              onRefresh={refreshFeed}
+              tintColor={THEME.primary}
+              colors={[THEME.primary]}
+            />
+          }
+          ListHeaderComponent={ListHeader}
+          ListFooterComponent={ListFooter}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.feedContent, { paddingBottom: insets.bottom + rh(40) }]}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+        />
+      </ActiveVideoContext.Provider>
 
       <AuthPromptModal
         visible={authModalVisible}
