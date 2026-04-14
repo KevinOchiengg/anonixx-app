@@ -562,7 +562,7 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleLike = useCallback(async () => {
     if (!isAuthenticated) {
-      showToast({ type: 'info', message: 'Sign in to like confessions.' });
+      showToast({ type: 'warning', message: 'Sign in to like confessions.' });
       navigation.navigate('Auth', { screen: 'Login' });
       return;
     }

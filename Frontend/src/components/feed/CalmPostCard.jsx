@@ -403,7 +403,7 @@ function CalmPostCard({
 
   const handleLike = useCallback(async () => {
     if (animating) return;
-    if (!isAuthenticated) { showToast({ type: 'info', message: 'Sign in to like confessions.' }); return; }
+    if (!isAuthenticated) { showToast({ type: 'warning', message: 'Sign in to like confessions.' }); return; }
     setAnimating(true);
     const newLiked = !liked;
     setLiked(newLiked);
