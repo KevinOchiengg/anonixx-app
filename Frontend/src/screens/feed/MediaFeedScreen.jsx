@@ -815,7 +815,7 @@ export default function MediaFeedScreen({ route, navigation }) {
   const handleLike = useCallback(
     async (postId) => {
       if (!isAuthenticated) {
-        showToast({ type: 'info', message: 'Sign in to like this.' });
+        showToast({ type: 'warning', message: 'Sign in to like this.' });
         navigation.navigate('Auth', { screen: 'Login' });
         return;
       }

@@ -159,9 +159,6 @@ const ToastItem = React.memo(({ toast, onDismiss }) => {
         },
       ]}
     >
-      {/* Left accent bar */}
-      <View style={[styles.accentBar, { backgroundColor: config.color }]} />
-
       {/* Icon */}
       <View
         style={[styles.iconWrapper, { backgroundColor: config.color + '22' }]}
@@ -263,14 +260,8 @@ const styles = StyleSheet.create({
       android: { elevation: 12 },
     }),
   },
-  accentBar: {
-    width: 4,
-    alignSelf: 'stretch',
-    marginRight: 12,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
-  },
   iconWrapper: {
+    marginLeft: 12,
     width: 34,
     height: 34,
     borderRadius: 10,
