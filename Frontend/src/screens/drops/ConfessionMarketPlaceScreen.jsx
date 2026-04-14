@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   spotlightCatEmoji:   { fontSize: rf(22) },
   spotlightConfession: {
     fontSize:   rf(13),
-    color:      T.text,
+    color:      T.textSecondary,
     fontStyle:  'italic',
     lineHeight: rf(20),
   },
@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
   dropConfession: {
     fontSize: FONT.md,
     lineHeight: rf(26),
-    color: T.text,
+    color: T.textSecondary,
     fontStyle: 'italic',
     marginBottom: SPACING.sm,
   },
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
   mediaThumb:        { width: '100%', height: rs(140) },
   videoPlaceholder:  { width: '100%', height: rs(140), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   videoOverlay:      { position: 'absolute', top: rp(8), left: rp(8), flexDirection: 'row', alignItems: 'center', gap: rp(4), backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: rp(8), paddingVertical: rp(4), borderRadius: RADIUS.sm },
-  videoOverlayText:  { fontSize: rf(11), color: '#fff', fontWeight: '600' },
+  videoOverlayText:  { fontSize: rf(11), color: 'rgba(255,255,255,0.80)', fontWeight: '600' },
   reactionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
