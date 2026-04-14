@@ -98,7 +98,7 @@ const ReceivedDropItem = React.memo(({ item, onPress }) => {
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={[recv.wrap, { borderLeftColor: color }]}
+        style={recv.wrap}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
@@ -156,7 +156,7 @@ const DropCard = React.memo(({ item, onShare, onPress }) => {
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={[card.wrap, { borderLeftColor: color }]}
+        style={card.wrap}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
@@ -612,8 +612,6 @@ const conn = StyleSheet.create({
     padding:         rp(14),
     borderWidth:     1,
     borderColor:     T.border,
-    borderLeftWidth: 1,
-    borderLeftColor: T.primary,
     gap:             rp(12),
     marginBottom:    SPACING.sm,
   },
@@ -738,7 +736,6 @@ const recv = StyleSheet.create({
     padding:         rp(16),
     borderWidth:     1,
     borderColor:     T.border,
-    borderLeftWidth: 3,
     marginBottom:    SPACING.sm,
   },
   header: {
