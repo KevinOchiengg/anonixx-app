@@ -27,16 +27,24 @@ async def get_upload_signature(
     current_user_id: str = Depends(get_current_user_id),
 ):
     """Return short-lived signed params for a direct-to-Cloudinary upload."""
-    timestamp = int(time.time())
-    params    = {"folder": folder, "timestamp": timestamp}
-    signature = cloudinary.utils.api_sign_request(params, settings.CLOUDINARY_API_SECRET)
-    return {
-        "signature":  signature,
-        "timestamp":  timestamp,
-        "api_key":    settings.CLOUDINARY_API_KEY,
-        "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
-        "folder":     folder,
-    }
+    if not settings.CLOUDINARY_API_SECRET or not settings.CLOUDINARY_API_KEY or not settings.CLOUDINARY_CLOUD_NAME:
+        raise HTTPException(
+            status_code=500,
+            detail="Media uploads are not configured on this server. Contact support."
+        )
+    try:
+        timestamp = int(time.time())
+        params    = {"folder": folder, "timestamp": timestamp}
+        signature = cloudinary.utils.api_sign_request(params, settings.CLOUDINARY_API_SECRET)
+        return {
+            "signature":  signature,
+            "timestamp":  timestamp,
+            "api_key":    settings.CLOUDINARY_API_KEY,
+            "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
+            "folder":     folder,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not generate upload signature: {str(e)}")
 
 
 # ── Server-side uploads (fallback) ───────────────────────────────────────────

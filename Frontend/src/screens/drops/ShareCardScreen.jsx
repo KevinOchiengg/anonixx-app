@@ -366,7 +366,10 @@ export default function ShareCardScreen({ navigation }) {
       `${API_BASE_URL}/api/v1/upload/sign?folder=anonixx/drops`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
-    if (!signRes.ok) throw new Error('Could not get upload signature.');
+    if (!signRes.ok) {
+      const errData = await signRes.json().catch(() => ({}));
+      throw new Error(errData?.detail || `Upload sign failed (${signRes.status})`);
+    }
     const { signature, timestamp, api_key, cloud_name, folder } = await signRes.json();
 
     const form = new FormData();
