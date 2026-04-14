@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useFocusEffect } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -753,7 +754,8 @@ export default function MediaFeedScreen({ route, navigation }) {
   const slideHeight = height - tabBarHeight;
   const [listHeight, setListHeight] = useState(slideHeight);
 
-  const [activeIndex, setActiveIndex] = useState(startIndex);
+  const [activeIndex,   setActiveIndex]   = useState(startIndex);
+  const [screenFocused, setScreenFocused] = useState(true);
   const [likeMap, setLikeMap] = useState(() => {
     const m = {};
     posts.forEach((p) => {
@@ -793,6 +795,14 @@ export default function MediaFeedScreen({ route, navigation }) {
       }, 50);
     }
   }, []);
+
+  // Pause all videos when the screen loses focus (tab switch or navigation)
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, [])
+  );
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
 
@@ -879,7 +889,7 @@ export default function MediaFeedScreen({ route, navigation }) {
 
   const renderItem = useCallback(
     ({ item, index }) => {
-      const isActive = index === activeIndex;
+      const isActive = index === activeIndex && screenFocused;
       const likeState = likeMap[item.id] || { liked: false, count: 0 };
 
       const commonProps = {
@@ -910,6 +920,7 @@ export default function MediaFeedScreen({ route, navigation }) {
     },
     [
       activeIndex,
+      screenFocused,
       likeMap,
       saveMap,
       commentCounts,
