@@ -575,7 +575,7 @@ export default function ShareCardScreen({ navigation }) {
                 style={styles.userSearchInput}
                 value={userQuery}
                 onChangeText={handleUserSearch}
-                placeholder="Type a username…"
+                placeholder="Search by username or anonymous name…"
                 placeholderTextColor={T.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -603,7 +603,7 @@ export default function ShareCardScreen({ navigation }) {
                   >
                     <View style={styles.userResultAvatar}>
                       <Text style={styles.userResultInitial}>
-                        {u.username?.[0]?.toUpperCase() || '?'}
+                        {(u.anonymous_name || u.username)?.[0]?.toUpperCase() || '?'}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
