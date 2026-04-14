@@ -73,7 +73,7 @@ async def search_users(
     db = Depends(get_database)
 ):
     """
-    Search users by username for anonymous drop targeting.
+    Search users by username OR anonymous_name for anonymous drop targeting.
     Returns id + username + anonymous_name only — no email, no sensitive data.
     Excludes the requester themselves.
     """
@@ -81,9 +81,13 @@ async def search_users(
     if not q:
         return {"users": []}
 
+    regex = {"$regex": q, "$options": "i"}
     cursor = db["users"].find(
         {
-            "username": {"$regex": q, "$options": "i"},
+            "$or": [
+                {"username": regex},
+                {"anonymous_name": regex},
+            ],
             "_id": {"$ne": ObjectId(current_user_id)},
         },
         {"_id": 1, "username": 1, "anonymous_name": 1},
