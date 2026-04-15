@@ -43,7 +43,12 @@ const getAvatar = (name) => AVATAR_MAP[name] || '👤';
 
 function formatChatTime(isoString) {
   if (!isoString) return '';
-  const msgDate = new Date(isoString);
+  // Normalise to UTC: replace space separator and append Z if no tz offset present
+  // so JS converts to the device's local timezone rather than treating it as local time.
+  const normalised = isoString
+    .replace(' ', 'T')
+    .replace(/(\.\d+)?$/, (m) => (/[Z+\-]\d/.test(isoString) ? m : m + 'Z'));
+  const msgDate = new Date(normalised);
   if (isNaN(msgDate.getTime())) return '';
 
   const now      = new Date();
