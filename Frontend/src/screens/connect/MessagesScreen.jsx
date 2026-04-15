@@ -41,12 +41,33 @@ const AVATAR_MAP = {
 };
 const getAvatar = (name) => AVATAR_MAP[name] || '👤';
 
-function timeAgo(isoString) {
-  const diff = (Date.now() - new Date(isoString).getTime()) / 1000;
-  if (diff < 60)    return 'just now';
-  if (diff < 3600)  return `${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return `${Math.floor(diff / 86400)}d`;
+function formatChatTime(isoString) {
+  if (!isoString) return '';
+  const msgDate = new Date(isoString);
+  if (isNaN(msgDate.getTime())) return '';
+
+  const now      = new Date();
+  const msgStr   = msgDate.toDateString();
+
+  // Today — clock time only  e.g. "2:34 PM"
+  if (msgStr === now.toDateString()) {
+    return msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+
+  // Yesterday
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (msgStr === yesterday.toDateString()) return 'Yesterday';
+
+  // Within the last 7 days — short weekday  e.g. "Mon"
+  const sevenAgo = new Date(now);
+  sevenAgo.setDate(now.getDate() - 7);
+  if (msgDate > sevenAgo) {
+    return msgDate.toLocaleDateString([], { weekday: 'short' });
+  }
+
+  // Older — "Apr 10" style
+  return msgDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 const TABS = ['All', 'Online 🔥', 'Locked 🔒'];
@@ -164,7 +185,7 @@ const ChatCard = React.memo(({ chat, onPress, isOnline, isTyping }) => {
             {chat.other_anonymous_name}
           </Text>
           <View style={styles.chatMetaRight}>
-            <Text style={styles.chatTime}>{timeAgo(chat.last_message_at)}</Text>
+            <Text style={styles.chatTime}>{formatChatTime(chat.last_message_at)}</Text>
             {hasUnread && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadBadgeText}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</Text>
