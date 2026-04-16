@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft, Check, CheckCheck, Image as ImageIcon,
-  Lock, Mic, MicOff, Phone, Square, Video,
+  Lock, Mic, MicOff, Phone, PhoneOff, Square, Video,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -490,8 +490,9 @@ export default function ChatScreen({ route, navigation }) {
   const [showReactions, setShowReactions] = useState(false);
   const [intensity,     setIntensity]     = useState(0);
   const [chatEvent,     setChatEvent]     = useState(null);
-  const [isRecording,   setIsRecording]   = useState(false);
+  const [isRecording,    setIsRecording]    = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [incomingCall,   setIncomingCall]   = useState(null); // {callType, callerName, callerAvatar, callerColor}
   const chatEventTimer = useRef(null);
   const recordingRef   = useRef(null);
 
@@ -586,6 +587,16 @@ export default function ChatScreen({ route, navigation }) {
     const handleOnline  = ({ userId }) => { if (userId === otherUserId) setIsOnline(true); };
     const handleOffline = ({ userId }) => { if (userId === otherUserId) setIsOnline(false); };
 
+    // Incoming call offer
+    const handleCallOffer = ({ chat_id, call_type, caller_name, caller_avatar, caller_color }) => {
+      if (chat_id !== chatId) return;
+      setIncomingCall({ callType: call_type, callerName: caller_name, callerAvatar: caller_avatar, callerColor: caller_color });
+    };
+    const handleCallEnded = ({ chat_id }) => {
+      if (chat_id !== chatId) return;
+      setIncomingCall(null);
+    };
+
     socketService.onNewMessage?.(handleNewMessage);
     socketService.onMessagesDelivered?.(handleDelivered);
     socketService.onMessagesRead?.(handleRead);
@@ -593,6 +604,8 @@ export default function ChatScreen({ route, navigation }) {
     socketService.on?.('user_online',      handleOnline);
     socketService.on?.('user_offline',     handleOffline);
     socketService.on?.('intensity_update', handleIntensityUpdate);
+    socketService.onCallOffer?.(handleCallOffer);
+    socketService.onCallEnded?.(handleCallEnded);
 
     return () => {
       socketService.offNewMessage?.(handleNewMessage);
@@ -602,6 +615,8 @@ export default function ChatScreen({ route, navigation }) {
       socketService.off?.('user_online',      handleOnline);
       socketService.off?.('user_offline',     handleOffline);
       socketService.off?.('intensity_update', handleIntensityUpdate);
+      socketService.offCallOffer?.(handleCallOffer);
+      socketService.offCallEnded?.(handleCallEnded);
       socketService.leaveChat?.(chatId);
     };
   }, [socketService, chatId, otherUserId, scrollToBottom]);
@@ -799,10 +814,49 @@ export default function ChatScreen({ route, navigation }) {
     navigation.navigate('UnlockPremium', { chatId, otherName });
   }, [navigation, chatId, otherName]);
 
-  // ── Locked feature toast (calls only — not yet implemented) ──
-  const handleLockedFeature = useCallback((feature) => {
-    showToast({ type: 'info', title: `${feature} locked`, message: `Keep chatting to unlock ${feature.toLowerCase()}.` });
-  }, [showToast]);
+  // ── Locked feature toast ──────────────────────────────────
+  const handleLockedFeature = useCallback((feature, needed) => {
+    const left = needed - (chatInfo?.message_count || 0);
+    showToast({ type: 'info', title: `${feature} locked`, message: `${left} more messages to unlock.` });
+  }, [showToast, chatInfo]);
+
+  // ── Start a call ─────────────────────────────────────────
+  const handleStartCall = useCallback((callType) => {
+    navigation.navigate('Call', {
+      chatId,
+      callType,
+      isInitiator:    true,
+      otherName,
+      otherAvatar,
+      otherAvatarColor,
+    });
+  }, [navigation, chatId, otherName, otherAvatar, otherAvatarColor]);
+
+  // ── Accept incoming call ──────────────────────────────────
+  const handleAcceptCall = useCallback(() => {
+    if (!incomingCall) return;
+    const { callType, callerName, callerAvatar, callerColor } = incomingCall;
+    setIncomingCall(null);
+    navigation.navigate('Call', {
+      chatId,
+      callType,
+      isInitiator:    false,
+      otherName:      callerName,
+      otherAvatar:    callerAvatar,
+      otherAvatarColor: callerColor,
+    });
+  }, [incomingCall, navigation, chatId]);
+
+  // ── Reject incoming call ──────────────────────────────────
+  const handleRejectCall = useCallback(async () => {
+    setIncomingCall(null);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/call/reject`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch { /* silent */ }
+  }, [chatId]);
 
   // ── Reactions ─────────────────────────────────────────────
   const handleLongPress = useCallback((message) => {
@@ -920,7 +974,7 @@ export default function ChatScreen({ route, navigation }) {
             {/* Audio call */}
             <TouchableOpacity
               style={[styles.headerActionBtn, hasAudioCall && styles.headerActionBtnActive]}
-              onPress={() => handleLockedFeature('Audio calls')}
+              onPress={() => hasAudioCall ? handleStartCall('audio') : handleLockedFeature('Audio calls', 80)}
               hitSlop={HIT_SLOP}
             >
               <Phone size={rs(16)} color={hasAudioCall ? T.primary : T.textMuted} strokeWidth={1.8} />
@@ -929,7 +983,7 @@ export default function ChatScreen({ route, navigation }) {
             {/* Video call */}
             <TouchableOpacity
               style={[styles.headerActionBtn, hasVideoCall && styles.headerActionBtnActive]}
-              onPress={() => handleLockedFeature('Video calls')}
+              onPress={() => hasVideoCall ? handleStartCall('video') : handleLockedFeature('Video calls', 100)}
               hitSlop={HIT_SLOP}
             >
               <Video size={rs(16)} color={hasVideoCall ? T.primary : T.textMuted} strokeWidth={1.8} />
@@ -1084,6 +1138,36 @@ export default function ChatScreen({ route, navigation }) {
         onRequest={handleRevealRequest}
         onClose={() => setShowReveal(false)}
       />
+
+      {/* ── Incoming call modal ── */}
+      {incomingCall && (
+        <Modal visible transparent animationType="slide" onRequestClose={handleRejectCall}>
+          <View style={styles.incomingBackdrop}>
+            <View style={styles.incomingCard}>
+              <View style={[styles.incomingAvatar, { backgroundColor: (incomingCall.callerColor || T.primary) + '22', borderColor: (incomingCall.callerColor || T.primary) + '55' }]}>
+                <Text style={styles.incomingAvatarEmoji}>
+                  {/* Avatar emoji map reuse */}
+                  {({'ghost':'👻','shadow':'🌑','flame':'🔥','void':'🕳️','storm':'⛈️','smoke':'💨','eclipse':'🌘','shard':'🔷','moth':'🦋','raven':'🐦‍⬛'})[incomingCall.callerAvatar] || '👤'}
+                </Text>
+              </View>
+              <Text style={styles.incomingName}>{incomingCall.callerName || 'Anonymous'}</Text>
+              <Text style={styles.incomingType}>
+                {incomingCall.callType === 'video' ? '📹 incoming video call' : '📞 incoming audio call'}
+              </Text>
+              <View style={styles.incomingBtns}>
+                <TouchableOpacity style={styles.incomingReject} onPress={handleRejectCall} activeOpacity={0.85}>
+                  <PhoneOff size={rs(22)} color="#fff" strokeWidth={2} />
+                  <Text style={styles.incomingBtnLabel}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.incomingAccept} onPress={handleAcceptCall} activeOpacity={0.85}>
+                  <Phone size={rs(22)} color="#fff" strokeWidth={2} />
+                  <Text style={styles.incomingBtnLabel}>Accept</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -1322,6 +1406,39 @@ const styles = StyleSheet.create({
   },
 
   // Reveal modal
+  // Incoming call modal
+  incomingBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center', justifyContent: 'flex-end', paddingBottom: rs(60),
+  },
+  incomingCard: {
+    backgroundColor: T.surface, borderRadius: RADIUS.xl,
+    padding: rp(28), width: '90%', alignItems: 'center',
+    gap: SPACING.sm, borderWidth: 1, borderColor: T.border,
+  },
+  incomingAvatar: {
+    width: rs(72), height: rs(72), borderRadius: rs(36),
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, marginBottom: rp(4),
+  },
+  incomingAvatarEmoji: { fontSize: rf(32) },
+  incomingName: { fontSize: rf(18), fontWeight: '700', color: T.text },
+  incomingType: { fontSize: rf(13), color: T.textSecondary, marginBottom: rp(8) },
+  incomingBtns: {
+    flexDirection: 'row', gap: SPACING.lg, marginTop: rp(8),
+  },
+  incomingReject: {
+    width: rs(64), height: rs(64), borderRadius: rs(32),
+    backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center',
+    gap: rp(4),
+  },
+  incomingAccept: {
+    width: rs(64), height: rs(64), borderRadius: rs(32),
+    backgroundColor: T.online, alignItems: 'center', justifyContent: 'center',
+    gap: rp(4),
+  },
+  incomingBtnLabel: { fontSize: rf(10), fontWeight: '700', color: '#fff' },
+
   revealBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.75)',
     alignItems: 'center', justifyContent: 'center', padding: SPACING.lg,

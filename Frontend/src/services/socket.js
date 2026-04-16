@@ -65,6 +65,17 @@ class SocketService {
   offNewMessage(cb)         { this.off('new_message',        cb); }
   offMessagesDelivered(cb)  { this.off('messages_delivered', cb); }
   offMessagesRead(cb)       { this.off('messages_read',      cb); }
+
+  // ── Call signaling ─────────────────────────────────────────────────────────
+  onCallOffer(cb)    { this.on('call_offer',    cb); }
+  onCallAccepted(cb) { this.on('call_accepted', cb); }
+  onCallRejected(cb) { this.on('call_rejected', cb); }
+  onCallEnded(cb)    { this.on('call_ended',    cb); }
+
+  offCallOffer(cb)    { this.off('call_offer',    cb); }
+  offCallAccepted(cb) { this.off('call_accepted', cb); }
+  offCallRejected(cb) { this.off('call_rejected', cb); }
+  offCallEnded(cb)    { this.off('call_ended',    cb); }
 }
 
 export default new SocketService();

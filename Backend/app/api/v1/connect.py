@@ -724,6 +724,160 @@ async def send_message(
     return {"message_id": str(message["_id"])}
 
 
+# ==================== CALLS ====================
+
+AUDIO_CALL_THRESHOLD = 80   # messages needed to unlock audio calls
+VIDEO_CALL_THRESHOLD = 100  # messages needed to unlock video calls
+CALL_TOKEN_EXPIRY    = 3600 # 1 hour
+
+
+@router.post("/chats/{chat_id}/call/start")
+async def start_call(
+    chat_id: str,
+    call_type: str = "audio",   # "audio" | "video"
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    Initiates a 1-on-1 Agora call.
+    1. Validates the chat and unlock threshold.
+    2. Generates an Agora token for channel call_{chat_id}.
+    3. Emits 'call_offer' socket event to the other participant.
+    4. Returns token + channel so the caller can join immediately.
+    """
+    from app.config import settings
+
+    chat = await db["connect_chats"].find_one({"_id": ObjectId(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if not is_participant(chat, current_user_id):
+        raise HTTPException(status_code=403, detail="Not your chat")
+
+    msg_count = chat.get("message_count", 0)
+    threshold = VIDEO_CALL_THRESHOLD if call_type == "video" else AUDIO_CALL_THRESHOLD
+    if msg_count < threshold:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Need {threshold} messages to unlock {call_type} calls (you have {msg_count})."
+        )
+
+    # Generate Agora token
+    if not settings.AGORA_APP_ID or not settings.AGORA_APP_CERTIFICATE:
+        raise HTTPException(status_code=503, detail="Calls not configured. Add AGORA_APP_ID and AGORA_APP_CERTIFICATE to .env.")
+
+    from agora_token_builder import RtcTokenBuilder
+    channel  = f"call_{chat_id}"
+    uid      = abs(hash(current_user_id)) % (2 ** 32)
+    expire   = int(datetime.now(timezone.utc).timestamp()) + CALL_TOKEN_EXPIRY
+    token    = RtcTokenBuilder.buildTokenWithUid(
+        settings.AGORA_APP_ID, settings.AGORA_APP_CERTIFICATE,
+        channel, uid, 1, expire,  # role 1 = publisher (both sides publish)
+    )
+
+    # Notify other participant via socket
+    other_id = other_participant(chat, current_user_id)
+    caller   = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    caller_name  = caller.get("anonymous_name", "Anonymous") if caller else "Anonymous"
+    caller_avatar = caller.get("avatar", "ghost") if caller else "ghost"
+    caller_color  = caller.get("avatar_color", "#FF634A") if caller else "#FF634A"
+
+    from app.sio import sio
+    await sio.emit(
+        "call_offer",
+        {
+            "chat_id":      chat_id,
+            "call_type":    call_type,
+            "caller_name":  caller_name,
+            "caller_avatar": caller_avatar,
+            "caller_color":  caller_color,
+            "channel":      channel,
+        },
+        room=f"user_{other_id}",
+    )
+
+    return {
+        "token":   token,
+        "channel": channel,
+        "uid":     uid,
+        "app_id":  settings.AGORA_APP_ID,
+        "call_type": call_type,
+    }
+
+
+@router.post("/chats/{chat_id}/call/accept")
+async def accept_call(
+    chat_id: str,
+    call_type: str = "audio",
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Receiver accepts — generates their own token and notifies caller to proceed."""
+    from app.config import settings
+
+    chat = await db["connect_chats"].find_one({"_id": ObjectId(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if not is_participant(chat, current_user_id):
+        raise HTTPException(status_code=403, detail="Not your chat")
+
+    if not settings.AGORA_APP_ID or not settings.AGORA_APP_CERTIFICATE:
+        raise HTTPException(status_code=503, detail="Calls not configured.")
+
+    from agora_token_builder import RtcTokenBuilder
+    channel  = f"call_{chat_id}"
+    uid      = abs(hash(current_user_id)) % (2 ** 32)
+    expire   = int(datetime.now(timezone.utc).timestamp()) + CALL_TOKEN_EXPIRY
+    token    = RtcTokenBuilder.buildTokenWithUid(
+        settings.AGORA_APP_ID, settings.AGORA_APP_CERTIFICATE,
+        channel, uid, 1, expire,
+    )
+
+    # Tell the caller the call was accepted
+    other_id = other_participant(chat, current_user_id)
+    from app.sio import sio
+    await sio.emit("call_accepted", {"chat_id": chat_id}, room=f"user_{other_id}")
+
+    return {"token": token, "channel": channel, "uid": uid, "app_id": settings.AGORA_APP_ID}
+
+
+@router.post("/chats/{chat_id}/call/reject")
+async def reject_call(
+    chat_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Receiver declines — notifies caller."""
+    chat = await db["connect_chats"].find_one({"_id": ObjectId(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if not is_participant(chat, current_user_id):
+        raise HTTPException(status_code=403, detail="Not your chat")
+
+    other_id = other_participant(chat, current_user_id)
+    from app.sio import sio
+    await sio.emit("call_rejected", {"chat_id": chat_id}, room=f"user_{other_id}")
+    return {"ok": True}
+
+
+@router.post("/chats/{chat_id}/call/end")
+async def end_call(
+    chat_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Either party ends the call — notifies the other."""
+    chat = await db["connect_chats"].find_one({"_id": ObjectId(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if not is_participant(chat, current_user_id):
+        raise HTTPException(status_code=403, detail="Not your chat")
+
+    other_id = other_participant(chat, current_user_id)
+    from app.sio import sio
+    await sio.emit("call_ended", {"chat_id": chat_id}, room=f"user_{other_id}")
+    return {"ok": True}
+
+
 # ==================== UNLOCK ====================
 
 @router.post("/chats/{chat_id}/unlock")
