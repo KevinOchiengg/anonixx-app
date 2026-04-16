@@ -16,7 +16,7 @@ import {
   Lock, Mic, MicOff, Pause, Phone, PhoneOff, Play, Reply, RotateCcw, Square, Trash2, Video, X,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP, SCREEN } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
@@ -354,81 +354,63 @@ function urlSeed(url = '') {
 const WAVEFORM_BARS = 36;
 
 const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
-  // playState: 'idle' | 'loading' | 'playing' | 'paused' | 'finished'
-  const [playState, setPlayState] = useState('idle');
-  const [duration,  setDuration]  = useState(0);
-  const [position,  setPosition]  = useState(0);
-  const soundRef = useRef(null);
+  // expo-audio: times are in SECONDS
+  const player = useAudioPlayer(null);
+  const status = useAudioPlayerStatus(player);
+  const [isFinished, setIsFinished] = useState(false);
 
   // Stable waveform shape derived from URL (consistent across re-renders)
   const bars = useMemo(() => seededBars(urlSeed(url), WAVEFORM_BARS), [url]);
 
-  useEffect(() => () => { soundRef.current?.unloadAsync(); }, []);
+  useEffect(() => () => player.remove(), []);
 
-  const onStatus = useCallback((s) => {
-    if (!s.isLoaded) return;
-    setPosition(s.positionMillis || 0);
-    if (s.durationMillis) setDuration(s.durationMillis);
-    if (s.didJustFinish) {
-      setPlayState('finished');
-      setPosition(0);
-      soundRef.current?.setPositionAsync(0).catch(() => {});
+  useEffect(() => {
+    if (status.didJustFinish) {
+      setIsFinished(true);
+      player.seekTo(0);
     }
-  }, []);
+  }, [status.didJustFinish]);
 
   const handlePress = useCallback(async () => {
     try {
-      if (playState === 'idle' || playState === 'finished') {
-        if (!soundRef.current) {
-          setPlayState('loading');
-          await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-          const { sound, status } = await Audio.Sound.createAsync(
-            { uri: url },
-            { shouldPlay: true },
-            onStatus,
-          );
-          soundRef.current = sound;
-          if (status.durationMillis) setDuration(status.durationMillis);
-          setPlayState('playing');
+      if (status.status === 'idle' || isFinished) {
+        if (status.status === 'idle') {
+          await setAudioModeAsync({ playsInSilentModeIOS: true });
+          player.replace({ uri: url });
         } else {
-          await soundRef.current.setPositionAsync(0);
-          await soundRef.current.playAsync();
-          setPlayState('playing');
+          player.seekTo(0);
         }
-      } else if (playState === 'playing') {
-        await soundRef.current.pauseAsync();
-        setPlayState('paused');
-      } else if (playState === 'paused') {
-        await soundRef.current.playAsync();
-        setPlayState('playing');
+        player.play();
+        setIsFinished(false);
+      } else if (status.playing) {
+        player.pause();
+      } else {
+        player.play();
       }
     } catch { /* silent */ }
-  }, [url, playState, onStatus]);
+  }, [url, status, isFinished, player]);
 
-  const seekTo = useCallback(async (ratio) => {
-    if (!soundRef.current || duration === 0 || playState === 'idle' || playState === 'finished') return;
-    const ms = Math.floor(ratio * duration);
-    try {
-      await soundRef.current.setPositionAsync(ms);
-      setPosition(ms);
-    } catch { /* silent */ }
-  }, [duration, playState]);
+  const seekTo = useCallback((ratio) => {
+    if (status.status === 'idle' || isFinished || !status.duration) return;
+    player.seekTo(ratio * status.duration);
+  }, [status, isFinished, player]);
 
-  const progress = duration > 0 ? position / duration : 0;
+  const progress = status.duration > 0 ? (status.currentTime || 0) / status.duration : 0;
   const activeBars = Math.round(progress * WAVEFORM_BARS);
 
-  // Time display: show elapsed while playing/paused, total when idle/finished
-  const displayMs = (playState === 'playing' || playState === 'paused') ? position : duration;
-  const secs = Math.floor(displayMs / 1000);
-  const timeLabel = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  // Show elapsed while active, total when idle/finished
+  const displaySecs = (status.playing || (!isFinished && status.status === 'readyToPlay'))
+    ? Math.floor(status.currentTime || 0)
+    : Math.floor(status.duration || 0);
+  const timeLabel = `${Math.floor(displaySecs / 60)}:${String(displaySecs % 60).padStart(2, '0')}`;
 
-  const activeColor  = isOwn ? 'rgba(255,255,255,0.95)' : T.primary;
+  const activeColor   = isOwn ? 'rgba(255,255,255,0.95)' : T.primary;
   const inactiveColor = isOwn ? 'rgba(255,255,255,0.28)' : 'rgba(255,99,74,0.22)';
 
   const PlayIcon =
-    playState === 'loading'  ? null :
-    playState === 'playing'  ? Pause :
-    playState === 'finished' ? RotateCcw : Play;
+    status.status === 'loading' ? null :
+    isFinished                  ? RotateCcw :
+    status.playing              ? Pause : Play;
 
   return (
     <View style={vStyles.container}>

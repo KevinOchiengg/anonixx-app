@@ -1,60 +1,38 @@
 import React, { useState, useEffect } from 'react'
 import { View, Text, TouchableOpacity } from 'react-native'
 import { Play, Pause } from 'lucide-react-native'
-import { Audio } from 'expo-av'
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import Slider from '@react-native-community/slider'
 
 export default function VoiceNote({ uri, duration = 30 }) {
-  const [sound, setSound] = useState(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [position, setPosition] = useState(0)
-  const [playbackDuration, setPlaybackDuration] = useState(duration * 1000)
+  const player = useAudioPlayer(null)
+  const status = useAudioPlayerStatus(player)
+  const [loaded, setLoaded] = useState(false)
 
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync()
-        }
-      : undefined
-  }, [sound])
+  useEffect(() => () => player.remove(), [])
 
   const playPauseSound = async () => {
-    if (!sound) {
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true },
-        onPlaybackStatusUpdate
-      )
-      setSound(newSound)
-      setIsPlaying(true)
+    if (!loaded) {
+      player.replace({ uri })
+      player.play()
+      setLoaded(true)
+    } else if (status.didJustFinish) {
+      player.seekTo(0)
+      player.play()
+    } else if (status.playing) {
+      player.pause()
     } else {
-      if (isPlaying) {
-        await sound.pauseAsync()
-        setIsPlaying(false)
-      } else {
-        await sound.playAsync()
-        setIsPlaying(true)
-      }
+      player.play()
     }
   }
 
-  const onPlaybackStatusUpdate = (status) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis)
-      setPlaybackDuration(status.durationMillis || duration * 1000)
+  // expo-audio uses seconds; fallback to prop (seconds) before loaded
+  const currentSec = status.currentTime || 0
+  const totalSec   = status.duration   || duration
 
-      if (status.didJustFinish) {
-        setIsPlaying(false)
-        setPosition(0)
-      }
-    }
-  }
-
-  const formatTime = (millis) => {
-    const seconds = Math.floor(millis / 1000)
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+  const formatTime = (secs) => {
+    const s = Math.floor(secs)
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   }
 
   return (
@@ -64,7 +42,7 @@ export default function VoiceNote({ uri, duration = 30 }) {
           onPress={playPauseSound}
           className='bg-echo-purple rounded-full w-10 h-10 items-center justify-center mr-3'
         >
-          {isPlaying ? (
+          {status.playing ? (
             <Pause size={20} color='#ffffff' fill='#ffffff' />
           ) : (
             <Play size={20} color='#ffffff' fill='#ffffff' />
@@ -73,25 +51,19 @@ export default function VoiceNote({ uri, duration = 30 }) {
 
         <View className='flex-1'>
           <Slider
-            value={position}
+            value={currentSec}
             minimumValue={0}
-            maximumValue={playbackDuration}
+            maximumValue={totalSec}
             minimumTrackTintColor='#a855f7'
             maximumTrackTintColor='#4b5563'
             thumbTintColor='#a855f7'
-            onSlidingComplete={async (value) => {
-              if (sound) {
-                await sound.setPositionAsync(value)
-              }
+            onSlidingComplete={(value) => {
+              if (loaded) player.seekTo(value)
             }}
           />
           <View className='flex-row justify-between'>
-            <Text className='text-gray-400 text-xs'>
-              {formatTime(position)}
-            </Text>
-            <Text className='text-gray-400 text-xs'>
-              {formatTime(playbackDuration)}
-            </Text>
+            <Text className='text-gray-400 text-xs'>{formatTime(currentSec)}</Text>
+            <Text className='text-gray-400 text-xs'>{formatTime(totalSec)}</Text>
           </View>
         </View>
       </View>

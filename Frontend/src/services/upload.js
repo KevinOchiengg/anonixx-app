@@ -1,5 +1,4 @@
 import * as ImagePicker from 'expo-image-picker'
-import { Audio } from 'expo-av'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const API_URL = 'http://192.168.100.22:8000/api/v1'
@@ -67,77 +66,6 @@ export const pickVideo = async () => {
     console.error('❌ Video picker error:', error)
     alert('Failed to pick video. Please try again.')
     return null
-  }
-}
-
-// Audio Recording
-let recording = null
-
-export const startRecording = async () => {
-  try {
-    console.log('🎤 Requesting permissions...')
-    const { status } = await Audio.requestPermissionsAsync()
-
-    if (status !== 'granted') {
-      alert('Sorry, we need microphone permissions to record audio!')
-      return null
-    }
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    })
-
-    console.log('🎤 Starting recording...')
-    const { recording: newRecording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY
-    )
-
-    recording = newRecording
-    console.log('✅ Recording started')
-    return recording
-  } catch (error) {
-    console.error('❌ Failed to start recording:', error)
-    alert('Failed to start recording')
-    return null
-  }
-}
-
-export const stopRecording = async () => {
-  try {
-    if (!recording) {
-      console.log('⚠️ No recording in progress')
-      return null
-    }
-
-    console.log('🛑 Stopping recording...')
-    await recording.stopAndUnloadAsync()
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-    })
-
-    const uri = recording.getURI()
-    recording = null
-
-    console.log('✅ Recording stopped:', uri)
-    return {
-      uri,
-      type: 'audio',
-    }
-  } catch (error) {
-    console.error('❌ Failed to stop recording:', error)
-    return null
-  }
-}
-
-export const playAudio = async (uri) => {
-  try {
-    console.log('▶️ Playing audio:', uri)
-    const { sound } = await Audio.Sound.createAsync({ uri })
-    await sound.playAsync()
-    return sound
-  } catch (error) {
-    console.error('❌ Failed to play audio:', error)
   }
 }
 
