@@ -450,8 +450,6 @@ const AudioSlide = ({
     if (!isActive) audioPlayer.pause();
   }, [isActive]);
 
-  useEffect(() => () => audioPlayer.remove(), []);
-
   const togglePlay = async () => {
     try {
       if (audioStatus.status === 'idle') {

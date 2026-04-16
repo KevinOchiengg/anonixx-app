@@ -362,8 +362,6 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
 
   const bars = useMemo(() => seededBars(urlSeed(url), WAVEFORM_BARS), [url]);
 
-  useEffect(() => () => player.remove(), []);
-
   useEffect(() => {
     if (status.didJustFinish) {
       setIsFinished(true);
@@ -567,8 +565,6 @@ const VideoBubble = React.memo(({ url }) => {
     const sub = player.addListener('playingChange', ({ isPlaying: p }) => setIsPlaying(p));
     return () => sub.remove();
   }, [player]);
-
-  useEffect(() => () => player.pause(), []);
 
   return (
     <TouchableOpacity

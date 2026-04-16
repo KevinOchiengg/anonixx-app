@@ -40,8 +40,6 @@ function PostCard({ post, onPress }) {
   const audioPlayer = useAudioPlayer(null)
   const audioStatus = useAudioPlayerStatus(audioPlayer)
 
-  useEffect(() => () => { videoPlayer.pause(); audioPlayer.remove() }, [])
-
   const playAudio = () => {
     if (audioStatus.status === 'idle') {
       audioPlayer.replace({ uri: post.audio_url })
