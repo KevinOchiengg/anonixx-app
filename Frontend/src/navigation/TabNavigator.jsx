@@ -61,7 +61,7 @@ const THEME = {
 };
 
 // ─── TAB BAR ICON ─────────────────────────────────────────────
-const TabBarIcon = ({ route, focused, color, size, unreadCount }) => {
+const TabBarIcon = ({ route, focused, unreadCount }) => {
   const icons = {
     Feed:     Home,
     Connect:  Users,
@@ -72,15 +72,19 @@ const TabBarIcon = ({ route, focused, color, size, unreadCount }) => {
   if (!IconComponent) return null;
 
   const showBadge = route.name === 'Messages' && unreadCount > 0;
+  const color = focused ? THEME.primary : THEME.inactive;
 
   return (
     <View style={styles.iconContainer}>
-      {focused && <View style={styles.glowEffect} />}
+      {/* Pill highlight behind focused icon */}
+      {focused && <View style={styles.pill} />}
+
       <IconComponent
-        size={size}
+        size={22}
         color={color}
-        strokeWidth={focused ? 2.5 : 2}
+        strokeWidth={focused ? 2.5 : 1.8}
       />
+
       {showBadge && (
         <View style={styles.tabBadge}>
           <Text style={styles.tabBadgeText}>
@@ -88,7 +92,6 @@ const TabBarIcon = ({ route, focused, color, size, unreadCount }) => {
           </Text>
         </View>
       )}
-      {focused && <View style={styles.activeDot} />}
     </View>
   );
 };
@@ -98,11 +101,12 @@ const CustomTabBarButton = ({ children, onPress }) => (
   <TouchableOpacity
     style={styles.centerButtonContainer}
     onPress={onPress}
-    activeOpacity={0.8}
+    activeOpacity={0.85}
   >
+    {/* Outer glow ring */}
     <View style={styles.centerButtonGlow} />
     <View style={styles.centerButton}>
-      <Plus size={28} color="#fff" strokeWidth={2.5} />
+      <Plus size={26} color="#fff" strokeWidth={2.5} />
     </View>
   </TouchableOpacity>
 );
@@ -180,21 +184,20 @@ export default function TabNavigator() {
         sceneContainerStyle: { backgroundColor: THEME.background },
         tabBarStyle: {
           ...styles.tabBar,
-          height: 68 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 10),
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom + 8,
+          paddingTop: 8,
         },
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.inactive,
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused }) => {
           if (route.name === 'Create') return null;
           return (
             <TabBarIcon
               route={route}
               focused={focused}
-              color={color}
-              size={24}
               unreadCount={unreadCount}
             />
           );
@@ -237,48 +240,43 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: THEME.surface,
     borderTopWidth: 1,
-    borderTopColor: THEME.border,
-    paddingTop: 8,
+    borderTopColor: 'rgba(255,255,255,0.07)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 20,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 24,
   },
   tabBarLabel: {
     fontSize: 10,
-    fontWeight: '500',
-    marginTop: 4,
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    marginTop: 3,
   },
   tabBarItem: {
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
+
+  // Icon + pill
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
+    width: 48,
+    height: 32,
   },
-  glowEffect: {
+  pill: {
     position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: THEME.primary,
-    opacity: 0.15,
-    top: -13,
+    width: 44,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,99,74,0.13)',
   },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: THEME.primary,
-    marginTop: 4,
-  },
+
+  // Unread badge
   tabBadge: {
     position: 'absolute',
-    top: -4,
-    right: -8,
+    top: -2,
+    right: -4,
     backgroundColor: THEME.primary,
     borderRadius: 8,
     minWidth: 16,
@@ -287,39 +285,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: THEME.background,
+    borderColor: THEME.surface,
   },
   tabBadgeText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#fff',
   },
+
+  // Centre create button
   centerButtonContainer: {
-    top: -20,
+    top: -18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   centerButtonGlow: {
     position: 'absolute',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: THEME.primary,
-    opacity: 0.2,
+    opacity: 0.18,
   },
   centerButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: THEME.primary,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: THEME.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 10,
-    borderWidth: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 12,
+    borderWidth: 3,
     borderColor: THEME.surface,
   },
 });
