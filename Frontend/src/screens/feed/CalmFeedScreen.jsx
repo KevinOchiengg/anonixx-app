@@ -127,6 +127,7 @@ export default function CalmFeedScreen({ navigation, route }) {
 
   const [posts, setPosts]                   = useState([]);
   const [loading, setLoading]               = useState(true);
+  const [fetchError, setFetchError]         = useState(false);
   const [sessionPosts, setSessionPosts]     = useState(0);
   const [hasMore, setHasMore]               = useState(true);
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
@@ -183,6 +184,7 @@ export default function CalmFeedScreen({ navigation, route }) {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
+    setFetchError(false);
 
     try {
       const token         = await AsyncStorage.getItem('token');
@@ -206,6 +208,7 @@ export default function CalmFeedScreen({ navigation, route }) {
         } else if (response.status >= 500) {
           showToast({ type: 'error', title: 'Server error', message: 'Could not load feed. Try again shortly.' });
         }
+        if (reset || posts.length === 0) setFetchError(true);
         return;
       }
 
@@ -239,6 +242,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       } else {
         showToast({ type: 'error', message: 'Could not load feed. Pull down to try again.' });
       }
+      if (reset || posts.length === 0) setFetchError(true);
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -250,6 +254,7 @@ export default function CalmFeedScreen({ navigation, route }) {
     setSessionPosts(0);
     setHasMore(true);
     setSessionLimitReached(false);
+    setFetchError(false);
     hasLoadedRef.current = false;
     loadFeed(true);
   }, [loadFeed]);
@@ -444,6 +449,33 @@ export default function CalmFeedScreen({ navigation, route }) {
     </View>
   );
 
+  // ── Error state (backend down / no connection) ─────────────
+  if (fetchError && posts.length === 0) return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
+      <StarryBackground />
+      <View style={[styles.centeredView]}>
+        <View style={styles.errorCard}>
+          <Text style={styles.errorEmoji}>🌌</Text>
+          <Text style={styles.errorTitle}>Something went quiet.</Text>
+          <View style={styles.limitDivider} />
+          <Text style={styles.errorBody}>
+            We couldn't reach the feed right now. It might be a brief hiccup — give it a moment and try again.
+          </Text>
+          <TouchableOpacity
+            onPress={refreshFeed}
+            style={styles.errorRetryBtn}
+            activeOpacity={0.85}
+            hitSlop={HIT_SLOP}
+          >
+            <RefreshCw size={rs(16)} color="#fff" strokeWidth={2} />
+            <Text style={styles.errorRetryText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
   // ── Session limit state ────────────────────────────────────
   if (sessionLimitReached) {
     return (
@@ -615,5 +647,45 @@ const styles = StyleSheet.create({
   limitBtnPrimary:      { flex: 1, height: BUTTON_HEIGHT, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.primary, shadowColor: THEME.primary, shadowOffset: { width: 0, height: rh(4) }, shadowOpacity: 0.4, shadowRadius: rs(12), elevation: 6 },
   limitBtnPrimaryText:  { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
 
+  // Error card
+  errorCard: {
+    width:           '100%',
+    backgroundColor: THEME.surface,
+    borderRadius:    RADIUS.xl,
+    padding:         rp(28),
+    alignItems:      'center',
+    borderWidth:     1,
+    borderColor:     THEME.border,
+  },
+  errorEmoji: { fontSize: rf(40), marginBottom: SPACING.md },
+  errorTitle: {
+    fontSize:     FONT.xl,
+    fontWeight:   '700',
+    color:        THEME.text,
+    textAlign:    'center',
+    marginBottom: SPACING.lg,
+  },
+  errorBody: {
+    fontSize:     FONT.md,
+    color:        THEME.textSecondary,
+    textAlign:    'center',
+    lineHeight:   FONT.md * 1.6,
+    marginBottom: SPACING.xl,
+  },
+  errorRetryBtn: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             SPACING.sm,
+    height:          BUTTON_HEIGHT,
+    paddingHorizontal: rp(28),
+    borderRadius:    RADIUS.md,
+    backgroundColor: THEME.primary,
+    shadowColor:     THEME.primary,
+    shadowOffset:    { width: 0, height: rh(4) },
+    shadowOpacity:   0.4,
+    shadowRadius:    rs(12),
+    elevation:       6,
+  },
+  errorRetryText: { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
 
 });
