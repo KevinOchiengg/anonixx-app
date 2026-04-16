@@ -352,15 +352,14 @@ function urlSeed(url = '') {
   return h;
 }
 
-const WAVEFORM_BARS = 36;
+const WAVEFORM_BARS = 40;
 
 const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
-  // expo-audio: times are in SECONDS
-  const player = useAudioPlayer(null);
-  const status = useAudioPlayerStatus(player);
+  const player   = useAudioPlayer(null);
+  const status   = useAudioPlayerStatus(player);
   const [isFinished, setIsFinished] = useState(false);
+  const btnScale = useRef(new Animated.Value(1)).current;
 
-  // Stable waveform shape derived from URL (consistent across re-renders)
   const bars = useMemo(() => seededBars(urlSeed(url), WAVEFORM_BARS), [url]);
 
   useEffect(() => () => player.remove(), []);
@@ -372,7 +371,15 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
     }
   }, [status.didJustFinish]);
 
+  const animBtn = () => {
+    Animated.sequence([
+      Animated.timing(btnScale, { toValue: 0.85, duration: 70, useNativeDriver: true }),
+      Animated.spring(btnScale,  { toValue: 1,    friction: 4, tension: 160, useNativeDriver: true }),
+    ]).start();
+  };
+
   const handlePress = useCallback(async () => {
+    animBtn();
     try {
       if (status.status === 'idle' || isFinished) {
         if (status.status === 'idle') {
@@ -396,102 +403,159 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
     player.seekTo(ratio * status.duration);
   }, [status, isFinished, player]);
 
-  const progress = status.duration > 0 ? (status.currentTime || 0) / status.duration : 0;
-  const activeBars = Math.round(progress * WAVEFORM_BARS);
+  const progress    = status.duration > 0 ? (status.currentTime || 0) / status.duration : 0;
+  const activeBars  = Math.round(progress * WAVEFORM_BARS);
 
-  // Show elapsed while active, total when idle/finished
   const displaySecs = (status.playing || (!isFinished && status.status === 'readyToPlay'))
     ? Math.floor(status.currentTime || 0)
-    : Math.floor(status.duration || 0);
+    : Math.floor(status.duration    || 0);
   const timeLabel = `${Math.floor(displaySecs / 60)}:${String(displaySecs % 60).padStart(2, '0')}`;
 
-  const activeColor   = isOwn ? 'rgba(255,255,255,0.95)' : T.primary;
-  const inactiveColor = isOwn ? 'rgba(255,255,255,0.28)' : 'rgba(255,99,74,0.22)';
+  const isLoading = status.status === 'loading';
+  const PlayIcon  = isFinished ? RotateCcw : status.playing ? Pause : Play;
 
-  const PlayIcon =
-    status.status === 'loading' ? null :
-    isFinished                  ? RotateCcw :
-    status.playing              ? Pause : Play;
+  // Own bubble (coral bg) → white button + white bars
+  // Their bubble (dark bg) → coral button + coral bars
+  const btnBg      = isOwn ? 'rgba(255,255,255,0.95)' : T.primary;
+  const iconColor  = isOwn ? T.primary               : '#fff';
+  const activeBar  = isOwn ? 'rgba(255,255,255,0.95)' : T.primary;
+  const inactiveBar = isOwn ? 'rgba(255,255,255,0.25)' : 'rgba(255,99,74,0.20)';
+  const timeColor  = isOwn ? 'rgba(255,255,255,0.65)' : T.textSecondary;
 
   return (
     <View style={vStyles.container}>
-      {/* Play / Pause / Replay button */}
-      <TouchableOpacity
-        onPress={handlePress}
-        activeOpacity={0.75}
-        hitSlop={HIT_SLOP}
-        style={[vStyles.btn, isOwn ? vStyles.btnOwn : vStyles.btnTheir]}
-      >
-        {status.status === 'loading' ? (
-          <ActivityIndicator size="small" color={isOwn ? '#fff' : T.primary} />
-        ) : (
-          <PlayIcon
-            size={rs(15)}
-            color={isOwn ? '#fff' : T.primary}
-            strokeWidth={2.5}
-            fill={status.playing ? (isOwn ? '#fff' : T.primary) : 'none'}
-          />
-        )}
-      </TouchableOpacity>
 
-      {/* Waveform + timestamp */}
+      {/* ── Circular play button ─────────────────────────────── */}
+      <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+        <TouchableOpacity
+          onPress={handlePress}
+          activeOpacity={1}
+          hitSlop={HIT_SLOP}
+          style={[
+            vStyles.btn,
+            { backgroundColor: btnBg },
+            !isOwn && vStyles.btnShadow,
+          ]}
+        >
+          {isLoading
+            ? <ActivityIndicator size="small" color={iconColor} />
+            : <PlayIcon
+                size={rs(16)}
+                color={iconColor}
+                strokeWidth={2.6}
+                fill={status.playing ? iconColor : 'none'}
+              />
+          }
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* ── Waveform + time ──────────────────────────────────── */}
       <View style={vStyles.right}>
+        {/* Bars — bottom-anchored so they grow upward naturally */}
         <View style={vStyles.waveRow}>
           {bars.map((h, i) => {
-            const barHeight = rs(4) + h * rs(20);
+            const MAX_H  = rs(24);
+            const MIN_H  = rs(3);
+            const barH   = MIN_H + h * (MAX_H - MIN_H);
             const active = i < activeBars;
             return (
               <TouchableOpacity
                 key={i}
-                activeOpacity={0.6}
-                hitSlop={{ top: 8, bottom: 8, left: 1, right: 1 }}
                 onPress={() => seekTo(i / WAVEFORM_BARS)}
-                style={[
+                activeOpacity={0.8}
+                hitSlop={{ top: 8, bottom: 8, left: 0, right: 0 }}
+                style={vStyles.barTouch}
+              >
+                <View style={[
                   vStyles.bar,
                   {
-                    height: barHeight,
-                    backgroundColor: active ? activeColor : inactiveColor,
-                    opacity: active ? 1 : 0.6,
+                    height: barH,
+                    backgroundColor: active ? activeBar : inactiveBar,
                   },
-                ]}
-              />
+                ]} />
+              </TouchableOpacity>
             );
           })}
         </View>
-        <Text style={[vStyles.time, isOwn ? vStyles.timeOwn : vStyles.timeTheir]}>
-          {timeLabel}
-        </Text>
+
+        {/* Thin progress rail + elapsed time inline */}
+        <View style={vStyles.footer}>
+          <View style={[vStyles.rail, { backgroundColor: inactiveBar }]}>
+            <View style={[vStyles.railFill, {
+              width: `${Math.round(progress * 100)}%`,
+              backgroundColor: activeBar,
+            }]} />
+          </View>
+          <Text style={[vStyles.time, { color: timeColor }]}>{timeLabel}</Text>
+        </View>
       </View>
+
     </View>
   );
 });
 
 const vStyles = StyleSheet.create({
   container: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: rp(6), paddingHorizontal: rp(2),
-    minWidth: rs(180),
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: rp(8),
+    paddingHorizontal: rp(4),
+    minWidth: rs(200),
+    gap: rp(10),
   },
   btn: {
-    width: rs(36), height: rs(36), borderRadius: rs(18),
+    width: rs(40), height: rs(40), borderRadius: rs(20),
     alignItems: 'center', justifyContent: 'center',
-    marginRight: rp(10),
   },
-  btnOwn:   { backgroundColor: 'rgba(255,255,255,0.22)' },
-  btnTheir: { backgroundColor: 'rgba(255,99,74,0.15)', borderWidth: 1, borderColor: 'rgba(255,99,74,0.3)' },
-  right: { flex: 1, gap: rp(5) },
+  btnShadow: {
+    shadowColor: T.primary,
+    shadowOffset: { width: 0, height: rs(3) },
+    shadowOpacity: 0.45,
+    shadowRadius: rs(8),
+    elevation: 6,
+  },
+  right: {
+    flex: 1,
+    gap: rp(6),
+  },
   waveRow: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: rs(2), height: rs(28),
+    flexDirection: 'row',
+    alignItems: 'flex-end',   // bars grow from bottom
+    height: rs(28),
+    gap: rs(2),
+  },
+  barTouch: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: rs(28),
   },
   bar: {
-    flex: 1, borderRadius: rs(2),
+    width: rs(2.5),
+    borderRadius: rs(2),
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rp(8),
+  },
+  rail: {
+    flex: 1,
+    height: rs(2),
+    borderRadius: rs(1),
+    overflow: 'hidden',
+  },
+  railFill: {
+    height: '100%',
+    borderRadius: rs(1),
   },
   time: {
-    fontSize: rf(10), letterSpacing: 0.3,
+    fontSize: rf(10),
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.4,
+    minWidth: rs(28),
+    textAlign: 'right',
   },
-  timeOwn:   { color: 'rgba(255,255,255,0.65)' },
-  timeTheir: { color: T.textSecondary },
 });
 
 // ─── Video bubble in chat ─────────────────────────────────────
