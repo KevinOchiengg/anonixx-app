@@ -92,18 +92,8 @@ const CipherMesh = memo(() => (
 ));
 
 // ─── Main component ───────────────────────────────────────────
-function IntensityBackground({ intensity = 0, event = null }) {
-  const glowAnim  = useRef(new Animated.Value(0)).current;
+function IntensityBackground({ event = null }) {
   const flashAnim = useRef(new Animated.Value(0)).current;
-
-  // Intensity glow: 0.02 (cold) → 0.10 (intimate)
-  useEffect(() => {
-    Animated.timing(glowAnim, {
-      toValue:  Math.max(0, Math.min(intensity, 100)) / 100,
-      duration: 900,
-      useNativeDriver: true,
-    }).start();
-  }, [intensity]);
 
   // Micro-flash on new message (barely perceptible — 3% max)
   useEffect(() => {
@@ -115,23 +105,12 @@ function IntensityBackground({ intensity = 0, event = null }) {
     ]).start();
   }, [event]);
 
-  const glowOpacity = glowAnim.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.020, 0.095],
-  });
-
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Layer 1 — static cipher mesh */}
       <CipherMesh />
 
-      {/* Layer 2 — intensity-reactive radial glow */}
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.glow, { opacity: glowOpacity }]}
-      />
-
-      {/* Layer 3 — micro-flash on new message */}
+      {/* Layer 2 — micro-flash on new message */}
       <Animated.View
         pointerEvents="none"
         style={[styles.flash, { opacity: flashAnim }]}
@@ -144,16 +123,6 @@ export default memo(IntensityBackground);
 
 // ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // Soft radial-ish oval centred on screen
-  glow: {
-    position:        'absolute',
-    width:           W * 1.3,
-    height:          H * 0.55,
-    borderRadius:    W,
-    alignSelf:       'center',
-    top:             H * 0.22,
-    backgroundColor: CORAL,
-  },
   flash: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: CORAL,

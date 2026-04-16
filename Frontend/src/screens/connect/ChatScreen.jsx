@@ -5,19 +5,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, FlatList, Image, KeyboardAvoidingView,
-  Modal, Platform, ScrollView, StyleSheet, Text, TextInput,
+  Modal, PanResponder, Platform, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  ArrowLeft, Check, CheckCheck, Image as ImageIcon,
-  Lock, Mic, MicOff, Phone, PhoneOff, Square, Video,
+  ArrowLeft, Check, CheckCheck, CornerUpLeft, Image as ImageIcon,
+  Lock, Mic, MicOff, Phone, PhoneOff, Reply, Square, Trash2, Video, X,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP, SCREEN } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
@@ -68,16 +68,27 @@ function getUnlockedFeatures(messageCount) {
   return INTENSITY_MILESTONES.filter(m => messageCount >= m.at);
 }
 
-function formatTime(isoString) {
-  if (!isoString) return '';
+function toLocalDate(isoString) {
+  if (!isoString) return null;
   try {
-    const normalised = isoString.replace(' ', 'T').replace(/(\.\d+)?$/, (m) =>
-      /[Z+\-]\d/.test(isoString) ? m : m + 'Z'
-    );
-    const d = new Date(normalised);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch { return ''; }
+    // Normalize space → T
+    let s = isoString.replace(' ', 'T');
+    // Only append Z when there is genuinely no timezone indicator.
+    // Timezone indicators appear AFTER the time digits, never inside the date.
+    // Valid suffixes: Z  |  ±HH:MM  |  ±HHMM  |  ±HH
+    // We test only the tail of the string (last 6 chars is enough).
+    const tail = s.slice(-6);
+    const hasTz = /Z$/i.test(s) || /[+\-]\d{2}(:\d{2})?$/.test(tail);
+    if (!hasTz) s += 'Z';
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  } catch { return null; }
+}
+
+function formatTime(isoString) {
+  const d = toLocalDate(isoString);
+  if (!d) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // ─── Typing indicator ─────────────────────────────────────────
@@ -130,6 +141,190 @@ const ReactionPicker = React.memo(({ onSelect, onClose }) => (
     ))}
   </View>
 ));
+
+// ─── Cloudinary URL helpers ────────────────────────────────────
+// Inject f_auto,q_auto into a Cloudinary URL so Cloudinary picks the best
+// format (WebP on Android, HEIC-safe JPEG on iOS) and compresses it.
+// Works only on Cloudinary URLs; passes anything else through unchanged.
+function withCloudinaryOpts(url) {
+  if (!url || !url.includes('res.cloudinary.com')) return url;
+  // Already has transformations? (contains /upload/x_y/)
+  const marker = '/upload/';
+  const idx = url.indexOf(marker);
+  if (idx === -1) return url;
+  const after = url.slice(idx + marker.length);
+  // Don't double-add
+  if (after.startsWith('f_auto')) return url;
+  return url.slice(0, idx + marker.length) + 'f_auto,q_auto/' + after;
+}
+
+// ─── Image message — auto-sizes to real aspect ratio ──────────
+const IMG_MAX_W = SCREEN.width * 0.72;   // 72 % of screen width
+const IMG_MAX_H = rs(320);               // tallest portrait we'll show inline
+const IMG_MIN_W = rs(160);
+const IMG_MIN_H = rs(100);
+
+const ImageMessage = React.memo(({ uri, isOwn, onPress, uploadProgress }) => {
+  const [size,    setSize]    = useState({ width: IMG_MAX_W, height: IMG_MAX_W * 0.65 });
+  const [loading, setLoading] = useState(true);   // true until onLoad fires
+  const [errored, setErrored] = useState(false);  // true if image fails to load
+  const shimmer = useRef(new Animated.Value(0.4)).current;
+
+  const uploading   = uploadProgress !== undefined && uploadProgress < 100;
+  const displayUri  = uploading ? uri : withCloudinaryOpts(uri); // local URI during upload, CDN-optimised after
+
+  // Pulsing shimmer while loading
+  useEffect(() => {
+    if (!loading) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 0.8, duration: 700, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [loading]);
+
+  // Resolve real image dimensions from the URI
+  useEffect(() => {
+    if (!uri) return;
+    setLoading(true);
+    setErrored(false);
+    Image.getSize(
+      withCloudinaryOpts(uri) || uri,
+      (w, h) => {
+        const ratio = w / h;
+        let width  = IMG_MAX_W;
+        let height = width / ratio;
+        if (height > IMG_MAX_H) { height = IMG_MAX_H; width = height * ratio; }
+        if (width  < IMG_MIN_W) { width  = IMG_MIN_W; height = width / ratio; }
+        if (height < IMG_MIN_H) { height = IMG_MIN_H; }
+        setSize({ width: Math.round(width), height: Math.round(height) });
+      },
+      () => {} // keep default size on failure — Image component still tries to render
+    );
+  }, [uri]);
+
+  return (
+    <TouchableOpacity
+      activeOpacity={uploading ? 1 : 0.92}
+      onPress={uploading || errored ? undefined : () => onPress?.(displayUri)}
+    >
+      <View style={{ width: size.width, height: size.height, borderRadius: RADIUS.md, overflow: 'hidden' }}>
+
+        {/* Shimmer skeleton — visible until image loads */}
+        {(loading && !uploading) && (
+          <Animated.View
+            style={[StyleSheet.absoluteFill, imgUploadStyles.shimmer, { opacity: shimmer }]}
+          />
+        )}
+
+        {/* Actual image */}
+        {!errored && (
+          <Image
+            source={{ uri: displayUri, cache: 'force-cache' }}
+            style={{ width: size.width, height: size.height }}
+            resizeMode="cover"
+            onLoadStart={() => setLoading(true)}
+            onLoad={()      => setLoading(false)}
+            onError={()     => { setLoading(false); setErrored(true); }}
+          />
+        )}
+
+        {/* Broken-image fallback */}
+        {errored && (
+          <View style={imgUploadStyles.errorBox}>
+            <Text style={imgUploadStyles.errorIcon}>🖼</Text>
+            <Text style={imgUploadStyles.errorText}>Couldn't load image</Text>
+          </View>
+        )}
+
+        {/* Upload progress overlay */}
+        {uploading && (
+          <View style={imgUploadStyles.overlay}>
+            <View style={imgUploadStyles.ring}>
+              <ActivityIndicator color="#fff" size="small" />
+            </View>
+            <Text style={imgUploadStyles.pct}>{uploadProgress}%</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+const imgUploadStyles = StyleSheet.create({
+  shimmer: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             rp(6),
+  },
+  ring: {
+    width:           rs(44),
+    height:          rs(44),
+    borderRadius:    rs(22),
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderWidth:     2,
+    borderColor:     'rgba(255,255,255,0.4)',
+  },
+  pct: {
+    color:      '#fff',
+    fontSize:   FONT.xs,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  errorBox: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             rp(6),
+  },
+  errorText: {
+    color:    'rgba(255,255,255,0.45)',
+    fontSize: FONT.xs,
+  },
+  errorIcon: {
+    fontSize: rf(28),
+    opacity:  0.4,
+  },
+});
+
+// ─── Full-screen image lightbox ───────────────────────────────
+const ImageLightbox = React.memo(({ uri, onClose }) => (
+  <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+    <View style={lightboxStyles.backdrop}>
+      <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+      <Image
+        source={{ uri: withCloudinaryOpts(uri), cache: 'force-cache' }}
+        style={lightboxStyles.image}
+        resizeMode="contain"
+      />
+      <TouchableOpacity style={lightboxStyles.closeBtn} onPress={onClose} hitSlop={HIT_SLOP}>
+        <X size={rs(22)} color="#fff" strokeWidth={2} />
+      </TouchableOpacity>
+    </View>
+  </Modal>
+));
+
+const lightboxStyles = StyleSheet.create({
+  backdrop:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', justifyContent: 'center', alignItems: 'center' },
+  image:     { width: SCREEN.width, height: SCREEN.height * 0.82 },
+  closeBtn:  {
+    position: 'absolute', top: rs(52), right: rs(18),
+    width: rs(36), height: rs(36), borderRadius: rs(18),
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+});
 
 // ─── Message Bubble ───────────────────────────────────────────
 // ─── Voice note player inside bubble ─────────────────────────
@@ -189,11 +384,23 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
   );
 });
 
-const MessageBubble = React.memo(({ message, onLongPress }) => {
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(message.is_own ? 16 : -16)).current;
-  const msgType   = message.message_type || 'text';
+const SWIPE_THRESHOLD = 32; // px to trigger reply — lower = easier to activate
 
+const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImagePress, uploadProgress }) => {
+  const fadeAnim       = useRef(new Animated.Value(0)).current;
+  const slideAnim      = useRef(new Animated.Value(message.is_own ? 16 : -16)).current;
+  const swipeX         = useRef(new Animated.Value(0)).current;
+  const replyScale     = useRef(new Animated.Value(0)).current;
+  const triggered      = useRef(false);
+  const msgType        = message.message_type || 'text';
+  // Keep both callback and message always-current so the one-time PanResponder
+  // closure never operates on stale values.
+  const onSwipeReplyRef = useRef(onSwipeReply);
+  const messageRef      = useRef(message);
+  useEffect(() => { onSwipeReplyRef.current = onSwipeReply; }, [onSwipeReply]);
+  useEffect(() => { messageRef.current      = message;      }, [message]);
+
+  // Entrance animation
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim,  { toValue: 1, duration: 220, useNativeDriver: true }),
@@ -201,160 +408,216 @@ const MessageBubble = React.memo(({ message, onLongPress }) => {
     ]).start();
   }, []);
 
+  const snapBack = () => {
+    Animated.spring(swipeX,     { toValue: 0, friction: 6, tension: 120, useNativeDriver: true }).start();
+    Animated.spring(replyScale, { toValue: 0, friction: 6, tension: 120, useNativeDriver: true }).start();
+  };
+
+  // Swipe-to-reply pan responder (right swipe only)
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder:        () => false,
+    onStartShouldSetPanResponderCapture: () => false,
+    // Claim the gesture when: moving right, horizontal > vertical, with some velocity
+    onMoveShouldSetPanResponder: (_, g) =>
+      g.dx > 4 && Math.abs(g.dy) < 14 && g.dx > Math.abs(g.dy),
+    onPanResponderMove: (_, g) => {
+      const clamped = Math.min(g.dx, SWIPE_THRESHOLD + 24);
+      if (clamped > 0) {
+        swipeX.setValue(clamped);
+        replyScale.setValue(Math.min(clamped / SWIPE_THRESHOLD, 1));
+        // Fire reply the moment threshold is crossed — immune to FlatList
+        // stealing the responder before onPanResponderRelease fires.
+        if (clamped >= SWIPE_THRESHOLD && !triggered.current) {
+          triggered.current = true;
+          onSwipeReplyRef.current?.(messageRef.current);
+        }
+      }
+    },
+    onPanResponderRelease: () => {
+      triggered.current = false;
+      snapBack();
+    },
+    onPanResponderTerminate: () => {
+      triggered.current = false;
+      snapBack();
+    },
+  })).current;
+
   const bubbleContent = () => {
-    if (msgType === 'image' && message.media_url) {
-      return (
-        <>
-          <Image
-            source={{ uri: message.media_url }}
-            style={styles.bubbleImage}
-            resizeMode="cover"
-          />
-          {message.content ? (
-            <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn, { marginTop: rp(6) }]}>
-              {message.content}
-            </Text>
-          ) : null}
-        </>
-      );
-    }
-    if (msgType === 'voice' && message.media_url) {
-      return <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} />;
-    }
     return (
-      <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
-        {message.content}
-      </Text>
+      <>
+        {/* Reply preview chip */}
+        {message.reply_to_id ? (
+          <View style={[styles.replyChip, message.is_own && styles.replyChipOwn]}>
+            <View style={[styles.replyChipBar, message.is_own && styles.replyChipBarOwn]} />
+            <Text style={[styles.replyChipText, message.is_own && styles.replyChipTextOwn]} numberOfLines={1}>
+              {message.reply_preview || 'Original message'}
+            </Text>
+          </View>
+        ) : null}
+
+        {msgType === 'image' && message.media_url ? (
+          <>
+            <ImageMessage
+              uri={message.media_url}
+              isOwn={message.is_own}
+              onPress={onImagePress}
+              uploadProgress={uploadProgress}
+            />
+            {message.content ? (
+              <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn, { marginTop: rp(6), paddingHorizontal: rp(4) }]}>
+                {message.content}
+              </Text>
+            ) : null}
+          </>
+        ) : msgType === 'voice' && message.media_url ? (
+          <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} />
+        ) : (
+          <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
+            {message.content}
+          </Text>
+        )}
+      </>
     );
   };
 
   return (
-    <Animated.View style={[
-      styles.bubbleRow,
-      message.is_own ? styles.bubbleRowOwn : styles.bubbleRowTheir,
-      { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
-    ]}>
-      <TouchableOpacity
-        onLongPress={() => onLongPress?.(message)}
-        activeOpacity={0.85}
-        delayLongPress={400}
+    <Animated.View
+      style={[
+        styles.bubbleRow,
+        message.is_own ? styles.bubbleRowOwn : styles.bubbleRowTheir,
+        { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
+      ]}
+      {...pan.panHandlers}
+    >
+      {/* Reply icon (appears behind bubble on swipe) */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.swipeReplyIcon,
+          message.is_own ? styles.swipeReplyIconOwn : styles.swipeReplyIconTheir,
+          { transform: [{ scale: replyScale }, { translateX: swipeX }] },
+        ]}
       >
-        <View style={[
-          styles.bubble,
-          message.is_own ? styles.bubbleOwn : styles.bubbleTheir,
-          msgType === 'image' && styles.bubbleImage_wrap,
-        ]}>
-          {bubbleContent()}
-          {message.reaction && (
-            <View style={[styles.reactionBadge, message.is_own && styles.reactionBadgeOwn]}>
-              <Text style={styles.reactionBadgeText}>{message.reaction}</Text>
-            </View>
+        <CornerUpLeft size={rs(18)} color={T.primary} strokeWidth={2} />
+      </Animated.View>
+
+      {/* Bubble itself slides right on swipe */}
+      <Animated.View style={{ transform: [{ translateX: swipeX }] }}>
+        <TouchableOpacity
+          onLongPress={() => onLongPress?.(message)}
+          activeOpacity={0.85}
+          delayLongPress={350}
+        >
+          <View style={[
+            styles.bubble,
+            message.is_own ? styles.bubbleOwn : styles.bubbleTheir,
+            msgType === 'image' && styles.bubbleImageWrap,
+          ]}>
+            {bubbleContent()}
+            {message.reaction && (
+              <View style={[styles.reactionBadge, message.is_own && styles.reactionBadgeOwn]}>
+                <Text style={styles.reactionBadgeText}>{message.reaction}</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+        <View style={[styles.bubbleFooter, message.is_own && styles.bubbleFooterOwn]}>
+          <Text style={styles.bubbleTime}>{formatTime(message.created_at)}</Text>
+          {message.is_own && (
+            <MessageStatus isDelivered={message.is_delivered} isRead={message.is_read} />
           )}
         </View>
-      </TouchableOpacity>
-      <View style={[styles.bubbleFooter, message.is_own && styles.bubbleFooterOwn]}>
-        <Text style={styles.bubbleTime}>{formatTime(message.created_at)}</Text>
-        {message.is_own && (
-          <MessageStatus isDelivered={message.is_delivered} isRead={message.is_read} />
-        )}
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 });
 
-// ─── Intensity Meter ──────────────────────────────────────────
-const IntensityMeter = React.memo(({ messageCount, isUnlocked }) => {
-  const percent      = getIntensityPercent(messageCount);
-  const widthAnim    = useRef(new Animated.Value(0)).current;
-  const [show, setShow] = useState(false);
+// ─── Connection Strip (replaces IntensityMeter + RevealProgressBanner) ───────
+// Collapsed: 28 px — a 2 px hairline bar + one text line.
+// Expanded: grows inline to show the full milestone list.
+// Hides completely once every feature AND reveal are both unlocked.
+const REVEAL_THRESHOLD = 30;
+
+const ConnectionStrip = React.memo(({ messageCount, revealUnlocked }) => {
+  const [expanded, setExpanded] = useState(false);
+  const widthAnim = useRef(new Animated.Value(0)).current;
+  const percent   = getIntensityPercent(messageCount);
 
   useEffect(() => {
-    Animated.spring(widthAnim, { toValue: percent, friction: 8, useNativeDriver: false }).start();
+    Animated.spring(widthAnim, { toValue: percent, friction: 9, useNativeDriver: false }).start();
   }, [percent]);
 
-  if (isUnlocked) return null;
+  // Hide once every feature + reveal is fully unlocked
+  const allFeaturesUnlocked = messageCount >= 100;
+  if (allFeaturesUnlocked && revealUnlocked) return null;
 
-  const barWidth = widthAnim.interpolate({
-    inputRange: [0, 100], outputRange: ['0%', '100%'], extrapolate: 'clamp',
-  });
+  const barWidth       = widthAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'], extrapolate: 'clamp' });
+  const nextFeature    = INTENSITY_MILESTONES.find(m => messageCount < m.at);
+  const revealLeft     = REVEAL_THRESHOLD - messageCount;
+  const showRevealHint = !revealUnlocked && revealLeft <= 10 && revealLeft > 0;
 
-  const nextMilestone = INTENSITY_MILESTONES.find(m => messageCount < m.at);
+  // One-liner: reveal hint takes priority when close
+  const hint = showRevealHint
+    ? `👁  ${revealLeft} more to unlock reveal`
+    : nextFeature
+      ? `${nextFeature.at - messageCount} more → ${nextFeature.label} ${nextFeature.icon}`
+      : `all features unlocked · ${percent}%`;
 
   return (
     <TouchableOpacity
-      style={styles.intensityWrap}
-      onPress={() => setShow(v => !v)}
-      activeOpacity={0.9}
+      onPress={() => setExpanded(v => !v)}
+      activeOpacity={0.85}
+      style={styles.cstrip}
     >
-      <View style={styles.intensityTopRow}>
-        <Text style={styles.intensityLabel}>connection intensity</Text>
-        <Text style={styles.intensityPercent}>{percent}%</Text>
-      </View>
-      <View style={styles.intensityTrack}>
-        <Animated.View style={[styles.intensityFill, { width: barWidth }]} />
-        {/* Milestone markers */}
+      {/* Hairline progress bar */}
+      <View style={styles.cstripTrack}>
+        <Animated.View style={[styles.cstripFill, { width: barWidth }]} />
         {INTENSITY_MILESTONES.map(m => (
-          <View
-            key={m.at}
-            style={[styles.intensityMarker, { left: `${m.at}%` }]}
-          />
+          <View key={m.at} style={[styles.cstripMarker, { left: `${m.at}%` }]} />
         ))}
       </View>
-      {nextMilestone && (
-        <Text style={styles.intensityNext}>
-          {nextMilestone.at - messageCount} more messages → unlock {nextMilestone.label} {nextMilestone.icon}
-        </Text>
-      )}
 
-      {show && (
-        <View style={styles.intensityMilestones}>
+      {/* Single text row */}
+      <View style={styles.cstripRow}>
+        <Text style={styles.cstripHint} numberOfLines={1}>{hint}</Text>
+        <Text style={styles.cstripPct}>{percent}%</Text>
+      </View>
+
+      {/* Inline expandable milestone list */}
+      {expanded && (
+        <View style={styles.cstripList}>
           {INTENSITY_MILESTONES.map(m => {
-            const unlocked = messageCount >= m.at;
+            const done = messageCount >= m.at;
             return (
-              <View key={m.at} style={styles.intensityMilestoneRow}>
-                <Text style={[styles.intensityMilestoneIcon, !unlocked && styles.intensityMilestoneLocked]}>
-                  {unlocked ? m.icon : '🔒'}
+              <View key={m.at} style={styles.cstripListRow}>
+                <Text style={[styles.cstripListIcon, !done && { opacity: 0.35 }]}>
+                  {done ? m.icon : '🔒'}
                 </Text>
-                <Text style={[styles.intensityMilestoneLabel, !unlocked && styles.intensityMilestoneLocked]}>
+                <Text style={[styles.cstripListLabel, !done && { color: T.textMuted }]}>
                   {m.label}
                 </Text>
-                <Text style={[styles.intensityMilestoneAt, unlocked && { color: T.success }]}>
-                  {unlocked ? 'unlocked' : `at ${m.at} msgs`}
+                <Text style={[styles.cstripListAt, done && { color: T.success }]}>
+                  {done ? 'unlocked' : `${m.at} msgs`}
                 </Text>
               </View>
             );
           })}
+          {/* Reveal row */}
+          <View style={styles.cstripListRow}>
+            <Text style={[styles.cstripListIcon, !revealUnlocked && { opacity: 0.35 }]}>
+              {revealUnlocked ? '✨' : '👁'}
+            </Text>
+            <Text style={[styles.cstripListLabel, !revealUnlocked && { color: T.textMuted }]}>
+              Identity reveal
+            </Text>
+            <Text style={[styles.cstripListAt, revealUnlocked && { color: T.success }]}>
+              {revealUnlocked ? 'unlocked' : `${REVEAL_THRESHOLD} msgs`}
+            </Text>
+          </View>
         </View>
       )}
     </TouchableOpacity>
-  );
-});
-
-// ─── Reveal Progress Banner ───────────────────────────────────
-const RevealProgressBanner = React.memo(({ messageCount, revealUnlocked }) => {
-  const THRESHOLD = 30;
-  if (revealUnlocked || messageCount === 0) return null;
-
-  const remaining = THRESHOLD - messageCount;
-  const progress  = Math.min(messageCount / THRESHOLD, 1);
-
-  // Only show in the last 10 messages before unlock, or exactly at unlock
-  if (remaining > 10) return null;
-
-  return (
-    <View style={styles.revealProgressBanner}>
-      <Text style={styles.revealProgressEmoji}>👁</Text>
-      <View style={styles.revealProgressBody}>
-        <Text style={styles.revealProgressText}>
-          {remaining === 0
-            ? 'identity reveal is now unlocked ✨'
-            : `${remaining} more ${remaining === 1 ? 'message' : 'messages'} to unlock reveal`}
-        </Text>
-        <View style={styles.revealProgressTrack}>
-          <View style={[styles.revealProgressFill, { width: `${progress * 100}%` }]} />
-        </View>
-      </View>
-    </View>
   );
 });
 
@@ -491,8 +754,11 @@ export default function ChatScreen({ route, navigation }) {
   const [intensity,     setIntensity]     = useState(0);
   const [chatEvent,     setChatEvent]     = useState(null);
   const [isRecording,    setIsRecording]    = useState(false);
-  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaUploading,   setMediaUploading]   = useState(false);
+  // { [tempId]: 0-100 } — tracks upload % per in-flight image bubble
+  const [uploadProgresses, setUploadProgresses] = useState({});
   const [incomingCall,   setIncomingCall]   = useState(null); // {callType, callerName, callerAvatar, callerColor}
+  const [replyTo,        setReplyTo]        = useState(null); // message being replied to
   const chatEventTimer = useRef(null);
   const recordingRef   = useRef(null);
 
@@ -500,19 +766,45 @@ export default function ChatScreen({ route, navigation }) {
   const pollRef        = useRef(null);
   const typingTimer    = useRef(null);
   const isTypingRef    = useRef(false);
+  const loadSeqRef     = useRef(0);           // stale-response guard
   const avatarColor    = otherAvatarColor || T.primary;
 
   // ── Load messages ────────────────────────────────────────
   const loadMessages = useCallback(async () => {
+    const seq = ++loadSeqRef.current;          // stamp this particular call
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
-      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/messages`, {
+      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/messages?limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
+
+      // If a newer call has already completed, throw away this stale result.
+      if (seq !== loadSeqRef.current) return;
+
       if (res.ok) {
-        setMessages(data.messages || []);
+        const serverMsgs = data.messages || [];
+        setMessages(prev => {
+          const serverIds = new Set(serverMsgs.map(m => m.id));
+
+          // 1. Keep in-flight temp bubbles not yet confirmed by the server.
+          const pendingTemps = prev.filter(
+            m => String(m.id).startsWith('temp_') && !serverIds.has(m.id)
+          );
+
+          // 2. Keep ANY local message (own or incoming via socket) that has a real
+          //    ID but hasn't appeared in the server snapshot yet — POST confirmed
+          //    but DB read hasn't caught up, or a socket message arrived after the
+          //    fetch started. No is_own restriction, no time check.
+          const localOnly = prev.filter(
+            m => !String(m.id).startsWith('temp_') && !serverIds.has(m.id)
+          );
+
+          const extras = [...pendingTemps, ...localOnly];
+          if (extras.length === 0) return serverMsgs;
+          return [...serverMsgs, ...extras];
+        });
         setChatInfo(data.chat);
         if (data.chat?.intensity_score != null) {
           setIntensity(data.chat.intensity_score);
@@ -520,7 +812,10 @@ export default function ChatScreen({ route, navigation }) {
         socketService?.markRead?.(chatId);
       }
     } catch { /* silent */ }
-    finally { setLoading(false); }
+    finally {
+      // Only clear the initial loader on the FIRST response that lands.
+      if (seq === loadSeqRef.current) setLoading(false);
+    }
   }, [chatId, socketService]);
 
   useFocusEffect(useCallback(() => {
@@ -574,14 +869,14 @@ export default function ChatScreen({ route, navigation }) {
       setMessages(prev => prev.map(m => ids.has(m.id) ? { ...m, is_delivered: true, is_read: true } : m));
     };
 
-    const handleTyping = ({ chatId: cid, userId, isTyping: typing }) => {
-      if (cid !== chatId || userId === otherUserId) return;
-      setIsTyping(typing);
-      if (typing) {
-        clearTimeout(typingTimer.current);
-        typingTimer.current = setTimeout(() => setIsTyping(false), 3000);
-        triggerChatEvent('typing');
-      }
+    // Backend emits 'user_typing' with { userId, chatId } — no isTyping flag.
+    // Receiving the event means they ARE typing; auto-clear after 3 s of silence.
+    const handleTyping = ({ chatId: cid, userId }) => {
+      if (cid !== chatId || userId !== otherUserId) return;  // must be FROM the other user
+      setIsTyping(true);
+      clearTimeout(typingTimer.current);
+      typingTimer.current = setTimeout(() => setIsTyping(false), 3000);
+      triggerChatEvent('typing');
     };
 
     const handleOnline  = ({ userId }) => { if (userId === otherUserId) setIsOnline(true); };
@@ -597,26 +892,33 @@ export default function ChatScreen({ route, navigation }) {
       setIncomingCall(null);
     };
 
+    // Message deleted by the other party
+    const handleMessageDeleted = ({ message_id }) => {
+      setMessages(prev => prev.filter(m => m.id !== message_id));
+    };
+
     socketService.onNewMessage?.(handleNewMessage);
     socketService.onMessagesDelivered?.(handleDelivered);
     socketService.onMessagesRead?.(handleRead);
-    socketService.on?.('typing',           handleTyping);
+    socketService.on?.('user_typing',      handleTyping);
     socketService.on?.('user_online',      handleOnline);
     socketService.on?.('user_offline',     handleOffline);
     socketService.on?.('intensity_update', handleIntensityUpdate);
     socketService.onCallOffer?.(handleCallOffer);
     socketService.onCallEnded?.(handleCallEnded);
+    socketService.on?.('message_deleted',  handleMessageDeleted);
 
     return () => {
       socketService.offNewMessage?.(handleNewMessage);
       socketService.offMessagesDelivered?.(handleDelivered);
       socketService.offMessagesRead?.(handleRead);
-      socketService.off?.('typing',           handleTyping);
+      socketService.off?.('user_typing',      handleTyping);
       socketService.off?.('user_online',      handleOnline);
       socketService.off?.('user_offline',     handleOffline);
       socketService.off?.('intensity_update', handleIntensityUpdate);
       socketService.offCallOffer?.(handleCallOffer);
       socketService.offCallEnded?.(handleCallEnded);
+      socketService.off?.('message_deleted',  handleMessageDeleted);
       socketService.leaveChat?.(chatId);
     };
   }, [socketService, chatId, otherUserId, scrollToBottom]);
@@ -624,16 +926,18 @@ export default function ChatScreen({ route, navigation }) {
   // ── Typing emit ──────────────────────────────────────────
   const handleInputChange = useCallback((text) => {
     setInputText(text);
+    // Throttle: only emit once per 1.5 s burst
     if (!isTypingRef.current) {
       isTypingRef.current = true;
-      socketService?.emit?.('typing', { chatId, isTyping: true });
+      // sendTyping emits 'user_typing' { chatId, recipientId } — the only form the backend understands
+      socketService?.sendTyping?.(chatId, otherUserId);
     }
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => {
       isTypingRef.current = false;
-      socketService?.emit?.('typing', { chatId, isTyping: false });
+      // No "stop typing" emit needed — the recipient auto-clears after 3 s of silence
     }, 1500);
-  }, [socketService, chatId]);
+  }, [socketService, chatId, otherUserId]);
 
   // ── Send message ─────────────────────────────────────────
   const sendMessage = useCallback(async () => {
@@ -642,98 +946,180 @@ export default function ChatScreen({ route, navigation }) {
 
     setSending(true);
     const tempId = `temp_${Date.now()}`;
+    const snapReplyTo = replyTo; // capture before clearing
 
     setMessages(prev => [...prev, {
       id: tempId, content, is_own: true,
       is_delivered: false, is_read: false,
       created_at: new Date().toISOString(),
+      reply_to_id: snapReplyTo?.id || '',
+      reply_preview: snapReplyTo
+        ? (snapReplyTo.content || (snapReplyTo.message_type === 'voice' ? '🎙 Voice note' : snapReplyTo.message_type === 'image' ? '🖼 Image' : '')).substring(0, 80)
+        : '',
     }]);
     setInputText('');
+    setReplyTo(null);
     scrollToBottom();
 
-    // Stop typing
+    // Clear local typing throttle — recipient auto-clears via their 3 s timeout
     isTypingRef.current = false;
-    socketService?.emit?.('typing', { chatId, isTyping: false });
 
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) return;
+      if (!token) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        showToast({ type: 'error', message: 'Session expired. Please log in again.' });
+        return;
+      }
       const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ chat_id: chatId, content }),
+        body:    JSON.stringify({
+          chat_id:      chatId,
+          content,
+          message_type: 'text',
+          reply_to_id:  snapReplyTo?.id   || '',
+          reply_preview: snapReplyTo
+            ? (snapReplyTo.content || (snapReplyTo.message_type === 'voice' ? '🎙 Voice note' : snapReplyTo.message_type === 'image' ? '🖼 Image' : '')).substring(0, 80)
+            : '',
+        }),
       });
       if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
         setMessages(prev => prev.filter(m => m.id !== tempId));
-        showToast({ type: 'error', message: 'Message could not be sent.' });
+        showToast({ type: 'error', message: errBody?.detail || `Failed to send (${res.status})` });
       } else {
-        loadMessages();
+        // Swap temp id → real id in-place. No full reload = no blink, no lost reply chip.
+        const data = await res.json();
+        if (!data.message_id) {
+          // Defensive: server returned 200 but no id — keep bubble as-is
+          return;
+        }
+        setMessages(prev => prev.map(m =>
+          m.id === tempId ? { ...m, id: data.message_id } : m
+        ));
       }
-    } catch {
+    } catch (e) {
       setMessages(prev => prev.filter(m => m.id !== tempId));
-      showToast({ type: 'error', message: 'Message could not be sent.' });
+      showToast({ type: 'error', message: e?.message || 'Message could not be sent.' });
     } finally {
       setSending(false);
     }
-  }, [inputText, sending, chatInfo, chatId, socketService, scrollToBottom, loadMessages, showToast]);
+  }, [inputText, sending, chatId, replyTo, scrollToBottom, showToast]);
 
   // ── Upload media to Cloudinary via signed upload ──────────
-  const uploadMedia = useCallback(async (uri, resourceType = 'image') => {
+  // ── fetch-based image upload with simulated progress ─────────
+  // fetch is far more reliable than XHR in React Native for FormData file uploads.
+  // Real upload progress isn't available via fetch, so we advance a timer-driven
+  // counter to 90 % while the request is in-flight, then snap to 100 % on success.
+  const uploadImageWithProgress = useCallback(async (uri, mimeType, onProgress) => {
+    const token  = await AsyncStorage.getItem('token');
+    const rawExt = uri.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+    const ext    = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(rawExt) ? rawExt : 'jpg';
+    const mime   = mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
+
+    const form = new FormData();
+    form.append('file', { uri, name: `img_${Date.now()}.${ext}`, type: mime });
+
+    // Animate progress 5 % → 90 % every 400 ms while upload is in flight
+    let pct = 5;
+    onProgress?.(pct);
+    const ticker = setInterval(() => {
+      pct = Math.min(pct + 12, 90);
+      onProgress?.(pct);
+    }, 400);
+
     try {
-      const token = await AsyncStorage.getItem('token');
-      // Get signed upload params from backend
-      const sigRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ resource_type: resourceType }),
+        headers: { Authorization: `Bearer ${token}` },
+        body:    form,
       });
-      if (!sigRes.ok) throw new Error('signature failed');
-      const { signature, timestamp, api_key, cloud_name, upload_preset } = await sigRes.json();
-
-      const form = new FormData();
-      const ext  = resourceType === 'video' ? 'mp4' : resourceType === 'image' ? 'jpg' : 'm4a';
-      form.append('file', { uri, name: `chat_media_${Date.now()}.${ext}`, type: resourceType === 'image' ? 'image/jpeg' : 'audio/m4a' });
-      form.append('signature',   signature);
-      form.append('timestamp',   String(timestamp));
-      form.append('api_key',     api_key);
-      if (upload_preset) form.append('upload_preset', upload_preset);
-
-      const uploadRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
-        { method: 'POST', body: form }
-      );
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadData?.error?.message || 'upload failed');
-      return uploadData.secure_url;
+      clearInterval(ticker);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.detail || `Upload failed (${res.status})`);
+      }
+      onProgress?.(100);
+      const data = await res.json();
+      return data.url;
     } catch (e) {
-      showToast({ type: 'error', message: 'Media upload failed. Try again.' });
-      return null;
+      clearInterval(ticker);
+      throw e;
     }
-  }, [showToast]);
+  }, []);
+
+  // ── Upload voice note directly to Cloudinary (signed) — .m4a is always a known format
+  const uploadVoice = useCallback(async (uri) => {
+    const token = await AsyncStorage.getItem('token');
+    // Step 1: get signed params from backend
+    const sigRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body:    JSON.stringify({ resource_type: 'video' }), // Cloudinary uses "video" for audio
+    });
+    if (!sigRes.ok) {
+      const err = await sigRes.json().catch(() => ({}));
+      throw new Error(err?.detail || `Signature failed (${sigRes.status})`);
+    }
+    const { signature, timestamp, api_key, cloud_name, folder } = await sigRes.json();
+
+    // Step 2: upload directly to Cloudinary
+    const form = new FormData();
+    form.append('file',      { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' });
+    form.append('signature', signature);
+    form.append('timestamp', String(timestamp));
+    form.append('api_key',   api_key);
+    form.append('folder',    folder);
+
+    const uploadRes  = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`,
+      { method: 'POST', body: form }
+    );
+    const uploadData = await uploadRes.json();
+    if (!uploadRes.ok) throw new Error(uploadData?.error?.message || `Cloudinary error (${uploadRes.status})`);
+    return uploadData.secure_url;
+  }, []);
 
   // ── Send a message with optional media ───────────────────
   const sendMediaMessage = useCallback(async ({ content = '', messageType, mediaUrl }) => {
     if (sending || mediaUploading) return;
     setSending(true);
     const tempId = `temp_${Date.now()}`;
+    const snapReplyTo = replyTo;
     setMessages(prev => [...prev, {
       id: tempId, content, message_type: messageType, media_url: mediaUrl,
       is_own: true, is_delivered: false, is_read: false,
       created_at: new Date().toISOString(),
+      reply_to_id:   snapReplyTo?.id || '',
+      reply_preview: snapReplyTo
+        ? (snapReplyTo.content || (snapReplyTo.message_type === 'voice' ? '🎙 Voice note' : snapReplyTo.message_type === 'image' ? '🖼 Image' : '')).substring(0, 80)
+        : '',
     }]);
+    setReplyTo(null);
     scrollToBottom();
     try {
       const token = await AsyncStorage.getItem('token');
       const res   = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ chat_id: chatId, content, message_type: messageType, media_url: mediaUrl }),
+        body:    JSON.stringify({
+          chat_id: chatId, content, message_type: messageType, media_url: mediaUrl,
+          reply_to_id:   snapReplyTo?.id || '',
+          reply_preview: snapReplyTo
+            ? (snapReplyTo.content || (snapReplyTo.message_type === 'voice' ? '🎙 Voice note' : snapReplyTo.message_type === 'image' ? '🖼 Image' : '')).substring(0, 80)
+            : '',
+        }),
       });
       if (!res.ok) {
         setMessages(prev => prev.filter(m => m.id !== tempId));
         showToast({ type: 'error', message: 'Could not send message.' });
       } else {
-        loadMessages();
+        // Swap temp id → real id in-place, preserving reply fields with zero blink.
+        const data = await res.json();
+        setMessages(prev => prev.map(m =>
+          m.id === tempId ? { ...m, id: data.message_id } : m
+        ));
       }
     } catch {
       setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -741,9 +1127,9 @@ export default function ChatScreen({ route, navigation }) {
     } finally {
       setSending(false);
     }
-  }, [sending, mediaUploading, chatId, scrollToBottom, loadMessages, showToast]);
+  }, [sending, mediaUploading, chatId, replyTo, scrollToBottom, showToast]);
 
-  // ── Image picker ─────────────────────────────────────────
+  // ── Image picker — optimistic preview + background upload ───
   const handleImagePress = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -752,39 +1138,122 @@ export default function ChatScreen({ route, navigation }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
-        quality: 0.8,
+        mediaTypes:    'images',
+        quality:       0.8,
         allowsEditing: false,
       });
       if (result.canceled) return;
-      setMediaUploading(true);
-      const url = await uploadMedia(result.assets[0].uri, 'image');
-      setMediaUploading(false);
-      if (url) await sendMediaMessage({ messageType: 'image', mediaUrl: url });
-    } catch {
-      setMediaUploading(false);
-      showToast({ type: 'error', message: 'Could not send image.' });
+
+      const asset       = result.assets[0];
+      const snapReplyTo = replyTo;
+      const tempId      = `temp_${Date.now()}`;
+
+      // 1 ── Drop a preview bubble immediately with the local URI
+      setMessages(prev => [...prev, {
+        id:           tempId,
+        content:      '',
+        message_type: 'image',
+        media_url:    asset.uri,   // local file:// — shows instantly before upload
+        is_own:       true,
+        is_delivered: false,
+        is_read:      false,
+        created_at:   new Date().toISOString(),
+        reply_to_id:    snapReplyTo?.id || '',
+        reply_preview:  snapReplyTo
+          ? (snapReplyTo.content || '🖼 Image').substring(0, 80)
+          : '',
+      }]);
+      setReplyTo(null);
+      scrollToBottom();
+
+      // 2 ── Upload with live % feedback
+      setUploadProgresses(prev => ({ ...prev, [tempId]: 0 }));
+      let cloudUrl;
+      try {
+        cloudUrl = await uploadImageWithProgress(
+          asset.uri,
+          asset.mimeType ?? null,
+          (pct) => setUploadProgresses(prev => ({ ...prev, [tempId]: pct })),
+        );
+      } catch (e) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+        showToast({ type: 'error', message: e?.message || 'Could not upload image.' });
+        return;
+      }
+
+      // Guard: if upload returned nothing, bail early
+      if (!cloudUrl) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+        showToast({ type: 'error', message: 'Upload returned no URL. Please try again.' });
+        return;
+      }
+
+      // 3 ── Swap local URI → CDN URL, clear progress overlay
+      setMessages(prev => prev.map(m =>
+        m.id === tempId ? { ...m, media_url: cloudUrl } : m
+      ));
+      setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+
+      // 4 ── Persist to backend, swap tempId → real message ID
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res   = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body:    JSON.stringify({
+            chat_id:      chatId,
+            content:      '',
+            message_type: 'image',
+            media_url:    cloudUrl,
+            reply_to_id:    snapReplyTo?.id || '',
+            reply_preview:  snapReplyTo
+              ? (snapReplyTo.content || '🖼 Image').substring(0, 80)
+              : '',
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(prev => prev.map(m =>
+            m.id === tempId ? { ...m, id: data.message_id, is_delivered: true } : m
+          ));
+        } else {
+          const errBody = await res.json().catch(() => ({}));
+          showToast({ type: 'error', message: errBody?.detail || `Send failed (${res.status})` });
+          // Keep the bubble visible so the user can see what failed — don't remove it
+        }
+      } catch (e) {
+        // Network error during backend POST — keep the bubble, show error
+        showToast({ type: 'error', message: e?.message || 'Could not send image.' });
+      }
+    } catch (e) {
+      showToast({ type: 'error', message: e?.message || 'Could not send image.' });
     }
-  }, [showToast, uploadMedia, sendMediaMessage]);
+  }, [replyTo, chatId, scrollToBottom, showToast, uploadImageWithProgress]);
 
   // ── Voice note record / stop ─────────────────────────────
   const handleVoicePress = useCallback(async () => {
     if (isRecording) {
-      // Stop and send
+      // Stop and send — getURI() MUST come before stopAndUnloadAsync(),
+      // after unloading the recording object is released and getURI() returns null.
       try {
-        await recordingRef.current?.stopAndUnloadAsync();
         const uri = recordingRef.current?.getURI();
+        await recordingRef.current?.stopAndUnloadAsync();
         setIsRecording(false);
         recordingRef.current = null;
-        if (!uri) return;
+        if (!uri) {
+          showToast({ type: 'error', message: 'Recording failed — no audio captured.' });
+          return;
+        }
         setMediaUploading(true);
-        const url = await uploadMedia(uri, 'video'); // Cloudinary uses 'video' resource type for audio
+        const url = await uploadVoice(uri);
         setMediaUploading(false);
         if (url) await sendMediaMessage({ messageType: 'voice', mediaUrl: url });
-      } catch {
+      } catch (e) {
         setIsRecording(false);
         setMediaUploading(false);
-        showToast({ type: 'error', message: 'Could not send voice note.' });
+        showToast({ type: 'error', message: e?.message || 'Could not send voice note.' });
       }
     } else {
       // Start recording
@@ -807,7 +1276,7 @@ export default function ChatScreen({ route, navigation }) {
         showToast({ type: 'error', message: 'Could not start recording.' });
       }
     }
-  }, [isRecording, uploadMedia, sendMediaMessage, showToast]);
+  }, [isRecording, uploadVoice, sendMediaMessage, showToast]);
 
   // ── Unlock ───────────────────────────────────────────────
   const handleUnlock = useCallback(() => {
@@ -873,6 +1342,31 @@ export default function ChatScreen({ route, navigation }) {
     setShowReactions(false);
   }, [selectedMsg]);
 
+  // ── Swipe to reply ────────────────────────────────────────
+  const handleSwipeReply = useCallback((message) => {
+    setReplyTo(message);
+  }, []);
+
+  // ── Delete message ────────────────────────────────────────
+  const handleDelete = useCallback(async (messageId, scope) => {
+    setShowReactions(false);
+    setSelectedMsg(null);
+    // Optimistic removal
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(
+        `${API_BASE_URL}/api/v1/connect/chats/${chatId}/messages/${messageId}?scope=${scope}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error('delete failed');
+    } catch {
+      // Reload to restore on failure
+      loadMessages();
+      showToast({ type: 'error', message: 'Could not delete message.' });
+    }
+  }, [chatId, loadMessages, showToast]);
+
   // ── Reveal ────────────────────────────────────────────────
   const handleRevealRequest = useCallback(async () => {
     setRevealLoading(true);
@@ -924,9 +1418,18 @@ export default function ChatScreen({ route, navigation }) {
     }
   }, [chatId, showToast]);
 
+  const [fullscreenImageUrl, setFullscreenImageUrl] = useState(null);
+  const handleOpenLightbox = useCallback((uri) => setFullscreenImageUrl(uri), []);
+
   const renderMessage = useCallback(({ item }) => (
-    <MessageBubble message={item} onLongPress={handleLongPress} />
-  ), [handleLongPress]);
+    <MessageBubble
+      message={item}
+      onLongPress={handleLongPress}
+      onSwipeReply={handleSwipeReply}
+      onImagePress={handleOpenLightbox}
+      uploadProgress={uploadProgresses[item.id]}
+    />
+  ), [handleLongPress, handleSwipeReply, handleOpenLightbox, uploadProgresses]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
@@ -940,7 +1443,7 @@ export default function ChatScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <IntensityBackground intensity={intensity} event={chatEvent} />
+      <IntensityBackground event={chatEvent} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior="padding"
@@ -1004,11 +1507,8 @@ export default function ChatScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* ── Intensity meter ── */}
-        <IntensityMeter messageCount={messageCount} isUnlocked={revealUnlocked} />
-
-        {/* ── Reveal progress banner ── */}
-        <RevealProgressBanner messageCount={messageCount} revealUnlocked={revealUnlocked} />
+        {/* ── Connection strip (intensity + reveal, collapsed to 28 px) ── */}
+        <ConnectionStrip messageCount={messageCount} revealUnlocked={revealUnlocked} />
 
         {/* ── Deep connection countdown ── */}
         <DeepConnectionCountdown
@@ -1063,28 +1563,107 @@ export default function ChatScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* ── Reaction picker modal ── */}
-        {showReactions && (
-          <Modal visible transparent animationType="fade" onRequestClose={() => setShowReactions(false)}>
-            <TouchableOpacity style={styles.reactionBackdrop} activeOpacity={1} onPress={() => setShowReactions(false)}>
-              <ReactionPicker onSelect={handleReaction} onClose={() => setShowReactions(false)} />
+        {/* ── Action sheet (long-press menu) ── */}
+        {showReactions && selectedMsg && (
+          <Modal visible transparent animationType="fade" onRequestClose={() => { setShowReactions(false); setSelectedMsg(null); }}>
+            <TouchableOpacity
+              style={styles.reactionBackdrop}
+              activeOpacity={1}
+              onPress={() => { setShowReactions(false); setSelectedMsg(null); }}
+            >
+              <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+                <View style={styles.actionSheet}>
+                  {/* Reaction row */}
+                  <View style={styles.reactionPicker}>
+                    {REACTIONS.map(r => (
+                      <TouchableOpacity key={r} onPress={() => handleReaction(r)} hitSlop={HIT_SLOP}>
+                        <Text style={styles.reactionEmoji}>{r}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <View style={styles.actionSheetDivider} />
+
+                  {/* Reply */}
+                  <TouchableOpacity
+                    style={styles.actionSheetRow}
+                    onPress={() => { setReplyTo(selectedMsg); setShowReactions(false); setSelectedMsg(null); }}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.7}
+                  >
+                    <Reply size={rs(18)} color={T.text} strokeWidth={1.8} />
+                    <Text style={styles.actionSheetRowText}>Reply</Text>
+                  </TouchableOpacity>
+
+                  {/* Delete for me */}
+                  <TouchableOpacity
+                    style={styles.actionSheetRow}
+                    onPress={() => handleDelete(selectedMsg.id, 'me')}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.7}
+                  >
+                    <Trash2 size={rs(18)} color={T.textSecondary} strokeWidth={1.8} />
+                    <Text style={styles.actionSheetRowText}>Delete for me</Text>
+                  </TouchableOpacity>
+
+                  {/* Delete for everyone — only if own message */}
+                  {selectedMsg.is_own && (
+                    <TouchableOpacity
+                      style={[styles.actionSheetRow, styles.actionSheetRowDanger]}
+                      onPress={() => handleDelete(selectedMsg.id, 'everyone')}
+                      hitSlop={HIT_SLOP}
+                      activeOpacity={0.7}
+                    >
+                      <Trash2 size={rs(18)} color="#ef4444" strokeWidth={1.8} />
+                      <Text style={styles.actionSheetRowTextDanger}>Delete for everyone</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <View style={styles.actionSheetDivider} />
+
+                  {/* Cancel */}
+                  <TouchableOpacity
+                    style={styles.actionSheetCancelRow}
+                    onPress={() => { setShowReactions(false); setSelectedMsg(null); }}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.actionSheetCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
             </TouchableOpacity>
           </Modal>
         )}
 
+        {/* ── Reply preview bar ── */}
+        {replyTo && (
+          <View style={styles.replyBar}>
+            <CornerUpLeft size={rs(14)} color={T.primary} strokeWidth={2} />
+            <View style={styles.replyBarContent}>
+              <Text style={styles.replyBarLabel}>replying to</Text>
+              <Text style={styles.replyBarPreview} numberOfLines={1}>
+                {replyTo.content
+                  || (replyTo.message_type === 'voice' ? '🎙 Voice note'
+                    : replyTo.message_type === 'image' ? '🖼 Image'
+                    : '')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setReplyTo(null)} hitSlop={HIT_SLOP}>
+              <X size={rs(16)} color={T.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── Input bar ── */}
         <View style={styles.inputBar}>
-          {/* Image button */}
+          {/* Image button — never disabled; uploads happen in the background */}
           <TouchableOpacity
-            style={[styles.inputActionBtn, mediaUploading && styles.inputActionBtnBusy]}
+            style={styles.inputActionBtn}
             onPress={hasMedia ? handleImagePress : () => handleLockedFeature('Images')}
             hitSlop={HIT_SLOP}
-            disabled={mediaUploading}
           >
-            {mediaUploading
-              ? <ActivityIndicator size="small" color={T.primary} />
-              : <ImageIcon size={rs(18)} color={hasMedia ? T.primary : T.textMuted} strokeWidth={1.5} />
-            }
+            <ImageIcon size={rs(18)} color={hasMedia ? T.primary : T.textMuted} strokeWidth={1.5} />
             {!hasMedia && !mediaUploading && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
           </TouchableOpacity>
 
@@ -1168,6 +1747,12 @@ export default function ChatScreen({ route, navigation }) {
           </View>
         </Modal>
       )}
+
+      {/* Full-screen image lightbox */}
+      <ImageLightbox
+        uri={fullscreenImageUrl}
+        onClose={() => setFullscreenImageUrl(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -1212,34 +1797,36 @@ const styles = StyleSheet.create({
   // Lock overlay for buttons
   lockOverlay: { position: 'absolute', bottom: rp(3), right: rp(3) },
 
-  // Intensity meter
-  intensityWrap: {
-    marginHorizontal: SPACING.md, marginTop: rp(10), marginBottom: rp(4),
-    padding: rp(12), backgroundColor: T.surface,
-    borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border,
+  // ── Connection strip ─────────────────────────────────────────
+  cstrip: {
+    borderBottomWidth: 1, borderBottomColor: T.border,
+    backgroundColor: T.surface,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: rp(6),
   },
-  intensityTopRow:  { flexDirection: 'row', justifyContent: 'space-between', marginBottom: rp(6) },
-  intensityLabel:   { fontSize: rf(10), fontWeight: '700', color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  intensityPercent: { fontSize: rf(10), fontWeight: '700', color: T.primary },
-  intensityTrack: {
-    height: rs(4), backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: rs(2), overflow: 'visible', position: 'relative',
+  cstripTrack: {
+    height: rp(2), backgroundColor: 'rgba(255,255,255,0.06)',
+    position: 'relative', overflow: 'visible', marginTop: rp(0),
   },
-  intensityFill: {
+  cstripFill: {
     position: 'absolute', top: 0, left: 0, bottom: 0,
-    backgroundColor: T.primary, borderRadius: rs(2),
+    backgroundColor: T.primary, borderRadius: rp(1),
   },
-  intensityMarker: {
-    position: 'absolute', top: -rs(2), width: rs(1), height: rs(8),
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  cstripMarker: {
+    position: 'absolute', top: -rp(1), width: rp(1), height: rp(4),
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  intensityNext: { fontSize: rf(11), color: T.textSecondary, marginTop: rp(6), fontStyle: 'italic' },
-  intensityMilestones: { marginTop: rp(10), gap: rp(6) },
-  intensityMilestoneRow: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
-  intensityMilestoneIcon: { fontSize: rf(14), width: rs(20) },
-  intensityMilestoneLabel: { flex: 1, fontSize: FONT.sm, color: T.text, fontWeight: '500' },
-  intensityMilestoneAt: { fontSize: FONT.xs, color: T.textMuted, fontWeight: '600' },
-  intensityMilestoneLocked: { color: T.textMuted, opacity: 0.5 },
+  cstripRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginTop: rp(4),
+  },
+  cstripHint: { flex: 1, fontSize: rf(10), color: T.textMuted, fontStyle: 'italic' },
+  cstripPct:  { fontSize: rf(10), color: T.primary, fontWeight: '700', marginLeft: rp(8) },
+  cstripList: { marginTop: rp(8), gap: rp(5), paddingBottom: rp(2) },
+  cstripListRow: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
+  cstripListIcon:  { fontSize: rf(12), width: rs(18) },
+  cstripListLabel: { flex: 1, fontSize: rf(11), color: T.text },
+  cstripListAt:    { fontSize: rf(10), color: T.textMuted, fontWeight: '600' },
 
   // Deep connection countdown
   countdownBanner: {
@@ -1268,27 +1855,11 @@ const styles = StyleSheet.create({
   dropNudgeText: { color: T.textSecondary, fontSize: FONT.xs },
   dropNudgeLink: { color: '#8B5CF6', fontWeight: '700' },
 
-  // Reveal progress banner
-  revealProgressBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
-    paddingHorizontal: SPACING.md, paddingVertical: rp(8),
-    backgroundColor: 'rgba(255,99,74,0.08)',
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,99,74,0.18)',
-  },
-  revealProgressEmoji: { fontSize: rf(16) },
-  revealProgressBody:  { flex: 1, gap: rp(4) },
-  revealProgressText:  { color: T.textSecondary, fontSize: FONT.xs },
-  revealProgressTrack: {
-    height: rp(3), backgroundColor: T.border, borderRadius: rp(2), overflow: 'hidden',
-  },
-  revealProgressFill: {
-    height: '100%', backgroundColor: T.primary, borderRadius: rp(2),
-  },
 
   // Messages
   messagesList: {
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.md,
-    gap: rp(4), paddingBottom: SPACING.md,
+    paddingHorizontal: rp(20), paddingVertical: SPACING.md,
+    gap: rp(6), paddingBottom: SPACING.md,
   },
   centered:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyChat:      { alignItems: 'center', justifyContent: 'center', paddingTop: rs(80), gap: SPACING.sm },
@@ -1307,7 +1878,7 @@ const styles = StyleSheet.create({
   typingDot: { width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.textSecondary },
 
   // Bubbles
-  bubbleRow:      { marginVertical: rp(2), maxWidth: '80%' },
+  bubbleRow:      { marginVertical: rp(2), maxWidth: '82%' },
   bubbleRowOwn:   { alignSelf: 'flex-end', alignItems: 'flex-end' },
   bubbleRowTheir: { alignSelf: 'flex-start', alignItems: 'flex-start' },
   bubble: { paddingHorizontal: rp(14), paddingVertical: rp(10), borderRadius: RADIUS.lg },
@@ -1397,12 +1968,14 @@ const styles = StyleSheet.create({
   voiceLabel:     { fontSize: rf(10), color: T.textSecondary },
   voiceLabelOwn:  { color: 'rgba(255,255,255,0.7)' },
 
-  // Image bubble
-  bubbleImage_wrap: { padding: rp(4) },
-  bubbleImage: {
-    width:        rs(220),
-    height:       rs(160),
-    borderRadius: RADIUS.md,
+  // Image bubble — zero inner padding so the image fills the bubble edge-to-edge
+  bubbleImageWrap: {
+    padding:           0,
+    paddingHorizontal: 0,
+    paddingVertical:   0,
+    overflow:          'hidden',
+    backgroundColor:   'transparent',
+    borderWidth:       0,
   },
 
   // Reveal modal
@@ -1457,4 +2030,68 @@ const styles = StyleSheet.create({
   revealSecondaryText:{ color: T.textSecondary, fontSize: FONT.sm },
   revealCloseBtn:     { paddingVertical: rp(8), marginTop: rp(4) },
   revealCloseText:    { color: T.textMuted, fontSize: FONT.sm },
+
+  // ── Swipe reply icon ─────────────────────────────────────────
+  swipeReplyIcon: {
+    position: 'absolute', top: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+    width: rs(32),
+  },
+  swipeReplyIconTheir: { left: -rs(36) },
+  swipeReplyIconOwn:   { right: -rs(36) },
+
+  // ── Reply chip inside bubble ─────────────────────────────────
+  replyChip: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: RADIUS.sm,
+    marginBottom: rp(6), overflow: 'hidden',
+  },
+  replyChipOwn: { backgroundColor: 'rgba(0,0,0,0.25)' },
+  replyChipBar: {
+    width: rp(3), alignSelf: 'stretch',
+    backgroundColor: T.textSecondary,
+    marginRight: rp(8),
+  },
+  replyChipBarOwn: { backgroundColor: 'rgba(255,255,255,0.7)' },
+  replyChipText: {
+    flex: 1, fontSize: rf(11), color: T.textSecondary,
+    paddingVertical: rp(5), paddingRight: rp(8),
+    fontStyle: 'italic',
+  },
+  replyChipTextOwn: { color: 'rgba(255,255,255,0.75)' },
+
+  // ── Reply bar above input ────────────────────────────────────
+  replyBar: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    paddingHorizontal: SPACING.md, paddingVertical: rp(8),
+    backgroundColor: T.surfaceAlt,
+    borderTopWidth: 1, borderTopColor: T.primaryBorder,
+  },
+  replyBarContent: { flex: 1 },
+  replyBarLabel:   { fontSize: rf(10), color: T.primary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  replyBarPreview: { fontSize: FONT.sm, color: T.textSecondary, marginTop: rp(2) },
+
+  // ── Action sheet ─────────────────────────────────────────────
+  actionSheet: {
+    backgroundColor: T.surface,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1, borderColor: T.border,
+    width: '88%', alignSelf: 'center',
+    overflow: 'hidden',
+    marginBottom: rs(24),
+  },
+  actionSheetDivider: { height: 1, backgroundColor: T.border },
+  actionSheetRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    paddingHorizontal: SPACING.md, paddingVertical: rp(15),
+  },
+  actionSheetRowDanger: {
+    backgroundColor: 'rgba(239,68,68,0.05)',
+  },
+  actionSheetRowText: { fontSize: FONT.md, color: T.text, fontWeight: '500' },
+  actionSheetRowTextDanger: { fontSize: FONT.md, color: '#ef4444', fontWeight: '500' },
+  actionSheetCancelRow: {
+    alignItems: 'center', paddingVertical: rp(15),
+  },
+  actionSheetCancelText: { fontSize: FONT.md, color: T.textSecondary, fontWeight: '600' },
 });

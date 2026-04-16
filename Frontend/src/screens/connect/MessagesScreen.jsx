@@ -316,22 +316,27 @@ export default function MessagesScreen({ navigation }) {
 
     const handleOnline  = ({ userId }) => setOnlineIds(prev => new Set([...prev, userId]));
     const handleOffline = ({ userId }) => setOnlineIds(prev => { const s = new Set(prev); s.delete(userId); return s; });
-    const handleTyping  = ({ chatId, userId, isTyping }) => {
-      setTypingIds(prev => {
-        const s = new Set(prev);
-        isTyping ? s.add(userId) : s.delete(userId);
-        return s;
-      });
+    // Backend emits 'user_typing' { userId, chatId } with no isTyping flag.
+    // Add to set on receive; auto-remove after 3 s of silence.
+    const typingTimers = {};
+    const handleTyping = ({ userId }) => {
+      if (!userId) return;
+      setTypingIds(prev => new Set([...prev, userId]));
+      clearTimeout(typingTimers[userId]);
+      typingTimers[userId] = setTimeout(() => {
+        setTypingIds(prev => { const s = new Set(prev); s.delete(userId); return s; });
+      }, 3000);
     };
 
     socketService.on?.('user_online',  handleOnline);
     socketService.on?.('user_offline', handleOffline);
-    socketService.on?.('typing',       handleTyping);
+    socketService.on?.('user_typing',  handleTyping);
 
     return () => {
       socketService.off?.('user_online',  handleOnline);
       socketService.off?.('user_offline', handleOffline);
-      socketService.off?.('typing',       handleTyping);
+      socketService.off?.('user_typing',  handleTyping);
+      Object.values(typingTimers).forEach(clearTimeout);
     };
   }, [socketService]);
 

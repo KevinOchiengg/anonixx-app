@@ -21,9 +21,14 @@ cloudinary.config(
 
 # ── Signed upload (direct-to-Cloudinary from frontend) ───────────────────────
 
-@router.get("/sign")
+from pydantic import BaseModel as _BaseModel
+
+class _SignRequest(_BaseModel):
+    resource_type: str = "image"   # "image" | "video"  (Cloudinary uses "video" for audio too)
+
+@router.post("/sign")
 async def get_upload_signature(
-    folder: str = "anonixx/posts",
+    data: _SignRequest,
     current_user_id: str = Depends(get_current_user_id),
 ):
     """Return short-lived signed params for a direct-to-Cloudinary upload."""
@@ -32,16 +37,18 @@ async def get_upload_signature(
             status_code=500,
             detail="Media uploads are not configured on this server. Contact support."
         )
+    # Route files to type-specific folders
+    folder = "anonixx/voice" if data.resource_type == "video" else "anonixx/images"
     try:
         timestamp = int(time.time())
         params    = {"folder": folder, "timestamp": timestamp}
         signature = cloudinary.utils.api_sign_request(params, settings.CLOUDINARY_API_SECRET)
         return {
-            "signature":  signature,
-            "timestamp":  timestamp,
-            "api_key":    settings.CLOUDINARY_API_KEY,
-            "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
-            "folder":     folder,
+            "signature":   signature,
+            "timestamp":   timestamp,
+            "api_key":     settings.CLOUDINARY_API_KEY,
+            "cloud_name":  settings.CLOUDINARY_CLOUD_NAME,
+            "folder":      folder,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not generate upload signature: {str(e)}")
@@ -68,7 +75,10 @@ async def upload_image(
                 contents,
                 folder="anonixx/images",
                 resource_type="image",
-                allowed_formats=["jpg", "jpeg", "png", "gif", "webp"],
+                # Convert everything to JPEG for universal compatibility
+                # (handles HEIC from iOS, WEBP, etc.)
+                format="jpg",
+                allowed_formats=["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"],
             ),
         )
         return {
