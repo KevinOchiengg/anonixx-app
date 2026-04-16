@@ -362,10 +362,11 @@ export default function ShareCardScreen({ navigation }) {
     const mimeType = mimeMap[ext] || (mode === 'image' ? 'image/jpeg' : 'video/mp4');
 
     // Get short-lived signed params from our backend (JWT-gated)
-    const signRes = await fetch(
-      `${API_BASE_URL}/api/v1/upload/sign?folder=anonixx/drops`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
+    const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body:    JSON.stringify({ resource_type: resourceType }),
+    });
     if (!signRes.ok) {
       const errData = await signRes.json().catch(() => ({}));
       throw new Error(errData?.detail || `Upload sign failed (${signRes.status})`);
