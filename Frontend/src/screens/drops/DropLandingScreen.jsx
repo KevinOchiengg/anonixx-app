@@ -9,7 +9,7 @@ import {
   ActivityIndicator, Animated, TextInput,
   KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -81,10 +81,18 @@ export default function DropLandingScreen({ route, navigation }) {
   const [connectionId, setConnectionId] = useState(null);
   const [coinsLoading, setCoinsLoading] = useState(false);
 
+  const videoPlayer  = useVideoPlayer(null, p => { p.loop = false; });
   const pulseAnim    = useRef(new Animated.Value(1)).current;
   const fadeAnim     = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0)).current;
   const pollRef      = useRef(null);
+
+  // Load video source once drop is fetched
+  useEffect(() => {
+    if (drop?.media_type === 'video' && drop.media_url) {
+      videoPlayer.replace({ uri: drop.media_url });
+    }
+  }, [drop?.media_url]);
 
   const catColor = getCatColor(drop?.category);
   const catEmoji = getCatEmoji(drop?.category);
@@ -412,12 +420,11 @@ export default function DropLandingScreen({ route, navigation }) {
                   </View>
                 ) : drop.media_type === 'video' && drop.media_url ? (
                   <View style={styles.mediaWrap}>
-                    <Video
-                      source={{ uri: drop.media_url }}
+                    <VideoView
+                      player={videoPlayer}
                       style={styles.mediaVideo}
-                      resizeMode={ResizeMode.COVER}
-                      useNativeControls
-                      shouldPlay={false}
+                      contentFit="cover"
+                      nativeControls
                     />
                     {drop.confession ? (
                       <Text style={styles.confession}>"{drop.confession}"</Text>

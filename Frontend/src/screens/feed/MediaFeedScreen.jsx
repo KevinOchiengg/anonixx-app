@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import {
@@ -425,77 +425,45 @@ const AudioSlide = ({
   isOwnPost,
   onDelete,
 }) => {
-  const soundRef = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [position, setPosition] = useState(0);
+  const audioPlayer = useAudioPlayer(null);
+  const audioStatus = useAudioPlayerStatus(audioPlayer);
   const [expanded, setExpanded] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Auto-pause when slide leaves view
-  useEffect(() => {
-    if (!isActive && playing) {
-      soundRef.current?.pauseAsync();
-      setPlaying(false);
-    }
-  }, [isActive]);
+  // expo-audio uses seconds; derive ms for existing formatTime/progressAnim
+  const position = (audioStatus.currentTime || 0) * 1000;
+  const duration = (audioStatus.duration  || 0) * 1000;
+  const progress = duration > 0 ? position / duration : 0;
+  const playing  = audioStatus.playing;
 
   useEffect(() => {
-    return () => {
-      soundRef.current?.unloadAsync();
-    };
-  }, []);
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: 100,
+      useNativeDriver: false,
+    }).start();
+    if (audioStatus.didJustFinish) progressAnim.setValue(0);
+  }, [progress, audioStatus.didJustFinish]);
+
+  // Auto-pause when slide leaves view
+  useEffect(() => {
+    if (!isActive) audioPlayer.pause();
+  }, [isActive]);
+
+  useEffect(() => () => audioPlayer.remove(), []);
 
   const togglePlay = async () => {
     try {
-      if (!soundRef.current) {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-        });
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: post.audio_url },
-          { shouldPlay: true },
-          onStatus
-        );
-        soundRef.current = sound;
-        setPlaying(true);
+      if (audioStatus.status === 'idle') {
+        await setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
+        audioPlayer.replace({ uri: post.audio_url });
+        audioPlayer.play();
+      } else if (playing) {
+        audioPlayer.pause();
       } else {
-        const status = await soundRef.current.getStatusAsync();
-        if (status.isPlaying) {
-          await soundRef.current.pauseAsync();
-          setPlaying(false);
-        } else {
-          await soundRef.current.playAsync();
-          setPlaying(true);
-        }
+        audioPlayer.play();
       }
-    } catch (e) {
-      console.error('Audio error:', e);
-    }
-  };
-
-  const onStatus = (status) => {
-    if (status.isLoaded) {
-      const pos = status.positionMillis;
-      const dur = status.durationMillis || 0;
-      setPosition(pos);
-      setDuration(dur);
-      const prog = dur > 0 ? pos / dur : 0;
-      setProgress(prog);
-      Animated.timing(progressAnim, {
-        toValue: prog,
-        duration: 100,
-        useNativeDriver: false,
-      }).start();
-      if (status.didJustFinish) {
-        setPlaying(false);
-        setProgress(0);
-        setPosition(0);
-        progressAnim.setValue(0);
-      }
-    }
+    } catch { /* silent */ }
   };
 
   const formatTime = (ms) => {

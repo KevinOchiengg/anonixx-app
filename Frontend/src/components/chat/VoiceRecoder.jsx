@@ -7,7 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Mic, X, Send } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, AudioQuality, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 
 const THEME = {
   background: '#0b0f18',
@@ -23,7 +23,7 @@ const THEME = {
 };
 
 export default function VoiceRecorder({ onSend, onCancel }) {
-  const [recording, setRecording] = useState(null);
+  const recorder = useAudioRecorder({ quality: AudioQuality.HIGH });
   const [duration, setDuration] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const pulseAnim = useState(new Animated.Value(1))[0];
@@ -55,40 +55,23 @@ export default function VoiceRecorder({ onSend, onCancel }) {
 
   const startRecording = async () => {
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
+      const { granted } = await requestRecordingPermissionsAsync();
+      if (!granted) {
         alert('Permission to access microphone is required!');
         return;
       }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      setRecording(newRecording);
+      await setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       setIsRecording(true);
-    } catch (err) {
-      console.error('Failed to start recording', err);
-    }
+    } catch (err) { /* silent */ }
   };
 
   const stopRecording = async (shouldSend = false) => {
-    if (!recording) return;
-
     setIsRecording(false);
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-
-    if (shouldSend && uri) {
-      onSend(uri, duration);
-    }
-
-    setRecording(null);
+    await recorder.stop();
+    const uri = recorder.uri;
+    if (shouldSend && uri) onSend(uri, duration);
     setDuration(0);
     onCancel();
   };
@@ -102,9 +85,7 @@ export default function VoiceRecorder({ onSend, onCancel }) {
   useEffect(() => {
     startRecording();
     return () => {
-      if (recording) {
-        recording.stopAndUnloadAsync();
-      }
+      if (recorder.isRecording) recorder.stop();
     };
   }, []);
 
