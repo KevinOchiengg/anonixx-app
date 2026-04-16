@@ -355,7 +355,8 @@ function urlSeed(url = '') {
 const WAVEFORM_BARS = 40;
 
 const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
-  const player   = useAudioPlayer(null);
+  // Pass URI at creation — player buffers immediately, no replace() needed
+  const player   = useAudioPlayer({ uri: url });
   const status   = useAudioPlayerStatus(player);
   const [isFinished, setIsFinished] = useState(false);
   const btnScale = useRef(new Animated.Value(1)).current;
@@ -379,13 +380,9 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
   const handlePress = useCallback(async () => {
     animBtn();
     try {
-      if (status.status === 'idle' || isFinished) {
-        if (status.status === 'idle') {
-          await setAudioModeAsync({ playsInSilentModeIOS: true });
-          player.replace({ uri: url });
-        } else {
-          player.seekTo(0);
-        }
+      await setAudioModeAsync({ playsInSilentModeIOS: true });
+      if (isFinished) {
+        player.seekTo(0);
         player.play();
         setIsFinished(false);
       } else if (status.playing) {
@@ -394,12 +391,12 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
         player.play();
       }
     } catch { /* silent */ }
-  }, [url, status, isFinished, player]);
+  }, [status.playing, isFinished, player]);
 
   const seekTo = useCallback((ratio) => {
-    if (status.status === 'idle' || isFinished || !status.duration) return;
+    if (!status.duration || isFinished) return;
     player.seekTo(ratio * status.duration);
-  }, [status, isFinished, player]);
+  }, [status.duration, isFinished, player]);
 
   const progress    = status.duration > 0 ? (status.currentTime || 0) / status.duration : 0;
   const activeBars  = Math.round(progress * WAVEFORM_BARS);
