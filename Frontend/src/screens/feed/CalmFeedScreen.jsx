@@ -19,7 +19,6 @@ import FeedDivider from '../../components/feed/FeedDivider';
 import MoodBalancer from '../../components/feed/MoodBalancer';
 import AuthPromptModal from '../../components/modals/AuthPromptModal';
 import { API_BASE_URL } from '../../config/api';
-import DynamicSplash from '../../components/common/DynamicSplash';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   BUTTON_HEIGHT, SCREEN, HIT_SLOP, isSmallDevice,
@@ -438,7 +437,12 @@ export default function CalmFeedScreen({ navigation, route }) {
 
 
   // ── Initial loading / refresh ─────────────────────────────
-  if (loading && posts.length === 0) return <DynamicSplash />;
+  if (loading && posts.length === 0) return (
+    <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
+      <ActivityIndicator size="large" color={THEME.primary} />
+    </View>
+  );
 
   // ── Session limit state ────────────────────────────────────
   if (sessionLimitReached) {
