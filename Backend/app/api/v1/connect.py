@@ -50,6 +50,8 @@ class SendMessageRequest(BaseModel):
     content: str = ""
     message_type: str = "text"   # "text" | "image" | "voice"
     media_url: str = ""
+    reply_to_id: str = ""        # id of the message being replied to
+    reply_preview: str = ""      # truncated preview text shown in the reply chip
 
 class RevealResponseRequest(BaseModel):
     reveal_id: str
@@ -145,6 +147,7 @@ async def get_anonymous_profile(
     join_date = created_at.strftime("%B %Y")
 
     return {
+        "user_id": target_id,               # internal id — needed for typing/call routing
         "anonymous_name": user["anonymous_name"],
         "avatar": user.get("avatar", "ghost"),
         "avatar_color": user.get("avatar_color", "#FF634A"),
@@ -524,6 +527,7 @@ async def get_chats(
 
         result.append({
             "chat_id": str(chat["_id"]),
+            "other_user_id": other_id,           # needed by frontend for typing / call routing
             "other_anonymous_name": other_name,
             "other_avatar": other_avatar,
             "other_avatar_color": other_color,
@@ -547,7 +551,7 @@ async def get_chats(
 async def get_chat_messages(
     chat_id: str,
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=200),
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
@@ -559,9 +563,12 @@ async def get_chat_messages(
     if not is_participant(chat, current_user_id):
         raise HTTPException(status_code=403, detail="Not your chat")
 
+    # Fetch newest messages first so the most recent ones are never cut off by
+    # the limit, then reverse to ascending order for chronological display.
     messages = await db["connect_messages"].find({
         "chat_id": chat_id
-    }).sort("created_at", 1).skip(skip).limit(limit).to_list(None)
+    }).sort("created_at", -1).skip(skip).limit(limit).to_list(None)
+    messages.reverse()
 
     # Collect unread incoming message IDs before marking
     unread_docs = await db["connect_messages"].find(
@@ -616,12 +623,16 @@ async def get_chat_messages(
                 "content":       m.get("content", ""),
                 "message_type":  m.get("message_type", "text"),
                 "media_url":     m.get("media_url", ""),
+                "reply_to_id":   m.get("reply_to_id", ""),
+                "reply_preview": m.get("reply_preview", ""),
                 "is_own":        m["sender_id"] == current_user_id,
                 "is_delivered":  m.get("is_delivered", False),
                 "is_read":       m.get("is_read", False),
                 "created_at":    m["created_at"].isoformat()
             }
             for m in messages
+            # Exclude messages soft-deleted for this user
+            if current_user_id not in m.get("hidden_for", [])
         ],
         "chat": {
             "chat_id": chat_id,
@@ -674,6 +685,8 @@ async def send_message(
         "content":       data.content.strip(),
         "message_type":  msg_type,
         "media_url":     media_url,
+        "reply_to_id":   data.reply_to_id.strip(),
+        "reply_preview": data.reply_preview.strip()[:80],  # cap at 80 chars
         "is_delivered":  False,
         "is_read":       False,
         "created_at":    datetime.now(timezone.utc),
@@ -691,6 +704,8 @@ async def send_message(
             "content":       message["content"],
             "message_type":  message["message_type"],
             "media_url":     message["media_url"],
+            "reply_to_id":   message["reply_to_id"],
+            "reply_preview": message["reply_preview"],
             "is_own":        False,
             "is_delivered":  False,
             "is_read":       False,
@@ -722,6 +737,60 @@ async def send_message(
     )
 
     return {"message_id": str(message["_id"])}
+
+
+# ==================== DELETE MESSAGE ====================
+
+@router.delete("/chats/{chat_id}/messages/{message_id}")
+async def delete_message(
+    chat_id:    str,
+    message_id: str,
+    scope: str = "me",          # "me" | "everyone"
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    Delete a message.
+    scope=me       — soft-delete for the requester only (hidden_for list).
+    scope=everyone — hard-delete allowed only if the requester sent it.
+    Emits 'message_deleted' socket event so both sides update in real time.
+    """
+    chat = await db["connect_chats"].find_one({"_id": ObjectId(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if not is_participant(chat, current_user_id):
+        raise HTTPException(status_code=403, detail="Not your chat")
+
+    msg = await db["connect_messages"].find_one({"_id": ObjectId(message_id), "chat_id": chat_id})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if scope == "everyone":
+        if msg["sender_id"] != current_user_id:
+            raise HTTPException(status_code=403, detail="Can only delete your own messages for everyone")
+        await db["connect_messages"].delete_one({"_id": ObjectId(message_id)})
+    else:
+        # Add user to hidden_for list (soft delete for this user only)
+        await db["connect_messages"].update_one(
+            {"_id": ObjectId(message_id)},
+            {"$addToSet": {"hidden_for": current_user_id}},
+        )
+
+    # Notify both participants so UI updates instantly
+    other_id = other_participant(chat, current_user_id)
+    from app.sio import sio
+    await sio.emit(
+        "message_deleted",
+        {"chat_id": chat_id, "message_id": message_id, "scope": scope},
+        room=f"user_{other_id}",
+    )
+    await sio.emit(
+        "message_deleted",
+        {"chat_id": chat_id, "message_id": message_id, "scope": scope},
+        room=f"user_{current_user_id}",
+    )
+
+    return {"ok": True}
 
 
 # ==================== CALLS ====================

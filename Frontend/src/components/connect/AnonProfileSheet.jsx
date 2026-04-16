@@ -207,8 +207,11 @@ export default function AnonProfileSheet({
       closeSheet();
       setTimeout(() => {
         navigation?.navigate('Chat', {
-          chatId:    profile.chat_id,
-          otherName: anonymousName,
+          chatId:          profile.chat_id,
+          otherName:       anonymousName,
+          otherAvatar:     profile.avatar,
+          otherAvatarColor: profile.avatar_color,
+          otherUserId:     profile.user_id,
         });
       }, 300);
       return;
