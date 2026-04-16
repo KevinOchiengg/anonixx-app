@@ -2,7 +2,7 @@
  * ChatScreen.jsx — Premium anonymous messaging
  * Cinematic Coral design system. Intensity meter. Locked premium features.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, FlatList, Image, KeyboardAvoidingView,
   Modal, PanResponder, Platform, ScrollView, StyleSheet, Text, TextInput,
@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft, Check, CheckCheck, CornerUpLeft, Image as ImageIcon,
-  Lock, Mic, MicOff, Phone, PhoneOff, Reply, Square, Trash2, Video, X,
+  Lock, Mic, MicOff, Pause, Phone, PhoneOff, Play, Reply, RotateCcw, Square, Trash2, Video, X,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -143,19 +143,18 @@ const ReactionPicker = React.memo(({ onSelect, onClose }) => (
 ));
 
 // ─── Cloudinary URL helpers ────────────────────────────────────
-// Inject f_auto,q_auto into a Cloudinary URL so Cloudinary picks the best
-// format (WebP on Android, HEIC-safe JPEG on iOS) and compresses it.
-// Works only on Cloudinary URLs; passes anything else through unchanged.
+// Inject f_jpg,q_auto into a Cloudinary URL.
+// f_jpg (not f_auto) forces JPEG delivery — f_auto can serve AVIF/WebP which
+// some React Native builds (especially older EAS Android builds) cannot decode,
+// causing a silent blank image. JPEG is universally supported across all RN versions.
 function withCloudinaryOpts(url) {
   if (!url || !url.includes('res.cloudinary.com')) return url;
-  // Already has transformations? (contains /upload/x_y/)
   const marker = '/upload/';
   const idx = url.indexOf(marker);
   if (idx === -1) return url;
   const after = url.slice(idx + marker.length);
-  // Don't double-add
-  if (after.startsWith('f_auto')) return url;
-  return url.slice(0, idx + marker.length) + 'f_auto,q_auto/' + after;
+  if (after.startsWith('f_jpg') || after.startsWith('f_auto')) return url;
+  return url.slice(0, idx + marker.length) + 'f_jpg,q_auto/' + after;
 }
 
 // ─── Image message — auto-sizes to real aspect ratio ──────────
@@ -328,60 +327,192 @@ const lightboxStyles = StyleSheet.create({
 
 // ─── Message Bubble ───────────────────────────────────────────
 // ─── Voice note player inside bubble ─────────────────────────
+
+// Seeded LCG to get consistent bar heights from URL
+function seededBars(seed, count) {
+  let s = seed;
+  const bars = [];
+  for (let i = 0; i < count; i++) {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    const norm = ((s >>> 0) / 0xffffffff);
+    // blend LCG randomness with a sine envelope for natural waveform shape
+    const envelope = 0.45 + 0.55 * Math.abs(Math.sin((i / count) * Math.PI));
+    bars.push(0.15 + norm * envelope * 0.85);
+  }
+  return bars;
+}
+
+function urlSeed(url = '') {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < url.length; i++) {
+    h ^= url.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return h;
+}
+
+const WAVEFORM_BARS = 36;
+
 const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
-  const [playing,  setPlaying]  = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [position, setPosition] = useState(0);
+  // playState: 'idle' | 'loading' | 'playing' | 'paused' | 'finished'
+  const [playState, setPlayState] = useState('idle');
+  const [duration,  setDuration]  = useState(0);
+  const [position,  setPosition]  = useState(0);
   const soundRef = useRef(null);
+
+  // Stable waveform shape derived from URL (consistent across re-renders)
+  const bars = useMemo(() => seededBars(urlSeed(url), WAVEFORM_BARS), [url]);
 
   useEffect(() => () => { soundRef.current?.unloadAsync(); }, []);
 
-  const toggle = useCallback(async () => {
+  const onStatus = useCallback((s) => {
+    if (!s.isLoaded) return;
+    setPosition(s.positionMillis || 0);
+    if (s.durationMillis) setDuration(s.durationMillis);
+    if (s.didJustFinish) {
+      setPlayState('finished');
+      setPosition(0);
+      soundRef.current?.setPositionAsync(0).catch(() => {});
+    }
+  }, []);
+
+  const handlePress = useCallback(async () => {
     try {
-      if (!soundRef.current) {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-        const { sound, status } = await Audio.Sound.createAsync(
-          { uri: url },
-          { shouldPlay: true },
-          (s) => {
-            setPosition(s.positionMillis || 0);
-            setDuration(s.durationMillis || 0);
-            if (s.didJustFinish) { setPlaying(false); setPosition(0); }
-          }
-        );
-        soundRef.current = sound;
-        setPlaying(true);
-        setDuration(status.durationMillis || 0);
-      } else if (playing) {
+      if (playState === 'idle' || playState === 'finished') {
+        if (!soundRef.current) {
+          setPlayState('loading');
+          await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+          const { sound, status } = await Audio.Sound.createAsync(
+            { uri: url },
+            { shouldPlay: true },
+            onStatus,
+          );
+          soundRef.current = sound;
+          if (status.durationMillis) setDuration(status.durationMillis);
+          setPlayState('playing');
+        } else {
+          await soundRef.current.setPositionAsync(0);
+          await soundRef.current.playAsync();
+          setPlayState('playing');
+        }
+      } else if (playState === 'playing') {
         await soundRef.current.pauseAsync();
-        setPlaying(false);
-      } else {
+        setPlayState('paused');
+      } else if (playState === 'paused') {
         await soundRef.current.playAsync();
-        setPlaying(true);
+        setPlayState('playing');
       }
     } catch { /* silent */ }
-  }, [url, playing]);
+  }, [url, playState, onStatus]);
 
-  const secs  = Math.floor((playing ? position : duration) / 1000);
-  const label = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const seekTo = useCallback(async (ratio) => {
+    if (!soundRef.current || duration === 0) return;
+    const ms = Math.floor(ratio * duration);
+    try {
+      await soundRef.current.setPositionAsync(ms);
+      setPosition(ms);
+      if (playState === 'finished') {
+        await soundRef.current.playAsync();
+        setPlayState('playing');
+      }
+    } catch { /* silent */ }
+  }, [duration, playState]);
+
   const progress = duration > 0 ? position / duration : 0;
+  const activeBars = Math.round(progress * WAVEFORM_BARS);
+
+  // Time display: show elapsed while playing/paused, total when idle/finished
+  const displayMs = (playState === 'playing' || playState === 'paused') ? position : duration;
+  const secs = Math.floor(displayMs / 1000);
+  const timeLabel = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+
+  const activeColor  = isOwn ? 'rgba(255,255,255,0.95)' : T.primary;
+  const inactiveColor = isOwn ? 'rgba(255,255,255,0.28)' : 'rgba(255,99,74,0.22)';
+
+  const PlayIcon =
+    playState === 'loading'  ? null :
+    playState === 'playing'  ? Pause :
+    playState === 'finished' ? RotateCcw : Play;
 
   return (
-    <TouchableOpacity onPress={toggle} activeOpacity={0.8} style={styles.voiceBubble}>
-      <View style={[styles.voicePlayBtn, isOwn && styles.voicePlayBtnOwn]}>
-        {playing
-          ? <Square size={rs(12)} color={isOwn ? '#fff' : T.primary} fill={isOwn ? '#fff' : T.primary} />
-          : <Mic    size={rs(14)} color={isOwn ? '#fff' : T.primary} strokeWidth={2} />
-        }
-      </View>
-      <View style={styles.voiceWaveWrap}>
-        <View style={[styles.voiceTrack, isOwn && styles.voiceTrackOwn]}>
-          <View style={[styles.voiceFill, isOwn && styles.voiceFillOwn, { width: `${progress * 100}%` }]} />
+    <View style={vStyles.container}>
+      {/* Play / Pause / Replay button */}
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={0.75}
+        hitSlop={HIT_SLOP}
+        style={[vStyles.btn, isOwn ? vStyles.btnOwn : vStyles.btnTheir]}
+      >
+        {playState === 'loading' ? (
+          <ActivityIndicator size="small" color={isOwn ? '#fff' : T.primary} />
+        ) : (
+          <PlayIcon
+            size={rs(15)}
+            color={isOwn ? '#fff' : T.primary}
+            strokeWidth={2.5}
+            fill={playState === 'playing' ? (isOwn ? '#fff' : T.primary) : 'none'}
+          />
+        )}
+      </TouchableOpacity>
+
+      {/* Waveform + timestamp */}
+      <View style={vStyles.right}>
+        <View style={vStyles.waveRow}>
+          {bars.map((h, i) => {
+            const barHeight = rs(4) + h * rs(20);
+            const active = i < activeBars;
+            return (
+              <TouchableOpacity
+                key={i}
+                activeOpacity={0.6}
+                hitSlop={{ top: 8, bottom: 8, left: 1, right: 1 }}
+                onPress={() => seekTo(i / WAVEFORM_BARS)}
+                style={[
+                  vStyles.bar,
+                  {
+                    height: barHeight,
+                    backgroundColor: active ? activeColor : inactiveColor,
+                    opacity: active ? 1 : 0.6,
+                  },
+                ]}
+              />
+            );
+          })}
         </View>
-        <Text style={[styles.voiceLabel, isOwn && styles.voiceLabelOwn]}>{label}</Text>
+        <Text style={[vStyles.time, isOwn ? vStyles.timeOwn : vStyles.timeTheir]}>
+          {timeLabel}
+        </Text>
       </View>
-    </TouchableOpacity>
+    </View>
   );
+});
+
+const vStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: rp(6), paddingHorizontal: rp(2),
+    minWidth: rs(180),
+  },
+  btn: {
+    width: rs(36), height: rs(36), borderRadius: rs(18),
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: rp(10),
+  },
+  btnOwn:   { backgroundColor: 'rgba(255,255,255,0.22)' },
+  btnTheir: { backgroundColor: 'rgba(255,99,74,0.15)', borderWidth: 1, borderColor: 'rgba(255,99,74,0.3)' },
+  right: { flex: 1, gap: rp(5) },
+  waveRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: rs(2), height: rs(28),
+  },
+  bar: {
+    flex: 1, borderRadius: rs(2),
+  },
+  time: {
+    fontSize: rf(10), letterSpacing: 0.3,
+  },
+  timeOwn:   { color: 'rgba(255,255,255,0.65)' },
+  timeTheir: { color: T.textSecondary },
 });
 
 const SWIPE_THRESHOLD = 32; // px to trigger reply — lower = easier to activate
@@ -767,6 +898,7 @@ export default function ChatScreen({ route, navigation }) {
   const typingTimer    = useRef(null);
   const isTypingRef    = useRef(false);
   const loadSeqRef     = useRef(0);           // stale-response guard
+  const isAtBottomRef  = useRef(true);        // whether user is near the bottom
   const avatarColor    = otherAvatarColor || T.primary;
 
   // ── Load messages ────────────────────────────────────────
@@ -824,8 +956,23 @@ export default function ChatScreen({ route, navigation }) {
     return () => clearInterval(pollRef.current);
   }, [loadMessages]));
 
+  // Always scroll — used when the user sends a message or on first load.
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, []);
+
+  // Only scroll if the user is already near the bottom — used for incoming messages.
+  const scrollToBottomIfNear = useCallback(() => {
+    if (isAtBottomRef.current) {
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, []);
+
+  // Track scroll position so we know whether to auto-scroll on new messages.
+  const handleScroll = useCallback(({ nativeEvent }) => {
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    isAtBottomRef.current = distanceFromBottom < 80;
   }, []);
 
   // ── Socket events ────────────────────────────────────────
@@ -853,7 +1000,7 @@ export default function ChatScreen({ route, navigation }) {
       });
       setIsTyping(false);
       triggerChatEvent('message');
-      scrollToBottom();
+      scrollToBottomIfNear();
       socketService.markRead?.(chatId);
     };
 
@@ -921,7 +1068,7 @@ export default function ChatScreen({ route, navigation }) {
       socketService.off?.('message_deleted',  handleMessageDeleted);
       socketService.leaveChat?.(chatId);
     };
-  }, [socketService, chatId, otherUserId, scrollToBottom]);
+  }, [socketService, chatId, otherUserId, scrollToBottomIfNear]);
 
   // ── Typing emit ──────────────────────────────────────────
   const handleInputChange = useCallback((text) => {
@@ -1129,7 +1276,87 @@ export default function ChatScreen({ route, navigation }) {
     }
   }, [sending, mediaUploading, chatId, replyTo, scrollToBottom, showToast]);
 
-  // ── Image picker — optimistic preview + background upload ───
+  // ── Send a single image asset (upload + optimistic bubble + backend POST) ──
+  const sendOneImage = useCallback(async (asset, snapReplyTo) => {
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    // 1 ── Optimistic preview bubble with local URI
+    setMessages(prev => [...prev, {
+      id:           tempId,
+      content:      '',
+      message_type: 'image',
+      media_url:    asset.uri,
+      is_own:       true,
+      is_delivered: false,
+      is_read:      false,
+      created_at:   new Date().toISOString(),
+      reply_to_id:   snapReplyTo?.id || '',
+      reply_preview: snapReplyTo
+        ? (snapReplyTo.content || '🖼 Image').substring(0, 80)
+        : '',
+    }]);
+
+    // 2 ── Upload with live % feedback
+    setUploadProgresses(prev => ({ ...prev, [tempId]: 0 }));
+    let cloudUrl;
+    try {
+      cloudUrl = await uploadImageWithProgress(
+        asset.uri,
+        asset.mimeType ?? null,
+        (pct) => setUploadProgresses(prev => ({ ...prev, [tempId]: pct })),
+      );
+    } catch (e) {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+      showToast({ type: 'error', message: e?.message || 'Could not upload image.' });
+      return;
+    }
+
+    if (!cloudUrl) {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+      showToast({ type: 'error', message: 'Upload returned no URL. Please try again.' });
+      return;
+    }
+
+    // 3 ── Swap local URI → CDN URL, clear progress overlay
+    setMessages(prev => prev.map(m =>
+      m.id === tempId ? { ...m, media_url: cloudUrl } : m
+    ));
+    setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+
+    // 4 ── Persist to backend
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({
+          chat_id:      chatId,
+          content:      '',
+          message_type: 'image',
+          media_url:    cloudUrl,
+          reply_to_id:   snapReplyTo?.id || '',
+          reply_preview: snapReplyTo
+            ? (snapReplyTo.content || '🖼 Image').substring(0, 80)
+            : '',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => prev.map(m =>
+          m.id === tempId ? { ...m, id: data.message_id, is_delivered: true } : m
+        ));
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        showToast({ type: 'error', message: errBody?.detail || `Send failed (${res.status})` });
+      }
+    } catch (e) {
+      showToast({ type: 'error', message: e?.message || 'Could not send image.' });
+    }
+  }, [chatId, showToast, uploadImageWithProgress]);
+
+  // ── Image picker — supports multiple selection ───────────────
   const handleImagePress = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1138,99 +1365,25 @@ export default function ChatScreen({ route, navigation }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:    'images',
-        quality:       0.8,
-        allowsEditing: false,
+        mediaTypes:            'images',
+        quality:               0.8,
+        allowsEditing:         false,
+        allowsMultipleSelection: true,
+        selectionLimit:        3,
       });
-      if (result.canceled) return;
+      if (result.canceled || !result.assets?.length) return;
 
-      const asset       = result.assets[0];
       const snapReplyTo = replyTo;
-      const tempId      = `temp_${Date.now()}`;
-
-      // 1 ── Drop a preview bubble immediately with the local URI
-      setMessages(prev => [...prev, {
-        id:           tempId,
-        content:      '',
-        message_type: 'image',
-        media_url:    asset.uri,   // local file:// — shows instantly before upload
-        is_own:       true,
-        is_delivered: false,
-        is_read:      false,
-        created_at:   new Date().toISOString(),
-        reply_to_id:    snapReplyTo?.id || '',
-        reply_preview:  snapReplyTo
-          ? (snapReplyTo.content || '🖼 Image').substring(0, 80)
-          : '',
-      }]);
       setReplyTo(null);
+
+      // Fire all uploads in parallel — each gets its own bubble and progress bar.
+      // scroll once up-front so the first bubble is visible immediately.
       scrollToBottom();
-
-      // 2 ── Upload with live % feedback
-      setUploadProgresses(prev => ({ ...prev, [tempId]: 0 }));
-      let cloudUrl;
-      try {
-        cloudUrl = await uploadImageWithProgress(
-          asset.uri,
-          asset.mimeType ?? null,
-          (pct) => setUploadProgresses(prev => ({ ...prev, [tempId]: pct })),
-        );
-      } catch (e) {
-        setMessages(prev => prev.filter(m => m.id !== tempId));
-        setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
-        showToast({ type: 'error', message: e?.message || 'Could not upload image.' });
-        return;
-      }
-
-      // Guard: if upload returned nothing, bail early
-      if (!cloudUrl) {
-        setMessages(prev => prev.filter(m => m.id !== tempId));
-        setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
-        showToast({ type: 'error', message: 'Upload returned no URL. Please try again.' });
-        return;
-      }
-
-      // 3 ── Swap local URI → CDN URL, clear progress overlay
-      setMessages(prev => prev.map(m =>
-        m.id === tempId ? { ...m, media_url: cloudUrl } : m
-      ));
-      setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
-
-      // 4 ── Persist to backend, swap tempId → real message ID
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const res   = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body:    JSON.stringify({
-            chat_id:      chatId,
-            content:      '',
-            message_type: 'image',
-            media_url:    cloudUrl,
-            reply_to_id:    snapReplyTo?.id || '',
-            reply_preview:  snapReplyTo
-              ? (snapReplyTo.content || '🖼 Image').substring(0, 80)
-              : '',
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setMessages(prev => prev.map(m =>
-            m.id === tempId ? { ...m, id: data.message_id, is_delivered: true } : m
-          ));
-        } else {
-          const errBody = await res.json().catch(() => ({}));
-          showToast({ type: 'error', message: errBody?.detail || `Send failed (${res.status})` });
-          // Keep the bubble visible so the user can see what failed — don't remove it
-        }
-      } catch (e) {
-        // Network error during backend POST — keep the bubble, show error
-        showToast({ type: 'error', message: e?.message || 'Could not send image.' });
-      }
+      await Promise.all(result.assets.map(asset => sendOneImage(asset, snapReplyTo)));
     } catch (e) {
       showToast({ type: 'error', message: e?.message || 'Could not send image.' });
     }
-  }, [replyTo, chatId, scrollToBottom, showToast, uploadImageWithProgress]);
+  }, [replyTo, scrollToBottom, showToast, sendOneImage]);
 
   // ── Voice note record / stop ─────────────────────────────
   const handleVoicePress = useCallback(async () => {
@@ -1421,15 +1574,58 @@ export default function ChatScreen({ route, navigation }) {
   const [fullscreenImageUrl, setFullscreenImageUrl] = useState(null);
   const handleOpenLightbox = useCallback((uri) => setFullscreenImageUrl(uri), []);
 
-  const renderMessage = useCallback(({ item }) => (
-    <MessageBubble
-      message={item}
-      onLongPress={handleLongPress}
-      onSwipeReply={handleSwipeReply}
-      onImagePress={handleOpenLightbox}
-      uploadProgress={uploadProgresses[item.id]}
-    />
-  ), [handleLongPress, handleSwipeReply, handleOpenLightbox, uploadProgresses]);
+  // ── Build flat list data with date separators injected ───────
+  const listData = useMemo(() => {
+    const today     = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    const toDateKey = (iso) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    };
+    const toLabel = (iso) => {
+      const d   = new Date(iso);
+      const key = toDateKey(iso);
+      if (key === toDateKey(today.toISOString()))     return 'Today';
+      if (key === toDateKey(yesterday.toISOString())) return 'Yesterday';
+      return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    };
+
+    const result = [];
+    let lastKey  = null;
+    for (const msg of messages) {
+      if (!msg.created_at) { result.push(msg); continue; }
+      const key = toDateKey(msg.created_at);
+      if (key !== lastKey) {
+        result.push({ __type: 'date_sep', id: `sep_${key}`, label: toLabel(msg.created_at) });
+        lastKey = key;
+      }
+      result.push(msg);
+    }
+    return result;
+  }, [messages]);
+
+  const renderMessage = useCallback(({ item }) => {
+    if (item.__type === 'date_sep') {
+      return (
+        <View style={styles.dateSepRow}>
+          <View style={styles.dateSepLine} />
+          <Text style={styles.dateSepLabel}>{item.label}</Text>
+          <View style={styles.dateSepLine} />
+        </View>
+      );
+    }
+    return (
+      <MessageBubble
+        message={item}
+        onLongPress={handleLongPress}
+        onSwipeReply={handleSwipeReply}
+        onImagePress={handleOpenLightbox}
+        uploadProgress={uploadProgresses[item.id]}
+      />
+    );
+  }, [handleLongPress, handleSwipeReply, handleOpenLightbox, uploadProgresses]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
@@ -1539,13 +1735,18 @@ export default function ChatScreen({ route, navigation }) {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={messages}
+            data={listData}
             keyExtractor={keyExtractor}
             renderItem={renderMessage}
             contentContainerStyle={styles.messagesList}
-            onContentSizeChange={scrollToBottom}
+            onScroll={handleScroll}
+            scrollEventThrottle={100}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            initialNumToRender={20}
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            removeClippedSubviews={true}
             ListEmptyComponent={
               <View style={styles.emptyChat}>
                 <Text style={styles.emptyChatEmoji}>🌑</Text>
@@ -1866,6 +2067,11 @@ const styles = StyleSheet.create({
   emptyChatEmoji: { fontSize: rf(40) },
   emptyChatText:  { color: T.textSecondary, fontSize: FONT.sm, fontStyle: 'italic', textAlign: 'center', lineHeight: rf(22) },
 
+  // Date separator
+  dateSepRow:   { flexDirection: 'row', alignItems: 'center', marginVertical: rp(10), paddingHorizontal: SPACING.md },
+  dateSepLine:  { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.07)' },
+  dateSepLabel: { color: T.textMuted, fontSize: FONT.xs, fontStyle: 'italic', marginHorizontal: SPACING.sm },
+
   // Typing indicator
   typingWrap:   { paddingHorizontal: SPACING.md, marginBottom: rp(4) },
   typingBubble: {
@@ -1945,28 +2151,6 @@ const styles = StyleSheet.create({
     backgroundColor: T.primary, borderRadius: rs(18),
     shadowColor: T.primary, shadowOpacity: 0.5, shadowRadius: rs(6), elevation: 4,
   },
-
-  // Voice note bubble
-  voiceBubble: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: rp(10), paddingVertical: rp(4), minWidth: rs(160),
-  },
-  voicePlayBtn: {
-    width: rs(32), height: rs(32), borderRadius: rs(16),
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  voicePlayBtnOwn: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  voiceWaveWrap:   { flex: 1, gap: rp(4) },
-  voiceTrack: {
-    height: rs(3), backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: rs(2), overflow: 'hidden',
-  },
-  voiceTrackOwn:  { backgroundColor: 'rgba(255,255,255,0.25)' },
-  voiceFill:      { height: '100%', backgroundColor: T.textSecondary, borderRadius: rs(2) },
-  voiceFillOwn:   { backgroundColor: 'rgba(255,255,255,0.7)' },
-  voiceLabel:     { fontSize: rf(10), color: T.textSecondary },
-  voiceLabelOwn:  { color: 'rgba(255,255,255,0.7)' },
 
   // Image bubble — zero inner padding so the image fills the bubble edge-to-edge
   bubbleImageWrap: {
