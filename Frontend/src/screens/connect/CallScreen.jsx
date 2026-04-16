@@ -143,12 +143,20 @@ export default function CallScreen({ route, navigation }) {
   // ── Init Agora ────────────────────────────────────────────
   const joinChannel = useCallback(async (token, channel, uid, appId) => {
     try {
+      let agoraModule;
+      try {
+        agoraModule = await import('react-native-agora');
+      } catch {
+        showToast({ type: 'error', message: 'Calls require a full app build — not supported in Expo Go.' });
+        endCall(false);
+        return;
+      }
       const {
         createAgoraRtcEngine,
         ChannelProfileType,
         ClientRoleType,
         RtcSurfaceView,
-      } = await import('react-native-agora');
+      } = agoraModule;
 
       RtcLocalViewRef.current  = RtcSurfaceView;
       RtcRemoteViewRef.current = RtcSurfaceView;
