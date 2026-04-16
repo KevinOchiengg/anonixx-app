@@ -48,7 +48,7 @@ class SendConnectRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     chat_id: str
     content: str = ""
-    message_type: str = "text"   # "text" | "image" | "voice"
+    message_type: str = "text"   # "text" | "image" | "voice" | "video"
     media_url: str = ""
     reply_to_id: str = ""        # id of the message being replied to
     reply_preview: str = ""      # truncated preview text shown in the reply chip
@@ -670,13 +670,13 @@ async def send_message(
     if chat["status"] == ChatStatus.BLOCKED:
         raise HTTPException(status_code=403, detail="Chat is blocked")
 
-    msg_type = data.message_type if data.message_type in ("text", "image", "voice") else "text"
+    msg_type = data.message_type if data.message_type in ("text", "image", "voice", "video") else "text"
     media_url = data.media_url.strip() if data.media_url else ""
 
     if msg_type == "text" and not data.content.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    if msg_type in ("image", "voice") and not media_url:
-        raise HTTPException(status_code=400, detail="media_url required for image/voice messages")
+    if msg_type in ("image", "voice", "video") and not media_url:
+        raise HTTPException(status_code=400, detail="media_url required for image/voice/video messages")
 
     message = {
         "_id":           ObjectId(),
