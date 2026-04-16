@@ -17,6 +17,7 @@ import {
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP, SCREEN } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
@@ -421,14 +422,14 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
         hitSlop={HIT_SLOP}
         style={[vStyles.btn, isOwn ? vStyles.btnOwn : vStyles.btnTheir]}
       >
-        {playState === 'loading' ? (
+        {status.status === 'loading' ? (
           <ActivityIndicator size="small" color={isOwn ? '#fff' : T.primary} />
         ) : (
           <PlayIcon
             size={rs(15)}
             color={isOwn ? '#fff' : T.primary}
             strokeWidth={2.5}
-            fill={playState === 'playing' ? (isOwn ? '#fff' : T.primary) : 'none'}
+            fill={status.playing ? (isOwn ? '#fff' : T.primary) : 'none'}
           />
         )}
       </TouchableOpacity>
@@ -491,6 +492,36 @@ const vStyles = StyleSheet.create({
   },
   timeOwn:   { color: 'rgba(255,255,255,0.65)' },
   timeTheir: { color: T.textSecondary },
+});
+
+// ─── Video bubble in chat ─────────────────────────────────────
+const VideoBubble = React.memo(({ url }) => {
+  const player = useVideoPlayer({ uri: url }, p => { p.loop = false; });
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const sub = player.addListener('playingChange', ({ isPlaying: p }) => setIsPlaying(p));
+    return () => sub.remove();
+  }, [player]);
+
+  useEffect(() => () => player.pause(), []);
+
+  return (
+    <TouchableOpacity
+      onPress={() => { if (isPlaying) player.pause(); else player.play(); }}
+      activeOpacity={0.9}
+      style={styles.bubbleVideoWrap}
+    >
+      <VideoView player={player} style={styles.bubbleVideo} contentFit="cover" />
+      {!isPlaying && (
+        <View style={styles.videoPlayOverlay}>
+          <View style={styles.videoPlayBtn}>
+            <Play size={rs(22)} color="#fff" fill="#fff" />
+          </View>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 });
 
 const SWIPE_THRESHOLD = 32; // px to trigger reply — lower = easier to activate
@@ -579,6 +610,8 @@ const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImageP
               </Text>
             ) : null}
           </>
+        ) : msgType === 'video' && message.media_url ? (
+          <VideoBubble url={message.media_url} />
         ) : msgType === 'voice' && message.media_url ? (
           <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} />
         ) : (
@@ -621,7 +654,7 @@ const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImageP
           <View style={[
             styles.bubble,
             message.is_own ? styles.bubbleOwn : styles.bubbleTheir,
-            msgType === 'image' && styles.bubbleImageWrap,
+            (msgType === 'image' || msgType === 'video') && styles.bubbleImageWrap,
           ]}>
             {bubbleContent()}
             {message.reaction && (
@@ -1254,6 +1287,100 @@ export default function ChatScreen({ route, navigation }) {
     }
   }, [sending, mediaUploading, chatId, replyTo, scrollToBottom, showToast]);
 
+  // ── Upload video to Cloudinary via backend ───────────────────
+  const uploadVideoWithProgress = useCallback(async (uri, mimeType, onProgress) => {
+    const token = await AsyncStorage.getItem('token');
+    const ext   = uri.split('?')[0].split('.').pop()?.toLowerCase() || 'mp4';
+    const mime  = mimeType || 'video/mp4';
+
+    const form = new FormData();
+    form.append('file', { uri, name: `vid_${Date.now()}.${ext}`, type: mime });
+
+    let pct = 5;
+    onProgress?.(pct);
+    const ticker = setInterval(() => {
+      pct = Math.min(pct + 8, 90);
+      onProgress?.(pct);
+    }, 600);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/upload/video`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body:    form,
+      });
+      clearInterval(ticker);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.detail || `Upload failed (${res.status})`);
+      }
+      onProgress?.(100);
+      const data = await res.json();
+      return data.url;
+    } catch (e) {
+      clearInterval(ticker);
+      throw e;
+    }
+  }, []);
+
+  // ── Send a single video asset ─────────────────────────────────
+  const sendOneVideo = useCallback(async (asset, snapReplyTo) => {
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    setMessages(prev => [...prev, {
+      id: tempId, content: '', message_type: 'video',
+      media_url: asset.uri, is_own: true,
+      is_delivered: false, is_read: false,
+      created_at: new Date().toISOString(),
+      reply_to_id:   snapReplyTo?.id || '',
+      reply_preview: snapReplyTo
+        ? (snapReplyTo.content || '📹 Video').substring(0, 80)
+        : '',
+    }]);
+    setUploadProgresses(prev => ({ ...prev, [tempId]: 0 }));
+
+    let cloudUrl;
+    try {
+      cloudUrl = await uploadVideoWithProgress(
+        asset.uri,
+        asset.mimeType ?? null,
+        (pct) => setUploadProgresses(prev => ({ ...prev, [tempId]: pct })),
+      );
+    } catch (e) {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+      showToast({ type: 'error', message: e?.message || 'Could not upload video.' });
+      return;
+    }
+
+    setMessages(prev => prev.map(m => m.id === tempId ? { ...m, media_url: cloudUrl } : m));
+    setUploadProgresses(prev => { const s = { ...prev }; delete s[tempId]; return s; });
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          chat_id: chatId, content: '', message_type: 'video', media_url: cloudUrl,
+          reply_to_id:   snapReplyTo?.id || '',
+          reply_preview: snapReplyTo ? (snapReplyTo.content || '📹 Video').substring(0, 80) : '',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => prev.map(m =>
+          m.id === tempId ? { ...m, id: data.message_id, is_delivered: true } : m
+        ));
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        showToast({ type: 'error', message: errBody?.detail || `Send failed (${res.status})` });
+      }
+    } catch (e) {
+      showToast({ type: 'error', message: e?.message || 'Could not send video.' });
+    }
+  }, [chatId, showToast, uploadVideoWithProgress]);
+
   // ── Send a single image asset (upload + optimistic bubble + backend POST) ──
   const sendOneImage = useCallback(async (asset, snapReplyTo) => {
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -1343,25 +1470,27 @@ export default function ChatScreen({ route, navigation }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:            'images',
-        quality:               0.8,
-        allowsEditing:         false,
+        mediaTypes:              ['images', 'videos'],
+        quality:                 0.8,
+        allowsEditing:           false,
         allowsMultipleSelection: true,
-        selectionLimit:        3,
+        selectionLimit:          3,
+        videoMaxDuration:        60,
       });
       if (result.canceled || !result.assets?.length) return;
 
       const snapReplyTo = replyTo;
       setReplyTo(null);
-
-      // Fire all uploads in parallel — each gets its own bubble and progress bar.
-      // scroll once up-front so the first bubble is visible immediately.
       scrollToBottom();
-      await Promise.all(result.assets.map(asset => sendOneImage(asset, snapReplyTo)));
+      await Promise.all(result.assets.map(asset =>
+        asset.type === 'video'
+          ? sendOneVideo(asset, snapReplyTo)
+          : sendOneImage(asset, snapReplyTo)
+      ));
     } catch (e) {
       showToast({ type: 'error', message: e?.message || 'Could not send image.' });
     }
-  }, [replyTo, scrollToBottom, showToast, sendOneImage]);
+  }, [replyTo, scrollToBottom, showToast, sendOneImage, sendOneVideo]);
 
   // ── Voice note record / stop ─────────────────────────────
   const handleVoicePress = useCallback(async () => {
@@ -2128,6 +2257,22 @@ const styles = StyleSheet.create({
   inputActionBtnRecording: {
     backgroundColor: T.primary, borderRadius: rs(18),
     shadowColor: T.primary, shadowOpacity: 0.5, shadowRadius: rs(6), elevation: 4,
+  },
+
+  // Video bubble
+  bubbleVideoWrap: {
+    width: rs(220), height: rs(160), borderRadius: RADIUS.md,
+    overflow: 'hidden', backgroundColor: '#000',
+  },
+  bubbleVideo: { width: '100%', height: '100%' },
+  videoPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  videoPlayBtn: {
+    width: rs(44), height: rs(44), borderRadius: rs(22),
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
   },
 
   // Image bubble — zero inner padding so the image fills the bubble edge-to-edge
