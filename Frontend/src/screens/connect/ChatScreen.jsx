@@ -406,15 +406,11 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
   }, [url, playState, onStatus]);
 
   const seekTo = useCallback(async (ratio) => {
-    if (!soundRef.current || duration === 0) return;
+    if (!soundRef.current || duration === 0 || playState === 'idle' || playState === 'finished') return;
     const ms = Math.floor(ratio * duration);
     try {
       await soundRef.current.setPositionAsync(ms);
       setPosition(ms);
-      if (playState === 'finished') {
-        await soundRef.current.playAsync();
-        setPlayState('playing');
-      }
     } catch { /* silent */ }
   }, [duration, playState]);
 
