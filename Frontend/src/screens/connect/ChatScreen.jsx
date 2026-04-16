@@ -355,14 +355,24 @@ function urlSeed(url = '') {
 const WAVEFORM_BARS = 40;
 
 const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
-  // Pass URI at creation — player buffers immediately, no replace() needed
-  const player   = useAudioPlayer({ uri: url });
-  const status   = useAudioPlayerStatus(player);
+  // Start with null — only load when user explicitly taps play (no autoplay)
+  const player      = useAudioPlayer(null);
+  const status      = useAudioPlayerStatus(player);
   const [isFinished, setIsFinished] = useState(false);
-  const btnScale = useRef(new Animated.Value(1)).current;
+  const pendingPlay = useRef(false);   // set true while waiting for readyToPlay
+  const btnScale    = useRef(new Animated.Value(1)).current;
 
   const bars = useMemo(() => seededBars(urlSeed(url), WAVEFORM_BARS), [url]);
 
+  // Fire play once the source is buffered (after first tap)
+  useEffect(() => {
+    if (status.status === 'readyToPlay' && pendingPlay.current) {
+      pendingPlay.current = false;
+      player.play();
+    }
+  }, [status.status]);
+
+  // After finishing: reset position to 0 and show replay button
   useEffect(() => {
     if (status.didJustFinish) {
       setIsFinished(true);
@@ -381,24 +391,29 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
     animBtn();
     try {
       await setAudioModeAsync({ playsInSilentModeIOS: true });
-      if (isFinished) {
+      if (status.status === 'idle') {
+        // First tap — load source then play once ready
+        pendingPlay.current = true;
+        player.replace({ uri: url });
+      } else if (isFinished) {
+        // Replay — seek back to start and play
+        setIsFinished(false);
         player.seekTo(0);
         player.play();
-        setIsFinished(false);
       } else if (status.playing) {
         player.pause();
       } else {
         player.play();
       }
     } catch { /* silent */ }
-  }, [status.playing, isFinished, player]);
+  }, [url, status.status, status.playing, isFinished, player]);
 
   const seekTo = useCallback((ratio) => {
-    if (!status.duration || isFinished) return;
+    if (status.status === 'idle' || isFinished || !status.duration) return;
     player.seekTo(ratio * status.duration);
-  }, [status.duration, isFinished, player]);
+  }, [status.status, status.duration, isFinished, player]);
 
-  const progress    = status.duration > 0 ? (status.currentTime || 0) / status.duration : 0;
+  const progress    = isFinished ? 0 : (status.duration > 0 ? (status.currentTime || 0) / status.duration : 0);
   const activeBars  = Math.round(progress * WAVEFORM_BARS);
 
   const displaySecs = (status.playing || (!isFinished && status.status === 'readyToPlay'))
