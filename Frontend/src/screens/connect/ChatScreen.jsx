@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, FlatList, KeyboardAvoidingView,
+  ActivityIndicator, Animated, FlatList, Image, KeyboardAvoidingView,
   Modal, Platform, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
@@ -13,8 +13,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft, Check, CheckCheck, Image as ImageIcon,
-  Lock, Mic, Phone, Video,
+  Lock, Mic, MicOff, Phone, Square, Video,
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
@@ -130,9 +132,67 @@ const ReactionPicker = React.memo(({ onSelect, onClose }) => (
 ));
 
 // ─── Message Bubble ───────────────────────────────────────────
+// ─── Voice note player inside bubble ─────────────────────────
+const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
+  const [playing,  setPlaying]  = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
+  const soundRef = useRef(null);
+
+  useEffect(() => () => { soundRef.current?.unloadAsync(); }, []);
+
+  const toggle = useCallback(async () => {
+    try {
+      if (!soundRef.current) {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        const { sound, status } = await Audio.Sound.createAsync(
+          { uri: url },
+          { shouldPlay: true },
+          (s) => {
+            setPosition(s.positionMillis || 0);
+            setDuration(s.durationMillis || 0);
+            if (s.didJustFinish) { setPlaying(false); setPosition(0); }
+          }
+        );
+        soundRef.current = sound;
+        setPlaying(true);
+        setDuration(status.durationMillis || 0);
+      } else if (playing) {
+        await soundRef.current.pauseAsync();
+        setPlaying(false);
+      } else {
+        await soundRef.current.playAsync();
+        setPlaying(true);
+      }
+    } catch { /* silent */ }
+  }, [url, playing]);
+
+  const secs  = Math.floor((playing ? position : duration) / 1000);
+  const label = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const progress = duration > 0 ? position / duration : 0;
+
+  return (
+    <TouchableOpacity onPress={toggle} activeOpacity={0.8} style={styles.voiceBubble}>
+      <View style={[styles.voicePlayBtn, isOwn && styles.voicePlayBtnOwn]}>
+        {playing
+          ? <Square size={rs(12)} color={isOwn ? '#fff' : T.primary} fill={isOwn ? '#fff' : T.primary} />
+          : <Mic    size={rs(14)} color={isOwn ? '#fff' : T.primary} strokeWidth={2} />
+        }
+      </View>
+      <View style={styles.voiceWaveWrap}>
+        <View style={[styles.voiceTrack, isOwn && styles.voiceTrackOwn]}>
+          <View style={[styles.voiceFill, isOwn && styles.voiceFillOwn, { width: `${progress * 100}%` }]} />
+        </View>
+        <Text style={[styles.voiceLabel, isOwn && styles.voiceLabelOwn]}>{label}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 const MessageBubble = React.memo(({ message, onLongPress }) => {
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(message.is_own ? 16 : -16)).current;
+  const msgType   = message.message_type || 'text';
 
   useEffect(() => {
     Animated.parallel([
@@ -140,6 +200,33 @@ const MessageBubble = React.memo(({ message, onLongPress }) => {
       Animated.spring(slideAnim, { toValue: 0, friction: 10,  useNativeDriver: true }),
     ]).start();
   }, []);
+
+  const bubbleContent = () => {
+    if (msgType === 'image' && message.media_url) {
+      return (
+        <>
+          <Image
+            source={{ uri: message.media_url }}
+            style={styles.bubbleImage}
+            resizeMode="cover"
+          />
+          {message.content ? (
+            <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn, { marginTop: rp(6) }]}>
+              {message.content}
+            </Text>
+          ) : null}
+        </>
+      );
+    }
+    if (msgType === 'voice' && message.media_url) {
+      return <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} />;
+    }
+    return (
+      <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
+        {message.content}
+      </Text>
+    );
+  };
 
   return (
     <Animated.View style={[
@@ -152,10 +239,12 @@ const MessageBubble = React.memo(({ message, onLongPress }) => {
         activeOpacity={0.85}
         delayLongPress={400}
       >
-        <View style={[styles.bubble, message.is_own ? styles.bubbleOwn : styles.bubbleTheir]}>
-          <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
-            {message.content}
-          </Text>
+        <View style={[
+          styles.bubble,
+          message.is_own ? styles.bubbleOwn : styles.bubbleTheir,
+          msgType === 'image' && styles.bubbleImage_wrap,
+        ]}>
+          {bubbleContent()}
           {message.reaction && (
             <View style={[styles.reactionBadge, message.is_own && styles.reactionBadgeOwn]}>
               <Text style={styles.reactionBadgeText}>{message.reaction}</Text>
@@ -401,7 +490,10 @@ export default function ChatScreen({ route, navigation }) {
   const [showReactions, setShowReactions] = useState(false);
   const [intensity,     setIntensity]     = useState(0);
   const [chatEvent,     setChatEvent]     = useState(null);
+  const [isRecording,   setIsRecording]   = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
   const chatEventTimer = useRef(null);
+  const recordingRef   = useRef(null);
 
   const flatListRef    = useRef(null);
   const pollRef        = useRef(null);
@@ -570,14 +662,146 @@ export default function ChatScreen({ route, navigation }) {
     }
   }, [inputText, sending, chatInfo, chatId, socketService, scrollToBottom, loadMessages, showToast]);
 
+  // ── Upload media to Cloudinary via signed upload ──────────
+  const uploadMedia = useCallback(async (uri, resourceType = 'image') => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      // Get signed upload params from backend
+      const sigRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ resource_type: resourceType }),
+      });
+      if (!sigRes.ok) throw new Error('signature failed');
+      const { signature, timestamp, api_key, cloud_name, upload_preset } = await sigRes.json();
+
+      const form = new FormData();
+      const ext  = resourceType === 'video' ? 'mp4' : resourceType === 'image' ? 'jpg' : 'm4a';
+      form.append('file', { uri, name: `chat_media_${Date.now()}.${ext}`, type: resourceType === 'image' ? 'image/jpeg' : 'audio/m4a' });
+      form.append('signature',   signature);
+      form.append('timestamp',   String(timestamp));
+      form.append('api_key',     api_key);
+      if (upload_preset) form.append('upload_preset', upload_preset);
+
+      const uploadRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
+        { method: 'POST', body: form }
+      );
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData?.error?.message || 'upload failed');
+      return uploadData.secure_url;
+    } catch (e) {
+      showToast({ type: 'error', message: 'Media upload failed. Try again.' });
+      return null;
+    }
+  }, [showToast]);
+
+  // ── Send a message with optional media ───────────────────
+  const sendMediaMessage = useCallback(async ({ content = '', messageType, mediaUrl }) => {
+    if (sending || mediaUploading) return;
+    setSending(true);
+    const tempId = `temp_${Date.now()}`;
+    setMessages(prev => [...prev, {
+      id: tempId, content, message_type: messageType, media_url: mediaUrl,
+      is_own: true, is_delivered: false, is_read: false,
+      created_at: new Date().toISOString(),
+    }]);
+    scrollToBottom();
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/connect/chats/${chatId}/message`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ chat_id: chatId, content, message_type: messageType, media_url: mediaUrl }),
+      });
+      if (!res.ok) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        showToast({ type: 'error', message: 'Could not send message.' });
+      } else {
+        loadMessages();
+      }
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      showToast({ type: 'error', message: 'Could not send message.' });
+    } finally {
+      setSending(false);
+    }
+  }, [sending, mediaUploading, chatId, scrollToBottom, loadMessages, showToast]);
+
+  // ── Image picker ─────────────────────────────────────────
+  const handleImagePress = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'warning', message: 'Gallery permission is needed.' });
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        quality: 0.8,
+        allowsEditing: false,
+      });
+      if (result.canceled) return;
+      setMediaUploading(true);
+      const url = await uploadMedia(result.assets[0].uri, 'image');
+      setMediaUploading(false);
+      if (url) await sendMediaMessage({ messageType: 'image', mediaUrl: url });
+    } catch {
+      setMediaUploading(false);
+      showToast({ type: 'error', message: 'Could not send image.' });
+    }
+  }, [showToast, uploadMedia, sendMediaMessage]);
+
+  // ── Voice note record / stop ─────────────────────────────
+  const handleVoicePress = useCallback(async () => {
+    if (isRecording) {
+      // Stop and send
+      try {
+        await recordingRef.current?.stopAndUnloadAsync();
+        const uri = recordingRef.current?.getURI();
+        setIsRecording(false);
+        recordingRef.current = null;
+        if (!uri) return;
+        setMediaUploading(true);
+        const url = await uploadMedia(uri, 'video'); // Cloudinary uses 'video' resource type for audio
+        setMediaUploading(false);
+        if (url) await sendMediaMessage({ messageType: 'voice', mediaUrl: url });
+      } catch {
+        setIsRecording(false);
+        setMediaUploading(false);
+        showToast({ type: 'error', message: 'Could not send voice note.' });
+      }
+    } else {
+      // Start recording
+      try {
+        const { status } = await Audio.requestPermissionsAsync();
+        if (status !== 'granted') {
+          showToast({ type: 'warning', message: 'Microphone permission is needed.' });
+          return;
+        }
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+        recordingRef.current = recording;
+        setIsRecording(true);
+      } catch {
+        showToast({ type: 'error', message: 'Could not start recording.' });
+      }
+    }
+  }, [isRecording, uploadMedia, sendMediaMessage, showToast]);
+
   // ── Unlock ───────────────────────────────────────────────
   const handleUnlock = useCallback(() => {
     navigation.navigate('UnlockPremium', { chatId, otherName });
   }, [navigation, chatId, otherName]);
 
-  // ── Locked premium feature ────────────────────────────────
+  // ── Locked feature toast (calls only — not yet implemented) ──
   const handleLockedFeature = useCallback((feature) => {
-    showToast({ type: 'info', title: `${feature} coming soon`, message: 'Keep chatting to unlock more features.' });
+    showToast({ type: 'info', title: `${feature} locked`, message: `Keep chatting to unlock ${feature.toLowerCase()}.` });
   }, [showToast]);
 
   // ── Reactions ─────────────────────────────────────────────
@@ -696,7 +920,7 @@ export default function ChatScreen({ route, navigation }) {
             {/* Audio call */}
             <TouchableOpacity
               style={[styles.headerActionBtn, hasAudioCall && styles.headerActionBtnActive]}
-              onPress={() => hasAudioCall ? handleLockedFeature('Audio call') : handleLockedFeature('Audio calls')}
+              onPress={() => handleLockedFeature('Audio calls')}
               hitSlop={HIT_SLOP}
             >
               <Phone size={rs(16)} color={hasAudioCall ? T.primary : T.textMuted} strokeWidth={1.8} />
@@ -796,14 +1020,18 @@ export default function ChatScreen({ route, navigation }) {
 
         {/* ── Input bar ── */}
         <View style={styles.inputBar}>
-          {/* Media button */}
+          {/* Image button */}
           <TouchableOpacity
-            style={styles.inputActionBtn}
-            onPress={() => hasMedia ? handleLockedFeature('Images') : handleLockedFeature('Images')}
+            style={[styles.inputActionBtn, mediaUploading && styles.inputActionBtnBusy]}
+            onPress={hasMedia ? handleImagePress : () => handleLockedFeature('Images')}
             hitSlop={HIT_SLOP}
+            disabled={mediaUploading}
           >
-            <ImageIcon size={rs(18)} color={hasMedia ? T.primary : T.textMuted} strokeWidth={1.5} />
-            {!hasMedia && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
+            {mediaUploading
+              ? <ActivityIndicator size="small" color={T.primary} />
+              : <ImageIcon size={rs(18)} color={hasMedia ? T.primary : T.textMuted} strokeWidth={1.5} />
+            }
+            {!hasMedia && !mediaUploading && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
           </TouchableOpacity>
 
           {/* Text input */}
@@ -821,12 +1049,15 @@ export default function ChatScreen({ route, navigation }) {
 
           {/* Voice note button */}
           <TouchableOpacity
-            style={styles.inputActionBtn}
-            onPress={() => hasVoiceNote ? handleLockedFeature('Voice notes') : handleLockedFeature('Voice notes')}
+            style={[styles.inputActionBtn, isRecording && styles.inputActionBtnRecording]}
+            onPress={hasVoiceNote ? handleVoicePress : () => handleLockedFeature('Voice notes')}
             hitSlop={HIT_SLOP}
           >
-            <Mic size={rs(18)} color={hasVoiceNote ? T.primary : T.textMuted} strokeWidth={1.5} />
-            {!hasVoiceNote && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
+            {isRecording
+              ? <MicOff size={rs(18)} color="#fff" strokeWidth={2} />
+              : <Mic    size={rs(18)} color={hasVoiceNote ? T.primary : T.textMuted} strokeWidth={1.5} />
+            }
+            {!hasVoiceNote && !isRecording && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
           </TouchableOpacity>
 
           {/* Send */}
@@ -1054,6 +1285,41 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { backgroundColor: '#1e2330', shadowOpacity: 0 },
   sendBtnText: { color: '#fff', fontSize: rf(18), fontWeight: '800' },
+  inputActionBtnBusy:      { opacity: 0.6 },
+  inputActionBtnRecording: {
+    backgroundColor: T.primary, borderRadius: rs(18),
+    shadowColor: T.primary, shadowOpacity: 0.5, shadowRadius: rs(6), elevation: 4,
+  },
+
+  // Voice note bubble
+  voiceBubble: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: rp(10), paddingVertical: rp(4), minWidth: rs(160),
+  },
+  voicePlayBtn: {
+    width: rs(32), height: rs(32), borderRadius: rs(16),
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  voicePlayBtnOwn: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  voiceWaveWrap:   { flex: 1, gap: rp(4) },
+  voiceTrack: {
+    height: rs(3), backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: rs(2), overflow: 'hidden',
+  },
+  voiceTrackOwn:  { backgroundColor: 'rgba(255,255,255,0.25)' },
+  voiceFill:      { height: '100%', backgroundColor: T.textSecondary, borderRadius: rs(2) },
+  voiceFillOwn:   { backgroundColor: 'rgba(255,255,255,0.7)' },
+  voiceLabel:     { fontSize: rf(10), color: T.textSecondary },
+  voiceLabelOwn:  { color: 'rgba(255,255,255,0.7)' },
+
+  // Image bubble
+  bubbleImage_wrap: { padding: rp(4) },
+  bubbleImage: {
+    width:        rs(220),
+    height:       rs(160),
+    borderRadius: RADIUS.md,
+  },
 
   // Reveal modal
   revealBackdrop: {
