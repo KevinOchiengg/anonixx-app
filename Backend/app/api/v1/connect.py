@@ -47,7 +47,9 @@ class SendConnectRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     chat_id: str
-    content: str
+    content: str = ""
+    message_type: str = "text"   # "text" | "image" | "voice"
+    media_url: str = ""
 
 class RevealResponseRequest(BaseModel):
     reveal_id: str
@@ -610,12 +612,14 @@ async def get_chat_messages(
     return {
         "messages": [
             {
-                "id":           str(m["_id"]),
-                "content":      m["content"],
-                "is_own":       m["sender_id"] == current_user_id,
-                "is_delivered": m.get("is_delivered", False),
-                "is_read":      m.get("is_read", False),
-                "created_at":   m["created_at"].isoformat()
+                "id":            str(m["_id"]),
+                "content":       m.get("content", ""),
+                "message_type":  m.get("message_type", "text"),
+                "media_url":     m.get("media_url", ""),
+                "is_own":        m["sender_id"] == current_user_id,
+                "is_delivered":  m.get("is_delivered", False),
+                "is_read":       m.get("is_read", False),
+                "created_at":    m["created_at"].isoformat()
             }
             for m in messages
         ],
@@ -655,17 +659,24 @@ async def send_message(
     if chat["status"] == ChatStatus.BLOCKED:
         raise HTTPException(status_code=403, detail="Chat is blocked")
 
-    if not data.content.strip():
+    msg_type = data.message_type if data.message_type in ("text", "image", "voice") else "text"
+    media_url = data.media_url.strip() if data.media_url else ""
+
+    if msg_type == "text" and not data.content.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if msg_type in ("image", "voice") and not media_url:
+        raise HTTPException(status_code=400, detail="media_url required for image/voice messages")
 
     message = {
-        "_id":          ObjectId(),
-        "chat_id":      chat_id,
-        "sender_id":    current_user_id,
-        "content":      data.content.strip(),
-        "is_delivered": False,
-        "is_read":      False,
-        "created_at":   datetime.now(timezone.utc),
+        "_id":           ObjectId(),
+        "chat_id":       chat_id,
+        "sender_id":     current_user_id,
+        "content":       data.content.strip(),
+        "message_type":  msg_type,
+        "media_url":     media_url,
+        "is_delivered":  False,
+        "is_read":       False,
+        "created_at":    datetime.now(timezone.utc),
     }
 
     await db["connect_messages"].insert_one(message)
@@ -675,13 +686,15 @@ async def send_message(
     await sio.emit(
         "new_message",
         {
-            "id":           str(message["_id"]),
-            "chat_id":      chat_id,
-            "content":      message["content"],
-            "is_own":       False,
-            "is_delivered": False,
-            "is_read":      False,
-            "created_at":   message["created_at"].isoformat(),
+            "id":            str(message["_id"]),
+            "chat_id":       chat_id,
+            "content":       message["content"],
+            "message_type":  message["message_type"],
+            "media_url":     message["media_url"],
+            "is_own":        False,
+            "is_delivered":  False,
+            "is_read":       False,
+            "created_at":    message["created_at"].isoformat(),
         },
         room=f"user_{other_participant(chat, current_user_id)}",
     )
