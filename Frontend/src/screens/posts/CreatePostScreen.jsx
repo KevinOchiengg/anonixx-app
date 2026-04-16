@@ -86,10 +86,11 @@ const PROMPTS = [
 
 const uploadToCloudinary = async (uri, resourceType = 'image', token) => {
   // Get short-lived signed params from our backend (JWT-gated)
-  const signRes = await fetch(
-    `${API_BASE_URL}/api/v1/upload/sign?folder=anonixx/posts`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body:    JSON.stringify({ resource_type: resourceType === 'video' ? 'video' : 'image' }),
+  });
   if (!signRes.ok) throw new Error('Could not get upload signature.');
   const { signature, timestamp, api_key, cloud_name, folder } = await signRes.json();
 
