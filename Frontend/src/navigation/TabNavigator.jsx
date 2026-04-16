@@ -76,9 +76,6 @@ const TabBarIcon = ({ route, focused, unreadCount }) => {
 
   return (
     <View style={styles.iconContainer}>
-      {/* Pill highlight behind focused icon */}
-      {focused && <View style={styles.pill} />}
-
       <IconComponent
         size={22}
         color={color}
@@ -264,14 +261,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 32,
   },
-  pill: {
-    position: 'absolute',
-    width: 44,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,99,74,0.13)',
-  },
-
   // Unread badge
   tabBadge: {
     position: 'absolute',

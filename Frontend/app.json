@@ -17,7 +17,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonixx.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio"],
+        "NSMicrophoneUsageDescription": "Anonixx needs your microphone for anonymous voice and video calls.",
+        "NSCameraUsageDescription": "Anonixx needs your camera for anonymous video calls."
       }
     },
     "android": {
@@ -25,9 +27,15 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a1a"
       },
-      "permissions": ["NOTIFICATIONS", "RECEIVE_BOOT_COMPLETED", "VIBRATE"],
+      "permissions": [
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "RECORD_AUDIO",
+        "CAMERA"
+      ],
       "package": "com.anonixx.app",
-      "navigationBarColor": "#151924",
+      "navigationBarColor": "#0b0f18",
       "navigationBarStyle": "dark",
       "intentFilters": [
         {
