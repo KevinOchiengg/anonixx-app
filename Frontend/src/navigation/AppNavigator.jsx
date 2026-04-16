@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import DynamicSplash from '../components/common/DynamicSplash';
 
 import ChatScreen from '../screens/connect/ChatScreen';
+import CallScreen from '../screens/connect/CallScreen';
 import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
 import CoinsScreen from '../screens/profile/CoinsScreen';
@@ -34,25 +35,26 @@ const linking = {
 };
 
 export default function AppNavigator() {
-  const { loading } = useAuth();
+  const { loading, isAuthenticated } = useAuth();
 
   return (
     <NavigationContainer linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* Splash is the initial screen while auth state is loading from storage.
-            NavigationContainer is always mounted so deep-link initial URLs are
-            captured immediately — before the auth check completes. */}
         {loading
           ? <Stack.Screen name="Splash" component={DynamicSplash} />
-          : <Stack.Screen name="Main" component={TabNavigator} />
+          : isAuthenticated
+            ? <Stack.Screen name="Main" component={TabNavigator} />
+            : <Stack.Screen name="Auth" component={AuthNavigator} />
         }
-        <Stack.Screen name="Auth" component={AuthNavigator} />
+        {/* Keep these accessible for deep links + post-auth navigation */}
+        <Stack.Screen name="AuthNav" component={AuthNavigator} />
         <Stack.Screen
           name="InterestSelection"
           component={InterestSelectionScreen}
         />
         <Stack.Screen name="UnlockPremium" component={UnlockPremiumScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="Call" component={CallScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="ShareCard" component={ShareCardScreen} />
         <Stack.Screen name="DropLanding" component={DropLandingScreen} />
         <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
