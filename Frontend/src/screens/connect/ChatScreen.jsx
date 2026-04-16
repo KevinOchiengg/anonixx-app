@@ -164,7 +164,7 @@ const IMG_MAX_H = rs(320);               // tallest portrait we'll show inline
 const IMG_MIN_W = rs(160);
 const IMG_MIN_H = rs(100);
 
-const ImageMessage = React.memo(({ uri, isOwn, onPress, uploadProgress }) => {
+const ImageMessage = React.memo(({ uri, isOwn, onPress, onLongPress, uploadProgress }) => {
   const [size,    setSize]    = useState({ width: IMG_MAX_W, height: IMG_MAX_W * 0.65 });
   const [loading, setLoading] = useState(true);   // true until onLoad fires
   const [errored, setErrored] = useState(false);  // true if image fails to load
@@ -210,6 +210,8 @@ const ImageMessage = React.memo(({ uri, isOwn, onPress, uploadProgress }) => {
     <TouchableOpacity
       activeOpacity={uploading ? 1 : 0.92}
       onPress={uploading || errored ? undefined : () => onPress?.(displayUri)}
+      onLongPress={onLongPress}
+      delayLongPress={350}
     >
       <View style={{ width: size.width, height: size.height, borderRadius: RADIUS.md, overflow: 'hidden' }}>
 
@@ -354,7 +356,7 @@ function urlSeed(url = '') {
 
 const WAVEFORM_BARS = 40;
 
-const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
+const VoiceNoteBubble = React.memo(({ url, isOwn, onLongPress }) => {
   // Start with null — only load when user explicitly taps play (no autoplay)
   const player      = useAudioPlayer(null);
   const status      = useAudioPlayerStatus(player);
@@ -433,7 +435,12 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
   const timeColor  = isOwn ? 'rgba(255,255,255,0.65)' : T.textSecondary;
 
   return (
-    <View style={vStyles.container}>
+    <TouchableOpacity
+      onLongPress={onLongPress}
+      delayLongPress={350}
+      activeOpacity={1}
+      style={vStyles.container}
+    >
 
       {/* ── Circular play button ─────────────────────────────── */}
       <Animated.View style={{ transform: [{ scale: btnScale }] }}>
@@ -500,7 +507,7 @@ const VoiceNoteBubble = React.memo(({ url, isOwn }) => {
         </View>
       </View>
 
-    </View>
+    </TouchableOpacity>
   );
 });
 
@@ -569,7 +576,7 @@ const vStyles = StyleSheet.create({
 });
 
 // ─── Video bubble in chat ─────────────────────────────────────
-const VideoBubble = React.memo(({ url, isOwn }) => {
+const VideoBubble = React.memo(({ url, isOwn, onLongPress }) => {
   const player    = useVideoPlayer({ uri: url }, p => { p.loop = false; });
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration,  setDuration]  = useState(0);
@@ -621,7 +628,7 @@ const VideoBubble = React.memo(({ url, isOwn }) => {
   const coral    = T.primary;
 
   return (
-    <TouchableOpacity onPress={handleTap} activeOpacity={1} style={vvStyles.wrap}>
+    <TouchableOpacity onPress={handleTap} onLongPress={onLongPress} delayLongPress={350} activeOpacity={1} style={vvStyles.wrap}>
       <VideoView player={player} style={vvStyles.video} contentFit="cover" />
 
       {/* Dark gradient at bottom */}
@@ -774,6 +781,7 @@ const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImageP
               uri={message.media_url}
               isOwn={message.is_own}
               onPress={onImagePress}
+              onLongPress={onLongPress}
               uploadProgress={uploadProgress}
             />
             {message.content ? (
@@ -783,9 +791,9 @@ const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImageP
             ) : null}
           </>
         ) : msgType === 'video' && message.media_url ? (
-          <VideoBubble url={message.media_url} isOwn={message.is_own} />
+          <VideoBubble url={message.media_url} isOwn={message.is_own} onLongPress={onLongPress} />
         ) : msgType === 'voice' && message.media_url ? (
-          <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} />
+          <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} onLongPress={onLongPress} />
         ) : (
           <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
             {message.content}
