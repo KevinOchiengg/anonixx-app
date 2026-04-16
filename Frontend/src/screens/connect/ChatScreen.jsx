@@ -569,31 +569,131 @@ const vStyles = StyleSheet.create({
 });
 
 // ─── Video bubble in chat ─────────────────────────────────────
-const VideoBubble = React.memo(({ url }) => {
-  const player = useVideoPlayer({ uri: url }, p => { p.loop = false; });
+const VideoBubble = React.memo(({ url, isOwn }) => {
+  const player    = useVideoPlayer({ uri: url }, p => { p.loop = false; });
   const [isPlaying, setIsPlaying] = useState(false);
+  const [duration,  setDuration]  = useState(0);
+  const [position,  setPosition]  = useState(0);
+  const overlayOpacity = useRef(new Animated.Value(1)).current;
+  const hideTimer      = useRef(null);
 
   useEffect(() => {
-    const sub = player.addListener('playingChange', ({ isPlaying: p }) => setIsPlaying(p));
-    return () => sub.remove();
+    const playingSub = player.addListener('playingChange', ({ isPlaying: p }) => {
+      setIsPlaying(p);
+      if (p) {
+        // Fade controls out after 2 s of playing
+        clearTimeout(hideTimer.current);
+        hideTimer.current = setTimeout(() => {
+          Animated.timing(overlayOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+        }, 2000);
+      } else {
+        clearTimeout(hideTimer.current);
+        Animated.timing(overlayOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      }
+    });
+    const statusSub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'readyToPlay') setDuration(player.duration || 0);
+    });
+    // Poll position while playing
+    const tick = setInterval(() => {
+      if (player.playing) setPosition(player.currentTime || 0);
+    }, 500);
+    return () => {
+      playingSub.remove(); statusSub.remove(); clearInterval(tick); clearTimeout(hideTimer.current);
+    };
   }, [player]);
 
+  const handleTap = () => {
+    // Always show controls on tap
+    Animated.timing(overlayOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+    if (isPlaying) {
+      player.pause();
+    } else {
+      player.play();
+      hideTimer.current = setTimeout(() => {
+        Animated.timing(overlayOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+      }, 2000);
+    }
+  };
+
+  const progress = duration > 0 ? position / duration : 0;
+  const fmtTime  = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const coral    = T.primary;
+
   return (
-    <TouchableOpacity
-      onPress={() => { if (isPlaying) player.pause(); else player.play(); }}
-      activeOpacity={0.9}
-      style={styles.bubbleVideoWrap}
-    >
-      <VideoView player={player} style={styles.bubbleVideo} contentFit="cover" />
-      {!isPlaying && (
-        <View style={styles.videoPlayOverlay}>
-          <View style={styles.videoPlayBtn}>
-            <Play size={rs(22)} color="#fff" fill="#fff" />
-          </View>
+    <TouchableOpacity onPress={handleTap} activeOpacity={1} style={vvStyles.wrap}>
+      <VideoView player={player} style={vvStyles.video} contentFit="cover" />
+
+      {/* Dark gradient at bottom */}
+      <Animated.View style={[vvStyles.overlay, { opacity: overlayOpacity }]}>
+        {/* Centre play/pause button */}
+        <View style={[vvStyles.playBtn, { backgroundColor: isOwn ? 'rgba(255,255,255,0.92)' : coral }]}>
+          {isPlaying
+            ? <Pause size={rs(18)} color={isOwn ? coral : '#fff'} fill={isOwn ? coral : '#fff'} strokeWidth={0} />
+            : <Play  size={rs(18)} color={isOwn ? coral : '#fff'} fill={isOwn ? coral : '#fff'} strokeWidth={0} />
+          }
         </View>
-      )}
+
+        {/* Bottom bar: time + progress rail */}
+        <View style={vvStyles.bottomBar}>
+          <Text style={vvStyles.timeText}>{fmtTime(position)}</Text>
+          <View style={vvStyles.rail}>
+            <View style={[vvStyles.railFill, { width: `${Math.round(progress * 100)}%` }]} />
+            {/* Thumb dot */}
+            <View style={[vvStyles.thumb, { left: `${Math.round(progress * 100)}%` }]} />
+          </View>
+          <Text style={vvStyles.timeText}>{fmtTime(duration)}</Text>
+        </View>
+      </Animated.View>
     </TouchableOpacity>
   );
+});
+
+const vvStyles = StyleSheet.create({
+  wrap: {
+    width: rs(230), height: rs(170),
+    borderRadius: RADIUS.lg, overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  video: { width: '100%', height: '100%' },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  playBtn: {
+    width: rs(46), height: rs(46), borderRadius: rs(23),
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: rs(2) },
+    shadowOpacity: 0.4, shadowRadius: rs(6), elevation: 6,
+  },
+  bottomBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: rp(10), paddingBottom: rp(8), paddingTop: rp(16),
+    gap: rp(6),
+    // subtle gradient-like darkening
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  timeText: {
+    color: '#fff', fontSize: rf(9), fontVariant: ['tabular-nums'],
+    letterSpacing: 0.3, minWidth: rs(24), textAlign: 'center',
+  },
+  rail: {
+    flex: 1, height: rs(3), backgroundColor: 'rgba(255,255,255,0.30)',
+    borderRadius: rs(2), overflow: 'visible', position: 'relative',
+  },
+  railFill: {
+    height: '100%', backgroundColor: T.primary, borderRadius: rs(2),
+  },
+  thumb: {
+    position: 'absolute', top: -rs(3),
+    width: rs(9), height: rs(9), borderRadius: rs(5),
+    backgroundColor: '#fff',
+    marginLeft: -rs(4.5),
+    shadowColor: T.primary, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8, shadowRadius: rs(4), elevation: 3,
+  },
 });
 
 const SWIPE_THRESHOLD = 32; // px to trigger reply — lower = easier to activate
@@ -683,7 +783,7 @@ const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImageP
             ) : null}
           </>
         ) : msgType === 'video' && message.media_url ? (
-          <VideoBubble url={message.media_url} />
+          <VideoBubble url={message.media_url} isOwn={message.is_own} />
         ) : msgType === 'voice' && message.media_url ? (
           <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} />
         ) : (
@@ -982,6 +1082,7 @@ export default function ChatScreen({ route, navigation }) {
   const isTypingRef    = useRef(false);
   const loadSeqRef     = useRef(0);           // stale-response guard
   const isAtBottomRef  = useRef(true);        // whether user is near the bottom
+  const initialScrollDone = useRef(false);   // scroll to bottom exactly once on first load
   const avatarColor    = otherAvatarColor || T.primary;
 
   // ── Load messages ────────────────────────────────────────
@@ -1025,6 +1126,11 @@ export default function ChatScreen({ route, navigation }) {
           setIntensity(data.chat.intensity_score);
         }
         socketService?.markRead?.(chatId);
+        // Scroll to bottom once after the very first load
+        if (!initialScrollDone.current) {
+          initialScrollDone.current = true;
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 150);
+        }
       }
     } catch { /* silent */ }
     finally {
@@ -1034,6 +1140,8 @@ export default function ChatScreen({ route, navigation }) {
   }, [chatId, socketService]);
 
   useFocusEffect(useCallback(() => {
+    initialScrollDone.current = false;
+    isAtBottomRef.current     = true;
     loadMessages();
     pollRef.current = setInterval(loadMessages, 10000);
     return () => clearInterval(pollRef.current);
@@ -1926,6 +2034,11 @@ export default function ChatScreen({ route, navigation }) {
             maxToRenderPerBatch={10}
             windowSize={10}
             removeClippedSubviews={true}
+            onLayout={() => {
+              if (!initialScrollDone.current) return;
+              // Re-anchor after keyboard / layout shifts if user is at bottom
+              if (isAtBottomRef.current) flatListRef.current?.scrollToEnd({ animated: false });
+            }}
             ListEmptyComponent={
               <View style={styles.emptyChat}>
                 <Text style={styles.emptyChatEmoji}>🌑</Text>
