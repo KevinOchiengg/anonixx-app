@@ -43,11 +43,13 @@ const getAvatar = (name) => AVATAR_MAP[name] || '👤';
 
 function formatChatTime(isoString) {
   if (!isoString) return '';
-  // Normalise to UTC: replace space separator and append Z if no tz offset present
-  // so JS converts to the device's local timezone rather than treating it as local time.
-  const normalised = isoString
-    .replace(' ', 'T')
-    .replace(/(\.\d+)?$/, (m) => (/[Z+\-]\d/.test(isoString) ? m : m + 'Z'));
+  // Normalise to UTC: replace space separator, then append Z only if there is
+  // no explicit timezone offset at the END of the string.
+  // Do NOT use a simple /[Z+\-]\d/ test — it falsely matches the '-' in date
+  // parts like "2024-04-16" and skips the Z append, treating UTC as local time.
+  const withT = isoString.replace(' ', 'T');
+  const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(withT);
+  const normalised  = hasTimezone ? withT : withT + 'Z';
   const msgDate = new Date(normalised);
   if (isNaN(msgDate.getTime())) return '';
 
