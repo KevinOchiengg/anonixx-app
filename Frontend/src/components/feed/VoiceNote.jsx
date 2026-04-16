@@ -9,8 +9,6 @@ export default function VoiceNote({ uri, duration = 30 }) {
   const status = useAudioPlayerStatus(player)
   const [loaded, setLoaded] = useState(false)
 
-  useEffect(() => () => player.remove(), [])
-
   const playPauseSound = async () => {
     if (!loaded) {
       player.replace({ uri })
