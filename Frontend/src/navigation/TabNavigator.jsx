@@ -181,8 +181,8 @@ export default function TabNavigator() {
         sceneContainerStyle: { backgroundColor: THEME.background },
         tabBarStyle: {
           ...styles.tabBar,
-          height: 64 + insets.bottom,
-          paddingBottom: insets.bottom + 8,
+          height: 72 + insets.bottom,
+          paddingBottom: insets.bottom + 16,
           paddingTop: 8,
         },
         tabBarActiveTintColor: THEME.primary,
