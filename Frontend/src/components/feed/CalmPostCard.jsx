@@ -12,6 +12,7 @@ import {
   ActivityIndicator, Animated, Dimensions, Image, Modal, ScrollView,
   Share, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useActiveVideo } from '../../context/VideoFeedContext';
@@ -381,9 +382,9 @@ const MenuItem = React.memo(({ item }) => (
 
 // ─── Main Card ────────────────────────────────────────────────
 function CalmPostCard({
-  post, onResponse, onSave, onViewThread, onPress,
-  onMediaPress, navigation,
+  post, onResponse, onSave, onViewThread, onPress, onMediaPress,
 }) {
+  const navigation          = useNavigation();
   const { isAuthenticated } = useAuth();
   const { showToast }       = useToast();
 

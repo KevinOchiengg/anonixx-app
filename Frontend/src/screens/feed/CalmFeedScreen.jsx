@@ -398,12 +398,11 @@ export default function CalmFeedScreen({ navigation, route }) {
           onViewThread={handleViewThread}
           onPress={handlePostPress}
           onMediaPress={handleMediaPress}
-          navigation={navigation}
         />
       );
     }
     return null;
-  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, navigation]);
+  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress]);
 
   const keyExtractor = useCallback((item, index) => `${item.id || item.type}-${index}`, []);
 
