@@ -755,24 +755,30 @@ async def delete_message(
     scope=everyone — hard-delete allowed only if the requester sent it.
     Emits 'message_deleted' socket event so both sides update in real time.
     """
-    chat = await db["connect_chats"].find_one({"_id": ObjectId(chat_id)})
+    try:
+        chat_oid = ObjectId(chat_id)
+        msg_oid  = ObjectId(message_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
+    chat = await db["connect_chats"].find_one({"_id": chat_oid})
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     if not is_participant(chat, current_user_id):
         raise HTTPException(status_code=403, detail="Not your chat")
 
-    msg = await db["connect_messages"].find_one({"_id": ObjectId(message_id), "chat_id": chat_id})
+    msg = await db["connect_messages"].find_one({"_id": msg_oid, "chat_id": chat_id})
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
     if scope == "everyone":
         if msg["sender_id"] != current_user_id:
             raise HTTPException(status_code=403, detail="Can only delete your own messages for everyone")
-        await db["connect_messages"].delete_one({"_id": ObjectId(message_id)})
+        await db["connect_messages"].delete_one({"_id": msg_oid})
     else:
         # Add user to hidden_for list (soft delete for this user only)
         await db["connect_messages"].update_one(
-            {"_id": ObjectId(message_id)},
+            {"_id": msg_oid},
             {"$addToSet": {"hidden_for": current_user_id}},
         )
 
