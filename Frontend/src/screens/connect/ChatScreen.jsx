@@ -2096,28 +2096,31 @@ export default function ChatScreen({ route, navigation }) {
                     <Text style={styles.actionSheetRowText}>Reply</Text>
                   </TouchableOpacity>
 
-                  {/* Delete for me */}
-                  <TouchableOpacity
-                    style={styles.actionSheetRow}
-                    onPress={() => handleDelete(selectedMsg.id, 'me')}
-                    hitSlop={HIT_SLOP}
-                    activeOpacity={0.7}
-                  >
-                    <Trash2 size={rs(18)} color={T.textSecondary} strokeWidth={1.8} />
-                    <Text style={styles.actionSheetRowText}>Delete for me</Text>
-                  </TouchableOpacity>
+                  {/* Delete — only available once the message is confirmed by the server (has a real ID) */}
+                  {!String(selectedMsg.id).startsWith('temp_') && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.actionSheetRow}
+                        onPress={() => handleDelete(selectedMsg.id, 'me')}
+                        hitSlop={HIT_SLOP}
+                        activeOpacity={0.7}
+                      >
+                        <Trash2 size={rs(18)} color={T.textSecondary} strokeWidth={1.8} />
+                        <Text style={styles.actionSheetRowText}>Delete for me</Text>
+                      </TouchableOpacity>
 
-                  {/* Delete for everyone — only if own message */}
-                  {selectedMsg.is_own && (
-                    <TouchableOpacity
-                      style={[styles.actionSheetRow, styles.actionSheetRowDanger]}
-                      onPress={() => handleDelete(selectedMsg.id, 'everyone')}
-                      hitSlop={HIT_SLOP}
-                      activeOpacity={0.7}
-                    >
-                      <Trash2 size={rs(18)} color="#ef4444" strokeWidth={1.8} />
-                      <Text style={styles.actionSheetRowTextDanger}>Delete for everyone</Text>
-                    </TouchableOpacity>
+                      {selectedMsg.is_own && (
+                        <TouchableOpacity
+                          style={[styles.actionSheetRow, styles.actionSheetRowDanger]}
+                          onPress={() => handleDelete(selectedMsg.id, 'everyone')}
+                          hitSlop={HIT_SLOP}
+                          activeOpacity={0.7}
+                        >
+                          <Trash2 size={rs(18)} color="#ef4444" strokeWidth={1.8} />
+                          <Text style={styles.actionSheetRowTextDanger}>Delete for everyone</Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
 
                   <View style={styles.actionSheetDivider} />
