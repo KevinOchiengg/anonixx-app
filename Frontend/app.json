@@ -35,7 +35,7 @@
         "CAMERA"
       ],
       "package": "com.anonixx.app",
-      "navigationBarColor": "#0b0f18",
+      "navigationBarColor": "#151924",
       "navigationBarStyle": "dark",
       "intentFilters": [
         {
