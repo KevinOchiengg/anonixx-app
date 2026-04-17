@@ -781,7 +781,7 @@ const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImageP
               uri={message.media_url}
               isOwn={message.is_own}
               onPress={onImagePress}
-              onLongPress={onLongPress}
+              onLongPress={() => onLongPress?.(message)}
               uploadProgress={uploadProgress}
             />
             {message.content ? (
@@ -791,9 +791,9 @@ const MessageBubble = React.memo(({ message, onLongPress, onSwipeReply, onImageP
             ) : null}
           </>
         ) : msgType === 'video' && message.media_url ? (
-          <VideoBubble url={message.media_url} isOwn={message.is_own} onLongPress={onLongPress} />
+          <VideoBubble url={message.media_url} isOwn={message.is_own} onLongPress={() => onLongPress?.(message)} />
         ) : msgType === 'voice' && message.media_url ? (
-          <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} onLongPress={onLongPress} />
+          <VoiceNoteBubble url={message.media_url} isOwn={message.is_own} onLongPress={() => onLongPress?.(message)} />
         ) : (
           <Text style={[styles.bubbleText, message.is_own && styles.bubbleTextOwn]}>
             {message.content}
