@@ -46,6 +46,32 @@ const CATEGORY_COLORS = {
 
 const TABS = ['Cards', 'Connections', 'Received'];
 
+// ─── Presence signal copy (spec section 12) ────────────────────
+// Quiet, italic, escalates with age. Chosen once per render based on
+// how long the drop has been sitting unopened.
+const PRESENCE_COPY = {
+  fresh:   'someone just left this for you.',
+  hours:   "it's been here a while.",
+  day:     'still here. still waiting.',
+  ending:  'almost gone. almost unsaid.',
+};
+
+const pickPresenceCopy = (ageHours = 0, timeLeft = '') => {
+  if (typeof timeLeft === 'string' && /^[0-5]?[0-9]m$/i.test(timeLeft.trim())) {
+    return PRESENCE_COPY.ending;   // <1h left
+  }
+  if (ageHours < 1)  return PRESENCE_COPY.fresh;
+  if (ageHours < 12) return PRESENCE_COPY.hours;
+  return PRESENCE_COPY.day;
+};
+
+const hoursSince = (iso) => {
+  if (!iso) return 0;
+  const then = new Date(iso).getTime();
+  if (!then || Number.isNaN(then)) return 0;
+  return Math.max(0, (Date.now() - then) / 3600000);
+};
+
 // ─── Module-level components (Rules 5, 6) ────────────────────
 const EmptyCards = React.memo(({ onPress }) => (
   <View style={empty.wrap}>
@@ -84,6 +110,49 @@ const EmptyReceived = React.memo(() => (
   </View>
 ));
 
+// ─── Unread pulse dot (section 12 — quiet, breathing) ─────────
+const UnreadPulse = React.memo(function UnreadPulse({ color = '#FF634A', size = 8 }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 1100, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const ringScale   = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
+  const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
+
+  return (
+    <View style={{ width: rs(size * 2), height: rs(size * 2), alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        style={{
+          position:        'absolute',
+          width:           rs(size),
+          height:          rs(size),
+          borderRadius:    rs(size),
+          backgroundColor: color,
+          opacity:         ringOpacity,
+          transform:       [{ scale: ringScale }],
+        }}
+      />
+      <View
+        style={{
+          width:           rs(size),
+          height:          rs(size),
+          borderRadius:    rs(size),
+          backgroundColor: color,
+        }}
+      />
+    </View>
+  );
+});
+
 const ReceivedDropItem = React.memo(({ item, onPress }) => {
   const color = CATEGORY_COLORS[item.category] || '#FF634A';
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -95,17 +164,29 @@ const ReceivedDropItem = React.memo(({ item, onPress }) => {
     Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, tension: 200, friction: 10 }).start();
   }, [scaleAnim]);
 
+  // Presence: unread + age-derived italic line + live readers (section 12)
+  const isUnread     = !item.already_unlocked && !item.is_expired && !item.read_at;
+  const ageH         = useMemo(() => hoursSince(item.created_at || item.sent_at), [item.created_at, item.sent_at]);
+  const presenceLine = useMemo(
+    () => pickPresenceCopy(ageH, item.time_left),
+    [ageH, item.time_left]
+  );
+  const readers      = Number(item.readers_now || 0);
+
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={recv.wrap}
+        style={[
+          recv.wrap,
+          isUnread && { borderColor: `${color}55`, shadowColor: color, shadowOpacity: 0.25, shadowRadius: rs(14), elevation: 4 },
+        ]}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         activeOpacity={1}
       >
         <View style={recv.header}>
-          <View style={[recv.catDot, { backgroundColor: color }]} />
+          {isUnread && <UnreadPulse color={color} size={7} />}
           <Text style={[recv.catLabel, { color }]}>{item.category}</Text>
           {item.is_expired ? (
             <View style={recv.expiredPill}>
@@ -122,8 +203,19 @@ const ReceivedDropItem = React.memo(({ item, onPress }) => {
         <Text style={recv.teaser} numberOfLines={2}>
           {item.already_unlocked
             ? `"${item.confession || 'media confession'}"`
-            : 'Someone has something to say to you… 👀'}
+            : presenceLine}
         </Text>
+
+        {readers > 0 && !item.already_unlocked && (
+          <View style={recv.presenceRow}>
+            <Eye size={rs(11)} color={color} strokeWidth={2} />
+            <Text style={[recv.presenceText, { color }]}>
+              {readers === 1
+                ? 'someone else is looking too'
+                : `${readers} are looking too`}
+            </Text>
+          </View>
+        )}
 
         <View style={recv.footer}>
           {item.already_unlocked ? (
@@ -774,6 +866,18 @@ const recv = StyleSheet.create({
     fontStyle:    'italic',
     lineHeight:   rf(23),
     marginBottom: rp(12),
+  },
+  presenceRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(6),
+    marginTop:     -rp(6),
+    marginBottom:  rp(10),
+  },
+  presenceText: {
+    fontSize:      rf(11),
+    fontStyle:     'italic',
+    letterSpacing: 0.3,
   },
   footer: { flexDirection: 'row', alignItems: 'center' },
   lockRow: {

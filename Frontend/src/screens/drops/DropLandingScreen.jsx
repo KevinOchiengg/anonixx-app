@@ -7,16 +7,21 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Animated, TextInput,
-  KeyboardAvoidingView, Platform, Image,
+  KeyboardAvoidingView, Platform, Image, Dimensions, Modal,
 } from 'react-native';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ArrowLeft, Clock, Flame, Heart, Lock, MessageCircle,
-  Moon, Send, Users, Zap, CheckCircle,
+  ArrowLeft, Clock, Flame, Flag, Heart, Lock, MessageCircle,
+  Moon, Send, Users, Zap, CheckCircle, X,
 } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
+import DropCardRenderer, { DROP_THEMES } from '../../components/drops/DropCardRenderer';
+import DropReactions from '../../components/drops/DropReactions';
+import DropExpiryTimer from '../../components/drops/DropExpiryTimer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useToast } from '../../components/ui/Toast';
 import { BACKENDS } from '../../config/api';
@@ -58,6 +63,17 @@ const PAY = {
   FAILED:         'failed',
 };
 
+// Section 19 — report reasons. Must match VALID_REPORT_REASONS in the backend.
+// Keep labels human; the backend enforces the enum slug.
+const REPORT_REASONS = [
+  { slug: 'abuse',             label: 'Abuse or threats' },
+  { slug: 'doxxing',           label: 'Names or identifies someone' },
+  { slug: 'self-harm-concern', label: "I'm worried about the person" },
+  { slug: 'spam',              label: 'Spam or irrelevant' },
+  { slug: 'explicit',          label: 'Explicit / unsafe content' },
+  { slug: 'other',             label: 'Something else' },
+];
+
 const getCatColor = (cat) => CATEGORY_COLORS[cat] ?? T.primary;
 const getCatEmoji = (cat) => CATEGORY_EMOJIS[cat] ?? '✨';
 
@@ -72,14 +88,16 @@ export default function DropLandingScreen({ route, navigation }) {
   const [drop, setDrop]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [fetchError, setFetchError] = useState(null); // 'not_found' | 'network'
-  const [reaction, setReaction]   = useState('');
-  const [reacted, setReacted]     = useState(false);
-  const [reactLoading, setReactLoading] = useState(false);
 
   const [payStep, setPayStep]         = useState(PAY.IDLE);
   const [phone, setPhone]             = useState('');
   const [connectionId, setConnectionId] = useState(null);
   const [coinsLoading, setCoinsLoading] = useState(false);
+
+  // Report flow (section 19)
+  const [reportOpen, setReportOpen]           = useState(false);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportSupportCopy, setReportSupportCopy] = useState(null);
 
   const videoPlayer  = useVideoPlayer(null, p => { p.loop = false; });
   const pulseAnim    = useRef(new Animated.Value(1)).current;
@@ -146,35 +164,6 @@ export default function DropLandingScreen({ route, navigation }) {
   }, [dropId]);
 
   useEffect(() => { loadDrop(); }, [loadDrop]);
-
-  // ── React ─────────────────────────────────────────────────────────────────────
-  const handleReact = useCallback(async () => {
-    if (!reaction.trim()) return;
-    if (!isAuthenticated) {
-      showToast({ type: 'info', message: 'Sign in to react.' });
-      navigation.navigate('Auth', { screen: 'Login' });
-      return;
-    }
-    setReactLoading(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${DROP_API}/api/v1/drops/${dropId}/react`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ reaction: reaction.trim() }),
-      });
-      if (res.ok) {
-        setReacted(true);
-        setReaction('');
-      } else {
-        showToast({ type: 'error', message: 'Already reacted to this drop.' });
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Could not send reaction.' });
-    } finally {
-      setReactLoading(false);
-    }
-  }, [reaction, isAuthenticated, dropId, navigation, showToast]);
 
   // ── Unlock via M-Pesa ─────────────────────────────────────────────────────────
   const handleUnlockMpesa = useCallback(async () => {
@@ -266,6 +255,61 @@ export default function DropLandingScreen({ route, navigation }) {
   const handleBrowseDrops  = useCallback(() => navigation.navigate('ConfessionMarketplace'), [navigation]);
   const handleRegister     = useCallback(() => navigation.navigate('Auth', { screen: 'Register' }), [navigation]);
   const handleLogin        = useCallback(() => navigation.navigate('Auth', { screen: 'Login' }), [navigation]);
+
+  // ── Report flow (section 19) ──────────────────────────────────
+  // Not a gesture we treat lightly — tapping it is enough of a signal,
+  // the modal only asks for one piece of context (the reason) and the
+  // backend is idempotent so double-taps don't double-count.
+  const handleOpenReport = useCallback(() => {
+    if (!isAuthenticated) {
+      showToast({
+        type: 'info',
+        message: 'Sign in to report this drop.',
+      });
+      return;
+    }
+    setReportSupportCopy(null);
+    setReportOpen(true);
+  }, [isAuthenticated, showToast]);
+
+  const handleCloseReport = useCallback(() => {
+    setReportOpen(false);
+  }, []);
+
+  const handleSubmitReport = useCallback(async (reasonSlug) => {
+    if (reportSubmitting) return;
+    setReportSubmitting(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${DROP_API}/api/v1/drops/${dropId}/report`, {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ reason: reasonSlug }),
+      });
+      if (!res.ok) {
+        showToast({ type: 'error', message: "Couldn't send the report. Try again." });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      // Self-harm-concern returns a support line — surface it inline.
+      if (data?.support_copy) {
+        setReportSupportCopy(data.support_copy);
+      } else {
+        setReportOpen(false);
+        showToast({
+          type: 'success',
+          message: data?.message || "Thanks. We'll review it quickly.",
+        });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong. Try again.' });
+    } finally {
+      setReportSubmitting(false);
+    }
+  }, [dropId, reportSubmitting, showToast]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Loading
@@ -366,7 +410,7 @@ export default function DropLandingScreen({ route, navigation }) {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Back button */}
+        {/* Back button + Report */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -375,6 +419,18 @@ export default function DropLandingScreen({ route, navigation }) {
           >
             <ArrowLeft size={rs(22)} color={T.text} />
           </TouchableOpacity>
+
+          {/* Report (section 19) — hidden on own drops + already-expired drops */}
+          {drop && !drop.is_own_drop && !drop.is_expired ? (
+            <TouchableOpacity
+              onPress={handleOpenReport}
+              hitSlop={HIT_SLOP}
+              style={styles.reportBtn}
+              accessibilityLabel="Report this drop"
+            >
+              <Flag size={rs(18)} color={T.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <ScrollView
@@ -383,84 +439,98 @@ export default function DropLandingScreen({ route, navigation }) {
           keyboardShouldPersistTaps="handled"
         >
           <Animated.View style={{ opacity: fadeAnim }}>
-            {/* Main confession card */}
+            {/* Main confession card — rendered via new DropCardRenderer */}
             <Animated.View style={[
-              styles.mainCard,
-              { borderColor: catColor, transform: [{ scale: pulseAnim }] },
+              styles.mainCardWrap,
+              { transform: [{ scale: pulseAnim }] },
             ]}>
-              <View style={styles.cardTop}>
+              {/* Context badges above the card */}
+              <View style={styles.contextRow}>
                 {drop.is_night_mode && (
                   <View style={styles.nightBadge}>
                     <Moon size={rs(12)} color={T.night} />
                     <Text style={styles.nightBadgeText}>Night Drop</Text>
                   </View>
                 )}
-
-                <View style={styles.catRow}>
-                  <Text style={styles.catEmoji}>{catEmoji}</Text>
-                  <Text style={[styles.catLabel, { color: catColor }]}>
-                    {drop.category?.toUpperCase()}
-                  </Text>
-                  {drop.is_group && (
-                    <View style={[styles.groupBadge, { backgroundColor: catColor + '22' }]}>
-                      <Users size={rs(12)} color={catColor} />
-                      <Text style={[styles.groupBadgeText, { color: catColor }]}>
-                        Group · {drop.group_size}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {drop.media_type === 'image' && drop.media_url ? (
-                  <View style={styles.mediaWrap}>
-                    <Image source={{ uri: drop.media_url }} style={styles.mediaImage} resizeMode="cover" />
-                    {drop.confession ? (
-                      <Text style={styles.confession}>"{drop.confession}"</Text>
-                    ) : null}
-                  </View>
-                ) : drop.media_type === 'video' && drop.media_url ? (
-                  <View style={styles.mediaWrap}>
-                    <VideoView
-                      player={videoPlayer}
-                      style={styles.mediaVideo}
-                      contentFit="cover"
-                      nativeControls
-                    />
-                    {drop.confession ? (
-                      <Text style={styles.confession}>"{drop.confession}"</Text>
-                    ) : null}
-                  </View>
-                ) : (
-                  <Text style={styles.confession}>"{drop.confession}"</Text>
-                )}
-
-                <View style={styles.cardMeta}>
-                  <View style={styles.metaItem}>
-                    <Clock size={rs(13)} color={T.textSecondary} />
-                    <Text style={styles.metaText}>
-                      {drop.is_expired ? 'Expired' : drop.time_left}
+                {drop.is_group && (
+                  <View style={[styles.groupBadge, { backgroundColor: catColor + '22' }]}>
+                    <Users size={rs(12)} color={catColor} />
+                    <Text style={[styles.groupBadgeText, { color: catColor }]}>
+                      Group · {drop.group_size}
                     </Text>
                   </View>
-                  <View style={styles.metaItem}>
-                    <Flame size={rs(13)} color={catColor} />
-                    <Text style={[styles.metaText, { color: catColor }]}>
-                      {drop.unlock_count} unlocked
+                )}
+                {/* Intensity pill (section 11) */}
+                {drop.intensity ? (
+                  <View style={[styles.intensityPill, { borderColor: catColor + '66' }]}>
+                    <Text style={[styles.intensityPillText, { color: catColor }]}>
+                      · {drop.intensity} ·
                     </Text>
                   </View>
-                </View>
-
-                {drop.reactions?.length > 0 && (
-                  <View style={styles.reactionsRow}>
-                    {drop.reactions.slice(-8).map((r, i) => (
-                      <View key={i} style={styles.reactionBubble}>
-                        <Text style={styles.reactionText}>{r}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <Text style={styles.cardBrand}>anonixx</Text>
+                ) : null}
               </View>
+
+              {/* One-word recognition hint (section 11) — only for directed drops */}
+              {drop.recognition_hint && !drop.is_own_drop ? (
+                <View style={styles.hintBanner}>
+                  <Text style={styles.hintBannerKicker}>a hint they left for you</Text>
+                  <Text style={[styles.hintBannerWord, { color: catColor }]}>
+                    "{drop.recognition_hint}"
+                  </Text>
+                  <Text style={styles.hintBannerNote}>
+                    You might recognize it. Or not. That's the whole thing.
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Video plays inline above the card (keeps native controls working) */}
+              {drop.media_type === 'video' && drop.media_url ? (
+                <View style={styles.mediaWrap}>
+                  <VideoView
+                    player={videoPlayer}
+                    style={styles.mediaVideo}
+                    contentFit="cover"
+                    nativeControls
+                  />
+                </View>
+              ) : null}
+
+              <DropCardRenderer
+                confession={drop.confession || ''}
+                moodTag={drop.mood_tag || drop.category || 'longing'}
+                emotionalContext={drop.emotional_context}
+                teaseMode={!!drop.tease_mode && !drop.is_own_drop && !drop.already_unlocked}
+                theme={drop.theme || 'cinematic-coral'}
+                mediaUrl={drop.media_type === 'image' ? drop.media_url : null}
+                layoutMode="split"
+                confessionId={drop.id || dropId}
+                seed={drop.id || dropId || drop.confession}
+                cardWidth={SCREEN_WIDTH - SPACING.md * 2}
+              />
+
+              {/* Meta strip — unlock count + 72h expiry timer */}
+              <View style={styles.cardMeta}>
+                <View style={styles.metaItem}>
+                  <Flame size={rs(13)} color={catColor} />
+                  <Text style={[styles.metaText, { color: catColor }]}>
+                    {drop.unlock_count || 0} unlocked
+                  </Text>
+                </View>
+                <DropExpiryTimer
+                  createdAt={drop.created_at}
+                  accent={(DROP_THEMES[drop.theme] || DROP_THEMES['cinematic-coral']).accent}
+                  align="right"
+                />
+              </View>
+
+              {/* Emotional reactions — text signals (spec section 8) */}
+              {!drop.is_expired && !drop.is_own_drop && drop.id ? (
+                <DropReactions
+                  dropId={drop.id}
+                  initialReaction={drop.user_reaction}
+                  accent={(DROP_THEMES[drop.theme] || DROP_THEMES['cinematic-coral']).accent}
+                />
+              ) : null}
             </Animated.View>
 
             {/* ── Expired ── */}
@@ -487,48 +557,6 @@ export default function DropLandingScreen({ route, navigation }) {
 
             ) : (
               <>
-                {/* Reaction */}
-                {!reacted ? (
-                  <View style={styles.reactSection}>
-                    <Text style={styles.sectionTitle}>Send a free reaction first</Text>
-                    <Text style={styles.sectionSub}>
-                      One emoji or word — they'll see it, but not who sent it.
-                    </Text>
-                    <View style={styles.reactRow}>
-                      <TextInput
-                        style={styles.reactInput}
-                        value={reaction}
-                        onChangeText={setReaction}
-                        placeholder="😍 or 'yes'"
-                        placeholderTextColor={T.textSecondary}
-                        maxLength={10}
-                      />
-                      <TouchableOpacity
-                        style={[
-                          styles.reactBtn,
-                          { backgroundColor: catColor },
-                          !reaction.trim() && { opacity: 0.4 },
-                        ]}
-                        onPress={handleReact}
-                        disabled={!reaction.trim() || reactLoading}
-                        hitSlop={HIT_SLOP}
-                      >
-                        {reactLoading
-                          ? <ActivityIndicator size="small" color="#fff" />
-                          : <Send size={rs(16)} color="#fff" />
-                        }
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.reactedBox}>
-                    <CheckCircle size={rs(18)} color={catColor} />
-                    <Text style={[styles.reactedText, { color: catColor }]}>
-                      Reaction sent 👀 They'll see it.
-                    </Text>
-                  </View>
-                )}
-
                 {/* Unlock section */}
                 <View style={styles.unlockSection}>
                   <View style={[styles.lockIconWrap, { backgroundColor: catColor + '15' }]}>
@@ -678,6 +706,67 @@ export default function DropLandingScreen({ route, navigation }) {
             </View>
           </Animated.View>
         </ScrollView>
+
+        {/* Report modal (section 19) */}
+        <Modal
+          visible={reportOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={handleCloseReport}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.reportBackdrop}
+            onPress={handleCloseReport}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.reportSheet}>
+              <View style={styles.reportHeader}>
+                <Text style={styles.reportTitle}>Why are you reporting this?</Text>
+                <TouchableOpacity
+                  onPress={handleCloseReport}
+                  hitSlop={HIT_SLOP}
+                  style={styles.reportClose}
+                >
+                  <X size={rs(18)} color={T.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.reportSub}>
+                Reports stay anonymous. Nobody is told it was you.
+              </Text>
+
+              {reportSupportCopy ? (
+                <View style={styles.supportBox}>
+                  <Text style={styles.supportText}>{reportSupportCopy}</Text>
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, { backgroundColor: catColor, marginTop: SPACING.sm }]}
+                    onPress={handleCloseReport}
+                    hitSlop={HIT_SLOP}
+                  >
+                    <Text style={styles.primaryBtnText}>Okay</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.reasonList}>
+                  {REPORT_REASONS.map(({ slug, label }) => (
+                    <TouchableOpacity
+                      key={slug}
+                      style={[
+                        styles.reasonRow,
+                        reportSubmitting && { opacity: 0.5 },
+                      ]}
+                      onPress={() => handleSubmitReport(slug)}
+                      disabled={reportSubmitting}
+                      hitSlop={HIT_SLOP}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.reasonText}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -690,8 +779,11 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical:   SPACING.sm,
   },
   backBtn: {
     width: rs(40),
@@ -700,6 +792,89 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: T.surface,
+  },
+  reportBtn: {
+    width: rs(40),
+    height: rs(40),
+    borderRadius: rs(20),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.surface,
+  },
+
+  // Report modal (section 19)
+  reportBackdrop: {
+    flex:            1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent:  'flex-end',
+  },
+  reportSheet: {
+    backgroundColor:     T.surface,
+    borderTopLeftRadius:  RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingHorizontal:   SPACING.lg,
+    paddingTop:          SPACING.md,
+    paddingBottom:       SPACING.xl,
+    borderTopWidth:      1,
+    borderTopColor:      T.border,
+  },
+  reportHeader: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+  },
+  reportTitle: {
+    fontSize:   FONT.lg,
+    fontWeight: '800',
+    color:      T.text,
+    flex:       1,
+  },
+  reportClose: {
+    width:          rs(32),
+    height:         rs(32),
+    borderRadius:   rs(16),
+    alignItems:     'center',
+    justifyContent: 'center',
+    backgroundColor:T.surfaceAlt,
+  },
+  reportSub: {
+    fontSize:   FONT.sm,
+    color:      T.textSecondary,
+    marginTop:  rp(6),
+    marginBottom: SPACING.md,
+    lineHeight: rf(20),
+  },
+  reasonList: {
+    gap: rp(6),
+  },
+  reasonRow: {
+    backgroundColor:   T.surfaceAlt,
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(14),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+  },
+  reasonText: {
+    fontSize:   FONT.md,
+    color:      T.text,
+    fontWeight: '500',
+  },
+  supportBox: {
+    backgroundColor:   'rgba(255,99,74,0.06)',
+    borderColor:       'rgba(255,99,74,0.25)',
+    borderWidth:       1,
+    borderRadius:      RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   SPACING.md,
+    marginTop:         SPACING.sm,
+  },
+  supportText: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+    color:      T.text,
+    lineHeight: rf(22),
+    letterSpacing: 0.3,
   },
 
   content: {
@@ -714,6 +889,65 @@ const styles = StyleSheet.create({
   },
 
   // Confession card
+  mainCardWrap: {
+    marginBottom: SPACING.lg,
+    shadowColor:  '#000',
+    shadowOffset: { width: 0, height: rs(12) },
+    shadowOpacity:0.5,
+    shadowRadius: rs(24),
+    elevation:    12,
+  },
+  contextRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(8),
+    marginBottom:  SPACING.sm,
+    flexWrap:      'wrap',
+  },
+  intensityPill: {
+    paddingHorizontal: rp(10),
+    paddingVertical:   rp(3),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    backgroundColor:   'rgba(255,99,74,0.06)',
+  },
+  intensityPillText: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(10),
+    letterSpacing: 2,
+    textTransform: 'lowercase',
+  },
+  hintBanner: {
+    alignSelf:         'stretch',
+    marginBottom:      SPACING.md,
+    paddingHorizontal: rp(16),
+    paddingVertical:   rp(14),
+    borderLeftWidth:   rs(2),
+    borderLeftColor:   'rgba(255,255,255,0.10)',
+    backgroundColor:   'rgba(255,255,255,0.02)',
+    borderRadius:      RADIUS.sm,
+  },
+  hintBannerKicker: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         '#9A9AA3',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  hintBannerWord: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(22),
+    letterSpacing: 0.5,
+    lineHeight:    rf(30),
+    marginTop:     rp(6),
+  },
+  hintBannerNote: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         '#9A9AA3',
+    letterSpacing: 0.3,
+    marginTop:     rp(6),
+  },
   mainCard: {
     backgroundColor: T.surface,
     borderRadius: RADIUS.xl,

@@ -27,7 +27,10 @@ import ConnectScreen from '../screens/connect/ConnectScreen';
 import ConfessionMarketplaceScreen from '../screens/drops/ConfessionMarketPlaceScreen';
 import DropChatScreen from '../screens/drops/DropChatScreen';
 import DropLandingScreen from '../screens/drops/DropLandingScreen';
+import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
+import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
+import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
 import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
 
@@ -130,6 +133,9 @@ function ConnectStack() {
       <Stack.Screen name="ConnectMain" component={ConnectScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="ShareCard" component={ShareCardScreen} />
+      <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
+      <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
+      <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />
       <Stack.Screen name="DropLanding" component={DropLandingScreen} />
       <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
       <Stack.Screen name="DropChat" component={DropChatScreen} />

@@ -47,13 +47,23 @@ class CreateDropRequest(BaseModel):
     is_group: bool = False
     group_size: Optional[int] = None
     media_url: Optional[str] = None
-    media_type: Optional[str] = None  # "image" or "video"
+    media_type: Optional[str] = None  # "image" | "video" | "voice"
     target_user_id: Optional[str] = None  # private targeted drop
     intent: Optional[str] = None  # what the sender is open to
 
+    # Drop spec upgrade fields
+    theme: Optional[str] = None                  # "cinematic-coral", etc.
+    mood_tag: Optional[str] = None               # "longing", "restless", …
+    tease_mode: Optional[bool] = False           # cut confession mid-thought
+    intensity: Optional[str] = None              # "soft" | "heavy" | "devastating"
+    recognition_hint: Optional[str] = None       # one word, directed drops only
+    publisher_opt_in: Optional[bool] = False     # share anonymously on Anonixx social
+    duration_seconds: Optional[float] = None     # voice drops
+    waveform_data: Optional[List[float]] = None  # voice drops
+
 
 class ReactToDropRequest(BaseModel):
-    reaction: str  # single emoji or one word max
+    reaction: str  # text reaction per spec section 8 (e.g. "That hit me.")
 
 
 class MpesaUnlockRequest(BaseModel):
@@ -78,6 +88,57 @@ class RenewDropRequest(BaseModel):
 
 class CardImageRequest(BaseModel):
     card_image_url: str
+
+
+class PublishDropRequest(BaseModel):
+    # Double-consent publish flow — the frontend always sends confirmed=True
+    # on the final tap of DropsPublishScreen step 2.
+    confirmed: bool = True
+
+
+class ReportDropRequest(BaseModel):
+    reason: str                          # short enum-ish reason
+    note: Optional[str] = None           # optional free-text detail
+
+
+# ==================== SPEC CONSTANTS ====================
+
+# Drop themes — mirrors DROP_THEMES in the frontend (DropCardRenderer.jsx).
+# Tier-2 themes are never published and are 18+ gated.
+TIER_1_THEMES = {
+    "cinematic-coral", "ember-love", "ocean-ache", "twilight-blush",
+    "graphite-rose", "paperback-ivory", "midnight-rain", "goldleaf",
+}
+TIER_2_THEMES = {
+    "bruised-plum", "oxblood", "after-dark", "velvet-ash",
+    "nocturne-indigo", "smoked-gold",
+}
+VALID_THEMES = TIER_1_THEMES | TIER_2_THEMES
+
+VALID_MOOD_TAGS = {
+    "longing", "restless", "tender", "bitter", "hopeful",
+    "ashamed", "dangerous", "quiet", "unsent", "reckless",
+}
+
+VALID_INTENSITIES = {"soft", "heavy", "devastating"}
+
+# Section 8 — six text reactions. Anything else is rejected.
+VALID_REACTIONS = {
+    "That hit me.",
+    "I think I know who this is.",
+    "This feels like you.",
+    "I'm not ready to respond.",
+    "Say more.",
+    "I needed to read this.",
+}
+
+# Section 14 — daily drop cap for free tier. Premium users bypass.
+DAILY_DROP_LIMIT_FREE = 3
+
+# Section 19 — valid report reasons.
+VALID_REPORT_REASONS = {
+    "abuse", "doxxing", "self-harm-concern", "spam", "explicit", "other",
+}
 
 
 # ==================== HELPERS ====================
@@ -290,11 +351,12 @@ async def create_drop(
     if data.confession and len(data.confession.strip()) == 0:
         raise HTTPException(status_code=400, detail="Confession cannot be empty")
 
-    if data.confession and len(data.confession) > 200:
-        raise HTTPException(status_code=400, detail="Confession must be 200 characters or less")
+    if data.confession and len(data.confession) > 280:
+        # Spec section 3 bumped the card cap from 200 → 280 chars.
+        raise HTTPException(status_code=400, detail="Confession must be 280 characters or less")
 
-    if data.media_url and data.media_type not in ("image", "video"):
-        raise HTTPException(status_code=400, detail="media_type must be 'image' or 'video'")
+    if data.media_url and data.media_type not in ("image", "video", "voice"):
+        raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'voice'")
 
     if data.is_group and (not data.group_size or data.group_size < 2 or data.group_size > 10):
         raise HTTPException(status_code=400, detail="Group size must be between 2 and 10")
@@ -314,6 +376,55 @@ async def create_drop(
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # ── Spec upgrade field validation (sections 11, 13, 16) ─────
+    theme = (data.theme or "cinematic-coral").strip()
+    if theme not in VALID_THEMES:
+        raise HTTPException(status_code=400, detail="Unknown theme")
+
+    mood_tag = (data.mood_tag or "longing").strip().lower()
+    if mood_tag not in VALID_MOOD_TAGS:
+        raise HTTPException(status_code=400, detail="Unknown mood tag")
+
+    intensity = (data.intensity or "heavy").strip().lower()
+    if intensity not in VALID_INTENSITIES:
+        raise HTTPException(status_code=400, detail="intensity must be soft, heavy, or devastating")
+
+    # Tier 2 themes (After Dark) are 18+ only and never published on social.
+    # Server-side gate: deny-by-default — a user must have an explicit
+    # truthy `age_verified` on their user doc. Absence counts as "no".
+    # The frontend locks the UI at DropsComposeScreen, this is belt-and-
+    # suspenders for API callers that bypass the client.
+    is_tier2 = theme in TIER_2_THEMES
+    if is_tier2 and not bool(user.get("age_verified")):
+        raise HTTPException(
+            status_code=403,
+            detail="After Dark themes are 18+. Verify your age in Settings to unlock.",
+        )
+
+    # One-word recognition hint (section 11)
+    recognition_hint = None
+    if data.recognition_hint:
+        parts = data.recognition_hint.strip().split()
+        if parts:
+            recognition_hint = parts[0].lower()[:16]
+
+    # Publisher opt-in is forced off for Tier 2 themes regardless of client input.
+    publisher_opt_in = bool(data.publisher_opt_in) and not is_tier2
+
+    # ── Daily drop limit (section 14) ───────────────────────────
+    is_premium = bool(user.get("is_premium") or user.get("premium_active"))
+    if not is_premium:
+        start_of_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
+        drops_today = await db["drops"].count_documents({
+            "sender_id": current_user_id,
+            "created_at": {"$gte": start_of_day},
+        })
+        if drops_today >= DAILY_DROP_LIMIT_FREE:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Daily drop limit reached ({DAILY_DROP_LIMIT_FREE}). Come back tomorrow or upgrade to Premium.",
+            )
 
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD
@@ -339,6 +450,21 @@ async def create_drop(
         "target_user_id": data.target_user_id or None,
         "intent": data.intent if data.intent in VALID_INTENTS else None,
         "created_at": now_utc(),
+
+        # ── Drop spec upgrade fields ──────────────────────────
+        "theme": theme,
+        "mood_tag": mood_tag,
+        "tease_mode": bool(data.tease_mode),
+        "intensity": intensity,
+        "recognition_hint": recognition_hint,
+        "publisher_opt_in": publisher_opt_in,
+        "tier": 2 if is_tier2 else 1,
+        "published_at": None,            # set by POST /drops/:id/publish
+        "duration_seconds": float(data.duration_seconds) if data.duration_seconds else None,
+        "waveform_data": (data.waveform_data or None) if data.media_type == "voice" else None,
+        "reaction_counts": {r: 0 for r in VALID_REACTIONS},
+        "report_count": 0,
+        "moderation_status": "visible",   # "visible" | "flagged" | "hidden"
     }
 
     await db["drops"].insert_one(drop)
@@ -431,6 +557,8 @@ async def get_marketplace(
         "is_active": True,
         "expires_at": {"$gt": now_utc()},
         "target_user_id": None,  # only public drops appear in marketplace
+        # Hide flagged/hidden content from the public feed (section 19).
+        "moderation_status": {"$nin": ["flagged", "hidden"]},
     }
 
     if category and category in CATEGORIES:
@@ -477,8 +605,18 @@ async def get_marketplace(
             "reactions": drop.get("reactions", [])[-5:],
             "time_left": get_time_left(drop["expires_at"]),
             "time_ago": get_time_ago(drop["created_at"]),
+            "created_at": drop["created_at"].isoformat() if drop.get("created_at") else None,
             "already_unlocked": already_unlocked,
             "intent": drop.get("intent"),
+
+            # ── Drop spec upgrade surface ────────────────────
+            "theme":       drop.get("theme", "cinematic-coral"),
+            "mood_tag":    drop.get("mood_tag"),
+            "tease_mode":  bool(drop.get("tease_mode")),
+            "intensity":   drop.get("intensity"),
+            "tier":        drop.get("tier", 1),
+            "duration_seconds": drop.get("duration_seconds"),
+            "waveform_data":    drop.get("waveform_data"),
         })
 
     return {
@@ -590,6 +728,27 @@ async def get_drop_landing(
                 )
             await update_vibe_score(drop["sender_id"], "reaction_received", db)
 
+    # Stamp read_at for the targeted recipient the first time they open
+    # the landing. Idempotent: $setOnInsert preserves the original timestamp
+    # so the unread pulse in DropsInboxScreen.ReceivedDropItem quiets once
+    # and stays quiet even if they re-open later.
+    if (
+        current_user_id
+        and drop.get("target_user_id")
+        and current_user_id == drop.get("target_user_id")
+        and current_user_id != drop["sender_id"]
+    ):
+        await db["drop_inbox_reads"].update_one(
+            {"drop_id": drop_id, "viewer_id": current_user_id},
+            {"$setOnInsert": {
+                "drop_id":   drop_id,
+                "viewer_id": current_user_id,
+                "sender_id": drop["sender_id"],
+                "read_at":   now_utc(),
+            }},
+            upsert=True,
+        )
+
     # Check if already unlocked
     already_unlocked = False
     if current_user_id:
@@ -599,24 +758,65 @@ async def get_drop_landing(
         })
         already_unlocked = unlock is not None
 
+    # What reaction (if any) has the viewer already sent? (section 8)
+    user_reaction = None
+    if current_user_id:
+        my_react = await db["drop_reactions"].find_one({
+            "drop_id": drop_id,
+            "reactor_id": current_user_id,
+        })
+        if my_react and my_react.get("reaction") in VALID_REACTIONS:
+            user_reaction = my_react["reaction"]
+
+    # Concurrent readers — "N are looking too" presence (section 12).
+    # Count distinct viewers who looked in the last 5 minutes.
+    five_min_ago = now_utc() - timedelta(minutes=5)
+    readers_now = await db["admirer_logs"].count_documents({
+        "drop_id":   drop_id,
+        "viewed_at": {"$gte": five_min_ago},
+    })
+    # Subtract the current viewer from "others looking too" count.
+    if current_user_id:
+        readers_now = max(0, readers_now - 1)
+
     return {
-        "id": drop_id,
-        "confession": drop.get("confession"),
-        "media_url": drop.get("media_url"),
-        "media_type": drop.get("media_type"),
-        "category": drop["category"],
-        "is_group": drop["is_group"],
-        "group_size": drop.get("group_size"),
-        "price": drop["price"],
-        "is_night_mode": drop.get("is_night_mode", False),
-        "is_expired": is_expired,
-        "time_left": get_time_left(drop["expires_at"]) if not is_expired else "expired",
-        "unlock_count": drop.get("unlock_count", 0),
-        "admirer_count": drop.get("admirer_count", 0),
-        "reactions": drop.get("reactions", []),
+        "id":               drop_id,
+        "confession":       drop.get("confession"),
+        "media_url":        drop.get("media_url"),
+        "media_type":       drop.get("media_type"),
+        "category":         drop["category"],
+        "is_group":         drop["is_group"],
+        "group_size":       drop.get("group_size"),
+        "price":            drop["price"],
+        "is_night_mode":    drop.get("is_night_mode", False),
+        "is_expired":       is_expired,
+        "time_left":        get_time_left(drop["expires_at"]) if not is_expired else "expired",
+        "unlock_count":     drop.get("unlock_count", 0),
+        "admirer_count":    drop.get("admirer_count", 0),
+        "reactions":        drop.get("reactions", []),
+        "reaction_counts":  drop.get("reaction_counts", {r: 0 for r in VALID_REACTIONS}),
+        "user_reaction":    user_reaction,
+        "readers_now":      readers_now,
         "already_unlocked": already_unlocked,
-        "is_own_drop": current_user_id == drop["sender_id"] if current_user_id else False,
-        "time_ago": get_time_ago(drop["created_at"]),
+        "is_own_drop":      current_user_id == drop["sender_id"] if current_user_id else False,
+        "time_ago":         get_time_ago(drop["created_at"]),
+        "created_at":       drop["created_at"].isoformat() if drop.get("created_at") else None,
+
+        # ── Drop spec upgrade surface ────────────────────────
+        "theme":             drop.get("theme", "cinematic-coral"),
+        "mood_tag":          drop.get("mood_tag"),
+        "tease_mode":        bool(drop.get("tease_mode")),
+        "intensity":         drop.get("intensity"),
+        # Hint is only shown to the target, never to random marketplace viewers.
+        "recognition_hint":  drop.get("recognition_hint") if (
+            not drop.get("target_user_id")
+            or current_user_id == drop.get("target_user_id")
+        ) else None,
+        "tier":              drop.get("tier", 1),
+        "published_at":      drop["published_at"].isoformat() if drop.get("published_at") else None,
+        "duration_seconds":  drop.get("duration_seconds"),
+        "waveform_data":     drop.get("waveform_data"),
+        "moderation_status": drop.get("moderation_status", "visible"),
     }
 
 
@@ -926,16 +1126,23 @@ async def react_to_drop(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """Send one anonymous reaction before paying. Max 1 per user per drop."""
+    """
+    Send exactly one text-reaction per user per drop (spec section 8).
+    If the user already reacted, the new reaction *replaces* the old one —
+    the frontend treats it as a toggle.
+
+    Reactions must be one of the six canonical spec lines in VALID_REACTIONS.
+    """
     reaction = data.reaction.strip()
-    if not reaction:
-        raise HTTPException(status_code=400, detail="Reaction cannot be empty")
-    if len(reaction) > 10:
-        raise HTTPException(status_code=400, detail="Reaction too long — emoji or one word only")
+    if reaction not in VALID_REACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Reaction must be one of the six spec lines.",
+        )
 
     try:
         drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except:
+    except Exception:
         raise HTTPException(status_code=404, detail="Drop not found")
 
     if not drop:
@@ -947,47 +1154,81 @@ async def react_to_drop(
     if _ensure_aware(drop["expires_at"]) < now_utc():
         raise HTTPException(status_code=400, detail="This drop has expired")
 
-    # One reaction per user per drop
+    # Atomic upsert: one reaction per user per drop. If one exists we rotate
+    # the counts so the old reaction is decremented and the new one bumped.
     existing = await db["drop_reactions"].find_one({
         "drop_id": drop_id,
-        "reactor_id": current_user_id
-    })
-    if existing:
-        raise HTTPException(status_code=400, detail="You already reacted to this drop")
-
-    await db["drop_reactions"].insert_one({
-        "_id": ObjectId(),
-        "drop_id": drop_id,
         "reactor_id": current_user_id,
-        "reaction": reaction,
-        "created_at": now_utc()
     })
 
-    # Append reaction to drop (store last 20 only)
-    await db["drops"].update_one(
-        {"_id": ObjectId(drop_id)},
+    prev_reaction = existing.get("reaction") if existing else None
+    if prev_reaction == reaction:
+        # Idempotent — no-op.
+        return {"message": "Already sent", "reaction": reaction}
+
+    await db["drop_reactions"].update_one(
+        {"drop_id": drop_id, "reactor_id": current_user_id},
         {
-            "$push": {
-                "reactions": {
-                    "$each": [reaction],
-                    "$slice": -20
-                }
-            }
-        }
+            "$set": {
+                "drop_id":     drop_id,
+                "reactor_id":  current_user_id,
+                "reaction":    reaction,
+                "updated_at":  now_utc(),
+            },
+            "$setOnInsert": {"created_at": now_utc()},
+        },
+        upsert=True,
     )
 
-    # Notify sender
-    reaction_total = len(drop.get("reactions", [])) + 1
-    if reaction_total in [1, 5, 10, 20]:
-        await send_push_notification(
-            drop["sender_id"],
-            f"Someone reacted to your confession {reaction}",
-            f"{reaction_total} reactions so far. People are feeling it.",
-            db
-        )
-    await update_vibe_score(drop["sender_id"], "reaction_received", db)
+    # Keep the per-reaction counts on the drop doc in sync.
+    inc = {f"reaction_counts.{reaction}": 1}
+    if prev_reaction and prev_reaction in VALID_REACTIONS:
+        inc[f"reaction_counts.{prev_reaction}"] = -1
+    await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": inc})
+
+    # Notify sender on milestone counts — only for a fresh first-time reaction.
+    if not existing:
+        reaction_total = await db["drop_reactions"].count_documents({"drop_id": drop_id})
+        if reaction_total in (1, 5, 10, 25, 50):
+            await send_push_notification(
+                drop["sender_id"],
+                "Someone reacted to your confession",
+                f'"{reaction}" — {reaction_total} so far. People are feeling it.',
+                db,
+            )
+        await update_vibe_score(drop["sender_id"], "reaction_received", db)
 
     return {"message": "Reaction sent", "reaction": reaction}
+
+
+@router.delete("/{drop_id}/react")
+async def unreact_to_drop(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    Remove the current user's reaction on this drop ("take it back" in the UI).
+    Silent-idempotent: returns 200 even if no reaction existed.
+    """
+    try:
+        ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    existing = await db["drop_reactions"].find_one_and_delete({
+        "drop_id":    drop_id,
+        "reactor_id": current_user_id,
+    })
+    if existing:
+        prev = existing.get("reaction")
+        if prev in VALID_REACTIONS:
+            await db["drops"].update_one(
+                {"_id": ObjectId(drop_id)},
+                {"$inc": {f"reaction_counts.{prev}": -1}},
+            )
+
+    return {"message": "Reaction withdrawn"}
 
 
 # ==================== UNLOCK — COINS ====================
@@ -1707,19 +1948,37 @@ async def get_drops_inbox(
         "is_active": True,
         "expires_at": {"$gt": now_utc()}
     }).sort("created_at", -1):
+        drop_id = str(drop["_id"])
+        # Aggregate reaction counts for sender's own dashboard.
+        r_counts = drop.get("reaction_counts") or {r: 0 for r in VALID_REACTIONS}
         active_drops.append({
-            "id": str(drop["_id"]),
-            "confession": drop.get("confession"),
-            "media_url": drop.get("media_url"),
-            "media_type": drop.get("media_type"),
-            "card_image_url": drop.get("card_image_url"),
-            "category": drop["category"],
-            "unlock_count": drop.get("unlock_count", 0),
-            "admirer_count": drop.get("admirer_count", 0),
-            "reactions": drop.get("reactions", []),
-            "time_left": get_time_left(drop["expires_at"]),
-            "is_night_mode": drop.get("is_night_mode", False),
-            "share_link": f"{settings.BASE_URL}/api/v1/drops/{str(drop['_id'])}/open",
+            "id":              drop_id,
+            "confession":      drop.get("confession"),
+            "media_url":       drop.get("media_url"),
+            "media_type":      drop.get("media_type"),
+            "card_image_url":  drop.get("card_image_url"),
+            "category":        drop["category"],
+            "unlock_count":    drop.get("unlock_count", 0),
+            "admirer_count":   drop.get("admirer_count", 0),
+            "reactions":       drop.get("reactions", []),
+            "reaction_counts": r_counts,
+            "time_left":       get_time_left(drop["expires_at"]),
+            "is_night_mode":   drop.get("is_night_mode", False),
+            "share_link":      f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open",
+            "created_at":      drop["created_at"].isoformat() if drop.get("created_at") else None,
+
+            # ── Drop spec upgrade surface ────────────────────
+            "theme":            drop.get("theme", "cinematic-coral"),
+            "mood_tag":         drop.get("mood_tag"),
+            "tease_mode":       bool(drop.get("tease_mode")),
+            "intensity":        drop.get("intensity"),
+            "recognition_hint": drop.get("recognition_hint"),
+            "tier":             drop.get("tier", 1),
+            "published_at":     drop["published_at"].isoformat() if drop.get("published_at") else None,
+            "publisher_opt_in": bool(drop.get("publisher_opt_in")),
+            "duration_seconds": drop.get("duration_seconds"),
+            "waveform_data":    drop.get("waveform_data"),
+            "moderation_status": drop.get("moderation_status", "visible"),
         })
 
     # Connections (chats)
@@ -1762,17 +2021,38 @@ async def get_received_drops(
     Sender identity is never exposed — not even after unlock.
     """
     received = []
+    five_min_ago = now_utc() - timedelta(minutes=5)
+
     async for drop in db["drops"].find({
         "target_user_id": current_user_id,
         "is_active": True,
+        "moderation_status": {"$nin": ["hidden"]},
     }).sort("created_at", -1).limit(50):
-        # Check if already unlocked by this user
+        drop_id = str(drop["_id"])
+
         already_unlocked = await db["drop_connections"].find_one({
-            "drop_id": str(drop["_id"]),
+            "drop_id":     drop_id,
             "unlocker_id": current_user_id,
         })
+
+        # Unread tracking: we stamp `read_at` the first time the recipient
+        # opens the landing screen. `/received` itself never consumes the
+        # unread state — that's what drives the pulse in the inbox.
+        inbox_read = await db["drop_inbox_reads"].find_one({
+            "drop_id":   drop_id,
+            "viewer_id": current_user_id,
+        })
+        read_at = inbox_read.get("read_at") if inbox_read else None
+
+        # Presence: other people looking concurrently (last 5 min).
+        readers_now = await db["admirer_logs"].count_documents({
+            "drop_id":   drop_id,
+            "viewed_at": {"$gte": five_min_ago},
+            "viewer_id": {"$ne": current_user_id},
+        })
+
         received.append({
-            "id":             str(drop["_id"]),
+            "id":             drop_id,
             "confession":     drop.get("confession"),
             "media_url":      drop.get("media_url"),
             "media_type":     drop.get("media_type"),
@@ -1785,9 +2065,66 @@ async def get_received_drops(
             "reactions":      drop.get("reactions", []),
             "already_unlocked": bool(already_unlocked),
             "price":          drop.get("price", 2),
+            "created_at":     drop["created_at"].isoformat() if drop.get("created_at") else None,
+            "sent_at":        drop["created_at"].isoformat() if drop.get("created_at") else None,
+            "read_at":        read_at.isoformat() if read_at else None,
+            "readers_now":    readers_now,
+
+            # ── Drop spec upgrade surface ────────────────────
+            "theme":            drop.get("theme", "cinematic-coral"),
+            "mood_tag":         drop.get("mood_tag"),
+            "tease_mode":       bool(drop.get("tease_mode")),
+            "intensity":        drop.get("intensity"),
+            "recognition_hint": drop.get("recognition_hint"),
+            "tier":             drop.get("tier", 1),
+            "duration_seconds": drop.get("duration_seconds"),
+            "waveform_data":    drop.get("waveform_data"),
         })
 
     return {"received": received}
+
+
+@router.post("/{drop_id}/mark-read")
+async def mark_drop_read(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    Stamp `read_at` on a drop the current user is the target of.
+    Idempotent — first call wins, re-opens don't overwrite the timestamp.
+    Silent no-op when the caller isn't the target (we never leak whether
+    a drop has a target or who it is, so non-targets just get {ok: true}).
+    """
+    if not ObjectId.is_valid(drop_id):
+        raise HTTPException(status_code=400, detail="Invalid drop ID")
+
+    drop = await db["drops"].find_one(
+        {"_id": ObjectId(drop_id)},
+        {"target_user_id": 1, "sender_id": 1},
+    )
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    # Only the targeted recipient can mark-read. Anyone else gets a silent
+    # ok so we don't expose targeting metadata through timing/error shape.
+    if (
+        drop.get("target_user_id")
+        and current_user_id == drop.get("target_user_id")
+        and current_user_id != drop.get("sender_id")
+    ):
+        await db["drop_inbox_reads"].update_one(
+            {"drop_id": drop_id, "viewer_id": current_user_id},
+            {"$setOnInsert": {
+                "drop_id":   drop_id,
+                "viewer_id": current_user_id,
+                "sender_id": drop["sender_id"],
+                "read_at":   now_utc(),
+            }},
+            upsert=True,
+        )
+
+    return {"ok": True}
 
 
 # ==================== VIBE SCORE ====================
@@ -1840,4 +2177,201 @@ def _next_tier(score: int) -> int:
         if score < t:
             return t
     return score
-    #noma
+
+
+# ==================== DAILY LIMIT (section 14) ====================
+
+@router.get("/daily-limit")
+async def get_daily_limit(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    How many drops the current user has posted today vs the cap.
+    The frontend (DropsComposeScreen) uses this to render the
+    "N of 3 drops left today" strip and gate the Drop button.
+
+    Premium users get `unlimited: true`.
+    """
+    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    is_premium = bool(user.get("is_premium") or user.get("premium_active"))
+    if is_premium:
+        return {
+            "unlimited": True,
+            "used":      0,
+            "limit":     None,
+            "left":      None,
+            "resets_at": None,
+        }
+
+    start_of_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow     = start_of_day + timedelta(days=1)
+
+    used = await db["drops"].count_documents({
+        "sender_id": current_user_id,
+        "created_at": {"$gte": start_of_day},
+    })
+
+    return {
+        "unlimited": False,
+        "used":      used,
+        "limit":     DAILY_DROP_LIMIT_FREE,
+        "left":      max(0, DAILY_DROP_LIMIT_FREE - used),
+        "resets_at": tomorrow.isoformat(),
+    }
+
+
+# ==================== PUBLISH (section 16) ====================
+
+@router.post("/{drop_id}/publish")
+async def publish_drop(
+    drop_id: str,
+    data: PublishDropRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    Final consent for a drop to leave Anonixx and appear on the
+    Anonixx Publisher social pages. The client only calls this after
+    two explicit confirmations (DropsPublishScreen steps 1 + 2).
+
+    Tier 2 drops can never be published — the server refuses.
+    """
+    if not data.confirmed:
+        raise HTTPException(status_code=400, detail="Explicit confirmation required")
+
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    if drop["sender_id"] != current_user_id:
+        raise HTTPException(status_code=403, detail="Only the sender can publish this drop")
+
+    if drop.get("tier") == 2 or drop.get("theme") in TIER_2_THEMES:
+        raise HTTPException(
+            status_code=400,
+            detail="After Dark drops stay inside Anonixx and can never be published.",
+        )
+
+    if drop.get("moderation_status") == "hidden":
+        raise HTTPException(status_code=400, detail="This drop is under review and cannot be published.")
+
+    if drop.get("published_at"):
+        return {"message": "Already published", "published_at": drop["published_at"].isoformat()}
+
+    published_at = now_utc()
+    await db["drops"].update_one(
+        {"_id": ObjectId(drop_id)},
+        {"$set": {
+            "publisher_opt_in": True,
+            "published_at":     published_at,
+        }},
+    )
+
+    # Also log it to the publisher queue for the social ops team.
+    await db["publisher_queue"].insert_one({
+        "_id":            ObjectId(),
+        "drop_id":        drop_id,
+        "sender_id":      current_user_id,
+        "theme":          drop.get("theme"),
+        "media_type":     drop.get("media_type"),
+        "confession":     drop.get("confession"),
+        "media_url":      drop.get("media_url"),
+        "submitted_at":   published_at,
+        "status":         "queued",    # queued | scheduled | posted | rejected
+    })
+
+    return {
+        "message":      "Published to Anonixx social queue.",
+        "published_at": published_at.isoformat(),
+    }
+
+
+# ==================== MODERATION / REPORT (section 19) ====================
+
+@router.post("/{drop_id}/report")
+async def report_drop(
+    drop_id: str,
+    data: ReportDropRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    Flag a drop for review. One report per user per drop; 3 unique reports
+    flip the drop to `moderation_status: flagged` so it's hidden from the
+    marketplace while ops reviews it.
+
+    Self-harm-concern reports bypass the threshold — we hide immediately
+    and surface support resources to the reporter.
+    """
+    reason = (data.reason or "").strip().lower()
+    if reason not in VALID_REPORT_REASONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"reason must be one of: {', '.join(sorted(VALID_REPORT_REASONS))}",
+        )
+
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    # Idempotent: one report per user per drop.
+    existing = await db["drop_reports"].find_one({
+        "drop_id":     drop_id,
+        "reporter_id": current_user_id,
+    })
+    if existing:
+        return {"message": "Report already received. Thank you."}
+
+    note = (data.note or "").strip()[:500] or None
+
+    await db["drop_reports"].insert_one({
+        "_id":         ObjectId(),
+        "drop_id":     drop_id,
+        "reporter_id": current_user_id,
+        "reason":      reason,
+        "note":        note,
+        "created_at":  now_utc(),
+    })
+
+    # Bump the cached count on the drop doc.
+    await db["drops"].update_one(
+        {"_id": ObjectId(drop_id)},
+        {"$inc": {"report_count": 1}},
+    )
+
+    # Self-harm-concern → hide immediately, notify ops.
+    REPORT_THRESHOLD = 3
+    should_hide = (reason == "self-harm-concern") or (drop.get("report_count", 0) + 1 >= REPORT_THRESHOLD)
+
+    if should_hide and drop.get("moderation_status") != "hidden":
+        await db["drops"].update_one(
+            {"_id": ObjectId(drop_id)},
+            {"$set": {
+                "moderation_status": "flagged" if reason != "self-harm-concern" else "hidden",
+                "flagged_at":        now_utc(),
+            }},
+        )
+
+    # For self-harm reports, send the reporter a gentle support nudge.
+    support_copy = None
+    if reason == "self-harm-concern":
+        support_copy = (
+            "Thank you for caring enough to flag this. "
+            "If you're struggling too, you can talk to someone now — we're here."
+        )
+
+    return {
+        "message":      "Report received. We'll review it quickly.",
+        "hidden":       bool(should_hide),
+        "support_copy": support_copy,
+    }

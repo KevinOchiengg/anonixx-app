@@ -25,11 +25,40 @@ import TabNavigator from './TabNavigator';
 
 const Stack = createStackNavigator();
 
+// ─── Deep-link routing (spec section 17) ────────────────────────
+// Schemes:
+//   anonixx://drop/:dropId        → DropLandingScreen
+//   anonixx://confession          → ConfessionMarketplace
+//   anonixx://drops/inbox         → DropsInbox
+//   anonixx://drops/new           → Connect › DropsCompose
+//   anonixx://drops/voice         → Connect › DropsRecord
+//   anonixx://drops/publish       → Connect › DropsPublish
+//   https://anonixx.app/drop/:id  → DropLandingScreen  (tappable share link)
 const linking = {
-  prefixes: ['anonixx://'],
+  prefixes: [
+    'anonixx://',
+    'https://anonixx.app',
+    'https://www.anonixx.app',
+  ],
   config: {
     screens: {
-      DropLanding: 'drop/:dropId',
+      DropLanding:           'drop/:dropId',
+      ConfessionMarketplace: 'confession',
+      DropsInbox:            'drops/inbox',
+      DropChat:              'drop-chat/:connectionId',
+      VibeScore:             'vibe',
+      // Nested routes live inside TabNavigator › Connect stack
+      Main: {
+        screens: {
+          Connect: {
+            screens: {
+              DropsCompose: 'drops/new',
+              DropsRecord:  'drops/voice',
+              DropsPublish: 'drops/publish',
+            },
+          },
+        },
+      },
     },
   },
 };
