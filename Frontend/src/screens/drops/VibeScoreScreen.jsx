@@ -108,7 +108,7 @@ export default function VibeScoreScreen({ navigation }) {
           <Text style={styles.errorSub}>Start creating drops to build your vibe score.</Text>
           <TouchableOpacity
             style={styles.createDropBtn}
-            onPress={() => navigation.navigate('ShareCard')}
+            onPress={() => navigation.navigate('DropsCompose')}
           >
             <Flame size={18} color="#fff" />
             <Text style={styles.createDropBtnText}>Create your first Drop</Text>
@@ -263,7 +263,7 @@ export default function VibeScoreScreen({ navigation }) {
 
         <TouchableOpacity
           style={styles.createDropBtn}
-          onPress={() => navigation.navigate('ShareCard')}
+          onPress={() => navigation.navigate('DropsCompose')}
         >
           <Flame size={18} color="#fff" />
           <Text style={styles.createDropBtnText}>Create a Drop to earn points</Text>

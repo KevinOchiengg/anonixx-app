@@ -92,7 +92,7 @@ const DropsHero = React.memo(({ navigation }) => (
 
       <TouchableOpacity
         style={hero.dropBtn}
-        onPress={() => navigation.navigate('ShareCard')}
+        onPress={() => navigation.navigate('DropsCompose')}
         activeOpacity={0.85}
         hitSlop={HIT_SLOP}
       >
