@@ -437,7 +437,7 @@ export default function DropsInboxScreen({ navigation }) {
   const handleCardPress   = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
   const handleConnPress   = useCallback((id) => navigation.navigate('DropChat', { connectionId: id }), [navigation]);
   const handleRecvPress   = useCallback((id) => navigation.navigate('DropLanding', { dropId: id }), [navigation]);
-  const handleNewDrop     = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
+  const handleNewDrop     = useCallback(() => navigation.navigate('DropsCompose'), [navigation]);
   const handleMarketplace = useCallback(() => navigation.navigate('ConfessionMarketplace'), [navigation]);
   const handleVibeScore   = useCallback(() => navigation.navigate('VibeScore'), [navigation]);
 

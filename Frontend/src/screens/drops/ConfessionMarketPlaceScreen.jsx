@@ -333,7 +333,7 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
   }, [navigation]);
 
   const handleCreateDrop = useCallback(() => {
-    navigation.navigate('ShareCard');
+    navigation.navigate('DropsCompose');
   }, [navigation]);
 
   // ── Render helpers ───────────────────────────────────────────────────────────
