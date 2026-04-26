@@ -270,7 +270,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           ) : (
             <TouchableOpacity
               style={styles.loginBtn}
-              onPress={() => { onClose(); setTimeout(() => navigation.navigate('Auth', { screen: 'Login' }), 220); }}
+              onPress={() => { onClose(); setTimeout(() => navigation.navigate('AuthNav', { screen: 'Login' }), 220); }}
               hitSlop={HIT_SLOP}
               activeOpacity={0.8}
             >

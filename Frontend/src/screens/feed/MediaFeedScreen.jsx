@@ -782,7 +782,7 @@ export default function MediaFeedScreen({ route, navigation }) {
     async (postId) => {
       if (!isAuthenticated) {
         showToast({ type: 'warning', message: 'Sign in to like this.' });
-        navigation.navigate('Auth', { screen: 'Login' });
+        navigation.navigate('AuthNav', { screen: 'Login' });
         return;
       }
       const current = likeMap[postId];

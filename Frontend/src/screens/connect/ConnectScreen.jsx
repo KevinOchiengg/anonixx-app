@@ -1,66 +1,31 @@
-import React, { useCallback, useRef, useState } from 'react';
+/**
+ * ConnectScreen.jsx
+ *
+ * Connect tab home. Surfaces incoming connection requests + the Drops hero
+ * (compose CTA, Browse / Inbox / Vibe Score quick-nav).
+ *
+ * Visual language follows DropsComposeScreen — shared T tokens, PlayfairDisplay
+ * italic titles, DMSans body, coral accent.
+ */
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Dimensions, FlatList, RefreshControl, StyleSheet,
+  ActivityIndicator, Animated, FlatList, RefreshControl, StyleSheet,
   Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Flame, Inbox, Menu, ShoppingBag, Sparkles, UserCheck } from 'lucide-react-native';
+import {
+  Flame, Inbox, Menu, ShoppingBag, Sparkles, UserCheck,
+} from 'lucide-react-native';
+
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
-import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
-
-const { width: SW, height: SH } = Dimensions.get('window');
-
-// Coral particles scattered behind the screen content
-const PARTICLES = Array.from({ length: 28 }, (_, i) => ({
-  id:      i,
-  top:     Math.random() * SH,
-  left:    Math.random() * SW,
-  size:    Math.random() * rs(3) + rs(1),
-  opacity: Math.random() * 0.13 + 0.04,
-}));
-
-const CoralParticles = React.memo(() => (
-  <>
-    {PARTICLES.map(p => (
-      <View key={p.id} style={{
-        position:        'absolute',
-        top:             p.top,
-        left:            p.left,
-        width:           p.size,
-        height:          p.size,
-        borderRadius:    p.size,
-        backgroundColor: '#FF634A',
-        opacity:         p.opacity,
-        pointerEvents:   'none',
-      }} />
-    ))}
-  </>
-));
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  surfaceDeep:   '#0e1320',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.12)',
-  primaryMid:    'rgba(255,99,74,0.20)',
-  primaryBorder: 'rgba(255,99,74,0.30)',
-  primaryGlow:   'rgba(255,99,74,0.08)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#4a5068',
-  border:        'rgba(255,255,255,0.06)',
-  borderStrong:  'rgba(255,255,255,0.10)',
-  success:       '#4CAF50',
-  successDim:    'rgba(76,175,80,0.12)',
-  successBorder: 'rgba(76,175,80,0.25)',
-};
+import { T } from '../../utils/colorTokens';
+import {
+  rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT,
+} from '../../utils/responsive';
 
 const AVATAR_MAP = {
   ghost: '👻', shadow: '🌑', flame: '🔥', void: '🕳️',
@@ -78,87 +43,82 @@ function timeAgo(isoString) {
 }
 
 // ─── Drops Hero ───────────────────────────────────────────────
-const DropsHero = React.memo(({ navigation }) => (
-  <View style={hero.wrap}>
-    {/* Top row: title + drop button */}
-    <View style={hero.topRow}>
-      <View style={hero.titleBlock}>
-        <View style={hero.titleRow}>
-          <Text style={hero.title}>Drops</Text>
-          <Text style={hero.flame}>🔥</Text>
-        </View>
-        <Text style={hero.sub}>Post a confession. Get paid connections.</Text>
-      </View>
+const DropsHero = React.memo(({ navigation }) => {
+  const handleCompose     = useCallback(() => navigation.navigate('DropsCompose'),         [navigation]);
+  const handleBrowse      = useCallback(() => navigation.navigate('ConfessionMarketplace'), [navigation]);
+  const handleInbox       = useCallback(() => navigation.navigate('DropsInbox'),            [navigation]);
+  const handleVibe        = useCallback(() => navigation.navigate('VibeScore'),             [navigation]);
 
+  return (
+    <View style={hero.wrap}>
+      {/* Eyebrow */}
+      <Text style={hero.eyebrow}>ANONIXX DROPS</Text>
+
+      {/* Editorial title */}
+      <Text style={hero.title}>Drop a confession.</Text>
+      <Text style={hero.titleAlt}>See who catches it.</Text>
+
+      {/* Body copy */}
+      <Text style={hero.body}>
+        Share the thing you can't say out loud. Let the right stranger reach back.
+      </Text>
+
+      {/* Primary CTA */}
       <TouchableOpacity
         style={hero.dropBtn}
-        onPress={() => navigation.navigate('DropsCompose')}
-        activeOpacity={0.85}
+        onPress={handleCompose}
+        activeOpacity={0.9}
         hitSlop={HIT_SLOP}
       >
-        <Flame size={rs(14)} color="#fff" strokeWidth={2.5} />
+        <Flame size={rs(16)} color="#fff" strokeWidth={2.5} />
         <Text style={hero.dropBtnText}>Drop It</Text>
       </TouchableOpacity>
+
+      {/* Quick-nav tiles */}
+      <View style={hero.tiles}>
+        <QuickTile
+          Icon={ShoppingBag}
+          label="Browse"
+          sub="confessions"
+          onPress={handleBrowse}
+        />
+        <QuickTile
+          Icon={Inbox}
+          label="My Drops"
+          sub="inbox & reveals"
+          onPress={handleInbox}
+        />
+        <QuickTile
+          Icon={Sparkles}
+          label="Vibe Score"
+          sub="your rating"
+          onPress={handleVibe}
+        />
+      </View>
     </View>
+  );
+});
 
-    {/* Divider */}
-    <View style={hero.divider} />
-
-    {/* Action pills */}
-    <View style={hero.actions}>
-      <TouchableOpacity
-        style={hero.actionPill}
-        onPress={() => navigation.navigate('ConfessionMarketplace')}
-        activeOpacity={0.8}
-      >
-        <View style={hero.actionIcon}>
-          <ShoppingBag size={rs(15)} color={T.primary} strokeWidth={2} />
-        </View>
-        <View>
-          <Text style={hero.actionLabel}>Browse</Text>
-          <Text style={hero.actionSub}>confessions</Text>
-        </View>
-      </TouchableOpacity>
-
-      <View style={hero.actionSep} />
-
-      <TouchableOpacity
-        style={hero.actionPill}
-        onPress={() => navigation.navigate('DropsInbox')}
-        activeOpacity={0.8}
-      >
-        <View style={hero.actionIcon}>
-          <Inbox size={rs(15)} color={T.primary} strokeWidth={2} />
-        </View>
-        <View>
-          <Text style={hero.actionLabel}>My Drops</Text>
-          <Text style={hero.actionSub}>inbox & reveals</Text>
-        </View>
-      </TouchableOpacity>
-
-      <View style={hero.actionSep} />
-
-      <TouchableOpacity
-        style={hero.actionPill}
-        onPress={() => navigation.navigate('VibeScore')}
-        activeOpacity={0.8}
-      >
-        <View style={hero.actionIcon}>
-          <Sparkles size={rs(15)} color={T.primary} strokeWidth={2} />
-        </View>
-        <View>
-          <Text style={hero.actionLabel}>Vibe Score</Text>
-          <Text style={hero.actionSub}>your rating</Text>
-        </View>
-      </TouchableOpacity>
+// ─── Quick Tile ───────────────────────────────────────────────
+const QuickTile = React.memo(({ Icon, label, sub, onPress }) => (
+  <TouchableOpacity
+    style={tile.wrap}
+    onPress={onPress}
+    activeOpacity={0.85}
+    hitSlop={HIT_SLOP}
+  >
+    <View style={tile.iconBox}>
+      <Icon size={rs(16)} color={T.primary} strokeWidth={2} />
     </View>
-  </View>
+    <Text style={tile.label}>{label}</Text>
+    <Text style={tile.sub}>{sub}</Text>
+  </TouchableOpacity>
 ));
 
-// ─── Section Header ───────────────────────────────────────────
-const SectionHeader = React.memo(({ count }) => (
+// ─── Section Label ────────────────────────────────────────────
+const SectionLabel = React.memo(({ count }) => (
   <View style={sec.row}>
-    <UserCheck size={rs(14)} color={T.textSecondary} strokeWidth={2} />
+    <UserCheck size={rs(13)} color={T.textSec} strokeWidth={2} />
     <Text style={sec.label}>Pending Requests</Text>
     {count > 0 && (
       <View style={sec.badge}>
@@ -172,6 +132,7 @@ const SectionHeader = React.memo(({ count }) => (
 const RequestCard = React.memo(({ request, onAccept, onDecline, accepting }) => {
   const scaleAnim   = useRef(new Animated.Value(1)).current;
   const avatarColor = request.from_avatar_color || T.primary;
+  const isAccepting = accepting === request.request_id;
 
   const handleAccept = useCallback(() => {
     Animated.sequence([
@@ -184,62 +145,62 @@ const RequestCard = React.memo(({ request, onAccept, onDecline, accepting }) => 
     onDecline(request.request_id);
   }, [onDecline, request.request_id]);
 
-  const isAccepting = accepting === request.request_id;
-
   return (
     <Animated.View style={[card.wrap, { transform: [{ scale: scaleAnim }] }]}>
-      <View style={card.inner}>
-        {/* Avatar + info row */}
-        <View style={card.topRow}>
-          {/* Avatar with glow */}
-          <View style={card.avatarWrap}>
-            <View style={[card.avatarGlow, { backgroundColor: avatarColor + '20' }]} />
-            <View style={[card.avatar, { borderColor: avatarColor + '60' }]}>
-              <Text style={card.avatarEmoji}>{getAvatar(request.from_avatar)}</Text>
+      {/* Top — avatar, name, time */}
+      <View style={card.top}>
+        <View style={card.avatarWrap}>
+          <View style={[card.avatarGlow, { backgroundColor: avatarColor + '22' }]} />
+          <View style={[card.avatar, { borderColor: avatarColor + '66' }]}>
+            <Text style={card.avatarEmoji}>{getAvatar(request.from_avatar)}</Text>
+          </View>
+        </View>
+
+        <View style={card.info}>
+          <Text style={card.name} numberOfLines={1}>
+            {request.from_anonymous_name}
+          </Text>
+          <Text style={card.subtitle}>wants to connect anonymously</Text>
+          {request.from_vibe_tags?.length > 0 && (
+            <View style={card.tags}>
+              {request.from_vibe_tags.slice(0, 3).map(tag => (
+                <View
+                  key={tag}
+                  style={[card.tag, { borderColor: avatarColor + '55' }]}
+                >
+                  <Text style={[card.tagText, { color: avatarColor }]}>{tag}</Text>
+                </View>
+              ))}
             </View>
-          </View>
-
-          {/* Name + meta */}
-          <View style={card.info}>
-            <Text style={card.name}>{request.from_anonymous_name}</Text>
-            <Text style={card.subtitle}>wants to connect anonymously</Text>
-            {request.from_vibe_tags?.length > 0 && (
-              <View style={card.tags}>
-                {request.from_vibe_tags.slice(0, 3).map(tag => (
-                  <View key={tag} style={[card.tag, { borderColor: avatarColor + '50' }]}>
-                    <Text style={[card.tagText, { color: avatarColor }]}>{tag}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* Time */}
-          <Text style={card.time}>{timeAgo(request.created_at)}</Text>
+          )}
         </View>
 
-        {/* Action row */}
-        <View style={card.actions}>
-          <TouchableOpacity
-            style={[card.acceptBtn, { backgroundColor: avatarColor }]}
-            onPress={handleAccept}
-            disabled={isAccepting}
-            activeOpacity={0.85}
-          >
-            {isAccepting
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Text style={card.acceptText}>Accept</Text>
-            }
-          </TouchableOpacity>
+        <Text style={card.time}>{timeAgo(request.created_at)}</Text>
+      </View>
 
-          <TouchableOpacity
-            style={card.ignoreBtn}
-            onPress={handleDecline}
-            activeOpacity={0.7}
-          >
-            <Text style={card.ignoreText}>Pass</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Actions */}
+      <View style={card.actions}>
+        <TouchableOpacity
+          style={[card.acceptBtn, { backgroundColor: avatarColor }]}
+          onPress={handleAccept}
+          disabled={isAccepting}
+          activeOpacity={0.88}
+          hitSlop={HIT_SLOP}
+        >
+          {isAccepting
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={card.acceptText}>Accept</Text>
+          }
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={card.ignoreBtn}
+          onPress={handleDecline}
+          activeOpacity={0.7}
+          hitSlop={HIT_SLOP}
+        >
+          <Text style={card.ignoreText}>Pass</Text>
+        </TouchableOpacity>
       </View>
     </Animated.View>
   );
@@ -249,7 +210,7 @@ const RequestCard = React.memo(({ request, onAccept, onDecline, accepting }) => 
 const EmptyRequests = React.memo(() => (
   <View style={empty.wrap}>
     <View style={empty.iconWrap}>
-      <UserCheck size={rs(32)} color={T.textMuted} strokeWidth={1.5} />
+      <UserCheck size={rs(30)} color={T.textMute} strokeWidth={1.5} />
     </View>
     <Text style={empty.title}>No requests yet</Text>
     <Text style={empty.body}>
@@ -270,6 +231,14 @@ export default function ConnectScreen({ navigation }) {
   const [requestCount,    setRequestCount]    = useState(0);
   const [menuVisible,     setMenuVisible]     = useState(false);
 
+  // Entrance fade
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1, duration: 320, useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
   const loadRequests = useCallback(async () => {
     setLoadingRequests(true);
     try {
@@ -284,7 +253,7 @@ export default function ConnectScreen({ navigation }) {
         setRequestCount(data.count || 0);
       }
     } catch {
-      // silent
+      // silent — surface only on explicit user action
     } finally {
       setLoadingRequests(false);
     }
@@ -350,53 +319,57 @@ export default function ConnectScreen({ navigation }) {
   const ListHeader = (
     <>
       <DropsHero navigation={navigation} />
-      <SectionHeader count={requestCount} />
+      <SectionLabel count={requestCount} />
     </>
   );
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
-      {/* Coral particle background */}
-      <CoralParticles />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerLogo}>anonixx</Text>
+      {/* Top bar — brand + hamburger */}
+      <View style={styles.topBar}>
+        <Text style={styles.logo}>anonixx</Text>
         <TouchableOpacity
           onPress={() => setMenuVisible(true)}
           style={styles.menuBtn}
           hitSlop={HIT_SLOP}
+          activeOpacity={0.7}
         >
-          <Menu size={rs(20)} color={T.textSecondary} />
+          <Menu size={rs(20)} color={T.textSec} />
         </TouchableOpacity>
       </View>
 
-      {loadingRequests && !refreshing ? (
-        <>
-          <DropsHero navigation={navigation} />
-          <View style={styles.centered}>
-            <ActivityIndicator color={T.primary} />
-          </View>
-        </>
-      ) : (
-        <FlatList
-          data={requests}
-          keyExtractor={keyExtractor}
-          renderItem={renderRequest}
-          ListHeaderComponent={ListHeader}
-          ListEmptyComponent={<EmptyRequests />}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={T.primary}
-              colors={[T.primary]}
-            />
-          }
-        />
-      )}
+      <Animated.View style={[{ flex: 1, opacity: fadeAnim }]}>
+        {loadingRequests && !refreshing ? (
+          <>
+            <DropsHero navigation={navigation} />
+            <View style={styles.centered}>
+              <ActivityIndicator color={T.primary} />
+            </View>
+          </>
+        ) : (
+          <FlatList
+            data={requests}
+            keyExtractor={keyExtractor}
+            renderItem={renderRequest}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={<EmptyRequests />}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={T.primary}
+                colors={[T.primary]}
+              />
+            }
+            removeClippedSubviews
+            windowSize={9}
+            initialNumToRender={6}
+          />
+        )}
+      </Animated.View>
 
       <HamburgerMenu
         visible={menuVisible}
@@ -409,112 +382,118 @@ export default function ConnectScreen({ navigation }) {
 
 // ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: T.background },
+  safe:     { flex: 1, backgroundColor: T.background },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: rh(40) },
   listContent: { paddingBottom: rs(100) },
 
-  header: {
+  topBar: {
     flexDirection:     'row',
     alignItems:        'center',
     justifyContent:    'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(14),
+    paddingVertical:   SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
-  headerLogo: {
-    fontSize:      rs(18),
-    fontWeight:    '800',
+  logo: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.lg,
     color:         T.primary,
-    letterSpacing: -0.3,
+    letterSpacing: 0.3,
   },
   menuBtn: {
-    width:          rs(36),
-    height:         rs(36),
-    alignItems:     'center',
-    justifyContent: 'center',
-    borderRadius:   rs(18),
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    width:           rs(36),
+    height:          rs(36),
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderRadius:    rs(18),
+    backgroundColor: T.surfaceAlt,
   },
 });
 
-// ─── Drops Hero Styles ────────────────────────────────────────
+// ─── Hero Styles ──────────────────────────────────────────────
 const hero = StyleSheet.create({
   wrap: {
-    marginHorizontal: SPACING.md,
-    marginTop:        SPACING.md,
-    marginBottom:     SPACING.sm,
-    backgroundColor:  T.surfaceDeep,
-    borderRadius:     RADIUS.xl,
-    borderWidth:      1,
-    borderColor:      T.primaryBorder,
-    overflow:         'hidden',
-    padding:          SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop:        SPACING.lg,
+    paddingBottom:     SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  topRow: {
-    flexDirection:  'row',
-    alignItems:     'flex-start',
-    justifyContent: 'space-between',
-    marginBottom:   SPACING.sm,
+  eyebrow: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.textSec,
+    letterSpacing: 2.4,
+    textTransform: 'uppercase',
+    marginBottom:  SPACING.xs,
   },
-  titleBlock: { flex: 1, marginRight: SPACING.sm },
-  titleRow:   { flexDirection: 'row', alignItems: 'center', gap: rp(6), marginBottom: rp(4) },
   title: {
-    fontSize:      FONT.xl,
-    fontWeight:    '900',
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(30),
     color:         T.text,
-    letterSpacing: -0.5,
+    letterSpacing: 0.2,
+    lineHeight:    rf(38),
   },
-  flame: { fontSize: rf(20) },
-  sub: {
-    fontSize: FONT.xs,
-    color:    T.textSecondary,
-    lineHeight: rf(18),
+  titleAlt: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(30),
+    color:         T.primary,
+    letterSpacing: 0.2,
+    lineHeight:    rf(38),
+    marginBottom:  SPACING.sm,
+  },
+  body: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    letterSpacing: 0.2,
+    lineHeight:    rf(20),
+    marginBottom:  SPACING.md,
   },
 
   dropBtn: {
     flexDirection:     'row',
     alignItems:        'center',
-    gap:               rp(5),
-    backgroundColor:   T.primary,
+    justifyContent:    'center',
+    gap:               rp(8),
+    height:            BUTTON_HEIGHT,
     borderRadius:      RADIUS.md,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical:   rp(10),
-    flexShrink:        0,
+    backgroundColor:   T.primary,
+    shadowColor:       T.primary,
+    shadowOffset:      { width: 0, height: rs(4) },
+    shadowOpacity:     0.4,
+    shadowRadius:      rs(12),
+    elevation:         6,
+    marginBottom:      SPACING.md,
   },
   dropBtnText: {
-    fontSize:   FONT.sm,
-    fontWeight: '800',
-    color:      '#fff',
-    letterSpacing: 0.2,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.md,
+    color:         '#fff',
+    letterSpacing: 0.5,
   },
 
-  divider: {
-    height:           1,
-    backgroundColor:  T.primaryBorder,
-    marginVertical:   SPACING.sm,
-    opacity:          0.5,
-  },
-
-  actions: {
-    flexDirection:  'row',
-    alignItems:     'center',
-  },
-  actionSep: {
-    width:           1,
-    height:          rs(28),
-    backgroundColor: T.border,
-    marginHorizontal: SPACING.xs,
-  },
-  actionPill: {
-    flex:          1,
+  tiles: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           rp(8),
-    paddingVertical: rp(6),
-    paddingHorizontal: rp(4),
+    gap:           SPACING.sm,
   },
-  actionIcon: {
+});
+
+// ─── Quick Tile ───────────────────────────────────────────────
+const tile = StyleSheet.create({
+  wrap: {
+    flex:              1,
+    paddingHorizontal: rp(10),
+    paddingVertical:   rp(12),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+    backgroundColor:   T.surfaceAlt,
+    alignItems:        'center',
+    gap:               rp(6),
+  },
+  iconBox: {
     width:           rs(32),
     height:          rs(32),
     borderRadius:    rs(10),
@@ -523,51 +502,59 @@ const hero = StyleSheet.create({
     borderColor:     T.primaryBorder,
     alignItems:      'center',
     justifyContent:  'center',
-    flexShrink:      0,
   },
-  actionLabel: {
-    fontSize:   FONT.xs,
-    fontWeight: '700',
-    color:      T.text,
+  label: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(11),
+    color:         T.text,
+    letterSpacing: 0.3,
+    marginTop:     rp(2),
   },
-  actionSub: {
-    fontSize: rs(9),
-    color:    T.textMuted,
-    marginTop: rp(1),
+  sub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(9),
+    color:         T.textMute,
+    letterSpacing: 0.2,
   },
 });
 
-// ─── Section Header Styles ────────────────────────────────────
+// ─── Section Label ────────────────────────────────────────────
 const sec = StyleSheet.create({
   row: {
     flexDirection:     'row',
     alignItems:        'center',
     gap:               SPACING.xs,
     paddingHorizontal: SPACING.md,
-    paddingTop:        SPACING.md,
-    paddingBottom:     rp(10),
+    paddingTop:        SPACING.lg,
+    paddingBottom:     SPACING.sm,
   },
   label: {
-    fontSize:      FONT.xs,
-    fontWeight:    '700',
-    color:         T.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
     flex:          1,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(11),
+    color:         T.textSec,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginLeft:    rp(4),
   },
   badge: {
     backgroundColor:   T.primary,
     borderRadius:      rs(9),
-    minWidth:          rs(18),
-    height:            rs(18),
+    minWidth:          rs(20),
+    height:            rs(20),
     alignItems:        'center',
     justifyContent:    'center',
-    paddingHorizontal: rp(5),
+    paddingHorizontal: rp(6),
   },
-  badgeText: { color: '#fff', fontSize: rs(10), fontWeight: '700' },
+  badgeText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         '#fff',
+    letterSpacing: 0.3,
+  },
 });
 
-// ─── Request Card Styles ──────────────────────────────────────
+// ─── Request Card ─────────────────────────────────────────────
 const card = StyleSheet.create({
   wrap: {
     marginHorizontal: SPACING.md,
@@ -576,14 +563,10 @@ const card = StyleSheet.create({
     borderRadius:     RADIUS.lg,
     borderWidth:      1,
     borderColor:      T.border,
-    overflow:         'hidden',
+    padding:          SPACING.md,
+    gap:              SPACING.sm,
   },
-  inner: {
-    padding: SPACING.md,
-    gap:     SPACING.sm,
-  },
-
-  topRow: {
+  top: {
     flexDirection: 'row',
     alignItems:    'flex-start',
     gap:           SPACING.sm,
@@ -601,47 +584,50 @@ const card = StyleSheet.create({
     borderRadius: rs(34),
   },
   avatar: {
-    width:          rs(52),
-    height:         rs(52),
-    borderRadius:   rs(26),
-    alignItems:     'center',
-    justifyContent: 'center',
-    borderWidth:    1.5,
-    backgroundColor: T.surfaceDeep,
+    width:           rs(52),
+    height:          rs(52),
+    borderRadius:    rs(26),
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderWidth:     1.5,
+    backgroundColor: T.background,
   },
   avatarEmoji: { fontSize: rf(24) },
 
-  info: { flex: 1, gap: rp(4) },
+  info: { flex: 1, gap: rp(3) },
   name: {
-    fontSize:   FONT.md,
-    fontWeight: '700',
-    color:      T.text,
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.md,
+    color:         T.text,
+    letterSpacing: 0.2,
   },
   subtitle: {
-    fontSize: FONT.xs,
-    color:    T.textMuted,
-    fontStyle: 'italic',
+    fontFamily: 'DMSans-Italic',
+    fontSize:   rf(11),
+    color:      T.textMute,
   },
   tags: {
     flexDirection: 'row',
     flexWrap:      'wrap',
     gap:           rp(5),
-    marginTop:     rp(2),
+    marginTop:     rp(4),
   },
   tag: {
     paddingHorizontal: rp(8),
     paddingVertical:   rp(2),
     borderRadius:      RADIUS.sm,
     borderWidth:       1,
-    backgroundColor:   'rgba(255,255,255,0.03)',
+    backgroundColor:   T.surfaceAlt,
   },
   tagText: {
-    fontSize:   rs(10),
-    fontWeight: '600',
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(9),
+    letterSpacing: 0.3,
   },
   time: {
-    fontSize:  rs(10),
-    color:     T.textMuted,
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(10),
+    color:      T.textMute,
     flexShrink: 0,
   },
 
@@ -656,13 +642,13 @@ const card = StyleSheet.create({
     justifyContent:  'center',
     paddingVertical: rp(10),
     borderRadius:    RADIUS.md,
-    minHeight:       rs(38),
+    minHeight:       rs(40),
   },
   acceptText: {
-    fontSize:   FONT.sm,
-    fontWeight: '800',
-    color:      '#fff',
-    letterSpacing: 0.3,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         '#fff',
+    letterSpacing: 0.4,
   },
   ignoreBtn: {
     paddingHorizontal: SPACING.md,
@@ -672,17 +658,18 @@ const card = StyleSheet.create({
     borderColor:       T.border,
   },
   ignoreText: {
-    fontSize:   FONT.sm,
-    color:      T.textMuted,
-    fontWeight: '500',
+    fontFamily:    'DMSans-Regular',
+    fontSize:      FONT.sm,
+    color:         T.textMute,
+    letterSpacing: 0.3,
   },
 });
 
-// ─── Empty State Styles ───────────────────────────────────────
+// ─── Empty State ──────────────────────────────────────────────
 const empty = StyleSheet.create({
   wrap: {
     alignItems:        'center',
-    paddingVertical:   rh(32),
+    paddingVertical:   rh(40),
     paddingHorizontal: SPACING.xl,
     gap:               SPACING.sm,
   },
@@ -698,15 +685,18 @@ const empty = StyleSheet.create({
     marginBottom:    SPACING.xs,
   },
   title: {
-    fontSize:   FONT.lg,
-    fontWeight: '700',
-    color:      T.text,
-    textAlign:  'center',
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.lg,
+    color:         T.text,
+    letterSpacing: 0.3,
+    textAlign:     'center',
   },
   body: {
-    fontSize:   FONT.sm,
-    color:      T.textSecondary,
-    textAlign:  'center',
-    lineHeight: rf(22),
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    textAlign:     'center',
+    lineHeight:    rf(22),
+    letterSpacing: 0.2,
   },
 });

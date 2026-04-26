@@ -293,7 +293,7 @@ const CommentBottomSheet = React.memo(({
 
   const submitComment = useCallback(async (gifUrl = null) => {
     if (!gifUrl && !text.trim()) return;
-    if (!isAuthenticated) { navigation.navigate('Auth', { screen: 'Login' }); return; }
+    if (!isAuthenticated) { navigation.navigate('AuthNav', { screen: 'Login' }); return; }
     setSubmitting(true);
     try {
       const token = await AsyncStorage.getItem('token');
@@ -563,7 +563,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const handleLike = useCallback(async () => {
     if (!isAuthenticated) {
       showToast({ type: 'warning', message: 'Sign in to like confessions.' });
-      navigation.navigate('Auth', { screen: 'Login' });
+      navigation.navigate('AuthNav', { screen: 'Login' });
       return;
     }
     const newLiked = !isLiked;
@@ -589,7 +589,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const handleSave = useCallback(async () => {
     if (!isAuthenticated) {
       showToast({ type: 'info', message: 'Sign in to save confessions.' });
-      navigation.navigate('Auth', { screen: 'Login' });
+      navigation.navigate('AuthNav', { screen: 'Login' });
       return;
     }
     try {

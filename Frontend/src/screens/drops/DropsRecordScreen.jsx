@@ -38,7 +38,7 @@ import {
 } from 'expo-audio';
 import { useDispatch } from 'react-redux';
 import {
-  ChevronLeft, Globe, Lock, Mic, Pause, Play, RotateCcw, Send, Square,
+  Globe, Lock, Mic, Pause, Play, RotateCcw, Send, Square,
   Type as TypeIcon,
 } from 'lucide-react-native';
 
@@ -49,18 +49,8 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
 import { DROP_THEMES } from '../../components/drops/DropCardRenderer';
-
-// ─── Theme tokens ──────────────────────────────────────────────
-const T = {
-  background: '#0b0f18',
-  surface:    '#151924',
-  primary:    '#FF634A',
-  text:       '#EAEAF0',
-  textSec:    '#9A9AA3',
-  textMute:   '#4a4f62',
-  border:     'rgba(255,255,255,0.06)',
-  danger:     '#ef4444',
-};
+import { T } from '../../utils/colorTokens';
+import DropScreenHeader from '../../components/drops/DropScreenHeader';
 
 const SCREEN_W      = Dimensions.get('window').width;
 const MAX_DURATION  = 180;      // seconds — spec: 3 minutes
@@ -110,14 +100,15 @@ export default function DropsRecordScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
 
-  const theme     = route?.params?.theme   || 'cinematic-coral';
-  const moodTag   = route?.params?.moodTag || 'longing';
+  const theme     = route?.params?.theme    || 'cinematic-coral';
+  const moodTag   = route?.params?.moodTag  || 'longing';
+  const category  = route?.params?.category || 'love';
   const themeObj  = DROP_THEMES[theme] || DROP_THEMES['cinematic-coral'];
   const accent    = themeObj.accent;
 
   // ── Recorder ──────────────────────────────────────────────────
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY, 100);
-  const recState = useAudioRecorderState(recorder);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recState = useAudioRecorderState(recorder, 100);
 
   // ── State ─────────────────────────────────────────────────────
   const [recordedUri, setRecordedUri]     = useState(null);
@@ -330,7 +321,7 @@ export default function DropsRecordScreen({ navigation, route }) {
 
       // 3. Create drop
       const body = {
-        category:   'love',
+        category,
         media_url:  upData.secure_url,
         media_type: 'voice',
         theme,
@@ -437,13 +428,11 @@ export default function DropsRecordScreen({ navigation, route }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleCancel} hitSlop={HIT_SLOP}>
-            <ChevronLeft size={rs(24)} color={T.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Voice Drop</Text>
-          <View style={{ width: rs(24) }} />
-        </View>
+        <DropScreenHeader
+          title="Voice Drop"
+          navigation={navigation}
+          onBack={handleCancel}
+        />
 
         {/* Context strip */}
         <View style={styles.contextStrip}>
@@ -707,22 +696,6 @@ export default function DropsRecordScreen({ navigation, route }) {
 // ─── Styles ────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
-
-  header: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  headerTitle: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      FONT.lg,
-    color:         T.text,
-    letterSpacing: 0.5,
-  },
 
   contextStrip: {
     flexDirection:     'row',
