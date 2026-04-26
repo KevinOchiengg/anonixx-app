@@ -278,7 +278,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
         showToast({ type: 'error', title: 'Session Expired', message: 'Please sign in again.' });
-        navigation.navigate('Auth', { screen: 'Login' });
+        navigation.navigate('AuthNav', { screen: 'Login' });
         return;
       }
 
@@ -299,7 +299,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       } else if (response.status === 401) {
         await AsyncStorage.removeItem('token');
         showToast({ type: 'error', title: 'Session Expired', message: 'Please sign in again.' });
-        navigation.navigate('Auth', { screen: 'Login' });
+        navigation.navigate('AuthNav', { screen: 'Login' });
       } else {
         showToast({ type: 'error', message: 'Could not send response. Try again.' });
       }
@@ -552,8 +552,8 @@ export default function CalmFeedScreen({ navigation, route }) {
       <AuthPromptModal
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
-        onSignUp={() => { setAuthModalVisible(false); navigation.navigate('Auth', { screen: 'Register' }); }}
-        onLogin={() => { setAuthModalVisible(false); navigation.navigate('Auth', { screen: 'Login' }); }}
+        onSignUp={() => { setAuthModalVisible(false); navigation.navigate('AuthNav', { screen: 'Register' }); }}
+        onLogin={() => { setAuthModalVisible(false); navigation.navigate('AuthNav', { screen: 'Login' }); }}
         action={authModalAction}
       />
 

@@ -1,6 +1,10 @@
 /**
- * DropsInboxScreen — active confession cards + drop connections.
- * All 17 Anonixx dev rules applied.
+ * DropsInboxScreen.jsx
+ *
+ * Active confession cards · drop connections · received drops.
+ *
+ * Visual language follows DropsComposeScreen — shared T tokens,
+ * PlayfairDisplay-Italic for expressive lines, DMSans for chrome.
  */
 import React, {
   useState, useEffect, useCallback, useRef, useMemo,
@@ -12,53 +16,32 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ArrowLeft, ChevronRight, Clock, Eye, Flame,
-  Lock, MessageCircle, Plus, Share2, Zap,
+  ChevronRight, Clock, Eye, Flame,
+  Lock, Plus, Share2, Zap,
 } from 'lucide-react-native';
+
+import { T } from '../../utils/colorTokens';
 import {
-  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT, SCREEN,
+  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, SCREEN,
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import DropScreenHeader from '../../components/drops/DropScreenHeader';
 
-// ─── Theme (Rule 14) ─────────────────────────────────────────
-const T = {
-  background:  '#0b0f18',
-  surface:     '#151924',
-  surfaceAlt:  '#1a1f2e',
-  primary:     '#FF634A',
-  primaryDim:  'rgba(255,99,74,0.15)',
-  text:        '#EAEAF0',
-  textSecondary:'#9A9AA3',
-  textMuted:   '#4a5068',
-  border:      'rgba(255,255,255,0.06)',
-  inputBg:     'rgba(255,255,255,0.04)',
-};
-
-// ─── Static data (Rule 5) ────────────────────────────────────
-const CATEGORY_COLORS = {
-  love:       '#FF634A',
-  fun:        '#FF634A',
-  adventure:  '#FF634A',
-  friendship: '#FF634A',
-  spicy:      '#FF634A',
-};
-
+// ─── Static data ─────────────────────────────────────────────
 const TABS = ['Cards', 'Connections', 'Received'];
 
-// ─── Presence signal copy (spec section 12) ────────────────────
-// Quiet, italic, escalates with age. Chosen once per render based on
-// how long the drop has been sitting unopened.
+// Presence copy escalates with unopened age
 const PRESENCE_COPY = {
-  fresh:   'someone just left this for you.',
-  hours:   "it's been here a while.",
-  day:     'still here. still waiting.',
-  ending:  'almost gone. almost unsaid.',
+  fresh:  'someone just left this for you.',
+  hours:  "it's been here a while.",
+  day:    'still here. still waiting.',
+  ending: 'almost gone. almost unsaid.',
 };
 
 const pickPresenceCopy = (ageHours = 0, timeLeft = '') => {
   if (typeof timeLeft === 'string' && /^[0-5]?[0-9]m$/i.test(timeLeft.trim())) {
-    return PRESENCE_COPY.ending;   // <1h left
+    return PRESENCE_COPY.ending;
   }
   if (ageHours < 1)  return PRESENCE_COPY.fresh;
   if (ageHours < 12) return PRESENCE_COPY.hours;
@@ -72,7 +55,7 @@ const hoursSince = (iso) => {
   return Math.max(0, (Date.now() - then) / 3600000);
 };
 
-// ─── Module-level components (Rules 5, 6) ────────────────────
+// ─── Empty states ────────────────────────────────────────────
 const EmptyCards = React.memo(({ onPress }) => (
   <View style={empty.wrap}>
     <Text style={empty.glyph}>🔥</Text>
@@ -80,9 +63,9 @@ const EmptyCards = React.memo(({ onPress }) => (
     <Text style={empty.sub}>
       write something you've never said out loud.{'\n'}someone will unlock it.
     </Text>
-    <TouchableOpacity style={empty.btn} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={empty.btn} onPress={onPress} activeOpacity={0.88} hitSlop={HIT_SLOP}>
       <Plus size={rs(15)} color="#fff" strokeWidth={2.5} />
-      <Text style={empty.btnText}>create a drop</Text>
+      <Text style={empty.btnText}>Create a Drop</Text>
     </TouchableOpacity>
   </View>
 ));
@@ -94,8 +77,8 @@ const EmptyConnections = React.memo(({ onPress }) => (
     <Text style={empty.sub}>
       when someone pays to unlock your drop,{'\n'}they show up here.
     </Text>
-    <TouchableOpacity style={empty.btn} onPress={onPress} activeOpacity={0.85}>
-      <Text style={empty.btnText}>browse confessions</Text>
+    <TouchableOpacity style={empty.btn} onPress={onPress} activeOpacity={0.88} hitSlop={HIT_SLOP}>
+      <Text style={empty.btnText}>Browse Confessions</Text>
     </TouchableOpacity>
   </View>
 ));
@@ -110,10 +93,9 @@ const EmptyReceived = React.memo(() => (
   </View>
 ));
 
-// ─── Unread pulse dot (section 12 — quiet, breathing) ─────────
-const UnreadPulse = React.memo(function UnreadPulse({ color = '#FF634A', size = 8 }) {
+// ─── Unread pulse ────────────────────────────────────────────
+const UnreadPulse = React.memo(function UnreadPulse({ color = T.primary, size = 8 }) {
   const pulse = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -130,47 +112,35 @@ const UnreadPulse = React.memo(function UnreadPulse({ color = '#FF634A', size = 
 
   return (
     <View style={{ width: rs(size * 2), height: rs(size * 2), alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View
-        style={{
-          position:        'absolute',
-          width:           rs(size),
-          height:          rs(size),
-          borderRadius:    rs(size),
-          backgroundColor: color,
-          opacity:         ringOpacity,
-          transform:       [{ scale: ringScale }],
-        }}
-      />
-      <View
-        style={{
-          width:           rs(size),
-          height:          rs(size),
-          borderRadius:    rs(size),
-          backgroundColor: color,
-        }}
-      />
+      <Animated.View style={{
+        position: 'absolute',
+        width: rs(size), height: rs(size), borderRadius: rs(size),
+        backgroundColor: color, opacity: ringOpacity,
+        transform: [{ scale: ringScale }],
+      }} />
+      <View style={{
+        width: rs(size), height: rs(size), borderRadius: rs(size),
+        backgroundColor: color,
+      }} />
     </View>
   );
 });
 
+// ─── Received drop item ──────────────────────────────────────
 const ReceivedDropItem = React.memo(({ item, onPress }) => {
-  const color = CATEGORY_COLORS[item.category] || '#FF634A';
+  const color = T.primary;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const onPressIn  = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, tension: 200, friction: 10 }).start();
   }, [scaleAnim]);
   const onPressOut = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, tension: 200, friction: 10 }).start();
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 10 }).start();
   }, [scaleAnim]);
 
-  // Presence: unread + age-derived italic line + live readers (section 12)
   const isUnread     = !item.already_unlocked && !item.is_expired && !item.read_at;
   const ageH         = useMemo(() => hoursSince(item.created_at || item.sent_at), [item.created_at, item.sent_at]);
-  const presenceLine = useMemo(
-    () => pickPresenceCopy(ageH, item.time_left),
-    [ageH, item.time_left]
-  );
+  const presenceLine = useMemo(() => pickPresenceCopy(ageH, item.time_left), [ageH, item.time_left]);
   const readers      = Number(item.readers_now || 0);
 
   return (
@@ -178,7 +148,13 @@ const ReceivedDropItem = React.memo(({ item, onPress }) => {
       <TouchableOpacity
         style={[
           recv.wrap,
-          isUnread && { borderColor: `${color}55`, shadowColor: color, shadowOpacity: 0.25, shadowRadius: rs(14), elevation: 4 },
+          isUnread && {
+            borderColor: `${color}55`,
+            shadowColor: color,
+            shadowOpacity: 0.25,
+            shadowRadius: rs(14),
+            elevation: 4,
+          },
         ]}
         onPress={onPress}
         onPressIn={onPressIn}
@@ -194,7 +170,7 @@ const ReceivedDropItem = React.memo(({ item, onPress }) => {
             </View>
           ) : (
             <View style={recv.timerPill}>
-              <Clock size={rs(10)} color="#9A9AA3" strokeWidth={2} />
+              <Clock size={rs(10)} color={T.textSec} strokeWidth={2} />
               <Text style={recv.timerText}>{item.time_left}</Text>
             </View>
           )}
@@ -234,8 +210,9 @@ const ReceivedDropItem = React.memo(({ item, onPress }) => {
   );
 });
 
+// ─── Drop card (your active drops) ───────────────────────────
 const DropCard = React.memo(({ item, onShare, onPress }) => {
-  const color    = CATEGORY_COLORS[item.category] || T.primary;
+  const color     = T.primary;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const onPressIn  = useCallback(() => {
@@ -254,27 +231,24 @@ const DropCard = React.memo(({ item, onShare, onPress }) => {
         onPressOut={onPressOut}
         activeOpacity={1}
       >
-        {/* Header row */}
         <View style={card.header}>
           <View style={[card.catDot, { backgroundColor: color }]} />
           <Text style={[card.catLabel, { color }]}>{item.category}</Text>
           {item.is_night_mode && (
             <View style={card.nightPill}>
-              <Text style={card.nightPillText}>🌙 night mode</Text>
+              <Text style={card.nightPillText}>🌙 after dark</Text>
             </View>
           )}
           <View style={card.timerPill}>
-            <Clock size={rs(10)} color={T.textSecondary} strokeWidth={2} />
+            <Clock size={rs(10)} color={T.textSec} strokeWidth={2} />
             <Text style={card.timerText}>{item.time_left}</Text>
           </View>
         </View>
 
-        {/* Confession */}
         <Text style={card.confession} numberOfLines={2}>
           "{item.confession}"
         </Text>
 
-        {/* Stats + share */}
         <View style={card.footer}>
           <View style={card.stat}>
             <Zap size={rs(13)} color={color} strokeWidth={2} />
@@ -282,7 +256,7 @@ const DropCard = React.memo(({ item, onShare, onPress }) => {
             <Text style={card.statLabel}>unlocks</Text>
           </View>
           <View style={card.stat}>
-            <Eye size={rs(13)} color={T.textSecondary} strokeWidth={2} />
+            <Eye size={rs(13)} color={T.textSec} strokeWidth={2} />
             <Text style={card.statNum}>{item.admirer_count}</Text>
             <Text style={card.statLabel}>views</Text>
           </View>
@@ -306,8 +280,9 @@ const DropCard = React.memo(({ item, onShare, onPress }) => {
   );
 });
 
+// ─── Connection item ─────────────────────────────────────────
 const ConnectionItem = React.memo(({ item, onPress }) => {
-  const initial = item.other_anonymous_name?.[0]?.toUpperCase() || '?';
+  const initial   = item.other_anonymous_name?.[0]?.toUpperCase() || '?';
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const onPressIn  = useCallback(() => {
@@ -350,7 +325,7 @@ const ConnectionItem = React.memo(({ item, onPress }) => {
 
         <View style={conn.right}>
           <Text style={conn.msgCount}>{item.message_count} msgs</Text>
-          <ChevronRight size={rs(14)} color={T.textMuted} strokeWidth={2} />
+          <ChevronRight size={rs(14)} color={T.textMute} strokeWidth={2} />
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -366,24 +341,14 @@ export default function DropsInboxScreen({ navigation }) {
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Animations (Rule 14)
   const fadeAnim     = useRef(new Animated.Value(0)).current;
   const slideAnim    = useRef(new Animated.Value(rs(18))).current;
   const tabIndicator = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    load();
-    Animated.parallel([
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 420, delay: 60, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 420, delay: 60, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  // Rule 11 — try/catch, Rule 3 — no console
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token   = await AsyncStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
       const [inboxRes, receivedRes] = await Promise.all([
@@ -395,9 +360,9 @@ export default function DropsInboxScreen({ navigation }) {
       const received = receivedRes.ok ? await receivedRes.json() : { received: [] };
 
       setData({
-        active_drops: inbox.active_drops   || [],
-        connections:  inbox.connections    || [],
-        received:     received.received    || [],
+        active_drops: inbox.active_drops || [],
+        connections:  inbox.connections  || [],
+        received:     received.received  || [],
       });
     } catch {
       showToast({ type: 'error', message: 'Something went wrong. Please try again.' });
@@ -406,6 +371,14 @@ export default function DropsInboxScreen({ navigation }) {
       setRefreshing(false);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    load();
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 420, delay: 60, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 420, delay: 60, useNativeDriver: true }),
+    ]).start();
+  }, [load, fadeAnim, slideAnim]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -421,7 +394,6 @@ export default function DropsInboxScreen({ navigation }) {
     }).start();
   }, [tabIndicator]);
 
-  // Rule 16 — HTTPS share link (tappable in messaging apps)
   const handleShare = useCallback(async (item) => {
     try {
       const url = `${API_BASE_URL}/api/v1/drops/${item.id}/open`;
@@ -434,46 +406,38 @@ export default function DropsInboxScreen({ navigation }) {
     }
   }, []);
 
-  const handleCardPress   = useCallback(() => navigation.navigate('ShareCard'), [navigation]);
+  const handleCardPress   = useCallback(() => navigation.navigate('ShareCard'),                [navigation]);
   const handleConnPress   = useCallback((id) => navigation.navigate('DropChat', { connectionId: id }), [navigation]);
-  const handleRecvPress   = useCallback((id) => navigation.navigate('DropLanding', { dropId: id }), [navigation]);
-  const handleNewDrop     = useCallback(() => navigation.navigate('DropsCompose'), [navigation]);
-  const handleMarketplace = useCallback(() => navigation.navigate('ConfessionMarketplace'), [navigation]);
-  const handleVibeScore   = useCallback(() => navigation.navigate('VibeScore'), [navigation]);
+  const handleRecvPress   = useCallback((id) => navigation.navigate('DropLanding', { dropId: id }),    [navigation]);
+  const handleNewDrop     = useCallback(() => navigation.navigate('DropsCompose'),             [navigation]);
+  const handleMarketplace = useCallback(() => navigation.navigate('ConfessionMarketplace'),    [navigation]);
+  const handleVibeScore   = useCallback(() => navigation.navigate('VibeScore'),                [navigation]);
 
-  // Memoised render functions (Rules 6, 7)
   const renderCard = useCallback(({ item }) => (
-    <DropCard
-      item={item}
-      onShare={handleShare}
-      onPress={handleCardPress}
-    />
+    <DropCard item={item} onShare={handleShare} onPress={handleCardPress} />
   ), [handleShare, handleCardPress]);
 
   const renderConn = useCallback(({ item }) => (
-    <ConnectionItem
-      item={item}
-      onPress={() => handleConnPress(item.id)}
-    />
+    <ConnectionItem item={item} onPress={() => handleConnPress(item.id)} />
   ), [handleConnPress]);
 
   const renderReceived = useCallback(({ item }) => (
-    <ReceivedDropItem
-      item={item}
-      onPress={() => handleRecvPress(item.id)}
-    />
+    <ReceivedDropItem item={item} onPress={() => handleRecvPress(item.id)} />
   ), [handleRecvPress]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
-  // Counts for tab badges
   const cardCount     = useMemo(() => data.active_drops.length, [data.active_drops]);
   const connCount     = useMemo(() => data.connections.length,  [data.connections]);
-  const receivedCount = useMemo(() => data.received.filter(r => !r.already_unlocked).length, [data.received]);
+  const receivedCount = useMemo(
+    () => data.received.filter(r => !r.already_unlocked).length,
+    [data.received]
+  );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        <DropScreenHeader title="Inbox" navigation={navigation} />
         <View style={styles.loadWrap}>
           <ActivityIndicator color={T.primary} />
           <Text style={styles.loadText}>pulling your drops…</Text>
@@ -484,38 +448,29 @@ export default function DropsInboxScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <Animated.View style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.goBack()}
-            hitSlop={HIT_SLOP}
-          >
-            <ArrowLeft size={rs(20)} color={T.text} strokeWidth={2} />
+      <DropScreenHeader
+        title="Inbox"
+        navigation={navigation}
+        right={
+          <TouchableOpacity onPress={handleNewDrop} hitSlop={HIT_SLOP} activeOpacity={0.7}>
+            <Plus size={rs(22)} color={T.primary} strokeWidth={2.5} />
           </TouchableOpacity>
-          <View>
-            <Text style={styles.headerTitle}>drops inbox</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={handleNewDrop}
-            hitSlop={HIT_SLOP}
-          >
-            <Plus size={rs(20)} color={T.primary} strokeWidth={2.5} />
-          </TouchableOpacity>
-        </View>
+        }
+      />
 
-        {/* Vibe score strip */}
+      <Animated.View
+        style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+      >
+        {/* Vibe strip */}
         <TouchableOpacity
           style={styles.vibeStrip}
           onPress={handleVibeScore}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
+          hitSlop={HIT_SLOP}
         >
           <Flame size={rs(15)} color={T.primary} strokeWidth={2} />
-          <Text style={styles.vibeStripText}>your vibe score & admirers</Text>
-          <ChevronRight size={rs(14)} color={T.textMuted} strokeWidth={2} />
+          <Text style={styles.vibeStripText}>your vibe score &amp; admirers</Text>
+          <ChevronRight size={rs(14)} color={T.textMute} strokeWidth={2} />
         </TouchableOpacity>
 
         {/* Tab bar */}
@@ -526,6 +481,7 @@ export default function DropsInboxScreen({ navigation }) {
               style={styles.tab}
               onPress={() => switchTab(i)}
               activeOpacity={0.8}
+              hitSlop={HIT_SLOP}
             >
               <Text style={[styles.tabText, activeTab === i && styles.tabTextActive]}>
                 {tab}
@@ -558,9 +514,7 @@ export default function DropsInboxScreen({ navigation }) {
             windowSize={3}
             initialNumToRender={6}
             ListEmptyComponent={<EmptyCards onPress={handleNewDrop} />}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />}
           />
         ) : activeTab === 1 ? (
           <FlatList
@@ -575,9 +529,7 @@ export default function DropsInboxScreen({ navigation }) {
             windowSize={3}
             initialNumToRender={8}
             ListEmptyComponent={<EmptyConnections onPress={handleMarketplace} />}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />}
           />
         ) : (
           <FlatList
@@ -592,32 +544,120 @@ export default function DropsInboxScreen({ navigation }) {
             windowSize={3}
             initialNumToRender={8}
             ListEmptyComponent={<EmptyReceived />}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />}
           />
         )}
-
       </Animated.View>
     </SafeAreaView>
   );
 }
 
-// ─── Drop Card Styles ─────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  safe:  { flex: 1, backgroundColor: T.background },
+  inner: { flex: 1 },
+
+  loadWrap: {
+    flex:           1,
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            SPACING.sm,
+  },
+  loadText: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+    color:      T.textSec,
+  },
+
+  vibeStrip: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              rp(8),
+    marginHorizontal: SPACING.md,
+    marginTop:        SPACING.md,
+    marginBottom:     SPACING.sm,
+    backgroundColor:  T.surface,
+    borderRadius:     RADIUS.md,
+    padding:          rp(14),
+    borderWidth:      1,
+    borderColor:      T.border,
+  },
+  vibeStripText: {
+    flex:          1,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.text,
+    letterSpacing: 0.3,
+  },
+
+  tabBar: {
+    flexDirection:     'row',
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    position:          'relative',
+  },
+  tab: {
+    flex:            1,
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingVertical: rp(13),
+    gap:             rp(6),
+  },
+  tabText: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(13),
+    color:      T.textSec,
+    letterSpacing: 0.3,
+  },
+  tabTextActive: {
+    color:      T.text,
+    fontFamily: 'DMSans-Bold',
+  },
+  tabBadge: {
+    backgroundColor:   T.primary,
+    borderRadius:      rs(9),
+    minWidth:          rs(18),
+    height:            rs(18),
+    alignItems:        'center',
+    justifyContent:    'center',
+    paddingHorizontal: rp(4),
+  },
+  tabBadgeText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   rf(10),
+    color:      '#fff',
+  },
+  tabIndicator: {
+    position:        'absolute',
+    bottom:          0,
+    left:            0,
+    width:           SCREEN.width / 3,
+    height:          rs(2),
+    backgroundColor: T.primary,
+    borderRadius:    rs(1),
+  },
+  listContent: {
+    padding:  SPACING.md,
+    flexGrow: 1,
+  },
+});
+
+// ─── Drop card styles ────────────────────────────────────────
 const card = StyleSheet.create({
   wrap: {
     backgroundColor: T.surface,
     borderRadius:    RADIUS.lg,
-    padding:         rp(16),
+    padding:         SPACING.md,
     borderWidth:     1,
     borderColor:     T.border,
     marginBottom:    SPACING.sm,
   },
   header: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            rp(6),
-    marginBottom:   rp(10),
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(6),
+    marginBottom:  rp(10),
   },
   catDot: {
     width:        rs(7),
@@ -625,34 +665,44 @@ const card = StyleSheet.create({
     borderRadius: rs(4),
   },
   catLabel: {
-    fontSize:      rf(11),
-    fontWeight:    '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
     flex:          1,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
   nightPill: {
-    backgroundColor: 'rgba(155,139,255,0.12)',
-    borderRadius:    RADIUS.sm,
+    backgroundColor:   T.tier2Dim,
+    borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(6),
     paddingVertical:   rp(2),
   },
-  nightPillText: { fontSize: rf(10), color: '#9B8BFF' },
+  nightPillText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   rf(9),
+    color:      T.tier2,
+    letterSpacing: 0.3,
+  },
   timerPill: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    gap:              rp(3),
-    backgroundColor:  T.surfaceAlt,
-    borderRadius:     RADIUS.sm,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(3),
+    backgroundColor:   T.surfaceAlt,
+    borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(6),
     paddingVertical:   rp(2),
   },
-  timerText: { fontSize: rf(10), color: T.textSecondary },
+  timerText: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(10),
+    color:      T.textSec,
+  },
   confession: {
+    fontFamily:   'PlayfairDisplay-Italic',
     fontSize:     rf(15),
-    color:        T.textSecondary,
-    fontStyle:    'italic',
+    color:        T.text,
     lineHeight:   rf(23),
+    letterSpacing: 0.2,
     marginBottom: rp(14),
   },
   footer: {
@@ -666,35 +716,37 @@ const card = StyleSheet.create({
     gap:           rp(4),
   },
   statNum: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   rf(13),
-    fontWeight: '700',
     color:      T.text,
   },
   statLabel: {
-    fontSize: rf(11),
-    color:    T.textSecondary,
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(11),
+    color:      T.textSec,
   },
   reactions: {
     fontSize:      rf(14),
     letterSpacing: 2,
   },
   shareBtn: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    gap:              rp(4),
-    marginLeft:       'auto',
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(4),
+    marginLeft:        'auto',
     paddingHorizontal: rp(10),
     paddingVertical:   rp(5),
-    borderRadius:     RADIUS.sm,
-    borderWidth:      1,
+    borderRadius:      RADIUS.sm,
+    borderWidth:       1,
   },
   shareBtnText: {
-    fontSize:   rf(11),
-    fontWeight: '600',
+    fontFamily: 'DMSans-Bold',
+    fontSize:   rf(10),
+    letterSpacing: 0.4,
   },
 });
 
-// ─── Connection Item Styles ───────────────────────────────────
+// ─── Connection item styles ──────────────────────────────────
 const conn = StyleSheet.create({
   wrap: {
     flexDirection:   'row',
@@ -716,11 +768,11 @@ const conn = StyleSheet.create({
     justifyContent:  'center',
     position:        'relative',
     borderWidth:     1,
-    borderColor:     'rgba(255,255,255,0.06)',
+    borderColor:     T.border,
   },
   avatarText: {
+    fontFamily: 'PlayfairDisplay-Italic',
     fontSize:   rf(18),
-    fontWeight: '700',
     color:      T.text,
   },
   revealDot: {
@@ -734,98 +786,54 @@ const conn = StyleSheet.create({
     borderWidth:     2,
     borderColor:     T.surface,
   },
-  info:    { flex: 1, gap: rp(2) },
+  info:    { flex: 1, gap: rp(3) },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   name: {
-    fontSize:   rf(14),
-    fontWeight: '700',
+    fontFamily: 'PlayfairDisplay-Italic',
+    fontSize:   FONT.sm,
     color:      T.text,
     flexShrink: 1,
+    letterSpacing: 0.2,
   },
   revealBadge: {
-    backgroundColor:   'rgba(71,255,184,0.12)',
+    backgroundColor:   T.primaryDim,
     borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(6),
     paddingVertical:   rp(2),
   },
   revealBadgeText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   rf(9),
     color:      T.primary,
-    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   confession: {
-    fontSize:  rf(11),
-    color:     T.textSecondary,
-    fontStyle: 'italic',
+    fontFamily: 'DMSans-Italic',
+    fontSize:   rf(11),
+    color:      T.textSec,
   },
   lastMsg: {
-    fontSize: rf(12),
-    color:    T.textSecondary,
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(11),
+    color:      T.textSec,
   },
   right: {
     alignItems: 'flex-end',
     gap:        rp(4),
   },
   msgCount: {
-    fontSize: rf(11),
-    color:    T.textMuted,
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(10),
+    color:      T.textMute,
   },
 });
 
-// ─── Empty State Styles ───────────────────────────────────────
-const empty = StyleSheet.create({
-  wrap: {
-    flex:             1,
-    alignItems:       'center',
-    justifyContent:   'center',
-    paddingVertical:  rp(60),
-    paddingHorizontal: SPACING.xl,
-  },
-  glyph: {
-    fontSize:     rf(44),
-    marginBottom: SPACING.md,
-  },
-  title: {
-    fontSize:     rf(17),
-    fontWeight:   '700',
-    color:        T.text,
-    marginBottom: rp(8),
-    textAlign:    'center',
-  },
-  sub: {
-    fontSize:     rf(13),
-    color:        T.textSecondary,
-    textAlign:    'center',
-    lineHeight:   rf(21),
-    marginBottom: SPACING.lg,
-  },
-  btn: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    gap:              rp(6),
-    backgroundColor:  T.primary,
-    borderRadius:     RADIUS.md,
-    paddingHorizontal: rp(20),
-    paddingVertical:   rp(12),
-    shadowColor:      T.primary,
-    shadowOffset:     { width: 0, height: rs(4) },
-    shadowOpacity:    0.35,
-    shadowRadius:     rs(10),
-    elevation:        5,
-  },
-  btnText: {
-    fontSize:   rf(13),
-    fontWeight: '700',
-    color:      '#fff',
-  },
-});
-
-// ─── Received Drop Styles ────────────────────────────────────
+// ─── Received item styles ────────────────────────────────────
 const recv = StyleSheet.create({
   wrap: {
     backgroundColor: T.surface,
     borderRadius:    RADIUS.lg,
-    padding:         rp(16),
+    padding:         SPACING.md,
     borderWidth:     1,
     borderColor:     T.border,
     marginBottom:    SPACING.sm,
@@ -836,36 +844,45 @@ const recv = StyleSheet.create({
     gap:           rp(6),
     marginBottom:  rp(10),
   },
-  catDot: {
-    width:        rs(7),
-    height:       rs(7),
-    borderRadius: rs(4),
-  },
   catLabel: {
-    fontSize:      rf(11),
-    fontWeight:    '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
     flex:          1,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
   timerPill: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    gap:              rp(3),
-    backgroundColor:  T.surfaceAlt,
-    borderRadius:     RADIUS.sm,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(3),
+    backgroundColor:   T.surfaceAlt,
+    borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(6),
     paddingVertical:   rp(2),
   },
-  timerText:    { fontSize: rf(10), color: T.textSecondary },
-  expiredPill:  { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: RADIUS.sm, paddingHorizontal: rp(6), paddingVertical: rp(2) },
-  expiredText:  { fontSize: rf(10), color: T.textMuted },
+  timerText: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(10),
+    color:      T.textSec,
+  },
+  expiredPill: {
+    backgroundColor:   T.surfaceAlt,
+    borderRadius:      RADIUS.sm,
+    paddingHorizontal: rp(6),
+    paddingVertical:   rp(2),
+  },
+  expiredText: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(10),
+    color:      T.textMute,
+  },
   teaser: {
-    fontSize:     rf(15),
-    color:        T.text,
-    fontStyle:    'italic',
-    lineHeight:   rf(23),
-    marginBottom: rp(12),
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(15),
+    color:         T.text,
+    lineHeight:    rf(23),
+    letterSpacing: 0.2,
+    marginBottom:  rp(12),
   },
   presenceRow: {
     flexDirection: 'row',
@@ -875,8 +892,8 @@ const recv = StyleSheet.create({
     marginBottom:  rp(10),
   },
   presenceText: {
+    fontFamily:    'DMSans-Italic',
     fontSize:      rf(11),
-    fontStyle:     'italic',
     letterSpacing: 0.3,
   },
   footer: { flexDirection: 'row', alignItems: 'center' },
@@ -885,126 +902,73 @@ const recv = StyleSheet.create({
     alignItems:    'center',
     gap:           rp(5),
   },
-  lockText:    { fontSize: rf(13), fontWeight: '600' },
+  lockText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   FONT.sm,
+    letterSpacing: 0.3,
+  },
   unlockedBadge: {
-    backgroundColor:   'rgba(71,255,184,0.10)',
+    backgroundColor:   T.successDim,
     borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(8),
     paddingVertical:   rp(4),
   },
-  unlockedText: { fontSize: rf(12), color: '#47FFB8', fontWeight: '600' },
+  unlockedText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   rf(11),
+    color:      T.success,
+    letterSpacing: 0.3,
+  },
 });
 
-// ─── Screen Styles ────────────────────────────────────────────
-const styles = StyleSheet.create({
-  safe: {
-    flex:            1,
-    backgroundColor: T.background,
-  },
-  inner: {
-    flex: 1,
-  },
-  loadWrap: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
-    gap:            SPACING.sm,
-  },
-  loadText: {
-    fontSize:  rf(13),
-    color:     T.textSecondary,
-    fontStyle: 'italic',
-  },
-  header: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(12),
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  iconBtn: {
-    width:           rs(38),
-    height:          rs(38),
-    borderRadius:    rs(19),
-    backgroundColor: T.surfaceAlt,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  headerTitle: {
-    fontSize:      rf(17),
-    fontWeight:    '700',
-    color:         T.text,
-    letterSpacing: 0.2,
-  },
-  vibeStrip: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    gap:              rp(8),
-    marginHorizontal: SPACING.md,
-    marginTop:        SPACING.md,
-    marginBottom:     SPACING.sm,
-    backgroundColor:  T.surfaceAlt,
-    borderRadius:     RADIUS.md,
-    padding:          rp(13),
-    borderWidth:      1,
-    borderColor:      T.border,
-  },
-  vibeStripText: {
-    flex:       1,
-    fontSize:   rf(13),
-    fontWeight: '500',
-    color:      T.text,
-  },
-  tabBar: {
-    flexDirection:     'row',
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-    position:          'relative',
-  },
-  tab: {
-    flex:           1,
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'center',
-    paddingVertical: rp(13),
-    gap:            rp(6),
-  },
-  tabText: {
-    fontSize:   rf(14),
-    fontWeight: '500',
-    color:      T.textSecondary,
-  },
-  tabTextActive: {
-    color:      T.text,
-    fontWeight: '700',
-  },
-  tabBadge: {
-    backgroundColor:   T.primary,
-    borderRadius:      rs(8),
-    minWidth:          rs(17),
-    height:            rs(17),
+// ─── Empty state styles ──────────────────────────────────────
+const empty = StyleSheet.create({
+  wrap: {
+    flex:              1,
     alignItems:        'center',
     justifyContent:    'center',
-    paddingHorizontal: rp(3),
+    paddingVertical:   rp(60),
+    paddingHorizontal: SPACING.xl,
   },
-  tabBadgeText: {
-    fontSize:   rf(10),
-    fontWeight: '700',
+  glyph: {
+    fontSize:     rf(44),
+    marginBottom: SPACING.md,
+  },
+  title: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.lg,
+    color:         T.text,
+    marginBottom:  rp(8),
+    textAlign:     'center',
+    letterSpacing: 0.3,
+  },
+  sub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    textAlign:     'center',
+    lineHeight:    rf(21),
+    marginBottom:  SPACING.lg,
+    letterSpacing: 0.2,
+  },
+  btn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(6),
+    backgroundColor:   T.primary,
+    borderRadius:      RADIUS.md,
+    paddingHorizontal: rp(22),
+    paddingVertical:   rp(12),
+    shadowColor:       T.primary,
+    shadowOffset:      { width: 0, height: rs(4) },
+    shadowOpacity:     0.4,
+    shadowRadius:      rs(10),
+    elevation:         5,
+  },
+  btnText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   FONT.sm,
     color:      '#fff',
-  },
-  tabIndicator: {
-    position:        'absolute',
-    bottom:          0,
-    left:            0,
-    width:           SCREEN.width / 3,
-    height:          rs(2),
-    backgroundColor: T.primary,
-    borderRadius:    rs(1),
-  },
-  listContent: {
-    padding:  SPACING.md,
-    flexGrow: 1,
+    letterSpacing: 0.4,
   },
 });

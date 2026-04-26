@@ -52,6 +52,23 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     FROM_EMAIL: str = "Anonixx <noreply@anonixx.app>"
 
+    # ── SOCIAL PUBLISHER ──────────────────────────────────────────
+    # TikTok — long-lived OAuth 2.0 access token for the Anonixx brand account
+    # Obtain via: https://developers.tiktok.com/doc/login-kit-web
+    # Required scopes: video.publish  video.upload
+    TIKTOK_ACCESS_TOKEN: str = "your-tiktok-access-token-here"
+
+    # Facebook Page — long-lived Page Access Token
+    # Obtain via: https://developers.facebook.com/tools/explorer
+    # Required permissions: pages_manage_posts  pages_read_engagement
+    FACEBOOK_PAGE_ID:           str = "your-facebook-page-id-here"
+    FACEBOOK_PAGE_ACCESS_TOKEN: str = "your-facebook-page-access-token-here"
+
+    # Instagram Business Account (linked to the Facebook Page above)
+    # Find it: GET /{page_id}?fields=instagram_business_account&access_token=...
+    # Uses the same FACEBOOK_PAGE_ACCESS_TOKEN — no separate token needed
+    INSTAGRAM_ACCOUNT_ID: str = "your-instagram-account-id-here"
+
     # APP
     BASE_URL: str = "http://localhost:8000"
 

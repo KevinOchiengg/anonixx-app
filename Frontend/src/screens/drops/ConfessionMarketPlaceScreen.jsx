@@ -1,159 +1,168 @@
 /**
  * ConfessionMarketplaceScreen
+ *
  * Browse and unlock active confession cards from everyone.
+ *
+ * Rebuilt to match the design language of DropsComposeScreen:
+ *   • shared `T` palette from utils/colorTokens
+ *   • shared DropScreenHeader (italic title + right action)
+ *   • shared Chip / ChipRow for category + filter chips
+ *   • PlayfairDisplay-Italic for confession teasers & section titles
+ *   • DMSans for chrome text
+ *   • 320 ms entrance fade
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useState, useEffect, useCallback, useRef, useMemo,
+} from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, RefreshControl, ScrollView, Image,
+  ActivityIndicator, RefreshControl, ScrollView, Image, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Clock, Film, Flame, Moon, Plus, Users, Zap } from 'lucide-react-native';
-import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import {
+  Clock, Film, Flame, Moon, Plus, Users, Zap,
+} from 'lucide-react-native';
+
+import { T } from '../../utils/colorTokens';
+import {
+  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
+} from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import DropScreenHeader from '../../components/drops/DropScreenHeader';
+import { Chip, ChipRow } from '../../components/drops/ChipRow';
 
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background:   '#0b0f18',
-  surface:      '#151924',
-  surfaceAlt:   '#1a1f2e',
-  primary:      '#FF634A',
-  text:         '#EAEAF0',
-  textSecondary:'#9A9AA3',
-  border:       'rgba(255,255,255,0.06)',
-  night:        '#9B8BFF',
-  nightDim:     'rgba(155,139,255,0.10)',
-};
-
-// ─── Static data (module level) ───────────────────────────────────────────────
+// ─── Static data (module level) ───────────────────────────────
 const CATEGORIES = [
-  { id: null,                    label: 'All',              emoji: '✨', color: T.primary },
+  { id: null,                    label: 'All',              emoji: '✨' },
   // Emotional / situational
-  { id: 'open to connection',    label: 'Open to Connect',  emoji: '🤲', color: T.primary },
-  { id: 'carrying this alone',   label: 'Carrying This',    emoji: '💛', color: T.primary },
-  { id: 'starting over',         label: 'Starting Over',    emoji: '🌱', color: T.primary },
-  { id: 'need stability',        label: 'Need Stability',   emoji: '🏠', color: T.primary },
-  { id: 'just need to be heard', label: 'Need to Be Heard', emoji: '🌙', color: T.primary },
+  { id: 'open to connection',    label: 'Open to Connect',  emoji: '🤲' },
+  { id: 'carrying this alone',   label: 'Carrying This',    emoji: '💛' },
+  { id: 'starting over',         label: 'Starting Over',    emoji: '🌱' },
+  { id: 'need stability',        label: 'Need Stability',   emoji: '🏠' },
+  { id: 'just need to be heard', label: 'Need to Be Heard', emoji: '🌙' },
   // Social
-  { id: 'love',                  label: 'Love',             emoji: '💔', color: T.primary },
-  { id: 'fun',                   label: 'Fun',              emoji: '😈', color: T.primary },
-  { id: 'adventure',             label: 'Adventure',        emoji: '🌍', color: T.primary },
-  { id: 'friendship',            label: 'Friendship',       emoji: '🤝', color: T.primary },
-  { id: 'spicy',                 label: 'Spicy',            emoji: '🌶️', color: T.primary },
+  { id: 'love',                  label: 'Love',             emoji: '💔' },
+  { id: 'fun',                   label: 'Fun',              emoji: '😈' },
+  { id: 'adventure',             label: 'Adventure',        emoji: '🌍' },
+  { id: 'friendship',            label: 'Friendship',       emoji: '🤝' },
+  { id: 'spicy',                 label: 'Spicy',            emoji: '🌶️' },
 ];
 
 const LIMIT = 20;
 
-const getCatColor = (id) => CATEGORIES.find(c => c.id === id)?.color ?? T.primary;
 const getCatEmoji = (id) => CATEGORIES.find(c => c.id === id)?.emoji ?? '✨';
 
-// ─── Drop Card ────────────────────────────────────────────────────────────────
+// ─── Drop Card ────────────────────────────────────────────────
 const DropCard = React.memo(({ item, onPress }) => {
-  const color = getCatColor(item.category);
   const emoji = getCatEmoji(item.category);
-
   const handlePress = useCallback(() => onPress(item.id), [onPress, item.id]);
 
   return (
     <TouchableOpacity
-      style={[styles.dropCard, { borderColor: color + '30' }]}
+      style={s.dropCard}
       onPress={handlePress}
       hitSlop={HIT_SLOP}
       activeOpacity={0.85}
     >
       {/* Top row */}
-      <View style={styles.dropTop}>
-        <Text style={styles.dropEmoji}>{emoji}</Text>
-        <Text style={[styles.dropCat, { color }]}>
+      <View style={s.dropTop}>
+        <Text style={s.dropEmoji}>{emoji}</Text>
+        <Text style={s.dropCat}>
           {item.category?.toUpperCase()}
         </Text>
+
         {item.is_night_mode && (
-          <View style={styles.nightTag}>
-            <Moon size={rs(11)} color={T.night} />
-            <Text style={styles.nightTagText}>Night</Text>
+          <View style={s.nightTag}>
+            <Moon size={rs(11)} color={T.tier2} strokeWidth={2} />
+            <Text style={s.nightTagText}>After Dark</Text>
           </View>
         )}
+
         {item.is_group && (
-          <View style={[styles.groupTag, { backgroundColor: color + '18' }]}>
-            <Users size={rs(11)} color={color} />
-            <Text style={[styles.groupTagText, { color }]}>
+          <View style={s.groupTag}>
+            <Users size={rs(11)} color={T.primary} strokeWidth={2} />
+            <Text style={s.groupTagText}>
               Group · {item.group_size}
             </Text>
           </View>
         )}
-        <Text style={styles.dropTimeAgo}>{item.time_ago}</Text>
+
+        <Text style={s.dropTimeAgo}>{item.time_ago}</Text>
       </View>
 
       {/* Confession / Media */}
       {item.media_type === 'image' && item.media_url ? (
-        <View style={styles.mediaThumbWrap}>
-          <Image source={{ uri: item.media_url }} style={styles.mediaThumb} resizeMode="cover" />
+        <View style={s.mediaThumbWrap}>
+          <Image source={{ uri: item.media_url }} style={s.mediaThumb} resizeMode="cover" />
           {item.confession ? (
-            <Text style={styles.dropConfession} numberOfLines={2}>"{item.confession}"</Text>
+            <Text style={s.dropConfession} numberOfLines={2}>
+              “{item.confession}”
+            </Text>
           ) : null}
         </View>
       ) : item.media_type === 'video' ? (
-        <View style={styles.mediaThumbWrap}>
+        <View style={s.mediaThumbWrap}>
           {item.card_image_url ? (
-            <Image source={{ uri: item.card_image_url }} style={styles.mediaThumb} resizeMode="cover" />
+            <Image source={{ uri: item.card_image_url }} style={s.mediaThumb} resizeMode="cover" />
           ) : (
-            <View style={styles.videoPlaceholder}>
-              <Film size={rs(28)} color={color} />
+            <View style={s.videoPlaceholder}>
+              <Film size={rs(28)} color={T.primary} strokeWidth={1.6} />
             </View>
           )}
-          <View style={styles.videoOverlay}>
-            <Film size={rs(13)} color="#fff" />
-            <Text style={styles.videoOverlayText}>Video</Text>
+          <View style={s.videoOverlay}>
+            <Film size={rs(13)} color="#fff" strokeWidth={2} />
+            <Text style={s.videoOverlayText}>Video</Text>
           </View>
           {item.confession ? (
-            <Text style={styles.dropConfession} numberOfLines={1}>"{item.confession}"</Text>
+            <Text style={s.dropConfession} numberOfLines={1}>
+              “{item.confession}”
+            </Text>
           ) : null}
         </View>
       ) : (
-        <Text style={styles.dropConfession} numberOfLines={3}>
-          "{item.confession}"
+        <Text style={s.dropConfession} numberOfLines={3}>
+          “{item.confession}”
         </Text>
       )}
 
       {/* Reactions */}
       {item.reactions?.length > 0 && (
-        <View style={styles.reactionsRow}>
+        <View style={s.reactionsRow}>
           {item.reactions.map((r, i) => (
-            <View key={i} style={styles.reactionBubble}>
-              <Text style={styles.reactionText}>{r}</Text>
+            <View key={i} style={s.reactionBubble}>
+              <Text style={s.reactionText}>{r}</Text>
             </View>
           ))}
         </View>
       )}
 
       {/* Footer */}
-      <View style={styles.dropFooter}>
-        <View style={styles.dropMeta}>
-          <Clock size={rs(12)} color={T.textSecondary} />
-          <Text style={styles.dropMetaText}>{item.time_left}</Text>
+      <View style={s.dropFooter}>
+        <View style={s.dropMeta}>
+          <Clock size={rs(12)} color={T.textSec} strokeWidth={2} />
+          <Text style={s.dropMetaText}>{item.time_left}</Text>
         </View>
-        <View style={styles.dropMeta}>
-          <Flame size={rs(12)} color={color} />
-          <Text style={[styles.dropMetaText, { color }]}>
+        <View style={s.dropMeta}>
+          <Flame size={rs(12)} color={T.primary} strokeWidth={2} />
+          <Text style={[s.dropMetaText, { color: T.primary }]}>
             {item.unlock_count} connected
           </Text>
         </View>
+
         {item.already_unlocked ? (
-          <View style={[styles.unlockBadge, {
-            backgroundColor: color + '18',
-            borderColor:     color + '40',
-          }]}>
-            <Text style={[styles.unlockBadgeText, { color }]}>✓ Connected</Text>
+          <View style={[s.unlockBadge, s.unlockBadgeOn]}>
+            <Text style={[s.unlockBadgeText, { color: T.primary }]}>
+              ✓ Connected
+            </Text>
           </View>
         ) : (
-          <View style={[styles.unlockBadge, {
-            backgroundColor: color + '12',
-            borderColor:     color + '30',
-          }]}>
-            <Zap size={rs(12)} color={color} />
-            <Text style={[styles.unlockBadgeText, { color }]}>${item.price}</Text>
+          <View style={s.unlockBadge}>
+            <Zap size={rs(12)} color={T.primary} strokeWidth={2} />
+            <Text style={[s.unlockBadgeText, { color: T.primary }]}>
+              ${item.price}
+            </Text>
           </View>
         )}
       </View>
@@ -161,96 +170,116 @@ const DropCard = React.memo(({ item, onPress }) => {
   );
 });
 
-// ─── List Header ──────────────────────────────────────────────────────────────
-const ListHeader = React.memo(({ category, setCategory, nightOnly, setNightOnly, groupOnly, setGroupOnly, total }) => (
-  <View>
-    {/* Category filter */}
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.catScroll}
-      contentContainerStyle={styles.catContent}
-    >
-      {CATEGORIES.map(cat => {
-        const active = category === cat.id;
-        const color  = cat.color;
-        return (
-          <TouchableOpacity
-            key={String(cat.id)}
-            style={[
-              styles.catChip,
-              active && { backgroundColor: color + '20', borderColor: color },
-            ]}
-            onPress={() => setCategory(cat.id)}
-            hitSlop={HIT_SLOP}
-          >
-            <Text style={styles.catChipEmoji}>{cat.emoji}</Text>
-            <Text style={[styles.catChipText, active && { color }]}>{cat.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-
-    {/* Filter toggles */}
-    <View style={styles.filterRow}>
-      <TouchableOpacity
-        style={[styles.filterChip, nightOnly && styles.filterChipNight]}
-        onPress={() => setNightOnly(v => !v)}
-        hitSlop={HIT_SLOP}
-      >
-        <Moon size={rs(13)} color={nightOnly ? T.night : T.textSecondary} />
-        <Text style={[styles.filterChipText, nightOnly && { color: T.night }]}>
-          Night only
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.filterChip, groupOnly && styles.filterChipActive]}
-        onPress={() => setGroupOnly(v => !v)}
-        hitSlop={HIT_SLOP}
-      >
-        <Users size={rs(13)} color={groupOnly ? T.primary : T.textSecondary} />
-        <Text style={[styles.filterChipText, groupOnly && { color: T.primary }]}>
-          Groups
-        </Text>
-      </TouchableOpacity>
-
-      <Text style={styles.totalLabel}>{total} drops</Text>
-    </View>
+// ─── Filter toggle row ────────────────────────────────────────
+const FilterRow = React.memo(({
+  nightOnly, setNightOnly, groupOnly, setGroupOnly, total,
+}) => (
+  <View style={s.filterRow}>
+    <Chip
+      variant="pill"
+      label="After Dark"
+      Icon={Moon}
+      active={nightOnly}
+      accent={T.tier2}
+      onPress={() => setNightOnly(v => !v)}
+    />
+    <Chip
+      variant="pill"
+      label="Groups"
+      Icon={Users}
+      active={groupOnly}
+      onPress={() => setGroupOnly(v => !v)}
+    />
+    <Text style={s.totalLabel}>{total} drops</Text>
   </View>
 ));
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+// ─── Category chip row ────────────────────────────────────────
+const CategoryRow = React.memo(({ category, setCategory }) => (
+  <ChipRow scroll gap="sm" style={s.catScroll} contentStyle={s.catContent}>
+    {CATEGORIES.map(cat => (
+      <Chip
+        key={String(cat.id)}
+        variant="pill"
+        label={`${cat.emoji}  ${cat.label}`}
+        active={category === cat.id}
+        onPress={() => setCategory(cat.id)}
+      />
+    ))}
+  </ChipRow>
+));
+
+// ─── Empty State ──────────────────────────────────────────────
 const EmptyState = React.memo(({ onCreateDrop }) => (
-  <View style={styles.empty}>
-    <Text style={styles.emptyIcon}>🌙</Text>
-    <Text style={styles.emptyTitle}>No drops right now</Text>
-    <Text style={styles.emptySub}>Be the first to drop a confession.</Text>
-    <TouchableOpacity style={styles.emptyBtn} onPress={onCreateDrop} hitSlop={HIT_SLOP}>
-      <Plus size={rs(16)} color="#fff" />
-      <Text style={styles.emptyBtnText}>Create a Drop</Text>
+  <View style={s.empty}>
+    <Text style={s.emptyIcon}>🌙</Text>
+    <Text style={s.emptyTitle}>No drops right now</Text>
+    <Text style={s.emptySub}>Be the first to leave something real.</Text>
+    <TouchableOpacity
+      style={s.emptyBtn}
+      onPress={onCreateDrop}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.85}
+    >
+      <Plus size={rs(16)} color="#fff" strokeWidth={2.4} />
+      <Text style={s.emptyBtnText}>Create a Drop</Text>
     </TouchableOpacity>
   </View>
 ));
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// ─── Spotlight card (Open to Connect) ─────────────────────────
+const SpotlightCard = React.memo(({ item, onPress }) => {
+  const emoji = getCatEmoji(item.category);
+  const handlePress = useCallback(() => onPress(item.id), [onPress, item.id]);
+  return (
+    <TouchableOpacity
+      style={s.spotlightCard}
+      onPress={handlePress}
+      activeOpacity={0.85}
+      hitSlop={HIT_SLOP}
+    >
+      <Text style={s.spotlightCatEmoji}>{emoji}</Text>
+      <Text style={s.spotlightConfession} numberOfLines={4}>
+        “{item.confession || 'tap to see'}”
+      </Text>
+      {item.intent ? (
+        <View style={s.intentBadge}>
+          <Text style={s.intentBadgeText}>{item.intent}</Text>
+        </View>
+      ) : null}
+      <Text style={s.spotlightTime}>{item.time_ago}</Text>
+    </TouchableOpacity>
+  );
+});
+
+// ─── Main Screen ──────────────────────────────────────────────
 export default function ConfessionMarketplaceScreen({ navigation }) {
   const { showToast } = useToast();
 
-  const [drops, setDrops]           = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [drops, setDrops]             = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore]       = useState(true);
+  const [hasMore, setHasMore]         = useState(true);
 
-  const [category, setCategory]   = useState(null);
-  const [nightOnly, setNightOnly] = useState(false);
-  const [groupOnly, setGroupOnly] = useState(false);
+  const [category, setCategory]         = useState(null);
+  const [nightOnly, setNightOnly]       = useState(false);
+  const [groupOnly, setGroupOnly]       = useState(false);
   const [openToConnect, setOpenToConnect] = useState([]);
 
   const skipRef = useRef(0);
 
-  // ── Load ─────────────────────────────────────────────────────────────────────
+  // Entrance animation
+  const fade = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fade, {
+      toValue:         1,
+      duration:        320,
+      useNativeDriver: true,
+    }).start();
+  }, [fade]);
+
+  // ── Load ──────────────────────────────────────────────────
   const load = useCallback(async (isFirst = false) => {
     if (isFirst) setLoading(true);
     else         setLoadingMore(true);
@@ -291,19 +320,22 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
     }
   }, [category, nightOnly, groupOnly, showToast]);
 
-  // Load "Open to Connect" spotlight section once on mount
+  // Load "Open to Connect" spotlight once on mount
   useEffect(() => {
     (async () => {
       try {
         const token = await AsyncStorage.getItem('token');
-        const res = await fetch(`${API_BASE_URL}/api/v1/drops/marketplace/open-to-connect?limit=6`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const res   = await fetch(
+          `${API_BASE_URL}/api/v1/drops/marketplace/open-to-connect?limit=6`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        );
         if (res.ok) {
           const data = await res.json();
           setOpenToConnect(data.drops || []);
         }
-      } catch { /* silent */ }
+      } catch {
+        /* silent */
+      }
     })();
   }, []);
 
@@ -313,6 +345,7 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
     setDrops([]);
     setHasMore(true);
     load(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, nightOnly, groupOnly]);
 
   const onRefresh = useCallback(() => {
@@ -327,7 +360,7 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
     if (!loadingMore && hasMore) load(false);
   }, [loadingMore, hasMore, load]);
 
-  // ── Navigation handlers ───────────────────────────────────────────────────────
+  // ── Navigation ────────────────────────────────────────────
   const handleDropPress = useCallback((dropId) => {
     navigation.navigate('DropLanding', { dropId });
   }, [navigation]);
@@ -336,440 +369,481 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
     navigation.navigate('DropsCompose');
   }, [navigation]);
 
-  // ── Render helpers ───────────────────────────────────────────────────────────
+  // ── Render helpers ────────────────────────────────────────
   const renderDrop = useCallback(({ item }) => (
     <DropCard item={item} onPress={handleDropPress} />
   ), [handleDropPress]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
-  const ListHeaderComponent = useCallback(() => (
-    <>
-      {/* Open to Connect spotlight — only show when browsing All */}
-      {!category && openToConnect.length > 0 && (
-        <View style={styles.spotlightSection}>
-          <View style={styles.spotlightHeader}>
-            <Text style={styles.spotlightEmoji}>🤲</Text>
-            <View>
-              <Text style={styles.spotlightTitle}>Open to Connection</Text>
-              <Text style={styles.spotlightSub}>People who said something real — and mean it</Text>
+  const showSpotlight = !category && openToConnect.length > 0;
+
+  const ListHeaderComponent = useMemo(() => (
+    <View>
+      {/* Editorial lede */}
+      <View style={s.lede}>
+        <Text style={s.ledeEyebrow}>ANONIXX · MARKETPLACE</Text>
+        <Text style={s.ledeTitle}>Anonymous.</Text>
+        <Text style={s.ledeTitle}>Real. Unfiltered.</Text>
+        <Text style={s.ledeBody}>
+          Stories dropped tonight. Connect with the ones that move you.
+        </Text>
+      </View>
+
+      {/* Open to Connect spotlight */}
+      {showSpotlight && (
+        <View style={s.spotlightSection}>
+          <View style={s.spotlightHeader}>
+            <Text style={s.spotlightEmoji}>🤲</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.spotlightTitle}>Open to Connection</Text>
+              <Text style={s.spotlightSub}>
+                People who said something real — and mean it
+              </Text>
             </View>
           </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.spotlightScroll}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={s.spotlightScroll}
           >
             {openToConnect.map(item => (
-              <TouchableOpacity
+              <SpotlightCard
                 key={item.id}
-                style={styles.spotlightCard}
-                onPress={() => handleDropPress(item.id)}
-                activeOpacity={0.85}
-                hitSlop={HIT_SLOP}
-              >
-                <Text style={styles.spotlightCatEmoji}>
-                  {getCatEmoji(item.category)}
-                </Text>
-                <Text style={styles.spotlightConfession} numberOfLines={4}>
-                  "{item.confession || 'tap to see'}"
-                </Text>
-                {item.intent && (
-                  <View style={styles.intentBadge}>
-                    <Text style={styles.intentBadgeText}>{item.intent}</Text>
-                  </View>
-                )}
-                <Text style={styles.spotlightTime}>{item.time_ago}</Text>
-              </TouchableOpacity>
+                item={item}
+                onPress={handleDropPress}
+              />
             ))}
           </ScrollView>
         </View>
       )}
-      <ListHeader
-        category={category}   setCategory={setCategory}
+
+      {/* Category chips */}
+      <CategoryRow category={category} setCategory={setCategory} />
+
+      {/* Filter toggles */}
+      <FilterRow
         nightOnly={nightOnly} setNightOnly={setNightOnly}
         groupOnly={groupOnly} setGroupOnly={setGroupOnly}
         total={drops.length}
       />
-    </>
-  ), [category, openToConnect, nightOnly, groupOnly, drops.length, handleDropPress]);
+    </View>
+  ), [
+    showSpotlight, openToConnect, category, nightOnly, groupOnly,
+    drops.length, handleDropPress,
+  ]);
 
-  const ListFooterComponent = useCallback(() =>
+  const ListFooterComponent = useCallback(() => (
     loadingMore
       ? <ActivityIndicator color={T.primary} style={{ marginVertical: SPACING.lg }} />
       : null
-  , [loadingMore]);
+  ), [loadingMore]);
 
-  const ListEmptyComponent = useCallback(() =>
+  const ListEmptyComponent = useCallback(() => (
     loading ? null : <EmptyState onCreateDrop={handleCreateDrop} />
-  , [loading, handleCreateDrop]);
+  ), [loading, handleCreateDrop]);
 
-  // ────────────────────────────────────────────────────────────────────────────
+  const HeaderRight = useMemo(() => (
+    <TouchableOpacity
+      onPress={handleCreateDrop}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.8}
+      style={s.rightBtn}
+    >
+      <Plus size={rs(18)} color={T.primary} strokeWidth={2.4} />
+    </TouchableOpacity>
+  ), [handleCreateDrop]);
+
+  // ──────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={HIT_SLOP}
-          style={styles.iconBtn}
-        >
-          <ArrowLeft size={rs(22)} color={T.text} />
-        </TouchableOpacity>
+    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
+      <DropScreenHeader
+        title="Marketplace"
+        navigation={navigation}
+        right={HeaderRight}
+      />
 
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>Confession Market</Text>
-          <Text style={styles.headerSub}>Anonymous. Real. Unfiltered.</Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={handleCreateDrop}
-          hitSlop={HIT_SLOP}
-        >
-          <Plus size={rs(22)} color={T.primary} />
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={T.primary} size="large" />
-        </View>
-      ) : (
-        <FlatList
-          data={drops}
-          keyExtractor={keyExtractor}
-          renderItem={renderDrop}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={ListHeaderComponent}
-          ListEmptyComponent={ListEmptyComponent}
-          ListFooterComponent={ListFooterComponent}
-          onEndReached={onEndReached}
-          onEndReachedThreshold={0.3}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={T.primary}
-              colors={[T.primary]}
-            />
-          }
-        />
-      )}
+      <Animated.View style={[s.flex, { opacity: fade }]}>
+        {loading ? (
+          <View style={s.centered}>
+            <ActivityIndicator color={T.primary} size="large" />
+          </View>
+        ) : (
+          <FlatList
+            data={drops}
+            keyExtractor={keyExtractor}
+            renderItem={renderDrop}
+            contentContainerStyle={s.list}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews
+            initialNumToRender={6}
+            maxToRenderPerBatch={8}
+            windowSize={9}
+            ListHeaderComponent={ListHeaderComponent}
+            ListEmptyComponent={ListEmptyComponent}
+            ListFooterComponent={ListFooterComponent}
+            onEndReached={onEndReached}
+            onEndReachedThreshold={0.3}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={T.primary}
+                colors={[T.primary]}
+              />
+            }
+          />
+        )}
+      </Animated.View>
     </SafeAreaView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
+// ─── Styles ───────────────────────────────────────────────────
+const s = StyleSheet.create({
   safe: {
-    flex: 1,
+    flex:            1,
     backgroundColor: T.background,
   },
+  flex:     { flex: 1 },
   centered: {
-    flex: 1,
-    alignItems: 'center',
+    flex:           1,
+    alignItems:     'center',
     justifyContent: 'center',
   },
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  iconBtn: {
-    width: rs(38),
-    height: rs(38),
-    borderRadius: rs(19),
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: T.surface,
-  },
-  headerText: { flex: 1, alignItems: 'center' },
-  headerTitle: {
-    fontSize: FONT.md,
-    fontWeight: '700',
-    color: T.text,
-  },
-  headerSub: {
-    fontSize: FONT.xs,
-    color: T.textSecondary,
-    marginTop: rp(2),
+  // Right-side "Plus" button on the header
+  rightBtn: {
+    width:           rs(34),
+    height:          rs(34),
+    borderRadius:    RADIUS.full,
+    alignItems:      'center',
+    justifyContent:  'center',
+    backgroundColor: T.primaryDim,
+    borderWidth:     1,
+    borderColor:     T.primaryBorder,
   },
 
   // List
   list: {
     paddingHorizontal: SPACING.md,
-    paddingBottom: rs(40),
-    gap: SPACING.sm,
+    paddingBottom:     rs(48),
+    gap:               SPACING.sm,
   },
 
-  // Category filter
-  catScroll:    { marginTop: SPACING.md },
-  catContent:   { paddingHorizontal: SPACING.md, gap: SPACING.xs },
-  catChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: rp(5),
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: rp(8),
-    borderRadius: RADIUS.md,
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
+  // Editorial lede
+  lede: {
+    paddingTop:    SPACING.lg,
+    paddingBottom: SPACING.md,
   },
-  catChipEmoji: { fontSize: rf(15) },
-  catChipText: {
-    fontSize: FONT.sm,
-    fontWeight: '600',
-    color: T.textSecondary,
+  ledeEyebrow: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.textMute,
+    letterSpacing: 2,
+    marginBottom:  SPACING.sm,
+  },
+  ledeTitle: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(32),
+    lineHeight:    rf(38),
+    color:         T.text,
+    letterSpacing: 0.2,
+  },
+  ledeBody: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    marginTop:     SPACING.sm,
+    lineHeight:    rf(20),
+    letterSpacing: 0.2,
   },
 
-  // Filter toggles
+  // Category chip scroller — pulls into full-bleed
+  catScroll:  { marginHorizontal: -SPACING.md, marginTop: SPACING.sm },
+  catContent: { paddingHorizontal: SPACING.md },
+
+  // Filter row
   filterRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    paddingHorizontal: SPACING.md,
+    alignItems:    'center',
+    gap:           SPACING.xs,
     paddingVertical: SPACING.sm,
   },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: rp(5),
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: rp(6),
-    borderRadius: RADIUS.sm,
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-  },
-  filterChipActive: {
-    borderColor: T.primary,
-    backgroundColor: 'rgba(255,99,74,0.10)',
-  },
-  filterChipNight: {
-    borderColor: T.night,
-    backgroundColor: T.nightDim,
-  },
-  filterChipText: {
-    fontSize: FONT.sm,
-    fontWeight: '500',
-    color: T.textSecondary,
-  },
   totalLabel: {
-    marginLeft: 'auto',
-    fontSize: FONT.xs,
-    color: T.textSecondary,
+    marginLeft:    'auto',
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textMute,
+    letterSpacing: 0.5,
   },
 
-  // Open to Connect spotlight
+  // ── Spotlight (Open to Connect) ──
   spotlightSection: {
     marginBottom: SPACING.md,
-    paddingTop:   SPACING.md,
+    paddingTop:   SPACING.sm,
   },
   spotlightHeader: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(10),
-    paddingHorizontal: SPACING.md,
-    marginBottom:      SPACING.sm,
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(12),
+    marginBottom:  SPACING.sm,
   },
-  spotlightEmoji: { fontSize: rf(26) },
+  spotlightEmoji: { fontSize: rf(24) },
   spotlightTitle: {
-    fontSize:   FONT.md,
-    fontWeight: '700',
-    color:      T.text,
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.lg,
+    color:         T.text,
+    letterSpacing: 0.3,
   },
   spotlightSub: {
-    fontSize:  FONT.xs,
-    color:     T.textSecondary,
-    marginTop: rp(2),
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textSec,
+    marginTop:     rp(2),
+    letterSpacing: 0.3,
   },
   spotlightScroll: {
-    paddingHorizontal: SPACING.md,
-    gap:               rp(10),
+    paddingVertical: rp(4),
+    gap:             rp(10),
   },
   spotlightCard: {
-    width:           rs(200),
-    backgroundColor: '#1a1430',
+    width:           rs(210),
+    backgroundColor: T.tier2Dim,
     borderRadius:    RADIUS.lg,
     borderWidth:     1,
-    borderColor:     'rgba(167,139,250,0.2)',
+    borderColor:     T.tier2Border,
     padding:         rp(16),
     gap:             rp(8),
   },
-  spotlightCatEmoji:   { fontSize: rf(22) },
+  spotlightCatEmoji: { fontSize: rf(22) },
   spotlightConfession: {
-    fontSize:   rf(13),
-    color:      T.textSecondary,
-    fontStyle:  'italic',
-    lineHeight: rf(20),
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(14),
+    color:         T.text,
+    lineHeight:    rf(22),
+    letterSpacing: 0.2,
   },
   intentBadge: {
     alignSelf:         'flex-start',
-    backgroundColor:   'rgba(167,139,250,0.12)',
+    backgroundColor:   'rgba(179,107,255,0.14)',
     borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(8),
     paddingVertical:   rp(3),
     borderWidth:       1,
-    borderColor:       'rgba(167,139,250,0.25)',
+    borderColor:       T.tier2Border,
   },
   intentBadgeText: {
-    fontSize:   rf(10),
-    color:      '#A78BFA',
-    fontWeight: '600',
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.tier2,
+    letterSpacing: 0.6,
   },
   spotlightTime: {
-    fontSize: rf(10),
-    color:    T.textMuted,
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(10),
+    color:         T.textMute,
+    letterSpacing: 0.3,
   },
 
-  // Drop card
+  // ── Drop card ──
   dropCard: {
     backgroundColor: T.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    borderWidth: 1,
+    borderRadius:    RADIUS.lg,
+    padding:         SPACING.md,
+    borderWidth:     1,
+    borderColor:     T.border,
   },
   dropTop: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    marginBottom: SPACING.sm,
+    alignItems:    'center',
+    gap:           SPACING.xs,
+    marginBottom:  SPACING.sm,
   },
-  dropEmoji:   { fontSize: rf(18) },
+  dropEmoji: { fontSize: rf(18) },
   dropCat: {
-    fontSize: FONT.xs,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.primary,
+    letterSpacing: 1.4,
   },
   nightTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: rp(3),
-    backgroundColor: T.nightDim,
-    borderRadius: RADIUS.xs,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(3),
+    backgroundColor:   T.tier2Dim,
+    borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(6),
-    paddingVertical: rp(2),
+    paddingVertical:   rp(2),
+    borderWidth:       1,
+    borderColor:       T.tier2Border,
   },
   nightTagText: {
-    fontSize: FONT.xs,
-    color: T.night,
-    fontWeight: '600',
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(9),
+    color:         T.tier2,
+    letterSpacing: 0.8,
   },
   groupTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: rp(3),
-    borderRadius: RADIUS.xs,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(3),
+    borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(6),
-    paddingVertical: rp(2),
+    paddingVertical:   rp(2),
+    backgroundColor:   T.primaryDim,
+    borderWidth:       1,
+    borderColor:       T.primaryBorder,
   },
   groupTagText: {
-    fontSize: FONT.xs,
-    fontWeight: '600',
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(9),
+    color:         T.primary,
+    letterSpacing: 0.6,
   },
   dropTimeAgo: {
-    fontSize: FONT.xs,
-    color: T.textSecondary,
     marginLeft: 'auto',
+    fontFamily: 'DMSans-Italic',
+    fontSize:   rf(10),
+    color:      T.textMute,
   },
   dropConfession: {
-    fontSize: FONT.md,
-    lineHeight: rf(26),
-    color: T.textSecondary,
-    fontStyle: 'italic',
-    marginBottom: SPACING.sm,
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(16),
+    lineHeight:    rf(24),
+    color:         T.text,
+    marginBottom:  SPACING.sm,
+    letterSpacing: 0.2,
   },
-  mediaThumbWrap:    { marginBottom: SPACING.sm, borderRadius: RADIUS.md, overflow: 'hidden', position: 'relative' },
-  mediaThumb:        { width: '100%', height: rs(140) },
-  videoPlaceholder:  { width: '100%', height: rs(140), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  videoOverlay:      { position: 'absolute', top: rp(8), left: rp(8), flexDirection: 'row', alignItems: 'center', gap: rp(4), backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: rp(8), paddingVertical: rp(4), borderRadius: RADIUS.sm },
-  videoOverlayText:  { fontSize: rf(11), color: 'rgba(255,255,255,0.80)', fontWeight: '600' },
+  mediaThumbWrap: {
+    marginBottom: SPACING.sm,
+    borderRadius: RADIUS.md,
+    overflow:     'hidden',
+    position:     'relative',
+  },
+  mediaThumb: { width: '100%', height: rs(150) },
+  videoPlaceholder: {
+    width:           '100%',
+    height:          rs(150),
+    backgroundColor: T.surfaceAlt,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  videoOverlay: {
+    position:          'absolute',
+    top:               rp(8),
+    left:              rp(8),
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(4),
+    backgroundColor:   'rgba(0,0,0,0.55)',
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(4),
+    borderRadius:      RADIUS.sm,
+  },
+  videoOverlayText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   rf(10),
+    color:      'rgba(255,255,255,0.88)',
+    letterSpacing: 0.4,
+  },
   reactionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: rp(5),
-    marginBottom: SPACING.sm,
+    flexWrap:      'wrap',
+    gap:           rp(5),
+    marginBottom:  SPACING.sm,
   },
   reactionBubble: {
-    backgroundColor: T.surfaceAlt,
-    borderRadius: RADIUS.sm,
+    backgroundColor:   T.surfaceAlt,
+    borderRadius:      RADIUS.sm,
     paddingHorizontal: rp(8),
-    paddingVertical: rp(4),
+    paddingVertical:   rp(4),
+    borderWidth:       1,
+    borderColor:       T.border,
   },
   reactionText: { fontSize: rf(14) },
   dropFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
+    alignItems:    'center',
+    gap:           SPACING.sm,
   },
   dropMeta: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: rp(4),
+    alignItems:    'center',
+    gap:           rp(4),
   },
   dropMetaText: {
-    fontSize: FONT.xs,
-    color: T.textSecondary,
-    fontWeight: '500',
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(11),
+    color:      T.textSec,
+    letterSpacing: 0.3,
   },
   unlockBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: rp(4),
-    marginLeft: 'auto',
+    marginLeft:        'auto',
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(4),
     paddingHorizontal: rp(10),
-    paddingVertical: rp(5),
-    borderRadius: RADIUS.sm,
-    borderWidth: 1,
+    paddingVertical:   rp(5),
+    borderRadius:      RADIUS.sm,
+    borderWidth:       1,
+    backgroundColor:   T.primaryDim,
+    borderColor:       T.primaryBorder,
+  },
+  unlockBadgeOn: {
+    backgroundColor: T.primaryTint,
   },
   unlockBadgeText: {
-    fontSize: FONT.xs,
-    fontWeight: '700',
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(11),
+    letterSpacing: 0.4,
   },
 
-  // Empty state
+  // ── Empty state ──
   empty: {
-    alignItems: 'center',
-    paddingTop: rs(60),
+    alignItems:        'center',
+    paddingTop:        rs(60),
     paddingHorizontal: SPACING.xl,
   },
   emptyIcon: {
-    fontSize: rf(48),
+    fontSize:     rf(48),
     marginBottom: SPACING.md,
   },
   emptyTitle: {
-    fontSize: FONT.lg,
-    fontWeight: '700',
-    color: T.text,
-    marginBottom: SPACING.xs,
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.xl,
+    color:         T.text,
+    marginBottom:  SPACING.xs,
+    letterSpacing: 0.3,
   },
   emptySub: {
-    fontSize: FONT.sm,
-    color: T.textSecondary,
-    textAlign: 'center',
-    marginBottom: SPACING.lg,
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    textAlign:     'center',
+    marginBottom:  SPACING.lg,
+    letterSpacing: 0.3,
   },
   emptyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    backgroundColor: T.primary,
-    borderRadius: RADIUS.md,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               SPACING.xs,
+    backgroundColor:   T.primary,
+    borderRadius:      RADIUS.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: rp(12),
+    paddingVertical:   rp(12),
+    shadowColor:       T.primary,
+    shadowOpacity:     0.35,
+    shadowRadius:      12,
+    shadowOffset:      { width: 0, height: 4 },
+    elevation:         4,
   },
   emptyBtnText: {
-    fontSize: FONT.sm,
-    fontWeight: '700',
-    color: '#fff',
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         '#fff',
+    letterSpacing: 0.4,
   },
 });

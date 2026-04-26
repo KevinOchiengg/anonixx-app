@@ -305,7 +305,7 @@ export default function CreatePostScreen({ route, navigation }) {
   const handlePost = useCallback(async () => {
     if (!isAuthenticated) {
       showToast({ type: 'warning', message: 'Sign in to confess.' });
-      navigation.navigate('Auth', { screen: 'Login' });
+      navigation.navigate('AuthNav', { screen: 'Login' });
       return;
     }
     if (!canPost) return;

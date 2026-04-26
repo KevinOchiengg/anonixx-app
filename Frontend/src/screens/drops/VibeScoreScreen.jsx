@@ -1,260 +1,308 @@
 /**
  * VibeScoreScreen
+ *
  * Your vibe score, tier, admirer count, confession streak, and event breakdown.
+ *
+ * Rebuilt to the DropsComposeScreen design language:
+ *   • shared `T` palette
+ *   • DropScreenHeader
+ *   • responsive.js spacing + typography
+ *   • PlayfairDisplay-Italic for score/tier/section titles, DMSans for chrome
+ *   • 320 ms entrance fade
+ *   • tier-specific color on the hero + roadmap preserved
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, {
+  useState, useEffect, useRef, useCallback, useMemo,
+} from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, Animated,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ArrowLeft, Eye, Flame, Heart, Star, Zap,
-  TrendingUp, Award, Calendar,
+  Eye, Flame, Heart, Star, Zap, Calendar,
 } from 'lucide-react-native';
+
+import { T } from '../../utils/colorTokens';
+import {
+  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
+} from '../../utils/responsive';
+import DropScreenHeader from '../../components/drops/DropScreenHeader';
+import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  surfaceAlt: '#1a1f2e',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.06)',
-};
-
+// ─── Static data ──────────────────────────────────────────────
 const TIERS = [
-  { name: 'Fresh',      emoji: '🌱', color: '#47FFB8', min: 0,   max: 49  },
-  { name: 'Awakening',  emoji: '✨', color: '#FFD700', min: 50,  max: 99  },
-  { name: 'Rising',     emoji: '🌙', color: '#9B8BFF', min: 100, max: 199 },
-  { name: 'Electric',   emoji: '⚡', color: '#47B8FF', min: 200, max: 499 },
-  { name: 'Legendary',  emoji: '🔥', color: '#FF634A', min: 500, max: 999 },
+  { name: 'Fresh',     emoji: '🌱', color: '#47FFB8', min: 0,   max: 49  },
+  { name: 'Awakening', emoji: '✨', color: '#FFD700', min: 50,  max: 99  },
+  { name: 'Rising',    emoji: '🌙', color: T.tier2,   min: 100, max: 199 },
+  { name: 'Electric',  emoji: '⚡', color: '#47B8FF', min: 200, max: 499 },
+  { name: 'Legendary', emoji: '🔥', color: T.primary, min: 500, max: 999 },
 ];
+
+const EVENT_LABELS = {
+  card_created:      { label: 'Cards created',      icon: Flame,    pts: '+2 pts each' },
+  card_unlocked:     { label: 'Cards unlocked',     icon: Zap,      pts: '+5 pts each' },
+  reaction_received: { label: 'Reactions received', icon: Heart,    pts: '+1 pt each'  },
+  reveal_completed:  { label: 'Reveals completed',  icon: Eye,      pts: '+3 pts each' },
+  streak_day:        { label: 'Streak days',        icon: Calendar, pts: '+2 pts each' },
+};
 
 const getTier = (score) =>
   TIERS.slice().reverse().find(t => score >= t.min) || TIERS[0];
 
 const getProgress = (score) => {
-  const tier = getTier(score);
+  const tier     = getTier(score);
   const nextTier = TIERS[TIERS.indexOf(tier) + 1];
   if (!nextTier) return 1;
   return (score - tier.min) / (nextTier.min - tier.min);
 };
 
-const EVENT_LABELS = {
-  card_created:       { label: 'Cards created',     icon: Flame,     pts: '+2 pts each' },
-  card_unlocked:      { label: 'Cards unlocked',    icon: Zap,       pts: '+5 pts each' },
-  reaction_received:  { label: 'Reactions received',icon: Heart,     pts: '+1 pt each'  },
-  reveal_completed:   { label: 'Reveals completed', icon: Eye,       pts: '+3 pts each' },
-  streak_day:         { label: 'Streak days',        icon: Calendar,  pts: '+2 pts each' },
-};
+// ─── Empty state ──────────────────────────────────────────────
+const EmptyState = React.memo(({ onCreateDrop }) => (
+  <View style={s.centered}>
+    <Star size={rs(40)} color={T.textMute} strokeWidth={1.5} />
+    <Text style={s.errorTitle}>No score yet</Text>
+    <Text style={s.errorSub}>
+      Start creating drops to build your vibe score.
+    </Text>
+    <TouchableOpacity
+      style={s.primaryBtn}
+      onPress={onCreateDrop}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.9}
+    >
+      <Flame size={rs(18)} color="#fff" strokeWidth={2.2} />
+      <Text style={s.primaryBtnText}>Create your first Drop</Text>
+    </TouchableOpacity>
+  </View>
+));
 
+// ─── Main Screen ──────────────────────────────────────────────
 export default function VibeScoreScreen({ navigation }) {
-  const insets = useSafeAreaInsets();
-  const [data, setData] = useState(null);
+  const { showToast } = useToast();
+
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const scoreAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim     = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/drops/vibe-score`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/vibe-score`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const json = await res.json();
         setData(json);
-        const tier = getTier(json.score);
         const progress = getProgress(json.score);
-
         Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(progressAnim, { toValue: progress, duration: 1000, delay: 300, useNativeDriver: false }),
+          Animated.timing(fadeAnim, {
+            toValue:         1,
+            duration:        320,
+            useNativeDriver: true,
+          }),
+          Animated.timing(progressAnim, {
+            toValue:         progress,
+            duration:        900,
+            delay:           260,
+            useNativeDriver: false,
+          }),
         ]).start();
+      } else {
+        showToast({ type: 'error', message: "Couldn't load your vibe score." });
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
+    } catch {
+      showToast({ type: 'error', message: 'Network error. Try again.' });
+    } finally {
+      setLoading(false);
+    }
+  }, [fadeAnim, progressAnim, showToast]);
 
+  useEffect(() => { load(); }, [load]);
+
+  const handleCreateDrop = useCallback(() => {
+    navigation.navigate('DropsCompose');
+  }, [navigation]);
+
+  // ── Loading ───────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={THEME.primary} size="large" />
-      </View>
+      <SafeAreaView style={[s.safe, s.centered]} edges={['top', 'left', 'right']}>
+        <ActivityIndicator color={T.primary} size="large" />
+      </SafeAreaView>
     );
   }
 
+  // ── Empty ─────────────────────────────────────────────────
   if (!data) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ArrowLeft size={22} color={THEME.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Vibe Score</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <View style={styles.centered}>
-          <Star size={40} color={THEME.textSecondary} strokeWidth={1.5} />
-          <Text style={styles.errorTitle}>No score yet</Text>
-          <Text style={styles.errorSub}>Start creating drops to build your vibe score.</Text>
-          <TouchableOpacity
-            style={styles.createDropBtn}
-            onPress={() => navigation.navigate('DropsCompose')}
-          >
-            <Flame size={18} color="#fff" />
-            <Text style={styles.createDropBtnText}>Create your first Drop</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
+        <DropScreenHeader title="Vibe Score" navigation={navigation} />
+        <EmptyState onCreateDrop={handleCreateDrop} />
+      </SafeAreaView>
     );
   }
 
-  const tier = getTier(data.score);
-  const nextTier = TIERS[TIERS.indexOf(tier) + 1];
+  const tier      = getTier(data.score);
+  const nextTier  = TIERS[TIERS.indexOf(tier) + 1];
   const ptsToNext = nextTier ? nextTier.min - data.score : 0;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={22} color={THEME.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Vibe Score</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
+      <DropScreenHeader title="Vibe Score" navigation={navigation} />
 
       <Animated.ScrollView
         style={{ opacity: fadeAnim }}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Tier hero */}
-        <View style={[styles.heroCard, { borderColor: `${tier.color}40` }]}>
-          <Text style={styles.tierEmoji}>{tier.emoji}</Text>
-          <Text style={[styles.tierName, { color: tier.color }]}>{tier.name}</Text>
-          <Text style={[styles.score, { color: tier.color }]}>{data.score}</Text>
-          <Text style={styles.scoreLabel}>vibe points</Text>
+        {/* ── Tier hero ── */}
+        <View style={[s.heroCard, { borderColor: `${tier.color}55` }]}>
+          <Text style={s.tierEmoji}>{tier.emoji}</Text>
+          <Text style={[s.tierName, { color: tier.color }]}>{tier.name}</Text>
+          <Text style={[s.score, { color: tier.color }]}>{data.score}</Text>
+          <Text style={s.scoreLabel}>vibe points</Text>
 
           {/* Progress bar */}
-          <View style={styles.progressTrack}>
+          <View style={s.progressTrack}>
             <Animated.View style={[
-              styles.progressFill,
+              s.progressFill,
               {
                 backgroundColor: tier.color,
                 width: progressAnim.interpolate({
-                  inputRange: [0, 1],
+                  inputRange:  [0, 1],
                   outputRange: ['0%', '100%'],
                 }),
-              }
+              },
             ]} />
           </View>
 
           {nextTier ? (
-            <Text style={styles.progressLabel}>
-              {ptsToNext} pts to{' '}
-              <Text style={{ color: nextTier.color }}>
+            <Text style={s.progressLabel}>
+              <Text style={{ color: tier.color, fontFamily: 'DMSans-Bold' }}>
+                {ptsToNext} pts
+              </Text>
+              {' to '}
+              <Text style={{ color: nextTier.color, fontFamily: 'DMSans-Bold' }}>
                 {nextTier.emoji} {nextTier.name}
               </Text>
             </Text>
           ) : (
-            <Text style={[styles.progressLabel, { color: tier.color }]}>
+            <Text style={[s.progressLabel, { color: tier.color }]}>
               Maximum tier reached 🏆
             </Text>
           )}
         </View>
 
-        {/* Tier roadmap */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tier Journey</Text>
-          <View style={styles.tierRoadmap}>
+        {/* ── Tier roadmap ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Tier Journey</Text>
+          <View style={s.tierRoadmap}>
             {TIERS.map((t, i) => {
-              const reached = data.score >= t.min;
+              const reached   = data.score >= t.min;
               const isCurrent = t.name === tier.name;
               return (
-                <View key={t.name} style={styles.tierStep}>
+                <View key={t.name} style={s.tierStep}>
                   <View style={[
-                    styles.tierDot,
-                    { backgroundColor: reached ? t.color : THEME.surfaceAlt },
-                    isCurrent && { width: 16, height: 16, borderRadius: 8 },
+                    s.tierDot,
+                    { backgroundColor: reached ? t.color : T.surfaceAlt },
+                    isCurrent && {
+                      width:        rs(16),
+                      height:       rs(16),
+                      borderRadius: rs(8),
+                      borderWidth:  2,
+                      borderColor:  T.background,
+                    },
                   ]} />
                   {i < TIERS.length - 1 && (
-                    <View style={[styles.tierLine, reached && TIERS[i + 1] && data.score >= TIERS[i + 1].min && { backgroundColor: TIERS[i + 1].color }]} />
+                    <View style={[
+                      s.tierLine,
+                      reached && TIERS[i + 1] && data.score >= TIERS[i + 1].min &&
+                        { backgroundColor: TIERS[i + 1].color },
+                    ]} />
                   )}
-                  <Text style={[styles.tierStepEmoji]}>{t.emoji}</Text>
-                  <Text style={[styles.tierStepName, isCurrent && { color: t.color, fontWeight: '700' }]}>
+                  <Text style={s.tierStepEmoji}>{t.emoji}</Text>
+                  <Text style={[
+                    s.tierStepName,
+                    isCurrent && { color: t.color, fontFamily: 'DMSans-Bold' },
+                  ]}>
                     {t.name}
                   </Text>
-                  <Text style={styles.tierStepMin}>{t.min}+</Text>
+                  <Text style={s.tierStepMin}>{t.min}+</Text>
                 </View>
               );
             })}
           </View>
         </View>
 
-        {/* Stats grid */}
-        <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { borderColor: 'rgba(255,107,138,0.3)' }]}>
-            <Eye size={22} color="#FF6B8A" />
-            <Text style={[styles.statBig, { color: '#FF6B8A' }]}>{data.admirer_count}</Text>
-            <Text style={styles.statCardLabel}>Admirers</Text>
-            <Text style={styles.statCardSub}>viewed your drops</Text>
+        {/* ── Stats ── */}
+        <View style={s.statsGrid}>
+          <View style={[s.statCard, { borderColor: 'rgba(255,107,138,0.32)' }]}>
+            <Eye size={rs(22)} color="#FF6B8A" strokeWidth={1.8} />
+            <Text style={[s.statBig, { color: '#FF6B8A' }]}>{data.admirer_count}</Text>
+            <Text style={s.statCardLabel}>Admirers</Text>
+            <Text style={s.statCardSub}>viewed your drops</Text>
           </View>
-          <View style={[styles.statCard, { borderColor: 'rgba(255,183,71,0.3)' }]}>
-            <Flame size={22} color="#FFB347" />
-            <Text style={[styles.statBig, { color: '#FFB347' }]}>{data.confession_streak}</Text>
-            <Text style={styles.statCardLabel}>Day Streak</Text>
-            <Text style={styles.statCardSub}>longest: {data.longest_streak}</Text>
+          <View style={[s.statCard, { borderColor: 'rgba(255,183,71,0.32)' }]}>
+            <Flame size={rs(22)} color="#FFB347" strokeWidth={1.8} />
+            <Text style={[s.statBig, { color: '#FFB347' }]}>{data.confession_streak}</Text>
+            <Text style={s.statCardLabel}>Day Streak</Text>
+            <Text style={s.statCardSub}>longest: {data.longest_streak}</Text>
           </View>
         </View>
 
-        {/* Event breakdown */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>How you earned it</Text>
-          <View style={styles.eventList}>
+        {/* ── Event breakdown ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>How you earned it</Text>
+          <View style={s.eventList}>
             {Object.entries(EVENT_LABELS).map(([key, meta]) => {
-              const count = data.events?.[key] || 0;
+              const count    = data.events?.[key] || 0;
               const IconComp = meta.icon;
               if (count === 0) return null;
               return (
-                <View key={key} style={styles.eventRow}>
-                  <View style={styles.eventLeft}>
-                    <IconComp size={18} color={THEME.primary} />
+                <View key={key} style={s.eventRow}>
+                  <View style={s.eventLeft}>
+                    <IconComp size={rs(18)} color={T.primary} strokeWidth={2} />
                     <View>
-                      <Text style={styles.eventLabel}>{meta.label}</Text>
-                      <Text style={styles.eventPts}>{meta.pts}</Text>
+                      <Text style={s.eventLabel}>{meta.label}</Text>
+                      <Text style={s.eventPts}>{meta.pts}</Text>
                     </View>
                   </View>
-                  <Text style={styles.eventCount}>{count}×</Text>
+                  <Text style={s.eventCount}>{count}×</Text>
                 </View>
               );
             })}
             {Object.values(data.events || {}).every(v => v === 0) && (
-              <Text style={styles.noEvents}>Start creating drops to earn points!</Text>
+              <Text style={s.noEvents}>
+                Start creating drops to earn points!
+              </Text>
             )}
           </View>
         </View>
 
-        {/* How to earn */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>How to earn points</Text>
-          <View style={styles.earnList}>
-            {Object.entries(EVENT_LABELS).map(([key, meta]) => {
+        {/* ── How to earn ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>How to earn points</Text>
+          <View style={s.earnList}>
+            {Object.entries(EVENT_LABELS).map(([key, meta], idx, arr) => {
               const IconComp = meta.icon;
               return (
-                <View key={key} style={styles.earnRow}>
-                  <IconComp size={16} color={THEME.textSecondary} />
-                  <Text style={styles.earnLabel}>{meta.label}</Text>
-                  <Text style={[styles.earnPts, { color: THEME.primary }]}>{meta.pts}</Text>
+                <View
+                  key={key}
+                  style={[
+                    s.earnRow,
+                    idx === arr.length - 1 && { borderBottomWidth: 0 },
+                  ]}
+                >
+                  <IconComp size={rs(16)} color={T.textSec} strokeWidth={2} />
+                  <Text style={s.earnLabel}>{meta.label}</Text>
+                  <Text style={[s.earnPts, { color: T.primary }]}>{meta.pts}</Text>
                 </View>
               );
             })}
@@ -262,114 +310,293 @@ export default function VibeScoreScreen({ navigation }) {
         </View>
 
         <TouchableOpacity
-          style={styles.createDropBtn}
-          onPress={() => navigation.navigate('DropsCompose')}
+          style={s.primaryBtn}
+          onPress={handleCreateDrop}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.9}
         >
-          <Flame size={18} color="#fff" />
-          <Text style={styles.createDropBtnText}>Create a Drop to earn points</Text>
+          <Flame size={rs(18)} color="#fff" strokeWidth={2.2} />
+          <Text style={s.primaryBtnText}>Create a Drop to earn points</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: rs(40) }} />
       </Animated.ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 },
-  errorTitle: { fontSize: 17, fontWeight: '700', color: THEME.text, marginTop: 8 },
-  errorSub: { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 21 },
-  content: { padding: 20, gap: 20 },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: THEME.border,
+// ─── Styles ───────────────────────────────────────────────────
+const s = StyleSheet.create({
+  safe:     { flex: 1, backgroundColor: T.background },
+  centered: {
+    flex:              1,
+    justifyContent:    'center',
+    alignItems:        'center',
+    padding:           SPACING.xl,
+    gap:               SPACING.sm,
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.surface,
-  },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: THEME.text },
 
-  // Hero
+  content: {
+    padding: SPACING.md,
+    gap:     SPACING.lg,
+  },
+
+  // Empty
+  errorTitle: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.lg,
+    color:         T.text,
+    marginTop:     SPACING.xs,
+    letterSpacing: 0.3,
+  },
+  errorSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    textAlign:     'center',
+    lineHeight:    rf(21),
+    marginBottom:  SPACING.md,
+    letterSpacing: 0.3,
+  },
+
+  // ── Tier hero ──
   heroCard: {
-    backgroundColor: THEME.surface, borderRadius: 24, padding: 28,
-    alignItems: 'center', borderWidth: 1.5,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4, shadowRadius: 20, elevation: 10,
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.xl,
+    padding:         SPACING.xl,
+    alignItems:      'center',
+    borderWidth:     1.5,
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: rs(8) },
+    shadowOpacity:   0.4,
+    shadowRadius:    rs(20),
+    elevation:       10,
   },
-  tierEmoji: { fontSize: 52, marginBottom: 8 },
-  tierName: { fontSize: 15, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 },
-  score: { fontSize: 64, fontWeight: '900', lineHeight: 72 },
-  scoreLabel: { fontSize: 14, color: THEME.textSecondary, marginBottom: 24 },
+  tierEmoji: {
+    fontSize:     rf(52),
+    marginBottom: SPACING.xs,
+  },
+  tierName: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(14),
+    letterSpacing: 2.4,
+    textTransform: 'uppercase',
+    marginBottom:  SPACING.sm,
+  },
+  score: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(64),
+    lineHeight:    rf(72),
+    letterSpacing: 0.5,
+  },
+  scoreLabel: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    marginBottom:  SPACING.lg,
+    letterSpacing: 0.3,
+  },
   progressTrack: {
-    width: '100%', height: 6, backgroundColor: THEME.surfaceAlt,
-    borderRadius: 3, marginBottom: 10, overflow: 'hidden',
+    width:           '100%',
+    height:          rs(6),
+    backgroundColor: T.surfaceAlt,
+    borderRadius:    rs(3),
+    marginBottom:    rp(10),
+    overflow:        'hidden',
   },
-  progressFill: { height: '100%', borderRadius: 3 },
-  progressLabel: { fontSize: 13, color: THEME.textSecondary },
+  progressFill: {
+    height:       '100%',
+    borderRadius: rs(3),
+  },
+  progressLabel: {
+    fontFamily:    'DMSans-Regular',
+    fontSize:      rf(12),
+    color:         T.textSec,
+    letterSpacing: 0.3,
+  },
 
-  // Tier roadmap
+  // ── Tier roadmap ──
   tierRoadmap: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingVertical: 8,
+    flexDirection:   'row',
+    alignItems:      'flex-start',
+    justifyContent:  'space-between',
+    paddingVertical: SPACING.xs,
   },
-  tierStep: { alignItems: 'center', flex: 1, position: 'relative' },
-  tierDot: { width: 12, height: 12, borderRadius: 6, marginBottom: 8 },
+  tierStep: {
+    alignItems: 'center',
+    flex:       1,
+    position:   'relative',
+  },
+  tierDot: {
+    width:        rs(12),
+    height:       rs(12),
+    borderRadius: rs(6),
+    marginBottom: SPACING.xs,
+  },
   tierLine: {
-    position: 'absolute', top: 6, left: '50%', right: '-50%',
-    height: 2, backgroundColor: THEME.border,
+    position:        'absolute',
+    top:             rs(5),
+    left:            '55%',
+    right:           '-45%',
+    height:          2,
+    backgroundColor: T.border,
   },
-  tierStepEmoji: { fontSize: 18, marginBottom: 4 },
-  tierStepName: { fontSize: 10, color: THEME.textSecondary, textAlign: 'center' },
-  tierStepMin: { fontSize: 10, color: THEME.textSecondary, opacity: 0.5, marginTop: 2 },
+  tierStepEmoji: {
+    fontSize:     rf(18),
+    marginBottom: rp(4),
+  },
+  tierStepName: {
+    fontFamily:    'DMSans-Regular',
+    fontSize:      rf(10),
+    color:         T.textSec,
+    textAlign:     'center',
+    letterSpacing: 0.3,
+  },
+  tierStepMin: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   rf(10),
+    color:      T.textMute,
+    marginTop:  rp(2),
+  },
 
-  // Stats grid
-  statsGrid: { flexDirection: 'row', gap: 12 },
+  // ── Stats ──
+  statsGrid: {
+    flexDirection: 'row',
+    gap:           SPACING.sm,
+  },
   statCard: {
-    flex: 1, backgroundColor: THEME.surface, borderRadius: 18, padding: 18,
-    alignItems: 'center', gap: 6, borderWidth: 1,
+    flex:            1,
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    padding:         SPACING.md,
+    alignItems:      'center',
+    gap:             rp(6),
+    borderWidth:     1,
   },
-  statBig: { fontSize: 32, fontWeight: '900' },
-  statCardLabel: { fontSize: 14, fontWeight: '700', color: THEME.text },
-  statCardSub: { fontSize: 11, color: THEME.textSecondary, textAlign: 'center' },
+  statBig: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(32),
+    letterSpacing: 0.3,
+  },
+  statCardLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.text,
+    letterSpacing: 0.4,
+  },
+  statCardSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textMute,
+    textAlign:     'center',
+    letterSpacing: 0.3,
+  },
 
-  // Section
-  section: { gap: 12 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: THEME.text },
+  // ── Section ──
+  section: { gap: SPACING.sm },
+  sectionTitle: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.md,
+    color:         T.text,
+    letterSpacing: 0.3,
+  },
 
-  // Event breakdown
+  // ── Event breakdown ──
   eventList: {
-    backgroundColor: THEME.surface, borderRadius: 18,
-    borderWidth: 1, borderColor: THEME.border, overflow: 'hidden',
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     T.border,
+    overflow:        'hidden',
   },
   eventRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: THEME.border,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    padding:           SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  eventLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  eventLabel: { fontSize: 14, fontWeight: '600', color: THEME.text },
-  eventPts: { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
-  eventCount: { fontSize: 16, fontWeight: '800', color: THEME.primary },
-  noEvents: { fontSize: 14, color: THEME.textSecondary, padding: 20, textAlign: 'center' },
+  eventLeft: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           SPACING.sm,
+  },
+  eventLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.text,
+    letterSpacing: 0.2,
+  },
+  eventPts: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   rf(11),
+    color:      T.textSec,
+    marginTop:  rp(2),
+  },
+  eventCount: {
+    fontFamily: 'PlayfairDisplay-Italic',
+    fontSize:   rf(18),
+    color:      T.primary,
+    letterSpacing: 0.3,
+  },
+  noEvents: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+    color:      T.textSec,
+    padding:    SPACING.md,
+    textAlign:  'center',
+  },
 
-  // Earn list
+  // ── How to earn ──
   earnList: {
-    backgroundColor: THEME.surface, borderRadius: 18,
-    borderWidth: 1, borderColor: THEME.border, overflow: 'hidden',
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.lg,
+    borderWidth:     1,
+    borderColor:     T.border,
+    overflow:        'hidden',
   },
   earnRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 14, borderBottomWidth: 1, borderBottomColor: THEME.border,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               SPACING.sm,
+    paddingVertical:   rp(14),
+    paddingHorizontal: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  earnLabel: { flex: 1, fontSize: 13, color: THEME.textSecondary },
-  earnPts: { fontSize: 13, fontWeight: '700' },
+  earnLabel: {
+    flex:          1,
+    fontFamily:    'DMSans-Regular',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    letterSpacing: 0.2,
+  },
+  earnPts: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    letterSpacing: 0.3,
+  },
 
-  createDropBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: THEME.primary, borderRadius: 18, paddingVertical: 16,
+  // ── Primary button ──
+  primaryBtn: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             SPACING.xs,
+    backgroundColor: T.primary,
+    borderRadius:    RADIUS.lg,
+    paddingVertical: rp(16),
+    shadowColor:     T.primary,
+    shadowOpacity:   0.35,
+    shadowRadius:    12,
+    shadowOffset:    { width: 0, height: 4 },
+    elevation:       4,
   },
-  createDropBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  primaryBtnText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.md,
+    color:         '#fff',
+    letterSpacing: 0.4,
+  },
 });

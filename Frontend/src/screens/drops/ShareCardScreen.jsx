@@ -1,133 +1,115 @@
 /**
  * ShareCardScreen — drop a confession.
  * Three modes: text · image · video
+ *
+ * Behaviour:
+ *   - Drop ALWAYS goes to marketplace.
+ *   - User can optionally tag a specific person within Anonixx; they receive
+ *     it directly (anonymously) while it still appears in the marketplace.
+ *   - Text drops can opt-in to AI refinement via POST /api/v1/drops/refine.
+ *     A before/after preview lets the user choose which version to post.
+ *   - No external sharing (WhatsApp / share sheet removed).
  */
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Keyboard, Dimensions,
-  KeyboardAvoidingView, ScrollView, Platform, Image, Linking, Share,
+  ActivityIndicator, Keyboard, Dimensions, Animated,
+  KeyboardAvoidingView, ScrollView, Platform, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ViewShot from 'react-native-view-shot';
 import * as Clipboard from 'expo-clipboard';
-import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch } from 'react-redux';
-import { FileImage, Film, Globe, Search, Type, User, X } from 'lucide-react-native';
+import { FileImage, Film, Sparkles, Type, X } from 'lucide-react-native';
+import TagUserSection from '../../components/drops/TagUserSection';
 import { LinearGradient } from 'expo-linear-gradient';
+
+import { T, ENTRANCE } from '../../utils/colorTokens';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL, BACKENDS } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  primary:       '#FF634A',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#4a4f62',
-  border:        'rgba(255,255,255,0.06)',
-};
+import DropScreenHeader from '../../components/drops/DropScreenHeader';
+import { Chip, ChipRow } from '../../components/drops/ChipRow';
 
 const SCREEN_W  = Dimensions.get('window').width;
 const MAX_CHARS = 200;
 const CARD_W    = SCREEN_W - SPACING.md * 2;
 
+// ─── Static data (module-level per dev rules) ─────────────────
+const CATEGORIES = [
+  { id: 'love',                    label: 'Love',                  emoji: '❤️'  },
+  { id: 'fun',                     label: 'Fun',                   emoji: '✨'  },
+  { id: 'friendship',              label: 'Friendship',            emoji: '🤝' },
+  { id: 'adventure',               label: 'Adventure',             emoji: '🌍' },
+  { id: 'spicy',                   label: 'Spicy',                 emoji: '🌶️' },
+  { id: 'carrying this alone',     label: 'Carrying this alone',   emoji: '🌑' },
+  { id: 'starting over',           label: 'Starting over',         emoji: '🌱' },
+  { id: 'need stability',          label: 'Need stability',        emoji: '⚓' },
+  { id: 'open to connection',      label: 'Open to connection',    emoji: '🤲' },
+  { id: 'just need to be heard',   label: 'Just need to be heard', emoji: '🌙' },
+];
 
-// ─── Mode tabs ────────────────────────────────────────────────
 const MODES = [
   { id: 'text',  label: 'Text',  Icon: Type      },
-  { id: 'image', label: 'Image', Icon: FileImage  },
-  { id: 'video', label: 'Video', Icon: Film       },
+  { id: 'image', label: 'Image', Icon: FileImage },
+  { id: 'video', label: 'Video', Icon: Film      },
 ];
-
-const AUDIENCE = [
-  { id: 'marketplace', label: 'Marketplace', Icon: Globe,   desc: 'Anyone can find it'     },
-  { id: 'someone',     label: 'Send to Someone', Icon: User, desc: 'Goes to their inbox'   },
-];
-
-const STORE_IOS     = 'https://apps.apple.com/app/anonixx';
-const STORE_ANDROID = 'https://play.google.com/store/apps/details?id=com.anonixx.app';
 
 const INTENTS = [
-  { id: 'open to connection',       label: 'Open to connection',        emoji: '🤲' },
-  { id: 'just need to be heard',    label: 'Just need to be heard',     emoji: '🌙' },
+  { id: 'open to connection',         label: 'Open to connection',         emoji: '🤲' },
+  { id: 'just need to be heard',      label: 'Just need to be heard',      emoji: '🌙' },
   { id: 'looking for something real', label: 'Looking for something real', emoji: '❤️' },
-  { id: 'late night thoughts',      label: 'Late night thoughts',       emoji: '🌃' },
+  { id: 'late night thoughts',        label: 'Late night thoughts',        emoji: '🌃' },
 ];
 
 // ─── Text Confession Card ─────────────────────────────────────
-const TextCard = React.memo(({ text, setText, captureRef, inputRef, readOnly, shareUrl }) => {
+const TextCard = React.memo(({ text, setText, inputRef, readOnly }) => {
   const remaining = MAX_CHARS - text.length;
   const warnColor = remaining <= 30
-    ? (remaining <= 10 ? '#ef4444' : '#FB923C')
-    : T.textMuted;
+    ? (remaining <= 10 ? T.danger : T.warn)
+    : T.textMute;
 
   return (
-    <ViewShot ref={captureRef} options={{ format: 'png', quality: 1.0 }}>
-      <LinearGradient
-        colors={['#12151f', '#0c0f18', '#111420']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[card.wrap, { width: CARD_W }]}
-      >
-        {/* Giant ghost quote — background texture */}
-        <Text style={card.ghostQuote}>"</Text>
+    <LinearGradient
+      colors={['#12151f', '#0c0f18', '#111420']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[card.wrap, { width: CARD_W }]}
+    >
+      <Text style={card.ghostQuote}>"</Text>
+      <Text style={card.secretTag}>someone said this</Text>
+      <View style={card.accentLine} />
 
-        {/* Label */}
-        <Text style={card.secretTag}>someone said this</Text>
+      <TextInput
+        ref={inputRef}
+        style={card.input}
+        value={text}
+        onChangeText={readOnly ? undefined : setText}
+        placeholder={"say what you've been\nholding in…"}
+        placeholderTextColor="rgba(234,234,240,0.22)"
+        multiline
+        maxLength={MAX_CHARS}
+        textAlignVertical="top"
+        autoCorrect
+        autoCapitalize="sentences"
+        scrollEnabled={false}
+        editable={!readOnly}
+      />
 
-        {/* Short red accent line */}
-        <View style={card.accentLine} />
+      <View style={card.tensionLine} />
 
-        {/* Confession — large serif italic */}
-        <TextInput
-          ref={inputRef}
-          style={card.input}
-          value={text}
-          onChangeText={readOnly ? undefined : setText}
-          placeholder={"say what you've been\nholding in…"}
-          placeholderTextColor="rgba(234,234,240,0.22)"
-          multiline
-          maxLength={MAX_CHARS}
-          textAlignVertical="top"
-          autoCorrect
-          autoCapitalize="sentences"
-          scrollEnabled={false}
-          editable={!readOnly}
-        />
+      <View style={card.footerRow}>
+        <Text style={card.anonTag}>— someone</Text>
+        {!readOnly && (
+          <Text style={[card.remaining, { color: warnColor }]}>{remaining}</Text>
+        )}
+      </View>
 
-        {/* Tension break — right-leaning partial line */}
-        <View style={card.tensionLine} />
-
-        {/* Footer */}
-        <View style={card.footerRow}>
-          <Text style={card.anonTag}>— someone</Text>
-          {!readOnly && (
-            <Text style={[card.remaining, { color: warnColor }]}>{remaining}</Text>
-          )}
-        </View>
-
-        {/* Brand signature */}
-        <Text style={card.brandSig}>anonixx</Text>
-
-        {/* Drop link — baked into the captured image so it shares automatically */}
-        {shareUrl ? (
-          <View style={card.linkRow}>
-            <View style={card.linkDot} />
-            <Text style={card.linkText} numberOfLines={1}>
-              {shareUrl.replace('https://', '')}
-            </Text>
-          </View>
-        ) : null}
-
-      </LinearGradient>
-    </ViewShot>
+      <Text style={card.brandSig}>anonixx</Text>
+    </LinearGradient>
   );
 });
 
@@ -138,7 +120,7 @@ const MediaPicker = React.memo(({ mode, mediaUri, thumbUri, onPick, onClear }) =
       <TouchableOpacity style={pick.wrap} onPress={onPick} activeOpacity={0.8}>
         {mode === 'image'
           ? <FileImage size={rs(36)} color={T.primary} />
-          : <Film size={rs(36)} color={T.primary} />
+          : <Film      size={rs(36)} color={T.primary} />
         }
         <Text style={pick.label}>
           {mode === 'image' ? 'Tap to pick an image' : 'Tap to pick a video'}
@@ -157,7 +139,7 @@ const MediaPicker = React.memo(({ mode, mediaUri, thumbUri, onPick, onClear }) =
           {thumbUri
             ? <Image source={{ uri: thumbUri }} style={pick.preview} resizeMode="cover" />
             : <View style={[pick.preview, pick.videoPlaceholder]}>
-                <Film size={rs(40)} color={T.textMuted} />
+                <Film size={rs(40)} color={T.textMute} />
               </View>
           }
           <View style={pick.videoOverlay}>
@@ -177,7 +159,6 @@ const MediaPicker = React.memo(({ mode, mediaUri, thumbUri, onPick, onClear }) =
 export default function ShareCardScreen({ navigation }) {
   const { showToast } = useToast();
   const dispatch      = useDispatch();
-  const captureRef    = useRef(null);
   const inputRef      = useRef(null);
 
   const [mode,     setMode]     = useState('text');
@@ -188,16 +169,28 @@ export default function ShareCardScreen({ navigation }) {
   const [loading,  setLoading]  = useState(false);
   const [dropId,   setDropId]   = useState(null);
 
-  // Audience targeting
-  const [audience,      setAudience]      = useState('marketplace');
-  const [userQuery,     setUserQuery]     = useState('');
-  const [userResults,   setUserResults]   = useState([]);
-  const [targetUser,    setTargetUser]    = useState(null);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const searchTimer = useRef(null);
+  // Category + intent
+  const [category, setCategory] = useState('love');
+  const [intent,   setIntent]   = useState(null);
 
-  // Intent — what the sender is open to (marketplace drops only)
-  const [intent, setIntent] = useState(null);
+  // Tag a specific user (drop still hits marketplace)
+  const [taggedUser, setTaggedUser] = useState(null);
+
+  // AI text refinement (text mode only)
+  const [refineEnabled,     setRefineEnabled]     = useState(false);
+  const [refinedText,       setRefinedText]       = useState('');
+  const [showRefinePreview, setShowRefinePreview] = useState(false);
+  const [refining,          setRefining]          = useState(false);
+
+  // Entrance fade
+  const fade = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fade, {
+      toValue: 1,
+      duration: ENTRANCE.fadeDuration,
+      useNativeDriver: true,
+    }).start();
+  }, [fade]);
 
   const handleModeChange = useCallback((m) => {
     setMode(m);
@@ -205,54 +198,39 @@ export default function ShareCardScreen({ navigation }) {
     setMediaUri(null);
     setThumbUri(null);
     setCaption('');
+    setRefineEnabled(false);
+    setRefinedText('');
+    setShowRefinePreview(false);
   }, []);
 
-  const handleAudienceChange = useCallback((a) => {
-    setAudience(a);
-    setTargetUser(null);
-    setUserQuery('');
-    setUserResults([]);
-  }, []);
-
-  const handleUserSearch = useCallback((q) => {
-    setUserQuery(q);
-    setTargetUser(null);
-    clearTimeout(searchTimer.current);
-    if (!q.trim()) { setUserResults([]); return; }
-    searchTimer.current = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const res   = await fetch(
-          `${API_BASE_URL}/api/v1/users/search?q=${encodeURIComponent(q.trim())}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setUserResults(data.users || []);
-        }
-      } catch { /* silent */ }
-      finally { setSearchLoading(false); }
-    }, 200);
-  }, []);
-
-  const handleSelectUser = useCallback((u) => {
-    setTargetUser(u);
-    setUserQuery(u.username);
-    setUserResults([]);
-    Keyboard.dismiss();
-  }, []);
-
-  // Mystery invite — promotes Anonixx without revealing who sent to whom
-  const shareMysteryInvite = useCallback(async () => {
-    const storeLink = Platform.OS === 'ios' ? STORE_IOS : STORE_ANDROID;
+  // ── AI refinement ─────────────────────────────────────────────
+  const handleRefineText = useCallback(async () => {
+    if (!text.trim()) return;
+    setRefining(true);
     try {
-      await Share.share({
-        message: `I just dropped an anonymous confession on Anonixx 👀\n\nDo you have one waiting for you? Find out → ${storeLink}`,
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/refine`, {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ text: text.trim() }),
       });
-    } catch { /* user cancelled */ }
-  }, []);
+      if (!res.ok) throw new Error('Refinement unavailable right now.');
+      const data = await res.json();
+      if (!data?.refined_text) throw new Error('No refined text returned.');
+      setRefinedText(data.refined_text);
+      setShowRefinePreview(true);
+    } catch (err) {
+      showToast({ type: 'warning', message: err.message || 'Could not refine. Try again.' });
+      setRefineEnabled(false);
+    } finally {
+      setRefining(false);
+    }
+  }, [text, showToast]);
 
+  // ── Media ─────────────────────────────────────────────────────
   const handlePickMedia = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -261,9 +239,7 @@ export default function ShareCardScreen({ navigation }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:    mode === 'image'
-          ? 'images'
-          : 'videos',
+        mediaTypes:    mode === 'image' ? 'images' : 'videos',
         quality:       0.85,
         allowsEditing: false,
       });
@@ -289,67 +265,7 @@ export default function ShareCardScreen({ navigation }) {
     setThumbUri(null);
   }, []);
 
-  const shareDropCard = useCallback(async (id, isTargeted = false) => {
-    const dropUrl = `${BACKENDS.production}/api/v1/drops/${id}/open`;
-    try {
-      const token = await AsyncStorage.getItem('token');
-
-      if (isTargeted) {
-        // Targeted drop — never share the direct link (it would reveal who you're targeting).
-        // Instead share a mystery invite that promotes the app without any sender/recipient info.
-        await shareMysteryInvite();
-        return;
-      }
-
-      // Public marketplace drop — share the card image + link
-      // 1. Wait for card to re-render with the baked link, then capture
-      await new Promise(r => setTimeout(r, 400));
-      const localUri = await captureRef.current.capture();
-
-      // 2. Copy link to clipboard silently
-      await Clipboard.setStringAsync(dropUrl);
-
-      // 3. Share card image
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(localUri, { mimeType: 'image/png', dialogTitle: 'Share your drop' });
-      }
-
-      // 4. Open WhatsApp with mystery invite text — no sender identity in the message
-      const mysteryText = `someone dropped something on Anonixx 👀 could it be for you?\n${dropUrl}`;
-      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(mysteryText)}`;
-      const canOpenWhatsApp = await Linking.canOpenURL(whatsappUrl).catch(() => false);
-      if (canOpenWhatsApp) {
-        await Linking.openURL(whatsappUrl);
-      } else {
-        showToast({ type: 'info', title: 'Link copied!', message: 'Send the card, then paste this right under it 👇' });
-      }
-
-      // 5. Upload card image in background so OG tags work
-      (async () => {
-        try {
-          const form = new FormData();
-          form.append('file', { uri: localUri, name: 'card.png', type: 'image/png' });
-          const up = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
-            method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
-          });
-          const upData = await up.json();
-          if (upData?.url) {
-            await fetch(`${API_BASE_URL}/api/v1/drops/${id}/card-image`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ card_image_url: upData.url }),
-            });
-          }
-        } catch {}
-      })();
-
-    } catch (err) {
-      if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
-      showToast({ type: 'error', message: 'Could not share your drop.' });
-    }
-  }, [showToast, shareMysteryInvite]);
-
+  // ── Upload (Cloudinary signed) ────────────────────────────────
   const uploadMedia = useCallback(async (token) => {
     const resourceType = mode === 'image' ? 'image' : 'video';
     const ext          = mediaUri?.split('?')[0].split('.').pop()?.toLowerCase() || '';
@@ -361,7 +277,6 @@ export default function ShareCardScreen({ navigation }) {
     };
     const mimeType = mimeMap[ext] || (mode === 'image' ? 'image/jpeg' : 'video/mp4');
 
-    // Get short-lived signed params from our backend (JWT-gated)
     const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -389,6 +304,7 @@ export default function ShareCardScreen({ navigation }) {
     return data.secure_url;
   }, [mode, mediaUri]);
 
+  // ── Create drop ───────────────────────────────────────────────
   const handleDrop = useCallback(async () => {
     if (mode === 'text' && !text.trim()) {
       showToast({ type: 'warning', message: 'Write your confession first.' });
@@ -398,10 +314,6 @@ export default function ShareCardScreen({ navigation }) {
       showToast({ type: 'warning', message: `Pick ${mode === 'image' ? 'an image' : 'a video'} first.` });
       return;
     }
-    if (audience === 'someone' && !targetUser) {
-      showToast({ type: 'warning', message: 'Search and select someone to send this to.' });
-      return;
-    }
 
     setLoading(true);
     try {
@@ -409,24 +321,29 @@ export default function ShareCardScreen({ navigation }) {
 
       let mediaUrl  = null;
       let mediaType = null;
-
       if (mode !== 'text') {
         mediaUrl  = await uploadMedia(token);
         mediaType = mode;
       }
 
+      // Use refined text if user accepted the AI suggestion, else raw.
+      const confessionText = (mode === 'text' && refineEnabled && refinedText)
+        ? refinedText
+        : text.trim();
+
       const body = {
-        category: 'love',
+        category,
         ...(mode === 'text'
-          ? { confession: text.trim() }
+          ? { confession: confessionText }
           : {
               media_url:  mediaUrl,
               media_type: mediaType,
               ...(caption.trim() ? { confession: caption.trim() } : {}),
             }
         ),
-        ...(audience === 'someone' && targetUser ? { target_user_id: targetUser.id } : {}),
-        ...(audience === 'marketplace' && intent ? { intent } : {}),
+        // Always marketplace; optionally also tag a specific user.
+        ...(taggedUser ? { target_user_id: taggedUser.id } : {}),
+        ...(intent     ? { intent }                        : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
@@ -453,17 +370,14 @@ export default function ShareCardScreen({ navigation }) {
       Keyboard.dismiss();
       setDropId(id);
 
-      const isTargeted = audience === 'someone' && !!targetUser;
       showToast({
-        type: 'success',
-        title: isTargeted ? 'Confession sent 👀' : 'Dropped!',
-        message: isTargeted
-          ? `${targetUser.username} has no idea it's you.`
-          : 'Your card is live. Share it anywhere.',
+        type:    'success',
+        title:   taggedUser ? 'Dropped + tagged 👀' : 'Dropped!',
+        message: taggedUser
+          ? `In the marketplace + sent to @${taggedUser.username} anonymously.`
+          : 'Your confession is live in the marketplace.',
       });
       dispatch(awardMilestone('first_drop'));
-
-      await shareDropCard(id, isTargeted);
 
     } catch (err) {
       if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
@@ -471,15 +385,15 @@ export default function ShareCardScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [mode, text, caption, mediaUri, uploadMedia, shareDropCard, showToast, dispatch, dropId]);
+  }, [
+    mode, text, caption, mediaUri, category, intent,
+    taggedUser, refineEnabled, refinedText,
+    uploadMedia, showToast, dispatch,
+  ]);
 
-  const handleShareAgain = useCallback(async () => {
-    if (!dropId) return;
-    await shareDropCard(dropId);
-  }, [dropId, shareDropCard]);
-
-  const dropped = !!dropId;
-  const canDrop = mode === 'text' ? !!text.trim() : !!mediaUri;
+  const dropped  = !!dropId;
+  const canDrop  = mode === 'text' ? !!text.trim() : !!mediaUri;
+  const dropLink = dropped ? `${BACKENDS.production}/api/v1/drops/${dropId}/open` : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -487,288 +401,262 @@ export default function ShareCardScreen({ navigation }) {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
-            <Text style={styles.backIcon}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Drop</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('DropsInbox')} hitSlop={HIT_SLOP}>
-            <Text style={styles.headerAction}>My Drops</Text>
-          </TouchableOpacity>
-        </View>
+        <DropScreenHeader
+          title="Drop"
+          navigation={navigation}
+          rightLabel="My Drops"
+          onRightPress={() => navigation.navigate('DropsInbox')}
+        />
 
-        {/* Mode tabs */}
-        {!dropped && (
-          <View style={styles.modeTabs}>
-            {MODES.map(({ id, label, Icon }) => {
-              const active = mode === id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={[styles.modeTab, active && styles.modeTabActive]}
-                  onPress={() => handleModeChange(id)}
-                  hitSlop={HIT_SLOP}
-                >
-                  <Icon size={rs(14)} color={active ? T.primary : T.textMuted} />
-                  <Text style={[styles.modeTabText, active && styles.modeTabTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Audience toggle */}
-        {!dropped && (
-          <View style={styles.audienceRow}>
-            {AUDIENCE.map(({ id, label, Icon }) => {
-              const active = audience === id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={[styles.audienceBtn, active && styles.audienceBtnActive]}
-                  onPress={() => handleAudienceChange(id)}
-                  hitSlop={HIT_SLOP}
-                  activeOpacity={0.8}
-                >
-                  <Icon size={rs(13)} color={active ? T.primary : T.textMuted} />
-                  <Text style={[styles.audienceBtnText, active && styles.audienceBtnTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Intent picker (Marketplace mode only) */}
-        {!dropped && audience === 'marketplace' && (
-          <View style={styles.intentWrap}>
-            <Text style={styles.intentLabel}>What are you open to? <Text style={styles.intentOptional}>(optional)</Text></Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.intentScroll}>
-              {INTENTS.map(({ id, label, emoji }) => (
-                <TouchableOpacity
-                  key={id}
-                  style={[styles.intentChip, intent === id && styles.intentChipActive]}
-                  onPress={() => setIntent(prev => prev === id ? null : id)}
-                  hitSlop={HIT_SLOP}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.intentChipEmoji}>{emoji}</Text>
-                  <Text style={[styles.intentChipText, intent === id && styles.intentChipTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* User search (Send to Someone mode) */}
-        {!dropped && audience === 'someone' && (
-          <View style={styles.userSearchWrap}>
-            {/* Input row */}
-            <View style={styles.userSearchRow}>
-              <Search size={rs(15)} color={T.textMuted} />
-              <TextInput
-                style={styles.userSearchInput}
-                value={userQuery}
-                onChangeText={handleUserSearch}
-                placeholder="Search by username or anonymous name…"
-                placeholderTextColor={T.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus={false}
-              />
-              {searchLoading
-                ? <ActivityIndicator size="small" color={T.primary} />
-                : userQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => { setUserQuery(''); setUserResults([]); setTargetUser(null); }} hitSlop={HIT_SLOP}>
-                    <X size={rs(14)} color={T.textMuted} />
-                  </TouchableOpacity>
-                )
-              }
-            </View>
-
-            {/* Floating dropdown — absolute so it overlays content below */}
-            {userResults.length > 0 && !targetUser && (
-              <View style={styles.userResultsList}>
-                {userResults.map((u, idx) => (
-                  <TouchableOpacity
-                    key={u.id}
-                    style={[styles.userResultItem, idx === userResults.length - 1 && { borderBottomWidth: 0 }]}
-                    onPress={() => handleSelectUser(u)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.userResultAvatar}>
-                      <Text style={styles.userResultInitial}>
-                        {(u.anonymous_name || u.username)?.[0]?.toUpperCase() || '?'}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.userResultName}>@{u.username}</Text>
-                      {u.anonymous_name ? (
-                        <Text style={styles.userResultAnon}>{u.anonymous_name}</Text>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
+        <Animated.View style={{ flex: 1, opacity: fade }}>
+          {/* Mode tabs */}
+          {!dropped && (
+            <View style={styles.modeRow}>
+              <ChipRow scroll={false} gap="sm">
+                {MODES.map(({ id, label, Icon }) => (
+                  <Chip
+                    key={id}
+                    variant="pill"
+                    label={label}
+                    Icon={Icon}
+                    active={mode === id}
+                    onPress={() => handleModeChange(id)}
+                  />
                 ))}
-              </View>
-            )}
+              </ChipRow>
+            </View>
+          )}
 
-            {/* Empty state — typed something but no matches */}
-            {!searchLoading && userQuery.length > 0 && userResults.length === 0 && !targetUser && (
-              <View style={styles.userNoResults}>
-                <Text style={styles.userNoResultsText}>No users found for "{userQuery}"</Text>
-              </View>
-            )}
+          {/* Category picker */}
+          {!dropped && (
+            <View style={styles.sectionWrap}>
+              <Text style={styles.eyebrow}>CATEGORY</Text>
+              <ChipRow scroll gap="sm">
+                {CATEGORIES.map(({ id, label, emoji }) => (
+                  <Chip
+                    key={id}
+                    variant="pill"
+                    label={`${emoji}  ${label}`}
+                    active={category === id}
+                    onPress={() => setCategory(id)}
+                  />
+                ))}
+              </ChipRow>
+            </View>
+          )}
 
-            {/* Selected user confirm strip */}
-            {targetUser && (
-              <View style={styles.targetConfirm}>
-                <Text style={styles.targetConfirmText}>
-                  🔒 Sending anonymously to{' '}
-                  <Text style={{ color: T.primary }}>@{targetUser.username}</Text>
-                  {' '}— they'll never know it's you
-                </Text>
-                <TouchableOpacity onPress={() => { setTargetUser(null); setUserQuery(''); }} hitSlop={HIT_SLOP}>
-                  <X size={rs(14)} color={T.textMuted} />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
+          {/* Intent picker (always visible, not audience-gated) */}
+          {!dropped && (
+            <View style={styles.sectionWrap}>
+              <Text style={styles.eyebrow}>OPEN TO · <Text style={styles.eyebrowMute}>optional</Text></Text>
+              <ChipRow scroll gap="sm">
+                {INTENTS.map(({ id, label, emoji }) => (
+                  <Chip
+                    key={id}
+                    variant="pill"
+                    label={`${emoji}  ${label}`}
+                    active={intent === id}
+                    onPress={() => setIntent(prev => prev === id ? null : id)}
+                  />
+                ))}
+              </ChipRow>
+            </View>
+          )}
 
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Text mode */}
-          {mode === 'text' && (
-            <TouchableOpacity
-              activeOpacity={dropped ? 0.85 : 1}
-              onPress={dropped ? handleShareAgain : undefined}
-              style={styles.cardWrap}
-            >
+          {/* Tag someone — always goes to marketplace too */}
+          {!dropped && (
+            <View style={[styles.sectionWrap, { zIndex: 50 }]}>
+              <TagUserSection
+                taggedUser={taggedUser}
+                onTag={setTaggedUser}
+                onClear={() => setTaggedUser(null)}
+              />
+            </View>
+          )}
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="always"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Text mode card */}
+            {mode === 'text' && (
               <TextCard
                 text={text}
                 setText={setText}
-                captureRef={captureRef}
                 inputRef={inputRef}
                 readOnly={dropped}
-                shareUrl={dropped ? `${BACKENDS.production}/api/v1/drops/${dropId}/open` : null}
               />
-              {dropped && (
-                <View style={styles.tapOverlay}>
-                  <Text style={styles.tapLabel}>tap to share again  ↗</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
+            )}
 
-          {/* Image / Video mode — pre-drop */}
-          {mode !== 'text' && !dropped && (
-            <View style={styles.mediaSection}>
-              <MediaPicker
-                mode={mode}
-                mediaUri={mediaUri}
-                thumbUri={thumbUri}
-                onPick={handlePickMedia}
-                onClear={handleClearMedia}
-              />
-              {mediaUri && (
-                <View style={styles.captionWrap}>
-                  <TextInput
-                    style={styles.captionInput}
-                    value={caption}
-                    onChangeText={(v) => setCaption(v.slice(0, MAX_CHARS))}
-                    placeholder="add a caption (optional)…"
-                    placeholderTextColor={T.textMuted}
-                    multiline
-                    maxLength={MAX_CHARS}
-                    autoCapitalize="sentences"
-                    autoCorrect
-                  />
-                  <Text style={styles.captionCount}>{MAX_CHARS - caption.length}</Text>
+            {/* Image / Video mode — pre-drop */}
+            {mode !== 'text' && !dropped && (
+              <View style={styles.mediaSection}>
+                <MediaPicker
+                  mode={mode}
+                  mediaUri={mediaUri}
+                  thumbUri={thumbUri}
+                  onPick={handlePickMedia}
+                  onClear={handleClearMedia}
+                />
+                {mediaUri && (
+                  <View style={styles.captionWrap}>
+                    <TextInput
+                      style={styles.captionInput}
+                      value={caption}
+                      onChangeText={(v) => setCaption(v.slice(0, MAX_CHARS))}
+                      placeholder="add a caption (optional)…"
+                      placeholderTextColor={T.textMute}
+                      multiline
+                      maxLength={MAX_CHARS}
+                      autoCapitalize="sentences"
+                      autoCorrect
+                    />
+                    <Text style={styles.captionCount}>{MAX_CHARS - caption.length}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Image / Video — post-drop */}
+            {mode !== 'text' && dropped && (
+              <View style={styles.droppedMediaWrap}>
+                {mode === 'image'
+                  ? <Image source={{ uri: mediaUri }} style={styles.droppedImage} resizeMode="cover" />
+                  : <View style={styles.droppedVideo}>
+                      {thumbUri
+                        ? <Image source={{ uri: thumbUri }} style={styles.droppedImage} resizeMode="cover" />
+                        : <Film size={rs(48)} color={T.textMute} />
+                      }
+                    </View>
+                }
+                {caption ? <Text style={styles.droppedCaption}>"{caption}"</Text> : null}
+              </View>
+            )}
+
+            {/* AI text refinement — text mode, pre-drop only */}
+            {mode === 'text' && !dropped && !!text.trim() && (
+              <View style={styles.refineBox}>
+                <TouchableOpacity
+                  style={styles.refineToggleRow}
+                  onPress={() => {
+                    const next = !refineEnabled;
+                    setRefineEnabled(next);
+                    if (!next) { setRefinedText(''); setShowRefinePreview(false); }
+                  }}
+                  activeOpacity={0.8}
+                  hitSlop={HIT_SLOP}
+                >
+                  <Sparkles size={rs(14)} color={refineEnabled ? T.primary : T.textMute} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.refineToggleLabel, refineEnabled && { color: T.primary }]}>
+                      Polish my words
+                    </Text>
+                    <Text style={styles.refineToggleSub}>
+                      Let Anonixx refine the wording — your meaning stays intact
+                    </Text>
+                  </View>
+                  <View style={[styles.refineToggleDot, refineEnabled && styles.refineToggleDotOn]} />
+                </TouchableOpacity>
+
+                {refineEnabled && !showRefinePreview && (
+                  <TouchableOpacity
+                    style={styles.refinePreviewBtn}
+                    onPress={handleRefineText}
+                    disabled={refining}
+                    activeOpacity={0.85}
+                  >
+                    {refining
+                      ? <ActivityIndicator size="small" color={T.primary} />
+                      : <Text style={styles.refinePreviewBtnText}>Preview refined version</Text>
+                    }
+                  </TouchableOpacity>
+                )}
+
+                {showRefinePreview && !!refinedText && (
+                  <View style={styles.refinePreviewWrap}>
+                    <Text style={styles.refinePreviewLabel}>REFINED VERSION</Text>
+                    <Text style={styles.refinePreviewText}>"{refinedText}"</Text>
+                    <View style={styles.refinePreviewActions}>
+                      <TouchableOpacity
+                        style={[styles.refineChoiceBtn, styles.refineChoicePrimary]}
+                        onPress={() => setShowRefinePreview(false)}
+                        hitSlop={HIT_SLOP}
+                      >
+                        <Text style={styles.refineChoicePrimaryText}>Use this ✓</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.refineChoiceBtn}
+                        onPress={() => {
+                          setRefinedText('');
+                          setShowRefinePreview(false);
+                          setRefineEnabled(false);
+                        }}
+                        hitSlop={HIT_SLOP}
+                      >
+                        <Text style={styles.refineChoiceGhostText}>Keep mine</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
+            <Text style={styles.hint}>
+              {dropped
+                ? 'your drop is live in the marketplace'
+                : mode === 'text'
+                  ? 'tap the card to write · what you say here, only you know'
+                  : `${mode === 'image' ? 'image' : 'video'} drop · your identity stays hidden`
+              }
+            </Text>
+
+            {/* Actions */}
+            <View style={styles.actions}>
+              {!dropped ? (
+                <TouchableOpacity
+                  style={[styles.dropBtn, (!canDrop || loading) && styles.dropBtnDisabled]}
+                  onPress={handleDrop}
+                  disabled={!canDrop || loading}
+                  activeOpacity={0.85}
+                >
+                  {loading
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={styles.dropBtnText}>DROP IT  ↗</Text>
+                  }
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.successWrap}>
+                  <Text style={styles.successTitle}>Dropped.</Text>
+                  <Text style={styles.successSub}>
+                    Your confession is live in the marketplace.
+                    {taggedUser ? `\n@${taggedUser.username} received it anonymously too.` : ''}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.copyBtn}
+                    onPress={async () => {
+                      if (!dropLink) return;
+                      await Clipboard.setStringAsync(dropLink);
+                      showToast({ type: 'success', title: 'Link copied!', message: 'Share it however you like.' });
+                    }}
+                    activeOpacity={0.75}
+                    hitSlop={HIT_SLOP}
+                  >
+                    <Text style={styles.copyBtnText}>Copy drop link</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.viewDropBtn}
+                    onPress={() => navigation.navigate('DropLanding', { dropId })}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.viewDropBtnText}>VIEW MY DROP</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
-          )}
-
-          {/* Image / Video mode — after drop */}
-          {mode !== 'text' && dropped && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={handleShareAgain}
-              style={styles.droppedMediaWrap}
-            >
-              {mode === 'image'
-                ? <Image source={{ uri: mediaUri }} style={styles.droppedImage} resizeMode="cover" />
-                : <View style={styles.droppedVideo}>
-                    {thumbUri
-                      ? <Image source={{ uri: thumbUri }} style={styles.droppedImage} resizeMode="cover" />
-                      : <Film size={rs(48)} color={T.textMuted} />
-                    }
-                  </View>
-              }
-              {caption ? <Text style={styles.droppedCaption}>"{caption}"</Text> : null}
-              <View style={styles.tapOverlay}>
-                <Text style={styles.tapLabel}>tap to share again  ↗</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          <Text style={styles.hint}>
-            {dropped
-              ? 'Your drop is live · share it anywhere'
-              : mode === 'text'
-                ? 'tap the card to write · what you say here, only you know'
-                : `${mode === 'image' ? 'image' : 'video'} drop · your identity stays hidden`
-            }
-          </Text>
-
-          {/* Actions */}
-          <View style={styles.actions}>
-            {!dropped ? (
-              <TouchableOpacity
-                style={[styles.dropBtn, (!canDrop || loading) && styles.dropBtnDisabled]}
-                onPress={handleDrop}
-                disabled={!canDrop || loading}
-                activeOpacity={0.85}
-              >
-                {loading
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.dropBtnText}>Drop It  ↗</Text>
-                }
-              </TouchableOpacity>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={styles.dropBtn}
-                  onPress={handleShareAgain}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.dropBtnText}>Share Card  ↗</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.copyBtn}
-                  onPress={async () => {
-                    await Clipboard.setStringAsync(`${BACKENDS.production}/api/v1/drops/${dropId}/open`);
-                    showToast({ type: 'success', title: 'Link copied!', message: 'Send the card, then paste this right under it 👇' });
-                  }}
-                  activeOpacity={0.75}
-                  hitSlop={HIT_SLOP}
-                >
-                  <Text style={styles.copyBtnText}>Copy Link</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -796,16 +684,16 @@ const card = StyleSheet.create({
     top:        rp(-18),
     left:       rp(10),
     fontSize:   rf(180),
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontFamily: 'PlayfairDisplay-Italic',
     color:      'rgba(255,255,255,0.03)',
     lineHeight: rf(180),
   },
   secretTag: {
+    fontFamily:    'DMSans-Italic',
     fontSize:      rf(10),
     color:         'rgba(255,99,74,0.60)',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
-    fontStyle:     'italic',
     marginBottom:  rp(14),
   },
   accentLine: {
@@ -817,8 +705,7 @@ const card = StyleSheet.create({
   },
   input: {
     fontSize:          rf(24),
-    fontFamily:        Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    fontStyle:         'italic',
+    fontFamily:        'PlayfairDisplay-Italic',
     color:             '#E8E8EE',
     lineHeight:        rf(38),
     letterSpacing:     0.3,
@@ -841,39 +728,22 @@ const card = StyleSheet.create({
     marginBottom:   rp(22),
   },
   anonTag: {
+    fontFamily:    'PlayfairDisplay-Italic',
     fontSize:      rf(11),
-    fontFamily:    Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    fontStyle:     'italic',
     color:         'rgba(255,255,255,0.38)',
     letterSpacing: 0.5,
   },
-  remaining: { fontSize: rf(11), fontWeight: '600' },
+  remaining: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   rf(11),
+  },
   brandSig: {
+    fontFamily:    'PlayfairDisplay-Italic',
     fontSize:      rf(10),
     color:         'rgba(255,255,255,0.20)',
     letterSpacing: 5,
-    fontStyle:     'italic',
     textAlign:     'right',
     marginRight:   rp(4),
-  },
-  linkRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    marginTop:      rp(12),
-    gap:            rp(6),
-  },
-  linkDot: {
-    width:           rp(5),
-    height:          rp(5),
-    borderRadius:    rp(3),
-    backgroundColor: 'rgba(255,99,74,0.55)',
-  },
-  linkText: {
-    flex:          1,
-    fontSize:      rf(9),
-    color:         'rgba(255,99,74,0.65)',
-    letterSpacing: 0.4,
-    fontStyle:     'italic',
   },
 });
 
@@ -886,28 +756,35 @@ const pick = StyleSheet.create({
     borderWidth:     1.5,
     borderColor:     'rgba(255,99,74,0.25)',
     borderStyle:     'dashed',
-    backgroundColor: 'rgba(255,99,74,0.04)',
+    backgroundColor: T.primaryDim,
     alignItems:      'center',
     justifyContent:  'center',
     gap:             SPACING.sm,
   },
-  label: { fontSize: FONT.md, color: T.text, fontWeight: '600' },
-  sub:   { fontSize: FONT.sm, color: T.textMuted },
-
-  previewWrap:     { width: CARD_W, height: rs(240), borderRadius: RADIUS.lg, overflow: 'hidden', position: 'relative' },
-  preview:         { width: '100%', height: '100%' },
-  videoWrap:       { width: '100%', height: '100%' },
-  videoPlaceholder:{ backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center' },
+  label: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   FONT.md,
+    color:      T.text,
+  },
+  sub: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+    color:      T.textMute,
+  },
+  previewWrap:      { width: CARD_W, height: rs(240), borderRadius: RADIUS.lg, overflow: 'hidden', position: 'relative' },
+  preview:          { width: '100%', height: '100%' },
+  videoWrap:        { width: '100%', height: '100%' },
+  videoPlaceholder: { backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center' },
   videoOverlay: {
     position:        'absolute',
-    bottom:          0, left: 0, right: 0,
+    bottom: 0, left: 0, right: 0,
     flexDirection:   'row',
     alignItems:      'center',
     gap:             rp(6),
     padding:         rp(10),
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  videoLabel: { fontSize: FONT.sm, color: '#fff', fontWeight: '600' },
+  videoLabel: { fontFamily: 'DMSans-Bold', fontSize: FONT.sm, color: '#fff' },
   clearBtn: {
     position:        'absolute',
     top:             rp(10),
@@ -925,58 +802,40 @@ const pick = StyleSheet.create({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
 
-  header: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  backIcon:     { fontSize: rf(28), color: T.text, lineHeight: rf(30) },
-  headerTitle:  { fontSize: FONT.md, fontWeight: '600', color: T.text, letterSpacing: 0.3 },
-  headerAction: { fontSize: FONT.sm, color: T.primary, fontWeight: '500' },
-
-  modeTabs: {
-    flexDirection:     'row',
+  modeRow: {
     paddingHorizontal: SPACING.md,
     paddingVertical:   rp(10),
-    gap:               SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
-  modeTab: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(5),
-    paddingVertical:   rp(6),
-    paddingHorizontal: rp(14),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       T.border,
+
+  sectionWrap: {
+    paddingHorizontal: SPACING.md,
+    paddingTop:        rp(12),
+    paddingBottom:     rp(10),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    gap:               rp(8),
   },
-  modeTabActive:     { borderColor: T.primary, backgroundColor: 'rgba(255,99,74,0.10)' },
-  modeTabText:       { fontSize: FONT.sm, color: T.textMuted, fontWeight: '500' },
-  modeTabTextActive: { color: T.primary, fontWeight: '700' },
+
+  eyebrow: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.textSec,
+    letterSpacing: 2.2,
+  },
+  eyebrowMute: {
+    fontFamily:    'DMSans-Italic',
+    color:         T.textMute,
+    letterSpacing: 1.4,
+  },
 
   scrollContent: {
     paddingHorizontal: SPACING.md,
     paddingTop:        SPACING.xl,
     paddingBottom:     SPACING.lg,
+    gap:               SPACING.md,
   },
-
-  cardWrap:   { position: 'relative' },
-  tapOverlay: {
-    position:          'absolute',
-    bottom:            rp(12),
-    right:             rp(16),
-    backgroundColor:   'rgba(11,15,24,0.72)',
-    borderRadius:      RADIUS.sm,
-    paddingVertical:   rp(4),
-    paddingHorizontal: rp(10),
-  },
-  tapLabel: { fontSize: FONT.xs, color: T.primary, fontWeight: '600' },
 
   mediaSection: { gap: SPACING.md },
   captionWrap: {
@@ -988,10 +847,21 @@ const styles = StyleSheet.create({
     paddingVertical:   rp(10),
     minHeight:         rs(72),
   },
-  captionInput:  { fontSize: FONT.md, color: T.text, lineHeight: rf(22) },
-  captionCount:  { fontSize: rf(11), color: T.textMuted, textAlign: 'right', marginTop: rp(4) },
+  captionInput: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   FONT.md,
+    color:      T.text,
+    lineHeight: rf(22),
+  },
+  captionCount: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(11),
+    color:      T.textMute,
+    textAlign:  'right',
+    marginTop:  rp(4),
+  },
 
-  droppedMediaWrap: { position: 'relative', borderRadius: RADIUS.lg, overflow: 'hidden' },
+  droppedMediaWrap: { borderRadius: RADIUS.lg, overflow: 'hidden' },
   droppedImage:     { width: CARD_W, height: rs(240) },
   droppedVideo: {
     width: CARD_W, height: rs(240),
@@ -999,17 +869,111 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   droppedCaption: {
-    fontSize: FONT.md, color: T.textSecondary, fontStyle: 'italic',
-    marginTop: SPACING.sm, textAlign: 'center',
+    fontFamily: 'PlayfairDisplay-Italic',
+    fontSize:   FONT.md,
+    color:      T.textSec,
+    marginTop:  SPACING.sm,
+    textAlign:  'center',
+  },
+
+  // AI refine
+  refineBox: {
+    backgroundColor:   'rgba(255,255,255,0.02)',
+    borderColor:       T.border,
+    borderWidth:       1,
+    borderRadius:      RADIUS.md,
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(12),
+    gap:               rp(12),
+  },
+  refineToggleRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(10),
+  },
+  refineToggleLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    letterSpacing: 0.3,
+  },
+  refineToggleSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textMute,
+    letterSpacing: 0.3,
+    marginTop:     rp(2),
+  },
+  refineToggleDot: {
+    width:           rs(18),
+    height:          rs(10),
+    borderRadius:    rs(5),
+    backgroundColor: T.border,
+  },
+  refineToggleDotOn: { backgroundColor: T.primary },
+  refinePreviewBtn: {
+    alignItems:      'center',
+    paddingVertical: rp(8),
+    borderRadius:    RADIUS.sm,
+    borderWidth:     1,
+    borderColor:     T.primaryBorder,
+    backgroundColor: T.primaryDim,
+  },
+  refinePreviewBtnText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.primary,
+    letterSpacing: 0.5,
+  },
+  refinePreviewWrap:    { gap: rp(8) },
+  refinePreviewLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(9),
+    color:         T.primary,
+    letterSpacing: 2.5,
+  },
+  refinePreviewText: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(15),
+    color:         T.text,
+    lineHeight:    rf(23),
+    letterSpacing: 0.3,
+  },
+  refinePreviewActions: {
+    flexDirection: 'row',
+    gap:           SPACING.sm,
+    marginTop:     rp(4),
+  },
+  refineChoiceBtn: {
+    paddingHorizontal: rp(16),
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    borderColor:       T.border,
+  },
+  refineChoicePrimary: {
+    borderColor:     T.primary,
+    backgroundColor: T.primaryTint,
+  },
+  refineChoicePrimaryText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.primary,
+    letterSpacing: 0.5,
+  },
+  refineChoiceGhostText: {
+    fontFamily:    'DMSans-Regular',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    letterSpacing: 0.3,
   },
 
   hint: {
+    fontFamily:    'DMSans-Italic',
     fontSize:      FONT.xs,
-    color:         T.textMuted,
+    color:         T.textMute,
     textAlign:     'center',
-    marginTop:     SPACING.sm,
-    marginBottom:  SPACING.md,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
 
   actions: {},
@@ -1026,182 +990,65 @@ const styles = StyleSheet.create({
     shadowRadius:    rs(14),
     elevation:       6,
   },
-  dropBtnDisabled:  { opacity: 0.38 },
-  dropBtnText:      { fontSize: FONT.md, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+  dropBtnDisabled: { opacity: 0.38 },
+  dropBtnText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.md,
+    color:         '#fff',
+    letterSpacing: 1.2,
+  },
 
-  secondaryBtn: {
+  // Success state (post-drop)
+  successWrap: {
+    alignItems: 'center',
+    gap:        SPACING.sm,
+    paddingTop: SPACING.sm,
+  },
+  successTitle: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(32),
+    color:         T.text,
+    letterSpacing: 0.5,
+  },
+  successSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    textAlign:     'center',
+    lineHeight:    rf(20),
+    letterSpacing: 0.3,
+  },
+  copyBtn: {
     marginTop:         SPACING.sm,
-    paddingVertical:   rp(12),
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       'rgba(255,255,255,0.10)',
-    alignItems:        'center',
-  },
-  secondaryBtnText: { fontSize: FONT.sm, color: T.textSecondary, fontWeight: '500' },
-
-  copyBtn:     { marginTop: SPACING.sm, alignItems: 'center', paddingVertical: rp(10) },
-  copyBtnText: { fontSize: FONT.sm, color: T.textMuted, fontWeight: '500' },
-
-  // Audience toggle
-  audienceRow: {
-    flexDirection:     'row',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(8),
-    gap:               SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  audienceBtn: {
-    flex:              1,
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'center',
-    gap:               rp(5),
-    paddingVertical:   rp(8),
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       T.border,
-    backgroundColor:   'transparent',
-  },
-  audienceBtnActive: {
-    borderColor:       T.primary,
-    backgroundColor:   'rgba(255,99,74,0.08)',
-  },
-  audienceBtnText:       { fontSize: FONT.sm, color: T.textMuted, fontWeight: '500' },
-  audienceBtnTextActive: { color: T.primary, fontWeight: '700' },
-
-  // User search
-  userSearchWrap: {
-    marginHorizontal: SPACING.md,
-    marginTop:        SPACING.sm,
-    marginBottom:     rp(4),
-    zIndex:           50,        // float above ScrollView content below
-  },
-  userSearchRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(8),
-    backgroundColor:   T.surface,
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       T.border,
-    paddingHorizontal: rp(12),
     paddingVertical:   rp(10),
+    paddingHorizontal: rp(20),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    borderColor:       T.border,
   },
-  userSearchInput: {
-    flex:      1,
-    fontSize:  FONT.md,
-    color:     T.text,
-    paddingVertical: 0,          // prevent Android extra padding
+  copyBtnText: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textMute,
+    letterSpacing: 0.5,
   },
-  userResultsList: {
-    position:        'absolute',
-    top:             rs(44) + rp(4),   // right below the input row
-    left:            0,
-    right:           0,
-    backgroundColor: T.surface,
+  viewDropBtn: {
+    backgroundColor: T.primary,
     borderRadius:    RADIUS.md,
-    borderWidth:     1,
-    borderColor:     T.border,
-    zIndex:          100,
-    elevation:       12,               // Android shadow/z-order
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: rs(4) },
-    shadowOpacity:   0.35,
-    shadowRadius:    rs(10),
-    maxHeight:       rs(220),
-    overflow:        'hidden',
-  },
-  userResultItem: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(10),
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(12),
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  userResultAvatar: {
-    width:           rs(34),
-    height:          rs(34),
-    borderRadius:    rs(17),
-    backgroundColor: 'rgba(255,99,74,0.12)',
+    height:          BUTTON_HEIGHT,
+    paddingHorizontal: rs(40),
     alignItems:      'center',
     justifyContent:  'center',
+    shadowColor:     T.primary,
+    shadowOffset:    { width: 0, height: rs(4) },
+    shadowOpacity:   0.4,
+    shadowRadius:    rs(14),
+    elevation:       6,
   },
-  userResultInitial: { fontSize: rf(14), fontWeight: '700', color: T.primary },
-  userResultName:    { fontSize: FONT.sm, fontWeight: '700', color: T.text },
-  userResultAnon:    { fontSize: rf(11), color: T.textMuted, fontStyle: 'italic', marginTop: rp(1) },
-  userNoResults: {
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(10),
-  },
-  userNoResultsText: { fontSize: FONT.sm, color: T.textMuted, fontStyle: 'italic' },
-
-  // Intent picker
-  intentWrap: {
-    marginTop:  rp(14),
-    gap:        rp(8),
-  },
-  intentLabel: {
-    fontSize:   FONT.sm,
-    fontWeight: '600',
-    color:      T.textSecondary,
-  },
-  intentOptional: {
-    fontSize:   rf(11),
-    fontWeight: '400',
-    color:      T.textMuted,
-    fontStyle:  'italic',
-  },
-  intentScroll: {
-    gap:            rp(8),
-    paddingVertical: rp(2),
-  },
-  intentChip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(6),
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(8),
-    borderRadius:      RADIUS.full,
-    backgroundColor:   'rgba(255,255,255,0.04)',
-    borderWidth:       1,
-    borderColor:       T.border,
-  },
-  intentChipActive: {
-    backgroundColor: 'rgba(255,99,74,0.12)',
-    borderColor:     'rgba(255,99,74,0.40)',
-  },
-  intentChipEmoji: {
-    fontSize: rf(14),
-  },
-  intentChipText: {
-    fontSize:   FONT.sm,
-    color:      T.textSecondary,
-    fontWeight: '500',
-  },
-  intentChipTextActive: {
-    color:      T.primary,
-    fontWeight: '700',
-  },
-
-  targetConfirm: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(8),
-    marginTop:         rp(8),
-    backgroundColor:   'rgba(255,99,74,0.07)',
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       'rgba(255,99,74,0.2)',
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(10),
-  },
-  targetConfirmText: {
-    flex:      1,
-    fontSize:  rf(12),
-    color:     T.textSecondary,
-    lineHeight: rf(18),
+  viewDropBtnText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.md,
+    color:         '#fff',
+    letterSpacing: 1.2,
   },
 });

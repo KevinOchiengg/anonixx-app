@@ -25,9 +25,10 @@ import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch } from 'react-redux';
 import {
-  ChevronLeft, Film, FileImage, Globe, Lock, Mic, Type, User, X,
+  ChevronLeft, Film, FileImage, Lock, Mic, Sparkles, Type,
   AlertTriangle, Trash2,
 } from 'lucide-react-native';
+import TagUserSection from '../../components/drops/TagUserSection';
 
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -75,10 +76,19 @@ const FORMATS = [
   { id: 'voice', label: 'Voice', Icon: Mic       },
 ];
 
-// ─── Audience ──────────────────────────────────────────────────
-const AUDIENCE = [
-  { id: 'marketplace', label: 'Marketplace',     Icon: Globe, desc: 'Anyone can find it.' },
-  { id: 'someone',     label: 'Send to Someone', Icon: User,  desc: 'Goes to their inbox.' },
+// ─── Categories ────────────────────────────────────────────────
+// These map 1:1 to the backend `category` field on a Drop.
+const CATEGORIES = [
+  { id: 'love',                    label: 'Love',                  emoji: '❤️'  },
+  { id: 'fun',                     label: 'Fun',                   emoji: '✨'  },
+  { id: 'friendship',              label: 'Friendship',            emoji: '🤝' },
+  { id: 'adventure',               label: 'Adventure',             emoji: '🌍' },
+  { id: 'spicy',                   label: 'Spicy',                 emoji: '🌶️' },
+  { id: 'carrying this alone',     label: 'Carrying this alone',   emoji: '🌑' },
+  { id: 'starting over',           label: 'Starting over',         emoji: '🌱' },
+  { id: 'need stability',          label: 'Need stability',        emoji: '⚓' },
+  { id: 'open to connection',      label: 'Open to connection',    emoji: '🤲' },
+  { id: 'just need to be heard',   label: 'Just need to be heard', emoji: '🌙' },
 ];
 
 // ─── Mood tags ─────────────────────────────────────────────────
@@ -175,18 +185,27 @@ export default function DropsComposeScreen({ navigation }) {
   const [text,     setText]     = useState('');
   const [theme,    setTheme]    = useState('cinematic-coral');
   const [moodTag,  setMoodTag]  = useState('longing');
-  const [audience, setAudience] = useState('marketplace');
+  const [category, setCategory] = useState('love');
   const [teaseMode,setTeaseMode]= useState(false);
   const [mediaUri, setMediaUri] = useState(null);
   const [thumbUri, setThumbUri] = useState(null);
   const [loading,  setLoading]  = useState(false);
+
+  // ── Tag a specific user (optional — drop still hits marketplace) ─
+  const [taggedUser, setTaggedUser] = useState(null);
+
+  // ── AI text refinement (text drops only) ─────────────────────────
+  const [refineEnabled,     setRefineEnabled]     = useState(false);
+  const [refinedText,       setRefinedText]       = useState('');
+  const [showRefinePreview, setShowRefinePreview] = useState(false);
+  const [refining,          setRefining]          = useState(false);
 
   // ── Publisher opt-in (section 16) — Tier 2 is never published ─
   const [publisherOptIn, setPublisherOptIn] = useState(false);
 
   // ── Intensity + one-word hint (section 11) ────────────────────
   const [intensity, setIntensity] = useState('heavy');
-  const [hint,      setHint]      = useState('');   // single word, shown only when audience === 'someone'
+  const [hint,      setHint]      = useState('');   // single word, shown only when a user is tagged
 
   // ── Unsent-restoration banner (section 5) ─────────────────────
   // When a draft loads from storage we don't silently restore — we
@@ -267,7 +286,7 @@ export default function DropsComposeScreen({ navigation }) {
               if (typeof d.format   === 'string') setFormat(d.format);
               if (typeof d.theme    === 'string' && DROP_THEMES[d.theme]) setTheme(d.theme);
               if (typeof d.moodTag  === 'string') setMoodTag(d.moodTag);
-              if (typeof d.audience === 'string') setAudience(d.audience);
+              if (typeof d.category === 'string' && CATEGORIES.some(c => c.id === d.category)) setCategory(d.category);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
               if (typeof d.hint     === 'string') setHint(d.hint);
               // Only surface the unsent banner if the restored draft has substance.
@@ -292,11 +311,11 @@ export default function DropsComposeScreen({ navigation }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
-        text, format, theme, moodTag, audience, intensity, hint,
+        text, format, theme, moodTag, category, intensity, hint,
       })).catch(() => {});
     }, 400);
     return () => clearTimeout(saveTimer.current);
-  }, [text, format, theme, moodTag, audience, intensity, hint]);
+  }, [text, format, theme, moodTag, category, intensity, hint]);
 
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
@@ -324,9 +343,9 @@ export default function DropsComposeScreen({ navigation }) {
       setThumbUri(null);
     }
     if (f === 'voice') {
-      // BACKEND: DropsRecordScreen will be a separate screen.
       navigation.navigate?.('DropsRecord', {
-        theme, moodTag, text,
+        theme, moodTag, category, text,
+        target_user_id: taggedUser?.id || undefined,
       });
     }
   }, [navigation, theme, moodTag, text]);
@@ -397,6 +416,35 @@ export default function DropsComposeScreen({ navigation }) {
     setPublisherOptIn(true);
   }, [format, theme, text, navigation]);
 
+  // ── AI text refinement ────────────────────────────────────────
+  // Calls POST /api/v1/drops/refine { text } → { refined_text }.
+  // Shows a before/after preview; user picks which version to post.
+  const handleRefineText = useCallback(async () => {
+    if (!text.trim()) return;
+    setRefining(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/refine`, {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ text: text.trim() }),
+      });
+      if (!res.ok) throw new Error('Refinement unavailable right now.');
+      const data = await res.json();
+      if (!data?.refined_text) throw new Error('No refined text returned.');
+      setRefinedText(data.refined_text);
+      setShowRefinePreview(true);
+    } catch (err) {
+      showToast({ type: 'warning', message: err.message || 'Could not refine. Try again.' });
+      setRefineEnabled(false);
+    } finally {
+      setRefining(false);
+    }
+  }, [text, showToast]);
+
   // ── Submit drop (client-side stub — posts to /drops) ───────────
   const handleDrop = useCallback(async () => {
     if (limitHit) {
@@ -434,16 +482,20 @@ export default function DropsComposeScreen({ navigation }) {
         .slice(0, HINT_MAX)
         .toLowerCase();
 
-      // BACKEND: Once /drops accepts theme/mood_tag/tease_mode, attach them here.
+      // Use refined text if user accepted the AI suggestion, otherwise raw.
+      const confessionText = (refineEnabled && refinedText) ? refinedText : text.trim();
+
       const body = {
-        category:   'love',
-        confession: text.trim() || undefined,
-        theme,                         // client hint until backend adopts
+        category,
+        confession: confessionText || undefined,
+        theme,
         mood_tag:   moodTag,
         tease_mode: teaseMode,
-        intensity,                     // 'soft' | 'heavy' | 'devastating'
-        // Hint only makes sense when the drop is directed at someone.
-        ...(audience === 'someone' && hintClean ? { recognition_hint: hintClean } : {}),
+        intensity,
+        // Hint only makes sense when a specific user is tagged.
+        ...(taggedUser && hintClean ? { recognition_hint: hintClean } : {}),
+        // Tag a specific user AND still hit marketplace.
+        ...(taggedUser ? { target_user_id: taggedUser.id } : {}),
         // Publisher opt-in is gated off for Tier 2 (after-dark is never published).
         publisher_opt_in: tier2 ? false : !!publisherOptIn,
         ...(format !== 'text' && mediaUri ? { media_type: format } : {}),
@@ -535,8 +587,8 @@ export default function DropsComposeScreen({ navigation }) {
       setLoading(false);
     }
   }, [
-    limitHit, format, text, mediaUri, theme, moodTag, teaseMode,
-    intensity, hint, audience, publisherOptIn,
+    limitHit, format, text, mediaUri, theme, moodTag, category, teaseMode,
+    intensity, hint, taggedUser, refineEnabled, refinedText, publisherOptIn,
     dailyUsed, dailyLimit, fetchDailyLimit,
     dispatch, navigation, showToast,
   ]);
@@ -808,6 +860,24 @@ export default function DropsComposeScreen({ navigation }) {
             ))}
           </ScrollView>
 
+          {/* Category picker */}
+          <Text style={s.sectionLabel}>Category</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.moodScroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            {CATEGORIES.map(({ id, label, emoji }) => (
+              <MoodChip
+                key={id}
+                tag={`${emoji}  ${label}`}
+                active={category === id}
+                onPress={() => setCategory(id)}
+              />
+            ))}
+          </ScrollView>
+
           {/* Intensity (section 11) */}
           <Text style={s.sectionLabel}>How heavy is it?</Text>
           <View style={s.intensityRow}>
@@ -830,30 +900,15 @@ export default function DropsComposeScreen({ navigation }) {
             })}
           </View>
 
-          {/* Audience */}
-          <Text style={s.sectionLabel}>Where does it go?</Text>
-          <View style={s.audienceRow}>
-            {AUDIENCE.map(({ id, label, Icon, desc }) => {
-              const active = audience === id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={[s.audienceBtn, active && s.audienceBtnActive]}
-                  onPress={() => setAudience(id)}
-                  activeOpacity={0.85}
-                >
-                  <Icon size={rs(14)} color={active ? T.primary : T.textMute} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.audienceLabel, active && s.audienceLabelActive]}>{label}</Text>
-                    <Text style={s.audienceDesc}>{desc}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {/* Tag someone — optional, drop still hits marketplace too */}
+          <TagUserSection
+            taggedUser={taggedUser}
+            onTag={setTaggedUser}
+            onClear={() => setTaggedUser(null)}
+          />
 
-          {/* One-word hint — only for directed drops (section 11) */}
-          {audience === 'someone' && (
+          {/* One-word hint — only when someone is tagged */}
+          {!!taggedUser && (
             <View style={s.hintBox}>
               <Text style={s.hintTitle}>
                 One word that points to you.
@@ -877,7 +932,7 @@ export default function DropsComposeScreen({ navigation }) {
           )}
 
           {/* Anonixx Publisher opt-in (section 16) — Tier 2 is never published */}
-          {themeObj?.tier !== 2 && audience === 'marketplace' && (
+          {themeObj?.tier !== 2 && (
             <View style={s.publisherBox}>
               <Text style={s.publisherQ}>
                 Allow Anonixx to share this confession anonymously on our social pages?
@@ -920,6 +975,71 @@ export default function DropsComposeScreen({ navigation }) {
               <Text style={s.publisherLocked}>
                 After Dark drops stay inside Anonixx. Never published, never shared.
               </Text>
+            </View>
+          )}
+
+          {/* AI text refinement — text drops only */}
+          {format === 'text' && !!text.trim() && (
+            <View style={s.refineBox}>
+              <TouchableOpacity
+                style={s.refineToggleRow}
+                onPress={() => {
+                  const next = !refineEnabled;
+                  setRefineEnabled(next);
+                  if (!next) { setRefinedText(''); setShowRefinePreview(false); }
+                }}
+                activeOpacity={0.8}
+                hitSlop={HIT_SLOP}
+              >
+                <Sparkles size={rs(14)} color={refineEnabled ? T.primary : T.textMute} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.refineToggleLabel, refineEnabled && { color: T.primary }]}>
+                    Polish my words
+                  </Text>
+                  <Text style={s.refineToggleSub}>
+                    Let Anonixx refine the wording — your meaning stays intact
+                  </Text>
+                </View>
+                <View style={[s.refineToggleDot, refineEnabled && s.refineToggleDotOn]} />
+              </TouchableOpacity>
+
+              {/* Preview the refined version */}
+              {refineEnabled && !showRefinePreview && (
+                <TouchableOpacity
+                  style={s.refinePreviewBtn}
+                  onPress={handleRefineText}
+                  disabled={refining}
+                  activeOpacity={0.85}
+                >
+                  {refining
+                    ? <ActivityIndicator size="small" color={T.primary} />
+                    : <Text style={s.refinePreviewBtnText}>Preview refined version</Text>
+                  }
+                </TouchableOpacity>
+              )}
+
+              {showRefinePreview && !!refinedText && (
+                <View style={s.refinePreviewWrap}>
+                  <Text style={s.refinePreviewLabel}>REFINED VERSION</Text>
+                  <Text style={s.refinePreviewText}>"{refinedText}"</Text>
+                  <View style={s.refinePreviewActions}>
+                    <TouchableOpacity
+                      style={[s.refineChoiceBtn, s.refineChoicePrimary]}
+                      onPress={() => setShowRefinePreview(false)}
+                      hitSlop={HIT_SLOP}
+                    >
+                      <Text style={s.refineChoicePrimaryText}>Use this ✓</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={s.refineChoiceBtn}
+                      onPress={() => { setRefinedText(''); setShowRefinePreview(false); setRefineEnabled(false); }}
+                      hitSlop={HIT_SLOP}
+                    >
+                      <Text style={s.refineChoiceGhostText}>Keep mine</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           )}
 
@@ -1520,5 +1640,203 @@ const s = StyleSheet.create({
     textAlign:     'center',
     marginTop:     SPACING.md,
     letterSpacing: 0.5,
+  },
+
+  // ─── Section optional label ────────────────────────────────────
+  sectionOptional: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(10),
+    color:         T.textMute,
+    letterSpacing: 0.8,
+    textTransform: 'none',
+  },
+  tagSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textMute,
+    letterSpacing: 0.3,
+    lineHeight:    rf(17),
+    marginBottom:  rp(10),
+  },
+
+  // ─── Tag someone / user search ─────────────────────────────────
+  userSearchWrap: {
+    marginBottom: SPACING.md,
+    zIndex:       50,
+  },
+  userSearchRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    backgroundColor:   T.surface,
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(10),
+  },
+  userSearchInput: {
+    flex:            1,
+    fontFamily:      'DMSans-Regular',
+    fontSize:        FONT.md,
+    color:           T.text,
+    paddingVertical: 0,
+  },
+  userResultsList: {
+    backgroundColor: T.surface,
+    borderRadius:    RADIUS.md,
+    borderWidth:     1,
+    borderColor:     T.border,
+    marginTop:       rp(4),
+    overflow:        'hidden',
+    maxHeight:       rs(220),
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: rs(4) },
+    shadowOpacity:   0.3,
+    shadowRadius:    rs(10),
+    elevation:       10,
+  },
+  userResultItem: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(10),
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(12),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  userResultAvatar: {
+    width:           rs(34),
+    height:          rs(34),
+    borderRadius:    rs(17),
+    backgroundColor: 'rgba(255,99,74,0.12)',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  userResultInitial: { fontFamily: 'DMSans-Bold', fontSize: rf(14), color: T.primary },
+  userResultName:    { fontFamily: 'DMSans-Bold',    fontSize: FONT.sm, color: T.text },
+  userResultAnon:    { fontFamily: 'DMSans-Italic',  fontSize: rf(11), color: T.textMute, marginTop: rp(1) },
+  userNoResults: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      FONT.sm,
+    color:         T.textMute,
+    paddingVertical: rp(8),
+    paddingHorizontal: rp(2),
+  },
+  tagConfirm: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    marginTop:         rp(8),
+    backgroundColor:   'rgba(255,99,74,0.06)',
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.2)',
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(10),
+  },
+  tagConfirmText: {
+    flex:       1,
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(12),
+    color:      T.textSec,
+    lineHeight: rf(18),
+  },
+
+  // ─── AI Refine ─────────────────────────────────────────────────
+  refineBox: {
+    backgroundColor:   'rgba(255,255,255,0.02)',
+    borderColor:       T.border,
+    borderWidth:       1,
+    borderRadius:      RADIUS.md,
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(12),
+    marginBottom:      SPACING.md,
+    gap:               rp(12),
+  },
+  refineToggleRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(10),
+  },
+  refineToggleLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    letterSpacing: 0.3,
+  },
+  refineToggleSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textMute,
+    letterSpacing: 0.3,
+    marginTop:     rp(2),
+  },
+  refineToggleDot: {
+    width:           rs(18),
+    height:          rs(10),
+    borderRadius:    rs(5),
+    backgroundColor: T.border,
+  },
+  refineToggleDotOn: {
+    backgroundColor: T.primary,
+  },
+  refinePreviewBtn: {
+    alignItems:        'center',
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.sm,
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.3)',
+    backgroundColor:   'rgba(255,99,74,0.06)',
+  },
+  refinePreviewBtnText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.primary,
+    letterSpacing: 0.5,
+  },
+  refinePreviewWrap: {
+    gap: rp(8),
+  },
+  refinePreviewLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(9),
+    color:         T.primary,
+    letterSpacing: 2.5,
+  },
+  refinePreviewText: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(15),
+    color:         T.text,
+    lineHeight:    rf(23),
+    letterSpacing: 0.3,
+  },
+  refinePreviewActions: {
+    flexDirection: 'row',
+    gap:           SPACING.sm,
+    marginTop:     rp(4),
+  },
+  refineChoiceBtn: {
+    paddingHorizontal: rp(16),
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    borderColor:       T.border,
+  },
+  refineChoicePrimary: {
+    borderColor:     T.primary,
+    backgroundColor: 'rgba(255,99,74,0.12)',
+  },
+  refineChoicePrimaryText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.primary,
+    letterSpacing: 0.5,
+  },
+  refineChoiceGhostText: {
+    fontFamily:    'DMSans-Regular',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    letterSpacing: 0.3,
   },
 });

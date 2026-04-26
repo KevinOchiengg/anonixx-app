@@ -99,7 +99,7 @@ export default function ThreadViewScreen({ route, navigation }) {
         Alert.alert('Session Expired', 'Please log in again to continue', [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+            onPress: () => navigation.navigate('AuthNav', { screen: 'Login' }),
           },
         ]);
         setLoading(false);
@@ -123,7 +123,7 @@ export default function ThreadViewScreen({ route, navigation }) {
         Alert.alert('Session Expired', 'Please log in again', [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+            onPress: () => navigation.navigate('AuthNav', { screen: 'Login' }),
           },
         ]);
       } else {
@@ -142,7 +142,7 @@ export default function ThreadViewScreen({ route, navigation }) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign In',
-          onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+          onPress: () => navigation.navigate('AuthNav', { screen: 'Login' }),
         },
       ]);
       return;
@@ -169,7 +169,7 @@ export default function ThreadViewScreen({ route, navigation }) {
         Alert.alert('Session Expired', 'Please log in again', [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+            onPress: () => navigation.navigate('AuthNav', { screen: 'Login' }),
           },
         ]);
         setSending(false);
@@ -206,7 +206,7 @@ export default function ThreadViewScreen({ route, navigation }) {
         Alert.alert('Session Expired', 'Please log in again', [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Auth', { screen: 'Login' }),
+            onPress: () => navigation.navigate('AuthNav', { screen: 'Login' }),
           },
         ]);
       } else {

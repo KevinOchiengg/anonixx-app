@@ -2274,17 +2274,19 @@ async def publish_drop(
         }},
     )
 
-    # Also log it to the publisher queue for the social ops team.
+    # Queue for TikTok publishing worker (app/tasks/publisher_worker.py).
     await db["publisher_queue"].insert_one({
-        "_id":            ObjectId(),
-        "drop_id":        drop_id,
-        "sender_id":      current_user_id,
-        "theme":          drop.get("theme"),
-        "media_type":     drop.get("media_type"),
-        "confession":     drop.get("confession"),
-        "media_url":      drop.get("media_url"),
-        "submitted_at":   published_at,
-        "status":         "queued",    # queued | scheduled | posted | rejected
+        "_id":          ObjectId(),
+        "drop_id":      drop_id,
+        "sender_id":    current_user_id,
+        "theme":        drop.get("theme"),
+        "category":     drop.get("category", "love"),   # needed by TikTok caption builder
+        "media_type":   drop.get("media_type"),         # text | image | video | None
+        "confession":   drop.get("confession"),
+        "media_url":    drop.get("media_url"),
+        "submitted_at": published_at,
+        "status":       "queued",                       # queued | processing | posted | failed | rejected
+        "retry_count":  0,
     })
 
     return {

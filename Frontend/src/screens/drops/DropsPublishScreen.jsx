@@ -31,7 +31,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ChevronLeft, Globe, Lock, Mic, Volume2, AlertTriangle,
+  Globe, Lock, Volume2, AlertTriangle,
 } from 'lucide-react-native';
 
 import {
@@ -39,19 +39,8 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { DROP_THEMES } from '../../components/drops/DropCardRenderer';
-
-// ─── Theme tokens ──────────────────────────────────────────────
-const T = {
-  background: '#0b0f18',
-  surface:    '#151924',
-  primary:    '#FF634A',
-  text:       '#EAEAF0',
-  textSec:    '#9A9AA3',
-  textMute:   '#4a4f62',
-  border:     'rgba(255,255,255,0.06)',
-  warn:       '#FB923C',
-  danger:     '#ef4444',
-};
+import { T } from '../../utils/colorTokens';
+import DropScreenHeader from '../../components/drops/DropScreenHeader';
 
 export default function DropsPublishScreen({ navigation, route }) {
   const { showToast } = useToast();
@@ -121,13 +110,7 @@ export default function DropsPublishScreen({ navigation, route }) {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
-          <ChevronLeft size={rs(24)} color={T.text} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Publish</Text>
-        <View style={{ width: rs(24) }} />
-      </View>
+      <DropScreenHeader title="Publish" navigation={navigation} />
 
       <ScrollView
         style={{ flex: 1 }}
@@ -249,22 +232,6 @@ export default function DropsPublishScreen({ navigation, route }) {
 // ─── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
-
-  header: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  headerTitle: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      FONT.lg,
-    color:         T.text,
-    letterSpacing: 0.5,
-  },
 
   scroll: {
     paddingHorizontal: SPACING.md,
