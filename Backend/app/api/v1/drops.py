@@ -11,6 +11,7 @@ from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
 from app.utils.coin_service import debit_coins
+from app.utils.notifications import send_push_notification as _notify
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
@@ -60,6 +61,15 @@ class CreateDropRequest(BaseModel):
     publisher_opt_in: Optional[bool] = False     # share anonymously on Anonixx social
     duration_seconds: Optional[float] = None     # voice drops
     waveform_data: Optional[List[float]] = None  # voice drops
+    inspired_by_post_id: Optional[str] = None   # feed post that triggered this drop
+    # AI refinement — set when the user accepted a suggested refinement
+    ai_refined:      Optional[bool] = False
+    ai_refined_mode: Optional[str]  = None      # "holding_back" | "distill" | "find_words"
+
+
+class RefineConfessionRequest(BaseModel):
+    confession: str
+    mode: str  # "holding_back" | "distill" | "find_words"
 
 
 class ReactToDropRequest(BaseModel):
@@ -462,12 +472,44 @@ async def create_drop(
         "published_at": None,            # set by POST /drops/:id/publish
         "duration_seconds": float(data.duration_seconds) if data.duration_seconds else None,
         "waveform_data": (data.waveform_data or None) if data.media_type == "voice" else None,
+        "inspired_by_post_id": data.inspired_by_post_id or None,
         "reaction_counts": {r: 0 for r in VALID_REACTIONS},
         "report_count": 0,
         "moderation_status": "visible",   # "visible" | "flagged" | "hidden"
+        # All drops are always public in the marketplace.
+        # target_user_id means "also deliver to this inbox" — not "private only".
+        "is_marketplace": True,
+        # AI refinement metadata — used to surface the ✦ disclosure marker
+        "ai_refined":      bool(data.ai_refined),
+        "ai_refined_mode": data.ai_refined_mode or None,
     }
 
     await db["drops"].insert_one(drop)
+
+    # Increment the all-time inspired_drop_count on the originating feed post.
+    # This counter never decrements — drops expiring doesn't erase the social proof.
+    if data.inspired_by_post_id:
+        try:
+            from bson import ObjectId as _ObjId
+            post = await db["posts"].find_one_and_update(
+                {"_id": _ObjId(data.inspired_by_post_id)},
+                {"$inc": {"inspired_drop_count": 1}},
+                return_document=True,
+            )
+            # Notify the original post author — but never notify the user about
+            # their own action (they're the one resonating).
+            if post and post.get("user_id") and post["user_id"] != current_user_id:
+                await _notify(
+                    user_id     = post["user_id"],
+                    template_key= "drop_resonated",
+                    db          = db,
+                    extra_data  = {
+                        "post_id": data.inspired_by_post_id,
+                        "drop_id": str(drop["_id"]),
+                    },
+                )
+        except Exception:
+            pass  # invalid id or post deleted — don't fail the drop creation
 
     # Notify target user privately — they see no sender identity
     if data.target_user_id:
@@ -553,10 +595,18 @@ async def get_marketplace(
     db = Depends(get_database)
 ):
     """Browse active confession cards."""
+    # All drops with is_marketplace: True are public.
+    # Drops with target_user_id set are ALSO in the marketplace —
+    # target_user_id only means "deliver to this person's inbox too."
+    # Legacy drops (before is_marketplace field existed) that have
+    # target_user_id: None are also included via the $or.
     query = {
         "is_active": True,
         "expires_at": {"$gt": now_utc()},
-        "target_user_id": None,  # only public drops appear in marketplace
+        "$or": [
+            {"is_marketplace": True},
+            {"target_user_id": None},   # backward compat for older drops
+        ],
         # Hide flagged/hidden content from the public feed (section 19).
         "moderation_status": {"$nin": ["flagged", "hidden"]},
     }
@@ -567,10 +617,6 @@ async def get_marketplace(
         query["is_group"] = is_group
     if night_only:
         query["is_night_mode"] = True
-
-    # Exclude own drops
-    if current_user_id:
-        query["sender_id"] = {"$ne": current_user_id}
 
     total = await db["drops"].count_documents(query)
 
@@ -617,12 +663,141 @@ async def get_marketplace(
             "tier":        drop.get("tier", 1),
             "duration_seconds": drop.get("duration_seconds"),
             "waveform_data":    drop.get("waveform_data"),
+            # Inspired-by attribution
+            "inspired_by_post_id": drop.get("inspired_by_post_id"),
+            # AI refinement disclosure
+            "ai_refined":          bool(drop.get("ai_refined", False)),
         })
 
     return {
         "drops": drops,
         "total": total,
         "has_more": skip + limit < total,
+    }
+
+
+# ==================== AI CONFESSION REFINEMENT ====================
+
+@router.post("/refine")
+async def refine_confession_endpoint(
+    data: RefineConfessionRequest,
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """
+    AI-assisted confession refinement.
+
+    Accepts raw text + an emotional mode; returns a refined version alongside
+    the original so the frontend can render a side-by-side comparison.
+    The user decides which version to post. If they accept the refinement the
+    drop is stamped with ai_refined=True and ai_refined_mode=<mode>.
+
+    Modes:
+      holding_back  — removes the filter, surfaces suppressed emotion
+      distill       — cuts to the single most powerful feeling
+      find_words    — reconstructs with more emotional precision
+    """
+    from app.utils.ai_refine import refine_confession, MODES
+
+    if data.mode not in MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown mode '{data.mode}'. Choose from: {', '.join(MODES.keys())}",
+        )
+    if not data.confession.strip():
+        raise HTTPException(status_code=400, detail="Confession cannot be empty.")
+
+    refined = await refine_confession(data.confession.strip(), data.mode)
+    if refined is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Refinement is unavailable right now. Your words are good as they are.",
+        )
+
+    return {
+        "original":   data.confession.strip(),
+        "refined":    refined,
+        "mode":       data.mode,
+        "mode_label": MODES[data.mode]["label"],
+    }
+
+
+# ==================== INSPIRATION THREAD ====================
+
+@router.get("/inspired-by/{post_id}")
+async def get_inspired_drops(
+    post_id: str,
+    skip:  int = Query(0, ge=0),
+    limit: int = Query(20, le=50),
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database),
+):
+    """
+    Return all active drops that were inspired by a specific feed post.
+    Used by InspirationThreadScreen to render the confession + its reply drops.
+    Also returns the originating post for header context.
+    """
+    # Fetch originating feed post for header context
+    origin_post = None
+    try:
+        from bson import ObjectId as _ObjId
+        raw = await db["posts"].find_one({"_id": _ObjId(post_id)})
+        if raw:
+            origin_post = {
+                "id":         post_id,
+                "content":    raw.get("content", ""),
+                "time_ago":   get_time_ago(raw["created_at"]) if raw.get("created_at") else "",
+                "anonymous_name": raw.get("anonymous_name", "Anonymous"),
+                "topics":     raw.get("topics", []),
+            }
+    except Exception:
+        pass  # invalid id or post deleted — thread still shows without header
+
+    query = {
+        "inspired_by_post_id": post_id,
+        "is_active":           True,
+        "expires_at":          {"$gt": now_utc()},
+        "moderation_status":   {"$nin": ["flagged", "hidden"]},
+    }
+
+    total  = await db["drops"].count_documents(query)
+    cursor = db["drops"].find(query).sort("created_at", -1).skip(skip).limit(limit)
+
+    drops = []
+    async for drop in cursor:
+        drop_id = str(drop["_id"])
+        already_unlocked = False
+        if current_user_id:
+            unlock = await db["drop_unlocks"].find_one({
+                "drop_id":    drop_id,
+                "unlocker_id": current_user_id,
+            })
+            already_unlocked = unlock is not None
+
+        drops.append({
+            "id":              drop_id,
+            "confession":      drop.get("confession"),
+            "media_url":       drop.get("media_url"),
+            "media_type":      drop.get("media_type"),
+            "card_image_url":  drop.get("card_image_url"),
+            "category":        drop["category"],
+            "price":           drop["price"],
+            "is_night_mode":   drop.get("is_night_mode", False),
+            "unlock_count":    drop.get("unlock_count", 0),
+            "reactions":       drop.get("reactions", [])[-3:],
+            "time_left":       get_time_left(drop["expires_at"]),
+            "time_ago":        get_time_ago(drop["created_at"]),
+            "already_unlocked": already_unlocked,
+            "theme":           drop.get("theme", "cinematic-coral"),
+            "mood_tag":        drop.get("mood_tag"),
+            "intensity":       drop.get("intensity"),
+            "tier":            drop.get("tier", 1),
+        })
+
+    return {
+        "origin_post":  origin_post,
+        "drops":        drops,
+        "total":        total,
+        "has_more":     skip + limit < total,
     }
 
 
@@ -758,6 +933,20 @@ async def get_drop_landing(
         })
         already_unlocked = unlock is not None
 
+    # Is the viewer the author of the post that inspired this drop?
+    # If so, they get a free unlock — surface this so the frontend can
+    # show "Connect free" instead of the payment options.
+    is_origin_author = False
+    if current_user_id and not already_unlocked and not (current_user_id == drop.get("sender_id")):
+        origin_post_id = drop.get("inspired_by_post_id")
+        if origin_post_id:
+            try:
+                origin_post = await db["posts"].find_one({"_id": ObjectId(origin_post_id)})
+                if origin_post and origin_post.get("user_id") == current_user_id:
+                    is_origin_author = True
+            except Exception:
+                pass
+
     # What reaction (if any) has the viewer already sent? (section 8)
     user_reaction = None
     if current_user_id:
@@ -797,8 +986,11 @@ async def get_drop_landing(
         "reaction_counts":  drop.get("reaction_counts", {r: 0 for r in VALID_REACTIONS}),
         "user_reaction":    user_reaction,
         "readers_now":      readers_now,
-        "already_unlocked": already_unlocked,
-        "is_own_drop":      current_user_id == drop["sender_id"] if current_user_id else False,
+        "already_unlocked":    already_unlocked,
+        "is_own_drop":         current_user_id == drop["sender_id"] if current_user_id else False,
+        "is_origin_author":    is_origin_author,
+        "origin_unlock_cost":  ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author else None,
+        "inspired_by_post_id": drop.get("inspired_by_post_id"),
         "time_ago":         get_time_ago(drop["created_at"]),
         "created_at":       drop["created_at"].isoformat() if drop.get("created_at") else None,
 
@@ -1233,7 +1425,8 @@ async def unreact_to_drop(
 
 # ==================== UNLOCK — COINS ====================
 
-COINS_UNLOCK_COST = 30   # coins required to unlock a drop
+COINS_UNLOCK_COST         = 30   # coins required to unlock a drop
+ORIGIN_AUTHOR_UNLOCK_COST = 10   # discounted rate for the author of the inspiring post
 
 @router.post("/{drop_id}/unlock/coins")
 async def unlock_drop_coins(
@@ -1265,26 +1458,56 @@ async def unlock_drop_coins(
         connection_id = existing.get("connection_id") or await _create_drop_connection(drop_id, drop, current_user_id, db)
         return {"already_unlocked": True, "connection_id": connection_id}
 
+    # Origin-author discount — if this drop was inspired by a post that belongs
+    # to the current user, they pay a reduced rate (10 coins instead of 30).
+    # Their confession sparked the drop, so they get rewarded — but Anonixx
+    # still earns from the connection.
+    is_origin_author = False
+    origin_post_id = drop.get("inspired_by_post_id")
+    if origin_post_id:
+        try:
+            origin_post = await db["posts"].find_one({"_id": ObjectId(origin_post_id)})
+            if origin_post and origin_post.get("user_id") == current_user_id:
+                is_origin_author = True
+        except Exception:
+            pass
+
+    cost = ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author else COINS_UNLOCK_COST
+
     # Debit coins (raises ValueError on insufficient balance)
     try:
         await debit_coins(
             db          = db,
             user_id     = current_user_id,
-            amount      = COINS_UNLOCK_COST,
+            amount      = cost,
             reason      = "drop_reveal",
-            description = f"Unlocked a drop confession",
-            meta        = {"drop_id": drop_id},
+            description = (
+                "Unlocked a drop inspired by your confession"
+                if is_origin_author else
+                "Unlocked a drop confession"
+            ),
+            meta        = {"drop_id": drop_id, "origin_author": is_origin_author},
         )
     except ValueError as e:
         if "Insufficient" in str(e):
-            raise HTTPException(status_code=402, detail="Not enough coins. Top up to unlock.")
+            needed = cost
+            raise HTTPException(
+                status_code=402,
+                detail=f"Not enough coins. You need {needed} coins to unlock."
+            )
         raise HTTPException(status_code=404, detail="User not found.")
 
     # Complete unlock + create chat
-    await _complete_unlock(drop_id, current_user_id, drop, "coins", db)
+    unlock_method = "origin_author_discounted" if is_origin_author else "coins"
+    await _complete_unlock(drop_id, current_user_id, drop, unlock_method, db)
     connection_id = await _create_drop_connection(drop_id, drop, current_user_id, db)
 
-    return {"unlocked": True, "connection_id": connection_id, "coins_spent": COINS_UNLOCK_COST}
+    return {
+        "unlocked":          True,
+        "connection_id":     connection_id,
+        "coins_spent":       cost,
+        "origin_author":     is_origin_author,
+    }
 
 
 # ==================== UNLOCK — M-PESA ====================

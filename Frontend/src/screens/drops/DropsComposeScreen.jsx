@@ -122,6 +122,13 @@ const detectEdge = (text) => {
   return null;
 };
 
+// ─── AI Refinement modes ───────────────────────────────────────
+const REFINE_MODES = [
+  { id: 'holding_back', label: "I'm holding back", sub: 'say it fully' },
+  { id: 'distill',      label: 'Get to the heart', sub: 'cut to what matters' },
+  { id: 'find_words',   label: 'Find the words',   sub: 'say it better' },
+];
+
 // ─── Format chips ──────────────────────────────────────────────
 const FormatChip = React.memo(function FormatChip({ id, label, Icon, active, onPress }) {
   return (
@@ -176,13 +183,20 @@ const MoodChip = React.memo(function MoodChip({ tag, active, onPress }) {
 });
 
 // ─── Main screen ───────────────────────────────────────────────
-export default function DropsComposeScreen({ navigation }) {
+export default function DropsComposeScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
 
+  // ── Inspired-by handoff (from feed Drop button) ──────────────
+  // When a user taps the "drop" button on a feed confession card and
+  // escalates to "add media", we land here pre-filled with their seed
+  // text and a link back to the originating post.
+  const initialText      = route?.params?.initialText      || '';
+  const inspiredByPostId = route?.params?.inspiredByPostId || null;
+
   // ── Core state ────────────────────────────────────────────────
   const [format,   setFormat]   = useState('text');    // text | image | video | voice
-  const [text,     setText]     = useState('');
+  const [text,     setText]     = useState(initialText);
   const [theme,    setTheme]    = useState('cinematic-coral');
   const [moodTag,  setMoodTag]  = useState('longing');
   const [category, setCategory] = useState('love');
@@ -199,6 +213,7 @@ export default function DropsComposeScreen({ navigation }) {
   const [refinedText,       setRefinedText]       = useState('');
   const [showRefinePreview, setShowRefinePreview] = useState(false);
   const [refining,          setRefining]          = useState(false);
+  const [selectedRefineMode, setSelectedRefineMode] = useState(null); // 'holding_back' | 'distill' | 'find_words'
 
   // ── Publisher opt-in (section 16) — Tier 2 is never published ─
   const [publisherOptIn, setPublisherOptIn] = useState(false);
@@ -417,11 +432,13 @@ export default function DropsComposeScreen({ navigation }) {
   }, [format, theme, text, navigation]);
 
   // ── AI text refinement ────────────────────────────────────────
-  // Calls POST /api/v1/drops/refine { text } → { refined_text }.
-  // Shows a before/after preview; user picks which version to post.
-  const handleRefineText = useCallback(async () => {
-    if (!text.trim()) return;
+  // Calls POST /api/v1/drops/refine { confession, mode } → { original, refined, mode, mode_label }.
+  // Shows a side-by-side before/after; user picks which version to post.
+  const handleRefineText = useCallback(async (mode) => {
+    if (!text.trim() || !mode) return;
     setRefining(true);
+    setRefinedText('');
+    setShowRefinePreview(false);
     try {
       const token = await AsyncStorage.getItem('token');
       const res   = await fetch(`${API_BASE_URL}/api/v1/drops/refine`, {
@@ -430,20 +447,29 @@ export default function DropsComposeScreen({ navigation }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ text: text.trim() }),
+        body: JSON.stringify({ confession: text.trim(), mode }),
       });
       if (!res.ok) throw new Error('Refinement unavailable right now.');
       const data = await res.json();
-      if (!data?.refined_text) throw new Error('No refined text returned.');
-      setRefinedText(data.refined_text);
+      if (!data?.refined) throw new Error('Nothing came back. Try again.');
+      setRefinedText(data.refined);
       setShowRefinePreview(true);
     } catch (err) {
       showToast({ type: 'warning', message: err.message || 'Could not refine. Try again.' });
-      setRefineEnabled(false);
+      setSelectedRefineMode(null);
     } finally {
       setRefining(false);
     }
   }, [text, showToast]);
+
+  const handleSelectRefineMode = useCallback((mode) => {
+    if (refining) return;
+    setSelectedRefineMode(mode);
+    setRefinedText('');
+    setShowRefinePreview(false);
+    setRefineEnabled(false);
+    handleRefineText(mode);
+  }, [refining, handleRefineText]);
 
   // ── Submit drop (client-side stub — posts to /drops) ───────────
   const handleDrop = useCallback(async () => {
@@ -499,6 +525,13 @@ export default function DropsComposeScreen({ navigation }) {
         // Publisher opt-in is gated off for Tier 2 (after-dark is never published).
         publisher_opt_in: tier2 ? false : !!publisherOptIn,
         ...(format !== 'text' && mediaUri ? { media_type: format } : {}),
+        // Link back to the feed post that inspired this drop, if any.
+        ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
+        // AI refinement — only stamped when the user accepted the suggestion.
+        ...(refineEnabled && refinedText ? {
+          ai_refined:      true,
+          ai_refined_mode: selectedRefineMode || undefined,
+        } : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
@@ -588,8 +621,8 @@ export default function DropsComposeScreen({ navigation }) {
     }
   }, [
     limitHit, format, text, mediaUri, theme, moodTag, category, teaseMode,
-    intensity, hint, taggedUser, refineEnabled, refinedText, publisherOptIn,
-    dailyUsed, dailyLimit, fetchDailyLimit,
+    intensity, hint, taggedUser, refineEnabled, refinedText, selectedRefineMode,
+    publisherOptIn, dailyUsed, dailyLimit, fetchDailyLimit,
     dispatch, navigation, showToast,
   ]);
 
@@ -978,66 +1011,109 @@ export default function DropsComposeScreen({ navigation }) {
             </View>
           )}
 
-          {/* AI text refinement — text drops only */}
+          {/* AI confession refinement — text drops only */}
           {format === 'text' && !!text.trim() && (
             <View style={s.refineBox}>
-              <TouchableOpacity
-                style={s.refineToggleRow}
-                onPress={() => {
-                  const next = !refineEnabled;
-                  setRefineEnabled(next);
-                  if (!next) { setRefinedText(''); setShowRefinePreview(false); }
-                }}
-                activeOpacity={0.8}
-                hitSlop={HIT_SLOP}
-              >
-                <Sparkles size={rs(14)} color={refineEnabled ? T.primary : T.textMute} />
+              {/* Header — always visible */}
+              <View style={s.refineHeader}>
+                <Sparkles size={rs(13)} color={selectedRefineMode ? T.primary : T.textMute} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.refineToggleLabel, refineEnabled && { color: T.primary }]}>
-                    Polish my words
+                  <Text style={[s.refineHeaderLabel, selectedRefineMode && { color: T.primary }]}>
+                    ✦  Help me say it
                   </Text>
-                  <Text style={s.refineToggleSub}>
-                    Let Anonixx refine the wording — your meaning stays intact
+                  <Text style={s.refineHeaderSub}>
+                    Anonixx finds the words — your meaning stays intact
                   </Text>
                 </View>
-                <View style={[s.refineToggleDot, refineEnabled && s.refineToggleDotOn]} />
-              </TouchableOpacity>
+              </View>
 
-              {/* Preview the refined version */}
-              {refineEnabled && !showRefinePreview && (
-                <TouchableOpacity
-                  style={s.refinePreviewBtn}
-                  onPress={handleRefineText}
-                  disabled={refining}
-                  activeOpacity={0.85}
-                >
-                  {refining
-                    ? <ActivityIndicator size="small" color={T.primary} />
-                    : <Text style={s.refinePreviewBtnText}>Preview refined version</Text>
-                  }
-                </TouchableOpacity>
+              {/* 3 emotional mode chips — hidden once accepted */}
+              {!refineEnabled && (
+                <View style={s.refineModeRow}>
+                  {REFINE_MODES.map(({ id, label, sub }) => {
+                    const active = selectedRefineMode === id;
+                    return (
+                      <TouchableOpacity
+                        key={id}
+                        style={[s.refineModeBtn, active && s.refineModeBtnActive]}
+                        onPress={() => handleSelectRefineMode(id)}
+                        disabled={refining && active}
+                        hitSlop={HIT_SLOP}
+                        activeOpacity={0.8}
+                      >
+                        {refining && active ? (
+                          <ActivityIndicator size="small" color={T.primary} />
+                        ) : (
+                          <>
+                            <Text style={[s.refineModeBtnLabel, active && { color: T.primary }]}>
+                              {label}
+                            </Text>
+                            <Text style={s.refineModeBtnSub}>{sub}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               )}
 
+              {/* Side-by-side before / after preview */}
               {showRefinePreview && !!refinedText && (
                 <View style={s.refinePreviewWrap}>
-                  <Text style={s.refinePreviewLabel}>REFINED VERSION</Text>
-                  <Text style={s.refinePreviewText}>"{refinedText}"</Text>
+                  <View style={s.refineSideBySide}>
+                    <View style={s.refineColumn}>
+                      <Text style={s.refineColLabel}>YOURS</Text>
+                      <Text style={s.refineColText}>{text.trim()}</Text>
+                    </View>
+                    <View style={s.refineColumnDivider} />
+                    <View style={s.refineColumn}>
+                      <Text style={[s.refineColLabel, { color: T.primary }]}>✦ REFINED</Text>
+                      <Text style={[s.refineColText, { color: T.text }]}>{refinedText}</Text>
+                    </View>
+                  </View>
                   <View style={s.refinePreviewActions}>
                     <TouchableOpacity
                       style={[s.refineChoiceBtn, s.refineChoicePrimary]}
-                      onPress={() => setShowRefinePreview(false)}
+                      onPress={() => { setRefineEnabled(true); setShowRefinePreview(false); }}
                       hitSlop={HIT_SLOP}
                     >
-                      <Text style={s.refineChoicePrimaryText}>Use this ✓</Text>
+                      <Text style={s.refineChoicePrimaryText}>Use ✦ refined</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={s.refineChoiceBtn}
-                      onPress={() => { setRefinedText(''); setShowRefinePreview(false); setRefineEnabled(false); }}
+                      onPress={() => {
+                        setRefinedText(''); setShowRefinePreview(false);
+                        setRefineEnabled(false); setSelectedRefineMode(null);
+                      }}
                       hitSlop={HIT_SLOP}
                     >
                       <Text style={s.refineChoiceGhostText}>Keep mine</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      style={s.refineChoiceBtn}
+                      onPress={() => { setRefinedText(''); setShowRefinePreview(false); }}
+                      hitSlop={HIT_SLOP}
+                    >
+                      <Text style={s.refineChoiceGhostText}>try another</Text>
+                    </TouchableOpacity>
                   </View>
+                </View>
+              )}
+
+              {/* Accepted state — user chose the refined version */}
+              {refineEnabled && !!refinedText && !showRefinePreview && (
+                <View style={s.refineAccepted}>
+                  <Text style={s.refineAcceptedText}>✦ Using refined version</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setRefineEnabled(false);
+                      setRefinedText('');
+                      setSelectedRefineMode(null);
+                    }}
+                    hitSlop={HIT_SLOP}
+                  >
+                    <Text style={s.refineAcceptedUndo}>undo</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -1743,7 +1819,7 @@ const s = StyleSheet.create({
     lineHeight: rf(18),
   },
 
-  // ─── AI Refine ─────────────────────────────────────────────────
+  // ─── AI Confession Refinement ──────────────────────────────────
   refineBox: {
     backgroundColor:   'rgba(255,255,255,0.02)',
     borderColor:       T.border,
@@ -1754,71 +1830,98 @@ const s = StyleSheet.create({
     marginBottom:      SPACING.md,
     gap:               rp(12),
   },
-  refineToggleRow: {
+  refineHeader: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           rp(10),
+    alignItems:    'flex-start',
+    gap:           rp(8),
   },
-  refineToggleLabel: {
+  refineHeaderLabel: {
     fontFamily:    'DMSans-Bold',
     fontSize:      FONT.sm,
     color:         T.textSec,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
-  refineToggleSub: {
+  refineHeaderSub: {
     fontFamily:    'DMSans-Italic',
     fontSize:      rf(11),
     color:         T.textMute,
     letterSpacing: 0.3,
     marginTop:     rp(2),
+    lineHeight:    rf(16),
   },
-  refineToggleDot: {
-    width:           rs(18),
-    height:          rs(10),
-    borderRadius:    rs(5),
-    backgroundColor: T.border,
+  refineModeRow: {
+    flexDirection: 'row',
+    gap:           SPACING.xs,
   },
-  refineToggleDotOn: {
-    backgroundColor: T.primary,
-  },
-  refinePreviewBtn: {
-    alignItems:        'center',
-    paddingVertical:   rp(8),
+  refineModeBtn: {
+    flex:              1,
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(10),
     borderRadius:      RADIUS.sm,
     borderWidth:       1,
-    borderColor:       'rgba(255,99,74,0.3)',
-    backgroundColor:   'rgba(255,99,74,0.06)',
+    borderColor:       T.border,
+    backgroundColor:   'transparent',
+    alignItems:        'center',
+    minHeight:         rs(58),
+    justifyContent:    'center',
   },
-  refinePreviewBtnText: {
+  refineModeBtnActive: {
+    borderColor:     'rgba(255,99,74,0.45)',
+    backgroundColor: 'rgba(255,99,74,0.07)',
+  },
+  refineModeBtnLabel: {
     fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
-    color:         T.primary,
-    letterSpacing: 0.5,
+    fontSize:      rf(11),
+    color:         T.textSec,
+    letterSpacing: 0.2,
+    textAlign:     'center',
   },
+  refineModeBtnSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(10),
+    color:         T.textMute,
+    letterSpacing: 0.2,
+    textAlign:     'center',
+    marginTop:     rp(3),
+  },
+  // Side-by-side preview
   refinePreviewWrap: {
-    gap: rp(8),
+    gap: rp(10),
   },
-  refinePreviewLabel: {
+  refineSideBySide: {
+    flexDirection: 'row',
+  },
+  refineColumn: {
+    flex: 1,
+    gap:  rp(6),
+  },
+  refineColumnDivider: {
+    width:            1,
+    backgroundColor:  'rgba(255,255,255,0.08)',
+    marginHorizontal: rp(10),
+  },
+  refineColLabel: {
     fontFamily:    'DMSans-Bold',
     fontSize:      rf(9),
-    color:         T.primary,
-    letterSpacing: 2.5,
+    color:         T.textMute,
+    letterSpacing: 2,
   },
-  refinePreviewText: {
+  refineColText: {
     fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(15),
-    color:         T.text,
-    lineHeight:    rf(23),
-    letterSpacing: 0.3,
+    fontSize:      rf(13),
+    color:         T.textSec,
+    lineHeight:    rf(20),
+    letterSpacing: 0.2,
   },
   refinePreviewActions: {
     flexDirection: 'row',
-    gap:           SPACING.sm,
+    gap:           SPACING.xs,
+    flexWrap:      'wrap',
     marginTop:     rp(4),
   },
   refineChoiceBtn: {
-    paddingHorizontal: rp(16),
-    paddingVertical:   rp(8),
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(7),
     borderRadius:      RADIUS.full,
     borderWidth:       1,
     borderColor:       T.border,
@@ -1829,14 +1932,39 @@ const s = StyleSheet.create({
   },
   refineChoicePrimaryText: {
     fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
+    fontSize:      rf(12),
     color:         T.primary,
     letterSpacing: 0.5,
   },
   refineChoiceGhostText: {
     fontFamily:    'DMSans-Regular',
-    fontSize:      FONT.sm,
+    fontSize:      rf(12),
     color:         T.textSec,
     letterSpacing: 0.3,
+  },
+  // Accepted state
+  refineAccepted: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    backgroundColor:   'rgba(255,99,74,0.08)',
+    borderRadius:      RADIUS.sm,
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(8),
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.25)',
+  },
+  refineAcceptedText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(12),
+    color:         T.primary,
+    letterSpacing: 0.3,
+  },
+  refineAcceptedUndo: {
+    fontFamily:         'DMSans-Regular',
+    fontSize:           rf(11),
+    color:              T.textMute,
+    letterSpacing:      0.3,
+    textDecorationLine: 'underline',
   },
 });

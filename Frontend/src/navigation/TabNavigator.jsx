@@ -31,6 +31,7 @@ import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
 import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
 import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
+import InspirationThreadScreen from '../screens/drops/InspirationThreadScreen';
 import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
 
@@ -122,6 +123,8 @@ function FeedStack() {
       <Stack.Screen name="CreatePost" component={CreatePostScreen} />
       <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
       <Stack.Screen name="ThreadView" component={ThreadViewScreen} />
+      {/* InspirationThread reachable from the feed drop-count badge */}
+      <Stack.Screen name="InspirationThread" component={InspirationThreadScreen} />
     </Stack.Navigator>
   );
 }
@@ -144,6 +147,8 @@ function ConnectStack() {
         component={ConfessionMarketplaceScreen}
       />
       <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
+      {/* InspirationThread reachable from the marketplace "inspired by" chip */}
+      <Stack.Screen name="InspirationThread" component={InspirationThreadScreen} />
     </Stack.Navigator>
   );
 }
@@ -169,7 +174,8 @@ function MessagesStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MessagesMain" component={MessagesScreen} />
-      <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="Chat"         component={ChatScreen} />
+      <Stack.Screen name="DropChat"     component={DropChatScreen} />
     </Stack.Navigator>
   );
 }

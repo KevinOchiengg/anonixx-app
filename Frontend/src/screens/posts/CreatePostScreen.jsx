@@ -70,6 +70,13 @@ const StarryBackground = React.memo(() => (
 const MAX_IMAGES               = 5;
 const MAX_CHARS                = 2000;
 const MAX_POLL_OPTIONS         = 4;
+const MAX_VIDEO_DURATION_SECS  = 600;   // 10 minutes
+
+const formatDuration = (seconds) => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
 
 const PROMPTS = [
   'the thing you\'ve been carrying alone…',
@@ -128,6 +135,7 @@ export default function CreatePostScreen({ route, navigation }) {
   const [uploadProgress, setUploadProgress] = useState('');
   const [images,         setImages]         = useState([]);
   const [videoUri,       setVideoUri]       = useState(null);
+  const [videoDuration,  setVideoDuration]  = useState(null);  // seconds
   const [promptIndex,    setPromptIndex]    = useState(0);
   const [isFocused,      setIsFocused]      = useState(false);
 
@@ -289,17 +297,33 @@ export default function CreatePostScreen({ route, navigation }) {
       mediaTypes: 'videos',
       quality:    0.85,
     });
-    if (!result.canceled) {
-      setVideoUri(result.assets[0].uri);
-      setImages([]);
+    if (result.canceled) return;
+
+    const asset          = result.assets[0];
+    const durationSecs   = asset.duration ? asset.duration / 1000 : 0;
+
+    if (durationSecs > MAX_VIDEO_DURATION_SECS) {
+      showToast({
+        type:    'warning',
+        title:   'Video too long',
+        message: `Max 10 minutes. Your video is ${formatDuration(durationSecs)}.`,
+      });
+      return;
     }
+
+    setVideoUri(asset.uri);
+    setVideoDuration(durationSecs > 0 ? durationSecs : null);
+    setImages([]);
   }, [pollEnabled, showToast]);
 
   const removeImage = useCallback((index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const removeVideo = useCallback(() => setVideoUri(null), []);
+  const removeVideo = useCallback(() => {
+    setVideoUri(null);
+    setVideoDuration(null);
+  }, []);
 
   // ── Post ─────────────────────────────────────────────────────────────────
   const handlePost = useCallback(async () => {
@@ -376,6 +400,7 @@ export default function CreatePostScreen({ route, navigation }) {
       setContent('');
       setImages([]);
       setVideoUri(null);
+      setVideoDuration(null);
       setPollEnabled(false);
       setPollQuestion('');
       setPollOptions(['', '']);
@@ -579,7 +604,14 @@ export default function CreatePostScreen({ route, navigation }) {
             {/* ── Video preview ─────────────────────────────────────────── */}
             {!!videoUri && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Video</Text>
+                <View style={styles.sectionLabelRow}>
+                  <Text style={styles.sectionLabel}>Video</Text>
+                  {videoDuration != null && (
+                    <Text style={styles.videoDurationBadge}>
+                      {formatDuration(videoDuration)} / 10:00
+                    </Text>
+                  )}
+                </View>
                 <View style={styles.videoRow}>
                   <Film size={rs(18)} color={T.primary} strokeWidth={1.5} />
                   <Text style={styles.videoName} numberOfLines={1}>
@@ -871,13 +903,28 @@ const styles = StyleSheet.create({
   mediaBtnTextActive: { color: T.primary },
 
   section:      { marginBottom: SPACING.md },
+  sectionLabelRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+    marginBottom:   SPACING.sm,
+  },
   sectionLabel: {
     fontSize:      FONT.xs,
     fontWeight:    '600',
     color:         T.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: rs(1),
-    marginBottom:  SPACING.sm,
+  },
+  videoDurationBadge: {
+    fontSize:        rf(11),
+    color:           T.textSecondary,
+    fontWeight:      '500',
+    letterSpacing:   0.3,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(2),
+    borderRadius:    RADIUS.full,
   },
 
   imagesRow:  { flexDirection: 'row', gap: SPACING.sm },

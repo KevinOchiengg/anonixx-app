@@ -55,9 +55,13 @@ const LIMIT = 20;
 const getCatEmoji = (id) => CATEGORIES.find(c => c.id === id)?.emoji ?? '✨';
 
 // ─── Drop Card ────────────────────────────────────────────────
-const DropCard = React.memo(({ item, onPress }) => {
+const DropCard = React.memo(({ item, onPress, onViewThread }) => {
   const emoji = getCatEmoji(item.category);
-  const handlePress = useCallback(() => onPress(item.id), [onPress, item.id]);
+  const handlePress        = useCallback(() => onPress(item.id), [onPress, item.id]);
+  const handleThreadPress  = useCallback((e) => {
+    e.stopPropagation();
+    onViewThread?.(item.inspired_by_post_id);
+  }, [onViewThread, item.inspired_by_post_id]);
 
   return (
     <TouchableOpacity
@@ -72,6 +76,12 @@ const DropCard = React.memo(({ item, onPress }) => {
         <Text style={s.dropCat}>
           {item.category?.toUpperCase()}
         </Text>
+
+        {item.ai_refined && (
+          <View style={s.aiRefinedBadge}>
+            <Text style={s.aiRefinedBadgeText}>✦</Text>
+          </View>
+        )}
 
         {item.is_night_mode && (
           <View style={s.nightTag}>
@@ -125,6 +135,19 @@ const DropCard = React.memo(({ item, onPress }) => {
         <Text style={s.dropConfession} numberOfLines={3}>
           “{item.confession}”
         </Text>
+      )}
+
+      {/* "Inspired by a confession" badge */}
+      {!!item.inspired_by_post_id && (
+        <TouchableOpacity
+          style={s.inspiredBadge}
+          onPress={handleThreadPress}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.75}
+        >
+          <Flame size={rs(10)} color={T.primary} strokeWidth={2} />
+          <Text style={s.inspiredBadgeText}>inspired by a confession  →</Text>
+        </TouchableOpacity>
       )}
 
       {/* Reactions */}
@@ -365,14 +388,18 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
     navigation.navigate('DropLanding', { dropId });
   }, [navigation]);
 
+  const handleViewThread = useCallback((postId) => {
+    if (postId) navigation.navigate('InspirationThread', { postId });
+  }, [navigation]);
+
   const handleCreateDrop = useCallback(() => {
     navigation.navigate('DropsCompose');
   }, [navigation]);
 
   // ── Render helpers ────────────────────────────────────────
   const renderDrop = useCallback(({ item }) => (
-    <DropCard item={item} onPress={handleDropPress} />
-  ), [handleDropPress]);
+    <DropCard item={item} onPress={handleDropPress} onViewThread={handleViewThread} />
+  ), [handleDropPress, handleViewThread]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
@@ -669,6 +696,20 @@ const s = StyleSheet.create({
     color:         T.primary,
     letterSpacing: 1.4,
   },
+  aiRefinedBadge: {
+    paddingHorizontal: rp(5),
+    paddingVertical:   rp(1),
+    borderRadius:      RADIUS.sm,
+    backgroundColor:   'rgba(255,99,74,0.10)',
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.25)',
+  },
+  aiRefinedBadgeText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(9),
+    color:         T.primary,
+    letterSpacing: 0.5,
+  },
   nightTag: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -749,6 +790,27 @@ const s = StyleSheet.create({
     color:      'rgba(255,255,255,0.88)',
     letterSpacing: 0.4,
   },
+  // "inspired by a confession" chip
+  inspiredBadge: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    alignSelf:         'flex-start',
+    gap:               rp(5),
+    backgroundColor:   'rgba(255,99,74,0.08)',
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.20)',
+    paddingHorizontal: rp(10),
+    paddingVertical:   rp(4),
+    marginBottom:      SPACING.sm,
+  },
+  inspiredBadgeText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.primary,
+    letterSpacing: 0.3,
+  },
+
   reactionsRow: {
     flexDirection: 'row',
     flexWrap:      'wrap',

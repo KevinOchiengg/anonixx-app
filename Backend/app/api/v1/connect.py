@@ -849,8 +849,17 @@ async def start_call(
         channel, uid, 1, expire,  # role 1 = publisher (both sides publish)
     )
 
-    # Notify other participant via socket
+    # Gate the call: if the other user has no active socket connection
+    # the call_offer will be silently dropped and the caller will be stuck
+    # with a ringing screen that never connects. Fail fast instead.
     other_id = other_participant(chat, current_user_id)
+    from app.websockets.events import is_user_online
+    if not is_user_online(other_id):
+        raise HTTPException(
+            status_code=503,
+            detail="They're not available right now. Try again when they're online."
+        )
+
     caller   = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     caller_name  = caller.get("anonymous_name", "Anonymous") if caller else "Anonymous"
     caller_avatar = caller.get("avatar", "ghost") if caller else "ghost"
@@ -871,10 +880,10 @@ async def start_call(
     )
 
     return {
-        "token":   token,
-        "channel": channel,
-        "uid":     uid,
-        "app_id":  settings.AGORA_APP_ID,
+        "token":     token,
+        "channel":   channel,
+        "uid":       uid,
+        "app_id":    settings.AGORA_APP_ID,
         "call_type": call_type,
     }
 

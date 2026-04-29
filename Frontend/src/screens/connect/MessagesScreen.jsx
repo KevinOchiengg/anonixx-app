@@ -6,8 +6,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Menu, Zap } from 'lucide-react-native';
-import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { Flame, Menu, MessageSquare, Zap } from 'lucide-react-native';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
@@ -32,8 +32,12 @@ const T = {
   successBorder: 'rgba(76,175,80,0.25)',
   online:        '#4CAF50',
   warning:       '#FB923C',
+  drop:          '#A78BFA',
+  dropDim:       'rgba(167,139,250,0.12)',
+  dropBorder:    'rgba(167,139,250,0.25)',
 };
 
+// ─── Constants ────────────────────────────────────────────────
 const AVATAR_MAP = {
   ghost: '👻', shadow: '🌑', flame: '🔥', void: '🕳️',
   storm: '⛈️', smoke: '💨', eclipse: '🌘', shard: '🔷',
@@ -41,43 +45,34 @@ const AVATAR_MAP = {
 };
 const getAvatar = (name) => AVATAR_MAP[name] || '👤';
 
+const TABS = ['All', 'Connect 🔗', 'Drops 🔥', 'Online ⚡'];
+
+// ─── Helpers ──────────────────────────────────────────────────
 function formatChatTime(isoString) {
   if (!isoString) return '';
-  // Normalise to UTC: replace space separator, then append Z only if there is
-  // no explicit timezone offset at the END of the string.
-  // Do NOT use a simple /[Z+\-]\d/ test — it falsely matches the '-' in date
-  // parts like "2024-04-16" and skips the Z append, treating UTC as local time.
-  const withT = isoString.replace(' ', 'T');
+  const withT      = isoString.replace(' ', 'T');
   const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(withT);
   const normalised  = hasTimezone ? withT : withT + 'Z';
-  const msgDate = new Date(normalised);
+  const msgDate     = new Date(normalised);
   if (isNaN(msgDate.getTime())) return '';
 
-  const now      = new Date();
-  const msgStr   = msgDate.toDateString();
+  const now       = new Date();
+  const msgStr    = msgDate.toDateString();
 
-  // Today — clock time only  e.g. "2:34 PM"
   if (msgStr === now.toDateString()) {
     return msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   }
-
-  // Yesterday
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (msgStr === yesterday.toDateString()) return 'Yesterday';
 
-  // Within the last 7 days — short weekday  e.g. "Mon"
   const sevenAgo = new Date(now);
   sevenAgo.setDate(now.getDate() - 7);
   if (msgDate > sevenAgo) {
     return msgDate.toLocaleDateString([], { weekday: 'short' });
   }
-
-  // Older — "Apr 10" style
   return msgDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
-
-const TABS = ['All', 'Online 🔥', 'Locked 🔒'];
 
 // ─── Typing dots ──────────────────────────────────────────────
 const TypingDots = React.memo(() => {
@@ -89,7 +84,7 @@ const TypingDots = React.memo(() => {
     const animate = (dot, delay) => Animated.loop(
       Animated.sequence([
         Animated.delay(delay),
-        Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(dot, { toValue: 1,   duration: 300, useNativeDriver: true }),
         Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
         Animated.delay(600),
       ])
@@ -108,29 +103,31 @@ const TypingDots = React.memo(() => {
   );
 });
 
-// ─── Active Now Strip ─────────────────────────────────────────
-const ActiveNowStrip = React.memo(({ chats, onlineIds, onPress }) => {
-  const activeChats = chats.filter(c => onlineIds.has(c.other_user_id));
-  if (!activeChats.length) return null;
+// ─── Active Now Strip (connect chats only) ───────────────────
+const ActiveNowStrip = React.memo(({ items, onlineIds, onPress }) => {
+  const activeItems = items.filter(
+    c => c.chat_type === 'connect' && onlineIds.has(c.other_user_id)
+  );
+  if (!activeItems.length) return null;
 
   return (
     <View style={styles.activeStrip}>
       <Text style={styles.activeStripLabel}>Active Now</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeStripRow}>
-        {activeChats.map(chat => (
+        {activeItems.map(item => (
           <TouchableOpacity
-            key={chat.chat_id}
-            onPress={() => onPress(chat)}
+            key={item.id}
+            onPress={() => onPress(item)}
             style={styles.activeAvatar}
             activeOpacity={0.8}
             hitSlop={HIT_SLOP}
           >
-            <View style={[styles.activeAvatarRing, { borderColor: (chat.other_avatar_color || T.primary) + '99' }]}>
-              <Text style={styles.activeAvatarEmoji}>{getAvatar(chat.other_avatar)}</Text>
+            <View style={[styles.activeAvatarRing, { borderColor: (item.other_avatar_color || T.primary) + '99' }]}>
+              <Text style={styles.activeAvatarEmoji}>{getAvatar(item.other_avatar)}</Text>
             </View>
             <View style={styles.activeOnlineDot} />
             <Text style={styles.activeAvatarName} numberOfLines={1}>
-              {chat.other_anonymous_name?.split(' ')[0]}
+              {item.other_anonymous_name?.split(' ')[0]}
             </Text>
           </TouchableOpacity>
         ))}
@@ -139,13 +136,19 @@ const ActiveNowStrip = React.memo(({ chats, onlineIds, onPress }) => {
   );
 });
 
-// ─── Chat Card ────────────────────────────────────────────────
-const ChatCard = React.memo(({ chat, onPress, isOnline, isTyping }) => {
-  const hasUnread    = chat.unread_count > 0;
-  const isLow        = !chat.is_unlocked && chat.messages_left !== null && chat.messages_left <= 3;
-  const isLocked     = !chat.is_unlocked && chat.messages_left === 0;
-  const avatarColor  = chat.other_avatar_color || T.primary;
+// ─── Unified Chat Card ────────────────────────────────────────
+const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
+  const isDrop       = item.chat_type === 'drop';
+  const hasUnread    = item.unread_count > 0;
+  const isLow        = !isDrop && !item.is_unlocked && item.messages_left !== null && item.messages_left !== undefined && item.messages_left <= 3;
+  const isLocked     = !isDrop && !item.is_unlocked && item.messages_left === 0;
+  const avatarColor  = item.other_avatar_color || (isDrop ? T.drop : T.primary);
   const pulseAnim    = useRef(new Animated.Value(1)).current;
+  const slideAnim    = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, { toValue: 1, friction: 7, tension: 80, useNativeDriver: true }).start();
+  }, []);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -159,113 +162,157 @@ const ChatCard = React.memo(({ chat, onPress, isOnline, isTyping }) => {
     return () => pulse.stop();
   }, [isOnline]);
 
-  const handlePress = useCallback(() => onPress(chat), [onPress, chat]);
+  const handlePress = useCallback(() => onPress(item), [onPress, item]);
+
+  // Avatar — drops get a confession emoji; connect gets the avatar slug
+  const avatarContent = isDrop
+    ? <Text style={styles.chatAvatarEmoji}>🔥</Text>
+    : <Text style={styles.chatAvatarEmoji}>{getAvatar(item.other_avatar)}</Text>;
+
+  const avatarBorderColor = isDrop
+    ? T.drop + '55'
+    : avatarColor + '55';
+
+  const avatarBg = isDrop
+    ? T.drop + '22'
+    : avatarColor + '22';
+
+  // Preview text
+  let previewText;
+  if (isLocked) {
+    previewText = '🔒 Unlock to keep talking';
+  } else if (isDrop && !item.last_message && item.confession) {
+    previewText = `"${item.confession}"`;
+  } else {
+    previewText = item.last_message || 'No messages yet';
+  }
 
   return (
-    <TouchableOpacity
-      style={[styles.chatCard, isLocked && styles.chatCardLocked, hasUnread && styles.chatCardUnread]}
-      onPress={handlePress}
-      activeOpacity={0.8}
-    >
-      {/* Avatar */}
-      <Animated.View style={[
-        styles.chatAvatarWrap,
-        isOnline && { transform: [{ scale: pulseAnim }] },
-      ]}>
-        <View style={[
-          styles.chatAvatar,
-          { backgroundColor: avatarColor + '22', borderColor: avatarColor + '55' },
-          isOnline && { borderColor: T.online + '99', borderWidth: 2 },
-        ]}>
-          <Text style={styles.chatAvatarEmoji}>{getAvatar(chat.other_avatar)}</Text>
-        </View>
-        {/* Online dot */}
-        {isOnline && <View style={styles.onlineDot} />}
-        {/* Unread dot */}
-        {hasUnread && !isOnline && <View style={styles.unreadDot} />}
-      </Animated.View>
+    <Animated.View style={{ opacity: slideAnim, transform: [{ translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+      <TouchableOpacity
+        style={[
+          styles.chatCard,
+          isDrop       && styles.chatCardDrop,
+          isLocked     && styles.chatCardLocked,
+          hasUnread    && styles.chatCardUnread,
+        ]}
+        onPress={handlePress}
+        activeOpacity={0.8}
+      >
+        {/* Type chip — only shown for drop chats; connect is self-evident */}
+        {isDrop && (
+          <View style={[styles.typeChip, styles.typeChipDrop]}>
+            <Flame size={rs(9)} color={T.drop} />
+            <Text style={[styles.typeChipText, styles.typeChipTextDrop]}>drop</Text>
+          </View>
+        )}
 
-      {/* Info */}
-      <View style={styles.chatInfo}>
-        <View style={styles.chatTopRow}>
-          <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]} numberOfLines={1}>
-            {chat.other_anonymous_name}
-          </Text>
-          <View style={styles.chatMetaRight}>
-            <Text style={styles.chatTime}>{formatChatTime(chat.last_message_at)}</Text>
-            {hasUnread && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</Text>
+        {/* Avatar */}
+        <Animated.View style={[
+          styles.chatAvatarWrap,
+          isOnline && { transform: [{ scale: pulseAnim }] },
+        ]}>
+          <View style={[
+            styles.chatAvatar,
+            { backgroundColor: avatarBg, borderColor: avatarBorderColor },
+            isOnline && { borderColor: T.online + '99', borderWidth: 2 },
+          ]}>
+            {avatarContent}
+          </View>
+          {isOnline && <View style={styles.onlineDot} />}
+          {hasUnread && !isOnline && <View style={styles.unreadDot} />}
+        </Animated.View>
+
+        {/* Info */}
+        <View style={styles.chatInfo}>
+          <View style={styles.chatTopRow}>
+            <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]} numberOfLines={1}>
+              {item.other_anonymous_name}
+            </Text>
+            <View style={styles.chatMetaRight}>
+              <Text style={styles.chatTime}>{formatChatTime(item.last_message_at)}</Text>
+              {hasUnread && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{item.unread_count > 99 ? '99+' : item.unread_count}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Preview / typing */}
+          {isTyping ? (
+            <View style={styles.typingRow}>
+              <TypingDots />
+              <Text style={styles.typingLabel}>typing</Text>
+            </View>
+          ) : (
+            <Text
+              style={[
+                styles.chatPreview,
+                hasUnread && styles.chatPreviewUnread,
+                isDrop && !item.last_message && styles.chatPreviewConfession,
+              ]}
+              numberOfLines={1}
+            >
+              {previewText}
+            </Text>
+          )}
+
+          {/* Badges row */}
+          <View style={styles.chatBadges}>
+            {isOnline && (
+              <View style={styles.onlineBadge}>
+                <View style={styles.onlineBadgeDot} />
+                <Text style={styles.onlineBadgeText}>online</Text>
+              </View>
+            )}
+            {!isDrop && item.is_unlocked && (
+              <View style={styles.unlockedBadge}>
+                <Zap size={rs(9)} color={T.success} />
+                <Text style={styles.unlockedBadgeText}>Unlocked</Text>
+              </View>
+            )}
+            {isLow && !isLocked && (
+              <View style={styles.lowBadge}>
+                <Text style={styles.lowBadgeText}>{item.messages_left} left</Text>
+              </View>
+            )}
+            {isLocked && (
+              <View style={styles.lockedBadge}>
+                <Text style={styles.lockedBadgeText}>tap to unlock</Text>
+              </View>
+            )}
+            {!isDrop && item.reveal_status === 'pending' && (
+              <View style={styles.revealBadge}>
+                <Text style={styles.revealBadgeText}>
+                  {item.reveal_initiator ? '👁 waiting…' : '👁 reveal request'}
+                </Text>
+              </View>
+            )}
+            {!isDrop && item.reveal_status === 'accepted' && (
+              <View style={[styles.revealBadge, styles.revealAccepted]}>
+                <Text style={styles.revealBadgeText}>✨ revealed</Text>
+              </View>
+            )}
+            {isDrop && item.is_revealed && (
+              <View style={[styles.revealBadge, styles.revealAccepted]}>
+                <Text style={styles.revealBadgeText}>✨ revealed</Text>
               </View>
             )}
           </View>
         </View>
-
-        {/* Preview / typing */}
-        {isTyping ? (
-          <View style={styles.typingRow}>
-            <TypingDots />
-            <Text style={styles.typingLabel}>typing</Text>
-          </View>
-        ) : (
-          <Text
-            style={[styles.chatPreview, hasUnread && styles.chatPreviewUnread]}
-            numberOfLines={1}
-          >
-            {isLocked
-              ? '🔒 Unlock to keep talking'
-              : (chat.last_message || 'No messages yet')}
-          </Text>
-        )}
-
-        {/* Badges */}
-        <View style={styles.chatBadges}>
-          {isOnline && (
-            <View style={styles.onlineBadge}>
-              <View style={styles.onlineBadgeDot} />
-              <Text style={styles.onlineBadgeText}>online</Text>
-            </View>
-          )}
-          {chat.is_unlocked && (
-            <View style={styles.unlockedBadge}>
-              <Zap size={rs(9)} color={T.success} />
-              <Text style={styles.unlockedBadgeText}>Unlocked</Text>
-            </View>
-          )}
-          {isLow && !isLocked && (
-            <View style={styles.lowBadge}>
-              <Text style={styles.lowBadgeText}>{chat.messages_left} left</Text>
-            </View>
-          )}
-          {isLocked && (
-            <View style={styles.lockedBadge}>
-              <Text style={styles.lockedBadgeText}>tap to unlock</Text>
-            </View>
-          )}
-          {chat.reveal_status === 'pending' && (
-            <View style={styles.revealBadge}>
-              <Text style={styles.revealBadgeText}>
-                {chat.reveal_initiator ? '👁 waiting…' : '👁 reveal request'}
-              </Text>
-            </View>
-          )}
-          {chat.reveal_status === 'accepted' && (
-            <View style={[styles.revealBadge, styles.revealAccepted]}>
-              <Text style={styles.revealBadgeText}>✨ revealed</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 });
 
 // ─── Empty State ──────────────────────────────────────────────
 const EmptyState = React.memo(({ tab }) => {
   const content = {
-    'All':       { emoji: '🌑', title: 'no connections yet', body: 'accept a connect request\nand start something real.' },
-    'Online 🔥': { emoji: '👻', title: `nobody online right now', body: 'check back later.\nthey're always watching.` },
-    'Locked 🔒': { emoji: '🔓', title: `nothing locked', body: 'all your chats are unlocked.\nyou're in.` },
+    'All':        { emoji: '🌑', title: 'nothing yet',         body: 'your conversations will\nappear here.' },
+    'Connect 🔗': { emoji: '👻', title: 'no connect chats',    body: 'accept a connect request\nand start something real.' },
+    'Drops 🔥':   { emoji: '🔥', title: 'no drop chats yet',   body: 'unlock a confession drop\nto start a private thread.' },
+    'Online ⚡':  { emoji: '⚡', title: 'nobody online',       body: 'check back later.\nthey\'re always watching.' },
   };
   const { emoji, title, body } = content[tab] || content['All'];
   return (
@@ -284,7 +331,7 @@ export default function MessagesScreen({ navigation }) {
   const { refreshUnread } = useUnread();
   const { socketService } = useSocket();
 
-  const [chats,       setChats]       = useState([]);
+  const [items,       setItems]       = useState([]);
   const [loading,     setLoading]     = useState(false);
   const [refreshing,  setRefreshing]  = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -292,25 +339,100 @@ export default function MessagesScreen({ navigation }) {
   const [onlineIds,   setOnlineIds]   = useState(new Set());
   const [typingIds,   setTypingIds]   = useState(new Set());
 
-  // ── Load chats ────────────────────────────────────────────
-  const loadChats = useCallback(async () => {
+  // ── Load inbox — calls the two live production endpoints in parallel ──
+  // /connect/chats     → connect conversations
+  // /drops/connections → drop marketplace chats
+  // Merged and sorted by last_message_at descending on the frontend.
+  const loadInbox = useCallback(async () => {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setChats(data.chats || []);
-        refreshUnread();
-      }
-    } catch { /* silent */ }
-    finally { setLoading(false); }
-  }, [refreshUnread]);
+      if (!token) { setLoading(false); return; }
 
-  useFocusEffect(useCallback(() => { loadChats(); }, [loadChats]));
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const [connectRes, dropsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v1/connect/chats`,      { headers }),
+        fetch(`${API_BASE_URL}/api/v1/drops/connections`,  { headers }),
+      ]);
+
+      // Parse both — treat non-ok as empty, not fatal
+      const connectData = connectRes.ok  ? await connectRes.json().catch(() => [])  : [];
+      const dropsData   = dropsRes.ok    ? await dropsRes.json().catch(() => [])    : [];
+
+      // Normalise connect chats → inbox shape
+      // Production endpoint returns { chats: [...] } with field "chat_id"
+      const rawConnect = connectData?.chats || (Array.isArray(connectData) ? connectData : []);
+      const REVEAL_THRESHOLD = 30;
+      const connectItems = rawConnect.map(c => {
+        const msgCount   = c.message_count || 0;
+        const isUnlocked = c.is_unlocked   || false;
+        return {
+          id:                   c.chat_id || c.id,   // production uses chat_id
+          chat_type:            'connect',
+          other_anonymous_name: c.other_anonymous_name || 'Anonymous',
+          other_avatar:         c.other_avatar         || 'ghost',
+          other_avatar_color:   c.other_avatar_color   || '#FF634A',
+          other_user_id:        c.other_user_id        || '',
+          last_message:         c.last_message         || null,
+          last_message_at:      c.last_message_at      || null,
+          unread_count:         c.unread_count         || 0,
+          is_unlocked:          isUnlocked,
+          messages_left:        isUnlocked ? null : Math.max(0, REVEAL_THRESHOLD - msgCount),
+          reveal_status:        c.reveal_status        || null,
+          reveal_initiator:     c.reveal_initiator     || false,
+          message_count:        msgCount,
+          drop_id:              null,
+          confession:           null,
+          is_sender:            null,
+          is_revealed:          null,
+          other_revealed:       null,
+        };
+      });
+
+      // Normalise drop connections → inbox shape
+      // Production endpoint returns { connections: [...] } with field "id"
+      const rawDrops = dropsData?.connections || (Array.isArray(dropsData) ? dropsData : []);
+      const dropItems = rawDrops.map(d => ({
+        id:                   d.id,
+        chat_type:            'drop',
+        other_anonymous_name: d.other_anonymous_name || 'Anonymous',
+        other_avatar:         null,
+        other_avatar_color:   null,
+        other_user_id:        d.other_user_id || '',   // not in prod response — ok, used for typing only
+        last_message:         d.last_message  || null,
+        last_message_at:      d.last_message_at || null,
+        unread_count:         0,
+        is_unlocked:          true,
+        messages_left:        null,
+        reveal_status:        null,
+        reveal_initiator:     null,
+        message_count:        d.message_count || 0,
+        drop_id:              d.drop_id       || null,
+        confession:           d.confession    || null,
+        is_sender:            d.is_sender     ?? null,
+        is_revealed:          d.is_revealed   ?? null,
+        other_revealed:       d.other_revealed ?? null,
+      }));
+
+      // Merge and sort by most-recent message
+      const merged = [...connectItems, ...dropItems].sort((a, b) => {
+        const ta = a.last_message_at || '';
+        const tb = b.last_message_at || '';
+        return tb.localeCompare(ta);
+      });
+
+      setItems(merged);
+      refreshUnread();
+    } catch (e) {
+      console.warn('MessagesScreen: loadInbox error', e);
+      showToast({ type: 'error', message: 'Connection error. Pull down to retry.' });
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshUnread, showToast]);
+
+  useFocusEffect(useCallback(() => { loadInbox(); }, [loadInbox]));
 
   // ── Socket: online/typing ─────────────────────────────────
   useEffect(() => {
@@ -318,10 +440,8 @@ export default function MessagesScreen({ navigation }) {
 
     const handleOnline  = ({ userId }) => setOnlineIds(prev => new Set([...prev, userId]));
     const handleOffline = ({ userId }) => setOnlineIds(prev => { const s = new Set(prev); s.delete(userId); return s; });
-    // Backend emits 'user_typing' { userId, chatId } with no isTyping flag.
-    // Add to set on receive; auto-remove after 3 s of silence.
-    const typingTimers = {};
-    const handleTyping = ({ userId }) => {
+    const typingTimers  = {};
+    const handleTyping  = ({ userId }) => {
       if (!userId) return;
       setTypingIds(prev => new Set([...prev, userId]));
       clearTimeout(typingTimers[userId]);
@@ -344,43 +464,59 @@ export default function MessagesScreen({ navigation }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadChats();
+    await loadInbox();
     setRefreshing(false);
-  }, [loadChats]);
+  }, [loadInbox]);
 
-  const handleOpenChat = useCallback((chat) => {
-    navigation.navigate('Chat', {
-      chatId:           chat.chat_id,
-      otherName:        chat.other_anonymous_name,
-      otherAvatar:      chat.other_avatar,
-      otherAvatarColor: chat.other_avatar_color,
-      otherUserId:      chat.other_user_id,
-    });
+  // ── Open chat — route by type ─────────────────────────────
+  const handleOpenChat = useCallback((item) => {
+    if (item.chat_type === 'drop') {
+      navigation.navigate('DropChat', { connectionId: item.id });
+    } else {
+      navigation.navigate('Chat', {
+        chatId:           item.id,
+        otherName:        item.other_anonymous_name,
+        otherAvatar:      item.other_avatar,
+        otherAvatarColor: item.other_avatar_color,
+        otherUserId:      item.other_user_id,
+      });
+    }
   }, [navigation]);
 
-  // ── Filter chats by tab ───────────────────────────────────
-  const filteredChats = chats.filter(chat => {
-    if (activeTab === 'Online 🔥') return onlineIds.has(chat.other_user_id);
-    if (activeTab === 'Locked 🔒') return !chat.is_unlocked && chat.messages_left === 0;
+  // ── Filter by tab ─────────────────────────────────────────
+  const filteredItems = items.filter(item => {
+    if (activeTab === 'Connect 🔗') return item.chat_type === 'connect';
+    if (activeTab === 'Drops 🔥')   return item.chat_type === 'drop';
+    if (activeTab === 'Online ⚡')  return item.chat_type === 'connect' && onlineIds.has(item.other_user_id);
     return true;
   });
 
-  const renderChat = useCallback(({ item }) => (
+  const renderItem = useCallback(({ item }) => (
     <ChatCard
-      chat={item}
+      item={item}
       onPress={handleOpenChat}
-      isOnline={onlineIds.has(item.other_user_id)}
-      isTyping={typingIds.has(item.other_user_id)}
+      isOnline={item.chat_type === 'connect' && onlineIds.has(item.other_user_id)}
+      isTyping={item.chat_type === 'connect' && typingIds.has(item.other_user_id)}
     />
   ), [handleOpenChat, onlineIds, typingIds]);
 
-  const keyExtractor = useCallback((item) => item.chat_id, []);
+  const keyExtractor = useCallback((item) => `${item.chat_type}-${item.id}`, []);
+
+  // Total unread for header
+  const totalUnread = items.reduce((acc, i) => acc + (i.unread_count || 0), 0);
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerLogo}>messages</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerLogo}>messages</Text>
+          {totalUnread > 0 && (
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuBtn} hitSlop={HIT_SLOP}>
           <Menu size={rs(20)} color={T.textSecondary} />
         </TouchableOpacity>
@@ -388,35 +524,41 @@ export default function MessagesScreen({ navigation }) {
 
       {/* Tab filters */}
       <View style={styles.tabRow}>
-        {TABS.map(tab => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveTab(tab)}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            hitSlop={HIT_SLOP}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRowContent}>
+          {TABS.map(tab => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              hitSlop={HIT_SLOP}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
-      {/* Active Now strip */}
-      <ActiveNowStrip chats={chats} onlineIds={onlineIds} onPress={handleOpenChat} />
+      {/* Active Now strip — connect only */}
+      <ActiveNowStrip items={items} onlineIds={onlineIds} onPress={handleOpenChat} />
 
       {/* Content */}
       {loading && !refreshing ? (
         <View style={styles.centered}>
           <ActivityIndicator color={T.primary} />
         </View>
-      ) : filteredChats.length === 0 ? (
+      ) : filteredItems.length === 0 ? (
         <EmptyState tab={activeTab} />
       ) : (
         <FlatList
-          data={filteredChats}
+          data={filteredItems}
           keyExtractor={keyExtractor}
-          renderItem={renderChat}
+          renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={12}
+          windowSize={10}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />
           }
@@ -437,24 +579,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, paddingVertical: rp(14),
     borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  headerLogo: { fontSize: rs(18), fontWeight: '800', color: T.primary, letterSpacing: -0.3 },
+  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  headerLogo:  { fontSize: rs(18), fontWeight: '800', color: T.primary, letterSpacing: -0.3 },
+  headerBadge: {
+    backgroundColor: T.primary, borderRadius: rs(10),
+    minWidth: rs(20), height: rs(20),
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(5),
+  },
+  headerBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
   menuBtn: {
     width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center',
     borderRadius: rs(18), backgroundColor: 'rgba(255,255,255,0.04)',
   },
 
   // Tabs
-  tabRow: {
-    flexDirection: 'row', paddingHorizontal: SPACING.md,
-    paddingVertical: rp(10), gap: SPACING.sm,
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
+  tabRow:         { borderBottomWidth: 1, borderBottomColor: T.border },
+  tabRowContent:  { paddingHorizontal: SPACING.md, paddingVertical: rp(10), gap: SPACING.sm },
   tab: {
     paddingHorizontal: rp(14), paddingVertical: rp(6),
     borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.border,
   },
-  tabActive: { backgroundColor: T.primaryDim, borderColor: T.primaryBorder },
-  tabText:   { fontSize: FONT.xs, fontWeight: '600', color: T.textSecondary },
+  tabActive:     { backgroundColor: T.primaryDim, borderColor: T.primaryBorder },
+  tabText:       { fontSize: FONT.xs, fontWeight: '600', color: T.textSecondary },
   tabTextActive: { color: T.primary },
 
   // Active Now
@@ -495,9 +641,23 @@ const styles = StyleSheet.create({
     backgroundColor: T.surface, borderRadius: RADIUS.md,
     padding: SPACING.md, gap: SPACING.sm,
     borderWidth: 1, borderColor: T.border,
+    position: 'relative', overflow: 'hidden',
   },
+  chatCardDrop:   { borderColor: 'rgba(167,139,250,0.15)' },
   chatCardUnread: { borderColor: 'rgba(255,99,74,0.15)', backgroundColor: '#171d2a' },
   chatCardLocked: { opacity: 0.75 },
+
+  // Type chip
+  typeChip: {
+    position: 'absolute', top: rp(8), right: rp(10),
+    flexDirection: 'row', alignItems: 'center', gap: rp(3),
+    paddingHorizontal: rp(6), paddingVertical: rp(2),
+    borderRadius: RADIUS.sm, borderWidth: 1,
+    backgroundColor: T.primaryDim, borderColor: T.primaryBorder,
+  },
+  typeChipDrop:    { backgroundColor: T.dropDim, borderColor: T.dropBorder },
+  typeChipText:    { fontSize: rf(9), fontWeight: '700', color: T.primary, textTransform: 'lowercase' },
+  typeChipTextDrop:{ color: T.drop },
 
   chatAvatarWrap: { position: 'relative', flexShrink: 0 },
   chatAvatar: {
@@ -517,14 +677,15 @@ const styles = StyleSheet.create({
   },
 
   chatInfo:   { flex: 1, gap: rp(3) },
-  chatTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  chatTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: rp(40) },
   chatName:   { fontSize: FONT.md, fontWeight: '600', color: T.text, flex: 1 },
   chatNameUnread: { fontWeight: '800' },
   chatMetaRight:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   chatTime:   { fontSize: FONT.xs, color: T.textMuted },
 
-  chatPreview:       { fontSize: FONT.sm, color: T.textSecondary },
-  chatPreviewUnread: { color: T.text, fontWeight: '500' },
+  chatPreview:           { fontSize: FONT.sm, color: T.textSecondary },
+  chatPreviewUnread:     { color: T.text, fontWeight: '500' },
+  chatPreviewConfession: { color: T.textMuted, fontStyle: 'italic' },
 
   typingRow:   { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   typingDots:  { flexDirection: 'row', alignItems: 'center', gap: rp(3) },
@@ -538,7 +699,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: rp(7), paddingVertical: rp(2),
     borderWidth: 1, borderColor: T.successBorder,
   },
-  onlineBadgeDot: { width: rs(5), height: rs(5), borderRadius: rs(3), backgroundColor: T.online },
+  onlineBadgeDot:  { width: rs(5), height: rs(5), borderRadius: rs(3), backgroundColor: T.online },
   onlineBadgeText: { fontSize: FONT.xs, color: T.success, fontWeight: '700' },
 
   unlockedBadge: {

@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0a0a1a"
+      "backgroundColor": "#0b0f18"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -25,7 +25,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0a0a1a"
+        "backgroundColor": "#0b0f18"
       },
       "permissions": [
         "NOTIFICATIONS",
@@ -56,7 +56,12 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Anonixx",
+      "shortName": "Anonixx",
+      "description": "Anonymous emotion. Structured connection.",
+      "themeColor": "#FF634A",
+      "backgroundColor": "#0b0f18"
     },
     "plugins": ["expo-asset", "expo-video", "expo-navigation-bar"],
     "extra": {

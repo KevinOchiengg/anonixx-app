@@ -10,6 +10,8 @@ import cloudinary.utils
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
+MAX_VIDEO_DURATION_SECONDS = 600   # 10 minutes
+
 # Configure Cloudinary
 cloudinary.config(
     cloud_name=settings.CLOUDINARY_CLOUD_NAME,
@@ -38,7 +40,7 @@ async def get_upload_signature(
             detail="Media uploads are not configured on this server. Contact support."
         )
     # Route files to type-specific folders
-    folder = "anonixx/voice" if data.resource_type == "video" else "anonixx/images"
+    folder = "anonixx/videos" if data.resource_type == "video" else "anonixx/images"
     try:
         timestamp = int(time.time())
         params    = {"folder": folder, "timestamp": timestamp}
@@ -136,11 +138,31 @@ async def upload_video(
                 resource_type="video",
             ),
         )
+
+        duration = result.get("duration") or 0
+        if duration > MAX_VIDEO_DURATION_SECONDS:
+            # Delete the just-uploaded file — it exceeded the limit.
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: cloudinary.uploader.destroy(
+                        result["public_id"], resource_type="video"
+                    ),
+                )
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=400,
+                detail=f"Video exceeds the 10-minute limit ({int(duration)}s). Please trim it and try again.",
+            )
+
         return {
             "url":           result["secure_url"],
             "public_id":     result["public_id"],
             "resource_type": "video",
-            "duration":      result.get("duration", 0),
+            "duration":      duration,
         }
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=500, detail="Video upload failed. Try again.")

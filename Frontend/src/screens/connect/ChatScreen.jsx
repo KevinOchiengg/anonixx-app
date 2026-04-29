@@ -1739,6 +1739,18 @@ export default function ChatScreen({ route, navigation }) {
 
   // ── Start a call ─────────────────────────────────────────
   const handleStartCall = useCallback((callType) => {
+    // Optimistic online check — isOnline is kept live via socket events.
+    // The backend does a definitive check too (503 if offline), but this
+    // saves a round-trip and gives immediate feedback.
+    if (!isOnline) {
+      showToast({
+        type:    'info',
+        title:   'Not available',
+        message: `${otherName || 'They'} are not online right now.`,
+      });
+      return;
+    }
+
     navigation.navigate('Call', {
       chatId,
       callType,
@@ -1747,7 +1759,7 @@ export default function ChatScreen({ route, navigation }) {
       otherAvatar,
       otherAvatarColor,
     });
-  }, [navigation, chatId, otherName, otherAvatar, otherAvatarColor]);
+  }, [navigation, chatId, otherName, otherAvatar, otherAvatarColor, isOnline, showToast]);
 
   // ── Accept incoming call ──────────────────────────────────
   const handleAcceptCall = useCallback(() => {

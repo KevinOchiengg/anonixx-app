@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -12,6 +13,8 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
+
+const LOGO = require('../../../assets/logo.png');
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { login } from '../../store/slices/authSlice';
@@ -165,11 +168,8 @@ export default function LoginScreen({ navigation }) {
           transform: [{ translateY: slideAnim }],
         }]}>
 
-          {/* Brand mark */}
-          <View style={styles.brandMark}>
-            <View style={styles.brandDot} />
-            <Text style={styles.brandText}>ANONIXX</Text>
-          </View>
+          {/* Logo */}
+          <Image source={LOGO} style={styles.logoImage} resizeMode="contain" />
 
           {/* Header */}
           <View style={styles.header}>
@@ -328,29 +328,11 @@ const styles = StyleSheet.create({
     paddingBottom:     SPACING.lg,
   },
 
-  brandMark: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           SPACING.sm,
-    marginBottom:  SPACING.xxl,
-  },
-  brandDot: {
-    width:           rs(8),
-    height:          rs(8),
-    borderRadius:    rs(4),
-    backgroundColor: THEME.primary,
-    shadowColor:     THEME.primary,
-    shadowOffset:    { width: 0, height: 0 },
-    shadowOpacity:   0.8,
-    shadowRadius:    rs(6),
-    elevation:       4,
-  },
-  brandText: {
-    fontSize:      rf(11),
-    fontWeight:    '800',
-    color:         THEME.primary,
-    letterSpacing: rs(3),
-    opacity:       0.8,
+  logoImage: {
+    width:        200,
+    height:       54,
+    alignSelf:    'center',
+    marginBottom: SPACING.xxl,
   },
 
   header:   { marginBottom: SPACING.xl },

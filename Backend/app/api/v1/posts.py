@@ -4,12 +4,18 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
+import asyncio
 import random
 import math
 import re
+import time as _time
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
+
+# ── Simple in-process TTL cache for expensive count query ─────
+_post_count_cache: dict = {"value": 0, "ts": 0.0}
+_POST_COUNT_TTL = 120   # refresh every 2 minutes
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
@@ -120,6 +126,10 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
         key = str(item["_id"])
         thread_counts[key] = thread_counts.get(key, 0) + item["count"]
 
+    # inspired_drop_count is stored directly on the post document as an
+    # all-time counter (incremented when a drop is created, never decremented).
+    # No aggregation needed here — the field is read off each post below.
+
     saved_set = set()
     liked_set = set()
     voted_map: dict[str, int] = {}  # post_id -> option_index
@@ -192,6 +202,8 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
             "created_at": created_at_iso,
             "time_ago": get_time_ago(created_at),
             "is_own_post": post.get("user_id") == current_user_id if current_user_id else False,
+            # All-time counter — stored on the post doc, never decrements when drops expire
+            "inspired_drop_count": post.get("inspired_drop_count", 0),
             "type": "post"
         })
 
@@ -538,27 +550,33 @@ async def get_calm_feed(
     user_affinities: dict[str, float] = {}
 
     if current_user_id:
-        streak_info = await track_streak(current_user_id, db)
+        # Run all three user-data lookups concurrently instead of sequentially
+        async def _fetch_user_doc():
+            return await db["users"].find_one(
+                {"_id": ObjectId(current_user_id)}, {"vibe_tags": 1}
+            )
 
-        # Fetch vibe tags → map to topic categories for scoring
-        user_doc = await db["users"].find_one(
-            {"_id": ObjectId(current_user_id)},
-            {"vibe_tags": 1}
+        streak_info, user_doc, user_affinities = await asyncio.gather(
+            track_streak(current_user_id, db),
+            _fetch_user_doc(),
+            get_behavioral_interests(current_user_id, db),
         )
+
         if user_doc:
             for tag in user_doc.get("vibe_tags", []):
                 mapped = _VIBE_TO_TOPIC.get(tag)
                 if mapped:
                     user_vibe_topics.add(mapped)
 
-        user_affinities = await get_behavioral_interests(current_user_id, db)
+    # Cached total-post count (avoids a full-collection scan on every request)
+    now_ts = _time.monotonic()
+    if now_ts - _post_count_cache["ts"] > _POST_COUNT_TTL:
+        _post_count_cache["value"] = await db["posts"].count_documents({})
+        _post_count_cache["ts"]    = now_ts
+    total_posts = _post_count_cache["value"]
 
-    # Count total posts for accurate has_more
-    total_posts = await db["posts"].count_documents({})
-
-    # Fetch a larger pool so the shuffle has meaningful material to work with.
-    # We pull 6× the batch size (min 60) then score+shuffle and slice to posts_to_load.
-    POOL_SIZE = max(60, posts_to_load * 6)
+    # Fetch pool — 3× batch size (min 30) gives good shuffle variety at half the old cost
+    POOL_SIZE = max(30, posts_to_load * 3)
     pool = await db["posts"].find({}) \
         .sort("created_at", -1) \
         .skip(session_posts) \
