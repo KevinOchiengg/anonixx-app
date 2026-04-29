@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
-  BarChart2, Bookmark, EyeOff, Flag, Heart, Link,
+  BarChart2, Bookmark, EyeOff, Feather, Flag, Flame, Heart, Link,
   MessageCircle, MoreHorizontal, Play, Share2, UserX, VolumeX, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -382,7 +382,7 @@ const MenuItem = React.memo(({ item }) => (
 
 // ─── Main Card ────────────────────────────────────────────────
 function CalmPostCard({
-  post, onResponse, onSave, onViewThread, onPress, onMediaPress,
+  post, onResponse, onSave, onViewThread, onPress, onMediaPress, onDrop,
 }) {
   const navigation          = useNavigation();
   const { isAuthenticated } = useAuth();
@@ -514,6 +514,11 @@ function CalmPostCard({
   const handleSharePress    = useCallback((e) => { e.stopPropagation(); handleShare(); }, [handleShare]);
   const handleCommentPress  = useCallback((e) => { e.stopPropagation(); handleCommentsOpen(); }, [handleCommentsOpen]);
   const handleLikePress     = useCallback((e) => { e.stopPropagation(); handleLike(); }, [handleLike]);
+  const handleDropPress           = useCallback((e) => { e.stopPropagation(); onDrop?.(post); }, [onDrop, post]);
+  const handleInspirationThreadPress = useCallback((e) => {
+    e.stopPropagation();
+    navigation.navigate('InspirationThread', { postId: post.id });
+  }, [navigation, post.id]);
   const handleReadMore      = useCallback((e) => { e.stopPropagation(); setShowFullContent(true); }, []);
   const handleShowLess      = useCallback((e) => { e.stopPropagation(); setShowFullContent(false); }, []);
   const handleMediaPress    = useCallback((time) => onMediaPress?.(post, time), [onMediaPress, post]);
@@ -595,6 +600,22 @@ function CalmPostCard({
             {isTextOnly && <Text style={styles.hint}>say something if it hits.</Text>}
             {(post.video_url || post.audio_url) && <Text style={styles.hint}>swipe through confessions ↑</Text>}
 
+            {/* Drop count — tappable thread entry point */}
+            {post.inspired_drop_count > 0 && (
+              <TouchableOpacity
+                style={styles.dropCountBadge}
+                onPress={handleInspirationThreadPress}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.75}
+              >
+                <Feather size={rs(11)} color={T.textSecondary} strokeWidth={1.8} />
+                <Text style={styles.dropCountText}>
+                  {post.inspired_drop_count} {post.inspired_drop_count === 1 ? 'person' : 'people'} resonated with this
+                </Text>
+                <Text style={styles.dropCountArrow}>→</Text>
+              </TouchableOpacity>
+            )}
+
             <View style={styles.actions}>
               <View style={styles.actionsLeft}>
                 <TouchableOpacity onPress={handleSave} style={styles.action} hitSlop={HIT_SLOP}>
@@ -604,6 +625,13 @@ function CalmPostCard({
                   <Share2 size={rs(17)} color={T.textSecondary} />
                 </TouchableOpacity>
               </View>
+
+              {/* "Felt this" — write your own inspired confession */}
+              <TouchableOpacity onPress={handleDropPress} style={styles.resonateAction} activeOpacity={0.7} hitSlop={HIT_SLOP}>
+                <Feather size={rs(15)} color={T.textSecondary} strokeWidth={1.8} />
+                <Text style={styles.resonateActionText}>resonate</Text>
+              </TouchableOpacity>
+
               <View style={styles.actionsRight}>
                 <TouchableOpacity onPress={handleCommentPress} style={styles.action} hitSlop={HIT_SLOP}>
                   <MessageCircle size={rs(18)} color={T.textSecondary} />
@@ -709,6 +737,35 @@ const styles = StyleSheet.create({
   actionsRight:     { flexDirection: 'row', alignItems: 'center', gap: rp(16) },
   action:           { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   actionCount:      { fontSize: FONT.sm, fontWeight: '500', color: T.textSecondary },
+  // "felt this" — flat, same visual grammar as heart/comment
+  resonateAction: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           rp(5),
+  },
+  resonateActionText: {
+    fontSize:      rf(12),
+    fontWeight:    '500',
+    color:         T.textSecondary,
+    letterSpacing: 0.1,
+  },
+
+  // "X people felt this" badge — sits above the action bar
+  dropCountBadge: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    alignSelf:         'flex-start',
+    gap:               rp(5),
+    backgroundColor:   'rgba(255,255,255,0.04)',
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    borderColor:       'rgba(255,255,255,0.07)',
+    paddingHorizontal: rp(10),
+    paddingVertical:   rp(4),
+    marginBottom:      rp(8),
+  },
+  dropCountText:  { fontSize: rf(11), fontWeight: '500', color: T.textSecondary },
+  dropCountArrow: { fontSize: rf(11), fontWeight: '500', color: T.textSecondary, opacity: 0.5 },
   menuOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   menuSheet:        { backgroundColor: T.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, paddingBottom: rp(24) },
   menuHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: rp(18), borderBottomWidth: 1, borderBottomColor: T.border },

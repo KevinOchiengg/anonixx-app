@@ -1,6 +1,6 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import List, Optional
 
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # AGORA
     AGORA_APP_ID: str = ""
     AGORA_APP_CERTIFICATE: str = ""
+
+    # ANTHROPIC (AI confession refinement)
+    ANTHROPIC_API_KEY: Optional[str] = None
 
     # RESEND (email)
     RESEND_API_KEY: str = ""

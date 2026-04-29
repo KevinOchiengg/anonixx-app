@@ -10,6 +10,7 @@ from app.api.v1 import payments
 from app.api.v1 import drops, rewards, referrals
 from app.api.v1 import admin
 from app.api.v1 import publisher
+from app.api.v1 import messages
 from app.api.v1 import (
     auth,
     coins,
@@ -25,10 +26,45 @@ from app.api.v1 import (
 from app.tasks.publisher_worker import publisher_worker
 
 
+async def _ensure_indexes():
+    """Create performance-critical indexes if they don't already exist."""
+    from app.database import get_database
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        db = await get_database()
+        await db["posts"].create_index([("created_at", -1)],       background=True)
+        await db["posts"].create_index([("likes_count", -1)],      background=True)
+        await db["saved_posts"].create_index(
+            [("user_id", 1), ("post_id", 1)], unique=True, background=True
+        )
+        await db["poll_votes"].create_index(
+            [("post_id", 1), ("user_id", 1)], background=True
+        )
+        await db["post_threads"].create_index([("post_id", 1)],    background=True)
+        await db["threads"].create_index([("post_id", 1)],         background=True)
+        await db["connect_messages"].create_index(
+            [("chat_id", 1), ("created_at", -1)], background=True
+        )
+        await db["connect_messages"].create_index(
+            [("chat_id", 1), ("sender_id", 1), ("is_read", 1)], background=True
+        )
+        await db["drop_messages"].create_index(
+            [("connection_id", 1), ("created_at", -1)], background=True
+        )
+        await db["publisher_queue"].create_index(
+            [("status", 1), ("submitted_at", 1)], background=True
+        )
+        log.info("MongoDB indexes verified.")
+    except Exception as exc:
+        log.warning("Index creation skipped: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
-    await publisher_worker.start()   # start TikTok publishing worker
+    await _ensure_indexes()
+    await publisher_worker.start()   # start social publishing worker
     yield
     await publisher_worker.stop()    # clean shutdown
     await close_mongo_connection()
@@ -79,6 +115,7 @@ app.include_router(referrals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(circles.router,    prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(publisher.router,  prefix=settings.API_V1_PREFIX)
+app.include_router(messages.router,   prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

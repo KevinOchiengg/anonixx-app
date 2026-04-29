@@ -61,6 +61,18 @@ TEMPLATES = {
         "body": "Your post resonated with someone.",
         "data": {"type": "post_like"},
     },
+
+    # Drops
+    "drop_resonated": {
+        "title": "Someone resonated with your confession 🔥",
+        "body": "They felt your words and had to say something back. Tap to read their drop.",
+        "data": {"type": "drop_resonated"},
+    },
+    "drop_unlocked": {
+        "title": "Someone unlocked your confession 🔓",
+        "body": "They paid to connect with you. Say something.",
+        "data": {"type": "drop_unlocked"},
+    },
 }
 
 

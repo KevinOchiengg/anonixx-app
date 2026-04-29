@@ -63,10 +63,11 @@ async def connect(sid: str, environ: dict, auth: dict):
     # Personal room so the server can reach this user directly
     await sio.enter_room(sid, f"user_{user_id}")
 
-    # Tell all OTHER connected users someone just came online
+    # Tell all OTHER connected users who just came online (userId required
+    # so the frontend can update per-user presence indicators)
     await sio.emit(
         "user_online",
-        {"count": len(_online_users)},
+        {"userId": user_id, "count": len(_online_users)},
         skip_sid=sid,
     )
 
@@ -80,6 +81,16 @@ async def disconnect(sid: str):
     user_id = _sid_to_user.pop(sid, None)
     if user_id:
         _online_users.discard(user_id)
+        # Notify all other users this person went offline
+        await sio.emit(
+            "user_offline",
+            {"userId": user_id, "count": len(_online_users)},
+        )
+
+
+def is_user_online(user_id: str) -> bool:
+    """Check if a user currently has an active socket connection."""
+    return user_id in _online_users
 
 
 # ─── Chat room management ─────────────────────────────────────────────────────

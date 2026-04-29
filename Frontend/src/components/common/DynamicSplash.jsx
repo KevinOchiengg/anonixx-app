@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View, Image } from 'react-native';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { getLoadingMessage, detectUserState } from '../../services/loadingMessageEngine';
+
+const LOGO = require('../../../assets/logo.png');
 
 function PulseDot({ delay = 0 }) {
   const scale = useRef(new Animated.Value(0.6)).current;
@@ -73,11 +75,7 @@ export default function DynamicSplash() {
           transform: [{ scale: logoScale }],
         }]}
       >
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoLetter}>A</Text>
-        </View>
-        <Text style={styles.appName}>Anonixx</Text>
-        <Text style={styles.tagline}>Where anonymity meets authenticity</Text>
+        <Image source={LOGO} style={styles.logoImage} resizeMode="contain" />
       </Animated.View>
 
       <Animated.Text style={[styles.message, { opacity: msgOpacity }]}>
@@ -102,39 +100,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   logoWrap: {
-    alignItems: 'center',
-    marginBottom: 48,
+    alignItems:   'center',
+    marginBottom: 56,
   },
-  logoCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#FF634A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: '#FF634A',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  logoLetter: {
-    color: '#fff',
-    fontSize: 40,
-    fontWeight: '800',
-  },
-  appName: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  tagline: {
-    color: '#14b8a6',
-    fontSize: 13,
-    letterSpacing: 0.3,
+  logoImage: {
+    width:  240,
+    height: 64,
   },
   message: {
     color: '#9ca3af',

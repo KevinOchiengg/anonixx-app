@@ -14,8 +14,8 @@ import React, {
   useCallback, useEffect, useRef, useState,
 } from 'react';
 import {
-  ActivityIndicator, Animated, StyleSheet, Text,
-  TouchableOpacity, View,
+  ActivityIndicator, Animated, Platform, PermissionsAndroid,
+  StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -105,7 +105,8 @@ export default function CallScreen({ route, navigation }) {
   const remoteViewRef    = useRef(null);
   const RtcLocalViewRef  = useRef(null);
   const RtcRemoteViewRef = useRef(null);
-  const callEnded        = useRef(false);
+  const callEnded           = useRef(false);
+  const noAnswerTimerRef    = useRef(null);
 
   const elapsed = useCallTimer(status === 'active');
   const avatarColor = otherAvatarColor || T.primary;
@@ -114,6 +115,11 @@ export default function CallScreen({ route, navigation }) {
   const cleanupEngine = useCallback(async () => {
     if (callEnded.current) return;
     callEnded.current = true;
+    // Always clear the no-answer timer on cleanup
+    if (noAnswerTimerRef.current) {
+      clearTimeout(noAnswerTimerRef.current);
+      noAnswerTimerRef.current = null;
+    }
     try {
       engineRef.current?.leaveChannel();
       engineRef.current?.release();
@@ -170,6 +176,30 @@ export default function CallScreen({ route, navigation }) {
       engine.enableAudio();
 
       if (callType === 'video') {
+        // Android 6+ requires runtime camera permission even if it's in the manifest.
+        // iOS uses NSCameraUsageDescription (set in app.json infoPlist) — the OS
+        // prompts automatically on first use, but we gate here to avoid a silent
+        // black-screen failure if the user previously denied it.
+        if (Platform.OS === 'android') {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+            {
+              title:   'Camera access',
+              message: 'Anonixx needs your camera for this video call.',
+              buttonPositive: 'Allow',
+              buttonNegative: 'Deny',
+            },
+          );
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            showToast({
+              type:    'info',
+              title:   'Camera blocked',
+              message: 'Allow camera access in Settings to make video calls.',
+            });
+            endCall(false);
+            return;
+          }
+        }
         engine.enableVideo();
         engine.startPreview();
       }
@@ -177,6 +207,11 @@ export default function CallScreen({ route, navigation }) {
       engine.addListener('onUserJoined', (connection, uid_) => {
         setRemoteUid(uid_);
         setStatus('active');
+        // Remote user joined — clear the no-answer timeout
+        if (noAnswerTimerRef.current) {
+          clearTimeout(noAnswerTimerRef.current);
+          noAnswerTimerRef.current = null;
+        }
       });
 
       engine.addListener('onUserOffline', () => {
@@ -189,7 +224,15 @@ export default function CallScreen({ route, navigation }) {
       });
 
       await engine.joinChannel(token, channel, uid, {});
-      if (callType !== 'video') setStatus('active'); // audio-only: active immediately on join
+
+      // Both audio and video wait for onUserJoined before going active.
+      // If no one joins within 30s, end the call — they didn't answer.
+      if (isInitiator) {
+        noAnswerTimerRef.current = setTimeout(() => {
+          showToast({ type: 'info', message: 'No answer.' });
+          endCall(true);
+        }, 30_000);
+      }
     } catch (e) {
       showToast({ type: 'error', message: 'Could not start call.' });
       endCall(false);
@@ -210,7 +253,11 @@ export default function CallScreen({ route, navigation }) {
       });
       if (!res.ok) {
         const err = await res.json();
-        showToast({ type: 'error', message: err.detail || 'Could not start call.' });
+        // 503 = other user is offline (definitive server-side check)
+        const msg = res.status === 503
+          ? (err.detail || 'They\'re not online right now.')
+          : (err.detail || 'Could not start call.');
+        showToast({ type: 'info', title: 'Not available', message: msg });
         navigation.goBack();
         return;
       }
@@ -357,8 +404,8 @@ export default function CallScreen({ route, navigation }) {
           <PhoneOff size={rs(26)} color="#fff" strokeWidth={2} />
         </TouchableOpacity>
 
-        {/* Camera toggle (video only) */}
-        {callType === 'video' ? (
+        {/* Camera toggle (video only, only when call is active) */}
+        {callType === 'video' && status === 'active' ? (
           <TouchableOpacity
             style={[styles.ctrlBtn, camOff && styles.ctrlBtnActive]}
             onPress={toggleCam}
@@ -371,13 +418,13 @@ export default function CallScreen({ route, navigation }) {
             }
           </TouchableOpacity>
         ) : (
-          /* Speaker placeholder so end btn stays centred on audio */
+          /* Placeholder keeps end btn centred during calling/audio */
           <View style={styles.ctrlBtn} />
         )}
       </View>
 
-      {/* Switch camera (video only, bottom-left) */}
-      {callType === 'video' && (
+      {/* Switch camera (video only, only when active) */}
+      {callType === 'video' && status === 'active' && (
         <TouchableOpacity
           style={styles.switchCamBtn}
           onPress={switchCamera}

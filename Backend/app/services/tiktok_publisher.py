@@ -22,49 +22,13 @@ from typing import Optional
 import httpx
 
 from app.config import settings
+from app.services.caption_engine import build_caption
 
 log = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────
-TIKTOK_API_BASE  = "https://open.tiktokapis.com"
-PRIVACY_LEVEL    = "PUBLIC_TO_EVERYONE"
-BASE_TAGS        = "#anonixx #anonymous #confession #mentalhealth #anonymousconfessions"
-CAPTION_MAX_LEN  = 2200   # TikTok character cap
-
-_CATEGORY_EMOJI: dict[str, str] = {
-    "love":                  "💔",
-    "fun":                   "✨",
-    "friendship":            "🤝",
-    "adventure":             "🌍",
-    "spicy":                 "🌶️",
-    "carrying this alone":   "🌑",
-    "starting over":         "🌱",
-    "need stability":        "⚓",
-    "open to connection":    "🤲",
-    "just need to be heard": "🌙",
-}
-
-
-# ── Caption builder ──────────────────────────────────────────────
-def build_caption(confession: str, category: str) -> str:
-    """
-    Build the TikTok post caption.
-
-    Example output:
-        Someone on Anonixx dropped this 💔
-
-        "I still think about you every single day."
-
-        #anonixx #anonymous #confession #mentalhealth #anonymousconfessions
-    """
-    emoji   = _CATEGORY_EMOJI.get(category, "💬")
-    content = confession.strip() if confession else ""
-    caption = (
-        f"Someone on Anonixx dropped this {emoji}\n\n"
-        f'"{content}"\n\n'
-        f"{BASE_TAGS}"
-    )
-    return caption[:CAPTION_MAX_LEN]
+TIKTOK_API_BASE = "https://open.tiktokapis.com"
+PRIVACY_LEVEL   = "PUBLIC_TO_EVERYONE"
 
 
 # ── Client ───────────────────────────────────────────────────────
@@ -109,7 +73,7 @@ class TikTokPublisher:
 
         payload = {
             "post_info": {
-                "title":           build_caption(confession, category),
+                "title":           build_caption(confession, category, platform="tiktok"),
                 "privacy_level":   PRIVACY_LEVEL,
                 "disable_duet":    True,
                 "disable_comment": False,
@@ -144,7 +108,7 @@ class TikTokPublisher:
 
         payload = {
             "post_info": {
-                "title":           build_caption(confession, category),
+                "title":           build_caption(confession, category, platform="tiktok"),
                 "privacy_level":   PRIVACY_LEVEL,
                 "disable_duet":    True,
                 "disable_comment": False,
@@ -180,7 +144,7 @@ class TikTokPublisher:
 
         payload = {
             "post_info": {
-                "title":                build_caption(confession, category),
+                "title":                build_caption(confession, category, platform="tiktok"),
                 "privacy_level":        PRIVACY_LEVEL,
                 "disable_duet":         True,
                 "disable_comment":      False,

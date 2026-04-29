@@ -24,50 +24,11 @@ import logging
 import httpx
 
 from app.config import settings
+from app.services.caption_engine import build_caption
 
 log = logging.getLogger(__name__)
 
-GRAPH_API_BASE   = "https://graph.facebook.com/v21.0"
-CAPTION_MAX_LEN  = 63206    # Facebook's post character limit
-
-_CATEGORY_EMOJI: dict[str, str] = {
-    "love":                  "💔",
-    "fun":                   "✨",
-    "friendship":            "🤝",
-    "adventure":             "🌍",
-    "spicy":                 "🌶️",
-    "carrying this alone":   "🌑",
-    "starting over":         "🌱",
-    "need stability":        "⚓",
-    "open to connection":    "🤲",
-    "just need to be heard": "🌙",
-}
-
-_FB_TAGS = "#anonixx #anonymous #confession #mentalhealth #anonymousconfessions"
-
-
-def build_fb_caption(confession: str, category: str) -> str:
-    """
-    Facebook caption — slightly richer than TikTok; includes an app CTA.
-
-    Example:
-        Someone on Anonixx dropped this 💔
-
-        "I still think about you every single day."
-
-        Anonymous. Safe. Real. — anonixx.app
-
-        #anonixx #anonymous #confession #mentalhealth #anonymousconfessions
-    """
-    emoji   = _CATEGORY_EMOJI.get(category, "💬")
-    content = confession.strip() if confession else ""
-    caption = (
-        f"Someone on Anonixx dropped this {emoji}\n\n"
-        f'"{content}"\n\n'
-        f"Anonymous. Safe. Real. — anonixx.app\n\n"
-        f"{_FB_TAGS}"
-    )
-    return caption[:CAPTION_MAX_LEN]
+GRAPH_API_BASE = "https://graph.facebook.com/v21.0"
 
 
 class FacebookPublisher:
@@ -115,7 +76,7 @@ class FacebookPublisher:
             res = await client.post(
                 f"{GRAPH_API_BASE}/{self._page_id}/feed",
                 params={"access_token": self._token},
-                json={"message": build_fb_caption(confession, category)},
+                json={"message": build_caption(confession, category, platform="facebook")},
             )
 
         return self._parse(res, "text post")
@@ -139,7 +100,7 @@ class FacebookPublisher:
                 params={"access_token": self._token},
                 json={
                     "url":     image_url,
-                    "caption": build_fb_caption(confession, category),
+                    "caption": build_caption(confession, category, platform="facebook"),
                 },
             )
 
@@ -164,7 +125,7 @@ class FacebookPublisher:
                 params={"access_token": self._token},
                 json={
                     "file_url":    video_url,
-                    "description": build_fb_caption(confession, category),
+                    "description": build_caption(confession, category, platform="facebook"),
                 },
             )
 

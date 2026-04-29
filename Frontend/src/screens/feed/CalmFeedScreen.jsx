@@ -4,6 +4,7 @@ import React, {
 import {
   View, FlatList, ActivityIndicator, StyleSheet,
   StatusBar, Text, TouchableOpacity, Animated, RefreshControl,
+  Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,6 +17,7 @@ import { ActiveVideoContext } from '../../context/VideoFeedContext';
 import { useToast } from '../../components/ui/Toast';
 import CalmPostCard from '../../components/feed/CalmPostCard';
 import FeedDivider from '../../components/feed/FeedDivider';
+import InspiredDropSheet from '../../components/feed/InspiredDropSheet';
 import MoodBalancer from '../../components/feed/MoodBalancer';
 import AuthPromptModal from '../../components/modals/AuthPromptModal';
 import { API_BASE_URL } from '../../config/api';
@@ -55,6 +57,61 @@ const StarryBackground = React.memo(() => (
       }} />
     ))}
   </>
+));
+
+// ── Skeleton Feed (replaces blank ActivityIndicator) ─────────
+const SkeletonPulse = React.memo(({ style }) => {
+  const opacity = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.7, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.35, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  return <Animated.View style={[style, { opacity }]} />;
+});
+
+const SkeletonCard = React.memo(({ hasMedia = false }) => (
+  <View style={styles.skeletonCard}>
+    {/* avatar + name row */}
+    <View style={styles.skeletonRow}>
+      <SkeletonPulse style={styles.skeletonAvatar} />
+      <View style={styles.skeletonNameGroup}>
+        <SkeletonPulse style={styles.skeletonNameLine} />
+        <SkeletonPulse style={styles.skeletonTimeLine} />
+      </View>
+    </View>
+    {/* content lines */}
+    <SkeletonPulse style={[styles.skeletonLine, { width: '100%' }]} />
+    <SkeletonPulse style={[styles.skeletonLine, { width: '85%' }]} />
+    <SkeletonPulse style={[styles.skeletonLine, { width: '60%', marginBottom: 0 }]} />
+    {/* optional media placeholder */}
+    {hasMedia && <SkeletonPulse style={styles.skeletonMedia} />}
+  </View>
+));
+
+const SkeletonFeed = React.memo(({ insetTop }) => (
+  <View style={[styles.container, { paddingTop: insetTop }]}>
+    <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
+    {/* header skeleton */}
+    <View style={[styles.header, { paddingTop: rp(14) }]}>
+      <SkeletonPulse style={{ width: rs(90), height: rs(22), borderRadius: RADIUS.sm, backgroundColor: THEME.surface }} />
+      <View style={{ flexDirection: 'row', gap: rp(8) }}>
+        <SkeletonPulse style={{ width: rs(38), height: rs(38), borderRadius: rs(19), backgroundColor: THEME.surface }} />
+        <SkeletonPulse style={{ width: rs(38), height: rs(38), borderRadius: rs(19), backgroundColor: THEME.surface }} />
+      </View>
+    </View>
+    <SkeletonCard />
+    <SkeletonCard hasMedia />
+    <SkeletonCard />
+    <SkeletonCard hasMedia />
+  </View>
 ));
 
 // ── Streak Banner ─────────────────────────────────────────────
@@ -137,6 +194,7 @@ export default function CalmFeedScreen({ navigation, route }) {
   const [activeVideoId, setActiveVideoId]   = useState(null);
   const [nextVideo, setNextVideo]           = useState(null);
   const [menuVisible, setMenuVisible]       = useState(false);
+  const [dropSheetPost, setDropSheetPost]   = useState(null);
 
   const flatListRef   = useRef(null);
   const postsRef      = useRef([]);
@@ -180,7 +238,7 @@ export default function CalmFeedScreen({ navigation, route }) {
     }, [route?.params?.refresh])
   );
 
-  const loadFeed = useCallback(async (reset = false) => {
+  const loadFeed = useCallback(async (reset = false, _retryCount = 0) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
@@ -193,7 +251,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       const currentOffset = reset ? 0 : sessionPosts;
 
       const controller = new AbortController();
-      const timeout    = setTimeout(() => controller.abort(), 15000);
+      const timeout    = setTimeout(() => controller.abort(), 30000);   // 30 s
       const response   = await fetch(
         `${API_BASE_URL}/api/v1/posts/calm-feed?session_posts=${currentOffset}`,
         { headers, signal: controller.signal }
@@ -237,7 +295,17 @@ export default function CalmFeedScreen({ navigation, route }) {
       }
     } catch (error) {
       const msg = error?.message || '';
-      if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+      const isTimeout = msg.includes('Aborted') || msg.includes('aborted') || msg.includes('abort');
+
+      // Silent auto-retry once on timeout before showing error to the user
+      if (isTimeout && _retryCount === 0) {
+        loadingRef.current = false;
+        setLoading(false);
+        loadFeed(reset, 1);
+        return;
+      }
+
+      if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch') || isTimeout) {
         showToast({ type: 'error', title: 'No Connection', message: 'Check your internet and try again.' });
       } else {
         showToast({ type: 'error', message: 'Could not load feed. Pull down to try again.' });
@@ -398,6 +466,7 @@ export default function CalmFeedScreen({ navigation, route }) {
           onViewThread={handleViewThread}
           onPress={handlePostPress}
           onMediaPress={handleMediaPress}
+          onDrop={setDropSheetPost}
         />
       );
     }
@@ -440,13 +509,8 @@ export default function CalmFeedScreen({ navigation, route }) {
   }, [loadFeed]);
 
 
-  // ── Initial loading / refresh ─────────────────────────────
-  if (loading && posts.length === 0) return (
-    <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-      <ActivityIndicator size="large" color={THEME.primary} />
-    </View>
-  );
+  // ── Initial loading — skeleton cards instead of blank spinner
+  if (loading && posts.length === 0) return <SkeletonFeed insetTop={insets.top} />;
 
   // ── Error state (backend down / no connection) ─────────────
   if (fetchError && posts.length === 0) return (
@@ -560,6 +624,13 @@ export default function CalmFeedScreen({ navigation, route }) {
       <HamburgerMenu
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
+        navigation={navigation}
+      />
+
+      <InspiredDropSheet
+        visible={!!dropSheetPost}
+        post={dropSheetPost}
+        onClose={() => setDropSheetPost(null)}
         navigation={navigation}
       />
     </View>
@@ -687,4 +758,52 @@ const styles = StyleSheet.create({
   },
   errorRetryText: { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
 
+  // Skeleton loader
+  skeletonCard: {
+    backgroundColor: THEME.surface,
+    borderRadius:    RADIUS.md,
+    padding:         SPACING.md,
+    marginHorizontal: SPACING.md,
+    marginBottom:    SPACING.sm,
+    borderWidth:     1,
+    borderColor:     THEME.border,
+    gap:             rp(10),
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           SPACING.sm,
+    marginBottom:  rp(4),
+  },
+  skeletonAvatar: {
+    width:           rs(40),
+    height:          rs(40),
+    borderRadius:    rs(20),
+    backgroundColor: THEME.surfaceAlt,
+  },
+  skeletonNameGroup: { gap: rp(6), flex: 1 },
+  skeletonNameLine: {
+    height:          rs(13),
+    width:           '45%',
+    borderRadius:    RADIUS.sm,
+    backgroundColor: THEME.surfaceAlt,
+  },
+  skeletonTimeLine: {
+    height:          rs(10),
+    width:           '25%',
+    borderRadius:    RADIUS.sm,
+    backgroundColor: THEME.surfaceAlt,
+  },
+  skeletonLine: {
+    height:          rs(13),
+    borderRadius:    RADIUS.sm,
+    backgroundColor: THEME.surfaceAlt,
+    marginBottom:    rp(6),
+  },
+  skeletonMedia: {
+    height:          rs(160),
+    borderRadius:    RADIUS.md,
+    backgroundColor: THEME.surfaceAlt,
+    marginTop:       rp(4),
+  },
 });

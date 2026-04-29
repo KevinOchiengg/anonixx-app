@@ -566,127 +566,167 @@ export default function DropLandingScreen({ route, navigation }) {
             ) : (
               <>
                 <View style={s.unlockSection}>
-                  <View style={[s.lockIconWrap, { backgroundColor: tint(catColor, '1E') }]}>
-                    <Lock size={rs(32)} color={catColor} strokeWidth={1.8} />
-                  </View>
-                  <Text style={s.unlockTitle}>Connect for ${drop.price}</Text>
-                  <Text style={s.unlockSub}>
-                    Pay once to unlock anonymous chat with{' '}
-                    {drop.is_group ? 'this group' : 'this person'}.
-                    You stay anonymous unless you choose to reveal.
-                  </Text>
-
-                  {!isAuthenticated ? (
-                    <View style={s.authPrompt}>
-                      <Text style={s.authPromptText}>You need an account to connect.</Text>
-                      <TouchableOpacity
-                        style={[s.primaryBtn, { backgroundColor: catColor, shadowColor: catColor }]}
-                        onPress={handleRegister}
-                        hitSlop={HIT_SLOP}
-                        activeOpacity={0.9}
-                      >
-                        <Text style={s.primaryBtnText}>Create Free Account</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={handleLogin} hitSlop={HIT_SLOP} style={s.loginLink}>
-                        <Text style={s.loginLinkText}>
-                          Already have an account? Log in
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                  ) : payStep === PAY.ENTERING_PHONE ? (
-                    <View style={s.phoneWrap}>
-                      <Text style={s.phoneLabel}>M-Pesa number</Text>
-                      <View style={s.phoneRow}>
-                        <TextInput
-                          style={s.phoneField}
-                          value={phone}
-                          onChangeText={setPhone}
-                          placeholder="2547XXXXXXXX"
-                          placeholderTextColor={T.textMute}
-                          keyboardType="phone-pad"
-                          maxLength={12}
-                        />
-                        <TouchableOpacity
-                          style={[
-                            s.payBtn,
-                            { backgroundColor: catColor },
-                            !phone.trim() && { opacity: 0.4 },
-                          ]}
-                          onPress={handleUnlockMpesa}
-                          disabled={!phone.trim()}
-                          hitSlop={HIT_SLOP}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={s.payBtnText}>Pay</Text>
-                        </TouchableOpacity>
+                  {drop.is_origin_author ? (
+                    /* ── Free unlock — viewer is the author of the inspiring post ── */
+                    <View style={s.originAuthorWrap}>
+                      <View style={[s.lockIconWrap, { backgroundColor: 'rgba(255,99,74,0.12)' }]}>
+                        <Flame size={rs(32)} color={T.primary} strokeWidth={1.8} />
                       </View>
-                      <TouchableOpacity
-                        onPress={() => setPayStep(PAY.IDLE)}
-                        hitSlop={HIT_SLOP}
-                        style={s.backToOptions}
-                      >
-                        <Text style={s.backToOptionsText}>← Back</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                  ) : payStep === PAY.FAILED ? (
-                    <View style={s.failedBox}>
-                      <Text style={s.failedText}>Payment timed out. Please try again.</Text>
-                      <TouchableOpacity
-                        style={[s.primaryBtn, { backgroundColor: catColor, shadowColor: catColor }]}
-                        onPress={() => setPayStep(PAY.ENTERING_PHONE)}
-                        hitSlop={HIT_SLOP}
-                        activeOpacity={0.9}
-                      >
-                        <Text style={s.primaryBtnText}>Try Again</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                  ) : (
-                    <View style={s.payOptions}>
-                      {/* ── Coins option ── */}
+                      <Text style={s.originAuthorTitle}>They resonated with your confession</Text>
+                      <Text style={s.originAuthorSub}>
+                        This drop was inspired by something you wrote.{'\n'}
+                        Connect at a discounted rate — {drop.origin_unlock_cost ?? 10} coins instead of {drop.price}.
+                      </Text>
+                      {coinBalance < (drop.origin_unlock_cost ?? 10) && (
+                        <Text style={s.originAuthorLowCoins}>
+                          You need {(drop.origin_unlock_cost ?? 10) - coinBalance} more coins — top up in Wallet.
+                        </Text>
+                      )}
                       <TouchableOpacity
                         style={[
-                          s.payChoice,
-                          { borderColor: coinBalance >= 30 ? '#fbbf24' : 'rgba(251,191,36,0.28)' },
+                          s.primaryBtn,
+                          { backgroundColor: T.primary, shadowColor: T.primary },
+                          coinBalance < (drop.origin_unlock_cost ?? 10) && { opacity: 0.45 },
                         ]}
                         onPress={handleUnlockCoins}
-                        disabled={coinsLoading}
+                        disabled={coinsLoading || coinBalance < (drop.origin_unlock_cost ?? 10)}
                         hitSlop={HIT_SLOP}
                         activeOpacity={0.9}
                       >
-                        <Text style={s.payChoiceIcon}>🪙</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[s.payChoiceTitle, { color: '#fbbf24' }]}>
-                            {coinsLoading ? 'Unlocking…' : 'Pay with Coins · 30'}
-                          </Text>
-                          <Text style={s.payChoiceSub}>
-                            {coinBalance >= 30
-                              ? `Balance: ${coinBalance} coins`
-                              : `Need ${30 - coinBalance} more coins — top up in Wallet`}
-                          </Text>
-                        </View>
-                        <Zap size={rs(18)} color="#fbbf24" strokeWidth={2} />
-                      </TouchableOpacity>
-
-                      {/* ── M-Pesa option ── */}
-                      <TouchableOpacity
-                        style={[s.payChoice, { borderColor: catColor }]}
-                        onPress={() => setPayStep(PAY.ENTERING_PHONE)}
-                        hitSlop={HIT_SLOP}
-                        activeOpacity={0.9}
-                      >
-                        <Text style={s.payChoiceIcon}>📱</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[s.payChoiceTitle, { color: catColor }]}>
-                            Pay with M-Pesa
-                          </Text>
-                          <Text style={s.payChoiceSub}>STK push to your phone</Text>
-                        </View>
-                        <Zap size={rs(18)} color={catColor} strokeWidth={2} />
+                        {coinsLoading
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={s.primaryBtnText}>
+                              Connect · {drop.origin_unlock_cost ?? 10} coins 🪙
+                            </Text>
+                        }
                       </TouchableOpacity>
                     </View>
+                  ) : (
+                    /* ── Regular paid unlock flow ── */
+                    <>
+                      <View style={[s.lockIconWrap, { backgroundColor: tint(catColor, '1E') }]}>
+                        <Lock size={rs(32)} color={catColor} strokeWidth={1.8} />
+                      </View>
+                      <Text style={s.unlockTitle}>Connect for ${drop.price}</Text>
+                      <Text style={s.unlockSub}>
+                        Pay once to unlock anonymous chat with{' '}
+                        {drop.is_group ? 'this group' : 'this person'}.
+                        You stay anonymous unless you choose to reveal.
+                      </Text>
+
+                      {!isAuthenticated ? (
+                        <View style={s.authPrompt}>
+                          <Text style={s.authPromptText}>You need an account to connect.</Text>
+                          <TouchableOpacity
+                            style={[s.primaryBtn, { backgroundColor: catColor, shadowColor: catColor }]}
+                            onPress={handleRegister}
+                            hitSlop={HIT_SLOP}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={s.primaryBtnText}>Create Free Account</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={handleLogin} hitSlop={HIT_SLOP} style={s.loginLink}>
+                            <Text style={s.loginLinkText}>
+                              Already have an account? Log in
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                      ) : payStep === PAY.ENTERING_PHONE ? (
+                        <View style={s.phoneWrap}>
+                          <Text style={s.phoneLabel}>M-Pesa number</Text>
+                          <View style={s.phoneRow}>
+                            <TextInput
+                              style={s.phoneField}
+                              value={phone}
+                              onChangeText={setPhone}
+                              placeholder="2547XXXXXXXX"
+                              placeholderTextColor={T.textMute}
+                              keyboardType="phone-pad"
+                              maxLength={12}
+                            />
+                            <TouchableOpacity
+                              style={[
+                                s.payBtn,
+                                { backgroundColor: catColor },
+                                !phone.trim() && { opacity: 0.4 },
+                              ]}
+                              onPress={handleUnlockMpesa}
+                              disabled={!phone.trim()}
+                              hitSlop={HIT_SLOP}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={s.payBtnText}>Pay</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => setPayStep(PAY.IDLE)}
+                            hitSlop={HIT_SLOP}
+                            style={s.backToOptions}
+                          >
+                            <Text style={s.backToOptionsText}>← Back</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                      ) : payStep === PAY.FAILED ? (
+                        <View style={s.failedBox}>
+                          <Text style={s.failedText}>Payment timed out. Please try again.</Text>
+                          <TouchableOpacity
+                            style={[s.primaryBtn, { backgroundColor: catColor, shadowColor: catColor }]}
+                            onPress={() => setPayStep(PAY.ENTERING_PHONE)}
+                            hitSlop={HIT_SLOP}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={s.primaryBtnText}>Try Again</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                      ) : (
+                        <View style={s.payOptions}>
+                          {/* ── Coins option ── */}
+                          <TouchableOpacity
+                            style={[
+                              s.payChoice,
+                              { borderColor: coinBalance >= 30 ? '#fbbf24' : 'rgba(251,191,36,0.28)' },
+                            ]}
+                            onPress={handleUnlockCoins}
+                            disabled={coinsLoading}
+                            hitSlop={HIT_SLOP}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={s.payChoiceIcon}>🪙</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[s.payChoiceTitle, { color: '#fbbf24' }]}>
+                                {coinsLoading ? 'Unlocking…' : 'Pay with Coins · 30'}
+                              </Text>
+                              <Text style={s.payChoiceSub}>
+                                {coinBalance >= 30
+                                  ? `Balance: ${coinBalance} coins`
+                                  : `Need ${30 - coinBalance} more coins — top up in Wallet`}
+                              </Text>
+                            </View>
+                            <Zap size={rs(18)} color="#fbbf24" strokeWidth={2} />
+                          </TouchableOpacity>
+
+                          {/* ── M-Pesa option ── */}
+                          <TouchableOpacity
+                            style={[s.payChoice, { borderColor: catColor }]}
+                            onPress={() => setPayStep(PAY.ENTERING_PHONE)}
+                            hitSlop={HIT_SLOP}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={s.payChoiceIcon}>📱</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[s.payChoiceTitle, { color: catColor }]}>
+                                Pay with M-Pesa
+                              </Text>
+                              <Text style={s.payChoiceSub}>STK push to your phone</Text>
+                            </View>
+                            <Zap size={rs(18)} color={catColor} strokeWidth={2} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </>
                   )}
                 </View>
 
@@ -1098,6 +1138,33 @@ const s = StyleSheet.create({
     fontFamily: 'DMSans-Italic',
     fontSize:   FONT.sm,
     color:      T.textSec,
+    textAlign:  'center',
+  },
+
+  // Origin-author free unlock
+  originAuthorWrap: {
+    width:        '100%',
+    alignItems:   'center',
+    gap:          SPACING.sm,
+  },
+  originAuthorTitle: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.lg,
+    color:         T.text,
+    textAlign:     'center',
+    letterSpacing: 0.2,
+  },
+  originAuthorSub: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+    color:      T.textSec,
+    textAlign:  'center',
+    lineHeight: rf(20),
+  },
+  originAuthorLowCoins: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(11),
+    color:      '#fbbf24',
     textAlign:  'center',
   },
 

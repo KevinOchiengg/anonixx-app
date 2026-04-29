@@ -32,59 +32,17 @@ import logging
 import httpx
 
 from app.config import settings
+from app.services.caption_engine import build_caption
 
 log = logging.getLogger(__name__)
 
-GRAPH_API_BASE           = "https://graph.facebook.com/v21.0"
-CAPTION_MAX_LEN          = 2200    # Instagram caption limit
-VIDEO_STATUS_MAX_POLLS   = 15      # 15 × 5 s = 75 s max wait
-VIDEO_STATUS_POLL_DELAY  = 5       # seconds between polls
-
-_CATEGORY_EMOJI: dict[str, str] = {
-    "love":                  "💔",
-    "fun":                   "✨",
-    "friendship":            "🤝",
-    "adventure":             "🌍",
-    "spicy":                 "🌶️",
-    "carrying this alone":   "🌑",
-    "starting over":         "🌱",
-    "need stability":        "⚓",
-    "open to connection":    "🤲",
-    "just need to be heard": "🌙",
-}
-
-# Instagram loves hashtags — more = better discoverability
-_IG_TAGS = (
-    "#anonixx #anonymous #confession #mentalhealth #anonymousconfessions "
-    "#MentalHealthMatters #confessions #secrets #anonymousstories "
-    "#feelingsheard #youarenotalone #healing #realstories #vulnerability "
-    "#emotionalhealth #innervoice"
-)
+GRAPH_API_BASE          = "https://graph.facebook.com/v21.0"
+VIDEO_STATUS_MAX_POLLS  = 15      # 15 × 5 s = 75 s max wait
+VIDEO_STATUS_POLL_DELAY = 5       # seconds between polls
 
 
 class PlatformSkipped(Exception):
     """Raised when a platform legitimately cannot handle this drop type."""
-
-
-def build_ig_caption(confession: str, category: str) -> str:
-    """
-    Instagram caption — hashtag-rich for maximum reach.
-
-    Example:
-        Someone on Anonixx dropped this 💔
-
-        "I still think about you every single day."
-
-        #anonixx #anonymous #confession #mentalhealth ...
-    """
-    emoji   = _CATEGORY_EMOJI.get(category, "💬")
-    content = confession.strip() if confession else ""
-    caption = (
-        f"Someone on Anonixx dropped this {emoji}\n\n"
-        f'"{content}"\n\n'
-        f"{_IG_TAGS}"
-    )
-    return caption[:CAPTION_MAX_LEN]
 
 
 class InstagramPublisher:
@@ -180,7 +138,7 @@ class InstagramPublisher:
                 params={"access_token": self._token},
                 json={
                     "image_url": image_url,
-                    "caption":   build_ig_caption(confession, category),
+                    "caption":   build_caption(confession, category, platform="instagram"),
                 },
             )
 
@@ -207,7 +165,7 @@ class InstagramPublisher:
                 json={
                     "video_url":  video_url,
                     "media_type": "REELS",
-                    "caption":    build_ig_caption(confession, category),
+                    "caption":    build_caption(confession, category, platform="instagram"),
                 },
             )
 
