@@ -116,6 +116,8 @@ const SpeakerAura = React.memo(({ speaker, index, isSpeaking, isCreator }) => {
               height:       size + rs(16),
               borderRadius: (size + rs(16)) / 2,
               borderColor:  color,
+              marginLeft:   -rs(8),
+              marginTop:    -rs(8),
               transform:    [{ scale: pulseScale }],
               opacity:      0.4,
             }
@@ -127,6 +129,8 @@ const SpeakerAura = React.memo(({ speaker, index, isSpeaking, isCreator }) => {
               height:       size + rs(30),
               borderRadius: (size + rs(30)) / 2,
               borderColor:  color,
+              marginLeft:   -rs(15),
+              marginTop:    -rs(15),
               transform:    [{ scale: pulseScale }],
               opacity:      0.2,
             }
@@ -174,12 +178,18 @@ const SpeakerAura = React.memo(({ speaker, index, isSpeaking, isCreator }) => {
 
 // ─── Listener Orb ─────────────────────────────────────────────────────────────
 const ListenerOrb = React.memo(({ index, color }) => {
-  const floatY = useRef(new Animated.Value(0)).current;
+  const floatY  = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  // Stable random values — computed once at mount, not on every render
+  const size        = useRef(rs(10 + Math.random() * 6)).current;
+  const targetOp    = useRef(0.5 + Math.random() * 0.3).current;
+  const floatTarget = useRef(-rs(4 + Math.random() * 4)).current;
+  const floatDur1   = useRef(2000 + Math.random() * 1000).current;
+  const floatDur2   = useRef(2000 + Math.random() * 1000).current;
 
   useEffect(() => {
     Animated.timing(opacity, {
-      toValue: 0.5 + Math.random() * 0.3,
+      toValue: targetOp,
       duration: 600,
       delay: index * 40,
       useNativeDriver: true,
@@ -188,13 +198,13 @@ const ListenerOrb = React.memo(({ index, color }) => {
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(floatY, {
-          toValue: -rs(4 + Math.random() * 4),
-          duration: 2000 + Math.random() * 1000,
+          toValue:  floatTarget,
+          duration: floatDur1,
           useNativeDriver: true,
         }),
         Animated.timing(floatY, {
-          toValue: 0,
-          duration: 2000 + Math.random() * 1000,
+          toValue:  0,
+          duration: floatDur2,
           useNativeDriver: true,
         }),
       ])
@@ -202,8 +212,6 @@ const ListenerOrb = React.memo(({ index, color }) => {
     anim.start();
     return () => anim.stop();
   }, []);
-
-  const size = rs(10 + Math.random() * 6);
 
   return (
     <Animated.View style={[
@@ -968,12 +976,10 @@ const styles = StyleSheet.create({
     position:   'relative',
   },
   speakerRing: {
-    position:     'absolute',
-    borderWidth:  1.5,
-    top:          0,
-    left:         0,
-    marginLeft:   -rs(8),
-    marginTop:    -rs(8),
+    position:  'absolute',
+    borderWidth: 1.5,
+    top:       0,
+    left:      0,
   },
   speakerAvatar: {
     alignItems:     'center',

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   FlatList,
@@ -79,6 +80,8 @@ const VideoSlide = ({
   const isSeekingRef = useRef(false);
   const hasSeededTime = useRef(false);
   const controlsOpacity = useRef(new Animated.Value(0)).current;
+  const [playerStatus, setPlayerStatus] = useState('loading');
+  const wasEverActive = useRef(false);
 
   const player = useVideoPlayer(post.video_url, (p) => {
     p.loop = true;
@@ -99,6 +102,14 @@ const VideoSlide = ({
     return () => sub.remove();
   }, [player]);
 
+  // Track player status so we can show a loading overlay while the video buffers
+  useEffect(() => {
+    const sub = player.addListener('statusChange', ({ status }) => {
+      setPlayerStatus(status);
+    });
+    return () => sub.remove();
+  }, [player]);
+
   // Poll currentTime + duration every 250 ms while active
   useEffect(() => {
     if (!isActive) return;
@@ -114,13 +125,16 @@ const VideoSlide = ({
 
   useEffect(() => {
     if (isActive) {
+      wasEverActive.current = true;
       player.muted = muted;
       if (!hasSeededTime.current && initialTime > 0) {
         hasSeededTime.current = true;
         player.seekBy(initialTime);
       }
       player.play();
-    } else {
+    } else if (wasEverActive.current) {
+      // Only pause when transitioning away — don't pause on initial mount
+      // (pausing before first play prevents first-frame buffering on some platforms)
       player.pause();
       setVideoCurrentTime(0);
       setVideoDuration(0);
@@ -225,6 +239,13 @@ const VideoSlide = ({
           ) : null}
         </View>
       </TouchableWithoutFeedback>
+
+      {/* Loading overlay — shown while video is buffering */}
+      {playerStatus === 'loading' && (
+        <View style={ss.videoLoading} pointerEvents="none">
+          <ActivityIndicator color="rgba(255,255,255,0.45)" size="large" />
+        </View>
+      )}
 
       {/* Gradients */}
       <LinearGradient
@@ -938,10 +959,9 @@ export default function MediaFeedScreen({ route, navigation }) {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         initialScrollIndex={startIndex}
-        removeClippedSubviews
-        maxToRenderPerBatch={3}
-        windowSize={3}
-        initialNumToRender={2}
+        maxToRenderPerBatch={2}
+        windowSize={5}
+        initialNumToRender={3}
       />
 
       {/* Comment sheet */}
@@ -1126,6 +1146,19 @@ const ss = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.2)',
+  },
+
+  // Video loading overlay
+  videoLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+    zIndex: 2,
   },
 
   // Heart burst
