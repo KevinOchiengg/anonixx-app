@@ -1266,7 +1266,10 @@ const styles = StyleSheet.create({
   // Live pulse
   livePulseWrap: {
     position:       'absolute',
-    inset:          -rs(20),
+    top:            -rs(20),
+    left:           -rs(20),
+    right:          -rs(20),
+    bottom:         -rs(20),
     alignItems:     'center',
     justifyContent: 'center',
   },

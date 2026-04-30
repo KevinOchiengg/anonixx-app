@@ -725,7 +725,10 @@ const styles = StyleSheet.create({
   cardWrapper: {},
   cardGlowBorder: {
     position:     'absolute',
-    inset:        -1,
+    top:          -1,
+    left:         -1,
+    right:        -1,
+    bottom:       -1,
     borderRadius: RADIUS.md + 1,
     borderWidth:  1,
     zIndex:       0,

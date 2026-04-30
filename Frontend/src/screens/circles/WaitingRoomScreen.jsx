@@ -497,7 +497,10 @@ export default function WaitingRoomScreen({ route, navigation }) {
 
 // ─── Waiting Dots ─────────────────────────────────────────────────────────────
 const WaitingDots = React.memo(({ color }) => {
-  const dots = [0, 1, 2].map(() => useRef(new Animated.Value(0.3)).current);
+  const dot0 = useRef(new Animated.Value(0.3)).current;
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dots = [dot0, dot1, dot2];
 
   useEffect(() => {
     const anims = dots.map((dot, i) =>
@@ -580,7 +583,10 @@ const styles = StyleSheet.create({
   },
   stageGlow: {
     position:     'absolute',
-    inset:        0,
+    top:          0,
+    left:         0,
+    right:        0,
+    bottom:       0,
     borderRadius: rs(180),
   },
   orb: {
@@ -617,7 +623,7 @@ const styles = StyleSheet.create({
     color:             T.textSecondary,
     textAlign:         'center',
     fontStyle:         'italic',
-    paddingHorizontal: SPACING.xl ?? SPACING.lg,
+    paddingHorizontal: SPACING.xl,
     letterSpacing:     0.2,
     lineHeight:        rf(22),
     fontFamily:        'PlayfairDisplay-Italic',

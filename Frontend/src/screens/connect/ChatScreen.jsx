@@ -5,8 +5,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, FlatList, Image, KeyboardAvoidingView,
-  Modal, PanResponder, Platform, ScrollView, StyleSheet, Text, TextInput,
-  TouchableOpacity, View,
+  Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { Audio } from 'expo-av';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP, SCREEN } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -392,7 +393,10 @@ const VoiceNoteBubble = React.memo(({ url, isOwn, onLongPress }) => {
   const handlePress = useCallback(async () => {
     animBtn();
     try {
-      await setAudioModeAsync({ playsInSilentModeIOS: true });
+      // Always reset audio session to playback mode before playing.
+      // If recording was used, iOS leaves the session in allowsRecordingIOS=true
+      // which silences all playback until explicitly cleared.
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       if (status.status === 'idle') {
         // First tap — load source then play once ready
         pendingPlay.current = true;
@@ -1076,6 +1080,7 @@ export default function ChatScreen({ route, navigation }) {
   const [intensity,     setIntensity]     = useState(0);
   const [chatEvent,     setChatEvent]     = useState(null);
   const [isRecording,    setIsRecording]    = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);   // seconds shown while holding
   const [mediaUploading,   setMediaUploading]   = useState(false);
   // { [tempId]: 0-100 } — tracks upload % per in-flight image bubble
   const [uploadProgresses, setUploadProgresses] = useState({});
@@ -1083,6 +1088,8 @@ export default function ChatScreen({ route, navigation }) {
   const [replyTo,        setReplyTo]        = useState(null); // message being replied to
   const chatEventTimer = useRef(null);
   const recordingRef   = useRef(null);
+  const recordTimerRef = useRef(null);   // interval for duration counter
+  const pressStartRef  = useRef(0);      // timestamp when press began
 
   const flatListRef    = useRef(null);
   const pollRef        = useRef(null);
@@ -1680,49 +1687,99 @@ export default function ChatScreen({ route, navigation }) {
     }
   }, [replyTo, scrollToBottom, showToast, sendOneImage, sendOneVideo]);
 
-  // ── Voice note record / stop ─────────────────────────────
-  const handleVoicePress = useCallback(async () => {
-    if (isRecording) {
-      // Stop and send — getURI() MUST come before stopAndUnloadAsync(),
-      // after unloading the recording object is released and getURI() returns null.
+  // ── Voice note — press and hold to record, release to send ──
+  const handleVoicePressIn = useCallback(async () => {
+    if (isRecording) return;
+
+    // ── Step 1: clean up any stale recording from a previous failed attempt ──
+    if (recordingRef.current) {
       try {
-        const uri = recordingRef.current?.getURI();
-        await recordingRef.current?.stopAndUnloadAsync();
-        setIsRecording(false);
-        recordingRef.current = null;
-        if (!uri) {
-          showToast({ type: 'error', message: 'Recording failed — no audio captured.' });
-          return;
-        }
-        setMediaUploading(true);
-        const url = await uploadVoice(uri);
-        setMediaUploading(false);
-        if (url) await sendMediaMessage({ messageType: 'voice', mediaUrl: url });
-      } catch (e) {
-        setIsRecording(false);
-        setMediaUploading(false);
-        showToast({ type: 'error', message: e?.message || 'Could not send voice note.' });
+        await recordingRef.current.stopAndUnloadAsync();
+      } catch { /* already stopped — ignore */ }
+      recordingRef.current = null;
+    }
+
+    try {
+      // ── Step 2: permission check ──
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'warning', message: 'Microphone permission is needed to record.' });
+        return;
       }
-    } else {
-      // Start recording
-      try {
-        const { status } = await Audio.requestPermissionsAsync();
-        if (status !== 'granted') {
-          showToast({ type: 'warning', message: 'Microphone permission is needed.' });
-          return;
-        }
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
-        const { recording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-        recordingRef.current = recording;
-        setIsRecording(true);
-      } catch {
-        showToast({ type: 'error', message: 'Could not start recording.' });
+
+      // ── Step 3: configure audio session for recording ──
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS:      true,
+        playsInSilentModeIOS:    true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid:       true,
+      });
+
+      // ── Step 4: use two-step prepare → start (more reliable than createAsync
+      //   when expo-audio playback is also present in the same screen) ──
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+
+      recordingRef.current  = recording;
+      pressStartRef.current = Date.now();
+      setIsRecording(true);
+      setRecordDuration(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordDuration(prev => prev + 1);
+      }, 1000);
+    } catch (e) {
+      // Reset state in case we got partway through
+      recordingRef.current = null;
+      setIsRecording(false);
+      clearInterval(recordTimerRef.current);
+      const msg = e?.message || '';
+      if (msg.toLowerCase().includes('permission')) {
+        showToast({ type: 'warning', message: 'Microphone permission denied.' });
+      } else {
+        showToast({ type: 'error', message: `Recording error: ${msg || 'Could not start.'}` });
       }
+    }
+  }, [isRecording, showToast]);
+
+  const handleVoicePressOut = useCallback(async () => {
+    if (!isRecording || !recordingRef.current) return;
+
+    clearInterval(recordTimerRef.current);
+    recordTimerRef.current = null;
+    const heldMs = Date.now() - pressStartRef.current;
+
+    try {
+      // getURI() MUST come before stopAndUnloadAsync()
+      const uri = recordingRef.current.getURI();
+      await recordingRef.current.stopAndUnloadAsync();
+      recordingRef.current = null;
+      setIsRecording(false);
+      setRecordDuration(0);
+
+      // Reset audio session back to playback mode
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+
+      if (heldMs < 500) {
+        showToast({ type: 'info', message: 'Hold to record, release to send.' });
+        return;
+      }
+      if (!uri) {
+        showToast({ type: 'error', message: 'Recording failed — no audio captured.' });
+        return;
+      }
+      setMediaUploading(true);
+      const url = await uploadVoice(uri);
+      setMediaUploading(false);
+      if (url) await sendMediaMessage({ messageType: 'voice', mediaUrl: url });
+    } catch (e) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+      recordingRef.current   = null;
+      setIsRecording(false);
+      setRecordDuration(0);
+      setMediaUploading(false);
+      showToast({ type: 'error', message: 'Could not send voice note.' });
     }
   }, [isRecording, uploadVoice, sendMediaMessage, showToast]);
 
@@ -2196,18 +2253,31 @@ export default function ChatScreen({ route, navigation }) {
             selectionColor={T.primary}
           />
 
-          {/* Voice note button */}
-          <TouchableOpacity
-            style={[styles.inputActionBtn, isRecording && styles.inputActionBtnRecording]}
-            onPress={hasVoiceNote ? handleVoicePress : () => handleLockedFeature('Voice notes')}
+          {/* Voice note — press and hold */}
+          <Pressable
+            onPressIn={hasVoiceNote ? handleVoicePressIn : () => handleLockedFeature('Voice notes', 25)}
+            onPressOut={hasVoiceNote ? handleVoicePressOut : undefined}
+            style={({ pressed }) => [
+              styles.inputActionBtn,
+              isRecording && styles.inputActionBtnRecording,
+              pressed && hasVoiceNote && !isRecording && { opacity: 0.7 },
+            ]}
             hitSlop={HIT_SLOP}
           >
-            {isRecording
-              ? <MicOff size={rs(18)} color="#fff" strokeWidth={2} />
-              : <Mic    size={rs(18)} color={hasVoiceNote ? T.primary : T.textMuted} strokeWidth={1.5} />
-            }
-            {!hasVoiceNote && !isRecording && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
-          </TouchableOpacity>
+            {isRecording ? (
+              <>
+                <Mic size={rs(18)} color="#fff" strokeWidth={2} />
+                <Text style={styles.recordDurationLabel}>
+                  {Math.floor(recordDuration / 60)}:{String(recordDuration % 60).padStart(2, '0')}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Mic size={rs(18)} color={hasVoiceNote ? T.primary : T.textMuted} strokeWidth={1.5} />
+                {!hasVoiceNote && <Lock size={rs(8)} color={T.primary} style={styles.lockOverlay} />}
+              </>
+            )}
+          </Pressable>
 
           {/* Send */}
           <TouchableOpacity
@@ -2463,8 +2533,21 @@ const styles = StyleSheet.create({
   sendBtnText: { color: '#fff', fontSize: rf(18), fontWeight: '800' },
   inputActionBtnBusy:      { opacity: 0.6 },
   inputActionBtnRecording: {
-    backgroundColor: T.primary, borderRadius: rs(18),
+    backgroundColor:  T.primary,
+    borderRadius:     rs(18),
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              rp(4),
+    paddingHorizontal: rp(10),
+    minWidth:         rs(64),
     shadowColor: T.primary, shadowOpacity: 0.5, shadowRadius: rs(6), elevation: 4,
+  },
+  recordDurationLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(11),
+    color:         '#fff',
+    letterSpacing: 0.5,
+    minWidth:      rs(28),
   },
 
   // Video bubble
