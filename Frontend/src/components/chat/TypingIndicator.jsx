@@ -1,9 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
-
-const THEME = {
-  primary: '#FF634A',
-};
+import { THEME } from '../../utils/theme';
 
 export default function TypingIndicator() {
   const dot1 = useRef(new Animated.Value(0)).current;

@@ -7,17 +7,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  input: 'rgba(30, 35, 45, 0.7)',
-  border: 'rgba(255,255,255,0.05)',
-  error: '#ef4444',
-};
+import T from '../../utils/theme';
+import { RADIUS, FONT, rp, rs } from '../../utils/responsive';
 
 export default function Input({
   label,
@@ -32,52 +23,47 @@ export default function Input({
   ...props
 }) {
   const [showPassword, setShowPassword] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
+  const [isFocused,    setIsFocused]    = useState(false);
 
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={styles.inputWrapper}>
         {showAccentBar && (
-          <View
-            style={[
-              styles.accentBar,
-              error && styles.accentBarError,
-              isFocused && styles.accentBarFocused,
-            ]}
-          />
+          <View style={[
+            styles.accentBar,
+            error     && styles.accentBarError,
+            isFocused && styles.accentBarFocused,
+          ]} />
         )}
-        <View
-          style={[styles.inputContainer, error && styles.inputContainerError]}
-        >
+        <View style={[styles.inputContainer, error && styles.inputContainerError]}>
           {icon && <View style={styles.iconLeft}>{icon}</View>}
           <TextInput
             value={value}
             onChangeText={onChangeText}
             placeholder={placeholder}
-            placeholderTextColor={THEME.textSecondary}
+            placeholderTextColor={T.textMuted}
             secureTextEntry={secureTextEntry && !showPassword}
             multiline={multiline}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             style={[
               styles.input,
-              icon && styles.inputWithIcon,
-              multiline && styles.textArea,
+              icon           && styles.inputWithIcon,
+              multiline      && styles.textArea,
               secureTextEntry && styles.inputWithRightIcon,
             ]}
             {...props}
           />
           {secureTextEntry && (
             <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
+              onPress={() => setShowPassword(p => !p)}
               style={styles.iconRight}
             >
-              {showPassword ? (
-                <EyeOff size={20} color={THEME.textSecondary} />
-              ) : (
-                <Eye size={20} color={THEME.textSecondary} />
-              )}
+              {showPassword
+                ? <EyeOff size={rs(20)} color={T.textMuted} />
+                : <Eye    size={rs(20)} color={T.textMuted} />
+              }
             </TouchableOpacity>
           )}
         </View>
@@ -93,13 +79,13 @@ export default function Input({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16,
+    marginBottom: rp(16),
   },
   label: {
-    color: THEME.text,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
+    color:         T.text,
+    fontSize:      FONT.xs,
+    fontWeight:    '700',
+    marginBottom:  rp(8),
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -107,76 +93,68 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: THEME.primary,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
-    opacity: 0.4,
-    zIndex: 1,
+    position:              'absolute',
+    left:                  0,
+    top:                   0,
+    bottom:                0,
+    width:                 rp(4),
+    backgroundColor:       T.primary,
+    borderTopLeftRadius:   RADIUS.md,
+    borderBottomLeftRadius: RADIUS.md,
+    opacity:               0.4,
+    zIndex:                1,
   },
-  accentBarFocused: {
-    opacity: 0.8,
-  },
-  accentBarError: {
-    backgroundColor: THEME.error,
-    opacity: 0.8,
-  },
+  accentBarFocused: { opacity: 0.9 },
+  accentBarError:   { backgroundColor: T.error, opacity: 0.9 },
+
   inputContainer: {
-    position: 'relative',
-    backgroundColor: THEME.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    position:         'relative',
+    backgroundColor:  T.surface,
+    borderRadius:     RADIUS.md,
+    borderWidth:      1,
+    borderColor:      T.border,
+    shadowColor:      '#000',
+    shadowOffset:     { width: 0, height: rp(2) },
+    shadowOpacity:    0.1,
+    shadowRadius:     rp(4),
+    elevation:        2,
   },
   inputContainerError: {
-    borderColor: THEME.error,
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    borderColor:     T.error,
+    backgroundColor: 'rgba(239,68,68,0.05)',
   },
   input: {
-    color: THEME.text,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    minHeight: 48,
+    color:            T.text,
+    paddingHorizontal: rp(16),
+    paddingVertical:   rp(13),
+    fontSize:          FONT.md,
+    minHeight:         rp(48),
   },
-  inputWithIcon: {
-    paddingLeft: 52,
-  },
-  inputWithRightIcon: {
-    paddingRight: 52,
-  },
+  inputWithIcon:      { paddingLeft:  rp(52) },
+  inputWithRightIcon: { paddingRight: rp(52) },
   textArea: {
-    minHeight: 100,
-    paddingTop: 12,
+    minHeight:       rp(100),
+    paddingTop:      rp(12),
     textAlignVertical: 'top',
   },
   iconLeft: {
     position: 'absolute',
-    left: 16,
-    top: 14,
-    zIndex: 10,
+    left:     rp(16),
+    top:      rp(14),
+    zIndex:   10,
   },
   iconRight: {
     position: 'absolute',
-    right: 16,
-    top: 14,
+    right:    rp(16),
+    top:      rp(14),
   },
   errorWrapper: {
-    marginTop: 6,
-    marginLeft: 4,
+    marginTop:  rp(6),
+    marginLeft: rp(4),
   },
   errorText: {
-    color: THEME.error,
-    fontSize: 12,
+    color:      T.error,
+    fontSize:   FONT.xs,
     fontWeight: '500',
   },
 });

@@ -14,23 +14,9 @@ import {
   ChevronDown, CornerDownRight, Heart, ImageIcon, MessageCircle, Send, X,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
+import T from '../../utils/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
-
-const T = {
-  background:    '#0b0f18',
-  surface:       '#0f1420',
-  surfaceAlt:    '#161b28',
-  surfaceHigh:   '#1c2235',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.10)',
-  primaryBorder: 'rgba(255,99,74,0.22)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#4a5068',
-  border:        'rgba(255,255,255,0.05)',
-  borderStrong:  'rgba(255,255,255,0.10)',
-};
 
 const AVATAR_BG = '#1e2330';
 

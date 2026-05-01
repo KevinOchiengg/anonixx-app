@@ -18,23 +18,9 @@ import { Send, Mic, Image as ImageIcon, ArrowLeft, Lock, Clock, Unlock } from 'l
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchMessages, sendMessage } from '../../store/slices/chatSlice';
 import { getConnectionDetails } from '../../services/connectApi'; // ✅ added
+import { THEME } from '../../utils/theme';
 
 const { height, width } = Dimensions.get('window');
-
-const THEME = {
-  background: '#0b0f18',
-  backgroundDark: '#06080f',
-  surface: '#151924',
-  surfaceDark: '#10131c',
-  primary: '#FF634A',
-  primaryDark: '#ff3b2f',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  input: 'rgba(30, 35, 45, 0.7)',
-  warning: '#F39C12',
-  gold: '#F1C40F',
-};
 
 const MESSAGE_LIMIT = 50;
 const WARN_AT = 40;

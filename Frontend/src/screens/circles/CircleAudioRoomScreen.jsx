@@ -27,24 +27,9 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import T from '../../utils/theme';
 
 const { width: W } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background:    '#06080f',
-  surface:       '#0f1219',
-  surfaceAlt:    '#151924',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.12)',
-  primaryBorder: 'rgba(255,99,74,0.25)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#3a3f50',
-  border:        'rgba(255,255,255,0.06)',
-  open:          '#4CAF50',
-  openDim:       'rgba(76,175,80,0.10)',
-};
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const SPEAKER_COLORS = [

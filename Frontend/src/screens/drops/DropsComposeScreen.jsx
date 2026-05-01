@@ -40,19 +40,7 @@ import { awardMilestone } from '../../store/slices/coinsSlice';
 import DropCardRenderer, {
   DROP_THEMES, TIER_1_THEMES, TIER_2_THEMES,
 } from '../../components/drops/DropCardRenderer';
-
-// ─── Theme ─────────────────────────────────────────────────────
-const T = {
-  background: '#0b0f18',
-  surface:    '#151924',
-  primary:    '#FF634A',
-  text:       '#EAEAF0',
-  textSec:    '#9A9AA3',
-  textMute:   '#4a4f62',
-  border:     'rgba(255,255,255,0.06)',
-  warn:       '#FB923C',
-  danger:     '#ef4444',
-};
+import T from '../../utils/theme';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CARD_W   = SCREEN_W - SPACING.md * 2;

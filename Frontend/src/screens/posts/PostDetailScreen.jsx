@@ -31,23 +31,9 @@ import {
 import { useToast }  from '../../components/ui/Toast';
 import { useAuth }   from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
+import T from '../../utils/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
-
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.08)',
-  primaryBorder: 'rgba(255,99,74,0.18)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#5a5f70',
-  border:        'rgba(255,255,255,0.06)',
-  borderStrong:  'rgba(255,255,255,0.10)',
-  avatarBg:      '#1e2330',
-};
 
 // ─── GIF / Emoji config ───────────────────────────────────────
 const TENOR_API_KEY = 'YOUR_TENOR_API_KEY';

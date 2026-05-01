@@ -8,16 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { Send, Mic, Image as ImageIcon } from 'lucide-react-native';
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  surfaceDark: '#10131c',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  input: 'rgba(30, 35, 45, 0.7)',
-};
+import { THEME } from '../../utils/theme';
 
 export default function MessageInput({ onSend, onVoicePress, onImagePress }) {
   const [messageText, setMessageText] = useState('');

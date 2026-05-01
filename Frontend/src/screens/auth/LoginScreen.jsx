@@ -25,17 +25,7 @@ import {
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react-native';
-
-const THEME = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255, 99, 74, 0.15)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border:        'rgba(255,255,255,0.06)',
-  inputBg:       'rgba(255,255,255,0.04)',
-};
+import { THEME } from '../../utils/theme';
 
 const STARS = Array.from({ length: 40 }, (_, i) => ({
   id:      i,

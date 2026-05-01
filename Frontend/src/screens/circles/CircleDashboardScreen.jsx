@@ -25,31 +25,9 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import T from '../../utils/theme';
 
 const { width: W } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.12)',
-  primaryBorder: 'rgba(255,99,74,0.25)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#5a5f70',
-  border:        'rgba(255,255,255,0.06)',
-  success:       '#4CAF50',
-  successDim:    'rgba(76,175,80,0.10)',
-  successBorder: 'rgba(76,175,80,0.25)',
-  mpesa:         '#00A651',
-  mpesaDim:      'rgba(0,166,81,0.10)',
-  mpesaBorder:   'rgba(0,166,81,0.25)',
-  warning:       '#F1C40F',
-  warningDim:    'rgba(241,196,15,0.10)',
-  warningBorder: 'rgba(241,196,15,0.25)',
-};
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const PAYOUT_STATUS = {

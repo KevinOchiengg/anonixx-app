@@ -14,18 +14,9 @@ import { API_BASE_URL } from '../../config/api';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
+import { THEME } from '../../utils/theme';
 
 const BASE_URL = 'https://anonixx-app.onrender.com';
-
-const THEME = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.15)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border:        'rgba(255,255,255,0.06)',
-};
 
 const TOPIC_META = {
   relationships:  { emoji: '💔', label: 'Love'       },

@@ -39,17 +39,9 @@ import {
   AlertTriangle,
   X,
 } from 'lucide-react-native';
+import { THEME } from '../../utils/theme';
 
 const { width } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-};
 
 const TOAST_CONFIG = {
   success: {

@@ -1,131 +1,131 @@
-import React, { createContext, useState, useContext, useEffect } from 'react'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+/**
+ * ThemeContext.jsx
+ *
+ * Provides the active theme palette to any component that needs
+ * to read colours at runtime (e.g. conditional dark/light styles).
+ *
+ * The app is dark-first. Light mode exists but is not yet exposed in the UI.
+ * All static StyleSheets should import from utils/theme.js directly — this
+ * context is only needed for values that change at runtime.
+ */
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { T } from '../utils/theme';
 
-const ThemeContext = createContext()
+const ThemeContext = createContext();
 
+// Dark theme — the Anonixx design system
+export const darkTheme = T;
+
+// Light theme — placeholder for future use
 export const lightTheme = {
-  // Background colors
-  background: '#ffffff',
-  backgroundSecondary: '#f3f4f6',
-  backgroundTertiary: '#e5e7eb',
+  background:    '#f5f5f7',
+  surface:       '#ffffff',
+  surfaceAlt:    '#ebebf0',
+  surfaceDark:   '#e0e0e8',
+  inputBg:       'rgba(0,0,0,0.04)',
 
-  // Card colors
-  card: '#ffffff',
-  cardBorder: '#e5e7eb',
+  text:          '#0b0f18',
+  textSecondary: '#4a4f62',
+  textSec:       '#4a4f62',
+  textSub:       '#4a4f62',
+  textMuted:     '#9A9AA3',
+  textMute:      '#9A9AA3',
+  inactive:      '#b0b0bb',
 
-  // Text colors
-  text: '#111827',
-  textSecondary: '#6b7280',
-  textTertiary: '#9ca3af',
+  primary:       '#FF634A',
+  primaryDim:    'rgba(255,99,74,0.10)',
+  primaryTint:   'rgba(255,99,74,0.08)',
+  primaryBorder: 'rgba(255,99,74,0.25)',
+  primaryGlow:   'rgba(255,99,74,0.18)',
 
-  // Primary colors
-  primary: '#a855f7',
-  primaryLight: 'rgba(168, 85, 247, 0.1)',
+  border:        'rgba(0,0,0,0.08)',
+  borderStrong:  'rgba(0,0,0,0.14)',
 
-  // Accent colors
-  accent: '#14b8a6',
-  success: '#10b981',
-  error: '#ef4444',
-  warning: '#f59e0b',
+  success:       '#4CAF50',
+  successDim:    'rgba(76,175,80,0.10)',
+  successBorder: 'rgba(76,175,80,0.25)',
+  open:          '#4CAF50',
+  openDim:       'rgba(76,175,80,0.12)',
+  openBorder:    'rgba(76,175,80,0.25)',
+  online:        '#4CAF50',
 
-  // Border colors
-  border: '#e5e7eb',
-  borderLight: '#f3f4f6',
+  warn:          '#FB923C',
+  warning:       '#FB923C',
+  warnDim:       'rgba(251,146,60,0.10)',
+  warningDim:    'rgba(251,146,60,0.10)',
+  warningBorder: 'rgba(251,146,60,0.30)',
 
-  // Input colors
-  input: '#f9fafb',
-  inputBorder: '#d1d5db',
-  placeholder: '#9ca3af',
+  danger:    '#ef4444',
+  error:     '#ef4444',
+  dangerDim: 'rgba(239,68,68,0.10)',
 
-  // Status bar
-  statusBar: 'dark-content',
-}
+  live:    '#FF634A',
+  liveDim: 'rgba(255,99,74,0.15)',
 
-export const darkTheme = {
-  // Background colors
-  background: '#0a0a1a',
-  backgroundSecondary: '#16213e',
-  backgroundTertiary: '#1e293b',
+  gold:       '#fbbf24',
+  goldDim:    'rgba(251,191,36,0.12)',
+  goldBg:     'rgba(251,191,36,0.10)',
+  goldBorder: 'rgba(251,191,36,0.35)',
 
-  // Card colors
-  card: '#16213e',
-  cardBorder: '#374151',
+  tier2:       '#B36BFF',
+  tier2Dim:    'rgba(179,107,255,0.10)',
+  tier2Border: 'rgba(179,107,255,0.40)',
+  purple:      '#a855f7',
 
-  // Text colors
-  text: '#ffffff',
-  textSecondary: '#9ca3af',
-  textTertiary: '#6b7280',
+  drop:       '#A78BFA',
+  dropDim:    'rgba(167,139,250,0.12)',
+  dropBorder: 'rgba(167,139,250,0.25)',
 
-  // Primary colors
-  primary: '#a855f7',
-  primaryLight: 'rgba(168, 85, 247, 0.1)',
+  mpesa:       '#00A651',
+  mpesaDim:    'rgba(0,166,81,0.10)',
+  mpesaBorder: 'rgba(0,166,81,0.30)',
+  stripe:      '#635BFF',
+  stripeDim:   'rgba(99,91,255,0.10)',
 
-  // Accent colors
-  accent: '#14b8a6',
-  success: '#10b981',
-  error: '#ef4444',
-  warning: '#f59e0b',
+  myBubble:    '#FF634A',
+  theirBubble: '#e8e8f0',
 
-  // Border colors
-  border: '#374151',
-  borderLight: '#1f2937',
+  avatarBg:   '#e8e8f0',
+  avatarIcon: '#9A9AA3',
 
-  // Input colors
-  input: '#16213e',
-  inputBorder: '#374151',
-  placeholder: '#6b7280',
-
-  // Status bar
-  statusBar: 'light-content',
-}
+  bg:       '#f5f5f7',
+  inactive: '#b0b0bb',
+};
 
 export const ThemeProvider = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false) // Default to dark
-  const [isLoading, setIsLoading] = useState(true)
+  const [isDarkMode, setIsDarkMode] = useState(true); // default: dark
+  const [isLoading, setIsLoading]   = useState(true);
 
-  // Load theme preference on mount
   useEffect(() => {
-    loadTheme()
-  }, [])
-
-  const loadTheme = async () => {
-    try {
-      const savedTheme = await AsyncStorage.getItem('theme')
-      if (savedTheme !== null) {
-        setIsDarkMode(savedTheme === 'dark')
-      }
-    } catch (error) {
-      console.error('Error loading theme:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem('theme');
+        if (saved !== null) setIsDarkMode(saved !== 'light');
+      } catch {}
+      finally { setIsLoading(false); }
+    })();
+  }, []);
 
   const toggleTheme = async () => {
     try {
-      const newTheme = !isDarkMode
-      setIsDarkMode(newTheme)
-      await AsyncStorage.setItem('theme', newTheme ? 'dark' : 'light')
-    } catch (error) {
-      console.error('Error saving theme:', error)
-    }
-  }
+      const next = !isDarkMode;
+      setIsDarkMode(next);
+      await AsyncStorage.setItem('theme', next ? 'dark' : 'light');
+    } catch {}
+  };
 
-  const theme = isDarkMode ? darkTheme : lightTheme
+  const theme = isDarkMode ? darkTheme : lightTheme;
 
   return (
-    <ThemeContext.Provider
-      value={{ theme, isDarkMode, toggleTheme, isLoading }}
-    >
+    <ThemeContext.Provider value={{ theme, isDarkMode, toggleTheme, isLoading }}>
       {children}
     </ThemeContext.Provider>
-  )
-}
+  );
+};
 
 export const useTheme = () => {
-  const context = useContext(ThemeContext)
-  if (!context) {
-    throw new Error('useTheme must be used within ThemeProvider')
-  }
-  return context
-}
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
+  return ctx;
+};

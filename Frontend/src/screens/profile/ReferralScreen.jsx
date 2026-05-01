@@ -37,6 +37,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchReferralCode, fetchReferralStats } from '../../store/slices/coinsSlice';
 import { useToast } from '../../components/ui/Toast';
 import { HIT_SLOP, BUTTON_HEIGHT, rf, rp, rs, SCREEN } from '../../utils/responsive';
+import { THEME } from '../../utils/theme';
 
 // ─── Static perks list ────────────────────────────────────────
 const PERKS = [
@@ -45,20 +46,6 @@ const PERKS = [
   { id: '3', icon: Zap,   color: '#FF634A', title: 'Up to 20 refs/month',      sub: 'That\'s 600 free coins. Every single month.' },
   { id: '4', icon: Users, color: '#22c55e', title: 'Bring your circle',       sub: 'The people you trust deserve a safe space too.' },
 ];
-
-const THEME = {
-  bg:         '#0b0f18',
-  surface:    '#151924',
-  surfaceAlt: '#1a1f2e',
-  border:     'rgba(255,255,255,0.07)',
-  text:       '#EAEAF0',
-  textSub:    '#9A9AA3',
-  gold:       '#fbbf24',
-  goldBg:     'rgba(251,191,36,0.08)',
-  goldBorder: 'rgba(251,191,36,0.2)',
-  primary:    '#FF634A',
-  purple:     '#a855f7',
-};
 
 // ─── Perk card ────────────────────────────────────────────────
 const PerkCard = React.memo(({ item, index }) => {

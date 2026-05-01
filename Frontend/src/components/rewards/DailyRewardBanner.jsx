@@ -22,20 +22,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { claimDailyReward, fetchStreak } from '../../store/slices/coinsSlice';
 import { useToast } from '../ui/Toast';
 import { HIT_SLOP, rf, rp, rs } from '../../utils/responsive';
+import { THEME } from '../../utils/theme';
 
 // ─── Static milestone labels ──────────────────────────────────
 const MILESTONE_KEYS = [7, 14, 30, 60, 100];
-
-const THEME = {
-  surface:    '#151924',
-  surfaceAlt: '#1a1f2e',
-  border:     'rgba(255,255,255,0.07)',
-  text:       '#EAEAF0',
-  textSub:    '#9A9AA3',
-  gold:       '#fbbf24',
-  primary:    '#FF634A',
-  danger:     '#ef4444',
-};
 
 // ─── Milestone pip row ────────────────────────────────────────
 const MilestonePips = React.memo(({ streak, nextMilestone }) => (

@@ -25,18 +25,7 @@ import {
 import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
-
-const THEME = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255, 99, 74, 0.15)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border:        'rgba(255,255,255,0.06)',
-  inputBg:       'rgba(255,255,255,0.04)',
-  error:         '#ef4444',
-};
+import { THEME } from '../../utils/theme';
 
 const EMAIL_REGEX         = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_USERNAME_LENGTH = 30;

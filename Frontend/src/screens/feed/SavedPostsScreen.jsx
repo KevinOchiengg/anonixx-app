@@ -13,19 +13,7 @@ import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../../components/ui/Toast';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { formatTimeAgo } from '../../utils/helpers';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.15)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#4a4f62',
-  border:        'rgba(255,255,255,0.06)',
-};
+import T from '../../utils/theme';
 
 // ─── Static data at module level (Rule 5) ─────────────────────
 // Golden-ratio distribution — deterministic, no Math.random()

@@ -37,6 +37,7 @@ import { fetchBalance, fetchTransactions, fetchStreak } from '../../store/slices
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import MpesaPaymentSheet from '../../components/payments/MpesaPaymentSheet';
 import { HIT_SLOP, rf, rp, rs, SCREEN } from '../../utils/responsive';
+import { THEME } from '../../utils/theme';
 
 // ─── Static maps ─────────────────────────────────────────────
 const REASON_META = {
@@ -50,21 +51,6 @@ const REASON_META = {
   drop_reveal:      { icon: Zap,         color: '#ef4444', label: 'Drop reveal'     },
   circle_entry:     { icon: Zap,         color: '#ef4444', label: 'Circle entry'    },
   streak_freeze:    { icon: Zap,         color: '#ef4444', label: 'Streak freeze'   },
-};
-
-const THEME = {
-  bg:         '#0b0f18',
-  surface:    '#151924',
-  surfaceAlt: '#1a1f2e',
-  border:     'rgba(255,255,255,0.07)',
-  text:       '#EAEAF0',
-  textSub:    '#9A9AA3',
-  gold:       '#fbbf24',
-  goldBg:     'rgba(251,191,36,0.08)',
-  goldBorder: 'rgba(251,191,36,0.2)',
-  primary:    '#FF634A',
-  success:    '#22c55e',
-  error:      '#ef4444',
 };
 
 // ─── Transaction row ──────────────────────────────────────────

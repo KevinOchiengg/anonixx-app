@@ -28,25 +28,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Flame, Sparkles, X } from 'lucide-react-native';
 import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/responsive';
+import T from '../../utils/theme';
 import { useToast } from '../ui/Toast';
 import { API_BASE_URL } from '../../config/api';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  surfaceRaised: '#1e2436',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.10)',
-  primaryBorder: 'rgba(255,99,74,0.22)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#4a5068',
-  border:        'rgba(255,255,255,0.06)',
-  borderStrong:  'rgba(255,255,255,0.10)',
-  chip:          'rgba(255,99,74,0.12)',
-};
 
 const MAX_CHARS = 400;
 

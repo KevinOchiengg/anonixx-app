@@ -13,29 +13,7 @@ import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useUnread } from '../../context/UnreadContext';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.10)',
-  primaryBorder: 'rgba(255,99,74,0.20)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#4a5068',
-  border:        'rgba(255,255,255,0.06)',
-  borderStrong:  'rgba(255,255,255,0.10)',
-  success:       '#4CAF50',
-  successDim:    'rgba(76,175,80,0.12)',
-  successBorder: 'rgba(76,175,80,0.25)',
-  online:        '#4CAF50',
-  warning:       '#FB923C',
-  drop:          '#A78BFA',
-  dropDim:       'rgba(167,139,250,0.12)',
-  dropBorder:    'rgba(167,139,250,0.25)',
-};
+import T from '../../utils/theme';
 
 // ─── Constants ────────────────────────────────────────────────
 const AVATAR_MAP = {

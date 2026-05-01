@@ -27,19 +27,9 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import T from '../../utils/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background: '#06080f',    // darker than usual — we want true darkness
-  surface:    '#0f1219',
-  primary:    '#FF634A',
-  text:       '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:  '#3a3f50',
-  border:     'rgba(255,255,255,0.04)',
-};
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const CYCLING_PHRASES = [

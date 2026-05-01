@@ -19,21 +19,9 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import T from '../../utils/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  primary:       '#FF634A',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#5a5f70',
-  border:        'rgba(255,255,255,0.06)',
-  inputBg:       'rgba(255,255,255,0.04)',
-};
 
 // ─── Cloudinary ───────────────────────────────────────────────────────────────
 const CLOUDINARY_CLOUD_NAME    = 'dojbdm2e1';

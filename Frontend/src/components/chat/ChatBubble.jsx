@@ -1,14 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-};
+import { THEME } from '../../utils/theme';
 
 export default function ChatBubble({ message, isOwn }) {
   return (
