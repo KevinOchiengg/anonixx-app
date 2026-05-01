@@ -13,20 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../../components/ui/Toast';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:  '#0b0f18',
-  surface:     '#151924',
-  surfaceAlt:  '#1a1f2e',
-  primary:     '#FF634A',
-  primaryDim:  'rgba(255,99,74,0.12)',
-  text:        '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:   '#4a4f62',
-  border:      'rgba(255,255,255,0.06)',
-  inputBg:     'rgba(255,255,255,0.04)',
-};
+import T from '../../utils/theme';
 
 // ─── PasswordField ────────────────────────────────────────────
 const PasswordField = React.memo(({ label, hint, value, onChange, show, onToggle, inputRef, onSubmit }) => (

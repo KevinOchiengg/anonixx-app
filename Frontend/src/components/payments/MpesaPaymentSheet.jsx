@@ -46,6 +46,7 @@ import {
 } from '../../store/slices/coinsSlice';
 import { useToast } from '../ui/Toast';
 import { HIT_SLOP, BUTTON_HEIGHT, INPUT_HEIGHT, rf, rp, rs, SCREEN } from '../../utils/responsive';
+import { THEME } from '../../utils/theme';
 
 // ─── Static Data ──────────────────────────────────────────────
 const COIN_PACKAGES = [
@@ -57,21 +58,6 @@ const COIN_PACKAGES = [
 
 const POLL_INTERVAL_MS  = 3000;
 const POLL_MAX_ATTEMPTS = 10;   // 30 seconds total
-
-const THEME = {
-  bg:           '#0b0f18',
-  surface:      '#151924',
-  surfaceAlt:   '#1a1f2e',
-  border:       'rgba(255,255,255,0.07)',
-  primary:      '#FF634A',
-  text:         '#EAEAF0',
-  textSub:      '#9A9AA3',
-  gold:         '#fbbf24',
-  goldBg:       'rgba(251, 191, 36, 0.1)',
-  goldBorder:   'rgba(251, 191, 36, 0.25)',
-  success:      '#22c55e',
-  error:        '#ef4444',
-};
 
 const SHEET_HEIGHT = SCREEN.height * 0.88;
 

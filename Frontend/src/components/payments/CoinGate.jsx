@@ -43,22 +43,7 @@ import { spendCoins } from '../../store/slices/coinsSlice';
 import { useToast } from '../ui/Toast';
 import MpesaPaymentSheet from './MpesaPaymentSheet';
 import { BUTTON_HEIGHT, HIT_SLOP, rf, rp, rs, SCREEN } from '../../utils/responsive';
-
-// ─── Theme ────────────────────────────────────────────────────
-const THEME = {
-  bg:         '#0b0f18',
-  surface:    '#151924',
-  surfaceAlt: '#1a1f2e',
-  border:     'rgba(255,255,255,0.07)',
-  text:       '#EAEAF0',
-  textSub:    '#9A9AA3',
-  gold:       '#fbbf24',
-  goldBg:     'rgba(251,191,36,0.1)',
-  goldBorder: 'rgba(251,191,36,0.25)',
-  primary:    '#FF634A',
-  success:    '#22c55e',
-  error:      '#ef4444',
-};
+import { THEME } from '../../utils/theme';
 
 const SHEET_HEIGHT = SCREEN.height * 0.52;
 

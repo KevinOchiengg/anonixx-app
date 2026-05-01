@@ -19,22 +19,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
+import { THEME } from '../../utils/theme';
 
 const { height, width } = Dimensions.get('window');
-
-// NEW Cinematic Coral Theme
-const THEME = {
-  background: '#0b0f18',
-  backgroundDark: '#06080f',
-  surface: '#151924',
-  surfaceDark: '#10131c',
-  primary: '#FF634A',
-  primaryDark: '#ff3b2f',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  input: 'rgba(30, 35, 45, 0.7)',
-};
 
 // Starry Background Component
 const StarryBackground = () => {

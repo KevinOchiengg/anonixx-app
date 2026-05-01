@@ -21,24 +21,9 @@ import { useToast } from '../ui/Toast';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
+import T from '../../utils/theme';
 
 const { height: H, width: W } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.12)',
-  primaryBorder: 'rgba(255,99,74,0.25)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#5a5f70',
-  border:        'rgba(255,255,255,0.06)',
-  borderStrong:  'rgba(255,255,255,0.10)',
-  avatarBg:      '#1e2330',
-};
 
 // ─── Static data ──────────────────────────────────────────────
 const GENDER_BADGE = {

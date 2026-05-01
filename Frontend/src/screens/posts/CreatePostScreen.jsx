@@ -24,20 +24,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
-
-// ─── THEME ───────────────────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255, 99, 74, 0.15)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#3e4558',
-  border:        'rgba(255,255,255,0.06)',
-  inputBg:       'rgba(255,255,255,0.04)',
-  error:         '#ef4444',
-};
+import T from '../../utils/theme';
 
 // ─── STATIC ──────────────────────────────────────────────────────────────────
 const STARS = Array.from({ length: 40 }, (_, i) => ({

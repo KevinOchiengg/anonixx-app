@@ -21,26 +21,9 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import T from '../../utils/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  surfaceAlt:    '#1a1f2e',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.12)',
-  primaryBorder: 'rgba(255,99,74,0.25)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#5a5f70',
-  border:        'rgba(255,255,255,0.06)',
-  live:          '#FF634A',
-  liveDim:       'rgba(255,99,74,0.15)',
-  open:          '#4CAF50',
-  openDim:       'rgba(76,175,80,0.12)',
-};
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const CATEGORIES = [

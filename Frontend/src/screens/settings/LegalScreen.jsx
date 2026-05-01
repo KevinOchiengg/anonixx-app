@@ -9,16 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
-
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  primary:       '#FF634A',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#4a5068',
-  border:        'rgba(255,255,255,0.06)',
-};
+import T from '../../utils/theme';
 
 // ─── Document content (module-level, Rule 5) ──────────────────
 const TERMS = {

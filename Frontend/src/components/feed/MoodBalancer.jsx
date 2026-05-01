@@ -1,16 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { THEME } from '../../utils/theme';
 
 const { width } = Dimensions.get('window');
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-};
 
 export default function MoodBalancer({ text }) {
   return (

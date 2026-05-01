@@ -50,19 +50,10 @@ import MessagesScreen from '../screens/connect/MessagesScreen';
 
 // Create
 import CreatePostScreen from '../screens/posts/CreatePostScreen';
+import { THEME } from '../utils/theme';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  inactive: '#5a5f70',
-};
 
 // ─── TAB BAR ICON ─────────────────────────────────────────────
 const TabBarIcon = ({ route, focused, unreadCount }) => {

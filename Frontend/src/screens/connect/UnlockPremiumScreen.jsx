@@ -18,25 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background:    '#0b0f18',
-  surface:       '#151924',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.15)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border:        'rgba(255,255,255,0.07)',
-  gold:          '#F1C40F',
-  goldDim:       'rgba(241,196,15,0.15)',
-  goldBorder:    'rgba(241,196,15,0.4)',
-  mpesa:         '#00A651',
-  stripe:        '#635BFF',
-  error:         '#E74C3C',
-  errorDim:      'rgba(231,76,60,0.15)',
-  errorBorder:   'rgba(231,76,60,0.3)',
-};
+import T from '../../utils/theme';
 
 // ─── Static data (module level) ───────────────────────────────────────────────
 const PERKS = [

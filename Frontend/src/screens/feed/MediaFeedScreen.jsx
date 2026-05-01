@@ -36,19 +36,9 @@ import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import { THEME } from '../../utils/theme';
 
 const { width, height } = Dimensions.get('window');
-
-const THEME = {
-  background: '#0b0f18',
-  surface: '#151924',
-  primary: '#FF634A',
-  text: '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  border: 'rgba(255,255,255,0.05)',
-  borderStrong: 'rgba(255,255,255,0.12)',
-  avatarBg: '#1e2330',
-};
 
 // ─── VIDEO SLIDE ──────────────────────────────────────────────
 const VideoSlide = ({

@@ -24,19 +24,7 @@ import { rs, rf, rp, SPACING, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:  '#0b0f18',
-  surface:     '#151924',
-  surfaceAlt:  '#1e2535',
-  primary:     '#FF634A',
-  text:        '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  danger:      '#ef4444',
-  online:      '#4CAF50',
-  border:      'rgba(255,255,255,0.06)',
-};
+import T from '../../utils/theme';
 
 const AVATAR_MAP = {
   ghost: '👻', shadow: '🌑', flame: '🔥', void: '🕳️',

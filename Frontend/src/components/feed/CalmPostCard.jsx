@@ -17,27 +17,13 @@ import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useActiveVideo } from '../../context/VideoFeedContext';
 import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/responsive';
+import T from '../../utils/theme';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
 import { useToast } from '../ui/Toast';
 import { CommentBottomSheet } from './CommentBottomSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
 const BASE_URL = 'https://anonixx-app.onrender.com';
-
-const T = {
-  background:   '#0b0f18',
-  surface:      '#151924',
-  surfaceAlt:   '#1a1f2e',
-  primary:      '#FF634A',
-  primaryDim:   'rgba(255,99,74,0.10)',
-  primaryBorder:'rgba(255,99,74,0.20)',
-  text:         '#EAEAF0',
-  textSecondary:'#9A9AA3',
-  textMuted:    '#5a5f70',
-  border:       'rgba(255,255,255,0.05)',
-  borderStrong: 'rgba(255,255,255,0.10)',
-  avatarBg:     '#1e2330',
-};
 
 // ─── Double tap like ──────────────────────────────────────────
 const DoubleTapLike = React.memo(({ children, onDoubleTap }) => {

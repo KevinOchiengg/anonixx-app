@@ -31,23 +31,9 @@ import { useToast } from '../../components/ui/Toast';
 import CoinGate from '../../components/payments/CoinGate';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
+import T from '../../utils/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const T = {
-  background:    '#06080f',
-  surface:       '#0f1219',
-  surfaceAlt:    '#151924',
-  primary:       '#FF634A',
-  primaryDim:    'rgba(255,99,74,0.15)',
-  primaryBorder: 'rgba(255,99,74,0.30)',
-  text:          '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:     '#3a3f50',
-  border:        'rgba(255,255,255,0.06)',
-  overlay:       'rgba(6,8,15,0.85)',
-};
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const GIFT_TIERS = [

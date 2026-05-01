@@ -18,21 +18,7 @@ import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS, SCREEN,
   BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
-
-// ─── Theme ────────────────────────────────────────────────────
-const T = {
-  background:  '#0b0f18',
-  surface:     '#151924',
-  surfaceAlt:  '#1a1f2e',
-  primary:     '#FF634A',
-  primaryDim:  'rgba(255,99,74,0.12)',
-  primaryBorder: 'rgba(255,99,74,0.25)',
-  text:        '#EAEAF0',
-  textSecondary: '#9A9AA3',
-  textMuted:   '#4a5068',
-  border:      'rgba(255,255,255,0.06)',
-  inputBg:     'rgba(255,255,255,0.04)',
-};
+import T from '../../utils/theme';
 
 // ─── Module-level static data (Rule 5) ───────────────────────
 const GENDER_OPTIONS = [
