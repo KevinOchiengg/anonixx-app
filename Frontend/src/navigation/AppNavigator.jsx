@@ -19,6 +19,8 @@ import SettingsScreen from '../screens/settings/SettingsScreen';
 import ConfessionMarketPlaceScreen from '../screens/drops/ConfessionMarketPlaceScreen';
 import DropChatScreen from '../screens/drops/DropChatScreen';
 import DropLandingScreen from '../screens/drops/DropLandingScreen';
+import MarketScreen from '../screens/market/MarketScreen';
+import MarketItemScreen from '../screens/market/MarketItemScreen';
 import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
 import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
@@ -50,6 +52,8 @@ const linking = {
       DropsInbox:            'drops/inbox',
       DropChat:              'drop-chat/:connectionId',
       VibeScore:             'vibe',
+      Market:                'market',
+      MarketItem:            'market/:itemId',
       // PayPal redirect deep links (used by InternationalPaymentSheet WebBrowser flow)
       // These are caught by WebBrowser.openAuthSessionAsync and don't need screen handlers
       // Nested routes live inside TabNavigator › Connect stack
@@ -112,6 +116,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Coins"          component={CoinsScreen} />
         <Stack.Screen name="Referral"       component={ReferralScreen} />
         <Stack.Screen name="Legal"          component={LegalScreen} />
+        <Stack.Screen name="Market"         component={MarketScreen} />
+        <Stack.Screen name="MarketItem"     component={MarketItemScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

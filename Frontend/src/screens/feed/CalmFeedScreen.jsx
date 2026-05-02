@@ -19,7 +19,10 @@ import CalmPostCard from '../../components/feed/CalmPostCard';
 import FeedDivider from '../../components/feed/FeedDivider';
 import InspiredDropSheet from '../../components/feed/InspiredDropSheet';
 import MoodBalancer from '../../components/feed/MoodBalancer';
+import MarketCard from '../../components/feed/MarketCard';
 import AuthPromptModal from '../../components/modals/AuthPromptModal';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 import { API_BASE_URL } from '../../config/api';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
@@ -170,6 +173,8 @@ export default function CalmFeedScreen({ navigation, route }) {
   const { isAuthenticated, checkAuth } = useAuth();
   const insets                         = useSafeAreaInsets();
   const { showToast }                  = useToast();
+  const dispatch                       = useDispatch();
+  const marketFeed                     = useSelector(selectMarketFeed);
 
   const [posts, setPosts]                   = useState([]);
   const [loading, setLoading]               = useState(true);
@@ -191,6 +196,38 @@ export default function CalmFeedScreen({ navigation, route }) {
   const hasLoadedRef  = useRef(false);
 
   useEffect(() => { postsRef.current = posts; }, [posts]);
+
+  // Fetch Market items once on mount — used for in-feed promo card injection
+  useEffect(() => {
+    dispatch(fetchMarketItems({ offset: 0, limit: 20 }));
+  }, [dispatch]);
+
+  // Inject one Market card every 7 posts. Stable across re-renders so
+  // VirtualizedList doesn't reconcile cells unnecessarily.
+  const feedWithMarket = useMemo(() => {
+    if (!posts.length) return posts;
+    if (!marketFeed.length) return posts;
+
+    const out = [];
+    let mIdx = 0;
+    posts.forEach((p, i) => {
+      out.push(p);
+      // After every 7th post, inject the next available market item
+      if ((i + 1) % 7 === 0 && mIdx < marketFeed.length) {
+        const m = marketFeed[mIdx++];
+        out.push({
+          type: 'market',
+          id:   `market-${m.id}`,
+          item: m,
+        });
+      }
+    });
+    return out;
+  }, [posts, marketFeed]);
+
+  const handleMarketOpen = useCallback((id) => {
+    navigation.navigate('MarketItem', { itemId: id });
+  }, [navigation]);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
@@ -446,6 +483,9 @@ export default function CalmFeedScreen({ navigation, route }) {
   const renderItem = useCallback(({ item }) => {
     if (item.type === 'divider')       return <FeedDivider text={item.text} />;
     if (item.type === 'mood_balancer') return <MoodBalancer text={item.text} />;
+    if (item.type === 'market') {
+      return <MarketCard item={item.item} onPress={handleMarketOpen} />;
+    }
     if (item.type === 'post') {
       return (
         <CalmPostCard
@@ -460,7 +500,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       );
     }
     return null;
-  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress]);
+  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen]);
 
   const keyExtractor = useCallback((item, index) => `${item.id || item.type}-${index}`, []);
 
@@ -575,7 +615,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       <ActiveVideoContext.Provider value={{ activeVideoId }}>
         <FlatList
           ref={flatListRef}
-          data={posts}
+          data={feedWithMarket}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           removeClippedSubviews
