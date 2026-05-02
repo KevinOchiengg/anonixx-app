@@ -4,6 +4,7 @@ import chatReducer from './slices/chatSlice';
 import coinsReducer from './slices/coinsSlice';
 import postsReducer from './slices/postsSlice';
 import locationReducer from './slices/locationSlice';
+import marketReducer from './slices/marketSlice';
 
 const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ const store = configureStore({
     coins:    coinsReducer,
     chat:     chatReducer,
     location: locationReducer,
+    market:   marketReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

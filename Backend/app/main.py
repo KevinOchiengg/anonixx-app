@@ -6,7 +6,7 @@ from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection
 from app.sio import sio
 import app.websockets.events  # noqa: F401 — registers all @sio.event handlers
-from app.api.v1 import payments, geo_pricing
+from app.api.v1 import payments, geo_pricing, market
 from app.api.v1 import drops, rewards, referrals
 from app.api.v1 import admin
 from app.api.v1 import publisher
@@ -54,6 +54,12 @@ async def _ensure_indexes():
         )
         await db["publisher_queue"].create_index(
             [("status", 1), ("submitted_at", 1)], background=True
+        )
+        await db["market_items"].create_index(
+            [("status", 1), ("published_at", -1)], background=True
+        )
+        await db["market_unlocks"].create_index(
+            [("user_id", 1), ("item_id", 1)], unique=True, background=True
         )
         log.info("MongoDB indexes verified.")
     except Exception as exc:
@@ -110,6 +116,7 @@ app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connect.router, prefix=settings.API_V1_PREFIX)
 app.include_router(payments.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(geo_pricing.router,   prefix=settings.API_V1_PREFIX)
+app.include_router(market.router,        prefix=settings.API_V1_PREFIX)
 app.include_router(drops.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rewards.router, prefix=settings.API_V1_PREFIX)
 app.include_router(referrals.router, prefix=settings.API_V1_PREFIX)
