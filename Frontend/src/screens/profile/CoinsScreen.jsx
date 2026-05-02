@@ -1,5 +1,9 @@
 /**
- * CoinsScreen.jsx — Wallet: balance, top up, streak, transaction history.
+ * CoinsScreen.jsx — Wallet: balance, geo-aware top up, streak, transaction history.
+ *
+ * Payment routing:
+ *   M-Pesa countries (KE/TZ/UG/RW/…) → M-Pesa sheet (primary) + Stripe sheet (secondary)
+ *   All other countries               → Stripe sheet only
  */
 
 import React, {
@@ -24,6 +28,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Coins,
+  CreditCard,
   Flame,
   Gift,
   ShoppingBag,
@@ -33,27 +38,34 @@ import {
 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 
-import { fetchBalance, fetchTransactions, fetchStreak } from '../../store/slices/coinsSlice';
-import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
-import MpesaPaymentSheet from '../../components/payments/MpesaPaymentSheet';
-import { HIT_SLOP, rf, rp, rs, SCREEN } from '../../utils/responsive';
+import {
+  fetchBalance,
+  fetchTransactions,
+  fetchStreak,
+  fetchGeoConfig,
+} from '../../store/slices/coinsSlice';
+import DailyRewardBanner       from '../../components/rewards/DailyRewardBanner';
+import MpesaPaymentSheet       from '../../components/payments/MpesaPaymentSheet';
+import StripePaymentSheet      from '../../components/payments/StripePaymentSheet';
+import { HIT_SLOP, rf, rp, rs } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 
-// ─── Static maps ─────────────────────────────────────────────
+// ─── Static maps ─────────────────────────────────────────────────────────────
 const REASON_META = {
-  welcome_bonus:    { icon: Gift,        color: '#a855f7', label: 'Welcome bonus'   },
-  daily_login:      { icon: Flame,       color: '#f59e0b', label: 'Daily streak'    },
-  streak_milestone: { icon: TrendingUp,  color: '#22c55e', label: 'Streak milestone'},
-  referral_bonus:   { icon: Users,       color: '#3b82f6', label: 'Referral'        },
-  milestone:        { icon: Zap,         color: '#FF634A', label: 'Achievement'     },
-  mpesa_purchase:   { icon: ShoppingBag, color: '#22c55e', label: 'Top up'          },
-  connect_unlock:   { icon: Zap,         color: '#ef4444', label: 'Connect unlock'  },
-  drop_reveal:      { icon: Zap,         color: '#ef4444', label: 'Drop reveal'     },
-  circle_entry:     { icon: Zap,         color: '#ef4444', label: 'Circle entry'    },
-  streak_freeze:    { icon: Zap,         color: '#ef4444', label: 'Streak freeze'   },
+  welcome_bonus:    { icon: Gift,        color: '#a855f7', label: 'Welcome bonus'    },
+  daily_login:      { icon: Flame,       color: '#f59e0b', label: 'Daily streak'     },
+  streak_milestone: { icon: TrendingUp,  color: '#22c55e', label: 'Streak milestone' },
+  referral_bonus:   { icon: Users,       color: '#3b82f6', label: 'Referral'         },
+  milestone:        { icon: Zap,         color: '#FF634A', label: 'Achievement'      },
+  mpesa_purchase:   { icon: ShoppingBag, color: '#22c55e', label: 'Top up'           },
+  stripe_purchase:  { icon: CreditCard,  color: '#635BFF', label: 'Top up'           },
+  connect_unlock:   { icon: Zap,         color: '#ef4444', label: 'Connect unlock'   },
+  drop_reveal:      { icon: Zap,         color: '#ef4444', label: 'Drop reveal'      },
+  circle_entry:     { icon: Zap,         color: '#ef4444', label: 'Circle entry'     },
+  streak_freeze:    { icon: Zap,         color: '#ef4444', label: 'Streak freeze'    },
 };
 
-// ─── Transaction row ──────────────────────────────────────────
+// ─── Transaction row ──────────────────────────────────────────────────────────
 const TransactionRow = React.memo(({ item }) => {
   const meta   = REASON_META[item.reason] ?? { icon: Coins, color: THEME.textSub, label: item.reason };
   const Icon   = meta.icon;
@@ -87,8 +99,8 @@ const TransactionRow = React.memo(({ item }) => {
 
 const txStyles = StyleSheet.create({
   row: {
-    flexDirection:   'row',
-    alignItems:      'center',
+    flexDirection:     'row',
+    alignItems:        'center',
     paddingHorizontal: rp(16),
     paddingVertical:   rp(12),
     borderBottomWidth: 1,
@@ -103,17 +115,18 @@ const txStyles = StyleSheet.create({
     marginRight:    rp(12),
   },
   info:   { flex: 1 },
-  desc:   { color: THEME.text,   fontSize: rf(13), fontWeight: '600' },
+  desc:   { color: THEME.text,    fontSize: rf(13), fontWeight: '600' },
   date:   { color: THEME.textSub, fontSize: rf(11), marginTop: rp(2) },
   amount: { fontSize: rf(15), fontWeight: '800', minWidth: rs(48), textAlign: 'right' },
   earn:   { color: THEME.success },
   spend:  { color: THEME.error },
 });
 
-// ─── Header component ─────────────────────────────────────────
-const WalletHeader = React.memo(({ balance, streak, onTopUp, onBack }) => {
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+// ─── Wallet header ────────────────────────────────────────────────────────────
+const WalletHeader = React.memo(({ balance, streak, geoConfig, onMpesa, onStripe }) => {
+  const scaleAnim   = useRef(new Animated.Value(0.85)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const showMpesa   = geoConfig?.show_mpesa ?? false;
 
   useEffect(() => {
     Animated.parallel([
@@ -144,20 +157,43 @@ const WalletHeader = React.memo(({ balance, streak, onTopUp, onBack }) => {
           </View>
         )}
 
+        {/* M-Pesa button — only for M-Pesa countries */}
+        {showMpesa && (
+          <TouchableOpacity
+            onPress={onMpesa}
+            activeOpacity={0.88}
+            hitSlop={HIT_SLOP}
+            style={hStyles.topUpBtn}
+          >
+            <LinearGradient
+              colors={['#4CAF50', '#2E7D32']}
+              style={hStyles.topUpGrad}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <ArrowUpRight size={rs(16)} color="#fff" />
+              <Text style={hStyles.topUpText}>Top Up with M-Pesa</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Stripe / card button — always visible */}
         <TouchableOpacity
-          onPress={onTopUp}
+          onPress={onStripe}
           activeOpacity={0.88}
           hitSlop={HIT_SLOP}
-          style={hStyles.topUpBtn}
+          style={showMpesa ? hStyles.topUpBtnSecondary : hStyles.topUpBtn}
         >
           <LinearGradient
-            colors={['#4CAF50', '#2E7D32']}
+            colors={showMpesa ? ['#2a2f45', '#1e2535'] : [THEME.primary, '#e8432a']}
             style={hStyles.topUpGrad}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <ArrowUpRight size={rs(16)} color="#fff" />
-            <Text style={hStyles.topUpText}>Top Up with M-Pesa</Text>
+            <CreditCard size={rs(16)} color={showMpesa ? THEME.textSub : '#fff'} />
+            <Text style={[hStyles.topUpText, showMpesa && { color: THEME.textSub }]}>
+              {showMpesa ? 'Pay by Card' : 'Add Coins'}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
       </LinearGradient>
@@ -179,14 +215,14 @@ const hStyles = StyleSheet.create({
     }),
   },
   gradient: {
-    alignItems:      'center',
-    paddingVertical: rp(28),
+    alignItems:        'center',
+    paddingVertical:   rp(28),
     paddingHorizontal: rp(24),
   },
   eyebrow: {
-    color:        THEME.textSub,
-    fontSize:     rf(10),
-    fontWeight:   '700',
+    color:         THEME.textSub,
+    fontSize:      rf(10),
+    fontWeight:    '700',
     letterSpacing: 2,
     marginBottom:  rp(8),
   },
@@ -196,36 +232,33 @@ const hStyles = StyleSheet.create({
     gap:           rs(10),
   },
   balance: {
-    color:      THEME.gold,
-    fontSize:   rf(48),
-    fontWeight: '900',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    color:              THEME.gold,
+    fontSize:           rf(48),
+    fontWeight:         '900',
+    fontFamily:         Platform.OS === 'ios' ? 'Georgia' : 'serif',
     includeFontPadding: false,
   },
   balanceSub: {
-    color:     THEME.textSub,
-    fontSize:  rf(13),
-    marginTop: rp(4),
+    color:        THEME.textSub,
+    fontSize:     rf(13),
+    marginTop:    rp(4),
     marginBottom: rp(16),
   },
   streakChip: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             rs(5),
-    backgroundColor: 'rgba(251,191,36,0.12)',
-    borderRadius:    rs(20),
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rs(5),
+    backgroundColor:   'rgba(251,191,36,0.12)',
+    borderRadius:      rs(20),
     paddingHorizontal: rp(12),
     paddingVertical:   rp(5),
     borderWidth:       1,
     borderColor:       THEME.goldBorder,
     marginBottom:      rp(16),
   },
-  streakChipText: {
-    color:    THEME.gold,
-    fontSize: rf(12),
-    fontWeight: '600',
-  },
-  topUpBtn: { width: '100%' },
+  streakChipText: { color: THEME.gold, fontSize: rf(12), fontWeight: '600' },
+  topUpBtn:          { width: '100%', marginBottom: rp(0) },
+  topUpBtnSecondary: { width: '100%', marginTop: rp(8) },
   topUpGrad: {
     flexDirection:   'row',
     alignItems:      'center',
@@ -234,27 +267,27 @@ const hStyles = StyleSheet.create({
     height:          rs(48),
     borderRadius:    rs(14),
   },
-  topUpText: {
-    color:      '#fff',
-    fontSize:   rf(14),
-    fontWeight: '700',
-  },
+  topUpText: { color: '#fff', fontSize: rf(14), fontWeight: '700' },
 });
 
-// ─── Screen ───────────────────────────────────────────────────
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function CoinsScreen({ navigation }) {
   const dispatch = useDispatch();
-  const { balance, transactions, streak, loading } = useSelector((state) => state.coins);
-  const [sheetVisible, setSheetVisible] = useState(false);
+  const { balance, transactions, streak, loading, geoConfig } =
+    useSelector((state) => state.coins);
+
+  const [mpesaVisible,  setMpesaVisible]  = useState(false);
+  const [stripeVisible, setStripeVisible] = useState(false);
 
   useEffect(() => {
     dispatch(fetchBalance());
     dispatch(fetchTransactions());
     dispatch(fetchStreak());
+    dispatch(fetchGeoConfig());
   }, []);
 
-  const handleTopUp   = useCallback(() => setSheetVisible(true),  []);
-  const handleCloseSheet = useCallback(() => setSheetVisible(false), []);
+  const handleMpesa  = useCallback(() => setMpesaVisible(true),  []);
+  const handleStripe = useCallback(() => setStripeVisible(true), []);
 
   const renderTransaction = useCallback(({ item }) => (
     <TransactionRow item={item} />
@@ -267,8 +300,9 @@ export default function CoinsScreen({ navigation }) {
       <WalletHeader
         balance={balance}
         streak={streak}
-        onTopUp={handleTopUp}
-        onBack={() => navigation?.goBack?.()}
+        geoConfig={geoConfig}
+        onMpesa={handleMpesa}
+        onStripe={handleStripe}
       />
       <DailyRewardBanner />
       <View style={styles.sectionHeader}>
@@ -276,7 +310,7 @@ export default function CoinsScreen({ navigation }) {
         <Text style={styles.sectionSub}>{transactions.length} records</Text>
       </View>
     </>
-  ), [balance, streak, transactions.length, handleTopUp]);
+  ), [balance, streak, geoConfig, transactions.length, handleMpesa, handleStripe]);
 
   const ListEmpty = useMemo(() => (
     <View style={styles.emptyWrap}>
@@ -322,17 +356,31 @@ export default function CoinsScreen({ navigation }) {
         updateCellsBatchingPeriod={50}
       />
 
-      <MpesaPaymentSheet visible={sheetVisible} onClose={handleCloseSheet} />
+      {/* M-Pesa sheet — only mounts for M-Pesa countries */}
+      {geoConfig?.show_mpesa && (
+        <MpesaPaymentSheet
+          visible={mpesaVisible}
+          onClose={() => setMpesaVisible(false)}
+          packages={geoConfig.packages}
+        />
+      )}
+
+      {/* Stripe sheet — always available */}
+      <StripePaymentSheet
+        visible={stripeVisible}
+        onClose={() => setStripeVisible(false)}
+        packages={geoConfig?.packages}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: THEME.bg },
+  container: { flex: 1, backgroundColor: THEME.bg },
   navbar: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'space-between',
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: rp(16),
     paddingVertical:   rp(12),
     borderBottomWidth: 1,
@@ -351,41 +399,38 @@ const styles = StyleSheet.create({
     justifyContent:  'center',
   },
   sectionHeader: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'space-between',
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: rp(16),
     paddingTop:        rp(20),
     paddingBottom:     rp(8),
   },
   sectionTitle: {
-    color:      THEME.text,
-    fontSize:   rf(15),
-    fontWeight: '700',
+    color:         THEME.text,
+    fontSize:      rf(15),
+    fontWeight:    '700',
     letterSpacing: 0.2,
   },
-  sectionSub: {
-    color:    THEME.textSub,
-    fontSize: rf(12),
-  },
+  sectionSub: { color: THEME.textSub, fontSize: rf(12) },
   listContent: { paddingBottom: rp(32) },
   emptyWrap: {
-    alignItems:   'center',
-    paddingTop:   rp(48),
+    alignItems:        'center',
+    paddingTop:        rp(48),
     paddingHorizontal: rp(40),
   },
   emptyTitle: {
-    color:      THEME.textSub,
-    fontSize:   rf(16),
-    fontWeight: '600',
-    marginTop:  rp(12),
+    color:        THEME.textSub,
+    fontSize:     rf(16),
+    fontWeight:   '600',
+    marginTop:    rp(12),
     marginBottom: rp(6),
   },
   emptySub: {
-    color:     THEME.textSub,
-    fontSize:  rf(13),
-    textAlign: 'center',
+    color:      THEME.textSub,
+    fontSize:   rf(13),
+    textAlign:  'center',
     lineHeight: rf(20),
-    opacity:   0.7,
+    opacity:    0.7,
   },
 });

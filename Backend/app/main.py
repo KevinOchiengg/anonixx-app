@@ -6,7 +6,7 @@ from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection
 from app.sio import sio
 import app.websockets.events  # noqa: F401 — registers all @sio.event handlers
-from app.api.v1 import payments
+from app.api.v1 import payments, geo_pricing
 from app.api.v1 import drops, rewards, referrals
 from app.api.v1 import admin
 from app.api.v1 import publisher
@@ -108,7 +108,8 @@ app.include_router(impact.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connections.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connect.router, prefix=settings.API_V1_PREFIX)
-app.include_router(payments.router, prefix=settings.API_V1_PREFIX)
+app.include_router(payments.router,      prefix=settings.API_V1_PREFIX)
+app.include_router(geo_pricing.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(drops.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rewards.router, prefix=settings.API_V1_PREFIX)
 app.include_router(referrals.router, prefix=settings.API_V1_PREFIX)

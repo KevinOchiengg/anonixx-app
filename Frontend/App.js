@@ -5,6 +5,8 @@ import { Provider } from 'react-redux';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+// @stripe/stripe-react-native — install: npx expo install @stripe/stripe-react-native
+import { StripeProvider } from '@stripe/stripe-react-native';
 import store from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SocketProvider } from './src/context/SocketContext';
@@ -12,6 +14,7 @@ import { ThemeProvider as CustomThemeProvider } from './src/context/ThemeContext
 import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/components/ui/Toast';
 import { UnreadProvider } from './src/context/UnreadContext';
+import { STRIPE_PUBLISHABLE_KEY } from './src/config/api';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -53,20 +56,22 @@ export default function App() {
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
-          <Provider store={store}>
-            <CustomThemeProvider>
-              <AuthProvider>
-                <SocketProvider>
-                  <ToastProvider>
-                    <UnreadProvider>
-                      <StatusBar style="light" />
-                      <AppNavigator />
-                    </UnreadProvider>
-                  </ToastProvider>
-                </SocketProvider>
-              </AuthProvider>
-            </CustomThemeProvider>
-          </Provider>
+          <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY} merchantIdentifier="merchant.com.anonixx">
+            <Provider store={store}>
+              <CustomThemeProvider>
+                <AuthProvider>
+                  <SocketProvider>
+                    <ToastProvider>
+                      <UnreadProvider>
+                        <StatusBar style="light" />
+                        <AppNavigator />
+                      </UnreadProvider>
+                    </ToastProvider>
+                  </SocketProvider>
+                </AuthProvider>
+              </CustomThemeProvider>
+            </Provider>
+          </StripeProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>

@@ -7,7 +7,7 @@ Packages (KES → coins):
   Value    250 → 350
   Power    500 → 800
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -17,6 +17,7 @@ from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins, debit_coins
 from app.utils.mpesa import MPesaClient
+from app.config import settings
 
 router = APIRouter(prefix="/coins", tags=["coins"])
 
@@ -43,6 +44,9 @@ SPEND_COSTS = {
 class BuyCoinsRequest(BaseModel):
     package_id:   str
     phone_number: str
+
+class BuyCoinsStripeRequest(BaseModel):
+    package_id: str
 
 class SpendCoinsRequest(BaseModel):
     reason:      str   # must be a key in SPEND_COSTS
@@ -228,3 +232,159 @@ async def mpesa_coins_callback(payload: MpesaCallbackBody, db=Depends(get_databa
     except Exception:
         pass
     return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+
+# ─── Stripe: create PaymentIntent (geo-priced) ───────────────────────────────
+
+@router.post("/buy/stripe/create-intent")
+async def buy_coins_stripe_create_intent(
+    data:            BuyCoinsStripeRequest,
+    request:         Request,
+    current_user_id: str = Depends(get_current_user_id),
+    db               = Depends(get_database),
+):
+    """
+    Creates a Stripe PaymentIntent for a coin package purchase.
+    Price is determined server-side from the user's IP (PPP tiers) —
+    the client cannot manipulate the amount.
+
+    Returns { client_secret, payment_intent_id, amount, currency, coins }
+    The frontend passes client_secret to Stripe's PaymentSheet.
+    Coins are credited via the /buy/stripe/webhook once payment succeeds.
+    """
+    from app.api.v1.geo_pricing import (
+        country_from_ip, TIER_MAP, STRIPE_PRICES, _PACKAGES_BASE,
+    )
+
+    pkg = next((p for p in _PACKAGES_BASE if p["id"] == data.package_id), None)
+    if not pkg:
+        raise HTTPException(status_code=400, detail="Invalid package.")
+
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Card payments are not configured yet.")
+
+    # Derive tier from IP — prevents price manipulation from the client
+    forwarded    = request.headers.get("X-Forwarded-For", "")
+    ip           = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "")
+    country      = await country_from_ip(ip)
+    tier         = TIER_MAP.get(country, 1)     # unknown → Tier 1 (safest for revenue)
+    stripe_tier  = min(tier, 2)                 # Tier 3 M-Pesa countries → Tier 2 USD
+    amount_cents = STRIPE_PRICES[stripe_tier][data.package_id]
+
+    try:
+        import stripe as stripe_sdk
+        stripe_sdk.api_key = settings.STRIPE_SECRET_KEY
+        intent = stripe_sdk.PaymentIntent.create(
+            amount=amount_cents,
+            currency="usd",
+            automatic_payment_methods={"enabled": True},
+            metadata={
+                "product":    "anonixx_coins",
+                "user_id":    current_user_id,
+                "package_id": data.package_id,
+                "coins":      str(pkg["coins"]),
+                "tier":       str(stripe_tier),
+                "country":    country,
+            },
+        )
+    except Exception as e:
+        msg = getattr(e, "user_message", None) or str(e)
+        raise HTTPException(status_code=400, detail=msg)
+
+    # Record pending purchase so the webhook can credit coins
+    await db.coin_purchases.insert_one({
+        "user_id":           current_user_id,
+        "package_id":        data.package_id,
+        "coins":             pkg["coins"],
+        "amount_cents":      amount_cents,
+        "currency":          "usd",
+        "payment_intent_id": intent.id,
+        "provider":          "stripe",
+        "tier":              stripe_tier,
+        "country":           country,
+        "status":            "pending",
+        "created_at":        _now(),
+        "completed_at":      None,
+    })
+
+    return {
+        "client_secret":      intent.client_secret,
+        "payment_intent_id":  intent.id,
+        "amount":             amount_cents,
+        "currency":           "usd",
+        "coins":              pkg["coins"],
+    }
+
+
+# ─── Stripe: webhook (coins credit) ──────────────────────────────────────────
+
+@router.post("/buy/stripe/webhook")
+async def buy_coins_stripe_webhook(
+    request:          Request,
+    stripe_signature: Optional[str] = Header(None, alias="stripe-signature"),
+    db                = Depends(get_database),
+):
+    """
+    Stripe posts here when a payment_intent.succeeded / failed event fires.
+    Register this URL in your Stripe dashboard:
+        https://anonixx-app.onrender.com/api/v1/coins/buy/stripe/webhook
+    Events to enable: payment_intent.succeeded  payment_intent.payment_failed
+    """
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Stripe not configured.")
+
+    payload = await request.body()
+
+    try:
+        import stripe as stripe_sdk
+        stripe_sdk.api_key = settings.STRIPE_SECRET_KEY
+        event = stripe_sdk.Webhook.construct_event(
+            payload, stripe_signature, settings.STRIPE_WEBHOOK_SECRET,
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid webhook signature.")
+
+    try:
+        pi   = event["data"]["object"]
+        meta = pi.get("metadata", {})
+
+        if meta.get("product") != "anonixx_coins":
+            return {"received": True}               # not our product
+
+        purchase = await db.coin_purchases.find_one({
+            "payment_intent_id": pi["id"],
+            "provider":          "stripe",
+        })
+        if not purchase or purchase.get("status") != "pending":
+            return {"received": True}               # idempotent
+
+        if event["type"] == "payment_intent.succeeded":
+            await credit_coins(
+                db          = db,
+                user_id     = purchase["user_id"],
+                amount      = purchase["coins"],
+                reason      = "stripe_purchase",
+                description = f"Bought {purchase['coins']} coins via card",
+                meta        = {
+                    "payment_intent_id": pi["id"],
+                    "package_id":        purchase["package_id"],
+                    "amount_cents":      purchase["amount_cents"],
+                },
+            )
+            await db.coin_purchases.update_one(
+                {"_id": purchase["_id"]},
+                {"$set": {"status": "completed", "completed_at": _now()}},
+            )
+
+        elif event["type"] == "payment_intent.payment_failed":
+            await db.coin_purchases.update_one(
+                {"_id": purchase["_id"]},
+                {"$set": {
+                    "status":      "failed",
+                    "fail_reason": pi.get("last_payment_error", {}).get("message", ""),
+                }},
+            )
+    except Exception:
+        pass                                        # always return 200 to Stripe
+
+    return {"received": True}

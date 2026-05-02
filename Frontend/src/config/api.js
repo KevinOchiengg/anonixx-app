@@ -6,8 +6,13 @@ export const BACKENDS = {
 
 export const API_BASE_URL = BACKENDS.production;
 
-if (__DEV__) {
-  console.log('Backend:', API_BASE_URL);
-}
+/**
+ * Stripe publishable key (safe to expose in client code — it's public).
+ * Replace with your live key before App Store submission:
+ *   pk_test_...  →  pk_live_...
+ * Or set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY in your .env file.
+ */
+export const STRIPE_PUBLISHABLE_KEY =
+  process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? 'pk_test_REPLACE_WITH_YOUR_KEY';
 
-export default { API_BASE_URL, BACKENDS };
+export default { API_BASE_URL, BACKENDS, STRIPE_PUBLISHABLE_KEY };

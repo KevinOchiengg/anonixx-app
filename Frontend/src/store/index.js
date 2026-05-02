@@ -3,13 +3,15 @@ import authReducer from './slices/authSlice';
 import chatReducer from './slices/chatSlice';
 import coinsReducer from './slices/coinsSlice';
 import postsReducer from './slices/postsSlice';
+import locationReducer from './slices/locationSlice';
 
 const store = configureStore({
   reducer: {
-    auth: authReducer,
-    posts: postsReducer,
-    coins: coinsReducer,
-    chat: chatReducer,
+    auth:     authReducer,
+    posts:    postsReducer,
+    coins:    coinsReducer,
+    chat:     chatReducer,
+    location: locationReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

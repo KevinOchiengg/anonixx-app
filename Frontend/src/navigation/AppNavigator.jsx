@@ -1,7 +1,10 @@
+import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { useDispatch } from 'react-redux';
 import { useAuth } from '../context/AuthContext';
 import DynamicSplash from '../components/common/DynamicSplash';
+import { detectLocation } from '../store/slices/locationSlice';
 
 import ChatScreen from '../screens/connect/ChatScreen';
 import CallScreen from '../screens/connect/CallScreen';
@@ -47,6 +50,8 @@ const linking = {
       DropsInbox:            'drops/inbox',
       DropChat:              'drop-chat/:connectionId',
       VibeScore:             'vibe',
+      // PayPal redirect deep links (used by InternationalPaymentSheet WebBrowser flow)
+      // These are caught by WebBrowser.openAuthSessionAsync and don't need screen handlers
       // Nested routes live inside TabNavigator › Connect stack
       Main: {
         screens: {
@@ -65,6 +70,12 @@ const linking = {
 
 export default function AppNavigator() {
   const { loading, isAuthenticated } = useAuth();
+  const dispatch = useDispatch();
+
+  // Detect payment region once on app boot (cached for 24h in AsyncStorage)
+  useEffect(() => {
+    dispatch(detectLocation());
+  }, []);
 
   return (
     <NavigationContainer linking={linking}>

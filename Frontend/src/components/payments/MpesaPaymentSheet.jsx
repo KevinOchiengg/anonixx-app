@@ -48,12 +48,12 @@ import { useToast } from '../ui/Toast';
 import { HIT_SLOP, BUTTON_HEIGHT, INPUT_HEIGHT, rf, rp, rs, SCREEN } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 
-// ─── Static Data ──────────────────────────────────────────────
-const COIN_PACKAGES = [
-  { id: 'starter', kes: 50,  coins: 55,  label: 'Starter',  tag: null,           tagColor: null },
-  { id: 'popular', kes: 100, coins: 120, label: 'Popular',  tag: 'Best Value',   tagColor: '#a855f7' },
-  { id: 'value',   kes: 250, coins: 350, label: 'Value',    tag: '+40% bonus',   tagColor: '#22c55e' },
-  { id: 'power',   kes: 500, coins: 800, label: 'Power',    tag: '+60% bonus',   tagColor: '#FF634A' },
+// ─── Static fallback data (used if geo config hasn't loaded yet) ──────────────
+const FALLBACK_PACKAGES = [
+  { id: 'starter', kes: 50,  coins: 55,  display_price: 'KES 50',  label: 'Starter', tag: null,          tagColor: null },
+  { id: 'popular', kes: 100, coins: 120, display_price: 'KES 100', label: 'Popular', tag: 'Best Value',  tagColor: '#a855f7' },
+  { id: 'value',   kes: 250, coins: 350, display_price: 'KES 250', label: 'Value',   tag: '+40% bonus',  tagColor: '#22c55e' },
+  { id: 'power',   kes: 500, coins: 800, display_price: 'KES 500', label: 'Power',   tag: '+60% bonus',  tagColor: '#FF634A' },
 ];
 
 const POLL_INTERVAL_MS  = 3000;
@@ -110,7 +110,7 @@ const PackageCard = React.memo(({ pkg, selected, onSelect }) => {
 
         {/* Price */}
         <View style={styles.packagePriceBadge}>
-          <Text style={styles.packageKes}>KES {pkg.kes}</Text>
+          <Text style={styles.packageKes}>{pkg.display_price ?? `KES ${pkg.kes}`}</Text>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -293,7 +293,12 @@ const FailedView = React.memo(({ onRetry, onClose }) => {
 });
 
 // ─── Main Sheet ───────────────────────────────────────────────
-export default function MpesaPaymentSheet({ visible, onClose }) {
+export default function MpesaPaymentSheet({ visible, onClose, packages }) {
+  // Use geo-priced packages when available, fall back to KES defaults
+  const COIN_PACKAGES = useMemo(
+    () => (packages?.length ? packages : FALLBACK_PACKAGES),
+    [packages]
+  );
   const dispatch   = useDispatch();
   const { showToast } = useToast();
 
@@ -509,7 +514,7 @@ export default function MpesaPaymentSheet({ visible, onClose }) {
                       <>
                         <Zap size={rs(18)} color="#fff" />
                         <Text style={styles.payButtonText}>
-                          Pay KES {selectedPkg?.kes} · Get {selectedPkg?.coins} coins
+                          Pay {selectedPkg?.display_price ?? `KES ${selectedPkg?.kes}`} · Get {selectedPkg?.coins} coins
                         </Text>
                       </>
                     )}
