@@ -1,13 +1,10 @@
-const BACKENDS = {
-  production: 'https://anonixx-app.onrender.com',
-  ngrok: 'https://ulysses-apronlike-alethia.ngrok-free.dev',
-  localhost: 'http://192.168.100.55:8000',
-};
+const PRODUCTION_URL = 'https://anonixx-app.onrender.com';
 
-export const API_BASE_URL = BACKENDS.production;
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || PRODUCTION_URL;
 
 if (__DEV__) {
   console.log('🔗 Backend:', API_BASE_URL);
 }
 
-export default { API_BASE_URL, BACKENDS };
+export default { API_BASE_URL };
