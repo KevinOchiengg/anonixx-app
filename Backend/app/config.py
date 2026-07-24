@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
 
+    # APPLE / GOOGLE — In-App Purchase validation (required for App Store + Play Store)
+    APPLE_SHARED_SECRET: str = ""
+    GOOGLE_PLAY_PACKAGE_NAME: str = "com.anonixx.app"
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: str = ""    # raw JSON or absolute path
+
     # M-PESA (Safaricom Daraja)
     MPESA_CONSUMER_KEY: str = ""
     MPESA_CONSUMER_SECRET: str = ""
@@ -71,6 +76,11 @@ class Settings(BaseSettings):
     # Find it: GET /{page_id}?fields=instagram_business_account&access_token=...
     # Uses the same FACEBOOK_PAGE_ACCESS_TOKEN — no separate token needed
     INSTAGRAM_ACCOUNT_ID: str = "your-instagram-account-id-here"
+
+    # Telegram — Bot API token + the Anonixx channel it posts into
+    # Create a bot via @BotFather, add it as admin to the channel
+    TELEGRAM_BOT_TOKEN:  str = "your-telegram-bot-token-here"
+    TELEGRAM_CHANNEL_ID: str = "your-telegram-channel-id-here"  # e.g. "@anonixx" or "-100123456789"
 
     # APP
     BASE_URL: str = "http://localhost:8000"

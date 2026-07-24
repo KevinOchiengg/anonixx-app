@@ -11,6 +11,7 @@ from app.api.v1 import drops, rewards, referrals
 from app.api.v1 import admin
 from app.api.v1 import publisher
 from app.api.v1 import messages
+from app.api.v1 import chat_profile
 from app.api.v1 import (
     auth,
     coins,
@@ -60,6 +61,12 @@ async def _ensure_indexes():
         )
         await db["market_unlocks"].create_index(
             [("user_id", 1), ("item_id", 1)], unique=True, background=True
+        )
+        await db["coin_purchases"].create_index(
+            [("iap_transaction_id", 1)],
+            unique=True,
+            partialFilterExpression={"iap_transaction_id": {"$exists": True}},
+            background=True,
         )
         log.info("MongoDB indexes verified.")
     except Exception as exc:
@@ -124,6 +131,7 @@ app.include_router(circles.router,    prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(publisher.router,  prefix=settings.API_V1_PREFIX)
 app.include_router(messages.router,   prefix=settings.API_V1_PREFIX)
+app.include_router(chat_profile.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

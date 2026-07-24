@@ -20,7 +20,8 @@
         "UIBackgroundModes": ["audio"],
         "NSMicrophoneUsageDescription": "Anonixx needs your microphone for anonymous voice and video calls.",
         "NSCameraUsageDescription": "Anonixx needs your camera for anonymous video calls."
-      }
+      },
+      "usesAppleSignIn": false
     },
     "android": {
       "adaptiveIcon": {
@@ -32,7 +33,8 @@
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "RECORD_AUDIO",
-        "CAMERA"
+        "CAMERA",
+        "com.android.vending.BILLING"
       ],
       "package": "com.anonixx.app",
       "navigationBarColor": "#151924",
@@ -42,14 +44,9 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            {
-              "scheme": "anonixx",
-              "host": "drop"
-            },
-            {
-              "scheme": "anonixx",
-              "host": "confession"
-            }
+            { "scheme": "anonixx", "host": "drop" },
+            { "scheme": "anonixx", "host": "confession" },
+            { "scheme": "anonixx", "host": "market" }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
         }
@@ -63,11 +60,23 @@
       "themeColor": "#FF634A",
       "backgroundColor": "#0b0f18"
     },
-    "plugins": ["expo-asset", "expo-video", "expo-navigation-bar"],
+    "plugins": [
+      "expo-asset",
+      "expo-video",
+      "expo-navigation-bar",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.anonixx.app",
+          "enableGooglePay": true
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "e6e5b944-ee40-4251-8b89-ff8a3e733ec2"
       }
-    }
+    },
+    "owner": "kotechnologies"
   }
 }

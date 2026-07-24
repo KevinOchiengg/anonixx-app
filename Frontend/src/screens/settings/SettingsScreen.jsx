@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft, Bell, BookOpen, ChevronRight, Database,
   Eye, FileText, Globe, HelpCircle, Lock,
-  Monitor, ShieldAlert, Smartphone, User, Volume2, Zap, Trash2,
+  Monitor, ShieldAlert, Smartphone, User, Volume2, Zap, Trash2, Palette,
 } from 'lucide-react-native';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useLogout } from '../../hooks/useLogout';
@@ -124,6 +124,16 @@ export default function SettingsScreen({ navigation }) {
             label="Email & Password"
             desc="Manage login credentials"
             onPress={() => navigation.navigate('ChangePassword')}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={Palette}
+            label="Chat Interface"
+            desc="Background, font, stickers, gallery — shown once someone unlocks a chat with you"
+            onPress={() => navigation.navigate('Main', {
+              screen: 'Messages',
+              params: { screen: 'ChatProfileSetup' },
+            })}
           />
           <View style={sec.divider} />
           <NavRow

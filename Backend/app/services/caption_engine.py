@@ -20,7 +20,7 @@ import random
 from typing import Literal
 
 # ── Platform type ────────────────────────────────────────────────────────────
-Platform = Literal["tiktok", "facebook", "instagram"]
+Platform = Literal["tiktok", "facebook", "instagram", "telegram"]
 
 # ── Category → emotional tone mapping ───────────────────────────────────────
 _CATEGORY_EMOJI: dict[str, str] = {
@@ -191,6 +191,14 @@ _INSTAGRAM_CTAS: list[str] = [
     "your confession is safe with us.\n\nanonixx.app",
 ]
 
+_TELEGRAM_CTAS: list[str] = [
+    "Someone's waiting to hear from you. Unlock the full confession on Anonixx → anonixx.app",
+    "This is only part of it. The rest is on Anonixx → anonixx.app",
+    "Real people, real confessions, completely anonymous. → anonixx.app",
+    "You can respond to this one — anonymously — on Anonixx → anonixx.app",
+    "Thousands are confessing right now on Anonixx → anonixx.app",
+]
+
 # ── Hashtag banks ─────────────────────────────────────────────────────────────
 _TIKTOK_TAGS = "#anonixx #anonymous #confession #mentalhealth #anonymousconfessions #secrets #vulnerability"
 
@@ -253,6 +261,8 @@ def build_caption(confession: str, category: str, platform: Platform) -> str:
         return _facebook_caption(confession, emoji, hook, category)
     if platform == "instagram":
         return _instagram_caption(confession, emoji, hook, category)
+    if platform == "telegram":
+        return _telegram_caption(confession, emoji, hook, category)
 
     # Fallback — should never happen
     return _tiktok_caption(confession, emoji, hook, category)
@@ -335,3 +345,20 @@ def _instagram_caption(confession: str, emoji: str, hook: str, category: str) ->
         f"{tags}"
     )
     return body[:2200]
+
+
+def _telegram_caption(confession: str, emoji: str, hook: str, category: str) -> str:
+    """
+    Telegram format — long captions are fine (up to ~1024 for media, ~4096
+    for text messages), closer in spirit to the Facebook formatter than
+    TikTok's hashtag-heavy style. No hashtag spam — Telegram audiences read
+    channels more like a newsletter.
+    """
+    cta = _pick(_TELEGRAM_CTAS, confession[-20:])
+    tg_hook = hook[0].upper() + hook[1:] if hook else hook
+    body = (
+        f"{tg_hook}\n\n"
+        f'{emoji} "{confession}"\n\n'
+        f"{cta}"
+    )
+    return body[:1024]

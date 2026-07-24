@@ -25,12 +25,14 @@ class TransactionReason(str, Enum):
     REFERRAL_BONUS   = "referral_bonus"
     MILESTONE        = "milestone"
     MPESA_PURCHASE   = "mpesa_purchase"
+    DROP_REVENUE_SHARE = "drop_revenue_share"   # 10% of a drop unlock, credited to the drop owner
     # Spend
     CONNECT_UNLOCK   = "connect_unlock"
     DROP_REVEAL      = "drop_reveal"
     CIRCLE_ENTRY     = "circle_entry"
     STREAK_FREEZE    = "streak_freeze"
     PREMIUM          = "premium"
+    WITHDRAWAL_REQUEST = "withdrawal_request"   # coins converted to a pending cash withdrawal
 
 
 class CoinTransaction(BaseModel):

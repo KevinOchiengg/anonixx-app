@@ -4,12 +4,12 @@ import React, {
 import {
   View, FlatList, ActivityIndicator, StyleSheet,
   StatusBar, Text, TouchableOpacity, Animated, RefreshControl,
-  Easing,
+  Easing, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, Flame, RefreshCw, Menu } from 'lucide-react-native';
+import { Search, Flame, RefreshCw, Menu, MapPin } from 'lucide-react-native';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
@@ -20,6 +20,7 @@ import FeedDivider from '../../components/feed/FeedDivider';
 import InspiredDropSheet from '../../components/feed/InspiredDropSheet';
 import MoodBalancer from '../../components/feed/MoodBalancer';
 import MarketCard from '../../components/feed/MarketCard';
+import DropFeedCard from '../../components/drops/DropFeedCard';
 import AuthPromptModal from '../../components/modals/AuthPromptModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
@@ -189,6 +190,9 @@ export default function CalmFeedScreen({ navigation, route }) {
   const [nextVideo, setNextVideo]           = useState(null);
   const [menuVisible, setMenuVisible]       = useState(false);
   const [dropSheetPost, setDropSheetPost]   = useState(null);
+  const [dropsFeed, setDropsFeed]           = useState([]);
+  const [locationFilter, setLocationFilter] = useState('');
+  const [locationFilterOpen, setLocationFilterOpen] = useState(false);
 
   const flatListRef   = useRef(null);
   const postsRef      = useRef([]);
@@ -202,32 +206,72 @@ export default function CalmFeedScreen({ navigation, route }) {
     dispatch(fetchMarketItems({ offset: 0, limit: 20 }));
   }, [dispatch]);
 
-  // Inject one Market card every 7 posts. Stable across re-renders so
+  // Load the viewer's saved feed-location filter, if any.
+  useEffect(() => {
+    AsyncStorage.getItem('feedLocationFilter').then((v) => {
+      if (v) setLocationFilter(v);
+    }).catch(() => {});
+  }, []);
+
+  // Fetch Drops for in-feed injection — re-fetches when the location
+  // filter changes (debounced so typing doesn't spam the endpoint).
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const params = new URLSearchParams({ limit: '20' });
+        if (locationFilter.trim()) params.set('location', locationFilter.trim());
+        const res = await fetch(`${API_BASE_URL}/api/v1/drops/marketplace?${params}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDropsFeed(data.drops || []);
+        }
+      } catch {
+        /* offline — feed just skips drop injection this session */
+      }
+    }, locationFilter ? 400 : 0);
+    return () => clearTimeout(timer);
+  }, [locationFilter]);
+
+  useEffect(() => {
+    AsyncStorage.setItem('feedLocationFilter', locationFilter).catch(() => {});
+  }, [locationFilter]);
+
+  // Inject Market + Drop cards into the post stream. Market every 7th post,
+  // Drops every 3rd post (distinct cadence). Stable across re-renders so
   // VirtualizedList doesn't reconcile cells unnecessarily.
-  const feedWithMarket = useMemo(() => {
+  const feedWithExtras = useMemo(() => {
     if (!posts.length) return posts;
-    if (!marketFeed.length) return posts;
+    if (!marketFeed.length && !dropsFeed.length) return posts;
 
     const out = [];
     let mIdx = 0;
+    let dIdx = 0;
     posts.forEach((p, i) => {
       out.push(p);
-      // After every 7th post, inject the next available market item
-      if ((i + 1) % 7 === 0 && mIdx < marketFeed.length) {
+      const n = i + 1;
+      if (n % 7 === 0 && mIdx < marketFeed.length) {
         const m = marketFeed[mIdx++];
-        out.push({
-          type: 'market',
-          id:   `market-${m.id}`,
-          item: m,
-        });
+        out.push({ type: 'market', id: `market-${m.id}`, item: m });
+      }
+      if (n % 3 === 0 && dIdx < dropsFeed.length) {
+        const d = dropsFeed[dIdx++];
+        out.push({ type: 'drop', id: `drop-${d.id}`, drop: d });
       }
     });
     return out;
-  }, [posts, marketFeed]);
+  }, [posts, marketFeed, dropsFeed]);
 
   const handleMarketOpen = useCallback((id) => {
     navigation.navigate('MarketItem', { itemId: id });
   }, [navigation]);
+
+  const handleOozeIn = useCallback((drop) => {
+    if (!isAuthenticated) { showAuthPrompt('unlock'); return; }
+    navigation.navigate('DropLanding', { dropId: drop.id, autoOpenUnlock: true });
+  }, [isAuthenticated, navigation]);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
@@ -486,6 +530,9 @@ export default function CalmFeedScreen({ navigation, route }) {
     if (item.type === 'market') {
       return <MarketCard item={item.item} onPress={handleMarketOpen} />;
     }
+    if (item.type === 'drop') {
+      return <DropFeedCard drop={item.drop} onOozeIn={handleOozeIn} />;
+    }
     if (item.type === 'post') {
       return (
         <CalmPostCard
@@ -500,7 +547,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       );
     }
     return null;
-  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen]);
+  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen, handleOozeIn]);
 
   const keyExtractor = useCallback((item, index) => `${item.id || item.type}-${index}`, []);
 
@@ -595,6 +642,17 @@ export default function CalmFeedScreen({ navigation, route }) {
 
         <View style={styles.headerRight}>
           <TouchableOpacity
+            onPress={() => setLocationFilterOpen((v) => !v)}
+            style={styles.headerBtn}
+            hitSlop={HIT_SLOP}
+          >
+            <MapPin
+              size={rs(20)}
+              color={locationFilter ? THEME.primary : THEME.textSecondary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={() => navigation.navigate('Search')}
             style={styles.headerBtn}
             hitSlop={HIT_SLOP}
@@ -612,10 +670,30 @@ export default function CalmFeedScreen({ navigation, route }) {
         </View>
       </View>
 
+      {locationFilterOpen && (
+        <View style={styles.locationFilterRow}>
+          <MapPin size={rs(14)} color={THEME.textSecondary} />
+          <TextInput
+            style={styles.locationFilterInput}
+            value={locationFilter}
+            onChangeText={setLocationFilter}
+            placeholder="Filter drops by location…"
+            placeholderTextColor={THEME.textSecondary}
+            returnKeyType="done"
+            onSubmitEditing={() => setLocationFilterOpen(false)}
+          />
+          {!!locationFilter && (
+            <TouchableOpacity onPress={() => setLocationFilter('')} hitSlop={HIT_SLOP}>
+              <Text style={styles.locationFilterClear}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       <ActiveVideoContext.Provider value={{ activeVideoId }}>
         <FlatList
           ref={flatListRef}
-          data={feedWithMarket}
+          data={feedWithExtras}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           removeClippedSubviews
@@ -697,6 +775,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius:   rs(19),
     backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  locationFilterRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(8),
+    backgroundColor:   'rgba(255,255,255,0.03)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  locationFilterInput: {
+    flex:     1,
+    color:    THEME.text,
+    fontSize: FONT.sm,
+  },
+  locationFilterClear: {
+    color:    THEME.primary,
+    fontSize: FONT.xs,
+    fontWeight: '700',
   },
 
   // Streak banner

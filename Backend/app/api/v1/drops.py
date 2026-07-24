@@ -6,11 +6,12 @@ from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 import httpx
 import random
+import re
 
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
-from app.utils.coin_service import debit_coins
+from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.notifications import send_push_notification as _notify
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
@@ -42,6 +43,15 @@ VALID_INTENTS = [
     "late night thoughts",  # reflective, no specific need
 ]
 
+class DropPollInput(BaseModel):
+    question: str
+    options: List[str]  # 2–4 items
+
+
+class DropVoteRequest(BaseModel):
+    option_index: int
+
+
 class CreateDropRequest(BaseModel):
     confession: Optional[str] = None
     category: str = "love"
@@ -58,13 +68,21 @@ class CreateDropRequest(BaseModel):
     tease_mode: Optional[bool] = False           # cut confession mid-thought
     intensity: Optional[str] = None              # "soft" | "heavy" | "devastating"
     recognition_hint: Optional[str] = None       # one word, directed drops only
-    publisher_opt_in: Optional[bool] = False     # share anonymously on Anonixx social
+    # Share anonymously on Anonixx social. Tri-state: None/omitted = default
+    # (auto-queued for eligible drops), True = explicit opt-in, False =
+    # explicit opt-out — lets a client distinguish "didn't ask" from "said no."
+    publisher_opt_in: Optional[bool] = None
     duration_seconds: Optional[float] = None     # voice drops
     waveform_data: Optional[List[float]] = None  # voice drops
     inspired_by_post_id: Optional[str] = None   # feed post that triggered this drop
     # AI refinement — set when the user accepted a suggested refinement
     ai_refined:      Optional[bool] = False
     ai_refined_mode: Optional[str]  = None      # "holding_back" | "distill" | "find_words"
+
+    # Feed-as-drops upgrade
+    location:   Optional[str] = None            # freeform "Nairobi, Kenya" style hint
+    poll:       Optional[DropPollInput] = None   # optional attached poll
+    font_style: Optional[str] = None             # "classic" | "sultry-script" | "bold-tease"
 
 
 class RefineConfessionRequest(BaseModel):
@@ -131,6 +149,12 @@ VALID_MOOD_TAGS = {
 }
 
 VALID_INTENSITIES = {"soft", "heavy", "devastating"}
+
+# Card-text font presets — style composition on the two font families the app
+# already ships (PlayfairDisplay / DMSans), not new font assets.
+FONT_STYLES = {"classic", "sultry-script", "bold-tease"}
+
+MAX_LOCATION_LEN = 80
 
 # Section 8 — six text reactions. Anything else is rejected.
 VALID_REACTIONS = {
@@ -315,6 +339,28 @@ async def trigger_mpesa_stk(phone: str, amount: float, account_ref: str, descrip
 
 # ==================== HELPERS ============================
 
+_CONTACT_INFO_PATTERNS = [
+    re.compile(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", re.IGNORECASE),          # email
+    re.compile(r"(\+?\d[\d\-\s()]{7,}\d)"),                             # phone number
+    re.compile(r"(?:^|\s)@[a-z0-9._]{2,}", re.IGNORECASE),              # @handle
+    re.compile(r"\b(wa\.me|t\.me|snapchat\.com|instagram\.com|tiktok\.com|facebook\.com)\/\S+", re.IGNORECASE),
+    re.compile(r"\bsnap(?:chat)?\s*[:：]\s*\S+", re.IGNORECASE),
+    re.compile(r"\btelegram\s*[:：]\s*\S+", re.IGNORECASE),
+    re.compile(r"\b(whatsapp|whats app)\b", re.IGNORECASE),
+]
+
+
+def _contains_contact_info(text: Optional[str]) -> bool:
+    """
+    Confessions stay public until someone pays to unlock a chat — contact
+    info (phone/email/social handles) can't be smuggled into the public
+    card text. Chat messages after unlock are exempt from this check.
+    """
+    if not text:
+        return False
+    return any(p.search(text) for p in _CONTACT_INFO_PATTERNS)
+
+
 def _media_preview_url(media_url: Optional[str], media_type: Optional[str]) -> Optional[str]:
     """
     Returns a static image URL suitable for og:image.
@@ -365,8 +411,36 @@ async def create_drop(
         # Spec section 3 bumped the card cap from 200 → 280 chars.
         raise HTTPException(status_code=400, detail="Confession must be 280 characters or less")
 
+    if _contains_contact_info(data.confession):
+        raise HTTPException(
+            status_code=400,
+            detail="Remove contact info from your confession — you can share it after someone unlocks.",
+        )
+
     if data.media_url and data.media_type not in ("image", "video", "voice"):
         raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'voice'")
+
+    if data.location and len(data.location) > MAX_LOCATION_LEN:
+        raise HTTPException(status_code=400, detail=f"Location must be {MAX_LOCATION_LEN} characters or less")
+
+    font_style = (data.font_style or "classic").strip()
+    if font_style not in FONT_STYLES:
+        raise HTTPException(status_code=400, detail=f"font_style must be one of: {', '.join(FONT_STYLES)}")
+
+    poll_data = None
+    if data.poll:
+        poll_options = [o.strip() for o in data.poll.options if o.strip()]
+        if len(poll_options) < 2 or len(poll_options) > 4:
+            raise HTTPException(status_code=400, detail="Poll requires 2–4 options.")
+        if not data.poll.question.strip():
+            raise HTTPException(status_code=400, detail="Poll question cannot be empty.")
+        if _contains_contact_info(data.poll.question) or any(_contains_contact_info(o) for o in poll_options):
+            raise HTTPException(status_code=400, detail="Remove contact info from your poll.")
+        poll_data = {
+            "question": data.poll.question.strip(),
+            "options": [{"text": o, "votes": 0} for o in poll_options],
+            "total_votes": 0,
+        }
 
     if data.is_group and (not data.group_size or data.group_size < 2 or data.group_size > 10):
         raise HTTPException(status_code=400, detail="Group size must be between 2 and 10")
@@ -420,7 +494,8 @@ async def create_drop(
             recognition_hint = parts[0].lower()[:16]
 
     # Publisher opt-in is forced off for Tier 2 themes regardless of client input.
-    publisher_opt_in = bool(data.publisher_opt_in) and not is_tier2
+    # Otherwise defaults True (auto-queue) unless the client explicitly opted out.
+    publisher_opt_in = (data.publisher_opt_in is not False) and not is_tier2
 
     # ── Daily drop limit (section 14) ───────────────────────────
     is_premium = bool(user.get("is_premium") or user.get("premium_active"))
@@ -482,9 +557,61 @@ async def create_drop(
         # AI refinement metadata — used to surface the ✦ disclosure marker
         "ai_refined":      bool(data.ai_refined),
         "ai_refined_mode": data.ai_refined_mode or None,
+
+        # Feed-as-drops upgrade
+        "location":   data.location.strip() if data.location else None,
+        "poll":       poll_data,
+        "font_style": font_style,
     }
 
     await db["drops"].insert_one(drop)
+
+    # ── Auto-queue for Anonixx social publishing ────────────────
+    # Eligible drops (Tier-1, not privately targeted, not already flagged,
+    # not explicitly opted out) queue for cross-posting immediately — no
+    # manual "Publish" tap needed. POST /{drop_id}/publish still works as a
+    # manual re-trigger for drops that skipped auto-queue (e.g. targeted).
+    if (
+        publisher_opt_in
+        and not data.target_user_id
+        and drop["moderation_status"] == "visible"
+    ):
+        drop["published_at"] = now_utc()
+        await db["drops"].update_one(
+            {"_id": drop["_id"]},
+            {"$set": {"published_at": drop["published_at"]}},
+        )
+
+        # Blurred teaser card — the growth hook for social. Best-effort:
+        # if generation/upload fails, publishing still proceeds using
+        # whatever card_image_url already exists (poster-frame or None).
+        teaser_image_url = None
+        try:
+            from app.services.card_generator import generate_teaser_card, upload_teaser_card
+            teaser_bytes = await generate_teaser_card(drop)
+            teaser_image_url = upload_teaser_card(teaser_bytes, str(drop["_id"]))
+            if teaser_image_url:
+                await db["drops"].update_one(
+                    {"_id": drop["_id"]},
+                    {"$set": {"card_image_url": teaser_image_url}},
+                )
+        except Exception as e:
+            print(f"⚠️ Teaser card generation failed for drop {drop['_id']}: {e}")
+
+        await db["publisher_queue"].insert_one({
+            "_id":               ObjectId(),
+            "drop_id":           str(drop["_id"]),
+            "sender_id":         current_user_id,
+            "theme":             drop.get("theme"),
+            "category":          drop.get("category", "love"),
+            "media_type":        drop.get("media_type"),
+            "confession":        drop.get("confession"),
+            "media_url":         drop.get("media_url"),
+            "teaser_image_url":  teaser_image_url,
+            "submitted_at":      drop["published_at"],
+            "status":            "queued",
+            "retry_count":       0,
+        })
 
     # Increment the all-time inspired_drop_count on the originating feed post.
     # This counter never decrements — drops expiring doesn't erase the social proof.
@@ -589,6 +716,7 @@ async def get_marketplace(
     category: Optional[str] = Query(None),
     is_group: Optional[bool] = Query(None),
     night_only: Optional[bool] = Query(False),
+    location: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, le=50),
     current_user_id: Optional[str] = Depends(get_optional_user_id),
@@ -617,6 +745,8 @@ async def get_marketplace(
         query["is_group"] = is_group
     if night_only:
         query["is_night_mode"] = True
+    if location and location.strip():
+        query["location"] = {"$regex": re.escape(location.strip()), "$options": "i"}
 
     total = await db["drops"].count_documents(query)
 
@@ -634,6 +764,31 @@ async def get_marketplace(
                 "unlocker_id": current_user_id
             })
             already_unlocked = unlock is not None
+
+        poll_out = None
+        raw_poll = drop.get("poll")
+        if raw_poll:
+            voted_option = None
+            if current_user_id:
+                vote = await db["drop_poll_votes"].find_one({
+                    "drop_id": drop_id, "user_id": current_user_id,
+                })
+                voted_option = vote["option_index"] if vote else None
+            total = raw_poll.get("total_votes", 0)
+            options_out = [
+                {
+                    "text": o["text"],
+                    "votes": o.get("votes", 0) if voted_option is not None else None,
+                    "percent": round(o.get("votes", 0) / total * 100) if total > 0 and voted_option is not None else None,
+                }
+                for o in raw_poll.get("options", [])
+            ]
+            poll_out = {
+                "question": raw_poll["question"],
+                "options": options_out,
+                "total_votes": total,
+                "voted_option": voted_option,
+            }
 
         drops.append({
             "id": drop_id,
@@ -667,12 +822,81 @@ async def get_marketplace(
             "inspired_by_post_id": drop.get("inspired_by_post_id"),
             # AI refinement disclosure
             "ai_refined":          bool(drop.get("ai_refined", False)),
+
+            # ── Feed-as-drops upgrade ─────────────────────────
+            "location":   drop.get("location"),
+            "font_style": drop.get("font_style", "classic"),
+            "poll":       poll_out,
         })
 
     return {
         "drops": drops,
         "total": total,
         "has_more": skip + limit < total,
+    }
+
+
+@router.post("/{drop_id}/vote")
+async def vote_on_drop_poll(
+    drop_id: str,
+    data: DropVoteRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
+
+    drop = await db["drops"].find_one({"_id": oid})
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+
+    poll = drop.get("poll")
+    if not poll:
+        raise HTTPException(status_code=400, detail="This drop has no poll.")
+
+    options = poll.get("options", [])
+    if data.option_index < 0 or data.option_index >= len(options):
+        raise HTTPException(status_code=400, detail="Invalid option.")
+
+    existing = await db["drop_poll_votes"].find_one({"drop_id": drop_id, "user_id": current_user_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="You've already voted on this poll.")
+
+    await db["drop_poll_votes"].insert_one({
+        "drop_id": drop_id,
+        "user_id": current_user_id,
+        "option_index": data.option_index,
+        "created_at": now_utc(),
+    })
+
+    await db["drops"].update_one(
+        {"_id": oid},
+        {
+            "$inc": {
+                f"poll.options.{data.option_index}.votes": 1,
+                "poll.total_votes": 1,
+            }
+        }
+    )
+
+    updated_drop = await db["drops"].find_one({"_id": oid})
+    updated_poll = updated_drop["poll"]
+    total = updated_poll["total_votes"]
+    options_out = [
+        {
+            "text": o["text"],
+            "votes": o.get("votes", 0),
+            "percent": round(o.get("votes", 0) / total * 100) if total > 0 else 0,
+        }
+        for o in updated_poll["options"]
+    ]
+
+    return {
+        "voted_option": data.option_index,
+        "total_votes": total,
+        "options": options_out,
     }
 
 
@@ -1499,7 +1723,7 @@ async def unlock_drop_coins(
 
     # Complete unlock + create chat
     unlock_method = "origin_author_discounted" if is_origin_author else "coins"
-    await _complete_unlock(drop_id, current_user_id, drop, unlock_method, db)
+    await _complete_unlock(drop_id, current_user_id, drop, unlock_method, db, coin_equivalent=cost)
     connection_id = await _create_drop_connection(drop_id, drop, current_user_id, db)
 
     return {
@@ -1712,8 +1936,37 @@ async def poll_unlock_status(
     return {"unlocked": False}
 
 
-async def _complete_unlock(drop_id: str, unlocker_id: str, drop: dict, method: str, db):
+# Approximate coins-per-dollar rate (from the Tier-1 "starter" package: 55
+# coins / $0.99), used only to convert a cash unlock's USD price into a
+# coin-equivalent figure for the drop-owner's 10% revenue share below —
+# never charged to a user directly.
+CASH_TO_COIN_RATE = 55 / 0.99
+DROP_REVENUE_SHARE_PCT = 0.10
+
+
+async def _credit_revenue_share(drop: dict, coin_equivalent: int, db):
+    """Credit the drop owner 10% of what an unlock cost (in coins)."""
+    share = max(1, round(coin_equivalent * DROP_REVENUE_SHARE_PCT))
+    try:
+        await credit_coins(
+            db=db,
+            user_id=drop["sender_id"],
+            amount=share,
+            reason="drop_revenue_share",
+            description="10% share from a drop unlock",
+            meta={"drop_id": str(drop["_id"]), "unlock_cost_coins": coin_equivalent},
+        )
+    except ValueError:
+        pass  # sender account missing — don't fail the unlocker's flow over it
+
+
+async def _complete_unlock(drop_id: str, unlocker_id: str, drop: dict, method: str, db, coin_equivalent: Optional[int] = None):
     """Shared unlock completion logic."""
+    if coin_equivalent is None:
+        cash_price = drop.get("price", DROP_PRICE_USD)
+        coin_equivalent = round(cash_price * CASH_TO_COIN_RATE)
+    await _credit_revenue_share(drop, coin_equivalent, db)
+
     await db["drop_unlocks"].insert_one({
         "_id": ObjectId(),
         "drop_id": drop_id,
@@ -1855,6 +2108,26 @@ async def get_drop_messages(
         })
 
     is_sender = conn["sender_id"] == current_user_id
+
+    # The poster's themed chat surface — always the drop's *sender*, since
+    # a chat_profile is reused across every unlocker who chats with them.
+    chat_profile = await db["chat_profiles"].find_one({"user_id": conn["sender_id"]})
+
+    # Show the welcome media once per unlocker, the first time they open
+    # this connection — never to the sender viewing their own chat.
+    welcome_media = None
+    if not is_sender and chat_profile:
+        shown_to = conn.get("welcome_shown_to", [])
+        if current_user_id not in shown_to:
+            gallery = chat_profile.get("gallery", [])
+            idx = chat_profile.get("welcome_media_index", 0)
+            if gallery and 0 <= idx < len(gallery):
+                welcome_media = gallery[idx]
+            await db["drop_connections"].update_one(
+                {"_id": ObjectId(connection_id)},
+                {"$addToSet": {"welcome_shown_to": current_user_id}},
+            )
+
     return {
         "messages": messages,
         "connection": {
@@ -1863,7 +2136,14 @@ async def get_drop_messages(
             "other_anonymous_name": conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"],
             "is_revealed": conn["is_revealed_sender"] if is_sender else conn["is_revealed_unlocker"],
             "other_revealed": conn["is_revealed_unlocker"] if is_sender else conn["is_revealed_sender"],
-        }
+        },
+        "chat_profile": {
+            "background_color":   chat_profile.get("background_color", "#151924") if chat_profile else "#151924",
+            "font_style":          chat_profile.get("font_style", "classic") if chat_profile else "classic",
+            "stickers":            chat_profile.get("stickers", []) if chat_profile else [],
+            "profile_picture_url": chat_profile.get("profile_picture_url") if chat_profile else None,
+        },
+        "welcome_media": welcome_media,
     }
 
 
@@ -2497,19 +2777,33 @@ async def publish_drop(
         }},
     )
 
-    # Queue for TikTok publishing worker (app/tasks/publisher_worker.py).
+    teaser_image_url = None
+    try:
+        from app.services.card_generator import generate_teaser_card, upload_teaser_card
+        teaser_bytes = await generate_teaser_card(drop)
+        teaser_image_url = upload_teaser_card(teaser_bytes, drop_id)
+        if teaser_image_url:
+            await db["drops"].update_one(
+                {"_id": ObjectId(drop_id)},
+                {"$set": {"card_image_url": teaser_image_url}},
+            )
+    except Exception as e:
+        print(f"⚠️ Teaser card generation failed for drop {drop_id}: {e}")
+
+    # Queue for the social publishing worker (app/tasks/publisher_worker.py).
     await db["publisher_queue"].insert_one({
-        "_id":          ObjectId(),
-        "drop_id":      drop_id,
-        "sender_id":    current_user_id,
-        "theme":        drop.get("theme"),
-        "category":     drop.get("category", "love"),   # needed by TikTok caption builder
-        "media_type":   drop.get("media_type"),         # text | image | video | None
-        "confession":   drop.get("confession"),
-        "media_url":    drop.get("media_url"),
-        "submitted_at": published_at,
-        "status":       "queued",                       # queued | processing | posted | failed | rejected
-        "retry_count":  0,
+        "_id":               ObjectId(),
+        "drop_id":           drop_id,
+        "sender_id":         current_user_id,
+        "theme":             drop.get("theme"),
+        "category":          drop.get("category", "love"),   # needed by TikTok caption builder
+        "media_type":        drop.get("media_type"),         # text | image | video | None
+        "confession":        drop.get("confession"),
+        "media_url":         drop.get("media_url"),
+        "teaser_image_url":  teaser_image_url,
+        "submitted_at":      published_at,
+        "status":            "queued",                       # queued | processing | posted | failed | rejected
+        "retry_count":       0,
     })
 
     return {

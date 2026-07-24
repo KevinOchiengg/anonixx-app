@@ -204,7 +204,16 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [selectedRefineMode, setSelectedRefineMode] = useState(null); // 'holding_back' | 'distill' | 'find_words'
 
   // ── Publisher opt-in (section 16) — Tier 2 is never published ─
-  const [publisherOptIn, setPublisherOptIn] = useState(false);
+  // Default ON: eligible drops auto-post to Anonixx's social pages to help
+  // the poster get noticed. This is an opt-OUT toggle, not opt-in.
+  const [publisherOptIn, setPublisherOptIn] = useState(true);
+
+  // ── Feed-as-drops upgrade: location, font style, poll ─────────
+  const [location, setLocation] = useState('');
+  const [fontStyle, setFontStyle] = useState('classic'); // classic | sultry-script | bold-tease
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
 
   // ── Intensity + one-word hint (section 11) ────────────────────
   const [intensity, setIntensity] = useState('heavy');
@@ -511,6 +520,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         // Tag a specific user AND still hit marketplace.
         ...(taggedUser ? { target_user_id: taggedUser.id } : {}),
         // Publisher opt-in is gated off for Tier 2 (after-dark is never published).
+        // Tri-state server-side: explicit false is the only way to opt out.
         publisher_opt_in: tier2 ? false : !!publisherOptIn,
         ...(format !== 'text' && mediaUri ? { media_type: format } : {}),
         // Link back to the feed post that inspired this drop, if any.
@@ -519,6 +529,14 @@ export default function DropsComposeScreen({ navigation, route }) {
         ...(refineEnabled && refinedText ? {
           ai_refined:      true,
           ai_refined_mode: selectedRefineMode || undefined,
+        } : {}),
+        ...(location.trim() ? { location: location.trim() } : {}),
+        font_style: fontStyle,
+        ...(pollEnabled && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2 ? {
+          poll: {
+            question: pollQuestion.trim(),
+            options:  pollOptions.filter(o => o.trim()).slice(0, 4),
+          },
         } : {}),
       };
 
@@ -550,31 +568,11 @@ export default function DropsComposeScreen({ navigation, route }) {
       const id   = data?.id;
       if (!id) throw new Error('No drop ID returned.');
 
-      // Anonixx Publisher (section 16): the create payload only stamps
-      // the intent — the queue insert happens via the dedicated publish
-      // endpoint so we get the double-consent audit trail. Failure here
-      // is non-fatal: the drop still exists, the user just won't hit the
-      // social queue this run. We toast soft so they know to retry.
-      if (!tier2 && publisherOptIn) {
-        try {
-          const pubRes = await fetch(`${API_BASE_URL}/api/v1/drops/${id}/publish`, {
-            method:  'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({ confirmed: true }),
-          });
-          if (!pubRes.ok) {
-            showToast({
-              type:    'info',
-              message: "Saved — but we couldn't queue it for social yet.",
-            });
-          }
-        } catch {
-          /* non-fatal */
-        }
-      }
+      // Anonixx Publisher (section 16): eligible drops (Tier-1, not tagged
+      // to a specific user, publisher_opt_in !== false) are now auto-queued
+      // for social by the server at creation time — no follow-up call
+      // needed. POST /drops/{id}/publish still exists as a manual re-trigger
+      // for drops that skipped auto-queue (e.g. tagged drops).
 
       // Increment local daily count immediately for snappy UI, then
       // re-sync from the server (authoritative — handles unlimited).
@@ -611,6 +609,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     limitHit, format, text, mediaUri, theme, moodTag, category, teaseMode,
     intensity, hint, taggedUser, refineEnabled, refinedText, selectedRefineMode,
     publisherOptIn, dailyUsed, dailyLimit, fetchDailyLimit,
+    location, fontStyle, pollEnabled, pollQuestion, pollOptions,
     dispatch, navigation, showToast,
   ]);
 
@@ -956,7 +955,7 @@ export default function DropsComposeScreen({ navigation, route }) {
           {themeObj?.tier !== 2 && (
             <View style={s.publisherBox}>
               <Text style={s.publisherQ}>
-                Allow Anonixx to share this confession anonymously on our social pages?
+                We'll share this confession anonymously on Anonixx's social pages to help interested people find you.
               </Text>
               <View style={s.publisherRow}>
                 <TouchableOpacity
@@ -969,7 +968,7 @@ export default function DropsComposeScreen({ navigation, route }) {
                     s.publisherBtnText,
                     publisherOptIn && s.publisherBtnYesActiveText,
                   ]}>
-                    {publisherOptIn ? 'Yes — confirmed' : 'Yes'}
+                    {publisherOptIn ? 'Yes — sharing' : 'Yes'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -998,6 +997,99 @@ export default function DropsComposeScreen({ navigation, route }) {
               </Text>
             </View>
           )}
+
+          {/* Location — freeform, helps interested people know you're reachable */}
+          <View style={s.publisherBox}>
+            <Text style={s.publisherQ}>Where are you? (optional)</Text>
+            <TextInput
+              style={s.hintInput}
+              value={location}
+              onChangeText={(v) => setLocation(v.slice(0, 80))}
+              placeholder="e.g. Nairobi, Kenya"
+              placeholderTextColor={T.textMute}
+              maxLength={80}
+              returnKeyType="done"
+            />
+          </View>
+
+          {/* Font style — classic vs. suggestive style presets */}
+          <View style={s.publisherBox}>
+            <Text style={s.publisherQ}>Card font style</Text>
+            <View style={s.publisherRow}>
+              {[
+                { id: 'classic',       label: 'Classic' },
+                { id: 'sultry-script', label: 'Sultry' },
+                { id: 'bold-tease',    label: 'Bold Tease' },
+              ].map((f) => (
+                <TouchableOpacity
+                  key={f.id}
+                  style={[s.publisherBtn, fontStyle === f.id && s.publisherBtnYesActive]}
+                  onPress={() => setFontStyle(f.id)}
+                  activeOpacity={0.85}
+                  hitSlop={HIT_SLOP}
+                >
+                  <Text style={[
+                    s.publisherBtnText,
+                    fontStyle === f.id && s.publisherBtnYesActiveText,
+                  ]}>
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Optional poll */}
+          <View style={s.publisherBox}>
+            <View style={s.publisherRow}>
+              <Text style={s.publisherQ}>Add a poll?</Text>
+              <TouchableOpacity
+                onPress={() => setPollEnabled((v) => !v)}
+                activeOpacity={0.85}
+                hitSlop={HIT_SLOP}
+                style={[s.publisherBtn, pollEnabled && s.publisherBtnYesActive]}
+              >
+                <Text style={[s.publisherBtnText, pollEnabled && s.publisherBtnYesActiveText]}>
+                  {pollEnabled ? 'Yes' : 'No'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {pollEnabled && (
+              <View style={{ gap: 8, marginTop: 8 }}>
+                <TextInput
+                  style={s.hintInput}
+                  value={pollQuestion}
+                  onChangeText={setPollQuestion}
+                  placeholder="Ask a question…"
+                  placeholderTextColor={T.textMute}
+                  maxLength={120}
+                />
+                {pollOptions.map((opt, idx) => (
+                  <TextInput
+                    key={idx}
+                    style={s.hintInput}
+                    value={opt}
+                    onChangeText={(v) => setPollOptions((prev) => {
+                      const next = [...prev];
+                      next[idx] = v;
+                      return next;
+                    })}
+                    placeholder={`Option ${idx + 1}`}
+                    placeholderTextColor={T.textMute}
+                    maxLength={60}
+                  />
+                ))}
+                {pollOptions.length < 4 && (
+                  <TouchableOpacity
+                    onPress={() => setPollOptions((prev) => [...prev, ''])}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={{ color: T.primary, fontSize: 12 }}>+ Add option</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
 
           {/* AI confession refinement — text drops only */}
           {format === 'text' && !!text.trim() && (

@@ -24,6 +24,9 @@ import MarketItemScreen from '../screens/market/MarketItemScreen';
 import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
 import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
+import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
+import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
+import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
 import InterestSelectionScreen from '../screens/onboarding/InterestSelectionScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
@@ -35,9 +38,9 @@ const Stack = createStackNavigator();
 //   anonixx://drop/:dropId        → DropLandingScreen
 //   anonixx://confession          → ConfessionMarketplace
 //   anonixx://drops/inbox         → DropsInbox
-//   anonixx://drops/new           → Connect › DropsCompose
-//   anonixx://drops/voice         → Connect › DropsRecord
-//   anonixx://drops/publish       → Connect › DropsPublish
+//   anonixx://drops/new           → DropsCompose
+//   anonixx://drops/voice         → DropsRecord
+//   anonixx://drops/publish       → DropsPublish
 //   https://anonixx.app/drop/:id  → DropLandingScreen  (tappable share link)
 const linking = {
   prefixes: [
@@ -54,20 +57,11 @@ const linking = {
       VibeScore:             'vibe',
       Market:                'market',
       MarketItem:            'market/:itemId',
+      DropsCompose:          'drops/new',
+      DropsRecord:           'drops/voice',
+      DropsPublish:          'drops/publish',
       // PayPal redirect deep links (used by InternationalPaymentSheet WebBrowser flow)
       // These are caught by WebBrowser.openAuthSessionAsync and don't need screen handlers
-      // Nested routes live inside TabNavigator › Connect stack
-      Main: {
-        screens: {
-          Connect: {
-            screens: {
-              DropsCompose: 'drops/new',
-              DropsRecord:  'drops/voice',
-              DropsPublish: 'drops/publish',
-            },
-          },
-        },
-      },
     },
   },
 };
@@ -103,6 +97,9 @@ export default function AppNavigator() {
         <Stack.Screen name="DropLanding" component={DropLandingScreen} />
         <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
         <Stack.Screen name="DropChat" component={DropChatScreen} />
+        <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
+        <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
+        <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />
         <Stack.Screen
           name="ConfessionMarketplace"
           component={ConfessionMarketPlaceScreen}
