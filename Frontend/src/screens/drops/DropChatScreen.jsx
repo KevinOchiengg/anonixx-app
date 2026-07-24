@@ -19,10 +19,11 @@ import React, {
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Animated, Modal,
+  Animated, Modal, Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import {
   Send, Sparkles, CheckCircle, Eye,
 } from 'lucide-react-native';
@@ -41,12 +42,12 @@ const REVEAL_POLL_MS   = 5000;
 const MAX_REVEAL_ATTEMPTS = 24;
 
 // ─── Message bubble ────────────────────────────────────────────
-const Bubble = React.memo(({ item }) => {
+const Bubble = React.memo(({ item, fontFamily }) => {
   const isOwn = item.is_own;
   return (
     <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
       <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
-        <Text style={[s.bubbleText, isOwn && s.bubbleTextOwn]}>
+        <Text style={[s.bubbleText, fontFamily && { fontFamily }, isOwn && s.bubbleTextOwn]}>
           {item.content}
         </Text>
         <Text style={[s.bubbleTime, isOwn && s.bubbleTimeOwn]}>
@@ -54,6 +55,34 @@ const Bubble = React.memo(({ item }) => {
         </Text>
       </View>
     </View>
+  );
+});
+
+// ─── Welcome media takeover — shown once per unlocker, first open ──
+const WelcomeMediaOverlay = React.memo(({ media, onDismiss }) => {
+  const isVideo = media?.media_type === 'video' && !!media?.media_url;
+  const player = useVideoPlayer(
+    isVideo ? { uri: media.media_url } : null,
+    (p) => { p.loop = true; p.play(); },
+  );
+
+  if (!media?.media_url) return null;
+
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onDismiss}>
+      <TouchableOpacity
+        style={s.welcomeOverlay}
+        activeOpacity={1}
+        onPress={onDismiss}
+      >
+        {isVideo ? (
+          <VideoView player={player} style={s.welcomeMedia} contentFit="cover" />
+        ) : (
+          <Image source={{ uri: media.media_url }} style={s.welcomeMedia} resizeMode="cover" />
+        )}
+        <Text style={s.welcomeHint}>tap anywhere to continue</Text>
+      </TouchableOpacity>
+    </Modal>
   );
 });
 
@@ -78,6 +107,19 @@ export default function DropChatScreen({ route, navigation }) {
   const [loading, setLoading]       = useState(true);
   const [text, setText]             = useState('');
   const [sending, setSending]       = useState(false);
+
+  // ── Poster's themed chat surface (per-user chat_profiles doc) ──
+  const [chatProfile, setChatProfile]   = useState(null);
+  const [welcomeMedia, setWelcomeMedia] = useState(null);
+  const [showWelcome, setShowWelcome]   = useState(false);
+
+  const bubbleFontFamily = useMemo(() => {
+    switch (chatProfile?.font_style) {
+      case 'sultry-script': return 'PlayfairDisplay-Italic';
+      case 'bold-tease':    return 'DMSans-Bold';
+      default:              return 'DMSans-Regular';
+    }
+  }, [chatProfile?.font_style]);
 
   const [showRevealModal, setShowRevealModal] = useState(false);
   const [revealStep, setRevealStep]           = useState('idle'); // idle | phone | waiting | polling | done
@@ -116,6 +158,11 @@ export default function DropChatScreen({ route, navigation }) {
         const data = await res.json();
         setMessages(data.messages);
         setConnection(data.connection);
+        if (data.chat_profile) setChatProfile(data.chat_profile);
+        if (data.welcome_media && !welcomeMedia) {
+          setWelcomeMedia(data.welcome_media);
+          setShowWelcome(true);
+        }
         if (data.connection?.is_revealed && !revealData) {
           checkRevealStatus();
         }
@@ -127,7 +174,7 @@ export default function DropChatScreen({ route, navigation }) {
         showToast({ type: 'error', message: 'Network error.' });
       }
     }
-  }, [connectionId, revealData, checkRevealStatus, showToast]);
+  }, [connectionId, revealData, checkRevealStatus, showToast, welcomeMedia]);
 
   // ── Initial load + polling ────────────────────────────────
   useEffect(() => {
@@ -240,8 +287,13 @@ export default function DropChatScreen({ route, navigation }) {
   }, [revealPhone, connectionId, startRevealPolling, showToast]);
 
   // ── Helpers ───────────────────────────────────────────────
-  const renderMessage = useCallback(({ item }) => <Bubble item={item} />, []);
+  const renderMessage = useCallback(
+    ({ item }) => <Bubble item={item} fontFamily={bubbleFontFamily} />,
+    [bubbleFontFamily],
+  );
   const keyExtractor  = useCallback((item) => item.id, []);
+
+  const handleDismissWelcome = useCallback(() => setShowWelcome(false), []);
 
   const handleOpenReveal = useCallback(() => {
     setRevealStep('idle');
@@ -290,12 +342,27 @@ export default function DropChatScreen({ route, navigation }) {
   }
 
   return (
-    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      style={[s.safe, chatProfile?.background_color && { backgroundColor: chatProfile.background_color }]}
+      edges={['top', 'left', 'right']}
+    >
       <DropScreenHeader
         title={headerTitle}
         navigation={navigation}
         right={HeaderRight}
       />
+
+      {/* Poster's themed profile picture — only ever visible post-unlock,
+          since this connection doc wouldn't exist otherwise. */}
+      {chatProfile?.profile_picture_url && (
+        <View style={s.profileRow}>
+          <Image source={{ uri: chatProfile.profile_picture_url }} style={s.profileAvatar} />
+        </View>
+      )}
+
+      {showWelcome && welcomeMedia && (
+        <WelcomeMediaOverlay media={welcomeMedia} onDismiss={handleDismissWelcome} />
+      )}
 
       {/* Was-anonymous-as subtitle when revealed */}
       {revealData?.revealed_name && connection?.other_anonymous_name ? (
@@ -498,6 +565,35 @@ export default function DropChatScreen({ route, navigation }) {
 const s = StyleSheet.create({
   safe:     { flex: 1, backgroundColor: T.background },
   centered: { justifyContent: 'center', alignItems: 'center' },
+
+  profileRow: {
+    alignItems:      'center',
+    paddingVertical: rp(8),
+  },
+  profileAvatar: {
+    width:        rs(56),
+    height:       rs(56),
+    borderRadius: rs(28),
+    borderWidth:  2,
+    borderColor:  T.primaryBorder,
+  },
+  welcomeOverlay: {
+    flex:            1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  welcomeMedia: {
+    width:  '88%',
+    height: '70%',
+    borderRadius: RADIUS.lg,
+  },
+  welcomeHint: {
+    marginTop:  rp(16),
+    color:      T.textMute,
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+  },
 
   // Header right
   revealBtn: {

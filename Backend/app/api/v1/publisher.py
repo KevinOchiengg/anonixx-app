@@ -1,19 +1,21 @@
 """
 app/api/v1/publisher.py
 
-Publisher admin endpoints — manage the TikTok publishing queue.
+Publisher admin endpoints — manage the social publishing queue.
 
-All routes require authentication (any logged-in user for now;
-you can tighten this to admin-only by adding a role check in the dependency).
+Queue-management routes are admin-only (require_admin). /health is a plain
+authenticated read so any logged-in client can check which platforms are
+configured.
 
 Routes
-  GET  /publisher/queue              list queue with optional status filter
-  GET  /publisher/queue/{id}         single item detail
-  POST /publisher/queue/{id}/retry   reset a failed entry back to "queued"
-  POST /publisher/queue/{id}/reject  permanently reject an entry
-  GET  /publisher/stats              aggregate counts by status
-  POST /publisher/trigger            manually fire one worker batch (dev/admin)
-  GET  /publisher/tiktok/status/{publish_id}  poll TikTok for a post's live status
+  GET  /publisher/queue              [admin] list queue with optional status filter
+  GET  /publisher/queue/{id}         [admin] single item detail
+  POST /publisher/queue/{id}/retry   [admin] reset a failed entry back to "queued"
+  POST /publisher/queue/{id}/reject  [admin] permanently reject an entry
+  GET  /publisher/stats              [admin] aggregate counts by status
+  POST /publisher/trigger            [admin] manually fire one worker batch
+  GET  /publisher/tiktok/status/{publish_id}  [admin] poll TikTok for a post's live status
+  GET  /publisher/health             [auth]  which platforms are configured
 """
 
 from datetime import datetime, timezone
@@ -23,11 +25,12 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.database import get_database
-from app.dependencies import get_current_user_id
+from app.dependencies import get_current_user_id, require_admin
 from app.tasks.publisher_worker import publisher_worker
 from app.services.tiktok_publisher    import tiktok_publisher
 from app.services.facebook_publisher  import facebook_publisher
 from app.services.instagram_publisher import instagram_publisher
+from app.services.telegram_publisher  import telegram_publisher
 
 router = APIRouter(prefix="/publisher", tags=["publisher"])
 
@@ -56,7 +59,7 @@ async def list_queue(
     limit:  int = Query(50, ge=1, le=200),
     skip:   int = Query(0,  ge=0),
     db      = Depends(get_database),
-    _       = Depends(get_current_user_id),
+    _       = Depends(require_admin),
 ):
     """List publisher queue entries, newest first."""
     query = {}
@@ -86,7 +89,7 @@ async def list_queue(
 async def get_queue_item(
     item_id: str,
     db       = Depends(get_database),
-    _        = Depends(get_current_user_id),
+    _        = Depends(require_admin),
 ):
     """Get full detail for a single queue entry."""
     try:
@@ -103,7 +106,7 @@ async def get_queue_item(
 async def retry_queue_item(
     item_id: str,
     db       = Depends(get_database),
-    _        = Depends(get_current_user_id),
+    _        = Depends(require_admin),
 ):
     """
     Reset a failed (or permanently failed) entry back to 'queued'
@@ -133,7 +136,7 @@ async def retry_queue_item(
 async def reject_queue_item(
     item_id: str,
     db       = Depends(get_database),
-    _        = Depends(get_current_user_id),
+    _        = Depends(require_admin),
 ):
     """Permanently reject an entry — it will never be posted."""
     try:
@@ -154,7 +157,7 @@ async def reject_queue_item(
 @router.get("/stats")
 async def publisher_stats(
     db = Depends(get_database),
-    _  = Depends(get_current_user_id),
+    _  = Depends(require_admin),
 ):
     """Aggregate queue counts by status — useful for a publisher dashboard."""
     pipeline = [{"$group": {"_id": "$status", "count": {"$sum": 1}}}]
@@ -175,7 +178,7 @@ async def publisher_stats(
 # ── Manual trigger ────────────────────────────────────────────────
 @router.post("/trigger")
 async def trigger_worker_batch(
-    _  = Depends(get_current_user_id),
+    _  = Depends(require_admin),
 ):
     """
     Manually fire one worker batch cycle.
@@ -190,7 +193,7 @@ async def trigger_worker_batch(
 @router.get("/tiktok/status/{publish_id}")
 async def get_tiktok_post_status(
     publish_id: str,
-    _           = Depends(get_current_user_id),
+    _           = Depends(require_admin),
 ):
     """
     Poll TikTok directly for the live publish status of a submitted post.
@@ -216,4 +219,5 @@ async def publisher_health(_= Depends(get_current_user_id)):
         "tiktok":    tiktok_publisher.is_configured(),
         "facebook":  facebook_publisher.is_configured(),
         "instagram": instagram_publisher.is_configured(),
+        "telegram":  telegram_publisher.is_configured(),
     }

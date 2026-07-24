@@ -3,18 +3,23 @@ app/tasks/publisher_worker.py
 
 Async background worker — processes `publisher_queue` and dispatches
 approved drops to every configured social platform simultaneously:
-  • TikTok   (app/services/tiktok_publisher.py)
+  • TikTok    (app/services/tiktok_publisher.py)
   • Facebook  (app/services/facebook_publisher.py)
   • Instagram (app/services/instagram_publisher.py)
+  • Telegram  (app/services/telegram_publisher.py)
 
 Lifecycle
   Started during FastAPI app startup (lifespan) as an asyncio background task.
   Polls every POLL_INTERVAL_SECONDS. Shuts down cleanly on app teardown.
 
 Per-platform dispatch rules
-  text   → TikTok ✓  Facebook ✓  Instagram SKIPPED (no text-only post API)
-  image  → TikTok ✓  Facebook ✓  Instagram ✓
-  video  → TikTok ✓  Facebook ✓  Instagram ✓ (posted as Reel)
+  If a blurred teaser card exists (app/services/card_generator.py), Facebook/
+  Instagram/Telegram always post that image instead of the raw content —
+  it also solves Instagram's "no text-only posts" limitation. TikTok always
+  posts the native asset since its content model needs real video/photo.
+  text   → TikTok ✓  Facebook ✓ (teaser)  Instagram ✓ (teaser)  Telegram ✓ (teaser)
+  image  → TikTok ✓  Facebook ✓  Instagram ✓  Telegram ✓
+  video  → TikTok ✓  Facebook ✓  Instagram ✓ (posted as Reel)  Telegram ✓
 
 Overall queue status after processing
   "posted"   — at least one platform succeeded, none failed
@@ -40,6 +45,7 @@ from app.database import get_database
 from app.services.tiktok_publisher    import tiktok_publisher
 from app.services.facebook_publisher  import facebook_publisher
 from app.services.instagram_publisher import instagram_publisher, PlatformSkipped
+from app.services.telegram_publisher  import telegram_publisher
 
 log = logging.getLogger(__name__)
 
@@ -213,10 +219,16 @@ class PublisherWorker:
             platform_results  dict  — platforms that succeeded or were skipped
             platform_errors   dict  — platforms that raised an error
         """
-        media_type = (entry.get("media_type") or "text").lower()
-        confession = entry.get("confession") or ""
-        category   = entry.get("category")   or "love"
-        media_url  = entry.get("media_url")
+        media_type   = (entry.get("media_type") or "text").lower()
+        confession   = entry.get("confession") or ""
+        category     = entry.get("category")   or "love"
+        media_url    = entry.get("media_url")
+        # Blurred teaser card (app/services/card_generator.py) — when present,
+        # Facebook/Instagram/Telegram post this branded image instead of the
+        # raw content, regardless of the drop's original media_type. TikTok
+        # keeps posting the native video/photo asset — its content model
+        # doesn't fit a static teaser image.
+        teaser_url   = entry.get("teaser_image_url")
 
         # Build coroutines for each configured platform.
         coros: dict[str, object] = {}
@@ -225,16 +237,19 @@ class PublisherWorker:
             coros["tiktok"] = self._call_tiktok(media_type, confession, category, media_url)
 
         if facebook_publisher.is_configured():
-            coros["facebook"] = self._call_facebook(media_type, confession, category, media_url)
+            coros["facebook"] = self._call_facebook(media_type, confession, category, media_url, teaser_url)
 
         if instagram_publisher.is_configured():
-            coros["instagram"] = self._call_instagram(media_type, confession, category, media_url)
+            coros["instagram"] = self._call_instagram(media_type, confession, category, media_url, teaser_url)
+
+        if telegram_publisher.is_configured():
+            coros["telegram"] = self._call_telegram(media_type, confession, category, media_url, teaser_url)
 
         if not coros:
             raise RuntimeError(
                 "No social platforms are configured. "
-                "Set at least one of TIKTOK_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN "
-                "in your .env file."
+                "Set at least one of TIKTOK_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN / "
+                "TELEGRAM_BOT_TOKEN in your .env file."
             )
 
         # Run all platforms concurrently.
@@ -282,8 +297,12 @@ class PublisherWorker:
         return await tiktok_publisher.post_text(confession=confession, category=category)
 
     async def _call_facebook(
-        self, media_type: str, confession: str, category: str, media_url: str | None
+        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None
     ):
+        if teaser_url:
+            return await facebook_publisher.post_image(
+                image_url=teaser_url, confession=confession, category=category,
+            )
         if media_type == "video":
             if not media_url:
                 raise ValueError("Video drop missing media_url.")
@@ -302,8 +321,14 @@ class PublisherWorker:
         return await facebook_publisher.post_text(confession=confession, category=category)
 
     async def _call_instagram(
-        self, media_type: str, confession: str, category: str, media_url: str | None
+        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None
     ):
+        if teaser_url:
+            # The teaser image also solves Instagram's "no text-only posts"
+            # limitation — text drops now have something to post.
+            return await instagram_publisher.post_image(
+                image_url=teaser_url, confession=confession, category=category,
+            )
         if media_type == "video":
             if not media_url:
                 raise ValueError("Video drop missing media_url.")
@@ -318,6 +343,29 @@ class PublisherWorker:
             )
         # text — Instagram does not support text-only posts
         return await instagram_publisher.post_text(confession=confession, category=category)
+
+    async def _call_telegram(
+        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None
+    ):
+        if teaser_url:
+            return await telegram_publisher.post_image(
+                image_url=teaser_url, confession=confession, category=category,
+            )
+        if media_type == "video":
+            if not media_url:
+                raise ValueError("Video drop missing media_url.")
+            return await telegram_publisher.post_video(
+                video_url=media_url, confession=confession, category=category,
+            )
+        if media_type == "image":
+            if not media_url:
+                raise ValueError("Image drop missing media_url.")
+            return await telegram_publisher.post_image(
+                image_url=media_url, confession=confession, category=category,
+            )
+        if not confession.strip():
+            raise ValueError("Text drop has no confession content.")
+        return await telegram_publisher.post_text(confession=confession, category=category)
 
 
 # ── Singleton ────────────────────────────────────────────────────

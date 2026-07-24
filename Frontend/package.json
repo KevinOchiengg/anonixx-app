@@ -16,6 +16,7 @@
     "@react-navigation/native-stack": "^7.3.27",
     "@react-navigation/stack": "^7.4.9",
     "@reduxjs/toolkit": "^2.9.2",
+    "@stripe/stripe-react-native": "0.50.3",
     "axios": "^1.12.2",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.34",

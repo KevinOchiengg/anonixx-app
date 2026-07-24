@@ -29,6 +29,16 @@ COIN_PACKAGES: List[dict] = [
 ]
 _PACKAGE_MAP = {p["id"]: p for p in COIN_PACKAGES}
 
+# Apple App Store Connect / Google Play Console product IDs.
+# Create these in both consoles with EXACTLY these identifiers.
+IAP_PRODUCT_IDS = {
+    "starter": "com.anonixx.coins.starter",
+    "popular": "com.anonixx.coins.popular",
+    "value":   "com.anonixx.coins.value",
+    "power":   "com.anonixx.coins.power",
+}
+IAP_PRODUCT_TO_PACKAGE = {v: k for k, v in IAP_PRODUCT_IDS.items()}
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -48,12 +58,25 @@ class BuyCoinsRequest(BaseModel):
 class BuyCoinsStripeRequest(BaseModel):
     package_id: str
 
+class BuyCoinsIAPRequest(BaseModel):
+    platform:        str            # "ios" | "android"
+    product_id:      str            # the IAP_PRODUCT_IDS value, e.g. "com.anonixx.coins.popular"
+    receipt:         Optional[str]  = None  # iOS: base64 receipt
+    purchase_token:  Optional[str]  = None  # Android: Google Play purchase token
+    transaction_id:  Optional[str]  = None  # client-known id, used as idempotency fallback
+
 class SpendCoinsRequest(BaseModel):
     reason:      str   # must be a key in SPEND_COSTS
     description: str   # human-readable label stored in transaction
 
 class MpesaCallbackBody(BaseModel):
     Body: dict
+
+class WithdrawRequest(BaseModel):
+    amount_coins: int
+    mpesa_number: str   # format 2547XXXXXXXX
+
+MIN_WITHDRAWAL_COINS = 100
 
 
 @router.get("/packages")
@@ -128,6 +151,77 @@ async def spend_coins(
 async def get_spend_costs():
     """Returns the coin cost for each action — used by the frontend to display prices."""
     return {"costs": SPEND_COSTS}
+
+
+@router.post("/withdraw")
+async def request_withdrawal(
+    data:            WithdrawRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db               = Depends(get_database),
+):
+    """
+    Queue a cash withdrawal for coins earned via drop-unlock revenue share.
+    Mirrors the circle_payouts accumulator pattern in circles.py — coins are
+    debited immediately, the request lands in `withdrawal_requests` as
+    "pending", and an admin pays it out manually (no automated M-Pesa B2C
+    integration exists yet). If a request is later rejected, the coins
+    should be credited back via `credit_coins(reason="withdrawal_request")`
+    — that reversal path is an admin-tool follow-up, not built here.
+    """
+    if data.amount_coins < MIN_WITHDRAWAL_COINS:
+        raise HTTPException(status_code=400, detail=f"Minimum withdrawal is {MIN_WITHDRAWAL_COINS} coins.")
+    if not data.mpesa_number.strip():
+        raise HTTPException(status_code=400, detail="M-Pesa number is required.")
+
+    try:
+        new_balance = await debit_coins(
+            db          = db,
+            user_id     = current_user_id,
+            amount      = data.amount_coins,
+            reason      = "withdrawal_request",
+            description = f"Withdrawal request — {data.amount_coins} coins",
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(status_code=402, detail="Not enough coins.")
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    doc = {
+        "_id":          ObjectId(),
+        "user_id":      current_user_id,
+        "amount_coins": data.amount_coins,
+        "mpesa_number": data.mpesa_number.strip(),
+        "status":       "pending",   # pending | paid | rejected
+        "created_at":   _now(),
+    }
+    await db.withdrawal_requests.insert_one(doc)
+
+    return {
+        "id":          str(doc["_id"]),
+        "status":      "pending",
+        "new_balance": new_balance,
+    }
+
+
+@router.get("/withdraw/history")
+async def withdrawal_history(
+    current_user_id: str = Depends(get_current_user_id),
+    db               = Depends(get_database),
+):
+    docs = await db.withdrawal_requests.find(
+        {"user_id": current_user_id}
+    ).sort("created_at", -1).to_list(None)
+
+    return [
+        {
+            "id":           str(d["_id"]),
+            "amount_coins": d["amount_coins"],
+            "mpesa_number": d["mpesa_number"],
+            "status":       d["status"],
+            "created_at":   d["created_at"].isoformat(),
+        }
+        for d in docs
+    ]
 
 
 @router.post("/buy/mpesa")
@@ -388,3 +482,129 @@ async def buy_coins_stripe_webhook(
         pass                                        # always return 200 to Stripe
 
     return {"received": True}
+
+
+# ─── IAP: Apple / Google Play receipt verification ───────────────────────────
+
+@router.get("/iap/products")
+async def list_iap_products():
+    """
+    Returns the canonical Apple/Google product IDs alongside each coin package.
+    The frontend uses this to match StoreKit/Play Billing SKUs back to packages.
+    """
+    return {
+        "products": [
+            {
+                **pkg,
+                "ios_product_id":     IAP_PRODUCT_IDS[pkg["id"]],
+                "android_product_id": IAP_PRODUCT_IDS[pkg["id"]],
+            }
+            for pkg in COIN_PACKAGES
+        ],
+    }
+
+
+@router.post("/buy/iap/verify")
+async def verify_iap_purchase(
+    data:            BuyCoinsIAPRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db                  = Depends(get_database),
+):
+    """
+    Server-side validation of an Apple App Store or Google Play in-app purchase.
+    Credits the matching coin package atomically. Idempotent — replaying the
+    same transaction_id will return the original credit without double-paying.
+
+    Required to comply with Apple/Google policy: digital goods sold inside the
+    iOS/Android app MUST flow through the platform's IAP (StoreKit / Play Billing).
+    """
+    from app.utils.iap_validator import verify_apple_receipt, verify_google_purchase
+
+    if data.platform not in ("ios", "android"):
+        raise HTTPException(status_code=400, detail="Invalid platform.")
+
+    package_id = IAP_PRODUCT_TO_PACKAGE.get(data.product_id)
+    if not package_id:
+        raise HTTPException(status_code=400, detail="Unknown IAP product.")
+    pkg = _PACKAGE_MAP[package_id]
+
+    # ── Validate the receipt with the relevant store ──────────────────────
+    if data.platform == "ios":
+        if not data.receipt:
+            raise HTTPException(status_code=400, detail="Missing receipt.")
+        result = await verify_apple_receipt(
+            receipt_data=data.receipt,
+            expected_product_id=data.product_id,
+        )
+    else:
+        if not data.purchase_token:
+            raise HTTPException(status_code=400, detail="Missing purchase_token.")
+        result = await verify_google_purchase(
+            package_name=settings.GOOGLE_PLAY_PACKAGE_NAME,
+            product_id=data.product_id,
+            purchase_token=data.purchase_token,
+        )
+
+    if not result.get("valid"):
+        raise HTTPException(
+            status_code=402,
+            detail=f"Receipt invalid: {result.get('error', 'unknown')}",
+        )
+
+    transaction_id = (
+        result.get("transaction_id")
+        or data.transaction_id
+        or (data.receipt or data.purchase_token or "")[:40]
+    )
+    if not transaction_id:
+        raise HTTPException(status_code=400, detail="No transaction id.")
+
+    # ── Idempotency: reject (or no-op) repeats of the same transaction ────
+    existing = await db.coin_purchases.find_one({
+        "iap_transaction_id": transaction_id,
+        "provider":           "iap",
+    })
+    if existing:
+        if existing.get("status") == "completed":
+            balance_doc = await db.users.find_one(
+                {"_id": ObjectId(current_user_id)}, {"coin_balance": 1},
+            )
+            return {
+                "already_credited": True,
+                "coins":            existing.get("coins", pkg["coins"]),
+                "new_balance":      (balance_doc or {}).get("coin_balance", 0),
+            }
+
+    # ── Credit coins atomically ───────────────────────────────────────────
+    new_balance = await credit_coins(
+        db          = db,
+        user_id     = current_user_id,
+        amount      = pkg["coins"],
+        reason      = "iap_purchase",
+        description = f"Bought {pkg['coins']} coins via {data.platform.upper()} IAP",
+        meta        = {
+            "platform":       data.platform,
+            "product_id":     data.product_id,
+            "transaction_id": transaction_id,
+        },
+    )
+
+    await db.coin_purchases.insert_one({
+        "user_id":             current_user_id,
+        "package_id":          package_id,
+        "coins":               pkg["coins"],
+        "provider":            "iap",
+        "platform":            data.platform,
+        "iap_product_id":      data.product_id,
+        "iap_transaction_id":  transaction_id,
+        "status":              "completed",
+        "created_at":          _now(),
+        "completed_at":        _now(),
+    })
+
+    return {
+        "already_credited": False,
+        "coins":            pkg["coins"],
+        "new_balance":      new_balance,
+        "package":          pkg,
+    }

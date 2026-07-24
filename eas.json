@@ -1,26 +1,18 @@
 {
   "cli": {
-    "version": ">= 5.0.0",
+    "version": ">= 21.1.0",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "projectRootDirectory": "Frontend"
+      "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
-      "projectRootDirectory": "Frontend",
-      "android": {
-        "buildType": "apk"
-      }
+      "distribution": "internal"
     },
     "production": {
-      "projectRootDirectory": "Frontend",
-      "android": {
-        "buildType": "apk"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {

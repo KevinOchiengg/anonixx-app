@@ -28,7 +28,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Eye } from 'lucide-react-native';
+import { Eye, Flame, Play } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, RADIUS } from '../../utils/responsive';
 import DropCardRenderer, { DROP_THEMES } from './DropCardRenderer';
@@ -41,6 +41,7 @@ const DropFeedCard = React.memo(function DropFeedCard({
   drop,
   width = SCREEN_W - SPACING.md * 2,
   onOpen,                  // optional override — defaults to navigate('DropLanding', { dropId })
+  onOozeIn,                // primary unlock CTA — defaults to navigate('DropLanding', { dropId, autoOpenUnlock: true })
   showReactions = true,
   showExpiry    = true,
   showPresence  = true,
@@ -49,7 +50,7 @@ const DropFeedCard = React.memo(function DropFeedCard({
 
   const {
     id, confession, created_at, theme, mood_tag, emotional_context,
-    tease_mode, media_url, media_type,
+    tease_mode, media_url, media_type, card_image_url, already_unlocked,
     user_reaction = null,
     readers_now = 0,
   } = drop || {};
@@ -60,10 +61,22 @@ const DropFeedCard = React.memo(function DropFeedCard({
     ? 'split'
     : 'split';
 
+  // Video drops can't render their raw file through an ImageBackground —
+  // use the server-generated poster-frame thumbnail (card_image_url) as the
+  // static preview instead, with a play affordance. Tapping through to
+  // DropLanding/MediaFeed is where actual video playback happens.
+  const isVideo = media_type === 'video';
+  const previewUrl = isVideo ? (card_image_url || media_url) : media_url;
+
   const handleOpen = useCallback(() => {
     if (onOpen) { onOpen(drop); return; }
     navigation?.navigate?.('DropLanding', { dropId: id });
   }, [onOpen, drop, navigation, id]);
+
+  const handleOozeIn = useCallback(() => {
+    if (onOozeIn) { onOozeIn(drop); return; }
+    navigation?.navigate?.('DropLanding', { dropId: id, autoOpenUnlock: true });
+  }, [onOozeIn, drop, navigation, id]);
 
   return (
     <View style={[styles.wrap, { width }]}>
@@ -74,12 +87,17 @@ const DropFeedCard = React.memo(function DropFeedCard({
           emotionalContext={emotional_context}
           teaseMode={!!tease_mode}
           theme={theme || 'cinematic-coral'}
-          mediaUrl={media_url}
+          mediaUrl={previewUrl}
           layoutMode={layoutMode}
           confessionId={id}
           seed={id || confession}
           cardWidth={width}
         />
+        {isVideo && previewUrl && (
+          <View style={styles.playBadge} pointerEvents="none">
+            <Play size={rs(22)} color="#fff" fill="#fff" />
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Meta row — presence + expiry, sitting just below the card */}
@@ -104,6 +122,18 @@ const DropFeedCard = React.memo(function DropFeedCard({
             />
           )}
         </View>
+      )}
+
+      {/* Ooze In — primary unlock CTA */}
+      {id && !already_unlocked && (
+        <TouchableOpacity
+          style={[styles.oozeBtn, { backgroundColor: themeObj.accent }]}
+          onPress={handleOozeIn}
+          activeOpacity={0.88}
+        >
+          <Flame size={rs(15)} color="#fff" strokeWidth={2.5} />
+          <Text style={styles.oozeBtnText}>Ooze In</Text>
+        </TouchableOpacity>
       )}
 
       {/* Reactions — emotional text signals */}
@@ -147,6 +177,37 @@ const styles = StyleSheet.create({
     fontFamily:    'DMSans-Italic',
     fontSize:      rf(10),
     letterSpacing: 0.3,
+  },
+  oozeBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'center',
+    gap:               rp(6),
+    marginTop:         rp(8),
+    paddingVertical:   rp(11),
+    borderRadius:      RADIUS.md,
+    shadowColor:       '#000',
+    shadowOffset:      { width: 0, height: rs(3) },
+    shadowOpacity:     0.3,
+    shadowRadius:      rs(8),
+    elevation:         4,
+  },
+  oozeBtnText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(13),
+    color:         '#fff',
+    letterSpacing: 0.4,
+  },
+  playBadge: {
+    position:        'absolute',
+    bottom:          '18%',
+    alignSelf:       'center',
+    width:           rs(48),
+    height:          rs(48),
+    borderRadius:    rs(24),
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
 });
 

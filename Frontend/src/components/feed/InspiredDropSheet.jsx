@@ -168,12 +168,9 @@ export default function InspiredDropSheet({ visible, post, onClose, navigation }
     dismiss();
     // Brief delay so the sheet closes before the new screen opens
     setTimeout(() => {
-      navigation.navigate('Connect', {
-        screen: 'DropsCompose',
-        params: {
-          initialText:         text.trim(),
-          inspiredByPostId:    linked && post?.id ? post.id : null,
-        },
+      navigation.navigate('DropsCompose', {
+        initialText:      text.trim(),
+        inspiredByPostId: linked && post?.id ? post.id : null,
       });
     }, 240);
   }, [text, linked, post, navigation, dismiss]);

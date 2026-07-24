@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import {
@@ -5,11 +6,12 @@ import {
   MessageCircle,
   Plus,
   Radio,
-  Users,
 } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUnread } from '../context/UnreadContext';
+import { API_BASE_URL } from '../config/api';
 
 // Feed
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen';
@@ -18,22 +20,18 @@ import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SearchScreen from '../screens/feed/SearchScreen';
 import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
 import PostDetailScreen from '../screens/posts/PostDetailScreen';
-
-// Connect
-import ChatScreen from '../screens/connect/ChatScreen';
-import ConnectScreen from '../screens/connect/ConnectScreen';
-
-// Drops
-import ConfessionMarketplaceScreen from '../screens/drops/ConfessionMarketPlaceScreen';
-import DropChatScreen from '../screens/drops/DropChatScreen';
-import DropLandingScreen from '../screens/drops/DropLandingScreen';
-import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
-import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
-import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
-import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
 import InspirationThreadScreen from '../screens/drops/InspirationThreadScreen';
-import ShareCardScreen from '../screens/drops/ShareCardScreen';
-import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
+
+// Connect chat screen — still used by Messages tab; the Connect tab itself
+// (ConnectScreen, and its own stack) is hidden from navigation, not deleted.
+import ChatScreen from '../screens/connect/ChatScreen';
+
+// Drops — DropsCompose now lives at the root AppNavigator stack (reachable
+// from anywhere, incl. the Create tab button below); DropChat stays here
+// since Messages needs it directly.
+import DropChatScreen from '../screens/drops/DropChatScreen';
+import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
+import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
 
 // Circles
 import CirclesScreen from '../screens/circles/CirclesScreen';
@@ -59,7 +57,6 @@ const Stack = createStackNavigator();
 const TabBarIcon = ({ route, focused, unreadCount }) => {
   const icons = {
     Feed:     Home,
-    Connect:  Users,
     Circles:  Radio,
     Messages: MessageCircle,
   };
@@ -120,30 +117,6 @@ function FeedStack() {
   );
 }
 
-// ─── CONNECT STACK ────────────────────────────────────────────
-function ConnectStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="ConnectMain" component={ConnectScreen} />
-      <Stack.Screen name="Chat" component={ChatScreen} />
-      <Stack.Screen name="ShareCard" component={ShareCardScreen} />
-      <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
-      <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
-      <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />
-      <Stack.Screen name="DropLanding" component={DropLandingScreen} />
-      <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
-      <Stack.Screen name="DropChat" component={DropChatScreen} />
-      <Stack.Screen
-        name="ConfessionMarketplace"
-        component={ConfessionMarketplaceScreen}
-      />
-      <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
-      {/* InspirationThread reachable from the marketplace "inspired by" chip */}
-      <Stack.Screen name="InspirationThread" component={InspirationThreadScreen} />
-    </Stack.Navigator>
-  );
-}
-
 // ─── CIRCLES STACK ────────────────────────────────────────────
 function CirclesStack() {
   return (
@@ -167,6 +140,7 @@ function MessagesStack() {
       <Stack.Screen name="MessagesMain" component={MessagesScreen} />
       <Stack.Screen name="Chat"         component={ChatScreen} />
       <Stack.Screen name="DropChat"     component={DropChatScreen} />
+      <Stack.Screen name="ChatProfileSetup" component={ChatProfileSetupScreen} />
     </Stack.Navigator>
   );
 }
@@ -176,6 +150,26 @@ export default function TabNavigator() {
   const insets      = useSafeAreaInsets();
   const { unreadCount } = useUnread();
 
+  // Gate the Messages tab behind chat-interface setup — null while unknown
+  // (defaults to "configured" so we never block on a slow first fetch).
+  const [hasChatProfile, setHasChatProfile] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setHasChatProfile(!!data);
+        }
+      } catch {
+        /* offline — assume configured, don't block navigation */
+      }
+    })();
+  }, []);
 
   return (
     <Tab.Navigator
@@ -210,13 +204,8 @@ export default function TabNavigator() {
         options={{ tabBarLabel: 'Thoughts' }}
       />
       <Tab.Screen
-        name="Connect"
-        component={ConnectStack}
-        options={{ tabBarLabel: 'Connect' }}
-      />
-      <Tab.Screen
         name="Create"
-        component={CreatePostScreen}
+        component={DropsComposeScreen}
         options={{
           tabBarLabel: '',
           tabBarButton: (props) => <CustomTabBarButton {...props} />,
@@ -226,6 +215,14 @@ export default function TabNavigator() {
         name="Messages"
         component={MessagesStack}
         options={{ tabBarLabel: 'Messages' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            if (!hasChatProfile) {
+              e.preventDefault();
+              navigation.navigate('Messages', { screen: 'ChatProfileSetup' });
+            }
+          },
+        })}
       />
       <Tab.Screen
         name="Circles"

@@ -90,7 +90,7 @@ const tint = (hex, alphaHex) => `${hex}${alphaHex}`; // e.g. '22' = ~13% alpha
 export default function DropLandingScreen({ route, navigation }) {
   const dispatch           = useDispatch();
   const coinBalance        = useSelector((state) => state.coins.balance);
-  const { dropId }         = route.params ?? {};
+  const { dropId, autoOpenUnlock } = route.params ?? {};
   const { isAuthenticated} = useAuth();
   const { showToast }      = useToast();
 
@@ -112,6 +112,10 @@ export default function DropLandingScreen({ route, navigation }) {
   const pulseAnim    = useRef(new Animated.Value(1)).current;
   const fadeAnim     = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0)).current;
+
+  // ── "Ooze In" from the feed — jump straight to the unlock section ──
+  const scrollRef  = useRef(null);
+  const unlockYRef = useRef(0);
   const pollRef      = useRef(null);
 
   // Load video source once drop is fetched
@@ -173,6 +177,16 @@ export default function DropLandingScreen({ route, navigation }) {
   }, [dropId]);
 
   useEffect(() => { loadDrop(); }, [loadDrop]);
+
+  // Coming from the feed's "Ooze In" button — jump straight to the pay
+  // section once the drop (and its layout) has loaded.
+  useEffect(() => {
+    if (!autoOpenUnlock || !drop || drop.already_unlocked || drop.is_own_drop) return;
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollTo?.({ y: Math.max(0, unlockYRef.current - 80), animated: true });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [autoOpenUnlock, drop]);
 
   // ── Unlock via M-Pesa ─────────────────────────────────────
   const handleUnlockMpesa = useCallback(async () => {
@@ -439,6 +453,7 @@ export default function DropLandingScreen({ route, navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={s.content}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -565,7 +580,10 @@ export default function DropLandingScreen({ route, navigation }) {
             /* ── Unlock ── */
             ) : (
               <>
-                <View style={s.unlockSection}>
+                <View
+                  style={s.unlockSection}
+                  onLayout={(e) => { unlockYRef.current = e.nativeEvent.layout.y; }}
+                >
                   {drop.is_origin_author ? (
                     /* ── Free unlock — viewer is the author of the inspiring post ── */
                     <View style={s.originAuthorWrap}>
