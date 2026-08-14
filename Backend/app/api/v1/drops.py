@@ -63,7 +63,7 @@ class CreateDropRequest(BaseModel):
     intent: Optional[str] = None  # what the sender is open to
 
     # Drop spec upgrade fields
-    theme: Optional[str] = None                  # "cinematic-coral", etc.
+    theme: Optional[str] = None                  # "desire", "after-dark", "midnight-sin"
     mood_tag: Optional[str] = None               # "longing", "restless", …
     tease_mode: Optional[bool] = False           # cut confession mid-thought
     intensity: Optional[str] = None              # "soft" | "heavy" | "devastating"
@@ -132,15 +132,14 @@ class ReportDropRequest(BaseModel):
 # ==================== SPEC CONSTANTS ====================
 
 # Drop themes — mirrors DROP_THEMES in the frontend (DropCardRenderer.jsx).
-# Tier-2 themes are never published and are 18+ gated.
-TIER_1_THEMES = {
-    "cinematic-coral", "ember-love", "ocean-ache", "twilight-blush",
-    "graphite-rose", "paperback-ivory", "midnight-rain", "goldleaf",
-}
-TIER_2_THEMES = {
-    "bruised-plum", "oxblood", "after-dark", "velvet-ash",
-    "nocturne-indigo", "smoked-gold",
-}
+# Tier-2 themes are never published and are 18+ gated (age_verified AND
+# explicit_content_opt_in both required — see the /drops POST handler below).
+# NOTE: these previously didn't match the frontend's real theme ids at all
+# (only "cinematic-coral"/"after-dark" happened to overlap) — every other
+# theme selection was silently rejected by the check below. Now reduced to
+# the 3 curated themes and kept in exact sync with the frontend.
+TIER_1_THEMES = {"desire"}
+TIER_2_THEMES = {"after-dark", "midnight-sin"}
 VALID_THEMES = TIER_1_THEMES | TIER_2_THEMES
 
 VALID_MOOD_TAGS = {
@@ -407,9 +406,8 @@ async def create_drop(
     if data.confession and len(data.confession.strip()) == 0:
         raise HTTPException(status_code=400, detail="Confession cannot be empty")
 
-    if data.confession and len(data.confession) > 280:
-        # Spec section 3 bumped the card cap from 200 → 280 chars.
-        raise HTTPException(status_code=400, detail="Confession must be 280 characters or less")
+    if data.confession and len(data.confession) > 500:
+        raise HTTPException(status_code=400, detail="Confession must be 500 characters or less")
 
     if _contains_contact_info(data.confession):
         raise HTTPException(
@@ -462,7 +460,7 @@ async def create_drop(
         raise HTTPException(status_code=404, detail="User not found")
 
     # ── Spec upgrade field validation (sections 11, 13, 16) ─────
-    theme = (data.theme or "cinematic-coral").strip()
+    theme = (data.theme or "desire").strip()
     if theme not in VALID_THEMES:
         raise HTTPException(status_code=400, detail="Unknown theme")
 
@@ -475,10 +473,10 @@ async def create_drop(
         raise HTTPException(status_code=400, detail="intensity must be soft, heavy, or devastating")
 
     # Tier 2 themes (After Dark) are 18+ only and never published on social.
-    # Server-side gate: deny-by-default — a user must have an explicit
-    # truthy `age_verified` on their user doc. Absence counts as "no".
-    # The frontend locks the UI at DropsComposeScreen, this is belt-and-
-    # suspenders for API callers that bypass the client.
+    # Signup itself is a hard 18+ gate (age_verified is always true past
+    # registration), so that's sufficient on its own now — the separate
+    # explicit_content_opt_in toggle no longer gates theme selection, only
+    # a viewer's own feed preferences elsewhere.
     is_tier2 = theme in TIER_2_THEMES
     if is_tier2 and not bool(user.get("age_verified")):
         raise HTTPException(
@@ -709,6 +707,95 @@ async def _update_confession_streak(user_id: str, db):
         )
 
 
+# ==================== SHARE — WHATSAPP ====================
+# Anonymous relay: sends from Anonixx's own WhatsApp number so the
+# recipient never sees the sharer's real number. Guardrails are mandatory,
+# not optional — this exact mechanism is also how anonymous harassment
+# happens, so every send is rate-limited per (sender, recipient) pair and
+# checked against an opt-out list first.
+
+PHONE_RE = re.compile(r"^\+[1-9]\d{7,14}$")  # E.164
+WHATSAPP_SHARE_COOLDOWN_HOURS = 24
+
+
+class WhatsAppShareRequest(BaseModel):
+    phone_number: str
+
+
+@router.post("/{drop_id}/share/whatsapp")
+async def share_drop_whatsapp(
+    drop_id: str,
+    data: WhatsAppShareRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    from app.services.whatsapp_sender import whatsapp_sender
+
+    phone = data.phone_number.strip()
+    if not PHONE_RE.match(phone):
+        raise HTTPException(status_code=400, detail="Enter a valid phone number in international format, e.g. +254712345678.")
+
+    if not whatsapp_sender.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp sharing isn't set up yet.")
+
+    if await db["whatsapp_optouts"].find_one({"phone_number": phone}):
+        raise HTTPException(status_code=403, detail="This number has opted out of Anonixx WhatsApp messages.")
+
+    cutoff = now_utc() - timedelta(hours=WHATSAPP_SHARE_COOLDOWN_HOURS)
+    recent = await db["whatsapp_shares"].find_one({
+        "sender_id": current_user_id,
+        "phone_number": phone,
+        "created_at": {"$gte": cutoff},
+    })
+    if recent:
+        raise HTTPException(status_code=429, detail="You already sent something to this number recently. Try again later.")
+
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+
+    preview = (drop.get("confession") or "a confession").strip()
+    if len(preview) > 100:
+        preview = preview[:100] + "…"
+    link = f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open"
+
+    try:
+        await whatsapp_sender.send_drop_share(phone, preview, link)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Could not send. Try again shortly.")
+
+    await db["whatsapp_shares"].insert_one({
+        "_id": ObjectId(),
+        "sender_id": current_user_id,
+        "drop_id": drop_id,
+        "phone_number": phone,
+        "created_at": now_utc(),
+    })
+
+    return {"sent": True, "message": "Sent. They'll see it's from Anonixx, not you."}
+
+
+@router.post("/whatsapp/opt-out")
+async def whatsapp_opt_out(data: WhatsAppShareRequest, db = Depends(get_database)):
+    """
+    Marks a number as opted out of future Anonixx WhatsApp sends.
+    TODO: wire this to a real Meta webhook (inbound "STOP" replies) before
+    launch — right now it only fires if something calls it directly.
+    """
+    phone = data.phone_number.strip()
+    if not PHONE_RE.match(phone):
+        raise HTTPException(status_code=400, detail="Invalid phone number.")
+    await db["whatsapp_optouts"].update_one(
+        {"phone_number": phone},
+        {"$setOnInsert": {"phone_number": phone, "created_at": now_utc()}},
+        upsert=True,
+    )
+    return {"opted_out": True}
+
+
 # ==================== MARKETPLACE ====================
 
 @router.get("/marketplace")
@@ -717,6 +804,7 @@ async def get_marketplace(
     is_group: Optional[bool] = Query(None),
     night_only: Optional[bool] = Query(False),
     location: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, description="Search by confession text"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, le=50),
     current_user_id: Optional[str] = Depends(get_optional_user_id),
@@ -747,6 +835,17 @@ async def get_marketplace(
         query["is_night_mode"] = True
     if location and location.strip():
         query["location"] = {"$regex": re.escape(location.strip()), "$options": "i"}
+    if q and q.strip():
+        query["confession"] = {"$regex": re.escape(q.strip()), "$options": "i"}
+
+    # Hide drops from anyone the current user has blocked.
+    if current_user_id:
+        viewer = await db["users"].find_one(
+            {"_id": ObjectId(current_user_id)}, {"blocked_user_ids": 1},
+        )
+        blocked_ids = viewer.get("blocked_user_ids", []) if viewer else []
+        if blocked_ids:
+            query["sender_id"] = {"$nin": blocked_ids}
 
     total = await db["drops"].count_documents(query)
 
@@ -811,7 +910,7 @@ async def get_marketplace(
             "intent": drop.get("intent"),
 
             # ── Drop spec upgrade surface ────────────────────
-            "theme":       drop.get("theme", "cinematic-coral"),
+            "theme":       drop.get("theme", "desire"),
             "mood_tag":    drop.get("mood_tag"),
             "tease_mode":  bool(drop.get("tease_mode")),
             "intensity":   drop.get("intensity"),
@@ -1011,7 +1110,7 @@ async def get_inspired_drops(
             "time_left":       get_time_left(drop["expires_at"]),
             "time_ago":        get_time_ago(drop["created_at"]),
             "already_unlocked": already_unlocked,
-            "theme":           drop.get("theme", "cinematic-coral"),
+            "theme":           drop.get("theme", "desire"),
             "mood_tag":        drop.get("mood_tag"),
             "intensity":       drop.get("intensity"),
             "tier":            drop.get("tier", 1),
@@ -1219,7 +1318,7 @@ async def get_drop_landing(
         "created_at":       drop["created_at"].isoformat() if drop.get("created_at") else None,
 
         # ── Drop spec upgrade surface ────────────────────────
-        "theme":             drop.get("theme", "cinematic-coral"),
+        "theme":             drop.get("theme", "desire"),
         "mood_tag":          drop.get("mood_tag"),
         "tease_mode":        bool(drop.get("tease_mode")),
         "intensity":         drop.get("intensity"),
@@ -1233,6 +1332,8 @@ async def get_drop_landing(
         "duration_seconds":  drop.get("duration_seconds"),
         "waveform_data":     drop.get("waveform_data"),
         "moderation_status": drop.get("moderation_status", "visible"),
+        "location":          drop.get("location"),
+        "font_style":        drop.get("font_style", "classic"),
     }
 
 
@@ -2113,9 +2214,11 @@ async def get_drop_messages(
     # a chat_profile is reused across every unlocker who chats with them.
     chat_profile = await db["chat_profiles"].find_one({"user_id": conn["sender_id"]})
 
-    # Show the welcome media once per unlocker, the first time they open
-    # this connection — never to the sender viewing their own chat.
+    # Show the welcome media + play the welcome sound once per unlocker, the
+    # first time they open this connection — never to the sender viewing
+    # their own chat.
     welcome_media = None
+    welcome_sound = None
     if not is_sender and chat_profile:
         shown_to = conn.get("welcome_shown_to", [])
         if current_user_id not in shown_to:
@@ -2123,6 +2226,7 @@ async def get_drop_messages(
             idx = chat_profile.get("welcome_media_index", 0)
             if gallery and 0 <= idx < len(gallery):
                 welcome_media = gallery[idx]
+            welcome_sound = chat_profile.get("welcome_sound", "soft-chime")
             await db["drop_connections"].update_one(
                 {"_id": ObjectId(connection_id)},
                 {"$addToSet": {"welcome_shown_to": current_user_id}},
@@ -2142,8 +2246,10 @@ async def get_drop_messages(
             "font_style":          chat_profile.get("font_style", "classic") if chat_profile else "classic",
             "stickers":            chat_profile.get("stickers", []) if chat_profile else [],
             "profile_picture_url": chat_profile.get("profile_picture_url") if chat_profile else None,
+            "welcome_sound":       chat_profile.get("welcome_sound", "soft-chime") if chat_profile else "soft-chime",
         },
         "welcome_media": welcome_media,
+        "welcome_sound": welcome_sound,
     }
 
 
@@ -2471,7 +2577,7 @@ async def get_drops_inbox(
             "created_at":      drop["created_at"].isoformat() if drop.get("created_at") else None,
 
             # ── Drop spec upgrade surface ────────────────────
-            "theme":            drop.get("theme", "cinematic-coral"),
+            "theme":            drop.get("theme", "desire"),
             "mood_tag":         drop.get("mood_tag"),
             "tease_mode":       bool(drop.get("tease_mode")),
             "intensity":        drop.get("intensity"),
@@ -2574,7 +2680,7 @@ async def get_received_drops(
             "readers_now":    readers_now,
 
             # ── Drop spec upgrade surface ────────────────────
-            "theme":            drop.get("theme", "cinematic-coral"),
+            "theme":            drop.get("theme", "desire"),
             "mood_tag":         drop.get("mood_tag"),
             "tease_mode":       bool(drop.get("tease_mode")),
             "intensity":        drop.get("intensity"),

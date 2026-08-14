@@ -31,6 +31,7 @@ import {
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
+import PulseLoader from '../../components/common/PulseLoader';
 import { Chip, ChipRow } from '../../components/drops/ChipRow';
 
 // ─── Static data (module level) ───────────────────────────────
@@ -494,7 +495,7 @@ export default function ConfessionMarketplaceScreen({ navigation }) {
       <Animated.View style={[s.flex, { opacity: fade }]}>
         {loading ? (
           <View style={s.centered}>
-            <ActivityIndicator color={T.primary} size="large" />
+            <PulseLoader size={52} color={T.primary} />
           </View>
         ) : (
           <FlatList

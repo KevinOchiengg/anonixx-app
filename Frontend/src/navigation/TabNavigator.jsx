@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Plus,
   Radio,
+  User,
 } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -42,9 +43,13 @@ import WaitingRoomScreen from '../screens/circles/WaitingRoomScreen';
 import CircleLiveScreen from '../screens/circles/CircleLiveScreen';
 import CircleAudioRoomScreen from '../screens/circles/CircleAudioRoomScreen';
 import CircleDashboardScreen from '../screens/circles/CircleDashboardScreen';
+import CircleContentScreen from '../screens/circles/CircleContentScreen';
 
 // Messages
 import MessagesScreen from '../screens/connect/MessagesScreen';
+
+// Profile
+import ProfileScreen from '../screens/profile/ProfileScreen';
 
 // Create
 import CreatePostScreen from '../screens/posts/CreatePostScreen';
@@ -59,6 +64,7 @@ const TabBarIcon = ({ route, focused, unreadCount }) => {
     Feed:     Home,
     Circles:  Radio,
     Messages: MessageCircle,
+    Profile:  User,
   };
   const IconComponent = icons[route.name];
   if (!IconComponent) return null;
@@ -129,6 +135,7 @@ function CirclesStack() {
       <Stack.Screen name="CircleLive" component={CircleLiveScreen} />
       <Stack.Screen name="CircleAudioRoom" component={CircleAudioRoomScreen} />
       <Stack.Screen name="CircleDashboard" component={CircleDashboardScreen} />
+      <Stack.Screen name="CircleContent" component={CircleContentScreen} />
     </Stack.Navigator>
   );
 }
@@ -141,6 +148,15 @@ function MessagesStack() {
       <Stack.Screen name="Chat"         component={ChatScreen} />
       <Stack.Screen name="DropChat"     component={DropChatScreen} />
       <Stack.Screen name="ChatProfileSetup" component={ChatProfileSetupScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// ─── PROFILE STACK ────────────────────────────────────────────
+function ProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
     </Stack.Navigator>
   );
 }
@@ -204,14 +220,6 @@ export default function TabNavigator() {
         options={{ tabBarLabel: 'Thoughts' }}
       />
       <Tab.Screen
-        name="Create"
-        component={DropsComposeScreen}
-        options={{
-          tabBarLabel: '',
-          tabBarButton: (props) => <CustomTabBarButton {...props} />,
-        }}
-      />
-      <Tab.Screen
         name="Messages"
         component={MessagesStack}
         options={{ tabBarLabel: 'Messages' }}
@@ -225,9 +233,22 @@ export default function TabNavigator() {
         })}
       />
       <Tab.Screen
+        name="Create"
+        component={DropsComposeScreen}
+        options={{
+          tabBarLabel: '',
+          tabBarButton: (props) => <CustomTabBarButton {...props} />,
+        }}
+      />
+      <Tab.Screen
         name="Circles"
         component={CirclesStack}
         options={{ tabBarLabel: 'Circles' }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileStack}
+        options={{ tabBarLabel: 'Profile' }}
       />
     </Tab.Navigator>
   );

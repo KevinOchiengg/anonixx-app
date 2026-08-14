@@ -310,6 +310,43 @@ async def list_posts(
     return {"total": total, "skip": skip, "limit": limit, "posts": posts}
 
 
+@router.get("/moderation-queue", summary="Drops flagged or hidden by user reports — awaiting review")
+async def get_moderation_queue(
+    skip:     int = Query(0,  ge=0),
+    limit:    int = Query(20, ge=1, le=100),
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    """
+    Reporting a Drop (POST /drops/{drop_id}/report) auto-flags it at 3
+    reports, or hides it immediately for self-harm-concern — but until now
+    nothing ever surfaced that queue for a human to actually act on.
+    """
+    query  = {"moderation_status": {"$in": ["flagged", "hidden"]}}
+    total  = await db["drops"].count_documents(query)
+    cursor = (
+        db["drops"].find(query)
+        .sort("flagged_at", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+
+    drops = []
+    async for d in cursor:
+        drops.append({
+            "id":                str(d["_id"]),
+            "sender_id":         d.get("sender_id"),
+            "confession":        (d.get("confession") or "")[:200],
+            "media_type":        d.get("media_type"),
+            "report_count":      d.get("report_count", 0),
+            "moderation_status": d.get("moderation_status"),
+            "flagged_at":        d["flagged_at"].isoformat() if d.get("flagged_at") else None,
+            "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
+        })
+
+    return {"total": total, "skip": skip, "limit": limit, "drops": drops}
+
+
 @router.delete("/posts/{post_id}", summary="Force-delete any post (admin override, cascades)")
 async def force_delete_post(
     post_id:  str,
@@ -331,6 +368,48 @@ async def force_delete_post(
     await db["post_views"].delete_many({"post_id": oid})
 
     return {"deleted": post_id}
+
+
+@router.patch("/drops/{drop_id}/dismiss", summary="Clear a drop from the moderation queue without deleting it")
+async def dismiss_flagged_drop(
+    drop_id:  str,
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
+
+    result = await db["drops"].update_one(
+        {"_id": oid},
+        {"$set": {"moderation_status": "reviewed", "reviewed_at": _now(), "reviewed_by": admin_id}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
+
+    return {"drop_id": drop_id, "moderation_status": "reviewed"}
+
+
+@router.delete("/drops/{drop_id}", summary="Force-delete a flagged drop (admin override, cascades)")
+async def force_delete_drop(
+    drop_id:  str,
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
+
+    result = await db["drops"].delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
+
+    await db["drop_unlocks"].delete_many({"drop_id": drop_id})
+    await db["drop_connections"].delete_many({"drop_id": drop_id})
+
+    return {"deleted": drop_id}
 
 
 # ─── Revenue ──────────────────────────────────────────────────

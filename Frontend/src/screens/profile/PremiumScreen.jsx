@@ -4,11 +4,11 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StyleSheet,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { Check, Crown } from 'lucide-react-native'
+import { ArrowLeft, Check, Crown } from 'lucide-react-native'
 
 const features = [
   'Unlimited swipes',
@@ -43,7 +43,11 @@ export default function PremiumScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <ArrowLeft size={24} color='#ffffff' />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Echo Premium</Text>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView style={styles.scrollView}>
@@ -109,6 +113,9 @@ export default function PremiumScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,

@@ -4,19 +4,15 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StyleSheet,
 } from 'react-native'
-import {
-  Settings,
-  Edit,
-  TrendingUp,
-  Heart,
-  MessageCircle,
-} from 'lucide-react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Settings, Edit, Lock, Palette, ChevronRight } from 'lucide-react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useSelector } from 'react-redux'
 import Avatar from '../../components/common/Avatar'
 import CoinBadge from '../../components/common/CoinBadge'
+import { THEME } from '../../utils/theme'
 
 export default function ProfileScreen({ navigation }) {
   const { user } = useSelector((state) => state.auth)
@@ -73,13 +69,20 @@ export default function ProfileScreen({ navigation }) {
 
         {!user?.is_premium && (
           <TouchableOpacity
-            style={styles.premiumCard}
+            activeOpacity={0.85}
             onPress={() => navigation.navigate('Premium')}
           >
-            <Text style={styles.premiumTitle}>👑 Upgrade to Premium</Text>
-            <Text style={styles.premiumSubtitle}>
-              Unlock exclusive features
-            </Text>
+            <LinearGradient
+              colors={['#a855f7', '#14b8a6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.premiumCard}
+            >
+              <Text style={styles.premiumTitle}>👑 Upgrade to Premium</Text>
+              <Text style={styles.premiumSubtitle}>
+                Unlock exclusive features
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
         )}
 
@@ -90,13 +93,42 @@ export default function ProfileScreen({ navigation }) {
           <Edit size={20} color='#ffffff' />
           <Text style={styles.editButtonText}>Edit Profile</Text>
         </TouchableOpacity>
+
+        <Text style={styles.sectionTitle}>Account</Text>
+        <View style={styles.accountCard}>
+          <TouchableOpacity
+            style={styles.accountRow}
+            onPress={() => navigation.navigate('ChangePassword')}
+          >
+            <Lock size={18} color={THEME.text} strokeWidth={1.8} />
+            <View style={styles.accountRowBody}>
+              <Text style={styles.accountRowLabel}>Email & Password</Text>
+              <Text style={styles.accountRowDesc}>Manage login credentials</Text>
+            </View>
+            <ChevronRight size={18} color={THEME.textMuted} />
+          </TouchableOpacity>
+          <View style={styles.accountDivider} />
+          <TouchableOpacity
+            style={styles.accountRow}
+            onPress={() => navigation.navigate('Messages', { screen: 'ChatProfileSetup' })}
+          >
+            <Palette size={18} color={THEME.text} strokeWidth={1.8} />
+            <View style={styles.accountRowBody}>
+              <Text style={styles.accountRowLabel}>Chat Interface</Text>
+              <Text style={styles.accountRowDesc}>
+                Background, font, stickers, gallery
+              </Text>
+            </View>
+            <ChevronRight size={18} color={THEME.textMuted} />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a1a' },
+  container: { flex: 1, backgroundColor: THEME.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -104,20 +136,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#374151',
+    borderBottomColor: THEME.border,
   },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#ffffff' },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: THEME.text },
   scrollView: { flex: 1 },
   profileHeader: { alignItems: 'center', paddingVertical: 32 },
   username: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: THEME.text,
     marginTop: 16,
   },
   bio: {
     fontSize: 14,
-    color: '#9ca3af',
+    color: THEME.textSecondary,
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 32,
@@ -129,16 +161,16 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#16213e',
+    backgroundColor: THEME.surface,
     borderRadius: 12,
     padding: 16,
     marginHorizontal: 4,
     alignItems: 'center',
   },
-  statNumber: { fontSize: 24, fontWeight: 'bold', color: '#ffffff' },
-  statLabel: { fontSize: 12, color: '#9ca3af', marginTop: 4 },
+  statNumber: { fontSize: 24, fontWeight: 'bold', color: THEME.text },
+  statLabel: { fontSize: 12, color: THEME.textSecondary, marginTop: 4 },
   coinCard: {
-    backgroundColor: '#16213e',
+    backgroundColor: THEME.surface,
     marginHorizontal: 16,
     borderRadius: 16,
     padding: 20,
@@ -147,13 +179,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  coinLabel: { color: '#9ca3af', fontSize: 14, marginBottom: 8 },
-  coinAction: { fontSize: 24, color: '#fbbf24' },
+  coinLabel: { color: THEME.textSecondary, fontSize: 14, marginBottom: 8 },
+  coinAction: { fontSize: 24, color: THEME.primary },
   premiumCard: {
-    backgroundColor: 'linear-gradient(135deg, #a855f7, #14b8a6)',
-    marginHorizontal: 16,
     borderRadius: 16,
     padding: 20,
+    marginHorizontal: 16,
     marginBottom: 16,
   },
   premiumTitle: {
@@ -164,7 +195,7 @@ const styles = StyleSheet.create({
   },
   premiumSubtitle: { fontSize: 14, color: '#e5e7eb' },
   editButton: {
-    backgroundColor: '#16213e',
+    backgroundColor: THEME.surface,
     marginHorizontal: 16,
     borderRadius: 12,
     padding: 16,
@@ -174,9 +205,38 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   editButtonText: {
-    color: '#ffffff',
+    color: THEME.text,
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  sectionTitle: {
+    color: THEME.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  accountCard: {
+    backgroundColor: THEME.surface,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 32,
+    overflow: 'hidden',
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  accountRowBody: { flex: 1, marginLeft: 12 },
+  accountRowLabel: { color: THEME.text, fontSize: 15, fontWeight: '500' },
+  accountRowDesc: { color: THEME.textSecondary, fontSize: 12, marginTop: 2 },
+  accountDivider: {
+    height: 1,
+    backgroundColor: THEME.border,
+    marginLeft: 46,
   },
 })

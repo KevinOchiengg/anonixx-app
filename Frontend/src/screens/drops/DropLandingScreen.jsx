@@ -40,6 +40,7 @@ import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useToast } from '../../components/ui/Toast';
 import { BACKENDS } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import PulseLoader from '../../components/common/PulseLoader';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -345,7 +346,7 @@ export default function DropLandingScreen({ route, navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={[s.safe, s.centered]} edges={['top', 'left', 'right']}>
-        <ActivityIndicator color={T.primary} size="large" />
+        <PulseLoader size={52} color={T.primary} />
       </SafeAreaView>
     );
   }
@@ -384,7 +385,7 @@ export default function DropLandingScreen({ route, navigation }) {
   if (payStep === PAY.POLLING) {
     return (
       <SafeAreaView style={[s.safe, s.centered]} edges={['top', 'left', 'right']}>
-        <ActivityIndicator color={catColor} size="large" />
+        <PulseLoader size={52} color={catColor} />
         <Text style={s.pollingTitle}>Waiting for payment…</Text>
         <Text style={s.pollingSubtitle}>Enter your M-Pesa PIN on your phone</Text>
         <TouchableOpacity onPress={cancelPolling} hitSlop={HIT_SLOP} style={s.cancelPollBtn}>
@@ -520,12 +521,13 @@ export default function DropLandingScreen({ route, navigation }) {
                 moodTag={drop.mood_tag || drop.category || 'longing'}
                 emotionalContext={drop.emotional_context}
                 teaseMode={!!drop.tease_mode && !drop.is_own_drop && !drop.already_unlocked}
-                theme={drop.theme || 'cinematic-coral'}
+                theme={drop.theme || 'desire'}
                 mediaUrl={drop.media_type === 'image' ? drop.media_url : null}
                 layoutMode="split"
                 confessionId={drop.id || dropId}
                 seed={drop.id || dropId || drop.confession}
                 cardWidth={SCREEN_WIDTH - SPACING.md * 2}
+                fontStyle={drop.font_style}
               />
 
               {/* Meta strip */}
@@ -538,7 +540,7 @@ export default function DropLandingScreen({ route, navigation }) {
                 </View>
                 <DropExpiryTimer
                   createdAt={drop.created_at}
-                  accent={(DROP_THEMES[drop.theme] || DROP_THEMES['cinematic-coral']).accent}
+                  accent={(DROP_THEMES[drop.theme] || DROP_THEMES['desire']).accent}
                   align="right"
                 />
               </View>
@@ -548,7 +550,7 @@ export default function DropLandingScreen({ route, navigation }) {
                 <DropReactions
                   dropId={drop.id}
                   initialReaction={drop.user_reaction}
-                  accent={(DROP_THEMES[drop.theme] || DROP_THEMES['cinematic-coral']).accent}
+                  accent={(DROP_THEMES[drop.theme] || DROP_THEMES['desire']).accent}
                 />
               ) : null}
             </Animated.View>

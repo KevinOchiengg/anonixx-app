@@ -21,6 +21,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { useAuth } from '../../context/AuthContext';
 import T from '../../utils/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -278,27 +279,37 @@ const SkeletonCard = React.memo(({ index }) => {
 const SKELETONS = [0, 1, 2, 3, 4];
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
-const EmptyState = React.memo(({ tab, onAction }) => {
-  const copy   = EMPTY_COPY[tab === 0 ? 'discover' : 'mine'];
+const EmptyState = React.memo(({ tab, onAction, isAdmin }) => {
+  const isDiscover = tab === 0;
+  const copy   = EMPTY_COPY[isDiscover ? 'discover' : 'mine'];
   const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeIn, { toValue: 1, duration: 600, useNativeDriver: true }).start();
   }, []);
 
+  // Discover-tab CTA only makes sense for admins (they're the only ones who
+  // can open a circle) — regular users get the "My Circles" tab CTA instead,
+  // which just switches tabs and always applies to everyone.
+  const showCta = !isDiscover || isAdmin;
+
   return (
     <Animated.View style={[styles.emptyWrap, { opacity: fadeIn }]}>
       <Text style={styles.emptyIcon}>🌑</Text>
       <Text style={styles.emptyTitle}>{copy.title}</Text>
-      <Text style={styles.emptySubtitle}>{copy.subtitle}</Text>
-      <TouchableOpacity
-        style={styles.emptyCta}
-        onPress={onAction}
-        hitSlop={HIT_SLOP}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.emptyCtaText}>{copy.cta}</Text>
-      </TouchableOpacity>
+      <Text style={styles.emptySubtitle}>
+        {isDiscover && !isAdmin ? 'Check back soon — new circles open regularly.' : copy.subtitle}
+      </Text>
+      {showCta && (
+        <TouchableOpacity
+          style={styles.emptyCta}
+          onPress={onAction}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.emptyCtaText}>{copy.cta}</Text>
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 });
@@ -306,6 +317,8 @@ const EmptyState = React.memo(({ tab, onAction }) => {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function CirclesScreen({ navigation }) {
   const { showToast } = useToast();
+  const { user }      = useAuth();
+  const isAdmin        = !!user?.is_admin;
 
   const [activeTab,     setActiveTab]     = useState(0);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -380,8 +393,12 @@ export default function CirclesScreen({ navigation }) {
   }, [navigation]);
 
   const handleCreatePress = useCallback(() => {
+    if (!isAdmin) {
+      showToast({ type: 'info', message: 'Circles are curated by the Anonixx team — you can join, not create.' });
+      return;
+    }
     navigation.navigate('CreateCircle');
-  }, [navigation]);
+  }, [navigation, isAdmin, showToast]);
 
   const handleTabPress = useCallback((i) => setActiveTab(i), []);
   const handleCategoryPress = useCallback((id) => setActiveCategory(id), []);
@@ -467,14 +484,16 @@ export default function CirclesScreen({ navigation }) {
             }
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handleCreatePress}
-            hitSlop={HIT_SLOP}
-            style={styles.createBtn}
-            activeOpacity={0.85}
-          >
-            <Plus size={rs(18)} color="#fff" strokeWidth={2.5} />
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              onPress={handleCreatePress}
+              hitSlop={HIT_SLOP}
+              style={styles.createBtn}
+              activeOpacity={0.85}
+            >
+              <Plus size={rs(18)} color="#fff" strokeWidth={2.5} />
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
 
@@ -534,7 +553,7 @@ export default function CirclesScreen({ navigation }) {
             />
           }
           ListEmptyComponent={
-            <EmptyState tab={activeTab} onAction={handleEmptyAction} />
+            <EmptyState tab={activeTab} onAction={handleEmptyAction} isAdmin={isAdmin} />
           }
           // Performance
           removeClippedSubviews

@@ -3,26 +3,9 @@ import { Animated, StyleSheet, Text, View, Image } from 'react-native';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { getLoadingMessage, detectUserState } from '../../services/loadingMessageEngine';
+import PulseLoader from './PulseLoader';
 
 const LOGO = require('../../../assets/logo.png');
-
-function PulseDot({ delay = 0 }) {
-  const scale = useRef(new Animated.Value(0.6)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(scale, { toValue: 1,   duration: 500, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0.6, duration: 500, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-
-  return (
-    <Animated.View style={[styles.dot, { transform: [{ scale }] }]} />
-  );
-}
 
 export default function DynamicSplash() {
   const { loadingEvent } = useSocket();
@@ -82,11 +65,7 @@ export default function DynamicSplash() {
         {message}
       </Animated.Text>
 
-      <View style={styles.dotsRow}>
-        <PulseDot delay={0}   />
-        <PulseDot delay={250} />
-        <PulseDot delay={500} />
-      </View>
+      <PulseLoader size={48} />
     </View>
   );
 }
@@ -115,15 +94,5 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 40,
     paddingHorizontal: 16,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF634A',
   },
 });

@@ -17,13 +17,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Trash2 } from 'lucide-react-native';
+import { Camera, Trash2, Volume2 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { WELCOME_SOUND_OPTIONS, WELCOME_SOUND_MAP } from '../../config/sounds';
 
 const BG_COLORS = [
   '#151924', '#1a0f14', '#0f1a17', '#1a1420', '#20141a',
@@ -51,6 +52,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
   const [stickers, setStickers]               = useState([]);
   const [profilePictureUrl, setProfilePictureUrl] = useState(null);
   const [gallery, setGallery]                 = useState([]);
+  const [welcomeSound, setWelcomeSound]       = useState('soft-chime');
 
   const authHeaders = useCallback(async (json = false) => {
     const token = await AsyncStorage.getItem('token');
@@ -74,6 +76,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
             setStickers(data.stickers || []);
             setProfilePictureUrl(data.profile_picture_url || null);
             setGallery(data.gallery || []);
+            setWelcomeSound(data.welcome_sound || 'soft-chime');
           }
         }
       } catch {
@@ -201,6 +204,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
           font_style: fontStyle,
           stickers,
           profile_picture_url: profilePictureUrl,
+          welcome_sound: welcomeSound,
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -211,7 +215,20 @@ export default function ChatProfileSetupScreen({ navigation }) {
     } finally {
       setSaving(false);
     }
-  }, [backgroundColor, fontStyle, stickers, profilePictureUrl, authHeaders, showToast, navigation]);
+  }, [backgroundColor, fontStyle, stickers, profilePictureUrl, welcomeSound, authHeaders, showToast, navigation]);
+
+  const handlePreviewSound = useCallback(async (soundId) => {
+    setWelcomeSound(soundId);
+    const asset = WELCOME_SOUND_MAP[soundId];
+    if (!asset) return; // no bundled file yet — silent, selection still saves fine
+    try {
+      const { createAudioPlayer } = await import('expo-audio');
+      const player = createAudioPlayer(asset);
+      player.play();
+    } catch {
+      /* playback unavailable — selection itself still works */
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -268,6 +285,27 @@ export default function ChatProfileSetupScreen({ navigation }) {
               hitSlop={HIT_SLOP}
             >
               <Text style={[styles.chipText, fontStyle === f.id && styles.chipTextActive]}>{f.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Welcome sound — plays once for a first-time unlocker */}
+        <Text style={styles.sectionLabel}>Welcome sound</Text>
+        <Text style={styles.sectionHint}>
+          Plays once when someone unlocks a chat with you for the first time.
+        </Text>
+        <View style={styles.chipRow}>
+          {WELCOME_SOUND_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.id}
+              onPress={() => handlePreviewSound(opt.id)}
+              style={[styles.chip, welcomeSound === opt.id && styles.chipActive]}
+              hitSlop={HIT_SLOP}
+            >
+              {opt.id !== 'silence' && (
+                <Volume2 size={rs(12)} color={welcomeSound === opt.id ? T.primary : T.textMute} />
+              )}
+              <Text style={[styles.chipText, welcomeSound === opt.id && styles.chipTextActive]}>{opt.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -387,6 +425,9 @@ const styles = StyleSheet.create({
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
   chip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(6),
     paddingHorizontal: rp(14),
     paddingVertical:   rp(9),
     borderRadius:      RADIUS.md,

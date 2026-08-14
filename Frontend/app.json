@@ -12,12 +12,16 @@
       "resizeMode": "contain",
       "backgroundColor": "#0b0f18"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonixx.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSMicrophoneUsageDescription": "Anonixx needs your microphone for anonymous voice and video calls.",
         "NSCameraUsageDescription": "Anonixx needs your camera for anonymous video calls."
       },
@@ -44,11 +48,23 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "anonixx", "host": "drop" },
-            { "scheme": "anonixx", "host": "confession" },
-            { "scheme": "anonixx", "host": "market" }
+            {
+              "scheme": "anonixx",
+              "host": "drop"
+            },
+            {
+              "scheme": "anonixx",
+              "host": "confession"
+            },
+            {
+              "scheme": "anonixx",
+              "host": "market"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -70,7 +86,8 @@
           "merchantIdentifier": "merchant.com.anonixx.app",
           "enableGooglePay": true
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

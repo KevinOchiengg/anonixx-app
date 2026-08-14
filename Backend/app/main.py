@@ -12,6 +12,7 @@ from app.api.v1 import admin
 from app.api.v1 import publisher
 from app.api.v1 import messages
 from app.api.v1 import chat_profile
+from app.api.v1 import ads
 from app.api.v1 import (
     auth,
     coins,
@@ -132,6 +133,7 @@ app.include_router(admin.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(publisher.router,  prefix=settings.API_V1_PREFIX)
 app.include_router(messages.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(chat_profile.router, prefix=settings.API_V1_PREFIX)
+app.include_router(ads.router,          prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # DATABASE
     MONGODB_URL: str = "mongodb://localhost:27017"
-    DATABASE_NAME: str = "anonixx"
+    DATABASE_NAME: str = "afterdark_dev"
 
     # STRIPE
     STRIPE_SECRET_KEY: str = ""
@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     # Create a bot via @BotFather, add it as admin to the channel
     TELEGRAM_BOT_TOKEN:  str = "your-telegram-bot-token-here"
     TELEGRAM_CHANNEL_ID: str = "your-telegram-channel-id-here"  # e.g. "@anonixx" or "-100123456789"
+
+    # WhatsApp Cloud API — sends a drop card to a number on the user's behalf,
+    # from Anonixx's own business number (recipient never sees the sender's
+    # real number). Requires a Meta WhatsApp Business Platform app.
+    # Get these from developers.facebook.com > your app > WhatsApp > API Setup.
+    WHATSAPP_ACCESS_TOKEN:    str = "your-whatsapp-access-token-here"
+    WHATSAPP_PHONE_NUMBER_ID: str = "your-whatsapp-phone-number-id-here"
 
     # APP
     BASE_URL: str = "http://localhost:8000"

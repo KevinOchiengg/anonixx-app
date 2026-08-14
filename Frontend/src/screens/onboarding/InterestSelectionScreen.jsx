@@ -55,43 +55,7 @@ const GENDER_OPTIONS = [
   },
 ];
 
-// Life tags — grouped by what people are actually carrying.
-// Think: single mum at 2am who needs someone steady, not a dating app swipe.
-// Groups: situation (where you are), need (what you're looking for), voice (how you show up)
-const VIBE_TAGS = [
-  // Where you are
-  { id: 'raising kids alone',      emoji: '🧒', label: 'Raising kids alone',       group: 'situation' },
-  { id: 'starting over',           emoji: '🌱', label: 'Starting over',            group: 'situation' },
-  { id: 'been through a lot',      emoji: '🔥', label: 'Been through a lot',       group: 'situation' },
-  { id: 'healing in progress',     emoji: '🩹', label: 'Healing in progress',      group: 'situation' },
-  { id: 'carrying a lot',          emoji: '🪨', label: 'Carrying a lot',           group: 'situation' },
-  { id: 'still standing',          emoji: '🏔️', label: 'Still standing',           group: 'situation' },
-  { id: 'lost right now',          emoji: '🌫️', label: 'Lost right now',           group: 'situation' },
-  { id: 'rebuilding myself',       emoji: '🔨', label: 'Rebuilding myself',        group: 'situation' },
-  // What you need
-  { id: 'need someone steady',     emoji: '⚓', label: 'Need someone steady',      group: 'need' },
-  { id: 'looking for something real', emoji: '❤️', label: 'Looking for something real', group: 'need' },
-  { id: 'just need to be heard',   emoji: '🌙', label: 'Just need to be heard',   group: 'need' },
-  { id: 'open to connection',      emoji: '🤲', label: 'Open to connection',       group: 'need' },
-  { id: 'not looking for games',   emoji: '🚫', label: 'Not looking for games',   group: 'need' },
-  { id: 'no rush',                 emoji: '🕊️', label: 'No rush',                 group: 'need' },
-  // How you show up
-  { id: 'emotionally available',   emoji: '💬', label: 'Emotionally available',   group: 'voice' },
-  { id: 'blunt but caring',        emoji: '🗡️', label: 'Blunt but caring',        group: 'voice' },
-  { id: 'soft but strong',         emoji: '🧸', label: 'Soft but strong',         group: 'voice' },
-  { id: 'overthinks everything',   emoji: '🌀', label: 'Overthinks everything',   group: 'voice' },
-  { id: 'here for the long run',   emoji: '🌿', label: 'Here for the long run',   group: 'voice' },
-  { id: 'ready to try again',      emoji: '🌅', label: 'Ready to try again',      group: 'voice' },
-];
-
-const VIBE_GROUPS = [
-  { id: 'situation', label: 'Where you are'       },
-  { id: 'need',      label: 'What you need'        },
-  { id: 'voice',     label: 'How you show up'      },
-];
-
-const MAX_VIBES   = 5;
-const TOTAL_STEPS = 3; // 0=gender  1=vibes  2=identity
+const TOTAL_STEPS = 2; // 0=gender  1=identity
 
 const PRESET_AVATARS = [
   { id: 'ghost',   emoji: '👻', color: '#FF634A' },
@@ -197,46 +161,6 @@ const GenderCard = React.memo(({ option, selected, onPress }) => {
   );
 });
 
-const VibeChip = React.memo(({ vibe, selected, onPress, disabled }) => {
-  const scale      = useRef(new Animated.Value(1)).current;
-  const isSelected = selected.includes(vibe.id);
-
-  const handlePress = useCallback(() => {
-    if (disabled && !isSelected) return;
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.92, duration: 65, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, tension: 240, friction: 7, useNativeDriver: true }),
-    ]).start();
-    onPress(vibe.id);
-  }, [vibe.id, onPress, scale, disabled, isSelected]);
-
-  return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <TouchableOpacity
-        onPress={handlePress}
-        activeOpacity={1}
-        style={[
-          styles.vibeChip,
-          isSelected && styles.vibeChipSelected,
-          disabled && !isSelected && styles.vibeChipDisabled,
-        ]}
-      >
-        <Text style={[styles.vibeEmoji, disabled && !isSelected && { opacity: 0.35 }]}>
-          {vibe.emoji}
-        </Text>
-        <Text style={[
-          styles.vibeName,
-          isSelected && styles.vibeNameSelected,
-          disabled && !isSelected && styles.vibeNameDisabled,
-        ]}>
-          {vibe.label}
-        </Text>
-        {isSelected && <Text style={styles.vibeCheck}>✓</Text>}
-      </TouchableOpacity>
-    </Animated.View>
-  );
-});
-
 // ─── SCREEN ──────────────────────────────────────────────────────────────────
 export default function InterestSelectionScreen({ navigation }) {
   const insets        = useSafeAreaInsets();
@@ -244,15 +168,16 @@ export default function InterestSelectionScreen({ navigation }) {
 
   const [step,           setStep]           = useState(0);
   const [selectedGender, setSelectedGender] = useState(null);
-  const [selectedVibes,  setSelectedVibes]  = useState([]);
-  const [activeGroup,    setActiveGroup]    = useState('situation');
   const [loading,        setLoading]        = useState(false);
 
-  // Identity step state
+  // Identity step state — default avatar is randomized so anyone who skips
+  // straight through still gets a distinct look, not the same fixed ghost.
   const [anonymousName,     setAnonymousName]     = useState('');
   const [nameStatus,        setNameStatus]        = useState('idle'); // idle|checking|available|taken|invalid
   const [nameMessage,       setNameMessage]       = useState('');
-  const [selectedAvatar,    setSelectedAvatar]    = useState('ghost');
+  const [selectedAvatar,    setSelectedAvatar]    = useState(
+    () => PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)].id
+  );
   const [photoUri,          setPhotoUri]          = useState(null);
   const [showDisclaimer,    setShowDisclaimer]    = useState(false);
   const [uploadingPhoto,    setUploadingPhoto]    = useState(false);
@@ -275,17 +200,6 @@ export default function InterestSelectionScreen({ navigation }) {
   const handleGenderPress = useCallback((id) => {
     setSelectedGender((prev) => (prev === id ? null : id));
   }, []);
-
-  const toggleVibe = useCallback((id) => {
-    setSelectedVibes((prev) => {
-      if (prev.includes(id)) return prev.filter((v) => v !== id);
-      if (prev.length >= MAX_VIBES) {
-        showToast({ type: 'info', message: `${MAX_VIBES} max — deselect one first.` });
-        return prev;
-      }
-      return [...prev, id];
-    });
-  }, [showToast]);
 
   // ── Identity step handlers ───────────────────────────────
   const handleNameChange = useCallback((text) => {
@@ -380,14 +294,6 @@ export default function InterestSelectionScreen({ navigation }) {
         }).catch(() => {});
       }
 
-      if (selectedVibes.length > 0) {
-        fetch(`${API_BASE_URL}/api/v1/connect/vibes`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body:    JSON.stringify({ vibe_tags: selectedVibes }),
-        }).catch(() => {});
-      }
-
       // Save identity (name + avatar) — fire-and-forget, non-blocking
       const identityBody = {};
       if (anonymousName.trim() && nameStatus === 'available') {
@@ -429,7 +335,7 @@ export default function InterestSelectionScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [loading, selectedGender, selectedVibes, anonymousName, nameStatus, photoUri, selectedAvatar, showToast, navigation]);
+  }, [loading, selectedGender, anonymousName, nameStatus, photoUri, selectedAvatar, showToast, navigation]);
 
   const handleSkip = useCallback(() => {
     if (step < TOTAL_STEPS - 1) {
@@ -443,7 +349,6 @@ export default function InterestSelectionScreen({ navigation }) {
 
   const STEP_META = [
     { title: 'How do you identify?',  subtitle: 'This stays private. It only helps us personalise your experience.' },
-    { title: 'What are you carrying?', subtitle: `Pick up to ${MAX_VIBES} that feel true. People with similar tags find each other.` },
     { title: 'Create your alter ego.', subtitle: 'This is who you are on Anonixx. You can always change it later.' },
   ];
   const meta       = STEP_META[step];
@@ -497,72 +402,8 @@ export default function InterestSelectionScreen({ navigation }) {
             </View>
           )}
 
-          {/* ── STEP 1: LIFE TAGS ── */}
+          {/* ── STEP 1: IDENTITY ── */}
           {step === 1 && (
-            <>
-              {/* Counter badge */}
-              <View style={styles.vibeCountRow}>
-                <Text style={styles.vibeCountText}>
-                  {selectedVibes.length} / {MAX_VIBES} selected
-                </Text>
-                {selectedVibes.length > 0 && (
-                  <TouchableOpacity onPress={() => setSelectedVibes([])} hitSlop={HIT_SLOP}>
-                    <Text style={styles.vibeClearText}>clear all</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Group tabs */}
-              <View style={styles.groupTabs}>
-                {VIBE_GROUPS.map((g) => (
-                  <TouchableOpacity
-                    key={g.id}
-                    style={[styles.groupTab, activeGroup === g.id && styles.groupTabActive]}
-                    onPress={() => setActiveGroup(g.id)}
-                    hitSlop={HIT_SLOP}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.groupTabText, activeGroup === g.id && styles.groupTabTextActive]}>
-                      {g.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Tags for active group */}
-              <View style={styles.vibeGrid}>
-                {VIBE_TAGS.filter(v => v.group === activeGroup).map((vibe) => (
-                  <VibeChip
-                    key={vibe.id}
-                    vibe={vibe}
-                    selected={selectedVibes}
-                    onPress={toggleVibe}
-                    disabled={selectedVibes.length >= MAX_VIBES}
-                  />
-                ))}
-              </View>
-
-              {/* Selected pills summary */}
-              {selectedVibes.length > 0 && (
-                <View style={styles.vibeSelectedWrap}>
-                  <Text style={styles.vibeSelectedLabel}>Your picks:</Text>
-                  <View style={styles.vibeSelectedPills}>
-                    {selectedVibes.map(id => {
-                      const tag = VIBE_TAGS.find(v => v.id === id);
-                      return tag ? (
-                        <View key={id} style={styles.vibeSelectedPill}>
-                          <Text style={styles.vibeSelectedPillText}>{tag.emoji} {tag.label}</Text>
-                        </View>
-                      ) : null;
-                    })}
-                  </View>
-                </View>
-              )}
-            </>
-          )}
-
-          {/* ── STEP 2: IDENTITY ── */}
-          {step === 2 && (
             <>
               {/* Avatar row */}
               <Text style={styles.identityLabel}>Choose your avatar</Text>
@@ -637,7 +478,13 @@ export default function InterestSelectionScreen({ navigation }) {
                   <Image source={{ uri: photoUri }} style={styles.photoPreview} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.photoPreviewLabel}>Photo set ✓</Text>
-                    <TouchableOpacity onPress={() => { setPhotoUri(null); setSelectedAvatar('ghost'); }} hitSlop={HIT_SLOP}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setPhotoUri(null);
+                        setSelectedAvatar(PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)].id);
+                      }}
+                      hitSlop={HIT_SLOP}
+                    >
                       <Text style={styles.photoRemoveText}>Remove photo</Text>
                     </TouchableOpacity>
                   </View>
@@ -836,84 +683,6 @@ const styles = StyleSheet.create({
   },
   badgeDot:  { width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.primary },
   badgeText: { fontSize: rf(12), color: T.primary, fontWeight: '600' },
-
-  // Group tabs
-  groupTabs: {
-    flexDirection:  'row',
-    gap:            rp(8),
-    marginBottom:   SPACING.md,
-  },
-  groupTab: {
-    flex:              1,
-    alignItems:        'center',
-    paddingVertical:   rp(9),
-    borderRadius:      RADIUS.md,
-    backgroundColor:   T.surface,
-    borderWidth:       1,
-    borderColor:       T.border,
-  },
-  groupTabActive: {
-    backgroundColor: T.primaryDim,
-    borderColor:     'rgba(255,99,74,0.4)',
-  },
-  groupTabText:       { fontSize: rf(11), color: T.textSecondary, fontWeight: '600', textAlign: 'center' },
-  groupTabTextActive: { color: T.primary, fontWeight: '700' },
-
-  // Vibe chips — full-width readable tags
-  vibeGrid: { gap: rp(8), marginBottom: SPACING.md },
-  vibeChip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(10),
-    paddingHorizontal: rp(16),
-    paddingVertical:   rp(14),
-    borderRadius:      RADIUS.lg,
-    backgroundColor:   T.surface,
-    borderWidth:       1.5,
-    borderColor:       T.border,
-  },
-  vibeChipSelected: {
-    backgroundColor: 'rgba(255,99,74,0.1)',
-    borderColor:     T.primary,
-  },
-  vibeChipDisabled: { opacity: 0.45 },
-  vibeEmoji:         { fontSize: rf(20), width: rs(28) },
-  vibeName: {
-    flex:       1,
-    fontSize:   FONT.md,
-    color:      T.textSecondary,
-    fontWeight: '500',
-  },
-  vibeNameSelected: { color: T.text, fontWeight: '700' },
-  vibeNameDisabled: { color: T.textMuted },
-  vibeCheck:        { fontSize: rf(14), color: T.primary, fontWeight: '800' },
-
-  // Count row
-  vibeCountRow: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-    marginBottom:   SPACING.sm,
-  },
-  vibeCountText:  { fontSize: rf(12), color: T.textSecondary, fontWeight: '600' },
-  vibeClearText:  { fontSize: rf(12), color: T.primary, fontWeight: '600' },
-
-  // Selected summary pills
-  vibeSelectedWrap: {
-    marginTop:    SPACING.md,
-    gap:          rp(8),
-  },
-  vibeSelectedLabel: { fontSize: rf(11), color: T.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: rs(0.6) },
-  vibeSelectedPills: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6) },
-  vibeSelectedPill: {
-    backgroundColor:   T.primaryDim,
-    borderRadius:      RADIUS.full,
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(6),
-    borderWidth:       1,
-    borderColor:       'rgba(255,99,74,0.25)',
-  },
-  vibeSelectedPillText: { fontSize: rf(12), color: T.primary, fontWeight: '600' },
 
   // Info box
   infoBox: {

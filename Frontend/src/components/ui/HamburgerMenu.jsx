@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Bell, BookOpen, ChevronRight, Coins, Eye,
   FileText, Globe, Heart, HelpCircle, Lock,
-  LogIn, LogOut, ShieldAlert, Smartphone,
+  LogIn, LogOut, Megaphone, ShieldAlert, Smartphone,
   User, Users, Volume2, X, Zap,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -183,6 +183,8 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           <SectionHeader title="Content" />
           <View style={sec.card}>
             <NavRow icon={Heart} label="Saved Posts" onPress={() => go('SavedPosts')} />
+            <View style={sec.div} />
+            <NavRow icon={Megaphone} label="Advertise" onPress={() => go('CreateAd')} />
           </View>
 
           {/* ── Privacy & Safety ── */}

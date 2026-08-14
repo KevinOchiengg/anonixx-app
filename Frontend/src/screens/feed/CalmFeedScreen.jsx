@@ -4,12 +4,12 @@ import React, {
 import {
   View, FlatList, ActivityIndicator, StyleSheet,
   StatusBar, Text, TouchableOpacity, Animated, RefreshControl,
-  Easing, TextInput,
+  Easing, TextInput, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, Flame, RefreshCw, Menu, MapPin } from 'lucide-react-native';
+import { Search, RefreshCw, Menu, MapPin } from 'lucide-react-native';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +21,7 @@ import InspiredDropSheet from '../../components/feed/InspiredDropSheet';
 import MoodBalancer from '../../components/feed/MoodBalancer';
 import MarketCard from '../../components/feed/MarketCard';
 import DropFeedCard from '../../components/drops/DropFeedCard';
+import FeedAdCard from '../../components/feed/FeedAdCard';
 import AuthPromptModal from '../../components/modals/AuthPromptModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
@@ -30,6 +31,9 @@ import {
   BUTTON_HEIGHT, SCREEN, HIT_SLOP, isSmallDevice,
 } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
+
+// Matches DEFAULT_FEED_AD_FREQUENCY in Backend/app/api/v1/ads.py
+const FEED_AD_FREQUENCY = 8;
 
 // ── Stars ─────────────────────────────────────────────────────
 const STARS = Array.from({ length: 80 }, (_, i) => ({
@@ -107,42 +111,6 @@ const SkeletonFeed = React.memo(({ insetTop }) => (
   </View>
 ));
 
-// ── Streak Banner ─────────────────────────────────────────────
-const StreakBanner = React.memo(({ message, onDismiss }) => {
-  const slideAnim   = useRef(new Animated.Value(rh(-80))).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(slideAnim,  { toValue: 0, useNativeDriver: true, tension: 70, friction: 10 }),
-      Animated.timing(opacityAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-    ]).start();
-
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(slideAnim,   { toValue: rh(-80), duration: 300, useNativeDriver: true }),
-        Animated.timing(opacityAnim, { toValue: 0,       duration: 300, useNativeDriver: true }),
-      ]).start(onDismiss);
-    }, 4000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <Animated.View style={[styles.streakBanner, {
-      transform: [{ translateY: slideAnim }],
-      opacity:   opacityAnim,
-    }]}>
-      <Flame size={rs(16)} color={THEME.primary} fill={THEME.primary} />
-      <Text style={styles.streakText}>{message}</Text>
-      <TouchableOpacity onPress={onDismiss} hitSlop={HIT_SLOP} style={styles.streakDismiss}>
-        <Text style={styles.streakDismissText}>✕</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-});
-
-
 // ── Session limit screen ───────────────────────────────────────
 const SessionLimitView = React.memo(({ hasMore, onContinue, onClose }) => (
   <View style={styles.centeredView}>
@@ -185,12 +153,12 @@ export default function CalmFeedScreen({ navigation, route }) {
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
   const [authModalVisible, setAuthModalVisible]       = useState(false);
   const [authModalAction, setAuthModalAction]         = useState('default');
-  const [streakBanner, setStreakBanner]     = useState(null);
   const [activeVideoId, setActiveVideoId]   = useState(null);
   const [nextVideo, setNextVideo]           = useState(null);
   const [menuVisible, setMenuVisible]       = useState(false);
   const [dropSheetPost, setDropSheetPost]   = useState(null);
   const [dropsFeed, setDropsFeed]           = useState([]);
+  const [feedAds, setFeedAds]               = useState([]);
   const [locationFilter, setLocationFilter] = useState('');
   const [locationFilterOpen, setLocationFilterOpen] = useState(false);
 
@@ -205,6 +173,14 @@ export default function CalmFeedScreen({ navigation, route }) {
   useEffect(() => {
     dispatch(fetchMarketItems({ offset: 0, limit: 20 }));
   }, [dispatch]);
+
+  // Fetch active feed ads once on mount — used for in-feed ad injection
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/v1/ads/active?limit=10`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setFeedAds(data.ads || []); })
+      .catch(() => { /* offline — feed just skips ad injection this session */ });
+  }, []);
 
   // Load the viewer's saved feed-location filter, if any.
   useEffect(() => {
@@ -244,11 +220,12 @@ export default function CalmFeedScreen({ navigation, route }) {
   // VirtualizedList doesn't reconcile cells unnecessarily.
   const feedWithExtras = useMemo(() => {
     if (!posts.length) return posts;
-    if (!marketFeed.length && !dropsFeed.length) return posts;
+    if (!marketFeed.length && !dropsFeed.length && !feedAds.length) return posts;
 
     const out = [];
     let mIdx = 0;
     let dIdx = 0;
+    let aIdx = 0;
     posts.forEach((p, i) => {
       out.push(p);
       const n = i + 1;
@@ -260,9 +237,14 @@ export default function CalmFeedScreen({ navigation, route }) {
         const d = dropsFeed[dIdx++];
         out.push({ type: 'drop', id: `drop-${d.id}`, drop: d });
       }
+      if (n % FEED_AD_FREQUENCY === 0 && feedAds.length > 0) {
+        const a = feedAds[aIdx % feedAds.length];
+        aIdx++;
+        out.push({ type: 'ad', id: `ad-${a.id}-${n}`, ad: a });
+      }
     });
     return out;
-  }, [posts, marketFeed, dropsFeed]);
+  }, [posts, marketFeed, dropsFeed, feedAds]);
 
   const handleMarketOpen = useCallback((id) => {
     navigation.navigate('MarketItem', { itemId: id });
@@ -272,6 +254,14 @@ export default function CalmFeedScreen({ navigation, route }) {
     if (!isAuthenticated) { showAuthPrompt('unlock'); return; }
     navigation.navigate('DropLanding', { dropId: drop.id, autoOpenUnlock: true });
   }, [isAuthenticated, navigation]);
+
+  const handleAdPress = useCallback((ad) => {
+    if (ad.link_url?.startsWith('anonixx://drop/')) {
+      navigation.navigate('DropLanding', { dropId: ad.link_url.split('/').pop() });
+    } else {
+      Linking.openURL(ad.link_url).catch(() => {});
+    }
+  }, [navigation]);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
@@ -358,10 +348,6 @@ export default function CalmFeedScreen({ navigation, route }) {
         });
         setSessionPosts(data.session_posts);
         setHasMore(data.has_more);
-
-        if (data.streak?.is_new_day && data.streak?.message) {
-          setStreakBanner({ message: data.streak.message });
-        }
       }
     } catch (error) {
       const msg = error?.message || '';
@@ -533,6 +519,9 @@ export default function CalmFeedScreen({ navigation, route }) {
     if (item.type === 'drop') {
       return <DropFeedCard drop={item.drop} onOozeIn={handleOozeIn} />;
     }
+    if (item.type === 'ad') {
+      return <FeedAdCard ad={item.ad} onPress={handleAdPress} />;
+    }
     if (item.type === 'post') {
       return (
         <CalmPostCard
@@ -547,7 +536,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       );
     }
     return null;
-  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen, handleOozeIn]);
+  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen, handleOozeIn, handleAdPress]);
 
   const keyExtractor = useCallback((item, index) => `${item.id || item.type}-${index}`, []);
 
@@ -560,19 +549,13 @@ export default function CalmFeedScreen({ navigation, route }) {
     );
   }, [loading, hasMore, posts.length]);
 
-  // Memoized header so it doesn't recreate on every render (streak/auth changes
-  // are the only reasons it should update).
+  // Memoized header so it doesn't recreate on every render (auth changes are
+  // the only reason it should update).
   const ListHeader = useMemo(() => (
     <>
-      {streakBanner && (
-        <StreakBanner
-          message={streakBanner.message}
-          onDismiss={() => setStreakBanner(null)}
-        />
-      )}
       {isAuthenticated && <DailyRewardBanner />}
     </>
-  ), [streakBanner, isAuthenticated]);
+  ), [isAuthenticated]);
 
   // Use refs for the end-reached guard so the callback never changes reference.
   const hasMoreRef  = useRef(hasMore);
@@ -796,24 +779,6 @@ const styles = StyleSheet.create({
     fontSize: FONT.xs,
     fontWeight: '700',
   },
-
-  // Streak banner
-  streakBanner: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               SPACING.sm,
-    marginHorizontal:  SPACING.md,
-    marginBottom:      SPACING.sm,
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(10),
-    borderRadius:      RADIUS.md,
-    backgroundColor:   THEME.primaryDim,
-    borderWidth:       1,
-    borderColor:       'rgba(255,99,74,0.25)',
-  },
-  streakText:        { flex: 1, fontSize: FONT.sm, fontWeight: '600', color: THEME.text },
-  streakDismiss:     { padding: rp(2) },
-  streakDismissText: { fontSize: rf(12), color: THEME.textSecondary },
 
   // Feed
   feedContent:  { paddingTop: rh(8) },

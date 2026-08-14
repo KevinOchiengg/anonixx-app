@@ -5,6 +5,7 @@ import { Provider } from 'react-redux';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useFonts } from 'expo-font';
 // @stripe/stripe-react-native — install: npx expo install @stripe/stripe-react-native
 import { StripeProvider } from '@stripe/stripe-react-native';
 import store from './src/store';
@@ -15,6 +16,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/components/ui/Toast';
 import { UnreadProvider } from './src/context/UnreadContext';
 import { STRIPE_PUBLISHABLE_KEY } from './src/config/api';
+import { FONT_MAP } from './src/config/fonts';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -52,6 +54,15 @@ const styles = StyleSheet.create({
 });
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts(FONT_MAP);
+
+  // Keep the native splash screen (app.json's `splash` config) up until
+  // fonts are ready — every screen in the app references these font
+  // families, so rendering before they load would flash system-font text.
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>

@@ -13,7 +13,10 @@ import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
 import CoinsScreen from '../screens/profile/CoinsScreen';
 import ReferralScreen from '../screens/profile/ReferralScreen';
 import LegalScreen from '../screens/settings/LegalScreen';
+import BlockListScreen from '../screens/settings/BlockListScreen';
+import ModerationHistoryScreen from '../screens/settings/ModerationHistoryScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
+import PremiumScreen from '../screens/profile/PremiumScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ConfessionMarketPlaceScreen from '../screens/drops/ConfessionMarketPlaceScreen';
@@ -24,9 +27,16 @@ import MarketItemScreen from '../screens/market/MarketItemScreen';
 import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
 import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
+import PostUnlockScreen from '../screens/drops/PostUnlockScreen';
+import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
+import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
+import AdminModerationScreen from '../screens/admin/AdminModerationScreen';
+import AdminAdsScreen from '../screens/admin/AdminAdsScreen';
+import CreateAdScreen from '../screens/feed/CreateAdScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
 import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
+import DropsPollScreen from '../screens/drops/DropsPollScreen';
 import InterestSelectionScreen from '../screens/onboarding/InterestSelectionScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
@@ -41,6 +51,7 @@ const Stack = createStackNavigator();
 //   anonixx://drops/new           → DropsCompose
 //   anonixx://drops/voice         → DropsRecord
 //   anonixx://drops/publish       → DropsPublish
+//   anonixx://drops/poll          → DropsPoll
 //   https://anonixx.app/drop/:id  → DropLandingScreen  (tappable share link)
 const linking = {
   prefixes: [
@@ -60,6 +71,7 @@ const linking = {
       DropsCompose:          'drops/new',
       DropsRecord:           'drops/voice',
       DropsPublish:          'drops/publish',
+      DropsPoll:             'drops/poll',
       // PayPal redirect deep links (used by InternationalPaymentSheet WebBrowser flow)
       // These are caught by WebBrowser.openAuthSessionAsync and don't need screen handlers
     },
@@ -67,7 +79,7 @@ const linking = {
 };
 
 export default function AppNavigator() {
-  const { loading, isAuthenticated } = useAuth();
+  const { loading } = useAuth();
   const dispatch = useDispatch();
 
   // Detect payment region once on app boot (cached for 24h in AsyncStorage)
@@ -78,11 +90,12 @@ export default function AppNavigator() {
   return (
     <NavigationContainer linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {/* No login/signup gate — guests (and new users) land straight on the
+            main feed. Auth screens stay reachable via "AuthNav" below for
+            whoever opts in later (e.g. Settings > Log In). */}
         {loading
           ? <Stack.Screen name="Splash" component={DynamicSplash} />
-          : isAuthenticated
-            ? <Stack.Screen name="Main" component={TabNavigator} />
-            : <Stack.Screen name="Auth" component={AuthNavigator} />
+          : <Stack.Screen name="Main" component={TabNavigator} />
         }
         {/* Keep these accessible for deep links + post-auth navigation */}
         <Stack.Screen name="AuthNav" component={AuthNavigator} />
@@ -91,6 +104,7 @@ export default function AppNavigator() {
           component={InterestSelectionScreen}
         />
         <Stack.Screen name="UnlockPremium" component={UnlockPremiumScreen} />
+        <Stack.Screen name="Premium" component={PremiumScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="Call" component={CallScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="ShareCard" component={ShareCardScreen} />
@@ -100,11 +114,18 @@ export default function AppNavigator() {
         <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
         <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
         <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />
+        <Stack.Screen name="DropsPoll" component={DropsPollScreen} />
         <Stack.Screen
           name="ConfessionMarketplace"
           component={ConfessionMarketPlaceScreen}
         />
         <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
+        <Stack.Screen name="PostUnlock" component={PostUnlockScreen} />
+        <Stack.Screen name="AdminDashboard"  component={AdminDashboardScreen} />
+        <Stack.Screen name="AdminUsers"      component={AdminUsersScreen} />
+        <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
+        <Stack.Screen name="AdminAds"        component={AdminAdsScreen} />
+        <Stack.Screen name="CreateAd"        component={CreateAdScreen} />
         {/* Accessible from HamburgerMenu across all tabs */}
         <Stack.Screen name="Settings"       component={SettingsScreen} />
         <Stack.Screen name="EditProfile"    component={EditProfileScreen} />
@@ -113,6 +134,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Coins"          component={CoinsScreen} />
         <Stack.Screen name="Referral"       component={ReferralScreen} />
         <Stack.Screen name="Legal"          component={LegalScreen} />
+        <Stack.Screen name="BlockList"          component={BlockListScreen} />
+        <Stack.Screen name="ModerationHistory"  component={ModerationHistoryScreen} />
         <Stack.Screen name="Market"         component={MarketScreen} />
         <Stack.Screen name="MarketItem"     component={MarketItemScreen} />
       </Stack.Navigator>

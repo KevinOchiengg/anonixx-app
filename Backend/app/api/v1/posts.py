@@ -12,6 +12,11 @@ import time as _time
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
+from app.utils.coin_service import debit_coins, credit_coins
+from app.api.v1.drops import (
+    update_vibe_score, send_push_notification,
+    COINS_UNLOCK_COST, CASH_TO_COIN_RATE, DROP_REVENUE_SHARE_PCT,
+)
 
 # ── Simple in-process TTL cache for expensive count query ─────
 _post_count_cache: dict = {"value": 0, "ts": 0.0}
@@ -470,6 +475,122 @@ async def create_post(
     return {"id": str(post_data["_id"]), "message": "Your words might help someone tonight."}
 
 
+# ==================== UNLOCK (Link up) ====================
+# Same pay-to-connect mechanic Drops uses (coins, drop_unlocks,
+# drop_connections) so DropChatScreen opens the resulting chat with no
+# changes on its end — only the unlock trigger differs (post vs drop).
+
+async def _create_post_connection(post_id: str, post: dict, unlocker_id: str, db) -> str:
+    existing_conn = await db["drop_connections"].find_one({
+        "drop_id": post_id, "unlocker_id": unlocker_id,
+    })
+    if existing_conn:
+        await db["drop_unlocks"].update_one(
+            {"drop_id": post_id, "unlocker_id": unlocker_id},
+            {"$set": {"connection_id": str(existing_conn["_id"])}},
+        )
+        return str(existing_conn["_id"])
+
+    unlocker = await db["users"].find_one({"_id": ObjectId(unlocker_id)})
+    unlocker_name = unlocker.get("anonymous_name", "Anonymous") if unlocker else "Anonymous"
+    sender_name = post.get("anonymous_name") or "Anonymous"
+
+    conn = {
+        "_id": ObjectId(),
+        "drop_id": post_id,
+        "sender_id": post["user_id"],
+        "sender_anonymous_name": sender_name,
+        "unlocker_id": unlocker_id,
+        "unlocker_anonymous_name": unlocker_name,
+        "confession": post.get("content", ""),
+        "message_count": 0,
+        "is_revealed_sender": False,
+        "is_revealed_unlocker": False,
+        "created_at": now_utc(),
+        "last_message_at": now_utc(),
+    }
+    await db["drop_connections"].insert_one(conn)
+    connection_id = str(conn["_id"])
+
+    await db["drop_unlocks"].update_one(
+        {"drop_id": post_id, "unlocker_id": unlocker_id},
+        {"$set": {"connection_id": connection_id, "sender_anonymous_name": sender_name}},
+    )
+    return connection_id
+
+
+@router.post("/{post_id}/unlock")
+async def unlock_post(
+    post_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Pay coins to unlock a chat connection with this post's anonymous author."""
+    try:
+        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    if post["user_id"] == current_user_id:
+        raise HTTPException(status_code=400, detail="Cannot unlock your own post.")
+
+    existing = await db["drop_unlocks"].find_one({
+        "drop_id": post_id, "unlocker_id": current_user_id,
+    })
+    if existing:
+        connection_id = existing.get("connection_id") or await _create_post_connection(post_id, post, current_user_id, db)
+        return {"already_unlocked": True, "connection_id": connection_id}
+
+    try:
+        await debit_coins(
+            db=db, user_id=current_user_id, amount=COINS_UNLOCK_COST,
+            reason="post_reveal", description="Unlocked a confession's author",
+            meta={"post_id": post_id},
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(
+                status_code=402,
+                detail=f"Not enough coins. You need {COINS_UNLOCK_COST} coins to unlock."
+            )
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Same 10% creator payout Drops already pays — credited as coins, no cash payout.
+    share = max(1, round(COINS_UNLOCK_COST * DROP_REVENUE_SHARE_PCT))
+    try:
+        await credit_coins(
+            db=db, user_id=post["user_id"], amount=share,
+            reason="drop_revenue_share", description="10% share from someone unlocking your confession",
+            meta={"post_id": post_id, "unlock_cost_coins": COINS_UNLOCK_COST},
+        )
+    except ValueError:
+        pass  # author account missing — don't fail the unlocker's flow over it
+
+    await db["drop_unlocks"].insert_one({
+        "_id": ObjectId(),
+        "drop_id": post_id,
+        "unlocker_id": current_user_id,
+        "sender_id": post["user_id"],
+        "method": "coins",
+        "amount": COINS_UNLOCK_COST / CASH_TO_COIN_RATE,
+        "sender_anonymous_name": post.get("anonymous_name") or "Anonymous",
+        "created_at": now_utc(),
+    })
+
+    await update_vibe_score(post["user_id"], "card_unlocked", db)
+    connection_id = await _create_post_connection(post_id, post, current_user_id, db)
+
+    await send_push_notification(
+        post["user_id"],
+        "Someone unlocked your confession 🔓",
+        "Someone just paid to connect with you.",
+        db,
+    )
+
+    return {"unlocked": True, "connection_id": connection_id, "coins_spent": COINS_UNLOCK_COST}
+
+
 @router.get("/search")
 async def search_posts(
     q:      str = Query(..., min_length=1, description="Search query"),
@@ -546,6 +667,7 @@ async def get_calm_feed(
     posts_to_load = min(BATCH_SIZE, SESSION_LIMIT - session_posts)
 
     streak_info = None
+    user_doc = None
     user_vibe_topics: set[str] = set()
     user_affinities: dict[str, float] = {}
 
@@ -553,7 +675,7 @@ async def get_calm_feed(
         # Run all three user-data lookups concurrently instead of sequentially
         async def _fetch_user_doc():
             return await db["users"].find_one(
-                {"_id": ObjectId(current_user_id)}, {"vibe_tags": 1}
+                {"_id": ObjectId(current_user_id)}, {"vibe_tags": 1, "blocked_user_ids": 1}
             )
 
         streak_info, user_doc, user_affinities = await asyncio.gather(
@@ -568,6 +690,8 @@ async def get_calm_feed(
                 if mapped:
                     user_vibe_topics.add(mapped)
 
+    blocked_ids = user_doc.get("blocked_user_ids", []) if user_doc else []
+
     # Cached total-post count (avoids a full-collection scan on every request)
     now_ts = _time.monotonic()
     if now_ts - _post_count_cache["ts"] > _POST_COUNT_TTL:
@@ -577,7 +701,8 @@ async def get_calm_feed(
 
     # Fetch pool — 3× batch size (min 30) gives good shuffle variety at half the old cost
     POOL_SIZE = max(30, posts_to_load * 3)
-    pool = await db["posts"].find({}) \
+    pool_query = {"user_id": {"$nin": blocked_ids}} if blocked_ids else {}
+    pool = await db["posts"].find(pool_query) \
         .sort("created_at", -1) \
         .skip(session_posts) \
         .limit(POOL_SIZE) \

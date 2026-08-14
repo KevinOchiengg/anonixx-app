@@ -100,10 +100,11 @@ export default function DropsRecordScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
 
-  const theme     = route?.params?.theme    || 'cinematic-coral';
-  const moodTag   = route?.params?.moodTag  || 'longing';
-  const category  = route?.params?.category || 'love';
-  const themeObj  = DROP_THEMES[theme] || DROP_THEMES['cinematic-coral'];
+  const theme        = route?.params?.theme    || 'desire';
+  const moodTag      = route?.params?.moodTag  || 'longing';
+  const category     = route?.params?.category || 'love';
+  const targetUserId = route?.params?.target_user_id || undefined;
+  const themeObj  = DROP_THEMES[theme] || DROP_THEMES['desire'];
   const accent    = themeObj.accent;
 
   // ── Recorder ──────────────────────────────────────────────────
@@ -331,6 +332,9 @@ export default function DropsRecordScreen({ navigation, route }) {
         confession:       caption?.trim() || undefined,
         // Publisher opt-in is forced off for Tier 2 (After Dark never leaves).
         publisher_opt_in: isTier2 ? false : !!publisherOptIn,
+        // Tag a specific user — carried over from the compose screen when
+        // the user tagged someone before switching to Voice format.
+        ...(targetUserId ? { target_user_id: targetUserId } : {}),
       };
 
       const dropRes = await fetch(`${API_BASE_URL}/api/v1/drops`, {
