@@ -125,7 +125,14 @@ export default function LoginScreen({ navigation }) {
       showToast({ type: 'success', message: 'Welcome back 👋' });
 
       setTimeout(() => {
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        // Login is usually reached mid-flow (tapped "Link up", tried to
+        // comment, etc.) — pop back to wherever that was instead of
+        // resetting to the feed, so the pending action can resume there.
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        }
       }, 600);
 
     } catch (error) {

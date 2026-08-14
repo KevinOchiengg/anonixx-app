@@ -2,19 +2,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from bson import ObjectId
 import secrets
 import hashlib
 import re
+import random
 
 from app.database import get_database
 from app.config import settings
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins
 from app.utils.email import send_password_reset_otp
+from app.models.user import AvatarAura
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -23,6 +25,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/to
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+MINIMUM_AGE = 18
+
+def _is_adult(dob: date) -> bool:
+    """Whole-years age from a date of birth, evaluated as of today (UTC)."""
+    today = _now().date()
+    years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    return years >= MINIMUM_AGE
 
 
 # ─── Models ───────────────────────────────────────────────────
@@ -33,6 +43,11 @@ class RegisterRequest(BaseModel):
     password:      str
     username:      Optional[str] = None
     referral_code: Optional[str] = None   # Optional referral code during signup
+    date_of_birth: date                   # Anonixx is 18+ only — enforced at registration
+    # Separate from age itself — a deliberate, optional consent for the most
+    # explicit "After Dark" tier-2 content. Off by default client-side; can
+    # also be turned on later via PATCH /users/me/explicit-content-optin.
+    explicit_content_opt_in: bool = False
 
 class LoginRequest(BaseModel):
     email:    EmailStr
@@ -63,6 +78,8 @@ class UserResponse(BaseModel):
     username:       Optional[str]
     anonymous_name: Optional[str]
     created_at:     str
+    age_verified:            bool = False
+    explicit_content_opt_in: bool = False
 
 
 # ─── Helpers ──────────────────────────────────────────────────
@@ -79,7 +96,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
 def generate_anonymous_name() -> str:
-    import random
     adjectives = [
         "Quiet", "Gentle", "Brave", "Kind", "Thoughtful", "Peaceful",
         "Calm", "Hopeful", "Strong", "Soft", "Wise", "Warm",
@@ -97,6 +113,9 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
     if await db["users"].find_one({"email": data.email}):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
+    if not _is_adult(data.date_of_birth):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Anonixx is for adults 18+")
+
     user_id = ObjectId()
     user = {
         "_id":            user_id,
@@ -104,9 +123,16 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
         "username":       data.username or data.email.split("@")[0],
         "password":       get_password_hash(data.password),
         "anonymous_name": generate_anonymous_name(),
+        # Random by default so anyone who never visits avatar settings still
+        # gets a distinct look rather than everyone sharing one fixed aura.
+        "avatar_aura":    random.choice(list(AvatarAura)).value,
         "interests":      [],
         "coin_balance":   0,          # Start at 0; welcome bonus credited below
         "streak_count":   0,
+        "date_of_birth":  data.date_of_birth.isoformat(),
+        "age_verified":   True,       # DOB above already proves 18+ at this point
+        "explicit_content_opt_in": bool(data.explicit_content_opt_in),
+        "blocked_user_ids": [],
         "created_at":     _now(),
         "updated_at":     _now(),
     }
@@ -139,7 +165,11 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
             "username":       user["username"],
             "anonymous_name": user["anonymous_name"],
             "avatar_url":     user.get("avatar_url"),
+            "avatar_aura":    user.get("avatar_aura"),
+            "is_admin":       user.get("is_admin", False),
             "coin_balance":   WELCOME_BONUS,
+            "age_verified":            user.get("age_verified", False),
+            "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
         },
     }
 
@@ -160,6 +190,10 @@ async def login(data: LoginRequest, db=Depends(get_database)):
             "username":       user.get("username"),
             "anonymous_name": user.get("anonymous_name"),
             "avatar_url":     user.get("avatar_url"),
+            "avatar_aura":    user.get("avatar_aura"),
+            "is_admin":       user.get("is_admin", False),
+            "age_verified":            user.get("age_verified", False),
+            "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
         },
     }
 
@@ -186,6 +220,10 @@ async def login_for_access_token(
             "username":       user.get("username"),
             "anonymous_name": user.get("anonymous_name"),
             "avatar_url":     user.get("avatar_url"),
+            "avatar_aura":    user.get("avatar_aura"),
+            "is_admin":       user.get("is_admin", False),
+            "age_verified":            user.get("age_verified", False),
+            "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
         },
     }
 
@@ -204,6 +242,8 @@ async def get_current_user(
         "username":       user.get("username"),
         "anonymous_name": user.get("anonymous_name"),
         "created_at":     user["created_at"].isoformat(),
+        "age_verified":            user.get("age_verified", False),
+        "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
     }
 
 

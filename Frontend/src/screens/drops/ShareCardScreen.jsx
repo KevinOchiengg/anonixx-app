@@ -8,7 +8,9 @@
  *     it directly (anonymously) while it still appears in the marketplace.
  *   - Text drops can opt-in to AI refinement via POST /api/v1/drops/refine.
  *     A before/after preview lets the user choose which version to post.
- *   - No external sharing (WhatsApp / share sheet removed).
+ *   - After dropping, the user can optionally send the card to a WhatsApp
+ *     number via POST /api/v1/drops/:id/share/whatsapp — sent from
+ *     Anonixx's own number, the recipient never sees the sender's real one.
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
@@ -22,7 +24,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch } from 'react-redux';
-import { FileImage, Film, Sparkles, Type, X } from 'lucide-react-native';
+import { FileImage, Film, MessageCircle, Sparkles, Type, X } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -35,7 +37,7 @@ import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { Chip, ChipRow } from '../../components/drops/ChipRow';
 
 const SCREEN_W  = Dimensions.get('window').width;
-const MAX_CHARS = 200;
+const MAX_CHARS = 500;
 const CARD_W    = SCREEN_W - SPACING.md * 2;
 
 // ─── Static data (module-level per dev rules) ─────────────────
@@ -175,6 +177,11 @@ export default function ShareCardScreen({ navigation }) {
 
   // Tag a specific user (drop still hits marketplace)
   const [taggedUser, setTaggedUser] = useState(null);
+
+  // Send to a WhatsApp number — post-drop only, anonymous relay via Anonixx's number
+  const [waNumber,  setWaNumber]  = useState('');
+  const [waSending, setWaSending] = useState(false);
+  const [waSent,    setWaSent]    = useState(false);
 
   // AI text refinement (text mode only)
   const [refineEnabled,     setRefineEnabled]     = useState(false);
@@ -390,6 +397,31 @@ export default function ShareCardScreen({ navigation }) {
     taggedUser, refineEnabled, refinedText,
     uploadMedia, showToast, dispatch,
   ]);
+
+  const handleSendWhatsApp = useCallback(async () => {
+    const phone = waNumber.trim();
+    if (!phone || waSending) return;
+    setWaSending(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${dropId}/share/whatsapp`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ phone_number: phone }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setWaSent(true);
+        showToast({ type: 'success', title: 'Sent!', message: "They'll see it's from Anonixx, not you." });
+      } else {
+        showToast({ type: 'error', message: data.detail || 'Could not send. Try again.' });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong. Try again.' });
+    } finally {
+      setWaSending(false);
+    }
+  }, [waNumber, waSending, dropId, showToast]);
 
   const dropped  = !!dropId;
   const canDrop  = mode === 'text' ? !!text.trim() : !!mediaUri;
@@ -652,6 +684,40 @@ export default function ShareCardScreen({ navigation }) {
                   >
                     <Text style={styles.viewDropBtnText}>VIEW MY DROP</Text>
                   </TouchableOpacity>
+
+                  {/* Send to a WhatsApp number — anonymous relay via Anonixx's own number */}
+                  {waSent ? (
+                    <Text style={styles.waSentText}>Sent via Anonixx ✓</Text>
+                  ) : (
+                    <View style={styles.waBox}>
+                      <View style={styles.waHeaderRow}>
+                        <MessageCircle size={rs(14)} color={T.textMute} />
+                        <Text style={styles.waLabel}>Send to a WhatsApp number</Text>
+                      </View>
+                      <View style={styles.waInputRow}>
+                        <TextInput
+                          style={styles.waInput}
+                          value={waNumber}
+                          onChangeText={setWaNumber}
+                          placeholder="+254712345678"
+                          placeholderTextColor={T.textMute}
+                          keyboardType="phone-pad"
+                        />
+                        <TouchableOpacity
+                          style={[styles.waSendBtn, (!waNumber.trim() || waSending) && styles.dropBtnDisabled]}
+                          onPress={handleSendWhatsApp}
+                          disabled={!waNumber.trim() || waSending}
+                          activeOpacity={0.85}
+                        >
+                          {waSending
+                            ? <ActivityIndicator color="#fff" size="small" />
+                            : <Text style={styles.waSendBtnText}>Send</Text>
+                          }
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.waHint}>They'll see it's from Anonixx — never your number.</Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -1050,5 +1116,53 @@ const styles = StyleSheet.create({
     fontSize:      FONT.md,
     color:         '#fff',
     letterSpacing: 1.2,
+  },
+
+  // Send to WhatsApp
+  waBox: {
+    width:             CARD_W,
+    marginTop:         SPACING.md,
+    padding:           rp(14),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+    backgroundColor:   'rgba(255,255,255,0.02)',
+    gap:               rp(8),
+  },
+  waHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
+  waLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(11),
+    color:         T.textSec,
+    letterSpacing: 0.3,
+  },
+  waInputRow: { flexDirection: 'row', gap: rp(8) },
+  waInput: {
+    flex:              1,
+    fontFamily:        'DMSans-Regular',
+    fontSize:          FONT.sm,
+    color:             T.text,
+    backgroundColor:   T.surface,
+    borderRadius:      RADIUS.sm,
+    borderWidth:       1,
+    borderColor:       T.border,
+    paddingHorizontal: rp(12),
+    height:            rs(40),
+  },
+  waSendBtn: {
+    paddingHorizontal: rp(18),
+    height:            rs(40),
+    borderRadius:      RADIUS.sm,
+    alignItems:        'center',
+    justifyContent:    'center',
+    backgroundColor:   T.primary,
+  },
+  waSendBtnText: { fontFamily: 'DMSans-Bold', fontSize: FONT.sm, color: '#fff' },
+  waHint: { fontFamily: 'DMSans-Italic', fontSize: rf(10), color: T.textMute },
+  waSentText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   FONT.sm,
+    color:      T.primary,
+    marginTop:  SPACING.sm,
   },
 });

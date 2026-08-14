@@ -26,6 +26,7 @@ import {
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
+import PulseLoader from '../../components/common/PulseLoader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -250,7 +251,7 @@ const PaymentModal = React.memo(({
 
           {polling ? (
             <View style={styles.pollingBox}>
-              <ActivityIndicator size="large" color={T.primary} />
+              <PulseLoader size={48} color={T.primary} />
               <Text style={styles.pollingTitle}>Check your phone</Text>
               <Text style={styles.pollingBody}>
                 Enter your M-Pesa PIN to step inside.
@@ -375,6 +376,10 @@ export default function CircleProfileScreen({ route, navigation }) {
       if (res.ok) {
         showToast({ type: 'success', message: "You're in the circle." });
         loadCircle();
+      } else if (res.status === 402) {
+        const data = await res.json().catch(() => ({}));
+        showToast({ type: 'warning', message: data.detail || 'Not enough coins to join.' });
+        navigation.navigate('Coins');
       } else {
         showToast({ type: 'error', message: 'Could not join. Try again.' });
       }
@@ -383,7 +388,7 @@ export default function CircleProfileScreen({ route, navigation }) {
     } finally {
       setJoining(false);
     }
-  }, [circleId, loadCircle, showToast]);
+  }, [circleId, loadCircle, showToast, navigation]);
 
   const handleLeave = useCallback(async () => {
     try {
@@ -500,7 +505,7 @@ export default function CircleProfileScreen({ route, navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, styles.centered]} edges={['top']}>
-        <ActivityIndicator size="large" color={T.primary} />
+        <PulseLoader size={52} color={T.primary} />
         <Text style={styles.loadingText}>Stepping into the circle…</Text>
       </SafeAreaView>
     );
@@ -705,6 +710,21 @@ export default function CircleProfileScreen({ route, navigation }) {
             </TouchableOpacity>
           )}
 
+          {/* Circle content feed — members and the creator/admins only */}
+          {(isCreator || isMember) && (
+            <TouchableOpacity
+              style={[styles.roomBtn, { borderColor: auraColor + '40' }]}
+              onPress={() => navigation.navigate('CircleContent', { circleId, circle })}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.85}
+            >
+              <View style={styles.roomBtnLeft}>
+                <Text style={styles.roomBtnText}>Circle feed</Text>
+              </View>
+              <Text style={[styles.roomBtnCta, { color: auraColor }]}>Open →</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Join / Leave */}
           {!isCreator && !isMember && (
             <TouchableOpacity
@@ -717,7 +737,9 @@ export default function CircleProfileScreen({ route, navigation }) {
               {joining
                 ? <ActivityIndicator size="small" color={auraColor} />
                 : <Text style={[styles.joinBtnText, { color: auraColor }]}>
-                    Join this circle — it's free
+                    {circle?.join_cost > 0
+                      ? `Join this circle — ${circle.join_cost} coins`
+                      : "Join this circle — it's free"}
                   </Text>
               }
             </TouchableOpacity>

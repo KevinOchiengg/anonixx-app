@@ -19,8 +19,9 @@ import React, {
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Animated, Modal, Image,
+  Animated, Modal, Image, ScrollView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -33,13 +34,54 @@ import {
   rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
 } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
+import PulseLoader from '../../components/common/PulseLoader';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { WELCOME_SOUND_MAP } from '../../config/sounds';
 
 const REVEAL_PRICE = 1.0;
 const POLL_INTERVAL_MS = 8000;
 const REVEAL_POLL_MS   = 5000;
 const MAX_REVEAL_ATTEMPTS = 24;
+
+// ─── Mood board — 33 procedurally-styled cards shown while waiting for a
+// first reply. Intentionally abstract (gradient + symbol, no photos) so it
+// can never be mistaken for the other person's real pictures — Anonixx
+// doesn't do real photos in the unlock flow at all, this is mood only.
+const MOOD_SYMBOLS = ['🔥', '😈', '💋', '🖤', '✨', '🌙', '⛓️', '🍒', '😏', '💦', '🌹'];
+const MOOD_GRADIENTS = [
+  ['#2a0f18', '#14060a'],
+  ['#1a0824', '#08020c'],
+  ['#0a0418', '#02030a'],
+  ['#3a0d1f', '#160510'],
+];
+const MOOD_CARDS = Array.from({ length: 33 }, (_, i) => ({
+  id: i,
+  symbol: MOOD_SYMBOLS[i % MOOD_SYMBOLS.length],
+  gradient: MOOD_GRADIENTS[i % MOOD_GRADIENTS.length],
+}));
+
+// ─── Mood board — shown until the other person's first reply arrives ───
+const MoodBoard = React.memo(() => (
+  <View style={s.moodBoardWrap}>
+    <Text style={s.moodBoardLabel}>their mood, while you wait</Text>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={s.moodBoardScroll}
+    >
+      {MOOD_CARDS.map((card) => (
+        <LinearGradient
+          key={card.id}
+          colors={card.gradient}
+          style={s.moodCard}
+        >
+          <Text style={s.moodCardSymbol}>{card.symbol}</Text>
+        </LinearGradient>
+      ))}
+    </ScrollView>
+  </View>
+));
 
 // ─── Message bubble ────────────────────────────────────────────
 const Bubble = React.memo(({ item, fontFamily }) => {
@@ -93,6 +135,7 @@ const EmptyChat = React.memo(() => (
     <Text style={s.emptyChatText}>
       Say hi — you're both anonymous. Break the ice.
     </Text>
+    <MoodBoard />
   </View>
 ));
 
@@ -132,6 +175,20 @@ export default function DropChatScreen({ route, navigation }) {
   const pollRef      = useRef(null);
   const revealPollRef = useRef(null);
 
+  // Fires once, the first time an unlocker opens this chat — see
+  // Frontend/src/config/sounds.js for what welcome_sound ids resolve to.
+  const playWelcomeSound = useCallback(async (soundId) => {
+    const asset = WELCOME_SOUND_MAP[soundId];
+    if (!asset) return; // 'silence', unset, or no bundled asset yet
+    try {
+      const { createAudioPlayer } = await import('expo-audio');
+      const player = createAudioPlayer(asset);
+      player.play();
+    } catch {
+      /* playback unavailable — welcome media/text still shows */
+    }
+  }, []);
+
   // ── Fetchers ──────────────────────────────────────────────
   const checkRevealStatus = useCallback(async () => {
     try {
@@ -159,9 +216,10 @@ export default function DropChatScreen({ route, navigation }) {
         setMessages(data.messages);
         setConnection(data.connection);
         if (data.chat_profile) setChatProfile(data.chat_profile);
-        if (data.welcome_media && !welcomeMedia) {
+        if ((data.welcome_media || data.welcome_sound) && !welcomeMedia && !showWelcome) {
           setWelcomeMedia(data.welcome_media);
           setShowWelcome(true);
+          playWelcomeSound(data.welcome_sound);
         }
         if (data.connection?.is_revealed && !revealData) {
           checkRevealStatus();
@@ -174,7 +232,7 @@ export default function DropChatScreen({ route, navigation }) {
         showToast({ type: 'error', message: 'Network error.' });
       }
     }
-  }, [connectionId, revealData, checkRevealStatus, showToast, welcomeMedia]);
+  }, [connectionId, revealData, checkRevealStatus, showToast, welcomeMedia, showWelcome, playWelcomeSound]);
 
   // ── Initial load + polling ────────────────────────────────
   useEffect(() => {
@@ -336,7 +394,7 @@ export default function DropChatScreen({ route, navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={[s.safe, s.centered]} edges={['top', 'left', 'right']}>
-        <ActivityIndicator color={T.primary} size="large" />
+        <PulseLoader size={52} color={T.primary} />
       </SafeAreaView>
     );
   }
@@ -470,7 +528,7 @@ export default function DropChatScreen({ route, navigation }) {
 
             ) : revealStep === 'polling' || revealStep === 'waiting' ? (
               <View style={s.revealWaiting}>
-                <ActivityIndicator color={T.primary} size="large" />
+                <PulseLoader size={48} color={T.primary} />
                 <Text style={s.revealWaitTitle}>
                   {revealStep === 'waiting'
                     ? 'Sending STK push…'
@@ -723,6 +781,32 @@ const s = StyleSheet.create({
     lineHeight:    rf(22),
     letterSpacing: 0.3,
   },
+
+  // Mood board
+  moodBoardWrap: { marginTop: SPACING.xl, alignSelf: 'stretch' },
+  moodBoardLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.textMute,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    textAlign:     'center',
+    marginBottom:  rp(10),
+  },
+  moodBoardScroll: {
+    paddingHorizontal: SPACING.md,
+    gap:               rp(8),
+  },
+  moodCard: {
+    width:          rs(56),
+    height:         rs(56),
+    borderRadius:   RADIUS.md,
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderWidth:    1,
+    borderColor:    'rgba(255,255,255,0.06)',
+  },
+  moodCardSymbol: { fontSize: rf(22) },
 
   // Input bar
   inputBar: {

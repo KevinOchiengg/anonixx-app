@@ -48,12 +48,12 @@ export default function DropsPublishScreen({ navigation, route }) {
   // ── Params from caller ─────────────────────────────────────────
   const {
     format   = 'text',
-    theme    = 'cinematic-coral',
+    theme    = 'desire',
     preview  = '',
     onConfirmed,       // callback — caller actually posts
   } = route?.params || {};
 
-  const themeObj = DROP_THEMES[theme] || DROP_THEMES['cinematic-coral'];
+  const themeObj = DROP_THEMES[theme] || DROP_THEMES['desire'];
   const isVoice  = format === 'voice';
   const isTier2  = themeObj.tier === 2;
 

@@ -19,6 +19,7 @@ import {
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { useAuth } from '../../context/AuthContext';
 import T from '../../utils/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -109,13 +110,28 @@ const AuraPreview = React.memo(({ name, bio, avatarUri, color, onAvatarPress }) 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function CreateCircleScreen({ navigation }) {
   const { showToast } = useToast();
+  const { user }      = useAuth();
 
   const [name,      setName]      = useState('');
   const [bio,       setBio]       = useState('');
   const [category,  setCategory]  = useState('');
   const [color,     setColor]     = useState(AURA_COLORS[0]);
   const [avatarUri, setAvatarUri] = useState(null);
+  const [joinCost,  setJoinCost]  = useState('');
+  const [facebookUrl,  setFacebookUrl]  = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
+  const [snapchatUrl,  setSnapchatUrl]  = useState('');
   const [loading,   setLoading]   = useState(false);
+
+  // Route-level guard — the entry button is already hidden for non-admins,
+  // this covers direct navigation (deep link, back-stack, etc).
+  useEffect(() => {
+    if (!user?.is_admin) {
+      showToast({ type: 'info', message: 'Circles are curated by the Anonixx team — you can join, not create.' });
+      navigation.goBack();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Entrance animations
   const headerOp = useRef(new Animated.Value(0)).current;
@@ -184,6 +200,10 @@ export default function CreateCircleScreen({ navigation }) {
           category:   category.trim().toLowerCase(),
           aura_color: color,
           avatar_url: avatarUrl,
+          join_cost:  parseInt(joinCost, 10) || 0,
+          facebook_url:  facebookUrl.trim()  || null,
+          instagram_url: instagramUrl.trim() || null,
+          snapchat_url:  snapchatUrl.trim()  || null,
         }),
       });
       const data = await res.json();
@@ -198,7 +218,7 @@ export default function CreateCircleScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [name, bio, category, color, avatarUri, navigation, showToast]);
+  }, [name, bio, category, color, avatarUri, joinCost, facebookUrl, instagramUrl, snapchatUrl, navigation, showToast]);
 
   // ──────────────────────────────────────────────────────────────────────────
   return (
@@ -312,6 +332,54 @@ export default function CreateCircleScreen({ navigation }) {
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+
+            {/* ── Join cost ── */}
+            <View style={styles.field}>
+              <SectionLabel label="Join cost (coins)" />
+              <Text style={styles.fieldHint}>Leave blank or 0 to keep it free to join.</Text>
+              <TextInput
+                value={joinCost}
+                onChangeText={(v) => setJoinCost(v.replace(/[^0-9]/g, ''))}
+                placeholder="0"
+                placeholderTextColor={T.textMuted}
+                style={styles.input}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
+            </View>
+
+            {/* ── Social links ── */}
+            <View style={styles.field}>
+              <SectionLabel label="Social links" />
+              <Text style={styles.fieldHint}>Optional — cross-post activity to these accounts.</Text>
+              <TextInput
+                value={facebookUrl}
+                onChangeText={setFacebookUrl}
+                placeholder="Facebook page URL"
+                placeholderTextColor={T.textMuted}
+                style={[styles.input, { marginBottom: rp(8) }]}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+              <TextInput
+                value={instagramUrl}
+                onChangeText={setInstagramUrl}
+                placeholder="Instagram profile URL"
+                placeholderTextColor={T.textMuted}
+                style={[styles.input, { marginBottom: rp(8) }]}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+              <TextInput
+                value={snapchatUrl}
+                onChangeText={setSnapchatUrl}
+                placeholder="Snapchat profile URL"
+                placeholderTextColor={T.textMuted}
+                style={styles.input}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
             </View>
 
             {/* ── Create button ── */}

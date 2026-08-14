@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, FlatList, Image, KeyboardAvoidingView,
+  ActivityIndicator, Alert, Animated, FlatList, Image, KeyboardAvoidingView,
   Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native';
@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft, Check, CheckCheck, CornerUpLeft, Image as ImageIcon,
-  Lock, Mic, MicOff, Pause, Phone, PhoneOff, Play, Reply, RotateCcw, Square, Trash2, Video, X,
+  Lock, Mic, MicOff, MoreVertical, Pause, Phone, PhoneOff, Play, Reply, RotateCcw, Square, Trash2, Video, X,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
@@ -1774,6 +1774,83 @@ export default function ChatScreen({ route, navigation }) {
     showToast({ type: 'info', title: `${feature} locked`, message: `${left} more messages to unlock.` });
   }, [showToast, chatInfo]);
 
+  // ── Block / report — app-wide, in addition to the existing per-chat
+  // block (used when a specific chat goes bad, separate from this) ──
+  const handleBlockUser = useCallback(() => {
+    if (!otherUserId) return;
+    Alert.alert(
+      'Block this person?',
+      "They won't be able to reach you, and their content will be hidden from your feed and Drops.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block', style: 'destructive',
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const res = await fetch(`${API_BASE_URL}/api/v1/users/${otherUserId}/block`, {
+                method:  'POST',
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) throw new Error();
+              showToast({ type: 'success', message: 'User blocked.' });
+              navigation.goBack();
+            } catch {
+              showToast({ type: 'error', message: 'Could not block. Try again.' });
+            }
+          },
+        },
+      ],
+    );
+  }, [otherUserId, navigation, showToast]);
+
+  const handleReportUser = useCallback(() => {
+    if (!otherUserId) return;
+    const reasons = [
+      { id: 'abuse',              label: 'Abuse or harassment' },
+      { id: 'spam',               label: 'Spam' },
+      { id: 'explicit',           label: 'Unwanted explicit content' },
+      { id: 'self-harm-concern',  label: "I'm worried about them" },
+      { id: 'other',              label: 'Other' },
+    ];
+    Alert.alert(
+      'Report this person',
+      "What's the issue?",
+      [
+        ...reasons.map((r) => ({
+          text: r.label,
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const res = await fetch(`${API_BASE_URL}/api/v1/users/${otherUserId}/report`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body:    JSON.stringify({ reason: r.id }),
+              });
+              if (!res.ok) throw new Error();
+              showToast({ type: 'success', message: 'Report received. Thank you.' });
+            } catch {
+              showToast({ type: 'error', message: 'Could not send report. Try again.' });
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [otherUserId, showToast]);
+
+  const handleMoreOptions = useCallback(() => {
+    Alert.alert(
+      otherName || 'Options',
+      undefined,
+      [
+        { text: 'Report user', onPress: handleReportUser },
+        { text: 'Block user', style: 'destructive', onPress: handleBlockUser },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [otherName, handleReportUser, handleBlockUser]);
+
   // ── Start a call ─────────────────────────────────────────
   const handleStartCall = useCallback((callType) => {
     // Optimistic online check — isOnline is kept live via socket events.
@@ -2044,6 +2121,14 @@ export default function ChatScreen({ route, navigation }) {
                 </Text>
               </TouchableOpacity>
             )}
+            {/* Block / report */}
+            <TouchableOpacity
+              style={styles.headerActionBtn}
+              onPress={handleMoreOptions}
+              hitSlop={HIT_SLOP}
+            >
+              <MoreVertical size={rs(16)} color={T.textMuted} strokeWidth={1.8} />
+            </TouchableOpacity>
           </View>
         </View>
 

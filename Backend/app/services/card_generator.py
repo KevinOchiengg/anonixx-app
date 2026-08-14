@@ -11,10 +11,10 @@ video thumbnail is Gaussian-blurred behind the text with a lock icon and
 "Unlock on Anonixx" caption — the unblur becomes the click-through hook.
 
 This is a simplified, server-side approximation of
-Frontend/src/components/drops/DropCardRenderer.jsx's visual language (a
-handful of its gradient themes, not the full theme system) — not a
-pixel-perfect port. Uses Pillow's built-in scalable default font so no
-font asset needs to be bundled or linked.
+Frontend/src/components/drops/DropCardRenderer.jsx's visual language (all
+3 curated theme gradients) — not a pixel-perfect port. Uses Pillow's
+built-in scalable default font so no font asset needs to be bundled or
+linked.
 """
 
 import io
@@ -39,19 +39,15 @@ cloudinary.config(
 
 CARD_SIZE = 1080
 
-# A handful of DROP_THEMES colors ported from DropCardRenderer.jsx — enough
-# variety for social teasers, not the full 14-theme system.
+# Ported directly from DropCardRenderer.jsx's DROP_THEMES (bgFrom, bgTo,
+# textColor) — kept in exact sync with the frontend's 3 curated themes and
+# Backend/app/api/v1/drops.py's TIER_1_THEMES/TIER_2_THEMES.
 _THEME_GRADIENTS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]] = {
-    "cinematic-coral":  ((30, 12, 20),  (255, 99, 74),  (255, 255, 255)),
-    "ember-love":        ((30, 8, 8),    (214, 69, 46),  (255, 235, 225)),
-    "ocean-ache":        ((6, 20, 30),   (34, 110, 140), (225, 245, 255)),
-    "twilight-blush":    ((25, 12, 28),  (200, 110, 170),(255, 240, 250)),
-    "graphite-rose":     ((20, 20, 22),  (150, 90, 100), (245, 235, 235)),
-    "paperback-ivory":   ((40, 35, 25),  (210, 190, 150),(255, 250, 240)),
-    "midnight-rain":     ((5, 8, 20),    (50, 70, 120),  (230, 235, 255)),
-    "goldleaf":          ((25, 20, 5),   (200, 160, 60), (255, 250, 230)),
+    "desire":       ((20, 6, 10),  (42, 15, 24), (246, 230, 236)),
+    "after-dark":   ((8, 2, 12),   (26, 8, 36),  (238, 221, 255)),
+    "midnight-sin": ((2, 3, 10),   (10, 4, 24),  (242, 216, 228)),
 }
-_DEFAULT_GRADIENT = _THEME_GRADIENTS["cinematic-coral"]
+_DEFAULT_GRADIENT = _THEME_GRADIENTS["desire"]
 
 
 def _lerp(a: int, b: int, t: float) -> int:
@@ -116,7 +112,7 @@ async def generate_teaser_card(drop: dict) -> bytes:
     Render a blurred/teased social teaser card for a drop.
     Returns JPEG bytes.
     """
-    theme = drop.get("theme") or "cinematic-coral"
+    theme = drop.get("theme") or "desire"
     _, _, text_color = _THEME_GRADIENTS.get(theme, _DEFAULT_GRADIENT)
 
     card = _gradient_background(theme)

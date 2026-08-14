@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
-  BarChart2, Bookmark, EyeOff, Feather, Flag, Flame, Heart, Link,
+  BarChart2, Bookmark, EyeOff, Feather, Flag, Flame, Heart, Link, Link2,
   MessageCircle, MoreHorizontal, Play, Share2, UserX, VolumeX, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,6 +24,11 @@ import { CommentBottomSheet } from './CommentBottomSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
 const BASE_URL = 'https://anonixx-app.onrender.com';
+
+// removeClippedSubviews unmounts/remounts cards as they scroll in and out
+// of the render window — without this, every remount of the same video
+// re-runs native thumbnail extraction from scratch.
+const videoThumbnailCache = new Map();
 
 // ─── Double tap like ──────────────────────────────────────────
 const DoubleTapLike = React.memo(({ children, onDoubleTap }) => {
@@ -149,16 +154,21 @@ const AudioPlayer = React.memo(({ onMediaPress }) => (
 const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) => {
   const { activeVideoId } = useActiveVideo() || {};
   const isActive = activeVideoId === postId;
-  const [thumbnail,   setThumbnail]   = useState(null);
-  const [thumbLoading,setThumbLoading]= useState(true);
+  const [thumbnail,   setThumbnail]   = useState(() => videoThumbnailCache.get(videoUrl) || null);
+  const [thumbLoading,setThumbLoading]= useState(!videoThumbnailCache.has(videoUrl));
   const [isPlaying,   setIsPlaying]   = useState(false);
   const [isMuted,     setIsMuted]     = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration,    setDuration]    = useState(0);
-  const isSeekingRef = useRef(false);
-  const overlayOp    = useRef(new Animated.Value(1)).current;
+  const isSeekingRef  = useRef(false);
+  const sourceLoaded  = useRef(false);
+  const overlayOp     = useRef(new Animated.Value(1)).current;
 
-  const inlinePlayer = useVideoPlayer(videoUrl, (p) => { p.loop = true; p.muted = true; });
+  // No source at creation — every video card in the list would otherwise
+  // open/prepare its media the instant it mounts, active or not. The real
+  // source is attached lazily, the first time this card actually becomes
+  // the active one (see the isActive effect below).
+  const inlinePlayer = useVideoPlayer(null, (p) => { p.loop = true; p.muted = true; });
 
   useEffect(() => {
     const sub = inlinePlayer.addListener('playingChange', ({ isPlaying: playing }) => setIsPlaying(playing));
@@ -178,20 +188,28 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
   }, [isPlaying, inlinePlayer]);
 
   useEffect(() => {
-    if (isActive) inlinePlayer.play();
-    else          inlinePlayer.pause();
-  }, [isActive]);
+    if (!isActive) { inlinePlayer.pause(); return; }
+    if (!sourceLoaded.current) {
+      inlinePlayer.replace({ uri: videoUrl });
+      sourceLoaded.current = true;
+    }
+    inlinePlayer.play();
+  }, [isActive, videoUrl]);
 
   useEffect(() => {
     Animated.timing(overlayOp, { toValue: isPlaying ? 0 : 1, duration: 400, useNativeDriver: true }).start();
   }, [isPlaying]);
 
   useEffect(() => {
+    if (videoThumbnailCache.has(videoUrl)) return; // already have it from a prior mount
     let cancelled = false;
     const gen = async () => {
       try {
         const { uri } = await VideoThumbnails.getThumbnailAsync(videoUrl, { time: 1000, quality: 0.7 });
-        if (!cancelled) setThumbnail(uri);
+        if (!cancelled) {
+          videoThumbnailCache.set(videoUrl, uri);
+          setThumbnail(uri);
+        }
       } catch {} finally { if (!cancelled) setThumbLoading(false); }
     };
     gen();
@@ -500,7 +518,16 @@ function CalmPostCard({
   const handleSharePress    = useCallback((e) => { e.stopPropagation(); handleShare(); }, [handleShare]);
   const handleCommentPress  = useCallback((e) => { e.stopPropagation(); handleCommentsOpen(); }, [handleCommentsOpen]);
   const handleLikePress     = useCallback((e) => { e.stopPropagation(); handleLike(); }, [handleLike]);
-  const handleDropPress           = useCallback((e) => { e.stopPropagation(); onDrop?.(post); }, [onDrop, post]);
+  const handleLinkUpPress = useCallback((e) => {
+    e.stopPropagation();
+    if (!isAuthenticated) { showToast({ type: 'warning', message: 'Sign in to link up.' }); return; }
+    navigation.navigate('PostUnlock', { post });
+  }, [isAuthenticated, navigation, post, showToast]);
+  const handleWriteInspired = useCallback((e) => {
+    e.stopPropagation();
+    if (!isAuthenticated) { showToast({ type: 'info', message: 'Sign in to write your own.' }); return; }
+    onDrop?.(post);
+  }, [isAuthenticated, onDrop, post, showToast]);
   const handleInspirationThreadPress = useCallback((e) => {
     e.stopPropagation();
     navigation.navigate('InspirationThread', { postId: post.id });
@@ -583,8 +610,8 @@ function CalmPostCard({
 
             <View style={styles.divider} />
 
-            {isTextOnly && <Text style={styles.hint}>say something if it hits.</Text>}
-            {(post.video_url || post.audio_url) && <Text style={styles.hint}>swipe through confessions ↑</Text>}
+            {isTextOnly && <Text style={styles.hint}>tell them it hit different.</Text>}
+            {(post.video_url || post.audio_url) && <Text style={styles.hint}>more secrets are waiting ↑</Text>}
 
             {/* Drop count — tappable thread entry point */}
             {post.inspired_drop_count > 0 && (
@@ -602,6 +629,17 @@ function CalmPostCard({
               </TouchableOpacity>
             )}
 
+            {/* Write-your-own entry point — the only remaining way to open an
+                inspired drop now that the action bar's main button is Link up. */}
+            <TouchableOpacity
+              onPress={handleWriteInspired}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.75}
+              style={styles.writeInspiredLink}
+            >
+              <Text style={styles.writeInspiredText}>write your own inspired confession</Text>
+            </TouchableOpacity>
+
             <View style={styles.actions}>
               <View style={styles.actionsLeft}>
                 <TouchableOpacity onPress={handleSave} style={styles.action} hitSlop={HIT_SLOP}>
@@ -612,10 +650,10 @@ function CalmPostCard({
                 </TouchableOpacity>
               </View>
 
-              {/* "Felt this" — write your own inspired confession */}
-              <TouchableOpacity onPress={handleDropPress} style={styles.resonateAction} activeOpacity={0.7} hitSlop={HIT_SLOP}>
-                <Feather size={rs(15)} color={T.textSecondary} strokeWidth={1.8} />
-                <Text style={styles.resonateActionText}>resonate</Text>
+              {/* Link up — pay to open a chat with this post's author */}
+              <TouchableOpacity onPress={handleLinkUpPress} style={styles.resonateAction} activeOpacity={0.7} hitSlop={HIT_SLOP}>
+                <Link2 size={rs(15)} color={T.primary} strokeWidth={1.8} />
+                <Text style={styles.linkUpActionText}>Link up</Text>
               </TouchableOpacity>
 
               <View style={styles.actionsRight}>
@@ -723,18 +761,20 @@ const styles = StyleSheet.create({
   actionsRight:     { flexDirection: 'row', alignItems: 'center', gap: rp(16) },
   action:           { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   actionCount:      { fontSize: FONT.sm, fontWeight: '500', color: T.textSecondary },
-  // "felt this" — flat, same visual grammar as heart/comment
+  // Link up — flat, same visual grammar as heart/comment
   resonateAction: {
     flexDirection: 'row',
     alignItems:    'center',
     gap:           rp(5),
   },
-  resonateActionText: {
+  linkUpActionText: {
     fontSize:      rf(12),
-    fontWeight:    '500',
-    color:         T.textSecondary,
+    fontWeight:    '700',
+    color:         T.primary,
     letterSpacing: 0.1,
   },
+  writeInspiredLink: { alignSelf: 'flex-start', marginBottom: rp(8) },
+  writeInspiredText: { fontSize: rf(11), color: T.textSecondary, fontStyle: 'italic', textDecorationLine: 'underline' },
 
   // "X people felt this" badge — sits above the action bar
   dropCountBadge: {

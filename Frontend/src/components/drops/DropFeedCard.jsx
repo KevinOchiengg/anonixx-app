@@ -51,11 +51,12 @@ const DropFeedCard = React.memo(function DropFeedCard({
   const {
     id, confession, created_at, theme, mood_tag, emotional_context,
     tease_mode, media_url, media_type, card_image_url, already_unlocked,
+    font_style,
     user_reaction = null,
     readers_now = 0,
   } = drop || {};
 
-  const themeObj = DROP_THEMES[theme] || DROP_THEMES['cinematic-coral'];
+  const themeObj = DROP_THEMES[theme] || DROP_THEMES['desire'];
 
   const layoutMode = (media_type === 'image' || media_type === 'video') && media_url
     ? 'split'
@@ -86,12 +87,13 @@ const DropFeedCard = React.memo(function DropFeedCard({
           moodTag={mood_tag || 'longing'}
           emotionalContext={emotional_context}
           teaseMode={!!tease_mode}
-          theme={theme || 'cinematic-coral'}
+          theme={theme || 'desire'}
           mediaUrl={previewUrl}
           layoutMode={layoutMode}
           confessionId={id}
           seed={id || confession}
           cardWidth={width}
+          fontStyle={font_style}
         />
         {isVideo && previewUrl && (
           <View style={styles.playBadge} pointerEvents="none">
@@ -132,7 +134,7 @@ const DropFeedCard = React.memo(function DropFeedCard({
           activeOpacity={0.88}
         >
           <Flame size={rs(15)} color="#fff" strokeWidth={2.5} />
-          <Text style={styles.oozeBtnText}>Ooze In</Text>
+          <Text style={styles.oozeBtnText}>Link up</Text>
         </TouchableOpacity>
       )}
 

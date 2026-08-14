@@ -1,17 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated, Linking, ScrollView, StyleSheet, Switch,
-  Text, TouchableOpacity, View,
+  Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useDispatch, useSelector } from 'react-redux';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft, Bell, BookOpen, ChevronRight, Database,
-  Eye, FileText, Globe, HelpCircle, Lock,
-  Monitor, ShieldAlert, Smartphone, User, Volume2, Zap, Trash2, Palette,
+  Eye, FileText, Globe, HelpCircle, Lock, Moon,
+  Monitor, ShieldAlert, Smartphone, User, Volume2, Zap, Trash2, Palette, Shield,
 } from 'lucide-react-native';
 import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../components/ui/Toast';
+import { updateUser } from '../../store/slices/authSlice';
+import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 
 const NavRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onPress, danger }) => (
@@ -72,12 +76,90 @@ export default function SettingsScreen({ navigation }) {
     ]).start();
   }, []);
 
+  const dispatch = useDispatch();
+  const authUser = useSelector((state) => state.auth.user);
+
   const [pushEnabled,      setPushEnabled]      = useState(true);
   const [notifyRequests,   setNotifyRequests]   = useState(true);
   const [notifyGroup,      setNotifyGroup]      = useState(false);
   const [screenshotDetect, setScreenshotDetect] = useState(false);
   const [haptics,          setHaptics]          = useState(true);
   const [inAppSounds,      setInAppSounds]      = useState(true);
+
+  // ── After Dark content opt-in (18+) ───────────────────────────
+  const [showAgeVerify, setShowAgeVerify] = useState(false);
+  const [verifyDob,     setVerifyDob]     = useState({ day: '', month: '', year: '' });
+  const [verifying,     setVerifying]     = useState(false);
+
+  // Persists a partial user patch to both Redux (for this session's
+  // Redux-reading screens, e.g. DropsComposeScreen) and the AsyncStorage
+  // 'user' blob AuthContext rehydrates from on cold start.
+  const persistUserPatch = useCallback(async (patch) => {
+    dispatch(updateUser(patch));
+    try {
+      const stored = await AsyncStorage.getItem('user');
+      if (stored) {
+        await AsyncStorage.setItem('user', JSON.stringify({ ...JSON.parse(stored), ...patch }));
+      }
+    } catch { /* best-effort */ }
+  }, [dispatch]);
+
+  const callOptIn = useCallback(async (optIn) => {
+    const token = await AsyncStorage.getItem('token');
+    const res = await fetch(`${API_BASE_URL}/api/v1/users/me/explicit-content-optin`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body:    JSON.stringify({ opt_in: optIn }),
+    });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    await persistUserPatch({ explicit_content_opt_in: data.explicit_content_opt_in });
+  }, [persistUserPatch]);
+
+  const handleExplicitToggle = useCallback(async (value) => {
+    if (value && !authUser?.age_verified) {
+      // Pre-migration account with no DOB on file — confirm age first.
+      setShowAgeVerify(true);
+      return;
+    }
+    try {
+      await callOptIn(value);
+    } catch {
+      showToast({ type: 'error', message: 'Could not update this. Try again.' });
+    }
+  }, [authUser, callOptIn, showToast]);
+
+  const handleConfirmAge = useCallback(async () => {
+    const day   = parseInt(verifyDob.day, 10);
+    const month = parseInt(verifyDob.month, 10);
+    const year  = parseInt(verifyDob.year, 10);
+    if (!(day >= 1 && day <= 31) || !(month >= 1 && month <= 12) || !(year >= 1900 && year <= new Date().getFullYear())) {
+      showToast({ type: 'warning', message: 'Enter a valid date of birth.' });
+      return;
+    }
+    setVerifying(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const dob = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const res = await fetch(`${API_BASE_URL}/api/v1/users/me/verify-age`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ date_of_birth: dob }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.detail || 'Verification failed');
+      }
+      await persistUserPatch({ age_verified: true });
+      await callOptIn(true);
+      setShowAgeVerify(false);
+      showToast({ type: 'success', message: 'Age verified — After Dark content unlocked.' });
+    } catch (err) {
+      showToast({ type: 'error', title: 'Could not verify', message: err.message || 'Anonixx is for adults 18+.' });
+    } finally {
+      setVerifying(false);
+    }
+  }, [verifyDob, persistUserPatch, callOptIn, showToast]);
 
   const handleDeleteAccount = useCallback(() => {
     showToast({
@@ -145,13 +227,25 @@ export default function SettingsScreen({ navigation }) {
           />
         </Section>
 
+        {/* ── Admin ── */}
+        {authUser?.is_admin && (
+          <Section title="Admin">
+            <NavRow
+              icon={Shield}
+              label="Admin Panel"
+              desc="Users, moderation, revenue"
+              onPress={() => navigation.navigate('AdminDashboard')}
+            />
+          </Section>
+        )}
+
         {/* ── Privacy & Safety ── */}
         <Section title="Privacy & Safety">
           <NavRow
             icon={ShieldAlert}
             label="Block List"
             desc="Manage blocked users"
-            onPress={() => {}}
+            onPress={() => navigation.navigate('BlockList')}
           />
           <View style={sec.divider} />
           <ToggleRow
@@ -173,8 +267,68 @@ export default function SettingsScreen({ navigation }) {
             icon={FileText}
             label="Report & Moderation History"
             desc="View your flagged content"
-            onPress={() => {}}
+            onPress={() => navigation.navigate('ModerationHistory')}
           />
+          <View style={sec.divider} />
+          <ToggleRow
+            icon={Moon}
+            label="After Dark Content"
+            desc="18+ explicit themes — separate from base account eligibility"
+            value={!!authUser?.explicit_content_opt_in}
+            onToggle={handleExplicitToggle}
+          />
+          {showAgeVerify && (
+            <View style={ageVerify.wrap}>
+              <Text style={ageVerify.title}>Confirm you're 18 or older</Text>
+              <Text style={ageVerify.sub}>
+                Your account was created before Anonixx required this — a one-time check.
+              </Text>
+              <View style={ageVerify.row}>
+                <TextInput
+                  style={ageVerify.input}
+                  value={verifyDob.day}
+                  onChangeText={(v) => setVerifyDob((p) => ({ ...p, day: v.replace(/[^0-9]/g, '').slice(0, 2) }))}
+                  placeholder="DD"
+                  placeholderTextColor={T.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                />
+                <Text style={ageVerify.slash}>/</Text>
+                <TextInput
+                  style={ageVerify.input}
+                  value={verifyDob.month}
+                  onChangeText={(v) => setVerifyDob((p) => ({ ...p, month: v.replace(/[^0-9]/g, '').slice(0, 2) }))}
+                  placeholder="MM"
+                  placeholderTextColor={T.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                />
+                <Text style={ageVerify.slash}>/</Text>
+                <TextInput
+                  style={[ageVerify.input, ageVerify.inputYear]}
+                  value={verifyDob.year}
+                  onChangeText={(v) => setVerifyDob((p) => ({ ...p, year: v.replace(/[^0-9]/g, '').slice(0, 4) }))}
+                  placeholder="YYYY"
+                  placeholderTextColor={T.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
+              </View>
+              <View style={ageVerify.actions}>
+                <TouchableOpacity onPress={() => setShowAgeVerify(false)} hitSlop={HIT_SLOP}>
+                  <Text style={ageVerify.cancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={ageVerify.confirmBtn}
+                  onPress={handleConfirmAge}
+                  disabled={verifying}
+                  hitSlop={HIT_SLOP}
+                >
+                  <Text style={ageVerify.confirmText}>{verifying ? 'Checking…' : 'Confirm'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </Section>
 
         {/* ── Notifications ── */}
@@ -361,6 +515,32 @@ const sec = StyleSheet.create({
     backgroundColor: T.border,
     marginLeft:      rs(34) + SPACING.sm + SPACING.md,
   },
+});
+
+const ageVerify = StyleSheet.create({
+  wrap: {
+    padding:          rp(14),
+    borderTopWidth:   1,
+    borderTopColor:   T.border,
+    backgroundColor:  T.surfaceAlt,
+  },
+  title: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
+  sub:   { fontSize: rf(11), color: T.textSecondary, marginTop: rp(4), lineHeight: rf(16) },
+  row:   { flexDirection: 'row', alignItems: 'center', marginTop: rp(12) },
+  input: {
+    fontSize: FONT.md, color: T.text, textAlign: 'center', width: rs(40),
+    backgroundColor: T.inputBg, borderRadius: RADIUS.md, borderWidth: 1,
+    borderColor: T.border, paddingVertical: rp(8),
+  },
+  inputYear: { width: rs(64) },
+  slash:     { color: T.textSecondary, fontSize: FONT.md, marginHorizontal: rp(6) },
+  actions:   { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: rp(14), gap: SPACING.md },
+  cancel:    { color: T.textSecondary, fontSize: FONT.sm, fontWeight: '600' },
+  confirmBtn: {
+    backgroundColor: T.primary, borderRadius: RADIUS.md,
+    paddingHorizontal: rp(16), paddingVertical: rp(9),
+  },
+  confirmText: { color: '#fff', fontSize: FONT.sm, fontWeight: '700' },
 });
 
 const styles = StyleSheet.create({

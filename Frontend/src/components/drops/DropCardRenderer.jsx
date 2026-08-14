@@ -13,30 +13,17 @@
  * Use <DropCardRenderer confession=... theme=... /> anywhere a card is needed.
  */
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ImageBackground } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { rf, rp, rs } from '../../utils/responsive';
 
 // ─── Themes ───────────────────────────────────────────────────
-// Each theme defines the mood. Tier 1 is open to all, Tier 2 requires 18+ opt-in.
+// Each theme defines the mood. Tier 1 is open to all, Tier 2 requires 18+
+// verification + a separate explicit-content opt-in (see api/v1/drops.py).
+// Reduced to 3 curated themes — mirrors Backend/app/api/v1/drops.py's
+// TIER_1_THEMES/TIER_2_THEMES exactly, keep both in sync if this changes.
 export const DROP_THEMES = {
   // ── Tier 1 ──
-  'cinematic-coral': {
-    tier: 1,
-    label: 'Cinematic Coral',
-    bgFrom: '#0b0f18', bgTo: '#131825',
-    accent: '#FF634A', accentGlow: 'rgba(255,99,74,0.12)',
-    textColor: '#EAEAF0', ghostColor: 'rgba(255,255,255,0.04)',
-    moodColor: '#9A9AA3', identityColor: '#FF634A',
-  },
-  'midnight': {
-    tier: 1,
-    label: 'Midnight',
-    bgFrom: '#05070d', bgTo: '#0d1223',
-    accent: '#4A6FFF', accentGlow: 'rgba(74,111,255,0.10)',
-    textColor: '#EAEAF0', ghostColor: 'rgba(74,111,255,0.05)',
-    moodColor: '#7E88A6', identityColor: '#4A6FFF',
-  },
   'desire': {
     tier: 1,
     label: 'Desire',
@@ -45,88 +32,10 @@ export const DROP_THEMES = {
     textColor: '#F6E6EC', ghostColor: 'rgba(255,59,122,0.05)',
     moodColor: '#C48A98', identityColor: '#FF3B7A',
   },
-  'devotion': {
-    tier: 1,
-    label: 'Devotion',
-    bgFrom: '#120a1c', bgTo: '#261640',
-    accent: '#B388FF', accentGlow: 'rgba(179,136,255,0.12)',
-    textColor: '#EDE4FF', ghostColor: 'rgba(179,136,255,0.05)',
-    moodColor: '#9D8BB8', identityColor: '#B388FF',
-  },
-  'solitude': {
-    tier: 1,
-    label: 'Solitude',
-    bgFrom: '#0a0f14', bgTo: '#1a2332',
-    accent: '#7DD3C0', accentGlow: 'rgba(125,211,192,0.10)',
-    textColor: '#E4F0EC', ghostColor: 'rgba(255,255,255,0.03)',
-    moodColor: '#8CA89F', identityColor: '#7DD3C0',
-  },
-  'flame': {
-    tier: 1,
-    label: 'Flame',
-    bgFrom: '#1a0a05', bgTo: '#2e1408',
-    accent: '#FF9040', accentGlow: 'rgba(255,144,64,0.14)',
-    textColor: '#FFE8D6', ghostColor: 'rgba(255,144,64,0.05)',
-    moodColor: '#C49880', identityColor: '#FF9040',
-  },
-  'confession': {
-    tier: 1,
-    label: 'Confession',
-    bgFrom: '#0c0a14', bgTo: '#1d1828',
-    accent: '#F5E6C8', accentGlow: 'rgba(245,230,200,0.08)',
-    textColor: '#F5E6C8', ghostColor: 'rgba(245,230,200,0.04)',
-    moodColor: '#A89B82', identityColor: '#F5E6C8',
-  },
-  'secret': {
-    tier: 1,
-    label: 'Secret',
-    bgFrom: '#060a10', bgTo: '#0f1822',
-    accent: '#4FBDDB', accentGlow: 'rgba(79,189,219,0.10)',
-    textColor: '#DDEEF5', ghostColor: 'rgba(79,189,219,0.04)',
-    moodColor: '#7A9AA8', identityColor: '#4FBDDB',
-  },
-  'ash': {
-    tier: 1,
-    label: 'Ash',
-    bgFrom: '#0e0e0e', bgTo: '#1c1c1c',
-    accent: '#C9C9C9', accentGlow: 'rgba(201,201,201,0.08)',
-    textColor: '#E8E8E8', ghostColor: 'rgba(255,255,255,0.04)',
-    moodColor: '#8A8A8A', identityColor: '#C9C9C9',
-  },
 
   // ── Tier 2 (18+ verified, explicit opt-in required) ──
-  'after-dark': {
-    tier: 2,
-    label: 'After Dark',
-    bgFrom: '#08020c', bgTo: '#1a0824',
-    accent: '#B026FF', accentGlow: 'rgba(176,38,255,0.14)',
-    textColor: '#EEDDFF', ghostColor: 'rgba(176,38,255,0.05)',
-    moodColor: '#8B6BA8', identityColor: '#B026FF',
-  },
-  'uncensored': {
-    tier: 2,
-    label: 'Uncensored',
-    bgFrom: '#120202', bgTo: '#2a0808',
-    accent: '#FF1744', accentGlow: 'rgba(255,23,68,0.16)',
-    textColor: '#FFE0E4', ghostColor: 'rgba(255,23,68,0.06)',
-    moodColor: '#B07078', identityColor: '#FF1744',
-  },
-  'forbidden': {
-    tier: 2,
-    label: 'Forbidden',
-    bgFrom: '#0a0005', bgTo: '#1f0612',
-    accent: '#D4004F', accentGlow: 'rgba(212,0,79,0.14)',
-    textColor: '#F5D8E2', ghostColor: 'rgba(212,0,79,0.06)',
-    moodColor: '#A06880', identityColor: '#D4004F',
-  },
-  'bare': {
-    tier: 2,
-    label: 'Bare',
-    bgFrom: '#0d0806', bgTo: '#1f140e',
-    accent: '#E8A87C', accentGlow: 'rgba(232,168,124,0.12)',
-    textColor: '#F2E4D6', ghostColor: 'rgba(232,168,124,0.06)',
-    moodColor: '#A8907C', identityColor: '#E8A87C',
-  },
+  // Midnight Sin listed first within this tier per request — still gated
+  // identically to After Dark, this only affects display order.
   'midnight-sin': {
     tier: 2,
     label: 'Midnight Sin',
@@ -134,6 +43,14 @@ export const DROP_THEMES = {
     accent: '#FF006E', accentGlow: 'rgba(255,0,110,0.14)',
     textColor: '#F2D8E4', ghostColor: 'rgba(255,0,110,0.05)',
     moodColor: '#A0708A', identityColor: '#FF006E',
+  },
+  'after-dark': {
+    tier: 2,
+    label: 'After Dark',
+    bgFrom: '#08020c', bgTo: '#1a0824',
+    accent: '#B026FF', accentGlow: 'rgba(176,38,255,0.14)',
+    textColor: '#EEDDFF', ghostColor: 'rgba(176,38,255,0.05)',
+    moodColor: '#8B6BA8', identityColor: '#B026FF',
   },
 };
 
@@ -145,17 +62,46 @@ export const TIER_2_THEMES = Object.entries(DROP_THEMES)
   .filter(([, t]) => t.tier === 2)
   .map(([id, t]) => ({ id, ...t }));
 
+// ─── Card font styles ──────────────────────────────────────────
+// `fontFamily` names map to real loaded assets (see src/config/fonts.js,
+// wired up via useFonts() in App.js) — the fontStyle/fontWeight/
+// letterSpacing values below are kept alongside them as a second layer
+// of differentiation on top of the actual typeface change.
+const CARD_FONT_STYLES = {
+  'classic': {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontStyle:     'italic',
+    fontWeight:    '400',
+    letterSpacing: 0.3,
+  },
+  'sultry-script': {
+    fontFamily:    'DancingScript-Regular',
+    fontStyle:     'italic',
+    fontWeight:    '300',
+    letterSpacing: 0,
+  },
+  'bold-tease': {
+    fontFamily:    'Montserrat-ExtraBold',
+    fontStyle:     'normal',
+    fontWeight:    '800',
+    letterSpacing: 0.6,
+  },
+};
+
 // ─── Text sizing ─────────────────────────────────────────────
 // Scales confession text based on length — the shorter the confession,
 // the bigger it breathes on the card.
 const getConfessionFontSize = (text, cardWidth) => {
   const len = text?.length || 0;
   // Base sizes are at 1080px card width — scale proportionally to actual render width.
+  // Bumped up from 52/44/36/32 — the card's whole job is to be a bold,
+  // stop-the-scroll visual; the text is the one thing on it that has to
+  // carry that, so it needs more visual weight than a body-text size.
   const scale = cardWidth / 1080;
-  if (len < 80)        return Math.round(52 * scale);
-  if (len < 160)       return Math.round(44 * scale);
-  if (len < 240)       return Math.round(36 * scale);
-  return Math.round(32 * scale);
+  if (len < 80)        return Math.round(68 * scale);
+  if (len < 160)       return Math.round(56 * scale);
+  if (len < 240)       return Math.round(46 * scale);
+  return Math.round(40 * scale);
 };
 
 // ─── Tease mode ──────────────────────────────────────────────
@@ -215,19 +161,31 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   moodTag         = 'longing',
   emotionalContext= null,         // "written at 2:14am" | "kept for 3 years"
   teaseMode       = false,        // forces tease regardless of random
-  theme           = 'cinematic-coral',
+  theme           = 'desire',
   mediaUrl        = null,         // image/video background (overlay mode)
   layoutMode      = 'split',      // 'split' | 'overlay' (for image/video drops)
   confessionId    = null,         // deep-link slug
   seed            = null,         // for variation — defaults to confession text
   cardWidth       = 360,          // scales everything proportionally
   showIdentityBar = true,
+  // Compose-mode: type directly into the rendered card instead of a
+  // separate input box. Tease-cutting is a reader-facing effect, so it's
+  // suppressed while editable — the writer always sees their own full text.
+  editable        = false,
+  onChangeText    = null,
+  placeholder     = '',
+  maxLength       = null,
+  // Card font style — "classic" | "sultry-script" | "bold-tease". Family
+  // names below are aspirational (no custom fonts are loaded anywhere in
+  // this app yet — see CARD_FONT_STYLES comment); the italic/weight/
+  // letter-spacing values are what actually render the difference today.
+  fontStyle       = 'classic',
 }) {
-  const t = DROP_THEMES[theme] || DROP_THEMES['cinematic-coral'];
+  const t = DROP_THEMES[theme] || DROP_THEMES['desire'];
   const variation = useMemo(() => getVariation(seed || confession), [seed, confession]);
   const teaseResult = useMemo(
-    () => (teaseMode ? applyTease(confession) : { body: confession, teased: false }),
-    [confession, teaseMode]
+    () => (teaseMode && !editable ? applyTease(confession) : { body: confession, teased: false }),
+    [confession, teaseMode, editable]
   );
 
   const fontSize = getConfessionFontSize(teaseResult.body, cardWidth);
@@ -275,7 +233,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
                 {teaseResult.body}
               </Text>
               {teaseResult.teased && (
-                <Text style={[styles.teaseHint, { color: t.accent }]}>read the full confession →</Text>
+                <Text style={[styles.teaseHint, { color: t.accent }]}>see where this goes →</Text>
               )}
             </View>
           </LinearGradient>
@@ -337,6 +295,11 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
               teased={teaseResult.teased}
               fontSize={fontSize}
               accentHeight={variation.accentHeight}
+              editable={editable}
+              onChangeText={onChangeText}
+              placeholder={placeholder}
+              maxLength={maxLength}
+              fontStyle={fontStyle}
             />
             <MoodBlock
               theme={t}
@@ -369,6 +332,11 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
             teased={teaseResult.teased}
             fontSize={fontSize}
             accentHeight={variation.accentHeight}
+            editable={editable}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            fontStyle={fontStyle}
           />
           <MoodBlock
             theme={t}
@@ -393,7 +361,18 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
 // ─── Sub-components ──────────────────────────────────────────
 const ConfessionBlock = React.memo(function ConfessionBlock({
   theme, text, teased, fontSize, accentHeight,
+  editable, onChangeText, placeholder, maxLength, fontStyle,
 }) {
+  const fontDef = CARD_FONT_STYLES[fontStyle] || CARD_FONT_STYLES['classic'];
+  const textStyle = {
+    fontFamily:    fontDef.fontFamily,
+    fontStyle:     fontDef.fontStyle,
+    fontWeight:    fontDef.fontWeight,
+    fontSize,
+    lineHeight:    Math.round(fontSize * 1.6),
+    letterSpacing: fontDef.letterSpacing,
+    color:         theme.textColor,
+  };
   return (
     <View style={styles.confessionRow}>
       <View style={[styles.accentLine, {
@@ -402,20 +381,26 @@ const ConfessionBlock = React.memo(function ConfessionBlock({
         height: Math.round(fontSize * 2.4 * accentHeight),
       }]} />
       <View style={styles.confessionTextWrap}>
-        <Text
-          style={{
-            fontFamily:    'PlayfairDisplay-Italic',
-            fontSize,
-            lineHeight:    Math.round(fontSize * 1.6),
-            letterSpacing: 0.3,
-            color:         theme.textColor,
-          }}
-        >
-          {text}
-        </Text>
+        {editable ? (
+          <TextInput
+            style={[textStyle, styles.confessionInput]}
+            value={text}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor={theme.textColor + '55'}
+            multiline
+            scrollEnabled={false}
+            textAlignVertical="top"
+            maxLength={maxLength || undefined}
+            autoCapitalize="sentences"
+            autoCorrect
+          />
+        ) : (
+          <Text style={textStyle}>{text}</Text>
+        )}
         {teased && (
           <Text style={[styles.teaseHint, { color: theme.accent }]}>
-            read the full confession →
+            see where this goes →
           </Text>
         )}
       </View>
@@ -524,6 +509,11 @@ const styles = StyleSheet.create({
   },
   confessionTextWrap: {
     flex: 1,
+  },
+  confessionInput: {
+    padding:        0,
+    margin:         0,
+    textAlignVertical: 'top',
   },
   teaseHint: {
     fontFamily: 'DMSans-Regular',

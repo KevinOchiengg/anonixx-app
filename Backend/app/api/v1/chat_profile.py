@@ -26,6 +26,9 @@ FONT_STYLES = {"classic", "sultry-script", "bold-tease"}
 STICKER_PACK = [
     "🔥", "😈", "💋", "🖤", "✨", "🌙", "⛓️", "🍒", "😏", "💦",
 ]
+# Played once for an unlocker on their first open of the chat — see
+# Frontend/src/config/sounds.js for the id → asset mapping.
+WELCOME_SOUNDS = {"soft-chime", "warm-bell", "gentle-hum", "silence"}
 
 
 def _now() -> datetime:
@@ -37,6 +40,7 @@ class ChatProfileUpdate(BaseModel):
     font_style:       Optional[str] = None
     stickers:         Optional[List[str]] = None
     profile_picture_url: Optional[str] = None
+    welcome_sound:    Optional[str] = None
 
 
 class GalleryMediaInput(BaseModel):
@@ -53,6 +57,7 @@ def _sanitize(doc: dict) -> dict:
         "profile_picture_url": doc.get("profile_picture_url"),
         "gallery":             doc.get("gallery", []),
         "welcome_media_index": doc.get("welcome_media_index", 0),
+        "welcome_sound":       doc.get("welcome_sound") or "soft-chime",
         "updated_at":          doc["updated_at"].isoformat() if doc.get("updated_at") else None,
     }
 
@@ -82,6 +87,9 @@ async def update_my_chat_profile(
         if invalid:
             raise HTTPException(status_code=400, detail=f"Unknown stickers: {invalid}")
 
+    if data.welcome_sound and data.welcome_sound not in WELCOME_SOUNDS:
+        raise HTTPException(status_code=400, detail=f"welcome_sound must be one of: {', '.join(WELCOME_SOUNDS)}")
+
     update = {"updated_at": _now()}
     if data.background_color is not None:
         update["background_color"] = data.background_color
@@ -91,6 +99,8 @@ async def update_my_chat_profile(
         update["stickers"] = data.stickers
     if data.profile_picture_url is not None:
         update["profile_picture_url"] = data.profile_picture_url
+    if data.welcome_sound is not None:
+        update["welcome_sound"] = data.welcome_sound
 
     await db["chat_profiles"].update_one(
         {"user_id": current_user_id},

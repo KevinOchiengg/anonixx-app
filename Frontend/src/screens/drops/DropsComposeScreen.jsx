@@ -2,8 +2,9 @@
  * DropsComposeScreen.jsx
  *
  * The new compose surface for Anonixx Drops.
- * Four formats, live card preview, theme picker, unsent draft layer,
- * daily-limit counter, dangerous-edge warning.
+ * Three formats (Text / Media / Voice) + an independent Poll toggle,
+ * live card preview, theme picker, unsent draft layer, daily-limit
+ * counter, dangerous-edge warning.
  *
  * Drops are rendered via <DropCardRenderer /> — this screen is only state,
  * composition and gating. All visual identity lives in the renderer.
@@ -15,7 +16,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Switch,
   ActivityIndicator, Dimensions, Keyboard, KeyboardAvoidingView,
   Platform, ScrollView, Image, Animated,
 } from 'react-native';
@@ -23,10 +24,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
-  ChevronLeft, Film, FileImage, Lock, Mic, Sparkles, Type,
-  AlertTriangle, Trash2,
+  ChevronLeft, ChevronDown, Images, BarChart2, Lock, Mic, Sparkles, Tag, Type,
+  AlertTriangle, Trash2, X,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 
@@ -44,7 +45,7 @@ import T from '../../utils/theme';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CARD_W   = SCREEN_W - SPACING.md * 2;
-const MAX_CHARS = 280;
+const MAX_CHARS = 500;
 
 // ─── Daily limit ────────────────────────────────────────────────
 // Free tier defaults to 3/day; the server is the source of truth and can
@@ -59,8 +60,8 @@ const todayKey = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 // ─── Formats ───────────────────────────────────────────────────
 const FORMATS = [
   { id: 'text',  label: 'Text',  Icon: Type      },
-  { id: 'image', label: 'Image', Icon: FileImage },
-  { id: 'video', label: 'Video', Icon: Film      },
+  { id: 'media', label: 'Media', Icon: Images    },
+  { id: 'poll',  label: 'Poll',  Icon: BarChart2 },
   { id: 'voice', label: 'Voice', Icon: Mic       },
 ];
 
@@ -77,20 +78,6 @@ const CATEGORIES = [
   { id: 'need stability',          label: 'Need stability',        emoji: '⚓' },
   { id: 'open to connection',      label: 'Open to connection',    emoji: '🤲' },
   { id: 'just need to be heard',   label: 'Just need to be heard', emoji: '🌙' },
-];
-
-// ─── Mood tags ─────────────────────────────────────────────────
-const MOOD_TAGS = [
-  'longing', 'restless', 'tender', 'bitter', 'hopeful',
-  'ashamed', 'dangerous', 'quiet', 'unsent', 'reckless',
-];
-
-// ─── Intensity (spec section 11) ───────────────────────────────
-// How heavy the drop feels. Not a rating — a frame.
-const INTENSITY_LEVELS = [
-  { id: 'soft',        label: 'soft',        sub: 'a thought that slipped' },
-  { id: 'heavy',       label: 'heavy',       sub: 'pressing on your chest' },
-  { id: 'devastating', label: 'devastating', sub: "you can't hold it anymore" },
 ];
 
 const HINT_MAX = 16;
@@ -156,24 +143,11 @@ const ThemeSwatch = React.memo(function ThemeSwatch({ themeId, theme, active, lo
   );
 });
 
-// ─── Mood chip ─────────────────────────────────────────────────
-const MoodChip = React.memo(function MoodChip({ tag, active, onPress }) {
-  return (
-    <TouchableOpacity
-      style={[s.moodChip, active && s.moodChipActive]}
-      onPress={onPress}
-      hitSlop={HIT_SLOP}
-      activeOpacity={0.85}
-    >
-      <Text style={[s.moodChipText, active && s.moodChipTextActive]}>· {tag} ·</Text>
-    </TouchableOpacity>
-  );
-});
-
 // ─── Main screen ───────────────────────────────────────────────
 export default function DropsComposeScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
+  const authUser = useSelector((state) => state.auth.user);
 
   // ── Inspired-by handoff (from feed Drop button) ──────────────
   // When a user taps the "drop" button on a feed confession card and
@@ -185,12 +159,13 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Core state ────────────────────────────────────────────────
   const [format,   setFormat]   = useState('text');    // text | image | video | voice
   const [text,     setText]     = useState(initialText);
-  const [theme,    setTheme]    = useState('cinematic-coral');
+  const [theme,    setTheme]    = useState('midnight-sin');
   const [moodTag,  setMoodTag]  = useState('longing');
   const [category, setCategory] = useState('love');
   const [teaseMode,setTeaseMode]= useState(false);
   const [mediaUri, setMediaUri] = useState(null);
   const [thumbUri, setThumbUri] = useState(null);
+  const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
   const [loading,  setLoading]  = useState(false);
 
   // ── Tag a specific user (optional — drop still hits marketplace) ─
@@ -208,12 +183,10 @@ export default function DropsComposeScreen({ navigation, route }) {
   // the poster get noticed. This is an opt-OUT toggle, not opt-in.
   const [publisherOptIn, setPublisherOptIn] = useState(true);
 
-  // ── Feed-as-drops upgrade: location, font style, poll ─────────
+  // ── Feed-as-drops upgrade: location, font style ───────────────
+  // Poll now lives on its own screen (DropsPollScreen), same pattern as Voice.
   const [location, setLocation] = useState('');
-  const [fontStyle, setFontStyle] = useState('classic'); // classic | sultry-script | bold-tease
-  const [pollEnabled, setPollEnabled] = useState(false);
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [fontStyle, setFontStyle] = useState('bold-tease'); // classic | sultry-script | bold-tease
 
   // ── Intensity + one-word hint (section 11) ────────────────────
   const [intensity, setIntensity] = useState('heavy');
@@ -224,14 +197,21 @@ export default function DropsComposeScreen({ navigation, route }) {
   // surface it so the user chooses to continue or discard.
   const [showUnsentBanner, setShowUnsentBanner] = useState(false);
 
+  // ── Progressive disclosure — collapsed by default so the compose
+  // screen reads as "write + drop", not a settings form ────────────
+  const [refineUiOpen,  setRefineUiOpen]  = useState(false);
+  const [tagSectionOpen, setTagSectionOpen] = useState(false);
+
   // ── Delivery tension (section 6) ──────────────────────────────
   // Briefly pauses between "Drop it" and the actual POST so the
   // moment of sending feels intentional rather than reflexive.
   const [sending, setSending] = useState(false);
 
-  // ── Tier-2 gate (18+ opt-in) ──────────────────────────────────
-  // BACKEND: replace with real user.age_verified when available.
-  const [tier2Unlocked, setTier2Unlocked] = useState(false);
+  // ── Tier-2 gate (18+) ──────────────────────────────────────────
+  // Signup itself is a hard 18+ gate (age_verified is always true past
+  // registration), so that alone is sufficient — themes are no longer
+  // additionally gated behind the separate After Dark viewing preference.
+  const tier2Unlocked = !!authUser?.age_verified;
 
   // ── Daily limit ───────────────────────────────────────────────
   // Server is authoritative; local count is a same-day fallback.
@@ -347,12 +327,14 @@ export default function DropsComposeScreen({ navigation, route }) {
     setTheme(themeId);
   }, [tier2Unlocked, showToast]);
 
-  // ── Format change — clear media if switching away ─────────────
+  // ── Format change — clear media if switching away. Voice and Poll
+  // both hand off to their own dedicated screen, same pattern for both ─
   const handleFormatChange = useCallback((f) => {
     setFormat(f);
-    if (f !== 'image' && f !== 'video') {
+    if (f !== 'media') {
       setMediaUri(null);
       setThumbUri(null);
+      setMediaKind(null);
     }
     if (f === 'voice') {
       navigation.navigate?.('DropsRecord', {
@@ -360,9 +342,15 @@ export default function DropsComposeScreen({ navigation, route }) {
         target_user_id: taggedUser?.id || undefined,
       });
     }
-  }, [navigation, theme, moodTag, text]);
+    if (f === 'poll') {
+      navigation.navigate?.('DropsPoll', {
+        theme, moodTag, category, text,
+        target_user_id: taggedUser?.id || undefined,
+      });
+    }
+  }, [navigation, theme, moodTag, category, text, taggedUser]);
 
-  // ── Media pick (image / video) ────────────────────────────────
+  // ── Media pick — one picker, either photos or videos ──────────
   const handlePickMedia = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -371,27 +359,32 @@ export default function DropsComposeScreen({ navigation, route }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:    format === 'image' ? 'images' : 'videos',
+        mediaTypes:    ['images', 'videos'],
         quality:       0.85,
         allowsEditing: false,
       });
       if (result.canceled) return;
       const asset = result.assets[0];
+      const kind = asset.type === 'video' ? 'video' : 'image';
       setMediaUri(asset.uri);
-      if (format === 'video') {
+      setMediaKind(kind);
+      if (kind === 'video') {
         try {
           const { uri } = await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 1000 });
           setThumbUri(uri);
         } catch { setThumbUri(null); }
+      } else {
+        setThumbUri(null);
       }
     } catch {
       showToast({ type: 'error', message: 'Could not open gallery.' });
     }
-  }, [format, showToast]);
+  }, [showToast]);
 
   const handleClearMedia = useCallback(() => {
     setMediaUri(null);
     setThumbUri(null);
+    setMediaKind(null);
   }, []);
 
   // ── Discard draft ─────────────────────────────────────────────
@@ -483,8 +476,8 @@ export default function DropsComposeScreen({ navigation, route }) {
       showToast({ type: 'warning', message: 'Write your confession first.' });
       return;
     }
-    if ((format === 'image' || format === 'video') && !mediaUri) {
-      showToast({ type: 'warning', message: `Pick ${format === 'image' ? 'an image' : 'a video'} first.` });
+    if (format === 'media' && !mediaUri) {
+      showToast({ type: 'warning', message: 'Pick a photo or video first.' });
       return;
     }
 
@@ -522,7 +515,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         // Publisher opt-in is gated off for Tier 2 (after-dark is never published).
         // Tri-state server-side: explicit false is the only way to opt out.
         publisher_opt_in: tier2 ? false : !!publisherOptIn,
-        ...(format !== 'text' && mediaUri ? { media_type: format } : {}),
+        ...(mediaKind && mediaUri ? { media_type: mediaKind } : {}),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
         // AI refinement — only stamped when the user accepted the suggestion.
@@ -532,12 +525,6 @@ export default function DropsComposeScreen({ navigation, route }) {
         } : {}),
         ...(location.trim() ? { location: location.trim() } : {}),
         font_style: fontStyle,
-        ...(pollEnabled && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2 ? {
-          poll: {
-            question: pollQuestion.trim(),
-            options:  pollOptions.filter(o => o.trim()).slice(0, 4),
-          },
-        } : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
@@ -606,18 +593,18 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    limitHit, format, text, mediaUri, theme, moodTag, category, teaseMode,
+    limitHit, format, text, mediaUri, mediaKind, theme, moodTag, category, teaseMode,
     intensity, hint, taggedUser, refineEnabled, refinedText, selectedRefineMode,
     publisherOptIn, dailyUsed, dailyLimit, fetchDailyLimit,
-    location, fontStyle, pollEnabled, pollQuestion, pollOptions,
+    location, fontStyle,
     dispatch, navigation, showToast,
   ]);
 
   // ── Derived ───────────────────────────────────────────────────
   const themeObj      = DROP_THEMES[theme];
   const canDrop       = format === 'text' ? !!text.trim() : !!mediaUri;
-  const layoutMode    = (format === 'image' && mediaUri) ? 'split' : 'split';
-  const cardMediaUri  = (format === 'image' || format === 'video') ? (thumbUri || mediaUri) : null;
+  const layoutMode    = 'split';
+  const cardMediaUri  = format === 'media' ? (thumbUri || mediaUri) : null;
   const remaining     = MAX_CHARS - text.length;
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
@@ -648,9 +635,9 @@ export default function DropsComposeScreen({ navigation, route }) {
         {limitHit ? (
           <View style={[s.limitStrip, s.limitStripHit]}>
             <View style={{ flex: 1 }}>
-              <Text style={s.limitTitleHit}>You've said a lot today.</Text>
+              <Text style={s.limitTitleHit}>You've sent enough for one day.</Text>
               <Text style={s.limitSubHit}>
-                Come back tomorrow — or unlock unlimited.
+                Come back tomorrow — or go unlimited and keep sending.
               </Text>
             </View>
             <TouchableOpacity
@@ -687,10 +674,10 @@ export default function DropsComposeScreen({ navigation, route }) {
           {showUnsentBanner && (
             <View style={s.unsentBanner}>
               <Text style={s.unsentTitle}>
-                You almost said something to them…
+                You almost sent this to them…
               </Text>
               <Text style={s.unsentSub}>
-                It's still here. Waiting.
+                Still here. Still waiting to be sent.
               </Text>
               <View style={s.unsentActions}>
                 <TouchableOpacity
@@ -713,7 +700,9 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Format selector */}
+          {/* Format selector — Text / Media / Poll / Voice. Poll hands off
+              to its own screen exactly like Voice does — building a poll
+              isn't a quick inline toggle, it's its own compose step. */}
           <Animated.View style={[s.formatRow, { opacity: fade }]}>
             {FORMATS.map(({ id, label, Icon }) => (
               <FormatChip
@@ -727,10 +716,11 @@ export default function DropsComposeScreen({ navigation, route }) {
             ))}
           </Animated.View>
 
-          {/* Live card preview */}
+          {/* Live card preview — type directly into the card itself,
+              no separate input box duplicating what it shows. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
             <DropCardRenderer
-              confession={text || 'your confession will live here — the quiet made visible.'}
+              confession={text}
               moodTag={moodTag}
               teaseMode={teaseMode}
               theme={theme}
@@ -738,108 +728,22 @@ export default function DropsComposeScreen({ navigation, route }) {
               layoutMode={layoutMode}
               cardWidth={CARD_W}
               seed={text || format}
+              editable
+              onChangeText={setText}
+              placeholder={format === 'text'
+                ? "say exactly what you want them to know…"
+                : 'tease it a little (optional)…'}
+              maxLength={MAX_CHARS}
+              fontStyle={fontStyle}
             />
           </Animated.View>
 
-          {/* Text input — only in text format */}
-          {format === 'text' && (
-            <View style={s.inputWrap}>
-              <TextInput
-                style={s.input}
-                value={text}
-                onChangeText={setText}
-                placeholder="say what you've been holding in…"
-                placeholderTextColor={T.textMute}
-                multiline
-                maxLength={MAX_CHARS}
-                textAlignVertical="top"
-                autoCapitalize="sentences"
-                autoCorrect
-              />
-              <View style={s.inputMeta}>
-                <TouchableOpacity
-                  style={[s.teaseToggle, teaseMode && s.teaseToggleActive]}
-                  onPress={() => setTeaseMode(v => !v)}
-                  hitSlop={HIT_SLOP}
-                >
-                  <Text style={[s.teaseToggleText, teaseMode && { color: T.primary }]}>
-                    {teaseMode ? '◉  tease on — cut mid-thought' : '○  tease mode'}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={[s.remaining, { color: remColor }]}>{remaining}</Text>
-              </View>
-            </View>
-          )}
-
-          {/* Media picker — image / video */}
-          {(format === 'image' || format === 'video') && (
-            <View style={s.mediaSection}>
-              {!mediaUri ? (
-                <TouchableOpacity
-                  style={s.pickBtn}
-                  onPress={handlePickMedia}
-                  activeOpacity={0.85}
-                >
-                  {format === 'image'
-                    ? <FileImage size={rs(28)} color={T.primary} />
-                    : <Film       size={rs(28)} color={T.primary} />
-                  }
-                  <Text style={s.pickBtnText}>
-                    Tap to pick {format === 'image' ? 'an image' : 'a video'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={s.previewWrap}>
-                  <Image source={{ uri: thumbUri || mediaUri }} style={s.preview} resizeMode="cover" />
-                  <TouchableOpacity style={s.clearBtn} onPress={handleClearMedia} hitSlop={HIT_SLOP}>
-                    <X size={rs(14)} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              <TextInput
-                style={s.caption}
-                value={text}
-                onChangeText={setText}
-                placeholder="add a caption (optional)…"
-                placeholderTextColor={T.textMute}
-                multiline
-                maxLength={MAX_CHARS}
-              />
-            </View>
-          )}
-
-          {/* Dangerous edge warning — spec section 10 */}
-          {edge && (
-            <View style={s.edgeWarn}>
-              <AlertTriangle size={rs(14)} color={T.warn} />
-              <View style={{ flex: 1 }}>
-                {edge === 'long' ? (
-                  <Text style={s.edgeWarnText}>
-                    Long confession. Cards read better when a thought breaks itself — consider tease mode.
-                  </Text>
-                ) : (
-                  <>
-                    <Text style={s.edgeWarnTitle}>
-                      This could change something between you.
-                    </Text>
-                    <Text style={s.edgeWarnText}>
-                      You can't undo this once it's sent.
-                    </Text>
-                  </>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* Theme picker */}
+          {/* Theme — right under the card, not buried in a collapsed
+              section, since it's the one thing here that visibly changes
+              the card and you should be able to see that change without
+              scrolling back up to look. */}
           <Text style={s.sectionLabel}>Theme</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.themeScroll}
-            keyboardShouldPersistTaps="handled"
-          >
+          <View style={s.themeRow}>
             {TIER_1_THEMES.map((t) => (
               <ThemeSwatch
                 key={t.id}
@@ -860,255 +764,82 @@ export default function DropsComposeScreen({ navigation, route }) {
                 onPress={() => handleSelectTheme(t.id)}
               />
             ))}
-          </ScrollView>
-
-          {/* Mood picker */}
-          <Text style={s.sectionLabel}>Mood</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.moodScroll}
-            keyboardShouldPersistTaps="handled"
-          >
-            {MOOD_TAGS.map((tag) => (
-              <MoodChip
-                key={tag}
-                tag={tag}
-                active={moodTag === tag}
-                onPress={() => setMoodTag(tag)}
-              />
-            ))}
-          </ScrollView>
-
-          {/* Category picker */}
-          <Text style={s.sectionLabel}>Category</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.moodScroll}
-            keyboardShouldPersistTaps="handled"
-          >
-            {CATEGORIES.map(({ id, label, emoji }) => (
-              <MoodChip
-                key={id}
-                tag={`${emoji}  ${label}`}
-                active={category === id}
-                onPress={() => setCategory(id)}
-              />
-            ))}
-          </ScrollView>
-
-          {/* Intensity (section 11) */}
-          <Text style={s.sectionLabel}>How heavy is it?</Text>
-          <View style={s.intensityRow}>
-            {INTENSITY_LEVELS.map(({ id, label, sub }) => {
-              const active = intensity === id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={[s.intensityBtn, active && s.intensityBtnActive]}
-                  onPress={() => setIntensity(id)}
-                  activeOpacity={0.85}
-                  hitSlop={HIT_SLOP}
-                >
-                  <Text style={[s.intensityLabel, active && s.intensityLabelActive]}>
-                    {label}
-                  </Text>
-                  <Text style={s.intensitySub}>{sub}</Text>
-                </TouchableOpacity>
-              );
-            })}
           </View>
 
-          {/* Tag someone — optional, drop still hits marketplace too */}
-          <TagUserSection
-            taggedUser={taggedUser}
-            onTag={setTaggedUser}
-            onClear={() => setTaggedUser(null)}
-          />
-
-          {/* One-word hint — only when someone is tagged */}
-          {!!taggedUser && (
-            <View style={s.hintBox}>
-              <Text style={s.hintTitle}>
-                One word that points to you.
-              </Text>
-              <Text style={s.hintSub}>
-                They might recognize it. Or they won't. That's the whole thing.
-              </Text>
-              <TextInput
-                style={s.hintInput}
-                value={hint}
-                onChangeText={(v) => setHint(v.split(/\s+/)[0].slice(0, HINT_MAX))}
-                placeholder="e.g. rain, august, friday…"
-                placeholderTextColor={T.textMute}
-                maxLength={HINT_MAX}
-                autoCorrect={false}
-                autoCapitalize="none"
-                returnKeyType="done"
-              />
-              <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
-            </View>
-          )}
-
-          {/* Anonixx Publisher opt-in (section 16) — Tier 2 is never published */}
-          {themeObj?.tier !== 2 && (
-            <View style={s.publisherBox}>
-              <Text style={s.publisherQ}>
-                We'll share this confession anonymously on Anonixx's social pages to help interested people find you.
-              </Text>
-              <View style={s.publisherRow}>
-                <TouchableOpacity
-                  style={[s.publisherBtn, publisherOptIn && s.publisherBtnYesActive]}
-                  onPress={handlePublisherYes}
-                  activeOpacity={0.85}
-                  hitSlop={HIT_SLOP}
-                >
-                  <Text style={[
-                    s.publisherBtnText,
-                    publisherOptIn && s.publisherBtnYesActiveText,
-                  ]}>
-                    {publisherOptIn ? 'Yes — sharing' : 'Yes'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.publisherBtn, !publisherOptIn && s.publisherBtnNoActive]}
-                  onPress={() => setPublisherOptIn(false)}
-                  activeOpacity={0.85}
-                  hitSlop={HIT_SLOP}
-                >
-                  <Text style={[
-                    s.publisherBtnText,
-                    !publisherOptIn && s.publisherBtnNoActiveText,
-                  ]}>
-                    No — keep private
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={s.publisherNote}>
-                Your identity never leaves Anonixx.
-              </Text>
-            </View>
-          )}
-          {themeObj?.tier === 2 && (
-            <View style={s.publisherBox}>
-              <Text style={s.publisherLocked}>
-                After Dark drops stay inside Anonixx. Never published, never shared.
-              </Text>
-            </View>
-          )}
-
-          {/* Location — freeform, helps interested people know you're reachable */}
-          <View style={s.publisherBox}>
-            <Text style={s.publisherQ}>Where are you? (optional)</Text>
-            <TextInput
-              style={s.hintInput}
-              value={location}
-              onChangeText={(v) => setLocation(v.slice(0, 80))}
-              placeholder="e.g. Nairobi, Kenya"
-              placeholderTextColor={T.textMute}
-              maxLength={80}
-              returnKeyType="done"
-            />
-          </View>
-
-          {/* Font style — classic vs. suggestive style presets */}
-          <View style={s.publisherBox}>
-            <Text style={s.publisherQ}>Card font style</Text>
-            <View style={s.publisherRow}>
-              {[
-                { id: 'classic',       label: 'Classic' },
-                { id: 'sultry-script', label: 'Sultry' },
-                { id: 'bold-tease',    label: 'Bold Tease' },
-              ].map((f) => (
-                <TouchableOpacity
-                  key={f.id}
-                  style={[s.publisherBtn, fontStyle === f.id && s.publisherBtnYesActive]}
-                  onPress={() => setFontStyle(f.id)}
-                  activeOpacity={0.85}
-                  hitSlop={HIT_SLOP}
-                >
-                  <Text style={[
-                    s.publisherBtnText,
-                    fontStyle === f.id && s.publisherBtnYesActiveText,
-                  ]}>
-                    {f.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Optional poll */}
-          <View style={s.publisherBox}>
-            <View style={s.publisherRow}>
-              <Text style={s.publisherQ}>Add a poll?</Text>
+          {/* Text meta — tease toggle + character count, text format only */}
+          {format === 'text' && (
+            <View style={s.cardMetaRow}>
               <TouchableOpacity
-                onPress={() => setPollEnabled((v) => !v)}
-                activeOpacity={0.85}
+                style={[s.teaseToggle, teaseMode && s.teaseToggleActive]}
+                onPress={() => setTeaseMode(v => !v)}
                 hitSlop={HIT_SLOP}
-                style={[s.publisherBtn, pollEnabled && s.publisherBtnYesActive]}
               >
-                <Text style={[s.publisherBtnText, pollEnabled && s.publisherBtnYesActiveText]}>
-                  {pollEnabled ? 'Yes' : 'No'}
+                <Text style={[s.teaseToggleText, teaseMode && { color: T.primary }]}>
+                  {teaseMode ? '◉  tease on — leave them wanting' : '○  tease mode'}
                 </Text>
               </TouchableOpacity>
+              <Text style={[s.remaining, { color: remColor }]}>{remaining}</Text>
             </View>
-            {pollEnabled && (
-              <View style={{ gap: 8, marginTop: 8 }}>
-                <TextInput
-                  style={s.hintInput}
-                  value={pollQuestion}
-                  onChangeText={setPollQuestion}
-                  placeholder="Ask a question…"
-                  placeholderTextColor={T.textMute}
-                  maxLength={120}
-                />
-                {pollOptions.map((opt, idx) => (
-                  <TextInput
-                    key={idx}
-                    style={s.hintInput}
-                    value={opt}
-                    onChangeText={(v) => setPollOptions((prev) => {
-                      const next = [...prev];
-                      next[idx] = v;
-                      return next;
-                    })}
-                    placeholder={`Option ${idx + 1}`}
-                    placeholderTextColor={T.textMute}
-                    maxLength={60}
-                  />
-                ))}
-                {pollOptions.length < 4 && (
-                  <TouchableOpacity
-                    onPress={() => setPollOptions((prev) => [...prev, ''])}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={{ color: T.primary, fontSize: 12 }}>+ Add option</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
+          )}
 
-          {/* AI confession refinement — text drops only */}
+          {/* Media picker — one picker, photo or video, caption is typed
+              on the card above */}
+          {format === 'media' && (
+            <View style={s.mediaSection}>
+              {!mediaUri ? (
+                <TouchableOpacity
+                  style={s.pickBtn}
+                  onPress={handlePickMedia}
+                  activeOpacity={0.85}
+                >
+                  <Images size={rs(28)} color={T.primary} />
+                  <Text style={s.pickBtnText}>Tap to pick a photo or video</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={s.previewWrap}>
+                  <Image source={{ uri: thumbUri || mediaUri }} style={s.preview} resizeMode="cover" />
+                  <TouchableOpacity style={s.clearBtn} onPress={handleClearMedia} hitSlop={HIT_SLOP}>
+                    <X size={rs(14)} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
+
+          {/* AI confession refinement — text drops only. Collapsed by
+              default: the header row is a compact tappable trigger; the
+              3 mode chips only appear once the user opens it. */}
           {format === 'text' && !!text.trim() && (
             <View style={s.refineBox}>
-              {/* Header — always visible */}
-              <View style={s.refineHeader}>
+              <TouchableOpacity
+                style={s.refineHeader}
+                onPress={() => setRefineUiOpen((v) => !v)}
+                activeOpacity={0.85}
+                hitSlop={HIT_SLOP}
+              >
                 <Sparkles size={rs(13)} color={selectedRefineMode ? T.primary : T.textMute} />
                 <View style={{ flex: 1 }}>
                   <Text style={[s.refineHeaderLabel, selectedRefineMode && { color: T.primary }]}>
-                    ✦  Help me say it
+                    ✦  Help me send it right
                   </Text>
-                  <Text style={s.refineHeaderSub}>
-                    Anonixx finds the words — your meaning stays intact
-                  </Text>
+                  {!refineEnabled && (
+                    <Text style={s.refineHeaderSub}>
+                      Anonixx sharpens the words — your intentions stay intact
+                    </Text>
+                  )}
                 </View>
-              </View>
+                {!refineEnabled && (
+                  <ChevronDown
+                    size={rs(15)}
+                    color={T.textMute}
+                    style={refineUiOpen ? s.chevronOpen : null}
+                  />
+                )}
+              </TouchableOpacity>
 
-              {/* 3 emotional mode chips — hidden once accepted */}
-              {!refineEnabled && (
+              {/* 3 emotional mode chips — only once opened, hidden once accepted */}
+              {!refineEnabled && refineUiOpen && (
                 <View style={s.refineModeRow}>
                   {REFINE_MODES.map(({ id, label, sub }) => {
                     const active = selectedRefineMode === id;
@@ -1199,6 +930,126 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
+          {/* Dangerous edge warning — spec section 10 */}
+          {edge && (
+            <View style={s.edgeWarn}>
+              <AlertTriangle size={rs(14)} color={T.warn} />
+              <View style={{ flex: 1 }}>
+                {edge === 'long' ? (
+                  <Text style={s.edgeWarnText}>
+                    That's a lot to send at once. Cards hit harder in pieces — try tease mode.
+                  </Text>
+                ) : (
+                  <>
+                    <Text style={s.edgeWarnTitle}>
+                      This could change everything between you two.
+                    </Text>
+                    <Text style={s.edgeWarnText}>
+                      No taking it back once it's sent.
+                    </Text>
+                  </>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Tag someone — optional, drop still hits marketplace too.
+              Collapsed by default: tagging a specific person is the
+              exception, not the rule — most drops just go to the
+              marketplace, so the search widget shouldn't be forced on
+              every single compose session. */}
+          <TouchableOpacity
+            style={s.collapsibleTrigger}
+            onPress={() => setTagSectionOpen((v) => !v)}
+            activeOpacity={0.85}
+            hitSlop={HIT_SLOP}
+          >
+            <Tag size={rs(13)} color={taggedUser ? T.primary : T.textMute} />
+            <Text style={[s.collapsibleTriggerLabel, taggedUser && { color: T.primary }]}>
+              {taggedUser
+                ? `Tagged ${taggedUser.username || taggedUser.anonymous_name}`
+                : 'Tag someone (optional)'}
+            </Text>
+            {!taggedUser && (
+              <ChevronDown
+                size={rs(15)}
+                color={T.textMute}
+                style={tagSectionOpen ? s.chevronOpen : null}
+              />
+            )}
+          </TouchableOpacity>
+          {(tagSectionOpen || taggedUser) && (
+            <TagUserSection
+              taggedUser={taggedUser}
+              onTag={setTaggedUser}
+              onClear={() => setTaggedUser(null)}
+            />
+          )}
+
+          {/* One-word hint — only when someone is tagged */}
+          {!!taggedUser && (
+            <View style={s.hintBox}>
+              <Text style={s.hintTitle}>
+                One word only they'd catch.
+              </Text>
+              <Text style={s.hintSub}>
+                They might pick up on it. Or not. That's the fun of it.
+              </Text>
+              <TextInput
+                style={s.hintInput}
+                value={hint}
+                onChangeText={(v) => setHint(v.split(/\s+/)[0].slice(0, HINT_MAX))}
+                placeholder="e.g. rain, august, friday…"
+                placeholderTextColor={T.textMute}
+                maxLength={HINT_MAX}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="done"
+              />
+              <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
+            </View>
+          )}
+
+          {/* Anonixx Publisher opt-in (section 16) — Tier 2 is never
+              published. Compact single toggle row instead of a paragraph
+              + two buttons — it's a binary decision, doesn't need a
+              full explainer every time. */}
+          {themeObj?.tier !== 2 ? (
+            <View style={s.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
+                <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
+              </View>
+              <Switch
+                value={publisherOptIn}
+                onValueChange={(v) => (v ? handlePublisherYes() : setPublisherOptIn(false))}
+                trackColor={{ false: T.surfaceAlt, true: T.primary }}
+                thumbColor={publisherOptIn ? '#fff' : T.textMute}
+                ios_backgroundColor={T.surfaceAlt}
+              />
+            </View>
+          ) : (
+            <Text style={s.toggleRowLockedNote}>
+              After Dark drops stay inside Anonixx. Never published, never shared.
+            </Text>
+          )}
+
+          {/* Location — freeform, helps interested people know you're
+              reachable. Everything else that used to live in a collapsed
+              "Customize" section (theme, intensity, poll) has been moved
+              inline or removed, so this is the only thing left — no need
+              for an accordion around a single optional field. */}
+          <Text style={s.sectionLabel}>Where are you? (optional)</Text>
+          <TextInput
+            style={[s.hintInput, { marginBottom: SPACING.md }]}
+            value={location}
+            onChangeText={(v) => setLocation(v.slice(0, 80))}
+            placeholder="e.g. Nairobi, Kenya"
+            placeholderTextColor={T.textMute}
+            maxLength={80}
+            returnKeyType="done"
+          />
+
           {/* Drop button */}
           <TouchableOpacity
             style={[s.dropBtn, (!canDrop || loading || limitHit || sending) && s.dropBtnDisabled]}
@@ -1217,7 +1068,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <Text style={s.dropBtnText}>
-                {limitHit ? 'Daily limit reached' : 'Drop it  ↗'}
+                {limitHit ? 'That\'s enough sending for today' : 'Send it  ↗'}
               </Text>
             )}
           </TouchableOpacity>
@@ -1225,7 +1076,7 @@ export default function DropsComposeScreen({ navigation, route }) {
           {/* Delivery-tension sublabel (section 6) */}
           {sending && (
             <Text style={s.deliveryTension}>
-              Anonixx is sealing something for them.
+              Anonixx is sending this straight to them.
             </Text>
           )}
 
@@ -1303,9 +1154,9 @@ const s = StyleSheet.create({
     backgroundColor:   'rgba(255,99,74,0.06)',
     borderColor:       'rgba(255,99,74,0.25)',
     borderWidth:       1,
-    borderRadius:      RADIUS.lg,
-    paddingHorizontal: rp(16),
-    paddingVertical:   rp(14),
+    borderRadius:      RADIUS.md,
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(12),
     marginBottom:      SPACING.md,
   },
   unsentTitle: {
@@ -1390,29 +1241,12 @@ const s = StyleSheet.create({
     elevation:    10,
   },
 
-  // Text input
-  inputWrap: {
-    backgroundColor: T.surface,
-    borderRadius:    RADIUS.lg,
-    borderWidth:     1,
-    borderColor:     T.border,
-    padding:         rp(14),
-    marginBottom:    SPACING.md,
-  },
-  input: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(17),
-    color:         T.text,
-    lineHeight:    rf(26),
-    minHeight:     rs(80),
-    letterSpacing: 0.3,
-    paddingVertical: 0,
-  },
-  inputMeta: {
+  // Text meta row — sits under the card now that typing happens on it directly
+  cardMetaRow: {
     flexDirection:  'row',
     justifyContent: 'space-between',
     alignItems:     'center',
-    marginTop:      rp(8),
+    marginBottom:   SPACING.md,
   },
   teaseToggle: {
     paddingVertical:   rp(4),
@@ -1457,19 +1291,6 @@ const s = StyleSheet.create({
     alignItems:      'center',
     justifyContent:  'center',
   },
-  caption: {
-    fontFamily:      'DMSans-Regular',
-    fontSize:        FONT.sm,
-    color:           T.text,
-    backgroundColor: T.surface,
-    borderRadius:    RADIUS.md,
-    borderWidth:     1,
-    borderColor:     T.border,
-    padding:         rp(12),
-    minHeight:       rs(56),
-    textAlignVertical: 'top',
-  },
-
   // Edge warning
   edgeWarn: {
     flexDirection:     'row',
@@ -1479,8 +1300,8 @@ const s = StyleSheet.create({
     borderColor:       'rgba(251,146,60,0.25)',
     borderWidth:       1,
     borderRadius:      RADIUS.md,
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(10),
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(12),
     marginBottom:      SPACING.md,
   },
   edgeWarnTitle: {
@@ -1510,12 +1331,31 @@ const s = StyleSheet.create({
     marginTop:     SPACING.sm,
   },
 
-  // Theme picker
-  themeScroll: {
-    gap:            SPACING.sm,
-    paddingRight:   SPACING.md,
-    paddingVertical: rp(4),
-    marginBottom:   SPACING.md,
+  // Customize accordion (theme/mood/category/intensity/location/font/poll)
+  // Shared flat toggle-row pattern — used by the Customize trigger and
+  // the Tag-someone trigger, so both collapsible rows read as one system.
+  collapsibleTrigger: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    paddingVertical:   rp(12),
+    paddingHorizontal: rp(2),
+    marginBottom:      SPACING.sm,
+  },
+  collapsibleTriggerLabel: {
+    flex:          1,
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.text,
+    letterSpacing: 0.3,
+  },
+  chevronOpen: { transform: [{ rotate: '180deg' }] },
+
+  // Theme picker — flat row, just 3 themes, right under the card
+  themeRow: {
+    flexDirection: 'row',
+    gap:           SPACING.md,
+    marginBottom:  SPACING.md,
   },
   swatch: {
     width:       rs(64),
@@ -1549,69 +1389,6 @@ const s = StyleSheet.create({
     fontSize:      rf(10),
     color:         T.textMute,
     letterSpacing: 0.3,
-  },
-
-  // Mood picker
-  moodScroll: {
-    gap:             SPACING.sm,
-    paddingRight:    SPACING.md,
-    paddingVertical: rp(2),
-    marginBottom:    SPACING.md,
-  },
-  moodChip: {
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(7),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       T.border,
-    backgroundColor:   'rgba(255,255,255,0.02)',
-  },
-  moodChipActive: {
-    borderColor:     'rgba(255,99,74,0.4)',
-    backgroundColor: 'rgba(255,99,74,0.08)',
-  },
-  moodChipText: {
-    fontFamily:    'DMSans-Regular',
-    fontSize:      rf(11),
-    color:         T.textMute,
-    letterSpacing: 2,
-  },
-  moodChipTextActive: { color: T.primary },
-
-  // Intensity (section 11)
-  intensityRow: {
-    flexDirection: 'row',
-    gap:           SPACING.sm,
-    marginBottom:  SPACING.md,
-  },
-  intensityBtn: {
-    flex:              1,
-    paddingHorizontal: rp(10),
-    paddingVertical:   rp(10),
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       T.border,
-    backgroundColor:   'transparent',
-    alignItems:        'center',
-  },
-  intensityBtnActive: {
-    borderColor:     'rgba(255,99,74,0.4)',
-    backgroundColor: 'rgba(255,99,74,0.06)',
-  },
-  intensityLabel: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(14),
-    color:         T.textSec,
-    letterSpacing: 0.3,
-  },
-  intensityLabelActive: { color: T.primary },
-  intensitySub: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(10),
-    color:         T.textMute,
-    letterSpacing: 0.3,
-    marginTop:     rp(4),
-    textAlign:     'center',
   },
 
   // One-word hint (section 11)
@@ -1787,6 +1564,37 @@ const s = StyleSheet.create({
     color:         T.textSec,
     letterSpacing: 0.3,
     lineHeight:    rf(18),
+  },
+
+  // Compact toggle row — publisher opt-in
+  toggleRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingVertical:   rp(10),
+    paddingHorizontal: rp(2),
+    marginBottom:      SPACING.sm,
+    gap:               SPACING.sm,
+  },
+  toggleRowLabel: {
+    fontFamily:    'DMSans-SemiBold',
+    fontSize:      FONT.sm,
+    color:         T.text,
+    letterSpacing: 0.2,
+  },
+  toggleRowSub: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textMute,
+    letterSpacing: 0.2,
+    marginTop:     rp(2),
+  },
+  toggleRowLockedNote: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(11),
+    color:         T.textSec,
+    letterSpacing: 0.3,
+    lineHeight:    rf(18),
+    marginBottom:  SPACING.sm,
   },
 
   footerNote: {

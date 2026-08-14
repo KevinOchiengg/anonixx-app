@@ -7,11 +7,11 @@ import React, {
 } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, StatusBar, ActivityIndicator, Keyboard,
+  StyleSheet, StatusBar, ActivityIndicator, Keyboard, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Clock, Search, X } from 'lucide-react-native';
+import { ArrowLeft, Clock, Search, X, Flame, Users } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import CalmPostCard from '../../components/feed/CalmPostCard';
 import { API_BASE_URL } from '../../config/api';
@@ -24,6 +24,47 @@ const HISTORY_KEY   = '@anonixx_search_history';
 const MAX_HISTORY   = 10;
 const FILTERS       = ['all', 'recent', 'popular'];
 const SUGGESTIONS   = ['anxiety', 'loneliness', 'hope', 'healing', 'relationships', 'family'];
+const CONTENT_TYPES = [
+  { id: 'posts',   label: 'Posts' },
+  { id: 'drops',   label: 'Drops' },
+  { id: 'circles', label: 'Circles' },
+];
+const LIVE_SEARCH_DEBOUNCE_MS = 400;
+const MIN_LIVE_QUERY_LEN = 2;
+
+// ─── Lightweight result rows for Drops / Circles ───────────────
+const DropResultRow = React.memo(({ item, onPress }) => (
+  <TouchableOpacity style={rowStyles.wrap} onPress={() => onPress(item)} activeOpacity={0.8}>
+    <View style={[rowStyles.iconBox, { backgroundColor: `${item.theme_accent || T.primary}22` }]}>
+      <Flame size={rs(16)} color={item.theme_accent || T.primary} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text style={rowStyles.title} numberOfLines={2}>
+        {item.confession || `[${item.media_type} drop]`}
+      </Text>
+      <Text style={rowStyles.sub}>{item.category || 'confession'}</Text>
+    </View>
+  </TouchableOpacity>
+));
+
+const CircleResultRow = React.memo(({ item, onPress }) => (
+  <TouchableOpacity style={rowStyles.wrap} onPress={() => onPress(item)} activeOpacity={0.8}>
+    <View style={[rowStyles.iconBox, { backgroundColor: `${item.aura_color || T.primary}22` }]}>
+      {item.avatar_url
+        ? <Image source={{ uri: item.avatar_url }} style={rowStyles.avatarImg} />
+        : <Text style={{ fontSize: rf(18) }}>{item.avatar_emoji || '🎭'}</Text>
+      }
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text style={rowStyles.title} numberOfLines={1}>{item.name}</Text>
+      <Text style={rowStyles.sub} numberOfLines={1}>{item.bio}</Text>
+    </View>
+    <View style={rowStyles.memberChip}>
+      <Users size={rs(11)} color={T.textMuted} />
+      <Text style={rowStyles.memberChipText}>{item.member_count}</Text>
+    </View>
+  </TouchableOpacity>
+));
 
 // ─── Screen ───────────────────────────────────────────────────
 export default function SearchScreen({ navigation }) {
@@ -38,6 +79,8 @@ export default function SearchScreen({ navigation }) {
   const [searched,   setSearched]   = useState(false);
   const [total,      setTotal]      = useState(0);
   const [filter,     setFilter]     = useState('all');
+  const [contentType, setContentType] = useState('posts');
+  const liveSearchTimer = useRef(null);
 
   // Load history on mount, auto-focus input
   useEffect(() => {
@@ -64,41 +107,76 @@ export default function SearchScreen({ navigation }) {
     await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
   }, [history]);
 
-  const doSearch = useCallback(async (q = query, f = filter) => {
+  const doSearch = useCallback(async (q = query, f = filter, type = contentType, { silent = false } = {}) => {
     const trimmed = q.trim();
     if (!trimmed) return;
 
-    Keyboard.dismiss();
+    if (!silent) Keyboard.dismiss();
     setLoading(true);
     setSearched(true);
-    await saveHistory(trimmed);
+    if (!silent) await saveHistory(trimmed);
 
     try {
       const token = await AsyncStorage.getItem('token');
-      const params = new URLSearchParams({ q: trimmed, filter: f, limit: '30' });
-      const res = await fetch(`${API_BASE_URL}/api/v1/posts/search?${params}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setResults(data.results || []);
-        setTotal(data.total || 0);
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      let data;
+      let list;
+      let count;
+
+      if (type === 'drops') {
+        const params = new URLSearchParams({ q: trimmed, limit: '30' });
+        const res = await fetch(`${API_BASE_URL}/api/v1/drops/marketplace?${params}`, { headers });
+        data = await res.json();
+        if (!res.ok) throw new Error();
+        list = data.drops || [];
+        count = list.length;
+      } else if (type === 'circles') {
+        const params = new URLSearchParams({ q: trimmed, limit: '30' });
+        const res = await fetch(`${API_BASE_URL}/api/v1/circles/?${params}`, { headers });
+        data = await res.json();
+        if (!res.ok) throw new Error();
+        list = data.circles || [];
+        count = list.length;
       } else {
-        setResults([]);
-        setTotal(0);
+        const params = new URLSearchParams({ q: trimmed, filter: f, limit: '30' });
+        const res = await fetch(`${API_BASE_URL}/api/v1/posts/search?${params}`, { headers });
+        data = await res.json();
+        if (!res.ok) throw new Error();
+        list = data.results || [];
+        count = data.total || 0;
       }
+      setResults(list);
+      setTotal(count);
     } catch {
       setResults([]);
       setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [query, filter, saveHistory]);
+  }, [query, filter, contentType, saveHistory]);
 
   const handleFilterChange = useCallback((f) => {
     setFilter(f);
-    if (searched) doSearch(query, f);
-  }, [searched, query, doSearch]);
+    if (searched) doSearch(query, f, contentType);
+  }, [searched, query, contentType, doSearch]);
+
+  const handleContentTypeChange = useCallback((type) => {
+    setContentType(type);
+    if (query.trim()) doSearch(query, filter, type);
+  }, [query, filter, doSearch]);
+
+  // Live search-as-you-type — debounced, doesn't touch history (only an
+  // explicit submit/history-tap/suggestion-tap does that).
+  useEffect(() => {
+    clearTimeout(liveSearchTimer.current);
+    const trimmed = query.trim();
+    if (trimmed.length < MIN_LIVE_QUERY_LEN) return;
+    liveSearchTimer.current = setTimeout(() => {
+      doSearch(trimmed, filter, contentType, { silent: true });
+    }, LIVE_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(liveSearchTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, contentType]);
 
   const handleClear = useCallback(() => {
     setQuery('');
@@ -110,24 +188,32 @@ export default function SearchScreen({ navigation }) {
 
   const handleHistoryPress = useCallback((q) => {
     setQuery(q);
-    doSearch(q, filter);
-  }, [filter, doSearch]);
+    doSearch(q, filter, contentType);
+  }, [filter, contentType, doSearch]);
 
   const handlePostPress    = useCallback((post) => navigation.navigate('PostDetail', { post }), [navigation]);
   const handleViewThread   = useCallback((postId) => navigation.navigate('ThreadView', { postId }), [navigation]);
+  const handleDropPress    = useCallback((drop) => navigation.navigate('DropLanding', { dropId: drop.id }), [navigation]);
+  const handleCirclePress  = useCallback((circle) => navigation.navigate('Circles', {
+    screen: 'CircleProfile', params: { circleId: circle.id },
+  }), [navigation]);
   const handleResponse     = useCallback(() => {}, []);
   const handleSave         = useCallback(() => {}, []);
 
-  const renderResult = useCallback(({ item }) => (
-    <CalmPostCard
-      post={item}
-      onResponse={handleResponse}
-      onSave={handleSave}
-      onViewThread={handleViewThread}
-      onPress={handlePostPress}
-      navigation={navigation}
-    />
-  ), [navigation, handleResponse, handleSave, handleViewThread, handlePostPress]);
+  const renderResult = useCallback(({ item }) => {
+    if (contentType === 'drops')   return <DropResultRow item={item} onPress={handleDropPress} />;
+    if (contentType === 'circles') return <CircleResultRow item={item} onPress={handleCirclePress} />;
+    return (
+      <CalmPostCard
+        post={item}
+        onResponse={handleResponse}
+        onSave={handleSave}
+        onViewThread={handleViewThread}
+        onPress={handlePostPress}
+        navigation={navigation}
+      />
+    );
+  }, [contentType, navigation, handleResponse, handleSave, handleViewThread, handlePostPress, handleDropPress, handleCirclePress]);
 
   const keyExtractor = useCallback((item, i) => item.id || String(i), []);
 
@@ -168,7 +254,7 @@ export default function SearchScreen({ navigation }) {
               <TouchableOpacity
                 key={s}
                 style={styles.chip}
-                onPress={() => { setQuery(s); doSearch(s, filter); }}
+                onPress={() => { setQuery(s); doSearch(s, filter, contentType); }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.chipText}>{s}</Text>
@@ -229,7 +315,11 @@ export default function SearchScreen({ navigation }) {
             style={styles.input}
             value={query}
             onChangeText={setQuery}
-            placeholder="search posts, confessions…"
+            placeholder={
+              contentType === 'drops' ? 'search confessions…'
+              : contentType === 'circles' ? 'search circles…'
+              : 'search posts, confessions…'
+            }
             placeholderTextColor={T.textMuted}
             returnKeyType="search"
             onSubmitEditing={() => doSearch()}
@@ -244,21 +334,39 @@ export default function SearchScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Filter chips — always visible */}
+      {/* Content type — Posts / Drops / Circles */}
       <View style={styles.filterRow}>
-        {FILTERS.map(f => (
+        {CONTENT_TYPES.map(ct => (
           <TouchableOpacity
-            key={f}
-            style={[styles.filterChip, filter === f && styles.filterChipActive]}
-            onPress={() => handleFilterChange(f)}
+            key={ct.id}
+            style={[styles.filterChip, contentType === ct.id && styles.filterChipActive]}
+            onPress={() => handleContentTypeChange(ct.id)}
             hitSlop={HIT_SLOP}
           >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+            <Text style={[styles.filterText, contentType === ct.id && styles.filterTextActive]}>
+              {ct.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* All / Recent / Popular — posts only */}
+      {contentType === 'posts' && (
+        <View style={styles.filterRow}>
+          {FILTERS.map(f => (
+            <TouchableOpacity
+              key={f}
+              style={[styles.filterChip, filter === f && styles.filterChipActive]}
+              onPress={() => handleFilterChange(f)}
+              hitSlop={HIT_SLOP}
+            >
+              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Body */}
       {searched ? PostSearch : PreSearch}
@@ -418,4 +526,30 @@ const styles = StyleSheet.create({
     color:    T.textMuted,
     textAlign: 'center',
   },
+});
+
+// ─── Drop / Circle result row styles ───────────────────────────
+const rowStyles = StyleSheet.create({
+  wrap: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(12),
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(12),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  iconBox: {
+    width:          rs(40),
+    height:         rs(40),
+    borderRadius:   rs(20),
+    alignItems:     'center',
+    justifyContent: 'center',
+    overflow:       'hidden',
+  },
+  avatarImg: { width: '100%', height: '100%' },
+  title: { fontSize: FONT.sm, fontWeight: '600', color: T.text },
+  sub:   { fontSize: rf(11), color: T.textMuted, marginTop: rp(2) },
+  memberChip: { flexDirection: 'row', alignItems: 'center', gap: rp(3) },
+  memberChipText: { fontSize: rf(10), color: T.textMuted },
 });

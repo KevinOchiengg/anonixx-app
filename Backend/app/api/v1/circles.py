@@ -31,10 +31,12 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from bson import ObjectId
+import re
 from app.core.security import get_current_user
 from app.database import get_database
 from app.models.user import User
 from app.config import settings
+from app.utils.coin_service import debit_coins, credit_coins
 
 router = APIRouter(prefix="/circles", tags=["circles"])
 
@@ -143,6 +145,11 @@ def format_circle(circle: dict, member_doc: Optional[dict], user_id: str) -> dic
         "aura_color":    circle.get("aura_color", "#FF634A"),
         "avatar_emoji":  circle.get("avatar_emoji", "🎭"),
         "avatar_url":    circle.get("avatar_url"),
+        "banner_url":    circle.get("banner_url"),
+        "facebook_url":  circle.get("facebook_url"),
+        "instagram_url": circle.get("instagram_url"),
+        "snapchat_url":  circle.get("snapchat_url"),
+        "join_cost":     circle.get("join_cost", 0),
         "member_count":  count,
         "member_range":  member_range_label(count),
         "is_creator":    is_creator,
@@ -235,6 +242,11 @@ class CircleCreate(BaseModel):
     aura_color:   str = "#FF634A"
     avatar_emoji: Optional[str] = "🎭"
     avatar_url:   Optional[str] = None
+    banner_url:   Optional[str] = None
+    facebook_url:  Optional[str] = None
+    instagram_url: Optional[str] = None
+    snapchat_url:  Optional[str] = None
+    join_cost:    int = 0   # coins required to join — 0 stays free
 
 
 class EventSchedule(BaseModel):
@@ -259,12 +271,19 @@ async def create_circle(
     data:         CircleCreate,
     current_user: User = Depends(get_current_user),
 ):
+    # Circles are curated by the Anonixx team (or its AI bot account) only —
+    # not user-created. Regular users join and consume, they don't open one.
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Only Anonixx admins can create circles.")
+
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="Your circle needs a name.")
     if not data.bio.strip():
         raise HTTPException(status_code=400, detail="Tell people what your circle is about.")
     if not data.category:
         raise HTTPException(status_code=400, detail="Choose a category.")
+    if data.join_cost < 0:
+        raise HTTPException(status_code=400, detail="join_cost can't be negative.")
 
     db  = await get_database()
     now = _now()
@@ -276,6 +295,11 @@ async def create_circle(
         "aura_color":    data.aura_color,
         "avatar_emoji":  data.avatar_emoji or "🎭",
         "avatar_url":    data.avatar_url,
+        "banner_url":    data.banner_url,
+        "facebook_url":  data.facebook_url,
+        "instagram_url": data.instagram_url,
+        "snapchat_url":  data.snapchat_url,
+        "join_cost":     data.join_cost,
         "creator_id":    str(current_user.id),
         "member_count":  1,
         "room_open":     False,
@@ -304,12 +328,16 @@ async def list_circles(
     skip:     int = Query(0, ge=0),
     limit:    int = Query(20, ge=1, le=100),
     category: Optional[str] = None,
+    q:        Optional[str] = Query(None, description="Search by name or bio"),
     current_user: User = Depends(get_current_user),
 ):
     db    = await get_database()
     query: dict = {"is_active": True}
     if category:
         query["category"] = category
+    if q and q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        query["$or"] = [{"name": rx}, {"bio": rx}]
 
     circles = (
         await db.circles.find(query)
@@ -386,6 +414,19 @@ async def join_circle(
 
     if m:
         return {"message": "You're already in this circle."}
+
+    cost = circle.get("join_cost", 0)
+    if cost > 0 and str(circle.get("creator_id", "")) != str(current_user.id):
+        try:
+            await debit_coins(
+                db=db, user_id=str(current_user.id), amount=cost,
+                reason="circle_join", description=f"Joined {circle['name']}",
+                meta={"circle_id": circle_id},
+            )
+        except ValueError as e:
+            if "Insufficient" in str(e):
+                raise HTTPException(status_code=402, detail=f"Not enough coins. You need {cost} coins to join.")
+            raise HTTPException(status_code=404, detail="User not found.")
 
     now = _now()
     await db.circle_members.insert_one({
@@ -1426,3 +1467,225 @@ async def delete_circle(
         {"$set": {"is_active": False, "deleted_at": _now()}}
     )
     return {"message": "Your circle has dissolved."}
+
+
+# ==================== CONTENT FEED ====================
+# Posts inside a circle — admin/circle-admin only to create, coin-unlockable
+# per item (blurred until paid), visible to members only (the paid join is
+# what gates the group's content, not each individual post).
+
+class CirclePostCreate(BaseModel):
+    caption:      str = ""
+    media_url:    Optional[str] = None
+    media_type:   Optional[str] = None   # "image" | "video"
+    unlock_price: int = 0                # coins; 0 = free to view
+
+
+def format_circle_post(post: dict, unlocked: bool) -> dict:
+    locked = post.get("unlock_price", 0) > 0 and not unlocked
+    return {
+        "id":            fmt_id(post),
+        "caption":       post.get("caption", ""),
+        "media_type":    post.get("media_type"),
+        # Blurred posts never leak the real media URL to an unpaid viewer.
+        "media_url":     None if locked else post.get("media_url"),
+        "unlock_price":  post.get("unlock_price", 0),
+        "locked":        locked,
+        "created_at":    post["created_at"].isoformat(),
+    }
+
+
+async def assert_member(db, circle_id: str, user_id: str):
+    m = await get_member_doc(db, circle_id, user_id)
+    if not m:
+        raise HTTPException(status_code=403, detail="Join this circle to see its content.")
+    return m
+
+
+@router.post("/{circle_id}/posts", status_code=201)
+async def create_circle_post(
+    circle_id:    str,
+    data:         CirclePostCreate,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_creator_or_admin(db, circle, str(current_user.id))
+
+    if not data.caption.strip() and not data.media_url:
+        raise HTTPException(status_code=400, detail="Add a caption or attach media.")
+    if data.unlock_price < 0:
+        raise HTTPException(status_code=400, detail="unlock_price can't be negative.")
+
+    now = _now()
+    result = await db.circle_posts.insert_one({
+        "circle_id":    circle_id,
+        "created_by":   str(current_user.id),
+        "caption":      data.caption.strip(),
+        "media_url":    data.media_url,
+        "media_type":   data.media_type,
+        "unlock_price": data.unlock_price,
+        "created_at":   now,
+    })
+    return {"id": str(result.inserted_id), "message": "Posted to the circle."}
+
+
+@router.get("/{circle_id}/posts")
+async def list_circle_posts(
+    circle_id:    str,
+    skip:         int = Query(0, ge=0),
+    limit:        int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_member(db, circle_id, str(current_user.id))
+
+    cursor = db.circle_posts.find({"circle_id": circle_id}).sort("created_at", -1).skip(skip).limit(limit)
+    posts  = [p async for p in cursor]
+
+    unlocked_ids = set()
+    if posts:
+        unlocks = db.circle_post_unlocks.find({
+            "circle_id": circle_id,
+            "user_id":   str(current_user.id),
+            "post_id":   {"$in": [fmt_id(p) for p in posts]},
+        })
+        unlocked_ids = {u["post_id"] async for u in unlocks}
+
+    return {
+        "posts": [format_circle_post(p, fmt_id(p) in unlocked_ids) for p in posts],
+        "total": await db.circle_posts.count_documents({"circle_id": circle_id}),
+    }
+
+
+@router.post("/{circle_id}/posts/{post_id}/unlock")
+async def unlock_circle_post(
+    circle_id:    str,
+    post_id:      str,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_member(db, circle_id, str(current_user.id))
+
+    post = await db.circle_posts.find_one({"_id": oid(post_id), "circle_id": circle_id})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+
+    price = post.get("unlock_price", 0)
+    if price <= 0:
+        return format_circle_post(post, True)
+
+    existing = await db.circle_post_unlocks.find_one({
+        "circle_id": circle_id, "post_id": post_id, "user_id": str(current_user.id),
+    })
+    if existing:
+        return format_circle_post(post, True)
+
+    try:
+        await debit_coins(
+            db=db, user_id=str(current_user.id), amount=price,
+            reason="circle_post_unlock", description="Unlocked circle content",
+            meta={"circle_id": circle_id, "post_id": post_id},
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(status_code=402, detail=f"Not enough coins. You need {price} coins to unlock.")
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    await db.circle_post_unlocks.insert_one({
+        "circle_id": circle_id,
+        "post_id":   post_id,
+        "user_id":   str(current_user.id),
+        "unlocked_at": _now(),
+    })
+    return format_circle_post(post, True)
+
+
+# ==================== ADS ====================
+# Any member can buy an ad slot in a circle's feed — priced by how long it
+# runs, auto-hidden (and lazily cleaned up) once its time is up. No
+# scheduler needed: expiry is enforced by the read-time query filter below,
+# so an expired ad simply stops appearing the moment it lapses.
+
+AD_COINS_PER_HOUR = 5
+MAX_AD_HOURS      = 24 * 14   # 2 weeks
+
+
+class CircleAdCreate(BaseModel):
+    title:          str
+    media_url:      Optional[str] = None
+    link_url:       str            # internal (anonixx://…) or external URL the ad promotes
+    duration_hours: int
+
+
+def format_circle_ad(ad: dict) -> dict:
+    return {
+        "id":         fmt_id(ad),
+        "title":      ad["title"],
+        "media_url":  ad.get("media_url"),
+        "link_url":   ad["link_url"],
+        "expires_at": ad["expires_at"].isoformat(),
+        "created_at": ad["created_at"].isoformat(),
+    }
+
+
+@router.post("/{circle_id}/ads", status_code=201)
+async def create_circle_ad(
+    circle_id:    str,
+    data:         CircleAdCreate,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_member(db, circle_id, str(current_user.id))
+
+    if not data.title.strip():
+        raise HTTPException(status_code=400, detail="Give your ad a title.")
+    if not data.link_url.strip():
+        raise HTTPException(status_code=400, detail="Add a link for your ad to point to.")
+    if data.duration_hours <= 0 or data.duration_hours > MAX_AD_HOURS:
+        raise HTTPException(status_code=400, detail=f"Duration must be between 1 and {MAX_AD_HOURS} hours.")
+
+    cost = data.duration_hours * AD_COINS_PER_HOUR
+    try:
+        await debit_coins(
+            db=db, user_id=str(current_user.id), amount=cost,
+            reason="circle_ad", description=f"Ad in {circle['name']} for {data.duration_hours}h",
+            meta={"circle_id": circle_id},
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(status_code=402, detail=f"Not enough coins. You need {cost} coins for {data.duration_hours}h.")
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    now = _now()
+    result = await db.circle_ads.insert_one({
+        "circle_id":  circle_id,
+        "created_by": str(current_user.id),
+        "title":      data.title.strip(),
+        "media_url":  data.media_url,
+        "link_url":   data.link_url.strip(),
+        "created_at": now,
+        "expires_at": now + timedelta(hours=data.duration_hours),
+    })
+    return {"id": str(result.inserted_id), "coins_spent": cost, "message": "Your ad is live."}
+
+
+@router.get("/{circle_id}/ads")
+async def list_circle_ads(
+    circle_id:    str,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_member(db, circle_id, str(current_user.id))
+
+    now = _now()
+    # Opportunistic cleanup — physically removes anything already expired so
+    # the collection doesn't grow unbounded; harmless if it races a request.
+    await db.circle_ads.delete_many({"circle_id": circle_id, "expires_at": {"$lte": now}})
+
+    cursor = db.circle_ads.find({"circle_id": circle_id, "expires_at": {"$gt": now}}).sort("created_at", -1)
+    return {"ads": [format_circle_ad(a) async for a in cursor]}
