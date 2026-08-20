@@ -25,7 +25,14 @@ const AdCard = React.memo(({ item, onApprove, onReject, busy }) => (
       <Megaphone size={rs(10)} color={T.primary} />
       <Text style={s.badgeText}>pending review</Text>
     </View>
-    {item.media_url ? <Image source={{ uri: item.media_url }} style={s.cover} /> : null}
+    {item.media_url && (item.media_type === 'image' || item.media_type === 'gif' || !item.media_type) ? (
+      <Image source={{ uri: item.media_url }} style={s.cover} />
+    ) : item.media_url ? (
+      <View style={s.mediaLinkRow}>
+        <Text style={s.mediaLinkLabel}>{(item.media_type || 'media').toUpperCase()} ATTACHED</Text>
+        <Text style={s.mediaLinkUrl} numberOfLines={1}>{item.media_url}</Text>
+      </View>
+    ) : null}
     <Text style={s.title} numberOfLines={2}>{item.title}</Text>
     <Text style={s.link} numberOfLines={1}>{item.link_url}</Text>
     <View style={s.actions}>
@@ -162,6 +169,9 @@ const s = StyleSheet.create({
   },
   badgeText: { fontSize: rf(10), color: T.primary, fontWeight: '700' },
   cover: { width: '100%', height: rs(140), borderRadius: RADIUS.sm, backgroundColor: T.surfaceAlt },
+  mediaLinkRow: { backgroundColor: T.surfaceAlt, borderRadius: RADIUS.sm, padding: rp(10), gap: rp(3) },
+  mediaLinkLabel: { fontSize: rf(9), fontWeight: '700', color: T.primary, letterSpacing: 0.5 },
+  mediaLinkUrl: { fontSize: rf(11), color: T.textSecondary },
   title: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
   link: { fontSize: rf(11), color: T.textSecondary },
   actions: { flexDirection: 'row', gap: rp(8) },

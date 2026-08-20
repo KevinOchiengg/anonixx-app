@@ -1,10 +1,20 @@
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useDispatch } from 'react-redux';
 import { useAuth } from '../context/AuthContext';
-import DynamicSplash from '../components/common/DynamicSplash';
 import { detectLocation } from '../store/slices/locationSlice';
+import T from '../utils/theme';
+
+// One loading moment, not two: the native splash (app.json's `splash`
+// config) is already up before this file even runs. This just holds the
+// exact same solid background color for the brief gap while AuthContext's
+// `loading` flag resolves (an AsyncStorage read, usually well under
+// 100ms) — no separate logo/headline screen layered on top of it.
+function Loading() {
+  return <View style={{ flex: 1, backgroundColor: T.background }} />;
+}
 
 import ChatScreen from '../screens/connect/ChatScreen';
 import CallScreen from '../screens/connect/CallScreen';
@@ -16,16 +26,13 @@ import LegalScreen from '../screens/settings/LegalScreen';
 import BlockListScreen from '../screens/settings/BlockListScreen';
 import ModerationHistoryScreen from '../screens/settings/ModerationHistoryScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
+import DashboardScreen from '../screens/profile/DashboardScreen';
 import PremiumScreen from '../screens/profile/PremiumScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
-import ConfessionMarketPlaceScreen from '../screens/drops/ConfessionMarketPlaceScreen';
 import DropChatScreen from '../screens/drops/DropChatScreen';
-import DropLandingScreen from '../screens/drops/DropLandingScreen';
 import MarketScreen from '../screens/market/MarketScreen';
 import MarketItemScreen from '../screens/market/MarketItemScreen';
-import DropsInboxScreen from '../screens/drops/DropsInboxScreen';
-import ShareCardScreen from '../screens/drops/ShareCardScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
 import PostUnlockScreen from '../screens/drops/PostUnlockScreen';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
@@ -45,14 +52,10 @@ const Stack = createStackNavigator();
 
 // ─── Deep-link routing (spec section 17) ────────────────────────
 // Schemes:
-//   anonixx://drop/:dropId        → DropLandingScreen
-//   anonixx://confession          → ConfessionMarketplace
-//   anonixx://drops/inbox         → DropsInbox
 //   anonixx://drops/new           → DropsCompose
 //   anonixx://drops/voice         → DropsRecord
 //   anonixx://drops/publish       → DropsPublish
 //   anonixx://drops/poll          → DropsPoll
-//   https://anonixx.app/drop/:id  → DropLandingScreen  (tappable share link)
 const linking = {
   prefixes: [
     'anonixx://',
@@ -61,9 +64,6 @@ const linking = {
   ],
   config: {
     screens: {
-      DropLanding:           'drop/:dropId',
-      ConfessionMarketplace: 'confession',
-      DropsInbox:            'drops/inbox',
       DropChat:              'drop-chat/:connectionId',
       VibeScore:             'vibe',
       Market:                'market',
@@ -94,7 +94,7 @@ export default function AppNavigator() {
             main feed. Auth screens stay reachable via "AuthNav" below for
             whoever opts in later (e.g. Settings > Log In). */}
         {loading
-          ? <Stack.Screen name="Splash" component={DynamicSplash} />
+          ? <Stack.Screen name="Splash" component={Loading} />
           : <Stack.Screen name="Main" component={TabNavigator} />
         }
         {/* Keep these accessible for deep links + post-auth navigation */}
@@ -107,18 +107,11 @@ export default function AppNavigator() {
         <Stack.Screen name="Premium" component={PremiumScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="Call" component={CallScreen} options={{ gestureEnabled: false }} />
-        <Stack.Screen name="ShareCard" component={ShareCardScreen} />
-        <Stack.Screen name="DropLanding" component={DropLandingScreen} />
-        <Stack.Screen name="DropsInbox" component={DropsInboxScreen} />
         <Stack.Screen name="DropChat" component={DropChatScreen} />
         <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
         <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
         <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />
         <Stack.Screen name="DropsPoll" component={DropsPollScreen} />
-        <Stack.Screen
-          name="ConfessionMarketplace"
-          component={ConfessionMarketPlaceScreen}
-        />
         <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
         <Stack.Screen name="PostUnlock" component={PostUnlockScreen} />
         <Stack.Screen name="AdminDashboard"  component={AdminDashboardScreen} />
@@ -129,6 +122,7 @@ export default function AppNavigator() {
         {/* Accessible from HamburgerMenu across all tabs */}
         <Stack.Screen name="Settings"       component={SettingsScreen} />
         <Stack.Screen name="EditProfile"    component={EditProfileScreen} />
+        <Stack.Screen name="Dashboard"      component={DashboardScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
         <Stack.Screen name="SavedPosts"     component={SavedPostsScreen} />
         <Stack.Screen name="Coins"          component={CoinsScreen} />

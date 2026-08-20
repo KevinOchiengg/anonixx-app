@@ -53,6 +53,8 @@ class User(BaseModel):
     is_active: bool = True
     is_online: bool = False
     is_premium: bool = False
+    premium_plan: Optional[str] = None       # "monthly" | "quarterly" | "yearly" — see api/v1/premium.py
+    premium_until: Optional[datetime] = None  # None + is_premium=True means never-expiring
 
     # ✅ NEW: Age verification + safety
     # Self-attested date of birth, required at signup — Anonixx is 18+ only.

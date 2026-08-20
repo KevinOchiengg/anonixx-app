@@ -16,8 +16,8 @@ EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 TEMPLATES = {
     # Connect requests
     "connect_request": {
-        "title": "Someone wants to connect",
-        "body": "An anonymous user sent you a connect request.",
+        "title": "Someone wants in",
+        "body": "A stranger noticed you. Your call.",
         "data": {"type": "connect_request"},
     },
     "connect_accepted": {
@@ -28,8 +28,8 @@ TEMPLATES = {
 
     # Messages
     "new_message": {
-        "title": "New message",
-        "body": "Someone sent you a message.",  # Never show content — anonymous
+        "title": "Someone said something",
+        "body": "Don't leave them on read.",  # Never show content — anonymous
         "data": {"type": "new_message"},
     },
 

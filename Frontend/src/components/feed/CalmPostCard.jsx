@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
-  BarChart2, Bookmark, EyeOff, Feather, Flag, Flame, Heart, Link, Link2,
+  BarChart2, Bookmark, ChevronRight, Coins, EyeOff, Feather, Flag, Flame, Heart, Link, Link2,
   MessageCircle, MoreHorizontal, Play, Share2, UserX, VolumeX, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,6 +24,9 @@ import { CommentBottomSheet } from './CommentBottomSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
 const BASE_URL = 'https://anonixx-app.onrender.com';
+// Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
+// tapping Link up is never a price surprise.
+const UNLOCK_COST = 30;
 
 // removeClippedSubviews unmounts/remounts cards as they scroll in and out
 // of the render window — without this, every remount of the same video
@@ -190,10 +193,15 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
   useEffect(() => {
     if (!isActive) { inlinePlayer.pause(); return; }
     if (!sourceLoaded.current) {
-      inlinePlayer.replace({ uri: videoUrl });
       sourceLoaded.current = true;
+      // replaceAsync (not replace) — loading the asset synchronously on
+      // iOS's main thread is deprecated and can freeze the UI.
+      inlinePlayer.replaceAsync({ uri: videoUrl })
+        .then(() => inlinePlayer.play())
+        .catch(() => {});
+    } else {
+      inlinePlayer.play();
     }
-    inlinePlayer.play();
   }, [isActive, videoUrl]);
 
   useEffect(() => {
@@ -386,7 +394,7 @@ const MenuItem = React.memo(({ item }) => (
 
 // ─── Main Card ────────────────────────────────────────────────
 function CalmPostCard({
-  post, onResponse, onSave, onViewThread, onPress, onMediaPress, onDrop,
+  post, onResponse, onSave, onViewThread, onPress, onMediaPress,
 }) {
   const navigation          = useNavigation();
   const { isAuthenticated } = useAuth();
@@ -426,12 +434,19 @@ function CalmPostCard({
         method: newLiked ? 'POST' : 'DELETE',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
-      const data = await res.json();
-      if (res.ok) { setLiked(data.liked); setLikesCount(data.likes_count); }
-      else { setLiked(!newLiked); setLikesCount(c => newLiked ? c - 1 : c + 1); }
-    } catch {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikesCount(data.likes_count);
+      } else {
+        setLiked(!newLiked);
+        setLikesCount(c => newLiked ? c - 1 : c + 1);
+        showToast({ type: 'error', message: data.detail || `Could not save (${res.status}). Try again.` });
+      }
+    } catch (err) {
       setLiked(!newLiked);
       setLikesCount(c => newLiked ? c - 1 : c + 1);
+      showToast({ type: 'error', message: 'Network error — could not save your like.' });
     }
   }, [animating, isAuthenticated, liked, post.id, scaleAnim, showToast]);
 
@@ -449,10 +464,21 @@ function CalmPostCard({
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
-      const data = await res.json();
-      if (res.ok) { setLiked(data.liked); setLikesCount(data.likes_count); }
-    } catch {}
-  }, [liked, isAuthenticated, post.id, scaleAnim]);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikesCount(data.likes_count);
+      } else {
+        setLiked(false);
+        setLikesCount(c => c - 1);
+        showToast({ type: 'error', message: data.detail || `Could not save (${res.status}). Try again.` });
+      }
+    } catch {
+      setLiked(false);
+      setLikesCount(c => c - 1);
+      showToast({ type: 'error', message: 'Network error — could not save your like.' });
+    }
+  }, [liked, isAuthenticated, post.id, scaleAnim, showToast]);
 
   const handleVote = useCallback(async (optionIndex) => {
     if (!isAuthenticated) { showToast({ type: 'info', message: 'Sign in to vote.' }); return; }
@@ -523,11 +549,6 @@ function CalmPostCard({
     if (!isAuthenticated) { showToast({ type: 'warning', message: 'Sign in to link up.' }); return; }
     navigation.navigate('PostUnlock', { post });
   }, [isAuthenticated, navigation, post, showToast]);
-  const handleWriteInspired = useCallback((e) => {
-    e.stopPropagation();
-    if (!isAuthenticated) { showToast({ type: 'info', message: 'Sign in to write your own.' }); return; }
-    onDrop?.(post);
-  }, [isAuthenticated, onDrop, post, showToast]);
   const handleInspirationThreadPress = useCallback((e) => {
     e.stopPropagation();
     navigation.navigate('InspirationThread', { postId: post.id });
@@ -535,8 +556,6 @@ function CalmPostCard({
   const handleReadMore      = useCallback((e) => { e.stopPropagation(); setShowFullContent(true); }, []);
   const handleShowLess      = useCallback((e) => { e.stopPropagation(); setShowFullContent(false); }, []);
   const handleMediaPress    = useCallback((time) => onMediaPress?.(post, time), [onMediaPress, post]);
-
-  const isTextOnly = !post.images?.length && !post.video_url && !post.audio_url;
 
   const menuItems = useMemo(() => [
     { icon: <Bookmark size={rs(18)} color={post.is_saved ? T.primary : T.textSecondary} fill={post.is_saved ? T.primary : 'none'} />, label: post.is_saved ? 'Unsave' : 'Save', onPress: () => { handleMenuClose(); onSave(post.id); } },
@@ -610,9 +629,6 @@ function CalmPostCard({
 
             <View style={styles.divider} />
 
-            {isTextOnly && <Text style={styles.hint}>tell them it hit different.</Text>}
-            {(post.video_url || post.audio_url) && <Text style={styles.hint}>more secrets are waiting ↑</Text>}
-
             {/* Drop count — tappable thread entry point */}
             {post.inspired_drop_count > 0 && (
               <TouchableOpacity
@@ -625,20 +641,9 @@ function CalmPostCard({
                 <Text style={styles.dropCountText}>
                   {post.inspired_drop_count} {post.inspired_drop_count === 1 ? 'person' : 'people'} resonated with this
                 </Text>
-                <Text style={styles.dropCountArrow}>→</Text>
+                <ChevronRight size={rs(13)} color={T.textSecondary} style={{ opacity: 0.5 }} />
               </TouchableOpacity>
             )}
-
-            {/* Write-your-own entry point — the only remaining way to open an
-                inspired drop now that the action bar's main button is Link up. */}
-            <TouchableOpacity
-              onPress={handleWriteInspired}
-              hitSlop={HIT_SLOP}
-              activeOpacity={0.75}
-              style={styles.writeInspiredLink}
-            >
-              <Text style={styles.writeInspiredText}>write your own inspired confession</Text>
-            </TouchableOpacity>
 
             <View style={styles.actions}>
               <View style={styles.actionsLeft}>
@@ -649,12 +654,6 @@ function CalmPostCard({
                   <Share2 size={rs(17)} color={T.textSecondary} />
                 </TouchableOpacity>
               </View>
-
-              {/* Link up — pay to open a chat with this post's author */}
-              <TouchableOpacity onPress={handleLinkUpPress} style={styles.resonateAction} activeOpacity={0.7} hitSlop={HIT_SLOP}>
-                <Link2 size={rs(15)} color={T.primary} strokeWidth={1.8} />
-                <Text style={styles.linkUpActionText}>Link up</Text>
-              </TouchableOpacity>
 
               <View style={styles.actionsRight}>
                 <TouchableOpacity onPress={handleCommentPress} style={styles.action} hitSlop={HIT_SLOP}>
@@ -669,6 +668,18 @@ function CalmPostCard({
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Link up — pay to open a chat with this post's author. Its own
+                elevated row, not squeezed between icons, so the one action
+                that actually makes money reads as a decision, not a caption. */}
+            <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
+              <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
+              <Text style={styles.linkUpBtnText}>Link up</Text>
+              <View style={styles.linkUpCostPill}>
+                <Coins size={rs(11)} color="#fff" />
+                <Text style={styles.linkUpCostText}>{UNLOCK_COST}</Text>
+              </View>
+            </TouchableOpacity>
           </TouchableOpacity>
         </DoubleTapLike>
       </View>
@@ -755,26 +766,46 @@ const styles = StyleSheet.create({
   waveBar:          { width: rp(3), borderRadius: rp(2), backgroundColor: 'rgba(255,255,255,0.12)' },
   audioMeta:        { flexDirection: 'row', justifyContent: 'space-between', marginTop: rp(4) },
   audioMetaText:    { fontSize: FONT.xs, color: T.textSecondary },
-  hint:             { fontSize: FONT.sm, color: T.textSecondary, fontStyle: 'italic', marginBottom: rp(12) },
   actions:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: rp(2) },
   actionsLeft:      { flexDirection: 'row', alignItems: 'center', gap: rp(16) },
   actionsRight:     { flexDirection: 'row', alignItems: 'center', gap: rp(16) },
   action:           { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   actionCount:      { fontSize: FONT.sm, fontWeight: '500', color: T.textSecondary },
-  // Link up — flat, same visual grammar as heart/comment
-  resonateAction: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           rp(5),
+
+  // Link up — its own elevated row below the icon actions. This is the
+  // money action, so it should look like a decision, not blend in with
+  // the icons above it.
+  linkUpBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'center',
+    gap:               rp(8),
+    marginTop:         rp(14),
+    paddingVertical:   rp(12),
+    borderRadius:      RADIUS.md,
+    backgroundColor:   T.primary,
+    shadowColor:       T.primary,
+    shadowOffset:      { width: 0, height: rs(4) },
+    shadowOpacity:     0.4,
+    shadowRadius:      rs(10),
+    elevation:         5,
   },
-  linkUpActionText: {
-    fontSize:      rf(12),
+  linkUpBtnText: {
+    fontSize:      FONT.sm,
     fontWeight:    '700',
-    color:         T.primary,
-    letterSpacing: 0.1,
+    color:         '#fff',
+    letterSpacing: 0.2,
   },
-  writeInspiredLink: { alignSelf: 'flex-start', marginBottom: rp(8) },
-  writeInspiredText: { fontSize: rf(11), color: T.textSecondary, fontStyle: 'italic', textDecorationLine: 'underline' },
+  linkUpCostPill: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(3),
+    backgroundColor:   'rgba(0,0,0,0.18)',
+    borderRadius:      RADIUS.full,
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(3),
+  },
+  linkUpCostText: { fontSize: rf(11), fontWeight: '700', color: '#fff' },
 
   // "X people felt this" badge — sits above the action bar
   dropCountBadge: {

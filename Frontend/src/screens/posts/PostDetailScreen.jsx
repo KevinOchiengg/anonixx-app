@@ -448,7 +448,7 @@ const RelatedCard = React.memo(({ post, onPress }) => {
           <Text style={rStyles.name}>{post.anonymous_name || 'Anonymous'}</Text>
           <Text style={rStyles.time}>{post.time_ago}</Text>
         </View>
-        <Text style={rStyles.arrow}>→</Text>
+        <ChevronRight size={rs(16)} color={T.textMuted} />
       </View>
       {hasCaption ? (
         <Text style={rStyles.content}>{preview}</Text>

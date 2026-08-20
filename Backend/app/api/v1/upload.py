@@ -3,14 +3,25 @@ from app.database import get_database
 from app.config import settings
 from app.dependencies import get_current_user_id
 import asyncio
+import logging
 import time
 import cloudinary
 import cloudinary.uploader
 import cloudinary.utils
 
+logger = logging.getLogger("uvicorn.error")
+
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 MAX_VIDEO_DURATION_SECONDS = 600   # 10 minutes
+
+
+def _require_cloudinary_configured():
+    if not settings.CLOUDINARY_API_SECRET or not settings.CLOUDINARY_API_KEY or not settings.CLOUDINARY_CLOUD_NAME:
+        raise HTTPException(
+            status_code=500,
+            detail="Media uploads are not configured on this server. Contact support."
+        )
 
 # Configure Cloudinary
 cloudinary.config(
@@ -53,6 +64,7 @@ async def get_upload_signature(
             "folder":      folder,
         }
     except Exception as e:
+        logger.error(f"Upload signature generation failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Could not generate upload signature: {str(e)}")
 
 
@@ -63,6 +75,8 @@ async def upload_image(
     file: UploadFile = File(...),
     current_user_id: str = Depends(get_current_user_id),
 ):
+    _require_cloudinary_configured()
+
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image.")
 
@@ -89,6 +103,7 @@ async def upload_image(
             "resource_type": "image",
         }
     except Exception as e:
+        logger.error(f"Image upload failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Image upload failed. Try again.")
 
 
@@ -97,6 +112,8 @@ async def upload_audio(
     file: UploadFile = File(...),
     current_user_id: str = Depends(get_current_user_id),
 ):
+    _require_cloudinary_configured()
+
     contents = await file.read()
     if len(contents) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Max 10MB.")
@@ -117,6 +134,7 @@ async def upload_audio(
             "duration":      result.get("duration", 0),
         }
     except Exception as e:
+        logger.error(f"Audio upload failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Audio upload failed. Try again.")
 
 
@@ -125,6 +143,8 @@ async def upload_video(
     file: UploadFile = File(...),
     current_user_id: str = Depends(get_current_user_id),
 ):
+    _require_cloudinary_configured()
+
     contents = await file.read()
     if len(contents) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Max 50MB.")
@@ -164,5 +184,6 @@ async def upload_video(
         }
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Video upload failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Video upload failed. Try again.")

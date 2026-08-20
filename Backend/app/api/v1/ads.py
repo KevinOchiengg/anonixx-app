@@ -27,6 +27,7 @@ router = APIRouter(prefix="/ads", tags=["Feed Ads"])
 AD_COINS_PER_HOUR = 5
 MAX_AD_HOURS      = 24 * 14
 DEFAULT_FEED_AD_FREQUENCY = 8   # one ad every N posts — admin-configurable via /admin/ads/frequency
+AD_MEDIA_TYPES    = {"image", "video", "gif", "audio"}
 
 
 def now_utc() -> datetime:
@@ -36,7 +37,13 @@ def now_utc() -> datetime:
 class AdCreate(BaseModel):
     title:          str
     media_url:      Optional[str] = None
-    link_url:       str
+    media_type:     str = "image"          # "image" | "video" | "gif" | "audio"
+    # Point the ad at one of your own Drops instead of a raw URL — the tap
+    # takes a viewer straight into the existing unlock flow for that Drop,
+    # which is what actually gets them into your chat interface. link_url
+    # stays available as a fallback (admin/house ads only need it).
+    drop_id:        Optional[str] = None
+    link_url:       Optional[str] = None
     duration_hours: int
 
 
@@ -45,12 +52,36 @@ def format_ad(ad: dict) -> dict:
         "id":         str(ad["_id"]),
         "title":      ad["title"],
         "media_url":  ad.get("media_url"),
+        "media_type": ad.get("media_type", "image"),
         "link_url":   ad["link_url"],
         "ad_type":    ad.get("ad_type", "sponsored"),
         "status":     ad.get("status", "approved"),
         "expires_at": ad["expires_at"].isoformat() if ad.get("expires_at") else None,
         "created_at": ad["created_at"].isoformat(),
     }
+
+
+@router.get("/my-drops")
+async def list_my_drops_for_ad(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Feeds the Drop picker in CreateAdScreen — only *your own*, still-active
+    Drops are valid ad targets, so a viewer who taps the ad lands somewhere
+    that's actually still unlockable."""
+    cursor = db["drops"].find(
+        {"sender_id": current_user_id, "is_active": True, "expires_at": {"$gt": now_utc()}},
+        {"confession": 1, "media_type": 1, "created_at": 1},
+    ).sort("created_at", -1).limit(25)
+
+    return {"drops": [
+        {
+            "id": str(d["_id"]),
+            "confession": (d.get("confession") or "")[:120],
+            "media_type": d.get("media_type"),
+        }
+        async for d in cursor
+    ]}
 
 
 @router.post("", status_code=201)
@@ -61,10 +92,24 @@ async def create_ad(
 ):
     if not data.title.strip():
         raise HTTPException(status_code=400, detail="Give your ad a title.")
-    if not data.link_url.strip():
-        raise HTTPException(status_code=400, detail="Add a link for your ad to point to.")
+    if data.media_type not in AD_MEDIA_TYPES:
+        raise HTTPException(status_code=400, detail=f"media_type must be one of: {', '.join(AD_MEDIA_TYPES)}")
     if data.duration_hours <= 0 or data.duration_hours > MAX_AD_HOURS:
         raise HTTPException(status_code=400, detail=f"Duration must be between 1 and {MAX_AD_HOURS} hours.")
+
+    link_url = None
+    if data.drop_id:
+        try:
+            drop = await db["drops"].find_one({"_id": ObjectId(data.drop_id), "sender_id": current_user_id})
+        except Exception:
+            drop = None
+        if not drop:
+            raise HTTPException(status_code=400, detail="Pick one of your own Drops to link this ad to.")
+        link_url = f"anonixx://drop/{data.drop_id}"
+    elif data.link_url and data.link_url.strip():
+        link_url = data.link_url.strip()
+    else:
+        raise HTTPException(status_code=400, detail="Link this ad to one of your Drops, or add a link for it to point to.")
 
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"is_admin": 1})
     is_admin = bool(user and user.get("is_admin"))
@@ -74,7 +119,8 @@ async def create_ad(
         "created_by":  current_user_id,
         "title":       data.title.strip(),
         "media_url":   data.media_url,
-        "link_url":    data.link_url.strip(),
+        "media_type":  data.media_type,
+        "link_url":    link_url,
         "created_at":  now,
         "expires_at":  now + timedelta(hours=data.duration_hours),
     }

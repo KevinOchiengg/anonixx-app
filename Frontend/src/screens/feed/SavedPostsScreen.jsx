@@ -92,7 +92,7 @@ const PostCard = React.memo(({ post, onPress }) => {
         </Text>
 
         {post.content?.length > 200 && (
-          <Text style={styles.readMore}>read more →</Text>
+          <Text style={styles.readMore}>read more</Text>
         )}
       </TouchableOpacity>
     </Animated.View>

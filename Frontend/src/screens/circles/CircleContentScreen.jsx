@@ -3,8 +3,10 @@
  *
  * The content feed inside a Circle — members-only. Admin/creator posts
  * (optionally coin-gated, shown blurred until unlocked), plus a strip of
- * member-bought ads at the top, priced by how long they run and auto-hidden
- * once expired (see POST/GET /circles/:id/ads in the backend).
+ * member-bought ads at the top, priced by how long they run. Ads land as
+ * pending and only reach the feed once the circle's creator/admin approves
+ * them (see POST/GET /circles/:id/ads* in the backend) — rejected ads are
+ * refunded in full. Expired ads are cleared by a scheduled backend job.
  */
 import React, {
   useState, useEffect, useCallback, useRef,
@@ -16,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Lock, Plus, Megaphone, X, Film } from 'lucide-react-native';
+import { ArrowLeft, Lock, Plus, Megaphone, X, Film, Check, ShieldCheck, Clock, RotateCcw } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -94,6 +96,14 @@ export default function CircleContentScreen({ route, navigation }) {
   const [adHours, setAdHours]     = useState('24');
   const [postingAd, setPostingAd] = useState(false);
 
+  const [pendingAds, setPendingAds]       = useState([]);
+  const [moderationOpen, setModerationOpen] = useState(false);
+  const [reviewingId, setReviewingId]     = useState(null);
+
+  const [myAds, setMyAds]           = useState([]);
+  const [myAdsOpen, setMyAdsOpen]   = useState(false);
+  const [myAdsLoading, setMyAdsLoading] = useState(false);
+
   const canManage = !!(circle?.is_creator || circle?.is_admin);
 
   const authHeaders = useCallback(async (json = false) => {
@@ -107,18 +117,23 @@ export default function CircleContentScreen({ route, navigation }) {
   const load = useCallback(async () => {
     try {
       const headers = await authHeaders();
-      const [postsRes, adsRes] = await Promise.all([
+      const requests = [
         fetch(`${API_BASE_URL}/api/v1/circles/${circleId}/posts`, { headers }),
         fetch(`${API_BASE_URL}/api/v1/circles/${circleId}/ads`, { headers }),
-      ]);
+      ];
+      if (canManage) {
+        requests.push(fetch(`${API_BASE_URL}/api/v1/circles/${circleId}/ads/pending`, { headers }));
+      }
+      const [postsRes, adsRes, pendingRes] = await Promise.all(requests);
       if (postsRes.ok) setPosts((await postsRes.json()).posts || []);
       if (adsRes.ok) setAds((await adsRes.json()).ads || []);
+      if (pendingRes?.ok) setPendingAds((await pendingRes.json()).ads || []);
     } catch {
       showToast({ type: 'error', message: 'Could not load the circle feed.' });
     } finally {
       setLoading(false);
     }
-  }, [circleId, authHeaders, showToast]);
+  }, [circleId, canManage, authHeaders, showToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -221,7 +236,7 @@ export default function CircleContentScreen({ route, navigation }) {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast({ type: 'success', message: `Ad live for ${hours}h — ${data.coins_spent} coins.` });
+        showToast({ type: 'success', message: data.message || `Ad submitted for review — ${data.coins_spent} coins.` });
         setAdModalOpen(false);
         setAdTitle(''); setAdLink(''); setAdHours('24');
         load();
@@ -238,13 +253,47 @@ export default function CircleContentScreen({ route, navigation }) {
     }
   }, [adTitle, adLink, adHours, circleId, authHeaders, showToast, load, navigation]);
 
-  const handleAdPress = useCallback((ad) => {
-    if (ad.link_url?.startsWith('anonixx://')) {
-      navigation.navigate('DropLanding', { dropId: ad.link_url.split('/').pop() });
-    } else {
-      Linking.openURL(ad.link_url).catch(() => {});
+  const handleReviewAd = useCallback(async (adId, approve) => {
+    setReviewingId(adId);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/v1/circles/${circleId}/ads/${adId}/${approve ? 'approve' : 'reject'}`,
+        { method: 'POST', headers: await authHeaders() },
+      );
+      const data = await res.json();
+      if (res.ok) {
+        showToast({ type: 'success', message: data.message || (approve ? 'Ad approved.' : 'Ad rejected.') });
+        setPendingAds((prev) => prev.filter((a) => a.id !== adId));
+        if (approve) load();
+      } else {
+        showToast({ type: 'error', message: data.detail || 'Could not review ad.' });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Could not review ad. Try again.' });
+    } finally {
+      setReviewingId(null);
     }
-  }, [navigation]);
+  }, [circleId, authHeaders, showToast, load]);
+
+  const handleOpenMyAds = useCallback(async () => {
+    setMyAdsOpen(true);
+    setMyAdsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/circles/${circleId}/ads/mine`, {
+        headers: await authHeaders(),
+      });
+      if (res.ok) setMyAds((await res.json()).ads || []);
+      else showToast({ type: 'error', message: 'Could not load your ads.' });
+    } catch {
+      showToast({ type: 'error', message: 'Could not load your ads. Try again.' });
+    } finally {
+      setMyAdsLoading(false);
+    }
+  }, [circleId, authHeaders, showToast]);
+
+  const handleAdPress = useCallback((ad) => {
+    Linking.openURL(ad.link_url).catch(() => {});
+  }, []);
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
@@ -253,9 +302,21 @@ export default function CircleContentScreen({ route, navigation }) {
           <ArrowLeft size={rs(20)} color={T.text} />
         </TouchableOpacity>
         <Text style={s.headerTitle} numberOfLines={1}>{circle?.name || 'Circle'} feed</Text>
-        <TouchableOpacity onPress={() => setAdModalOpen(true)} hitSlop={HIT_SLOP} style={s.headerBtn}>
-          <Megaphone size={rs(18)} color={T.textMuted} />
-        </TouchableOpacity>
+        <View style={s.headerActions}>
+          {canManage && pendingAds.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setModerationOpen(true)}
+              hitSlop={HIT_SLOP}
+              style={[s.headerBtn, s.headerBtnPending]}
+            >
+              <ShieldCheck size={rs(16)} color={auraColor} />
+              <Text style={[s.headerBtnPendingText, { color: auraColor }]}>{pendingAds.length}</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => setAdModalOpen(true)} hitSlop={HIT_SLOP} style={s.headerBtn}>
+            <Megaphone size={rs(18)} color={T.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -349,7 +410,15 @@ export default function CircleContentScreen({ route, navigation }) {
                 <X size={rs(20)} color={T.textMuted} />
               </TouchableOpacity>
             </View>
-            <Text style={s.sheetHint}>5 coins per hour it runs — deleted automatically when time's up.</Text>
+            <Text style={s.sheetHint}>5 coins per hour it runs, charged now. Reviewed by the circle's admin before it goes live — refunded in full if it's rejected.</Text>
+            <TouchableOpacity
+              onPress={() => { setAdModalOpen(false); handleOpenMyAds(); }}
+              hitSlop={HIT_SLOP}
+              style={s.myAdsLink}
+            >
+              <Clock size={rs(12)} color={T.textMuted} />
+              <Text style={s.myAdsLinkText}>See your ad history</Text>
+            </TouchableOpacity>
             <TextInput
               value={adTitle}
               onChangeText={setAdTitle}
@@ -384,12 +453,118 @@ export default function CircleContentScreen({ route, navigation }) {
               {postingAd
                 ? <ActivityIndicator color="#fff" size="small" />
                 : <Text style={s.submitBtnText}>
-                    Run ad — {(parseInt(adHours, 10) || 0) * 5} coins
+                    Submit for review — {(parseInt(adHours, 10) || 0) * 5} coins
                   </Text>
               }
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Ad moderation queue (creator/admin only) ── */}
+      <Modal visible={moderationOpen} animationType="slide" transparent onRequestClose={() => setModerationOpen(false)}>
+        <View style={s.modalWrap}>
+          <View style={[s.sheet, s.moderationSheet]}>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>Ads awaiting review</Text>
+              <TouchableOpacity onPress={() => setModerationOpen(false)} hitSlop={HIT_SLOP}>
+                <X size={rs(20)} color={T.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={s.moderationList} showsVerticalScrollIndicator={false}>
+              {pendingAds.map((ad) => (
+                <View key={ad.id} style={s.pendingAdRow}>
+                  {ad.media_url && <Image source={{ uri: ad.media_url }} style={s.pendingAdImage} resizeMode="cover" />}
+                  <View style={s.pendingAdInfo}>
+                    <Text style={s.pendingAdTitle} numberOfLines={2}>{ad.title}</Text>
+                    <Text style={s.pendingAdMeta} numberOfLines={1}>{ad.link_url}</Text>
+                    <Text style={s.pendingAdMeta}>{ad.duration_hours}h run time</Text>
+                  </View>
+                  <View style={s.pendingAdActions}>
+                    <TouchableOpacity
+                      style={[s.reviewBtn, s.reviewBtnApprove]}
+                      onPress={() => handleReviewAd(ad.id, true)}
+                      disabled={reviewingId === ad.id}
+                      hitSlop={HIT_SLOP}
+                    >
+                      {reviewingId === ad.id
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Check size={rs(16)} color="#fff" strokeWidth={2.4} />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.reviewBtn, s.reviewBtnReject]}
+                      onPress={() => handleReviewAd(ad.id, false)}
+                      disabled={reviewingId === ad.id}
+                      hitSlop={HIT_SLOP}
+                    >
+                      <X size={rs(16)} color="#fff" strokeWidth={2.4} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+              {pendingAds.length === 0 && (
+                <Text style={s.emptyText}>Nothing waiting on review.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── My ads — status history for whoever submitted them ── */}
+      <Modal visible={myAdsOpen} animationType="slide" transparent onRequestClose={() => setMyAdsOpen(false)}>
+        <View style={s.modalWrap}>
+          <View style={[s.sheet, s.moderationSheet]}>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>Your ads</Text>
+              <TouchableOpacity onPress={() => setMyAdsOpen(false)} hitSlop={HIT_SLOP}>
+                <X size={rs(20)} color={T.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {myAdsLoading ? (
+              <ActivityIndicator size="small" color={auraColor} style={{ marginVertical: rp(20) }} />
+            ) : (
+              <ScrollView style={s.moderationList} showsVerticalScrollIndicator={false}>
+                {myAds.map((ad) => (
+                  <View key={ad.id} style={s.myAdRow}>
+                    <View style={s.myAdInfo}>
+                      <Text style={s.pendingAdTitle} numberOfLines={2}>{ad.title}</Text>
+                      {ad.status === 'pending' && (
+                        <Text style={s.pendingAdMeta}>Awaiting review — {ad.duration_hours}h requested, {ad.coins_spent} coins held</Text>
+                      )}
+                      {ad.status === 'approved' && (
+                        <Text style={s.pendingAdMeta}>
+                          Live until {new Date(ad.expires_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      )}
+                      {ad.status === 'rejected' && (
+                        <Text style={s.pendingAdMeta}>Rejected — {ad.coins_spent} coins refunded</Text>
+                      )}
+                    </View>
+                    <View style={[
+                      s.statusBadge,
+                      ad.status === 'approved' && s.statusBadgeApproved,
+                      ad.status === 'rejected' && s.statusBadgeRejected,
+                    ]}>
+                      {ad.status === 'pending' && <Clock size={rs(11)} color={T.warning} />}
+                      {ad.status === 'approved' && <Check size={rs(11)} color="#2e9e5b" />}
+                      {ad.status === 'rejected' && <RotateCcw size={rs(11)} color="#c0392b" />}
+                      <Text style={[
+                        s.statusBadgeText,
+                        ad.status === 'approved' && s.statusBadgeTextApproved,
+                        ad.status === 'rejected' && s.statusBadgeTextRejected,
+                      ]}>
+                        {ad.status}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                {myAds.length === 0 && (
+                  <Text style={s.emptyText}>You haven't submitted any ads in this circle yet.</Text>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -402,7 +577,15 @@ const s = StyleSheet.create({
     paddingHorizontal: SPACING.md, paddingVertical: rp(12),
     borderBottomWidth: 1, borderBottomColor: T.border,
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
   headerBtn: { padding: rp(4) },
+  headerBtnPending: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(4),
+    paddingHorizontal: rp(8), paddingVertical: rp(4),
+    borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.border,
+    backgroundColor: T.surfaceAlt,
+  },
+  headerBtnPendingText: { fontSize: rf(11), fontWeight: '700' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: FONT.md, fontWeight: '700', color: T.text, fontFamily: 'PlayfairDisplay-Bold' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: rs(60) },
   emptyText: { color: T.textMuted, fontSize: FONT.sm, fontStyle: 'italic' },
@@ -449,4 +632,50 @@ const s = StyleSheet.create({
   mediaPickText: { color: T.textSecondary, fontSize: FONT.sm },
   submitBtn: { height: BUTTON_HEIGHT, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', marginTop: rp(4), marginBottom: SPACING.md },
   submitBtnText: { color: '#fff', fontSize: FONT.md, fontWeight: '700' },
+
+  // Ad moderation queue
+  moderationSheet: { maxHeight: '75%' },
+  moderationList: { marginTop: rp(4) },
+  pendingAdRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(10),
+    paddingVertical: rp(10), borderBottomWidth: 1, borderBottomColor: T.border,
+  },
+  pendingAdImage: { width: rs(48), height: rs(48), borderRadius: RADIUS.sm, backgroundColor: T.surfaceAlt },
+  pendingAdInfo: { flex: 1, gap: rp(2) },
+  pendingAdTitle: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
+  pendingAdMeta: { fontSize: rf(11), color: T.textMuted },
+  pendingAdActions: { flexDirection: 'row', gap: rp(8) },
+  reviewBtn: {
+    width: rs(32), height: rs(32), borderRadius: rs(16),
+    alignItems: 'center', justifyContent: 'center',
+  },
+  reviewBtnApprove: { backgroundColor: '#2e9e5b' },
+  reviewBtnReject:  { backgroundColor: '#c0392b' },
+
+  // "See your ad history" link inside the ad-post sheet
+  myAdsLink: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(5),
+    alignSelf: 'flex-start', marginTop: -rp(2),
+  },
+  myAdsLinkText: { fontSize: rf(11), color: T.textMuted, fontWeight: '600' },
+
+  // My ads — status history
+  myAdRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(10),
+    paddingVertical: rp(10), borderBottomWidth: 1, borderBottomColor: T.border,
+  },
+  myAdInfo: { flex: 1, gap: rp(2) },
+  statusBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(4),
+    paddingHorizontal: rp(8), paddingVertical: rp(4),
+    borderRadius: RADIUS.full,
+    backgroundColor: T.warningDim, borderWidth: 1, borderColor: T.warningBorder,
+  },
+  statusBadgeApproved: { backgroundColor: 'rgba(46,158,91,0.12)', borderColor: 'rgba(46,158,91,0.35)' },
+  statusBadgeRejected: { backgroundColor: 'rgba(192,57,43,0.12)', borderColor: 'rgba(192,57,43,0.35)' },
+  statusBadgeText: {
+    fontSize: rf(10), fontWeight: '700', color: T.warning, textTransform: 'capitalize',
+  },
+  statusBadgeTextApproved: { color: '#2e9e5b' },
+  statusBadgeTextRejected: { color: '#c0392b' },
 });

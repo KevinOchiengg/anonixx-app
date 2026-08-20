@@ -19,25 +19,31 @@ import React, {
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Animated, Modal, Image, ScrollView,
+  Animated, Modal, Image, ScrollView, Pressable, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { Audio } from 'expo-av';
 import {
-  Send, Sparkles, CheckCircle, Eye,
+  Send, Sparkles, CheckCircle, Eye, X, Video, Phone, MoreVertical,
+  Mic, Play, Pause, RotateCcw, Settings, Flag, ShieldOff, Users,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
 import {
-  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
+  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, SCREEN,
 } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import PulseLoader from '../../components/common/PulseLoader';
+import ChatBackground from '../../components/chat/ChatBackground';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { WELCOME_SOUND_MAP } from '../../config/sounds';
+import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
+import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 
 const REVEAL_PRICE = 1.0;
 const POLL_INTERVAL_MS = 8000;
@@ -83,9 +89,86 @@ const MoodBoard = React.memo(() => (
   </View>
 ));
 
+// ─── Voice note bubble — play/pause + duration, no autoplay ────
+const VoiceBubble = React.memo(({ item, isOwn }) => {
+  const player = useAudioPlayer(null);
+  const status = useAudioPlayerStatus(player);
+  const [isFinished, setIsFinished] = useState(false);
+  const pendingPlay = useRef(false);
+
+  useEffect(() => {
+    if (status.status === 'readyToPlay' && pendingPlay.current) {
+      pendingPlay.current = false;
+      player.play();
+    }
+  }, [status.status]);
+
+  useEffect(() => {
+    if (status.didJustFinish) {
+      setIsFinished(true);
+      player.seekTo(0);
+    }
+  }, [status.didJustFinish]);
+
+  const handlePress = useCallback(async () => {
+    try {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      if (status.status === 'idle') {
+        pendingPlay.current = true;
+        player.replace({ uri: item.media_url });
+      } else if (isFinished) {
+        setIsFinished(false);
+        player.seekTo(0);
+        player.play();
+      } else if (status.playing) {
+        player.pause();
+      } else {
+        player.play();
+      }
+    } catch { /* silent */ }
+  }, [status.status, status.playing, isFinished, player]);
+
+  const progress = isFinished ? 0 : (status.duration > 0 ? (status.currentTime || 0) / status.duration : 0);
+  const displaySecs = (status.playing || (!isFinished && status.status === 'readyToPlay'))
+    ? Math.floor(status.currentTime || 0)
+    : Math.floor(status.duration || item.duration_seconds || 0);
+  const timeLabel = `${Math.floor(displaySecs / 60)}:${String(displaySecs % 60).padStart(2, '0')}`;
+  const isLoading = status.status === 'loading';
+  const PlayIcon = isFinished ? RotateCcw : status.playing ? Pause : Play;
+
+  return (
+    <View style={s.voiceRow}>
+      <TouchableOpacity
+        onPress={handlePress}
+        hitSlop={HIT_SLOP}
+        activeOpacity={0.8}
+        style={[s.voicePlayBtn, isOwn ? s.voicePlayBtnOwn : s.voicePlayBtnTheir]}
+      >
+        {isLoading
+          ? <ActivityIndicator size="small" color={isOwn ? T.primary : '#fff'} />
+          : <PlayIcon size={rs(15)} color={isOwn ? T.primary : '#fff'} strokeWidth={2.4} fill={status.playing ? (isOwn ? T.primary : '#fff') : 'none'} />}
+      </TouchableOpacity>
+      <View style={s.voiceTrack}>
+        <View style={[s.voiceTrackFill, isOwn && s.voiceTrackFillOwn, { width: `${Math.max(progress * 100, 3)}%` }]} />
+      </View>
+      <Text style={[s.voiceTimeLabel, isOwn && s.voiceTimeLabelOwn]}>{timeLabel}</Text>
+    </View>
+  );
+});
+
 // ─── Message bubble ────────────────────────────────────────────
 const Bubble = React.memo(({ item, fontFamily }) => {
   const isOwn = item.is_own;
+  if (item.media_type === 'voice' && item.media_url) {
+    return (
+      <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
+        <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
+          <VoiceBubble item={item} isOwn={isOwn} />
+          <Text style={[s.bubbleTime, isOwn && s.bubbleTimeOwn]}>{item.time_ago}</Text>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
       <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
@@ -100,30 +183,77 @@ const Bubble = React.memo(({ item, fontFamily }) => {
   );
 });
 
-// ─── Welcome media takeover — shown once per unlocker, first open ──
-const WelcomeMediaOverlay = React.memo(({ media, onDismiss }) => {
-  const isVideo = media?.media_type === 'video' && !!media?.media_url;
+// ─── One page of the welcome gallery — its own component so useVideoPlayer
+// is only ever called once per item, not conditionally inside a .map() ──
+const WelcomeGalleryPage = React.memo(({ item }) => {
+  const isVideo = item?.media_type === 'video' && !!item?.media_url;
   const player = useVideoPlayer(
-    isVideo ? { uri: media.media_url } : null,
+    isVideo ? { uri: item.media_url } : null,
     (p) => { p.loop = true; p.play(); },
   );
 
-  if (!media?.media_url) return null;
+  if (!item?.media_url) return null;
+
+  return isVideo ? (
+    <VideoView player={player} style={s.welcomeMedia} contentFit="cover" />
+  ) : (
+    // Image handles animated gifs natively — same component for image/gif.
+    <Image source={{ uri: item.media_url }} style={s.welcomeMedia} resizeMode="cover" />
+  );
+});
+
+// ─── Welcome gallery takeover — up to 3 swipeable items (image/video/gif),
+// shown once per unlocker on first open, to entertain them if the host
+// isn't online yet ──
+const WelcomeGalleryOverlay = React.memo(({ gallery, onDismiss }) => {
+  const [page, setPage] = useState(0);
+  const items = (gallery || []).filter((m) => m?.media_url).slice(0, 3);
+  if (!items.length) return null;
+
+  const handleScroll = (e) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN.width);
+    setPage(idx);
+  };
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onDismiss}>
-      <TouchableOpacity
-        style={s.welcomeOverlay}
-        activeOpacity={1}
-        onPress={onDismiss}
-      >
-        {isVideo ? (
-          <VideoView player={player} style={s.welcomeMedia} contentFit="cover" />
-        ) : (
-          <Image source={{ uri: media.media_url }} style={s.welcomeMedia} resizeMode="cover" />
+      <View style={s.welcomeOverlay}>
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScroll}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
+          {items.map((item, idx) => (
+            <TouchableOpacity
+              key={idx}
+              activeOpacity={1}
+              onPress={onDismiss}
+              style={{ width: SCREEN.width, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <WelcomeGalleryPage item={item} />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {items.length > 1 && (
+          <View style={s.welcomeDots} pointerEvents="none">
+            {items.map((_, idx) => (
+              <View key={idx} style={[s.welcomeDot, idx === page && s.welcomeDotActive]} />
+            ))}
+          </View>
         )}
-        <Text style={s.welcomeHint}>tap anywhere to continue</Text>
-      </TouchableOpacity>
+
+        <TouchableOpacity style={s.welcomeClose} onPress={onDismiss} hitSlop={HIT_SLOP}>
+          <X size={rs(18)} color="#fff" />
+        </TouchableOpacity>
+
+        <Text style={s.welcomeHint}>
+          {items.length > 1 ? 'swipe to see more · tap to continue' : 'tap anywhere to continue'}
+        </Text>
+      </View>
     </Modal>
   );
 });
@@ -152,17 +282,32 @@ export default function DropChatScreen({ route, navigation }) {
   const [sending, setSending]       = useState(false);
 
   // ── Poster's themed chat surface (per-user chat_profiles doc) ──
-  const [chatProfile, setChatProfile]   = useState(null);
-  const [welcomeMedia, setWelcomeMedia] = useState(null);
-  const [showWelcome, setShowWelcome]   = useState(false);
+  const [chatProfile, setChatProfile]     = useState(null);
+  const [welcomeGallery, setWelcomeGallery] = useState([]);
+  const [showWelcome, setShowWelcome]     = useState(false);
+  // On-demand re-open of the same gallery, any time — not gated to the
+  // once-only first-open welcome takeover above.
+  const [galleryViewerOpen, setGalleryViewerOpen] = useState(false);
+  // Room video call — polled from the same messages fetch (see
+  // /drop-calls/start and /:id/join for what actually starts it).
+  const [activeCall, setActiveCall]   = useState(null);
+  const [callLoading, setCallLoading] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [guestList, setGuestList]       = useState([]);
+  const [guestsLoading, setGuestsLoading] = useState(false);
 
-  const bubbleFontFamily = useMemo(() => {
-    switch (chatProfile?.font_style) {
-      case 'sultry-script': return 'PlayfairDisplay-Italic';
-      case 'bold-tease':    return 'DMSans-Bold';
-      default:              return 'DMSans-Regular';
-    }
-  }, [chatProfile?.font_style]);
+  // ── Voice note recording — press-and-hold mic, mirrors ChatScreen.jsx ──
+  const [isRecording, setIsRecording]     = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const [voiceUploading, setVoiceUploading] = useState(false);
+  const recordingRef   = useRef(null);
+  const recordTimerRef = useRef(null);
+  const pressStartRef  = useRef(0);
+
+  const bubbleFontFamily = useMemo(
+    () => CHAT_FONT_MAP[chatProfile?.font_style] || CHAT_FONT_MAP[DEFAULT_CHAT_FONT],
+    [chatProfile?.font_style]
+  );
 
   const [showRevealModal, setShowRevealModal] = useState(false);
   const [revealStep, setRevealStep]           = useState('idle'); // idle | phone | waiting | polling | done
@@ -216,8 +361,9 @@ export default function DropChatScreen({ route, navigation }) {
         setMessages(data.messages);
         setConnection(data.connection);
         if (data.chat_profile) setChatProfile(data.chat_profile);
-        if ((data.welcome_media || data.welcome_sound) && !welcomeMedia && !showWelcome) {
-          setWelcomeMedia(data.welcome_media);
+        setActiveCall(data.active_call || null);
+        if ((data.welcome_gallery?.length || data.welcome_sound) && !welcomeGallery.length && !showWelcome) {
+          setWelcomeGallery(data.welcome_gallery || []);
           setShowWelcome(true);
           playWelcomeSound(data.welcome_sound);
         }
@@ -232,7 +378,7 @@ export default function DropChatScreen({ route, navigation }) {
         showToast({ type: 'error', message: 'Network error.' });
       }
     }
-  }, [connectionId, revealData, checkRevealStatus, showToast, welcomeMedia, showWelcome, playWelcomeSound]);
+  }, [connectionId, revealData, checkRevealStatus, showToast, welcomeGallery.length, showWelcome, playWelcomeSound]);
 
   // ── Initial load + polling ────────────────────────────────
   useEffect(() => {
@@ -249,6 +395,7 @@ export default function DropChatScreen({ route, navigation }) {
     return () => {
       clearInterval(pollRef.current);
       clearInterval(revealPollRef.current);
+      clearInterval(recordTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -280,6 +427,146 @@ export default function DropChatScreen({ route, navigation }) {
       setSending(false);
     }
   }, [text, connectionId, loadMessages, showToast]);
+
+  // ── Voice note — upload direct to Cloudinary (signed), then send as
+  //    a media message. Mirrors ChatScreen.jsx's uploadVoice exactly. ──
+  const uploadVoice = useCallback(async (uri) => {
+    const token = await AsyncStorage.getItem('token');
+    const sigRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body:    JSON.stringify({ resource_type: 'video' }), // Cloudinary uses "video" for audio
+    });
+    if (!sigRes.ok) {
+      const err = await sigRes.json().catch(() => ({}));
+      throw new Error(err?.detail || `Signature failed (${sigRes.status})`);
+    }
+    const { signature, timestamp, api_key, cloud_name, folder } = await sigRes.json();
+
+    const form = new FormData();
+    form.append('file',      { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' });
+    form.append('signature', signature);
+    form.append('timestamp', String(timestamp));
+    form.append('api_key',   api_key);
+    form.append('folder',    folder);
+
+    const uploadRes  = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`,
+      { method: 'POST', body: form },
+    );
+    const uploadData = await uploadRes.json();
+    if (!uploadRes.ok) throw new Error(uploadData?.error?.message || `Cloudinary error (${uploadRes.status})`);
+    return uploadData.secure_url;
+  }, []);
+
+  const sendVoiceMessage = useCallback(async (mediaUrl, durationSeconds) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      await fetch(
+        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
+        {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization:  `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            media_url: mediaUrl, media_type: 'voice', duration_seconds: durationSeconds,
+          }),
+        },
+      );
+      await loadMessages(true);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch {
+      showToast({ type: 'error', message: 'Voice note sent, but the chat failed to refresh.' });
+    }
+  }, [connectionId, loadMessages, showToast]);
+
+  const handleVoicePressIn = useCallback(async () => {
+    if (isRecording) return;
+
+    if (recordingRef.current) {
+      try { await recordingRef.current.stopAndUnloadAsync(); } catch { /* already stopped */ }
+      recordingRef.current = null;
+    }
+
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'warning', message: 'Microphone permission is needed to record.' });
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS:      true,
+        playsInSilentModeIOS:    true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid:       true,
+      });
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+
+      recordingRef.current  = recording;
+      pressStartRef.current = Date.now();
+      setIsRecording(true);
+      setRecordDuration(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (e) {
+      recordingRef.current = null;
+      setIsRecording(false);
+      clearInterval(recordTimerRef.current);
+      const msg = e?.message || '';
+      if (msg.toLowerCase().includes('permission')) {
+        showToast({ type: 'warning', message: 'Microphone permission denied.' });
+      } else {
+        showToast({ type: 'error', message: `Recording error: ${msg || 'Could not start.'}` });
+      }
+    }
+  }, [isRecording, showToast]);
+
+  const handleVoicePressOut = useCallback(async () => {
+    if (!isRecording || !recordingRef.current) return;
+
+    clearInterval(recordTimerRef.current);
+    recordTimerRef.current = null;
+    const heldMs = Date.now() - pressStartRef.current;
+
+    try {
+      const uri = recordingRef.current.getURI();
+      const durationSeconds = recordDuration;
+      await recordingRef.current.stopAndUnloadAsync();
+      recordingRef.current = null;
+      setIsRecording(false);
+      setRecordDuration(0);
+
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+
+      if (heldMs < 500) {
+        showToast({ type: 'info', message: 'Hold to record, release to send.' });
+        return;
+      }
+      if (!uri) {
+        showToast({ type: 'error', message: 'Recording failed — no audio captured.' });
+        return;
+      }
+      setVoiceUploading(true);
+      const url = await uploadVoice(uri);
+      setVoiceUploading(false);
+      if (url) await sendVoiceMessage(url, durationSeconds);
+    } catch {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+      recordingRef.current   = null;
+      setIsRecording(false);
+      setRecordDuration(0);
+      setVoiceUploading(false);
+      showToast({ type: 'error', message: 'Could not send voice note.' });
+    }
+  }, [isRecording, recordDuration, uploadVoice, sendVoiceMessage, showToast]);
 
   // ── Reveal flow ───────────────────────────────────────────
   const startRevealPolling = useCallback(() => {
@@ -353,34 +640,213 @@ export default function DropChatScreen({ route, navigation }) {
 
   const handleDismissWelcome = useCallback(() => setShowWelcome(false), []);
 
+  const handleStartCall = useCallback(async (isAudioOnly = false) => {
+    if (callLoading) return;
+    setCallLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drop-calls/start`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not start the call.');
+      navigation.navigate('DropCall', {
+        callId: data.call_id, channel: data.channel, token: data.token,
+        uid: data.uid, appId: data.app_id, isHost: true, isAudioOnly,
+      });
+    } catch (err) {
+      showToast({ type: 'error', message: err.message || 'Could not start the call.' });
+    } finally {
+      setCallLoading(false);
+    }
+  }, [callLoading, navigation, showToast]);
+
+  const handleJoinCall = useCallback(async (isAudioOnly = false) => {
+    if (callLoading || !activeCall) return;
+    setCallLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drop-calls/${activeCall.id}/join`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not join the call.');
+      navigation.navigate('DropCall', {
+        callId: data.call_id, channel: data.channel, token: data.token,
+        uid: data.uid, appId: data.app_id, isHost: false, isAudioOnly,
+        hostName: connection?.other_anonymous_name || 'Anonymous',
+      });
+    } catch (err) {
+      showToast({ type: 'error', message: err.message || 'Could not join the call.' });
+    } finally {
+      setCallLoading(false);
+    }
+  }, [callLoading, activeCall, navigation, showToast, connection]);
+
+  // Header call icons — host starts either flavor, guest joins whichever
+  // is live. No lock/paywall here, unlike ChatScreen's unlockedFeatures —
+  // every host's room supports both from the moment they unlock chat.
+  const handlePressAudio = useCallback(() => {
+    if (connection?.is_sender) return handleStartCall(true);
+    if (activeCall) return handleJoinCall(true);
+    showToast({ type: 'info', message: 'No live call right now.' });
+  }, [connection, activeCall, handleStartCall, handleJoinCall, showToast]);
+
+  const handlePressVideo = useCallback(() => {
+    if (connection?.is_sender) return handleStartCall(false);
+    if (activeCall) return handleJoinCall(false);
+    showToast({ type: 'info', message: 'No live call right now.' });
+  }, [connection, activeCall, handleStartCall, handleJoinCall, showToast]);
+
   const handleOpenReveal = useCallback(() => {
     setRevealStep('idle');
     setShowRevealModal(true);
   }, []);
 
-  // Header right: reveal pill / revealed tag
+  // ── 3-dot menu — roster behind the room, host/guest specific actions ──
+  useEffect(() => {
+    if (!showMoreMenu || !connection?.host_user_id) return;
+    (async () => {
+      setGuestsLoading(true);
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res   = await fetch(
+          `${API_BASE_URL}/api/v1/drops/room/${connection.host_user_id}/guests`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setGuestList(data.guests || []);
+        }
+      } catch { /* silent — roster is a nice-to-have in this sheet */ }
+      setGuestsLoading(false);
+    })();
+  }, [showMoreMenu, connection?.host_user_id]);
+
+  const handleOpenSettings = useCallback(() => {
+    setShowMoreMenu(false);
+    navigation.navigate('ChatProfileSetup');
+  }, [navigation]);
+
+  const handleBlockHost = useCallback(() => {
+    if (!connection?.host_user_id) return;
+    Alert.alert(
+      'Block this person?',
+      "They won't be able to reach you, and their content will be hidden from your feed and Drops.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block', style: 'destructive',
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.host_user_id}/block`, {
+                method: 'POST', headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) throw new Error();
+              setShowMoreMenu(false);
+              showToast({ type: 'success', message: 'User blocked.' });
+              navigation.goBack();
+            } catch {
+              showToast({ type: 'error', message: 'Could not block. Try again.' });
+            }
+          },
+        },
+      ],
+    );
+  }, [connection, navigation, showToast]);
+
+  const handleReportHost = useCallback(() => {
+    if (!connection?.host_user_id) return;
+    const reasons = [
+      { id: 'abuse',             label: 'Abuse or harassment' },
+      { id: 'spam',              label: 'Spam' },
+      { id: 'explicit',          label: 'Unwanted explicit content' },
+      { id: 'self-harm-concern', label: "I'm worried about them" },
+      { id: 'other',             label: 'Other' },
+    ];
+    Alert.alert(
+      'Report this person',
+      "What's the issue?",
+      [
+        ...reasons.map((r) => ({
+          text: r.label,
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.host_user_id}/report`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body:    JSON.stringify({ reason: r.id }),
+              });
+              if (!res.ok) throw new Error();
+              setShowMoreMenu(false);
+              showToast({ type: 'success', message: 'Report received. Thank you.' });
+            } catch {
+              showToast({ type: 'error', message: 'Could not send report. Try again.' });
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [connection, showToast]);
+
+  // Header right: audio / video call icons + reveal pill/tag + 3-dot menu —
+  // the room's controls live in the header now, not a full-width bar.
   const HeaderRight = useMemo(() => {
     if (!connection) return null;
-    if (connection.is_revealed) {
-      return (
-        <View style={s.revealedTag}>
-          <CheckCircle size={rs(13)} color={T.success} strokeWidth={2} />
-          <Text style={s.revealedTagText}>Revealed</Text>
-        </View>
-      );
-    }
+    const callLive = !!activeCall;
     return (
-      <TouchableOpacity
-        style={s.revealBtn}
-        onPress={handleOpenReveal}
-        hitSlop={HIT_SLOP}
-        activeOpacity={0.85}
-      >
-        <Sparkles size={rs(14)} color={T.primary} strokeWidth={2} />
-        <Text style={s.revealBtnText}>Reveal</Text>
-      </TouchableOpacity>
+      <View style={s.headerActions}>
+        <TouchableOpacity
+          style={[s.headerActionBtn, callLive && s.headerActionBtnLive]}
+          onPress={handlePressAudio}
+          disabled={callLoading}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.75}
+        >
+          <Phone size={rs(15)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
+          {callLive && <View style={s.liveDot} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[s.headerActionBtn, callLive && s.headerActionBtnLive]}
+          onPress={handlePressVideo}
+          disabled={callLoading}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.75}
+        >
+          <Video size={rs(15)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
+          {callLive && <View style={s.liveDot} />}
+        </TouchableOpacity>
+
+        {connection.is_revealed ? (
+          <View style={s.revealedTag}>
+            <CheckCircle size={rs(13)} color={T.success} strokeWidth={2} />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={s.revealBtn}
+            onPress={handleOpenReveal}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.85}
+          >
+            <Sparkles size={rs(14)} color={T.primary} strokeWidth={2} />
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={s.headerActionBtn}
+          onPress={() => setShowMoreMenu(true)}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.75}
+        >
+          <MoreVertical size={rs(15)} color={T.textMute} strokeWidth={1.8} />
+        </TouchableOpacity>
+      </View>
     );
-  }, [connection, handleOpenReveal]);
+  }, [connection, activeCall, callLoading, handlePressAudio, handlePressVideo, handleOpenReveal]);
 
   const headerTitle = useMemo(() => {
     if (!connection) return 'Anonymous';
@@ -400,26 +866,63 @@ export default function DropChatScreen({ route, navigation }) {
   }
 
   return (
-    <SafeAreaView
-      style={[s.safe, chatProfile?.background_color && { backgroundColor: chatProfile.background_color }]}
-      edges={['top', 'left', 'right']}
-    >
+    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       <DropScreenHeader
         title={headerTitle}
         navigation={navigation}
         right={HeaderRight}
       />
 
+      <ChatBackground
+        pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN}
+        style={{ flex: 1 }}
+      >
+
       {/* Poster's themed profile picture — only ever visible post-unlock,
-          since this connection doc wouldn't exist otherwise. */}
+          since this connection doc wouldn't exist otherwise. Tappable into
+          the gallery any time it has items, for either side of the chat —
+          not just the unlocker's one-time welcome takeover below. */}
       {chatProfile?.profile_picture_url && (
-        <View style={s.profileRow}>
-          <Image source={{ uri: chatProfile.profile_picture_url }} style={s.profileAvatar} />
-        </View>
+        <TouchableOpacity
+          style={s.profileRow}
+          activeOpacity={chatProfile?.gallery?.length ? 0.8 : 1}
+          onPress={() => chatProfile?.gallery?.length && setGalleryViewerOpen(true)}
+        >
+          <View>
+            <Image source={{ uri: chatProfile.profile_picture_url }} style={s.profileAvatar} />
+            {chatProfile?.gallery?.length > 0 && (
+              <View style={s.galleryBadge}>
+                <Text style={s.galleryBadgeText}>{chatProfile.gallery.length}</Text>
+              </View>
+            )}
+          </View>
+          {chatProfile?.gallery?.length > 0 && (
+            <Text style={s.galleryHint}>tap to view gallery</Text>
+          )}
+        </TouchableOpacity>
       )}
 
-      {showWelcome && welcomeMedia && (
-        <WelcomeMediaOverlay media={welcomeMedia} onDismiss={handleDismissWelcome} />
+      {/* Live-call status strip — the actual join/start controls now live
+          in the header (Phone/Video icons); this just tells guests the
+          room is occupied before they tap in. */}
+      {activeCall ? (
+        <View style={s.liveStrip}>
+          <View style={s.liveStripDot} />
+          <Text style={s.liveStripText}>
+            {connection?.is_sender ? 'Your call is live' : 'Call live'} — {activeCall.guest_count}/{activeCall.max_guests} in room
+          </Text>
+        </View>
+      ) : null}
+
+      {showWelcome && welcomeGallery.length > 0 && (
+        <WelcomeGalleryOverlay gallery={welcomeGallery} onDismiss={handleDismissWelcome} />
+      )}
+
+      {galleryViewerOpen && (
+        <WelcomeGalleryOverlay
+          gallery={chatProfile?.gallery || []}
+          onDismiss={() => setGalleryViewerOpen(false)}
+        />
       )}
 
       {/* Was-anonymous-as subtitle when revealed */}
@@ -473,11 +976,37 @@ export default function DropChatScreen({ route, navigation }) {
             style={s.input}
             value={text}
             onChangeText={setText}
-            placeholder="Say something…"
+            placeholder="say what you came here for…"
             placeholderTextColor={T.textMute}
             multiline
             maxLength={500}
           />
+
+          {/* Voice note — press and hold to record, release to send */}
+          <Pressable
+            onPressIn={handleVoicePressIn}
+            onPressOut={handleVoicePressOut}
+            style={({ pressed }) => [
+              s.micBtn,
+              isRecording && s.micBtnRecording,
+              pressed && !isRecording && { opacity: 0.7 },
+            ]}
+            hitSlop={HIT_SLOP}
+          >
+            {isRecording ? (
+              <>
+                <Mic size={rs(16)} color="#fff" strokeWidth={2} />
+                <Text style={s.recordDurationLabel}>
+                  {Math.floor(recordDuration / 60)}:{String(recordDuration % 60).padStart(2, '0')}
+                </Text>
+              </>
+            ) : voiceUploading ? (
+              <ActivityIndicator size="small" color={T.primary} />
+            ) : (
+              <Mic size={rs(16)} color={T.textMute} strokeWidth={1.6} />
+            )}
+          </Pressable>
+
           <TouchableOpacity
             style={[s.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}
             onPress={handleSend}
@@ -491,6 +1020,7 @@ export default function DropChatScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      </ChatBackground>
 
       {/* ── Reveal modal ── */}
       <Modal
@@ -615,6 +1145,78 @@ export default function DropChatScreen({ route, navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* ── 3-dot menu — room roster + host/guest actions ── */}
+      <Modal
+        visible={showMoreMenu}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMoreMenu(false)}
+      >
+        <TouchableOpacity
+          style={s.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMoreMenu(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <View style={s.menuHeaderRow}>
+              <Users size={rs(16)} color={T.textMute} strokeWidth={1.8} />
+              <Text style={s.menuHeaderText}>
+                {connection?.is_sender ? 'Your room' : `${headerTitle}'s room`}
+              </Text>
+            </View>
+
+            {guestsLoading ? (
+              <ActivityIndicator size="small" color={T.primary} style={{ marginVertical: rp(16) }} />
+            ) : guestList.length > 0 ? (
+              <ScrollView style={s.guestListScroll} showsVerticalScrollIndicator={false}>
+                {guestList.map((g) => (
+                  <View key={g.user_id} style={s.guestRow}>
+                    <View style={s.guestRowLeft}>
+                      <View style={s.guestDotWrap}>
+                        {g.is_online && <View style={s.guestOnlineDot} />}
+                      </View>
+                      <Text style={s.guestName}>{g.anonymous_name}</Text>
+                    </View>
+                    <Text style={s.guestStatus}>{g.is_online ? 'online' : 'offline'}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={s.guestEmptyText}>No one's unlocked this room yet.</Text>
+            )}
+
+            <View style={s.menuDivider} />
+
+            {connection?.is_sender ? (
+              <TouchableOpacity style={s.menuAction} onPress={handleOpenSettings} hitSlop={HIT_SLOP}>
+                <Settings size={rs(16)} color={T.text} strokeWidth={1.8} />
+                <Text style={s.menuActionText}>Room settings</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>
+                  <Flag size={rs(16)} color={T.text} strokeWidth={1.8} />
+                  <Text style={s.menuActionText}>Report</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.menuAction} onPress={handleBlockHost} hitSlop={HIT_SLOP}>
+                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Block</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity
+              onPress={() => setShowMoreMenu(false)}
+              hitSlop={HIT_SLOP}
+              style={s.cancelBtn}
+            >
+              <Text style={s.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -627,6 +1229,42 @@ const s = StyleSheet.create({
   profileRow: {
     alignItems:      'center',
     paddingVertical: rp(8),
+  },
+  galleryBadge: {
+    position: 'absolute', bottom: -rp(2), right: -rp(2),
+    backgroundColor: T.primary, borderRadius: rs(9),
+    minWidth: rs(18), height: rs(18), paddingHorizontal: rp(4),
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: T.background,
+  },
+  galleryBadgeText: { fontSize: rf(9), fontWeight: '800', color: '#fff' },
+  galleryHint: {
+    marginTop: rp(4), fontSize: rf(10), color: T.textMute, fontFamily: 'DMSans-Italic',
+  },
+  liveStrip: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(6),
+    alignSelf: 'center', marginBottom: rp(10),
+    paddingHorizontal: rp(12), paddingVertical: rp(6),
+    borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.primaryBorder,
+    backgroundColor: T.primaryDim,
+  },
+  liveStripDot: {
+    width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.online,
+  },
+  liveStripText: { fontSize: rf(11), fontWeight: '700', color: T.primary },
+
+  // Header call/menu icons
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
+  headerActionBtn: {
+    width: rs(30), height: rs(30), borderRadius: rs(15),
+    backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: T.border, position: 'relative',
+  },
+  headerActionBtnLive: { borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
+  liveDot: {
+    position: 'absolute', top: rp(3), right: rp(3),
+    width: rs(6), height: rs(6), borderRadius: rs(3),
+    backgroundColor: T.online, borderWidth: 1, borderColor: T.background,
   },
   profileAvatar: {
     width:        rs(56),
@@ -652,41 +1290,37 @@ const s = StyleSheet.create({
     fontFamily: 'DMSans-Italic',
     fontSize:   FONT.sm,
   },
+  welcomeDots: {
+    flexDirection: 'row',
+    gap:           rp(6),
+    marginTop:     rp(14),
+  },
+  welcomeDot: {
+    width: rs(6), height: rs(6), borderRadius: rs(3),
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  welcomeDotActive: { backgroundColor: T.primary, width: rs(16) },
+  welcomeClose: {
+    position: 'absolute', top: rp(50), right: rp(20),
+    width: rs(34), height: rs(34), borderRadius: rs(17),
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // Header right
   revealBtn: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(5),
+    width: rs(30), height: rs(30), borderRadius: rs(15),
+    alignItems: 'center', justifyContent: 'center',
     backgroundColor:   T.primaryDim,
-    borderRadius:      RADIUS.full,
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(6),
     borderWidth:       1,
     borderColor:       T.primaryBorder,
   },
-  revealBtnText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(11),
-    color:         T.primary,
-    letterSpacing: 0.8,
-  },
   revealedTag: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(4),
+    width: rs(30), height: rs(30), borderRadius: rs(15),
+    alignItems: 'center', justifyContent: 'center',
     backgroundColor:   T.successDim,
-    borderRadius:      RADIUS.full,
-    paddingHorizontal: rp(10),
-    paddingVertical:   rp(5),
     borderWidth:       1,
     borderColor:       'rgba(34,197,94,0.4)',
-  },
-  revealedTagText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(10),
-    color:         T.success,
-    letterSpacing: 0.6,
   },
 
   // "was AnonXXX" pill below header after reveal
@@ -765,6 +1399,30 @@ const s = StyleSheet.create({
   },
   bubbleTimeOwn: { color: 'rgba(255,255,255,0.65)' },
 
+  // Voice note bubble
+  voiceRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(9), minWidth: rs(160),
+  },
+  voicePlayBtn: {
+    width: rs(30), height: rs(30), borderRadius: rs(15),
+    alignItems: 'center', justifyContent: 'center',
+  },
+  voicePlayBtnOwn:   { backgroundColor: 'rgba(255,255,255,0.95)' },
+  voicePlayBtnTheir: { backgroundColor: T.primary },
+  voiceTrack: {
+    flex: 1, height: rs(3), borderRadius: rs(2),
+    backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden',
+  },
+  voiceTrackFill: {
+    height: '100%', borderRadius: rs(2), backgroundColor: 'rgba(255,255,255,0.95)',
+  },
+  voiceTrackFillOwn: { backgroundColor: 'rgba(255,255,255,0.95)' },
+  voiceTimeLabel: {
+    fontFamily: 'DMSans-Bold', fontSize: rf(10), color: 'rgba(255,255,255,0.7)',
+    minWidth: rs(26),
+  },
+  voiceTimeLabelOwn: { color: 'rgba(255,255,255,0.85)' },
+
   // Empty
   emptyChat: {
     flex:           1,
@@ -832,6 +1490,27 @@ const s = StyleSheet.create({
     maxHeight:         rs(100),
     borderWidth:       1,
     borderColor:       T.border,
+  },
+  micBtn: {
+    width: rs(40), height: rs(40), borderRadius: rs(20),
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: rp(2),
+  },
+  micBtnRecording: {
+    backgroundColor: T.primary,
+    borderRadius:    rs(20),
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             rp(4),
+    paddingHorizontal: rp(10),
+    width: 'auto',
+  },
+  recordDurationLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(11),
+    color:         '#fff',
+    letterSpacing: 0.5,
+    minWidth:      rs(26),
   },
   sendBtn: {
     width:           rs(44),
@@ -978,6 +1657,42 @@ const s = StyleSheet.create({
     fontFamily: 'DMSans-Italic',
     fontSize:   FONT.sm,
     color:      T.textSec,
+  },
+
+  // 3-dot menu — room roster + actions
+  menuHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(8),
+    marginBottom: SPACING.sm,
+  },
+  menuHeaderText: {
+    fontFamily: 'PlayfairDisplay-Italic', fontSize: rf(16), color: T.text,
+  },
+  guestListScroll: { maxHeight: rs(220), marginBottom: rp(4) },
+  guestRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: rp(9),
+    borderBottomWidth: 1, borderBottomColor: T.border,
+  },
+  guestRowLeft: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
+  guestDotWrap: { width: rs(8), height: rs(8), alignItems: 'center', justifyContent: 'center' },
+  guestOnlineDot: { width: rs(7), height: rs(7), borderRadius: rs(4), backgroundColor: T.online },
+  guestName: {
+    fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.text,
+  },
+  guestStatus: {
+    fontFamily: 'DMSans-Italic', fontSize: rf(11), color: T.textMute,
+  },
+  guestEmptyText: {
+    fontFamily: 'DMSans-Italic', fontSize: FONT.sm, color: T.textMute,
+    textAlign: 'center', paddingVertical: SPACING.md,
+  },
+  menuDivider: { height: 1, backgroundColor: T.border, marginVertical: SPACING.sm },
+  menuAction: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(10),
+    paddingVertical: rp(12),
+  },
+  menuActionText: {
+    fontFamily: 'DMSans-Bold', fontSize: FONT.sm, color: T.text, letterSpacing: 0.2,
   },
 
   // Reveal success

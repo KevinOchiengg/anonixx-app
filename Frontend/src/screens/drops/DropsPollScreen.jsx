@@ -102,9 +102,6 @@ export default function DropsPollScreen({ navigation, route }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.detail || `Server error ${res.status}`);
       }
-      const data = await res.json();
-      const dropId = data?.id;
-
       showToast({
         type:    'success',
         title:   'Poll dropped.',
@@ -112,7 +109,9 @@ export default function DropsPollScreen({ navigation, route }) {
       });
       dispatch(awardMilestone('first_drop'));
 
-      navigation.navigate?.('DropLanding', { dropId });
+      // Land back in the main feed — the poll shows up there as a genuine
+      // post now (see create_drop's post-mirroring on the backend).
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err) {
       showToast({ type: 'error', message: err?.message || 'Could not post your poll. Try again.' });
     } finally {

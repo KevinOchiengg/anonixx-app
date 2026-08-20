@@ -11,13 +11,6 @@
  *   <DropScreenHeader title="Marketplace" navigation={navigation} />
  *
  *   <DropScreenHeader
- *     title="Drop"
- *     navigation={navigation}
- *     rightLabel="Inbox"
- *     onRightPress={() => navigation.navigate('DropsInbox')}
- *   />
- *
- *   <DropScreenHeader
  *     title="Vibe"
  *     navigation={navigation}
  *     right={<SomeIconButton />}

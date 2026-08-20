@@ -867,7 +867,7 @@ const ConnectionStrip = React.memo(({ messageCount, revealUnlocked }) => {
   const hint = showRevealHint
     ? `👁  ${revealLeft} more to unlock reveal`
     : nextFeature
-      ? `${nextFeature.at - messageCount} more → ${nextFeature.label} ${nextFeature.icon}`
+      ? `${nextFeature.at - messageCount} more until ${nextFeature.label} ${nextFeature.icon}`
       : `all features unlocked · ${percent}%`;
 
   return (
@@ -1033,7 +1033,7 @@ const DeepConnectionCountdown = React.memo(({ expiresAt, revealUnlocked, onRevea
       </Text>
       {revealUnlocked && (
         <TouchableOpacity onPress={onReveal} hitSlop={HIT_SLOP} style={styles.countdownRevealBtn}>
-          <Text style={styles.countdownRevealText}>reveal & continue →</Text>
+          <Text style={styles.countdownRevealText}>reveal & continue</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -2142,20 +2142,6 @@ export default function ChatScreen({ route, navigation }) {
           onReveal={() => setShowReveal(true)}
         />
 
-        {/* ── Drop nudge — they have a confession ── */}
-        {chatInfo?.has_active_drop && chatInfo?.drop_id && (
-          <TouchableOpacity
-            style={styles.dropNudgeBanner}
-            onPress={() => navigation.navigate('DropLanding', { dropId: chatInfo.drop_id })}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.dropNudgeText}>
-              🌑 they have a confession on the board · <Text style={styles.dropNudgeLink}>read it</Text>
-            </Text>
-          </TouchableOpacity>
-        )}
-
         {/* ── Messages ── */}
         {loading ? (
           <View style={styles.centered}>
@@ -2495,16 +2481,6 @@ const styles = StyleSheet.create({
   countdownTextUrgent:  { color: '#EF4444' },
   countdownRevealBtn:   { paddingHorizontal: rp(10), paddingVertical: rp(4), backgroundColor: T.primary, borderRadius: RADIUS.sm },
   countdownRevealText:  { color: '#fff', fontSize: FONT.xs, fontWeight: '700' },
-
-  // Drop nudge banner
-  dropNudgeBanner: {
-    paddingHorizontal: SPACING.md, paddingVertical: rp(7),
-    backgroundColor: 'rgba(139,92,246,0.08)',
-    borderBottomWidth: 1, borderBottomColor: 'rgba(139,92,246,0.15)',
-    alignItems: 'center',
-  },
-  dropNudgeText: { color: T.textSecondary, fontSize: FONT.xs },
-  dropNudgeLink: { color: '#8B5CF6', fontWeight: '700' },
 
 
   // Messages

@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Clock, Flame, Zap } from 'lucide-react-native';
+import { ArrowLeft, Clock, Flame } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
 import {
@@ -74,16 +74,11 @@ const ThreadDivider = React.memo(({ count }) => (
 ));
 
 // ─── Individual inspired drop card ───────────────────────────
-const InspirationCard = React.memo(({ item, onPress }) => {
-  const handlePress = useCallback(() => onPress(item.id), [onPress, item.id]);
-
+// Purely informational now — there's no standalone drop page to tap
+// through to anymore (see InspirationThreadScreen's own header note).
+const InspirationCard = React.memo(({ item }) => {
   return (
-    <TouchableOpacity
-      style={[s.inspCard, item.is_night_mode && s.inspCardNight]}
-      onPress={handlePress}
-      hitSlop={HIT_SLOP}
-      activeOpacity={0.85}
-    >
+    <View style={[s.inspCard, item.is_night_mode && s.inspCardNight]}>
       {/* Category + time */}
       <View style={s.inspTop}>
         <Text style={s.inspCat}>{item.category?.toUpperCase()}</Text>
@@ -121,18 +116,8 @@ const InspirationCard = React.memo(({ item, onPress }) => {
             {item.unlock_count} connected
           </Text>
         </View>
-        {item.already_unlocked ? (
-          <View style={[s.badge, s.badgeDone]}>
-            <Text style={[s.badgeText, { color: T.primary }]}>✓ Connected</Text>
-          </View>
-        ) : (
-          <View style={s.badge}>
-            <Zap size={rs(11)} color={T.primary} strokeWidth={2} />
-            <Text style={[s.badgeText, { color: T.primary }]}>${item.price}</Text>
-          </View>
-        )}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 });
 
@@ -217,16 +202,12 @@ export default function InspirationThreadScreen({ navigation, route }) {
     if (!loadingMore && hasMore) load(false);
   }, [loadingMore, hasMore, load]);
 
-  const handleDropPress = useCallback((dropId) => {
-    navigation.navigate('DropLanding', { dropId });
-  }, [navigation]);
-
   // ── Render helpers ────────────────────────────────────────
   const keyExtractor = useCallback((item) => item.id, []);
 
   const renderItem = useCallback(({ item }) => (
-    <InspirationCard item={item} onPress={handleDropPress} />
-  ), [handleDropPress]);
+    <InspirationCard item={item} />
+  ), []);
 
   const ListHeader = useMemo(() => (
     <View>
@@ -490,27 +471,6 @@ const s = StyleSheet.create({
     fontSize:      rf(11),
     color:         T.textSec,
   },
-  badge: {
-    marginLeft:        'auto',
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(4),
-    backgroundColor:   T.primaryDim,
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       T.primaryBorder,
-    paddingHorizontal: rp(10),
-    paddingVertical:   rp(4),
-  },
-  badgeDone: {
-    backgroundColor: 'rgba(255,99,74,0.10)',
-    borderColor:     'rgba(255,99,74,0.22)',
-  },
-  badgeText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(11),
-  },
-
   // Empty
   empty: {
     alignItems:   'center',

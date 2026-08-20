@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
@@ -100,8 +99,6 @@ export default function SignUpScreen({ navigation }) {
   const [focused, setFocused]     = useState('');
   const [showPass, setShowPass]   = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  // Optional, unchecked by default — a real opt-in, not a pre-ticked box.
-  const [explicitOptIn, setExplicitOptIn] = useState(false);
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(rh(24))).current;
@@ -181,7 +178,6 @@ export default function SignUpScreen({ navigation }) {
         email:         formData.email.trim().toLowerCase(),
         password:      formData.password,
         date_of_birth: dob,
-        explicit_content_opt_in: explicitOptIn,
       })).unwrap();
 
       await authContextLogin(result.token, result.user);
@@ -225,7 +221,7 @@ export default function SignUpScreen({ navigation }) {
         showToast({ type: 'error', title: 'Signup Failed', message: 'Something went wrong. Please try again.' });
       }
     }
-  }, [formData, explicitOptIn, validate, dispatch, authContextLogin, showToast, navigation]);
+  }, [formData, validate, dispatch, authContextLogin, showToast, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -255,7 +251,7 @@ export default function SignUpScreen({ navigation }) {
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.title}>Create account</Text>
-              <Text style={styles.subtitle}>Anonymous. No judgement. Just truth.</Text>
+              <Text style={styles.subtitle}>No names. No judgment. Just what's real.</Text>
             </View>
 
             {/* Username */}
@@ -456,23 +452,6 @@ export default function SignUpScreen({ navigation }) {
               {errors.dob ? <Text style={styles.fieldError}>{errors.dob}</Text> : null}
             </View>
 
-            {/* Explicit content opt-in — separate from age itself. Off by
-                default; a real opt-in you can also change later in
-                Settings, not something decided for you here. */}
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.toggleLabel}>Show me After Dark content</Text>
-                <Text style={styles.toggleSub}>18+ explicit themes — optional, change anytime in Settings</Text>
-              </View>
-              <Switch
-                value={explicitOptIn}
-                onValueChange={setExplicitOptIn}
-                trackColor={{ false: THEME.surfaceAlt, true: THEME.primary }}
-                thumbColor={explicitOptIn ? '#fff' : THEME.textSecondary}
-                ios_backgroundColor={THEME.surfaceAlt}
-              />
-            </View>
-
             {/* Referral Code (optional) */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Referral Code <Text style={styles.labelOptional}>(optional)</Text></Text>
@@ -545,15 +524,15 @@ const styles = StyleSheet.create({
 
   brandMark:    { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.xl, marginBottom: SPACING.xl },
   brandDot:     { width: rs(8), height: rs(8), borderRadius: rs(4), backgroundColor: THEME.primary, shadowColor: THEME.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: rs(6), elevation: 4 },
-  brandText:    { fontSize: rf(11), fontWeight: '800', color: THEME.primary, letterSpacing: rs(3), opacity: 0.8 },
+  brandText:    { fontSize: rf(11), fontWeight: '800', fontFamily: 'DMSans-Bold', color: THEME.primary, letterSpacing: rs(3), opacity: 0.8 },
 
   header:       { marginBottom: SPACING.xl },
-  title:        { fontSize: FONT.hero, fontWeight: '800', color: THEME.text, letterSpacing: rs(-1), marginBottom: SPACING.sm, lineHeight: FONT.hero * 1.15 },
-  subtitle:     { fontSize: FONT.md, color: THEME.textSecondary, lineHeight: FONT.md * 1.6 },
+  title:        { fontSize: FONT.hero, fontWeight: '800', fontFamily: 'PlayfairDisplay-Bold', color: THEME.text, letterSpacing: rs(-1), marginBottom: SPACING.sm, lineHeight: FONT.hero * 1.15 },
+  subtitle:     { fontSize: FONT.md, fontFamily: 'PlayfairDisplay-Italic', color: THEME.textSecondary, lineHeight: FONT.md * 1.6 },
 
   fieldGroup:   { marginBottom: SPACING.md },
-  label:        { fontSize: rf(11), fontWeight: '700', color: THEME.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase', letterSpacing: rs(1) },
-  labelOptional: { fontWeight: '400', textTransform: 'none', letterSpacing: 0, opacity: 0.7 },
+  label:        { fontSize: rf(11), fontWeight: '700', fontFamily: 'DMSans-Bold', color: THEME.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase', letterSpacing: rs(1) },
+  labelOptional: { fontWeight: '400', fontFamily: 'DMSans-Regular', textTransform: 'none', letterSpacing: 0, opacity: 0.7 },
 
   inputRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -564,39 +543,28 @@ const styles = StyleSheet.create({
   inputRowFocused: { borderColor: 'rgba(255,255,255,0.20)', backgroundColor: 'rgba(255,255,255,0.06)' },
   inputRowError:   { borderColor: THEME.error },
   fieldIcon:       { marginRight: rp(10) },
-  input:           { flex: 1, fontSize: FONT.md, color: THEME.text, height: INPUT_HEIGHT },
+  input:           { flex: 1, fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT },
   eyeBtn:          { padding: rp(4), marginLeft: rp(6) },
-  fieldError:      { color: THEME.error, fontSize: rf(11), marginTop: SPACING.xs, marginLeft: rp(4), fontWeight: '500' },
+  fieldError:      { color: THEME.error, fontSize: rf(11), fontFamily: 'DMSans-SemiBold', marginTop: SPACING.xs, marginLeft: rp(4), fontWeight: '500' },
 
   // Date of birth — DD / MM / YYYY
-  dobInput:        { fontSize: FONT.md, color: THEME.text, height: INPUT_HEIGHT, width: rs(36), textAlign: 'center' },
-  dobInputYear:     { flex: 1, fontSize: FONT.md, color: THEME.text, height: INPUT_HEIGHT, textAlign: 'center' },
-  dobSlash:        { color: THEME.textSecondary, fontSize: FONT.md, marginHorizontal: rp(4) },
-
-  // Explicit content opt-in toggle
-  toggleRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    paddingVertical:   rp(10),
-    marginBottom:      SPACING.md,
-    gap:               SPACING.sm,
-  },
-  toggleLabel:     { fontSize: FONT.sm, fontWeight: '600', color: THEME.text },
-  toggleSub:       { fontSize: rf(11), color: THEME.textSecondary, marginTop: rp(2) },
+  dobInput:        { fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, width: rs(36), textAlign: 'center' },
+  dobInputYear:     { flex: 1, fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, textAlign: 'center' },
+  dobSlash:        { color: THEME.textSecondary, fontSize: FONT.md, fontFamily: 'DMSans-Regular', marginHorizontal: rp(4) },
 
   // Password strength
   strengthContainer: { flexDirection: 'row', alignItems: 'center', marginTop: SPACING.sm, gap: SPACING.sm },
   strengthBars:      { flexDirection: 'row', gap: rp(4), flex: 1 },
   strengthBar:       { flex: 1, height: rh(3), borderRadius: rh(2) },
-  strengthLabel:     { fontSize: rf(11), fontWeight: '700', width: rs(48), textAlign: 'right' },
+  strengthLabel:     { fontSize: rf(11), fontWeight: '700', fontFamily: 'DMSans-Bold', width: rs(48), textAlign: 'right' },
 
   submitBtn:        { height: BUTTON_HEIGHT, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.primary, marginTop: SPACING.sm, marginBottom: SPACING.lg, shadowColor: THEME.primary, shadowOffset: { width: 0, height: rh(8) }, shadowOpacity: 0.45, shadowRadius: rs(20), elevation: 10 },
   submitBtnDisabled:{ opacity: 0.55, shadowOpacity: 0 },
-  submitBtnText:    { color: '#fff', fontSize: FONT.lg, fontWeight: '700', letterSpacing: rs(0.3) },
+  submitBtnText:    { color: '#fff', fontSize: FONT.lg, fontWeight: '700', fontFamily: 'DMSans-Bold', letterSpacing: rs(0.3) },
 
   loginRow:         { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg },
-  loginText:        { fontSize: FONT.md, color: THEME.textSecondary },
-  loginTextBold:    { fontSize: FONT.md, fontWeight: '700', color: THEME.primary },
+  loginText:        { fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.textSecondary },
+  loginTextBold:    { fontSize: FONT.md, fontWeight: '700', fontFamily: 'DMSans-Bold', color: THEME.primary },
 
-  termsText:        { fontSize: rf(11), textAlign: 'center', color: THEME.textSecondary, lineHeight: rf(11) * 1.7, opacity: 0.6, paddingHorizontal: SPACING.md },
+  termsText:        { fontSize: rf(11), fontFamily: 'DMSans-Regular', textAlign: 'center', color: THEME.textSecondary, lineHeight: rf(11) * 1.7, opacity: 0.6, paddingHorizontal: SPACING.md },
 });

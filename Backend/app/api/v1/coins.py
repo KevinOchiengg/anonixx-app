@@ -78,6 +78,16 @@ class WithdrawRequest(BaseModel):
 
 MIN_WITHDRAWAL_COINS = 100
 
+# Coins-to-cash payout rate, shown to users as an estimate before they
+# withdraw. Derived from the "Popular" package's KES rate (100 KES / 120
+# coins ≈ 0.833 KES/coin) discounted by the same 80% payout share Circles
+# already uses for creator payouts (CREATOR_CUT in circles.py) — i.e. users
+# get roughly what a creator keeps elsewhere in the app, not the raw
+# purchase-side rate. This is a placeholder pending an explicit finance/ops
+# sign-off on the real payout economics; nothing here is charged or paid
+# automatically — every /withdraw request still goes through manual review.
+PAYOUT_RATE_KES_PER_COIN = 0.65
+
 
 @router.get("/packages")
 async def list_packages():
@@ -92,7 +102,12 @@ async def get_coin_balance(
     user = await db.users.find_one({"_id": ObjectId(current_user_id)}, {"coin_balance": 1})
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
-    return {"balance": user.get("coin_balance", 0)}
+    balance = user.get("coin_balance", 0)
+    return {
+        "balance": balance,
+        "payout_rate_kes_per_coin": PAYOUT_RATE_KES_PER_COIN,
+        "estimated_kes": round(balance * PAYOUT_RATE_KES_PER_COIN, 2),
+    }
 
 
 @router.get("/transactions")
@@ -186,10 +201,12 @@ async def request_withdrawal(
             raise HTTPException(status_code=402, detail="Not enough coins.")
         raise HTTPException(status_code=404, detail="User not found.")
 
+    estimated_kes = round(data.amount_coins * PAYOUT_RATE_KES_PER_COIN, 2)
     doc = {
         "_id":          ObjectId(),
         "user_id":      current_user_id,
         "amount_coins": data.amount_coins,
+        "estimated_kes": estimated_kes,
         "mpesa_number": data.mpesa_number.strip(),
         "status":       "pending",   # pending | paid | rejected
         "created_at":   _now(),
@@ -197,9 +214,10 @@ async def request_withdrawal(
     await db.withdrawal_requests.insert_one(doc)
 
     return {
-        "id":          str(doc["_id"]),
-        "status":      "pending",
-        "new_balance": new_balance,
+        "id":            str(doc["_id"]),
+        "status":        "pending",
+        "new_balance":   new_balance,
+        "estimated_kes": estimated_kes,
     }
 
 
@@ -214,11 +232,12 @@ async def withdrawal_history(
 
     return [
         {
-            "id":           str(d["_id"]),
-            "amount_coins": d["amount_coins"],
-            "mpesa_number": d["mpesa_number"],
-            "status":       d["status"],
-            "created_at":   d["created_at"].isoformat(),
+            "id":            str(d["_id"]),
+            "amount_coins":  d["amount_coins"],
+            "estimated_kes": d.get("estimated_kes", round(d["amount_coins"] * PAYOUT_RATE_KES_PER_COIN, 2)),
+            "mpesa_number":  d["mpesa_number"],
+            "status":        d["status"],
+            "created_at":    d["created_at"].isoformat(),
         }
         for d in docs
     ]

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, FlatList, RefreshControl, ScrollView,
+  ActivityIndicator, Animated, FlatList, RefreshControl,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Flame, Menu, MessageSquare, Zap } from 'lucide-react-native';
+import { Flame, Menu, Palette, Zap } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
@@ -22,8 +22,6 @@ const AVATAR_MAP = {
   moth: '🦋', raven: '🐦‍⬛',
 };
 const getAvatar = (name) => AVATAR_MAP[name] || '👤';
-
-const TABS = ['All', 'Connect 🔗', 'Drops 🔥', 'Online ⚡'];
 
 // ─── Helpers ──────────────────────────────────────────────────
 function formatChatTime(isoString) {
@@ -77,39 +75,6 @@ const TypingDots = React.memo(() => {
       {[dot1, dot2, dot3].map((dot, i) => (
         <Animated.View key={i} style={[styles.typingDot, { opacity: dot }]} />
       ))}
-    </View>
-  );
-});
-
-// ─── Active Now Strip (connect chats only) ───────────────────
-const ActiveNowStrip = React.memo(({ items, onlineIds, onPress }) => {
-  const activeItems = items.filter(
-    c => c.chat_type === 'connect' && onlineIds.has(c.other_user_id)
-  );
-  if (!activeItems.length) return null;
-
-  return (
-    <View style={styles.activeStrip}>
-      <Text style={styles.activeStripLabel}>Active Now</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeStripRow}>
-        {activeItems.map(item => (
-          <TouchableOpacity
-            key={item.id}
-            onPress={() => onPress(item)}
-            style={styles.activeAvatar}
-            activeOpacity={0.8}
-            hitSlop={HIT_SLOP}
-          >
-            <View style={[styles.activeAvatarRing, { borderColor: (item.other_avatar_color || T.primary) + '99' }]}>
-              <Text style={styles.activeAvatarEmoji}>{getAvatar(item.other_avatar)}</Text>
-            </View>
-            <View style={styles.activeOnlineDot} />
-            <Text style={styles.activeAvatarName} numberOfLines={1}>
-              {item.other_anonymous_name?.split(' ')[0]}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
     </View>
   );
 });
@@ -284,23 +249,28 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
   );
 });
 
-// ─── Empty State ──────────────────────────────────────────────
-const EmptyState = React.memo(({ tab }) => {
-  const content = {
-    'All':        { emoji: '🌑', title: 'nothing yet',         body: 'your conversations will\nappear here.' },
-    'Connect 🔗': { emoji: '👻', title: 'no connect chats',    body: 'accept a connect request\nand start something real.' },
-    'Drops 🔥':   { emoji: '🔥', title: 'no drop chats yet',   body: 'unlock a confession drop\nto start a private thread.' },
-    'Online ⚡':  { emoji: '⚡', title: 'nobody online',       body: 'check back later.\nthey\'re always watching.' },
-  };
-  const { emoji, title, body } = content[tab] || content['All'];
-  return (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyEmoji}>{emoji}</Text>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{body}</Text>
+// ─── Anonixx demo row — pinned above the real list so this tab is never
+// just a blank screen for someone who hasn't unlocked anyone yet. Not a
+// real chat: taps into DemoChatScreen, a fully local walkthrough. ──
+const AnonixxDemoCard = React.memo(({ onPress }) => (
+  <TouchableOpacity style={styles.demoCard} onPress={onPress} activeOpacity={0.85}>
+    <View style={styles.demoAvatarWrap}>
+      <View style={styles.demoAvatar}>
+        <Text style={styles.demoAvatarEmoji}>🌑</Text>
+      </View>
+      <View style={styles.demoOnlineDot} />
     </View>
-  );
-});
+    <View style={styles.demoInfo}>
+      <View style={styles.demoTopRow}>
+        <Text style={styles.demoName}>anonixx</Text>
+        <View style={styles.demoBadge}>
+          <Text style={styles.demoBadgeText}>guide</Text>
+        </View>
+      </View>
+      <Text style={styles.demoPreview} numberOfLines={1}>see what a real chat room looks like</Text>
+    </View>
+  </TouchableOpacity>
+));
 
 // ─── Screen ───────────────────────────────────────────────────
 export default function MessagesScreen({ navigation }) {
@@ -313,7 +283,6 @@ export default function MessagesScreen({ navigation }) {
   const [loading,     setLoading]     = useState(false);
   const [refreshing,  setRefreshing]  = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [activeTab,   setActiveTab]   = useState('All');
   const [onlineIds,   setOnlineIds]   = useState(new Set());
   const [typingIds,   setTypingIds]   = useState(new Set());
 
@@ -461,13 +430,7 @@ export default function MessagesScreen({ navigation }) {
     }
   }, [navigation]);
 
-  // ── Filter by tab ─────────────────────────────────────────
-  const filteredItems = items.filter(item => {
-    if (activeTab === 'Connect 🔗') return item.chat_type === 'connect';
-    if (activeTab === 'Drops 🔥')   return item.chat_type === 'drop';
-    if (activeTab === 'Online ⚡')  return item.chat_type === 'connect' && onlineIds.has(item.other_user_id);
-    return true;
-  });
+  const handleOpenDemo = useCallback(() => navigation.navigate('DemoChat'), [navigation]);
 
   const renderItem = useCallback(({ item }) => (
     <ChatCard
@@ -495,40 +458,34 @@ export default function MessagesScreen({ navigation }) {
             </View>
           )}
         </View>
-        <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuBtn} hitSlop={HIT_SLOP}>
-          <Menu size={rs(20)} color={T.textSecondary} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ChatProfileSetup')}
+            style={styles.menuBtn}
+            hitSlop={HIT_SLOP}
+          >
+            <Palette size={rs(18)} color={T.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuBtn} hitSlop={HIT_SLOP}>
+            <Menu size={rs(20)} color={T.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Tab filters */}
-      <View style={styles.tabRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRowContent}>
-          {TABS.map(tab => (
-            <TouchableOpacity
-              key={tab}
-              onPress={() => setActiveTab(tab)}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              hitSlop={HIT_SLOP}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* Anonixx guide — always visible, so this tab is never a blank
+          screen before someone's unlocked their first real conversation. */}
+      <View style={styles.demoWrap}>
+        <AnonixxDemoCard onPress={handleOpenDemo} />
       </View>
-
-      {/* Active Now strip — connect only */}
-      <ActiveNowStrip items={items} onlineIds={onlineIds} onPress={handleOpenChat} />
 
       {/* Content */}
       {loading && !refreshing ? (
         <View style={styles.centered}>
           <ActivityIndicator color={T.primary} />
         </View>
-      ) : filteredItems.length === 0 ? (
-        <EmptyState tab={activeTab} />
-      ) : (
+      ) : items.length === 0 ? null : (
         <FlatList
-          data={filteredItems}
+          data={items}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -565,53 +522,44 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(5),
   },
   headerBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
   menuBtn: {
     width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center',
     borderRadius: rs(18), backgroundColor: 'rgba(255,255,255,0.04)',
   },
 
-  // Tabs
-  tabRow:         { borderBottomWidth: 1, borderBottomColor: T.border },
-  tabRowContent:  { paddingHorizontal: SPACING.md, paddingVertical: rp(10), gap: SPACING.sm },
-  tab: {
-    paddingHorizontal: rp(14), paddingVertical: rp(6),
-    borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.border,
-  },
-  tabActive:     { backgroundColor: T.primaryDim, borderColor: T.primaryBorder },
-  tabText:       { fontSize: FONT.xs, fontWeight: '600', color: T.textSecondary },
-  tabTextActive: { color: T.primary },
-
-  // Active Now
-  activeStrip: {
-    paddingTop: rp(12), paddingBottom: rp(8),
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  activeStripLabel: {
-    fontSize: rf(11), fontWeight: '700', color: T.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.8,
-    paddingHorizontal: SPACING.md, marginBottom: rp(8),
-  },
-  activeStripRow:    { paddingHorizontal: SPACING.md, gap: SPACING.md },
-  activeAvatar:      { alignItems: 'center', width: rs(56) },
-  activeAvatarRing: {
-    width: rs(48), height: rs(48), borderRadius: rs(24),
-    borderWidth: 2, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: T.surfaceAlt,
-  },
-  activeAvatarEmoji: { fontSize: rf(22) },
-  activeOnlineDot: {
-    position: 'absolute', bottom: rp(2), right: rp(2),
-    width: rs(12), height: rs(12), borderRadius: rs(6),
-    backgroundColor: T.online, borderWidth: 2, borderColor: T.background,
-  },
-  activeAvatarName: {
-    fontSize: rf(10), color: T.textSecondary, marginTop: rp(4),
-    fontWeight: '600', textAlign: 'center',
-  },
-
   // List
   centered:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, paddingBottom: rs(100), gap: SPACING.xs },
+
+  // Anonixx demo row
+  demoWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
+  demoCard: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: T.primaryDim, borderRadius: RADIUS.md,
+    borderWidth: 1, borderColor: T.primaryBorder, padding: SPACING.md,
+  },
+  demoAvatarWrap: { position: 'relative', flexShrink: 0 },
+  demoAvatar: {
+    width: rs(46), height: rs(46), borderRadius: rs(23),
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: T.surface, borderWidth: 1.5, borderColor: T.primaryBorder,
+  },
+  demoAvatarEmoji: { fontSize: rf(20) },
+  demoOnlineDot: {
+    position: 'absolute', bottom: rp(1), right: rp(1),
+    width: rs(12), height: rs(12), borderRadius: rs(6),
+    backgroundColor: T.online, borderWidth: 2, borderColor: T.background,
+  },
+  demoInfo: { flex: 1, gap: rp(2) },
+  demoTopRow: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
+  demoName: { fontSize: FONT.md, fontWeight: '700', color: T.text },
+  demoBadge: {
+    backgroundColor: T.primary, borderRadius: RADIUS.full,
+    paddingHorizontal: rp(8), paddingVertical: rp(2),
+  },
+  demoBadgeText: { fontSize: rf(9), fontWeight: '700', color: '#fff', textTransform: 'uppercase', letterSpacing: 0.4 },
+  demoPreview: { fontSize: FONT.sm, color: T.textSecondary },
 
   // Chat card
   chatCard: {
@@ -718,8 +666,4 @@ const styles = StyleSheet.create({
   unreadBadgeText: { fontSize: rf(10), fontWeight: '700', color: '#fff' },
 
   // Empty
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl },
-  emptyEmoji: { fontSize: rf(48), marginBottom: SPACING.md },
-  emptyTitle: { fontSize: FONT.lg, fontWeight: '700', color: T.text, marginBottom: SPACING.sm, textAlign: 'center' },
-  emptyBody:  { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: rf(22), fontStyle: 'italic' },
 });
