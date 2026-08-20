@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
+from pymongo import ReturnDocument
 import asyncio
 import random
 import math
@@ -24,17 +25,32 @@ _POST_COUNT_TTL = 120   # refresh every 2 minutes
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
+# Reworded to match Anonixx's actual voice — anonymous confessions with a
+# flirty edge (see DROP_CATEGORIES in drops.py, and this file's own PROMPTS
+# list below: "the thing you've been carrying alone…", "what you can't say
+# out loud…"), not a clinical mental-health-app taxonomy. Previously this
+# list read like a therapy app's category picker (anxiety/depression/
+# self_growth/school_career) while every other part of the app — Drops
+# categories, compose prompts, chat placeholders — already spoke in this
+# rawer, more anonymous-confession voice.
+#
+# The underlying emotional-pacing safety mechanism (HEAVY_TOPICS /
+# interleave_by_emotion below — caps back-to-back heavy posts in the feed
+# at 2 before forcing in something lighter) is unchanged; only the topic
+# ids and labels moved to match the app's real tone. carrying_it_alone
+# reuses the exact phrase already used for one of Drops' own categories,
+# for cross-feature consistency.
 AVAILABLE_TOPICS = [
-    "relationships", "anxiety", "depression", "self_growth",
-    "school_career", "family", "lgbtq", "addiction",
-    "sleep", "identity", "wins", "friendship",
-    "financial", "health", "grief", "loneliness", "trauma",
+    "desire", "heartbreak", "late_night", "secrets", "toxic_ties",
+    "family", "money", "identity", "queer", "glow_up", "friendship",
+    "hustle", "dark_nights", "spiraling", "grief", "carrying_it_alone",
+    "cant_sleep",
     # kept for backwards-compat with existing posts
     "general"
 ]
 
-HEAVY_TOPICS = {"depression", "anxiety", "addiction", "self_harm", "grief", "trauma"}
-LIGHT_TOPICS  = {"wins", "self_growth", "friendship"}
+HEAVY_TOPICS = {"toxic_ties", "dark_nights", "spiraling", "grief", "carrying_it_alone"}
+LIGHT_TOPICS  = {"glow_up", "friendship", "desire"}
 
 
 # ==================== REQUEST MODELS ====================
@@ -593,29 +609,34 @@ async def unlock_post(
 
 @router.get("/search")
 async def search_posts(
-    q:      str = Query(..., min_length=1, description="Search query"),
+    q:      Optional[str] = Query(None, description="Search query — optional if a topic is given, to allow browsing by topic alone"),
     filter: str = Query("all", description="all | recent | popular"),
+    topic:  Optional[str] = Query(None, description="Narrow results to one topic, e.g. 'anxiety'"),
     limit:  int = Query(20, le=50, ge=1),
     skip:   int = Query(0, ge=0),
     current_user_id: Optional[str] = Depends(get_optional_user_id),
     db = Depends(get_database),
 ):
-    """Full-text search across post content, name, and topics. Case-insensitive."""
-    query = q.strip()
-    if not query:
-        return {"results": [], "total": 0, "query": q}
+    """Full-text search across post content, name, and topics. Case-insensitive.
+    A topic alone (no q) is a valid request — lets the UI offer "browse by topic"
+    without requiring the user to type anything first."""
+    query = (q or "").strip()
+    valid_topic = topic if topic in AVAILABLE_TOPICS else None
+    if not query and not valid_topic:
+        return {"results": [], "total": 0, "query": query}
 
-    # Escape special regex characters so literal text is always matched
-    safe_query = re.escape(query)
-    rx = {"$regex": safe_query, "$options": "i"}
-
-    base_filter: dict = {
-        "$or": [
+    base_filter: dict = {}
+    if query:
+        safe_query = re.escape(query)
+        rx = {"$regex": safe_query, "$options": "i"}
+        base_filter["$or"] = [
             {"content":          rx},
             {"anonymous_name":   rx},
             {"topics":           rx},
         ]
-    }
+
+    if valid_topic:
+        base_filter["topics"] = valid_topic
 
     if filter == "recent":
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
@@ -844,9 +865,15 @@ async def like_post(
     if current_user_id in liked_by:
         return {"message": "Already liked", "liked": True, "likes_count": post.get("likes_count", 0)}
 
-    await db["posts"].update_one(
+    # $addToSet (not $push) so a duplicate/racing request never double-counts
+    # the same user, and find_one_and_update returns the post's real
+    # post-increment count instead of us guessing pre_fetch_count + 1 —
+    # that guess goes stale under any concurrent like/unlike and was
+    # returning a count the client would later "snap back" from.
+    updated = await db["posts"].find_one_and_update(
         {"_id": ObjectId(post_id)},
-        {"$push": {"liked_by": current_user_id}, "$inc": {"likes_count": 1}}
+        {"$addToSet": {"liked_by": current_user_id}, "$inc": {"likes_count": 1}},
+        return_document=ReturnDocument.AFTER,
     )
 
     await update_affinity(current_user_id, post.get("topics", []), "like", db)
@@ -859,7 +886,7 @@ async def like_post(
             db
         )
 
-    return {"message": "Post liked", "liked": True, "likes_count": post.get("likes_count", 0) + 1}
+    return {"message": "Post liked", "liked": True, "likes_count": updated.get("likes_count", 0)}
 
 
 @router.delete("/{post_id}/like")
@@ -880,12 +907,13 @@ async def unlike_post(
     if current_user_id not in liked_by:
         return {"message": "Not liked", "liked": False, "likes_count": post.get("likes_count", 0)}
 
-    await db["posts"].update_one(
+    updated = await db["posts"].find_one_and_update(
         {"_id": ObjectId(post_id)},
-        {"$pull": {"liked_by": current_user_id}, "$inc": {"likes_count": -1}}
+        {"$pull": {"liked_by": current_user_id}, "$inc": {"likes_count": -1}},
+        return_document=ReturnDocument.AFTER,
     )
 
-    return {"message": "Post unliked", "liked": False, "likes_count": max(0, post.get("likes_count", 1) - 1)}
+    return {"message": "Post unliked", "liked": False, "likes_count": max(0, updated.get("likes_count", 0))}
 
 
 # ==================== SAVE ====================
@@ -1091,7 +1119,7 @@ async def view_post(
     db = Depends(get_database)
 ):
     try:
-        await db["posts"].update_one({"_id": ObjectId(post_id)}, {"$inc": {"views": 1}})
+        await db["posts"].update_one({"_id": ObjectId(post_id)}, {"$inc": {"views_count": 1}})
         if current_user_id:
             await db["post_views"].update_one(
                 {"post_id": ObjectId(post_id), "user_id": ObjectId(current_user_id)},
@@ -1101,6 +1129,49 @@ async def view_post(
     except Exception as e:
         print(f"⚠️ View tracking skipped: {e}")
     return {"status": "success"}
+
+
+# ==================== MY POSTS (dashboard) ====================
+
+@router.get("/mine")
+async def get_my_posts(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Every post the current user has authored — used by the user dashboard's
+    'My Posts' section (edit/delete live there, not in the public feed)."""
+    cursor = db["posts"].find({"user_id": current_user_id}).sort("created_at", -1)
+    posts = await cursor.to_list(200)
+
+    total_views = 0
+    total_likes = 0
+    formatted = []
+    for post in posts:
+        created_at = post.get("created_at")
+        views = post.get("views_count", post.get("views", 0))
+        likes = post.get("likes_count", 0)
+        total_views += views
+        total_likes += likes
+        formatted.append({
+            "id": str(post["_id"]),
+            "content": post.get("content") or "",
+            "images": post.get("images", []),
+            "video_url": post.get("video_url"),
+            "audio_url": post.get("audio_url"),
+            "views_count": views,
+            "likes_count": likes,
+            "saves_count": post.get("saves_count", 0),
+            "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+            "edited_at": post["edited_at"].isoformat() if post.get("edited_at") else None,
+            "time_ago": get_time_ago(created_at) if created_at else "",
+        })
+
+    return {
+        "posts": formatted,
+        "total_posts": len(formatted),
+        "total_views": total_views,
+        "total_likes": total_likes,
+    }
 
 
 # ==================== EDIT / DELETE ====================

@@ -1,7 +1,7 @@
 /**
  * TagUserSection.jsx
  *
- * "Tag Someone" UI used in DropsComposeScreen and ShareCardScreen.
+ * "Tag Someone" UI used in DropsComposeScreen.
  *
  * Behaviour:
  *   1. On mount, fetches the user's recent drop-chat partners from

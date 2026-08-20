@@ -24,7 +24,7 @@
  *   isTablet        — width >= 768
  */
 
-import { Dimensions, PixelRatio, Platform } from 'react-native';
+import { Dimensions, PixelRatio } from 'react-native';
 
 // ─── Base design dimensions (designed at iPhone 14, 390x844) ──
 const BASE_WIDTH  = 390;
@@ -51,14 +51,14 @@ export function rh(size) {
 }
 
 // ─── Font scale (moderately responsive — avoid too-large text) ─
+// Floored so nothing on any screen, including small/narrow Android
+// devices, ever renders below a legible minimum.
+const MIN_FONT_SIZE = 11;
+
 export function rf(size) {
-  const scale      = SCREEN.width / BASE_WIDTH;
-  const newSize    = size * scale;
-  if (Platform.OS === 'ios') {
-    return Math.round(PixelRatio.roundToNearestPixel(newSize));
-  }
-  // Android: normalize by font scale to avoid double-scaling
-  return Math.round(PixelRatio.roundToNearestPixel(newSize)) - 2;
+  const scale   = SCREEN.width / BASE_WIDTH;
+  const newSize = Math.round(PixelRatio.roundToNearestPixel(size * scale));
+  return Math.max(MIN_FONT_SIZE, newSize);
 }
 
 // ─── Padding/margin scale (gentler than rs) ───────────────────
@@ -93,14 +93,14 @@ export const SPACING = {
 
 // ─── Common responsive font sizes ────────────────────────────
 export const FONT = {
-  xs:      rf(11),
-  sm:      rf(13),
-  md:      rf(15),
-  lg:      rf(17),
-  xl:      rf(20),
-  xxl:     rf(26),
-  display: rf(34),
-  hero:    rf(42),
+  xs:      rf(12),
+  sm:      rf(14),
+  md:      rf(16),
+  lg:      rf(19),
+  xl:      rf(22),
+  xxl:     rf(28),
+  display: rf(36),
+  hero:    rf(44),
 };
 
 // ─── Anonixx design tokens (responsive) ──────────────────────

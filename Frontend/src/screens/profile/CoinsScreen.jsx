@@ -63,6 +63,8 @@ const REASON_META = {
   drop_reveal:      { icon: Zap,         color: '#ef4444', label: 'Drop reveal'      },
   circle_entry:     { icon: Zap,         color: '#ef4444', label: 'Circle entry'     },
   streak_freeze:    { icon: Zap,         color: '#ef4444', label: 'Streak freeze'    },
+  drop_revenue_share: { icon: Coins,      color: '#22c55e', label: 'Earned — someone unlocked you' },
+  withdrawal_request: { icon: ArrowUpRight, color: '#f59e0b', label: 'Withdrawal to M-Pesa' },
 };
 
 // ─── Transaction row ──────────────────────────────────────────────────────────

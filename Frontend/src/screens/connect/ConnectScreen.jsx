@@ -2,7 +2,7 @@
  * ConnectScreen.jsx
  *
  * Connect tab home. Surfaces incoming connection requests + the Drops hero
- * (compose CTA, Browse / Inbox / Vibe Score quick-nav).
+ * (compose CTA, Browse / Vibe Score quick-nav).
  *
  * Visual language follows DropsComposeScreen — shared T tokens, PlayfairDisplay
  * italic titles, DMSans body, coral accent.
@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  Flame, Inbox, Menu, ShoppingBag, Sparkles, UserCheck,
+  Flame, Menu, ShoppingBag, Sparkles, UserCheck,
 } from 'lucide-react-native';
 
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
@@ -45,8 +45,7 @@ function timeAgo(isoString) {
 // ─── Drops Hero ───────────────────────────────────────────────
 const DropsHero = React.memo(({ navigation }) => {
   const handleCompose     = useCallback(() => navigation.navigate('DropsCompose'),         [navigation]);
-  const handleBrowse      = useCallback(() => navigation.navigate('ConfessionMarketplace'), [navigation]);
-  const handleInbox       = useCallback(() => navigation.navigate('DropsInbox'),            [navigation]);
+  const handleBrowse      = useCallback(() => navigation.navigate('Feed'), [navigation]);
   const handleVibe        = useCallback(() => navigation.navigate('VibeScore'),             [navigation]);
 
   return (
@@ -78,15 +77,9 @@ const DropsHero = React.memo(({ navigation }) => {
       <View style={hero.tiles}>
         <QuickTile
           Icon={ShoppingBag}
-          label="Browse"
+          label="Feed"
           sub="confessions"
           onPress={handleBrowse}
-        />
-        <QuickTile
-          Icon={Inbox}
-          label="My Drops"
-          sub="inbox & reveals"
-          onPress={handleInbox}
         />
         <QuickTile
           Icon={Sparkles}

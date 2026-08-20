@@ -1605,12 +1605,19 @@ async def unlock_circle_post(
 
 # ==================== ADS ====================
 # Any member can buy an ad slot in a circle's feed — priced by how long it
-# runs, auto-hidden (and lazily cleaned up) once its time is up. No
-# scheduler needed: expiry is enforced by the read-time query filter below,
-# so an expired ad simply stops appearing the moment it lapses.
+# runs. New ads land as "pending" and only reach the feed once the circle's
+# creator/admin approves them — the app is anonymous and adult-adjacent
+# enough that an unmoderated self-serve queue is too easy to abuse. The
+# duration clock starts at approval, not purchase, so review time never eats
+# into what the buyer paid for. Physical cleanup of expired ads is a real
+# scheduled job (see app/tasks/circle_ad_cleanup.py), not a read-time filter.
 
 AD_COINS_PER_HOUR = 5
 MAX_AD_HOURS      = 24 * 14   # 2 weeks
+
+AD_STATUS_PENDING  = "pending"
+AD_STATUS_APPROVED = "approved"
+AD_STATUS_REJECTED = "rejected"
 
 
 class CircleAdCreate(BaseModel):
@@ -1626,7 +1633,10 @@ def format_circle_ad(ad: dict) -> dict:
         "title":      ad["title"],
         "media_url":  ad.get("media_url"),
         "link_url":   ad["link_url"],
-        "expires_at": ad["expires_at"].isoformat(),
+        "status":     ad.get("status", AD_STATUS_APPROVED),
+        "duration_hours": ad.get("duration_hours"),
+        "coins_spent":    ad.get("coins_spent", 0),
+        "expires_at": ad["expires_at"].isoformat() if ad.get("expires_at") else None,
         "created_at": ad["created_at"].isoformat(),
     }
 
@@ -1662,15 +1672,21 @@ async def create_circle_ad(
 
     now = _now()
     result = await db.circle_ads.insert_one({
-        "circle_id":  circle_id,
-        "created_by": str(current_user.id),
-        "title":      data.title.strip(),
-        "media_url":  data.media_url,
-        "link_url":   data.link_url.strip(),
-        "created_at": now,
-        "expires_at": now + timedelta(hours=data.duration_hours),
+        "circle_id":      circle_id,
+        "created_by":     str(current_user.id),
+        "title":          data.title.strip(),
+        "media_url":      data.media_url,
+        "link_url":       data.link_url.strip(),
+        "status":         AD_STATUS_PENDING,
+        "duration_hours": data.duration_hours,
+        "coins_spent":    cost,
+        "created_at":     now,
+        "expires_at":     None,
     })
-    return {"id": str(result.inserted_id), "coins_spent": cost, "message": "Your ad is live."}
+    return {
+        "id": str(result.inserted_id), "coins_spent": cost,
+        "message": "Ad submitted — it'll go live once the circle's admin approves it.",
+    }
 
 
 @router.get("/{circle_id}/ads")
@@ -1678,14 +1694,100 @@ async def list_circle_ads(
     circle_id:    str,
     current_user: User = Depends(get_current_user),
 ):
+    """Feed-facing list — approved and still running only."""
     db     = await get_database()
     circle = await get_circle_or_404(db, circle_id)
     await assert_member(db, circle_id, str(current_user.id))
 
     now = _now()
-    # Opportunistic cleanup — physically removes anything already expired so
-    # the collection doesn't grow unbounded; harmless if it races a request.
-    await db.circle_ads.delete_many({"circle_id": circle_id, "expires_at": {"$lte": now}})
-
-    cursor = db.circle_ads.find({"circle_id": circle_id, "expires_at": {"$gt": now}}).sort("created_at", -1)
+    cursor = db.circle_ads.find({
+        "circle_id": circle_id,
+        "status":    AD_STATUS_APPROVED,
+        "expires_at": {"$gt": now},
+    }).sort("created_at", -1)
     return {"ads": [format_circle_ad(a) async for a in cursor]}
+
+
+@router.get("/{circle_id}/ads/mine")
+async def list_my_circle_ads(
+    circle_id:    str,
+    current_user: User = Depends(get_current_user),
+):
+    """Lets a member track the ads they've submitted — pending/approved/rejected."""
+    db = await get_database()
+    await get_circle_or_404(db, circle_id)
+    await assert_member(db, circle_id, str(current_user.id))
+
+    cursor = db.circle_ads.find(
+        {"circle_id": circle_id, "created_by": str(current_user.id)}
+    ).sort("created_at", -1)
+    return {"ads": [format_circle_ad(a) async for a in cursor]}
+
+
+@router.get("/{circle_id}/ads/pending")
+async def list_pending_circle_ads(
+    circle_id:    str,
+    current_user: User = Depends(get_current_user),
+):
+    """Moderation queue — creator/admin only."""
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_creator_or_admin(db, circle, str(current_user.id))
+
+    cursor = db.circle_ads.find(
+        {"circle_id": circle_id, "status": AD_STATUS_PENDING}
+    ).sort("created_at", 1)
+    return {"ads": [format_circle_ad(a) async for a in cursor]}
+
+
+@router.post("/{circle_id}/ads/{ad_id}/approve")
+async def approve_circle_ad(
+    circle_id:    str,
+    ad_id:        str,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_creator_or_admin(db, circle, str(current_user.id))
+
+    ad = await db.circle_ads.find_one({"_id": oid(ad_id), "circle_id": circle_id})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found.")
+    if ad.get("status") != AD_STATUS_PENDING:
+        raise HTTPException(status_code=400, detail="This ad has already been reviewed.")
+
+    now        = _now()
+    expires_at = now + timedelta(hours=ad["duration_hours"])
+    await db.circle_ads.update_one(
+        {"_id": ad["_id"]},
+        {"$set": {"status": AD_STATUS_APPROVED, "approved_at": now, "expires_at": expires_at}},
+    )
+    return {"message": "Ad approved and live.", "expires_at": expires_at.isoformat()}
+
+
+@router.post("/{circle_id}/ads/{ad_id}/reject")
+async def reject_circle_ad(
+    circle_id:    str,
+    ad_id:        str,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+    await assert_creator_or_admin(db, circle, str(current_user.id))
+
+    ad = await db.circle_ads.find_one({"_id": oid(ad_id), "circle_id": circle_id})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found.")
+    if ad.get("status") != AD_STATUS_PENDING:
+        raise HTTPException(status_code=400, detail="This ad has already been reviewed.")
+
+    await db.circle_ads.update_one(
+        {"_id": ad["_id"]},
+        {"$set": {"status": AD_STATUS_REJECTED, "rejected_at": _now()}},
+    )
+    await credit_coins(
+        db=db, user_id=ad["created_by"], amount=ad.get("coins_spent", 0),
+        reason="circle_ad_refund", description=f"Ad rejected in {circle['name']} — refunded",
+        meta={"circle_id": circle_id, "ad_id": str(ad["_id"])},
+    )
+    return {"message": "Ad rejected and coins refunded."}

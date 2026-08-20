@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import {
@@ -10,9 +9,8 @@ import {
 } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUnread } from '../context/UnreadContext';
-import { API_BASE_URL } from '../config/api';
+import { rf } from '../utils/responsive';
 
 // Feed
 import CalmFeedScreen from '../screens/feed/CalmFeedScreen';
@@ -31,6 +29,8 @@ import ChatScreen from '../screens/connect/ChatScreen';
 // from anywhere, incl. the Create tab button below); DropChat stays here
 // since Messages needs it directly.
 import DropChatScreen from '../screens/drops/DropChatScreen';
+import DropCallScreen from '../screens/drops/DropCallScreen';
+import DemoChatScreen from '../screens/drops/DemoChatScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
 
@@ -147,6 +147,8 @@ function MessagesStack() {
       <Stack.Screen name="MessagesMain" component={MessagesScreen} />
       <Stack.Screen name="Chat"         component={ChatScreen} />
       <Stack.Screen name="DropChat"     component={DropChatScreen} />
+      <Stack.Screen name="DropCall"     component={DropCallScreen} options={{ gestureEnabled: false }} />
+      <Stack.Screen name="DemoChat"     component={DemoChatScreen} />
       <Stack.Screen name="ChatProfileSetup" component={ChatProfileSetupScreen} />
     </Stack.Navigator>
   );
@@ -165,27 +167,6 @@ function ProfileStack() {
 export default function TabNavigator() {
   const insets      = useSafeAreaInsets();
   const { unreadCount } = useUnread();
-
-  // Gate the Messages tab behind chat-interface setup — null while unknown
-  // (defaults to "configured" so we never block on a slow first fetch).
-  const [hasChatProfile, setHasChatProfile] = useState(true);
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        if (!token) return;
-        const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setHasChatProfile(!!data);
-        }
-      } catch {
-        /* offline — assume configured, don't block navigation */
-      }
-    })();
-  }, []);
 
   return (
     <Tab.Navigator
@@ -217,20 +198,12 @@ export default function TabNavigator() {
       <Tab.Screen
         name="Feed"
         component={FeedStack}
-        options={{ tabBarLabel: 'Thoughts' }}
+        options={{ tabBarLabel: 'Desires' }}
       />
       <Tab.Screen
         name="Messages"
         component={MessagesStack}
-        options={{ tabBarLabel: 'Messages' }}
-        listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            if (!hasChatProfile) {
-              e.preventDefault();
-              navigation.navigate('Messages', { screen: 'ChatProfileSetup' });
-            }
-          },
-        })}
+        options={{ tabBarLabel: 'Chats' }}
       />
       <Tab.Screen
         name="Create"
@@ -248,7 +221,7 @@ export default function TabNavigator() {
       <Tab.Screen
         name="Profile"
         component={ProfileStack}
-        options={{ tabBarLabel: 'Profile' }}
+        options={{ tabBarLabel: 'You' }}
       />
     </Tab.Navigator>
   );
@@ -266,7 +239,7 @@ const styles = StyleSheet.create({
     elevation: 24,
   },
   tabBarLabel: {
-    fontSize: 10,
+    fontSize: rf(10),
     fontWeight: '600',
     letterSpacing: 0.2,
     marginTop: 3,
@@ -298,7 +271,7 @@ const styles = StyleSheet.create({
     borderColor: THEME.surface,
   },
   tabBadgeText: {
-    fontSize: 9,
+    fontSize: rf(9),
     fontWeight: '800',
     color: '#fff',
   },

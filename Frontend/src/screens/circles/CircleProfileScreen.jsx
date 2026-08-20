@@ -12,7 +12,7 @@ import React, {
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Animated, RefreshControl, ActivityIndicator, Modal,
-  TextInput, KeyboardAvoidingView, Platform, Dimensions,
+  TextInput, KeyboardAvoidingView, Platform, Dimensions, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -573,6 +573,11 @@ export default function CircleProfileScreen({ route, navigation }) {
           />
         }
       >
+        {/* Banner image — optional, set at creation */}
+        {circle.banner_url && (
+          <Image source={{ uri: circle.banner_url }} style={styles.bannerImage} resizeMode="cover" />
+        )}
+
         {/* Hero section */}
         <Animated.View style={[
           styles.hero,
@@ -584,7 +589,11 @@ export default function CircleProfileScreen({ route, navigation }) {
               styles.heroAvatarInner,
               { backgroundColor: auraColor + '20', borderColor: auraColor + '30' }
             ]}>
-              <Text style={styles.heroEmoji}>{circle.avatar_emoji ?? '🎭'}</Text>
+              {circle.avatar_url ? (
+                <Image source={{ uri: circle.avatar_url }} style={styles.heroAvatarImg} />
+              ) : (
+                <Text style={styles.heroEmoji}>{circle.avatar_emoji ?? '🎭'}</Text>
+              )}
             </View>
             {isLive && <LivePulse color={auraColor} />}
           </View>
@@ -706,7 +715,10 @@ export default function CircleProfileScreen({ route, navigation }) {
                 <Mic size={rs(18)} color={T.open} />
                 <Text style={styles.roomBtnText}>The room is open</Text>
               </View>
-              <Text style={styles.roomBtnCta}>Step inside →</Text>
+              <View style={styles.roomBtnCtaRow}>
+                <Text style={styles.roomBtnCta}>Step inside</Text>
+                <ChevronRight size={rs(15)} color={T.open} />
+              </View>
             </TouchableOpacity>
           )}
 
@@ -721,7 +733,10 @@ export default function CircleProfileScreen({ route, navigation }) {
               <View style={styles.roomBtnLeft}>
                 <Text style={styles.roomBtnText}>Circle feed</Text>
               </View>
-              <Text style={[styles.roomBtnCta, { color: auraColor }]}>Open →</Text>
+              <View style={styles.roomBtnCtaRow}>
+                <Text style={[styles.roomBtnCta, { color: auraColor }]}>Open</Text>
+                <ChevronRight size={rs(15)} color={auraColor} />
+              </View>
             </TouchableOpacity>
           )}
 
@@ -866,17 +881,19 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop:  SPACING.sm,
+    fontFamily: 'DMSans-Italic',
     fontSize:   FONT.sm,
     color:      T.textSecondary,
-    fontStyle:  'italic',
   },
   errorText: {
-    fontSize:  FONT.md,
+    fontFamily: 'PlayfairDisplay-Italic',
+    fontSize:  rf(18),
     color:     T.textSecondary,
     textAlign: 'center',
   },
   backLink: {
     marginTop: SPACING.sm,
+    fontFamily: 'DMSans-Bold',
     fontSize:  FONT.sm,
     color:     T.primary,
   },
@@ -920,6 +937,11 @@ const styles = StyleSheet.create({
     paddingBottom: rs(60),
   },
 
+  bannerImage: {
+    width:  '100%',
+    height: rs(150),
+  },
+
   // Hero
   hero: {
     alignItems:      'center',
@@ -938,7 +960,9 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'center',
     borderWidth:    2,
+    overflow:       'hidden',
   },
+  heroAvatarImg: { width: '100%', height: '100%' },
   heroEmoji: { fontSize: rf(40) },
   heroInfo:  { alignItems: 'center', marginBottom: SPACING.sm },
   heroName:  {
@@ -959,8 +983,8 @@ const styles = StyleSheet.create({
     borderWidth:     1,
   },
   heroBadgeText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:    FONT.xs,
-    fontWeight:  '700',
     letterSpacing: 0.5,
   },
   openHeroBadge: {
@@ -975,22 +999,25 @@ const styles = StyleSheet.create({
     backgroundColor: T.open,
   },
   openHeroBadgeText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.xs,
     color:      T.open,
-    fontWeight: '600',
   },
   heroStatus: {
+    fontFamily: 'DMSans-Regular',
     fontSize: FONT.sm,
     color:    T.textSecondary,
+    letterSpacing: 0.2,
   },
   heroBio: {
-    fontSize:   FONT.sm,
+    fontFamily: 'PlayfairDisplay-Italic',
+    fontSize:   rf(15),
     color:      T.textSecondary,
     textAlign:  'center',
-    lineHeight: rf(22),
+    lineHeight: rf(23),
     marginBottom: SPACING.md,
     paddingHorizontal: SPACING.md,
-    fontStyle:  'italic',
+    letterSpacing: 0.2,
   },
   statsRow: {
     flexDirection:  'row',
@@ -1003,9 +1030,9 @@ const styles = StyleSheet.create({
     gap:           rp(5),
   },
   statText: {
+    fontFamily: 'DMSans-SemiBold',
     fontSize:   FONT.sm,
     color:      T.textSecondary,
-    fontWeight: '500',
   },
   statDivider: {
     width:           1,
@@ -1038,11 +1065,12 @@ const styles = StyleSheet.create({
     flex:          1,
   },
   liveBannerTitle: {
-    fontSize:   FONT.md,
-    fontWeight: '700',
+    fontFamily: 'PlayfairDisplay-Bold',
+    fontSize:   rf(16),
     marginBottom: rp(2),
   },
   liveBannerSub: {
+    fontFamily: 'DMSans-Regular',
     fontSize: FONT.xs,
     color:    T.textSecondary,
   },
@@ -1052,8 +1080,8 @@ const styles = StyleSheet.create({
     borderRadius:      RADIUS.sm,
   },
   enterLiveBtnText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.sm,
-    fontWeight: '700',
     color:      '#fff',
   },
 
@@ -1074,14 +1102,15 @@ const styles = StyleSheet.create({
     gap:           SPACING.xs,
   },
   roomBtnText: {
+    fontFamily: 'DMSans-SemiBold',
     fontSize:   FONT.sm,
     color:      T.text,
-    fontWeight: '600',
   },
+  roomBtnCtaRow: { flexDirection: 'row', alignItems: 'center', gap: rp(2) },
   roomBtnCta: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.sm,
     color:      T.open,
-    fontWeight: '700',
   },
 
   // Join / Leave
@@ -1094,8 +1123,8 @@ const styles = StyleSheet.create({
     justifyContent:  'center',
   },
   joinBtnText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.md,
-    fontWeight: '700',
   },
   memberStatus: {
     flexDirection:   'row',
@@ -1109,10 +1138,12 @@ const styles = StyleSheet.create({
     borderColor:       T.border,
   },
   memberStatusText: {
+    fontFamily: 'DMSans-Regular',
     fontSize:   FONT.sm,
     color:      T.textSecondary,
   },
   leaveText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.sm,
     color:      T.textMuted,
   },
@@ -1136,12 +1167,13 @@ const styles = StyleSheet.create({
     gap:             rp(4),
   },
   creatorBtnText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.sm,
-    fontWeight: '700',
     color:      T.text,
     marginTop:  rp(6),
   },
   creatorBtnSub: {
+    fontFamily: 'DMSans-Italic',
     fontSize: FONT.xs,
     color:    T.textMuted,
   },
@@ -1155,16 +1187,16 @@ const styles = StyleSheet.create({
     marginBottom:    SPACING.sm,
   },
   sectionLabel: {
+    fontFamily:    'DMSans-Bold',
     fontSize:      FONT.xs,
-    fontWeight:    '700',
     color:         T.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 1.2,
   },
   sectionAction: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.sm,
     color:      T.primary,
-    fontWeight: '600',
   },
   noEvents: {
     backgroundColor: T.surface,
@@ -1174,9 +1206,9 @@ const styles = StyleSheet.create({
     padding:         SPACING.md,
   },
   noEventsText: {
+    fontFamily: 'DMSans-Italic',
     fontSize:  FONT.sm,
     color:     T.textMuted,
-    fontStyle: 'italic',
   },
 
   // Event card
@@ -1210,8 +1242,8 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     flex:       1,
-    fontSize:   FONT.sm,
-    fontWeight: '700',
+    fontFamily: 'PlayfairDisplay-Bold',
+    fontSize:   rf(14),
     color:      T.text,
   },
   eventLiveBadge: {
@@ -1223,19 +1255,20 @@ const styles = StyleSheet.create({
     borderColor:     T.primaryBorder,
   },
   eventLiveBadgeText: {
+    fontFamily:  'DMSans-Bold',
     fontSize:    rf(9),
-    fontWeight:  '800',
     color:       T.live,
     letterSpacing: 0.6,
   },
   eventMeta: {
+    fontFamily: 'DMSans-Regular',
     fontSize: FONT.xs,
     color:    T.textSecondary,
   },
   eventCountdown: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.xs,
     color:      T.primary,
-    fontWeight: '600',
     marginTop:  rp(3),
   },
   eventCardRight: {
@@ -1249,8 +1282,8 @@ const styles = StyleSheet.create({
     borderRadius:    RADIUS.xs,
   },
   eventEnterText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.xs,
-    fontWeight: '700',
     color:      '#fff',
   },
   eventGoLiveBtn: {
@@ -1263,8 +1296,8 @@ const styles = StyleSheet.create({
     borderRadius:    RADIUS.xs,
   },
   eventGoLiveText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.xs,
-    fontWeight: '700',
     color:      '#fff',
   },
 
@@ -1311,23 +1344,23 @@ const styles = StyleSheet.create({
     marginBottom:    SPACING.xs,
   },
   modalTitle: {
-    fontSize:   FONT.xl,
-    fontWeight: '800',
+    fontSize:   rf(22),
     color:      T.text,
     textAlign:  'center',
     fontFamily: 'PlayfairDisplay-Bold',
   },
   modalSub: {
+    fontFamily: 'DMSans-Italic',
     fontSize:  FONT.sm,
     color:     T.textSecondary,
     textAlign: 'center',
   },
   modalFieldLabel: {
+    fontFamily:    'DMSans-Bold',
     fontSize:      FONT.xs,
-    fontWeight:    '600',
     color:         T.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
     marginTop:     SPACING.xs,
   },
   modalInput: {
@@ -1335,12 +1368,14 @@ const styles = StyleSheet.create({
     borderRadius:     RADIUS.sm,
     paddingHorizontal: SPACING.sm,
     paddingVertical:   rp(13),
+    fontFamily:       'DMSans-Regular',
     fontSize:         FONT.md,
     color:            T.text,
     borderWidth:      1,
     borderColor:      T.border,
   },
   modalHint: {
+    fontFamily: 'DMSans-Italic',
     fontSize: FONT.xs,
     color:    T.textMuted,
   },
@@ -1358,8 +1393,8 @@ const styles = StyleSheet.create({
     elevation:       6,
   },
   modalPayBtnText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.md,
-    fontWeight: '700',
     color:      '#fff',
   },
   pollingBox: {
@@ -1368,16 +1403,18 @@ const styles = StyleSheet.create({
     gap:           SPACING.sm,
   },
   pollingTitle: {
-    fontSize:   FONT.lg,
-    fontWeight: '700',
+    fontFamily: 'PlayfairDisplay-Bold',
+    fontSize:   rf(18),
     color:      T.text,
   },
   pollingBody: {
+    fontFamily: 'DMSans-Regular',
     fontSize:  FONT.sm,
     color:     T.textSecondary,
     textAlign: 'center',
   },
   cancelText: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.sm,
     color:      T.textMuted,
     paddingVertical: SPACING.xs,

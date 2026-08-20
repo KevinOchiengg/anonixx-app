@@ -114,7 +114,7 @@ export default React.memo(function DailyRewardBanner() {
 
   const streakLabel = useMemo(() => {
     if (streak === 0) return 'Start your streak today';
-    if (streakInDanger) return '⚠️ Streak at risk — claim now!';
+    if (streakInDanger) return 'Your streak dies at midnight.';
     return `${streak}-day streak`;
   }, [streak, streakInDanger]);
 

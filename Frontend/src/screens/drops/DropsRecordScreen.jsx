@@ -394,7 +394,9 @@ export default function DropsRecordScreen({ navigation, route }) {
       });
       dispatch(awardMilestone('first_drop'));
 
-      navigation.navigate?.('DropLanding', { dropId: newDropId });
+      // Land back in the main feed — the voice drop shows up there as a
+      // genuine post now (see create_drop's post-mirroring on the backend).
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err) {
       showToast({
         type:    'error',

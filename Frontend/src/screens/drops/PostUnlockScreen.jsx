@@ -2,12 +2,11 @@
  * PostUnlockScreen
  *
  * "Link up" landing page for a calm-feed post — pay coins to open a chat
- * connection with its anonymous author. Mirrors the coins-unlock section of
- * DropLandingScreen but scoped to posts/{postId}/unlock, which reuses the
- * same drop_connections record shape so DropChatScreen needs no changes to
- * open the resulting chat.
+ * connection with its anonymous author. Scoped to posts/{postId}/unlock,
+ * which reuses the same drop_connections record shape so DropChatScreen
+ * needs no changes to open the resulting chat.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Animated,
 } from 'react-native';
@@ -34,6 +33,13 @@ export default function PostUnlockScreen({ route, navigation }) {
 
   const [unlocking, setUnlocking] = useState(false);
   const successScale = React.useRef(new Animated.Value(1)).current;
+
+  // Redux coins.balance defaults to 0 and nothing else guarantees it's been
+  // fetched by the time someone lands here — without this, the screen shows
+  // a stale/zero balance until after the first successful unlock.
+  useEffect(() => {
+    dispatch(fetchBalance());
+  }, [dispatch]);
 
   const handleUnlock = useCallback(async () => {
     if (unlocking || !post?.id) return;

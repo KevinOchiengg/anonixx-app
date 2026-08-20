@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -7,16 +7,42 @@ import {
   StyleSheet,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Settings, Edit, Lock, Palette, ChevronRight } from 'lucide-react-native'
+import { Settings, Edit, Lock, Palette, ChevronRight, LayoutDashboard } from 'lucide-react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useSelector } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import Avatar from '../../components/common/Avatar'
 import CoinBadge from '../../components/common/CoinBadge'
 import { THEME } from '../../utils/theme'
+import { API_BASE_URL } from '../../config/api'
+import { fetchStreak } from '../../store/slices/coinsSlice'
 
 export default function ProfileScreen({ navigation }) {
+  const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
-  const { balance } = useSelector((state) => state.coins)
+  const { balance, streak } = useSelector((state) => state.coins)
+
+  // Real post/reaction counts — was hardcoded (42/328) before the dashboard existed.
+  const [postCount, setPostCount] = useState(null)
+  const [reactionCount, setReactionCount] = useState(null)
+
+  useEffect(() => {
+    dispatch(fetchStreak())
+    ;(async () => {
+      try {
+        const token   = await AsyncStorage.getItem('token')
+        const headers = token ? { Authorization: `Bearer ${token}` } : {}
+        const res     = await fetch(`${API_BASE_URL}/api/v1/posts/mine`, { headers })
+        if (res.ok) {
+          const data = await res.json()
+          setPostCount(data.total_posts ?? 0)
+          setReactionCount(data.total_likes ?? 0)
+        }
+      } catch {
+        // silent — stat cards just show 0 if this fails, not worth a toast
+      }
+    })()
+  }, [dispatch])
 
   return (
     <SafeAreaView style={styles.container}>
@@ -43,18 +69,33 @@ export default function ProfileScreen({ navigation }) {
 
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>42</Text>
+            <Text style={styles.statNumber}>{postCount ?? '—'}</Text>
             <Text style={styles.statLabel}>Posts</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>328</Text>
+            <Text style={styles.statNumber}>{reactionCount ?? '—'}</Text>
             <Text style={styles.statLabel}>Reactions</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>7</Text>
+            <Text style={styles.statNumber}>{streak ?? 0}</Text>
             <Text style={styles.statLabel}>Streak</Text>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.dashboardCard}
+          onPress={() => navigation.navigate('Dashboard')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.dashboardIconWrap}>
+            <LayoutDashboard size={20} color={THEME.primary} strokeWidth={1.8} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dashboardTitle}>Your Dashboard</Text>
+            <Text style={styles.dashboardSubtitle}>Posts, activity, coins & earnings</Text>
+          </View>
+          <ChevronRight size={20} color={THEME.textMuted} />
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.coinCard}
@@ -64,7 +105,7 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.coinLabel}>Coin Balance</Text>
             <CoinBadge amount={balance || 0} size='large' />
           </View>
-          <Text style={styles.coinAction}>→</Text>
+          <ChevronRight size={22} color={THEME.primary} />
         </TouchableOpacity>
 
         {!user?.is_premium && (
@@ -169,6 +210,26 @@ const styles = StyleSheet.create({
   },
   statNumber: { fontSize: 24, fontWeight: 'bold', color: THEME.text },
   statLabel: { fontSize: 12, color: THEME.textSecondary, marginTop: 4 },
+  dashboardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.surface,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  dashboardIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: THEME.primary + '1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dashboardTitle: { color: THEME.text, fontSize: 15, fontWeight: '700' },
+  dashboardSubtitle: { color: THEME.textSecondary, fontSize: 12, marginTop: 2 },
   coinCard: {
     backgroundColor: THEME.surface,
     marginHorizontal: 16,

@@ -1,14 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socketService from '../services/socket';
-import { LOADING_EVENTS } from '../services/loadingMessageEngine';
 
 export const SocketContext = createContext(null);
 
 export const SocketProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
-  // { type: string, data: object, timestamp: number } | null
-  const [loadingEvent, setLoadingEvent] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -22,15 +19,6 @@ export const SocketProvider = ({ children }) => {
         sock.on('connect',    () => { if (mounted) setConnected(true);  });
         sock.on('disconnect', () => { if (mounted) setConnected(false); });
         if (sock.connected && mounted) setConnected(true);
-
-        // Register listeners for every loading-system event
-        LOADING_EVENTS.forEach(event => {
-          sock.on(event, (data) => {
-            if (mounted) {
-              setLoadingEvent({ type: event, data: data || {}, timestamp: Date.now() });
-            }
-          });
-        });
       } catch {
         // silent — polling fallback keeps the app working
       }
@@ -46,7 +34,7 @@ export const SocketProvider = ({ children }) => {
   }, []);
 
   return (
-    <SocketContext.Provider value={{ socketService, connected, loadingEvent }}>
+    <SocketContext.Provider value={{ socketService, connected }}>
       {children}
     </SocketContext.Provider>
   );

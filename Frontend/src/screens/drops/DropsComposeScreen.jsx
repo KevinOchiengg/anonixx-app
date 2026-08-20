@@ -3,8 +3,8 @@
  *
  * The new compose surface for Anonixx Drops.
  * Three formats (Text / Media / Voice) + an independent Poll toggle,
- * live card preview, theme picker, unsent draft layer, daily-limit
- * counter, dangerous-edge warning.
+ * live card preview, confession-type picker, unsent draft layer,
+ * daily-limit counter, dangerous-edge warning.
  *
  * Drops are rendered via <DropCardRenderer /> — this screen is only state,
  * composition and gating. All visual identity lives in the renderer.
@@ -24,12 +24,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import {
-  ChevronLeft, ChevronDown, Images, BarChart2, Lock, Mic, Sparkles, Tag, Type,
+  ChevronLeft, ChevronDown, Images, BarChart2, Mic, Sparkles, Tag, Type,
   AlertTriangle, Trash2, X,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
+import LocationField from '../../components/drops/LocationField';
 
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -39,7 +40,7 @@ import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
 
 import DropCardRenderer, {
-  DROP_THEMES, TIER_1_THEMES, TIER_2_THEMES,
+  DROP_THEMES, CARD_INTENTS, CARD_INTENT_LIST,
 } from '../../components/drops/DropCardRenderer';
 import T from '../../utils/theme';
 
@@ -119,26 +120,30 @@ const FormatChip = React.memo(function FormatChip({ id, label, Icon, active, onP
   );
 });
 
-// ─── Theme picker ──────────────────────────────────────────────
-const ThemeSwatch = React.memo(function ThemeSwatch({ themeId, theme, active, locked, onPress }) {
+// ─── Confession type picker ──────────────────────────────────────
+// The headline choice — this is what decides how the card looks (colors +
+// background pattern in DropCardRenderer), so it gets real visual weight
+// here, not a tiny swatch. Each tile previews its own palette so picking
+// one is a "does this look like me" decision, not a label lookup.
+const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
   return (
     <TouchableOpacity
-      style={[s.swatch, active && s.swatchActive]}
+      style={s.intentCard}
       onPress={onPress}
       hitSlop={HIT_SLOP}
-      activeOpacity={0.8}
+      activeOpacity={0.85}
     >
-      <View style={[s.swatchFill, { backgroundColor: theme.bgTo }]}>
-        <View style={[s.swatchAccent, { backgroundColor: theme.accent }]} />
-        {locked && (
-          <View style={s.swatchLock}>
-            <Lock size={rs(11)} color="#fff" />
-          </View>
-        )}
+      <View style={[s.intentCardFill, {
+        backgroundColor: def.bgTo,
+        borderColor: active ? def.accent + '66' : 'transparent',
+      }]}>
+        <Text style={s.intentCardEmoji}>{def.emoji}</Text>
+        <View style={[s.intentCardAccent, { backgroundColor: def.accent }]} />
       </View>
-      <Text style={[s.swatchLabel, active && { color: theme.accent }]} numberOfLines={1}>
-        {theme.label}
+      <Text style={[s.intentCardLabel, active && { color: def.accent }]}>
+        {def.label}
       </Text>
+      <Text style={s.intentCardSub}>{def.sub}</Text>
     </TouchableOpacity>
   );
 });
@@ -147,7 +152,6 @@ const ThemeSwatch = React.memo(function ThemeSwatch({ themeId, theme, active, lo
 export default function DropsComposeScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
-  const authUser = useSelector((state) => state.auth.user);
 
   // ── Inspired-by handoff (from feed Drop button) ──────────────
   // When a user taps the "drop" button on a feed confession card and
@@ -159,10 +163,17 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Core state ────────────────────────────────────────────────
   const [format,   setFormat]   = useState('text');    // text | image | video | voice
   const [text,     setText]     = useState(initialText);
-  const [theme,    setTheme]    = useState('midnight-sin');
-  const [moodTag,  setMoodTag]  = useState('longing');
+  const [cardIntent, setCardIntent] = useState('general');
+  // Theme (tier-gating only, never shown as its own picker anymore) is
+  // derived from the confession type — "No Strings" is the one type explicit
+  // enough to warrant the After Dark tier (never published, matches its
+  // nature); everything else is Tier 1.
+  const theme = cardIntent === 'no-strings' ? 'after-dark' : 'desire';
+  // Mood tag (the "· longing ·" line on the card) is derived the same way —
+  // each confession type has its own emotional register, so the tag should
+  // shift with it instead of sitting on one word regardless of what's picked.
+  const moodTag = CARD_INTENTS[cardIntent]?.moodTag || 'longing';
   const [category, setCategory] = useState('love');
-  const [teaseMode,setTeaseMode]= useState(false);
   const [mediaUri, setMediaUri] = useState(null);
   const [thumbUri, setThumbUri] = useState(null);
   const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
@@ -185,7 +196,13 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Feed-as-drops upgrade: location, font style ───────────────
   // Poll now lives on its own screen (DropsPollScreen), same pattern as Voice.
-  const [location, setLocation] = useState('');
+  // Structured location — country/county picked from a real list (Kenya's
+  // 47 counties, the app's primary market), sub-county/estate stay freeform
+  // since no reliable exhaustive dataset exists at that granularity.
+  const [locationCountry, setLocationCountry] = useState('');
+  const [locationCounty, setLocationCounty] = useState('');
+  const [locationSubCounty, setLocationSubCounty] = useState('');
+  const [locationEstate, setLocationEstate] = useState('');
   const [fontStyle, setFontStyle] = useState('bold-tease'); // classic | sultry-script | bold-tease
 
   // ── Intensity + one-word hint (section 11) ────────────────────
@@ -206,12 +223,6 @@ export default function DropsComposeScreen({ navigation, route }) {
   // Briefly pauses between "Drop it" and the actual POST so the
   // moment of sending feels intentional rather than reflexive.
   const [sending, setSending] = useState(false);
-
-  // ── Tier-2 gate (18+) ──────────────────────────────────────────
-  // Signup itself is a hard 18+ gate (age_verified is always true past
-  // registration), so that alone is sufficient — themes are no longer
-  // additionally gated behind the separate After Dark viewing preference.
-  const tier2Unlocked = !!authUser?.age_verified;
 
   // ── Daily limit ───────────────────────────────────────────────
   // Server is authoritative; local count is a same-day fallback.
@@ -276,8 +287,7 @@ export default function DropsComposeScreen({ navigation, route }) {
                 (typeof d.text === 'string' && d.text.trim().length > 0);
               if (typeof d.text     === 'string') setText(d.text);
               if (typeof d.format   === 'string') setFormat(d.format);
-              if (typeof d.theme    === 'string' && DROP_THEMES[d.theme]) setTheme(d.theme);
-              if (typeof d.moodTag  === 'string') setMoodTag(d.moodTag);
+              if (typeof d.cardIntent === 'string' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
               if (typeof d.category === 'string' && CATEGORIES.some(c => c.id === d.category)) setCategory(d.category);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
               if (typeof d.hint     === 'string') setHint(d.hint);
@@ -303,29 +313,14 @@ export default function DropsComposeScreen({ navigation, route }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
-        text, format, theme, moodTag, category, intensity, hint,
+        text, format, cardIntent, category, intensity, hint,
       })).catch(() => {});
     }, 400);
     return () => clearTimeout(saveTimer.current);
-  }, [text, format, theme, moodTag, category, intensity, hint]);
+  }, [text, format, cardIntent, category, intensity, hint]);
 
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
-
-  // ── Theme selection (gate Tier 2) ─────────────────────────────
-  const handleSelectTheme = useCallback((themeId) => {
-    const t = DROP_THEMES[themeId];
-    if (!t) return;
-    if (t.tier === 2 && !tier2Unlocked) {
-      showToast({
-        type: 'info',
-        title: 'After Dark themes',
-        message: '18+ only. Opt in from Settings when you\'re ready.',
-      });
-      return;
-    }
-    setTheme(themeId);
-  }, [tier2Unlocked, showToast]);
 
   // ── Format change — clear media if switching away. Voice and Poll
   // both hand off to their own dedicated screen, same pattern for both ─
@@ -390,8 +385,6 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Discard draft ─────────────────────────────────────────────
   const handleDiscardDraft = useCallback(async () => {
     setText('');
-    setMoodTag('longing');
-    setTeaseMode(false);
     setMediaUri(null);
     setThumbUri(null);
     setShowUnsentBanner(false);
@@ -505,8 +498,8 @@ export default function DropsComposeScreen({ navigation, route }) {
         category,
         confession: confessionText || undefined,
         theme,
+        intent:     cardIntent,
         mood_tag:   moodTag,
-        tease_mode: teaseMode,
         intensity,
         // Hint only makes sense when a specific user is tagged.
         ...(taggedUser && hintClean ? { recognition_hint: hintClean } : {}),
@@ -523,7 +516,10 @@ export default function DropsComposeScreen({ navigation, route }) {
           ai_refined:      true,
           ai_refined_mode: selectedRefineMode || undefined,
         } : {}),
-        ...(location.trim() ? { location: location.trim() } : {}),
+        ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
+        ...(locationCounty.trim() ? { location_county: locationCounty.trim() } : {}),
+        ...(locationSubCounty.trim() ? { location_sub_county: locationSubCounty.trim() } : {}),
+        ...(locationEstate.trim() ? { location_estate: locationEstate.trim() } : {}),
         font_style: fontStyle,
       };
 
@@ -582,7 +578,11 @@ export default function DropsComposeScreen({ navigation, route }) {
       });
       dispatch(awardMilestone('first_drop'));
 
-      navigation.navigate?.('DropLanding', { dropId: id });
+      // Land back in the main feed, not the individual drop page — the
+      // drop now shows up there as a genuine confession post (see
+      // create_drop's post-mirroring on the backend), so that's where the
+      // reaction should happen, not on a standalone landing screen.
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err) {
       showToast({
         type: 'error',
@@ -593,10 +593,10 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    limitHit, format, text, mediaUri, mediaKind, theme, moodTag, category, teaseMode,
+    limitHit, format, text, mediaUri, mediaKind, theme, cardIntent, moodTag, category,
     intensity, hint, taggedUser, refineEnabled, refinedText, selectedRefineMode,
     publisherOptIn, dailyUsed, dailyLimit, fetchDailyLimit,
-    location, fontStyle,
+    locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
     dispatch, navigation, showToast,
   ]);
 
@@ -623,12 +623,8 @@ export default function DropsComposeScreen({ navigation, route }) {
             <ChevronLeft size={rs(24)} color={T.text} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Drop</Text>
-          <TouchableOpacity
-            onPress={() => navigation.navigate?.('DropsInbox')}
-            hitSlop={HIT_SLOP}
-          >
-            <Text style={s.headerAction}>Inbox</Text>
-          </TouchableOpacity>
+          {/* Balances the back-chevron so the title stays centered */}
+          <View style={{ width: rs(24) }} />
         </View>
 
         {/* Daily limit strip (section 14) */}
@@ -716,14 +712,37 @@ export default function DropsComposeScreen({ navigation, route }) {
             ))}
           </Animated.View>
 
+          {/* Confession type — the headline choice. Picked before the card
+              preview so the preview below always reflects it live: pick
+              your audience, then watch the card become yours as you type. */}
+          <Text style={s.sectionLabel}>Confession Type</Text>
+          <Text style={s.sectionSubLabel}>
+            Who is this for? It shapes how your card looks — colors, pattern, everything.
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.intentScroll}
+            contentContainerStyle={s.intentRow}
+          >
+            {CARD_INTENT_LIST.map((def) => (
+              <IntentCard
+                key={def.id}
+                def={def}
+                active={cardIntent === def.id}
+                onPress={() => setCardIntent(def.id)}
+              />
+            ))}
+          </ScrollView>
+
           {/* Live card preview — type directly into the card itself,
               no separate input box duplicating what it shows. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
             <DropCardRenderer
               confession={text}
               moodTag={moodTag}
-              teaseMode={teaseMode}
               theme={theme}
+              intent={cardIntent}
               mediaUrl={cardMediaUri}
               layoutMode={layoutMode}
               cardWidth={CARD_W}
@@ -732,52 +751,15 @@ export default function DropsComposeScreen({ navigation, route }) {
               onChangeText={setText}
               placeholder={format === 'text'
                 ? "say exactly what you want them to know…"
-                : 'tease it a little (optional)…'}
+                : "say what this doesn't show…"}
               maxLength={MAX_CHARS}
               fontStyle={fontStyle}
             />
           </Animated.View>
 
-          {/* Theme — right under the card, not buried in a collapsed
-              section, since it's the one thing here that visibly changes
-              the card and you should be able to see that change without
-              scrolling back up to look. */}
-          <Text style={s.sectionLabel}>Theme</Text>
-          <View style={s.themeRow}>
-            {TIER_1_THEMES.map((t) => (
-              <ThemeSwatch
-                key={t.id}
-                themeId={t.id}
-                theme={t}
-                active={theme === t.id}
-                locked={false}
-                onPress={() => handleSelectTheme(t.id)}
-              />
-            ))}
-            {TIER_2_THEMES.map((t) => (
-              <ThemeSwatch
-                key={t.id}
-                themeId={t.id}
-                theme={t}
-                active={theme === t.id}
-                locked={!tier2Unlocked}
-                onPress={() => handleSelectTheme(t.id)}
-              />
-            ))}
-          </View>
-
-          {/* Text meta — tease toggle + character count, text format only */}
+          {/* Character count, text format only */}
           {format === 'text' && (
             <View style={s.cardMetaRow}>
-              <TouchableOpacity
-                style={[s.teaseToggle, teaseMode && s.teaseToggleActive]}
-                onPress={() => setTeaseMode(v => !v)}
-                hitSlop={HIT_SLOP}
-              >
-                <Text style={[s.teaseToggleText, teaseMode && { color: T.primary }]}>
-                  {teaseMode ? '◉  tease on — leave them wanting' : '○  tease mode'}
-                </Text>
-              </TouchableOpacity>
               <Text style={[s.remaining, { color: remColor }]}>{remaining}</Text>
             </View>
           )}
@@ -937,7 +919,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               <View style={{ flex: 1 }}>
                 {edge === 'long' ? (
                   <Text style={s.edgeWarnText}>
-                    That's a lot to send at once. Cards hit harder in pieces — try tease mode.
+                    That's a lot to send at once. Shorter confessions hit harder.
                   </Text>
                 ) : (
                   <>
@@ -1034,21 +1016,22 @@ export default function DropsComposeScreen({ navigation, route }) {
             </Text>
           )}
 
-          {/* Location — freeform, helps interested people know you're
-              reachable. Everything else that used to live in a collapsed
-              "Customize" section (theme, intensity, poll) has been moved
-              inline or removed, so this is the only thing left — no need
-              for an accordion around a single optional field. */}
+          {/* Location — structured (country → county → sub-county → estate),
+              helps interested people know you're reachable and powers the
+              location filter in Search. Everything here is optional. */}
           <Text style={s.sectionLabel}>Where are you? (optional)</Text>
-          <TextInput
-            style={[s.hintInput, { marginBottom: SPACING.md }]}
-            value={location}
-            onChangeText={(v) => setLocation(v.slice(0, 80))}
-            placeholder="e.g. Nairobi, Kenya"
-            placeholderTextColor={T.textMute}
-            maxLength={80}
-            returnKeyType="done"
-          />
+          <View style={{ marginBottom: SPACING.md }}>
+            <LocationField
+              country={locationCountry}
+              county={locationCounty}
+              subCounty={locationSubCounty}
+              estate={locationEstate}
+              onChangeCountry={setLocationCountry}
+              onChangeCounty={setLocationCounty}
+              onChangeSubCounty={setLocationSubCounty}
+              onChangeEstate={setLocationEstate}
+            />
+          </View>
 
           {/* Drop button */}
           <TouchableOpacity
@@ -1108,7 +1091,6 @@ const s = StyleSheet.create({
     color:         T.text,
     letterSpacing: 0.5,
   },
-  headerAction: { fontSize: FONT.sm, color: T.primary, fontWeight: '600' },
 
   limitStrip: {
     flexDirection:     'row',
@@ -1244,19 +1226,9 @@ const s = StyleSheet.create({
   // Text meta row — sits under the card now that typing happens on it directly
   cardMetaRow: {
     flexDirection:  'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems:     'center',
     marginBottom:   SPACING.md,
-  },
-  teaseToggle: {
-    paddingVertical:   rp(4),
-    paddingHorizontal: rp(6),
-  },
-  teaseToggleActive: {},
-  teaseToggleText: {
-    fontSize:      rf(11),
-    color:         T.textMute,
-    letterSpacing: 0.3,
   },
   remaining: { fontSize: rf(12), fontWeight: '600' },
 
@@ -1327,8 +1299,65 @@ const s = StyleSheet.create({
     color:         T.textSec,
     letterSpacing: 2,
     textTransform: 'uppercase',
-    marginBottom:  rp(10),
-    marginTop:     SPACING.sm,
+    marginBottom:  rp(6),
+    marginTop:     SPACING.md,
+  },
+  sectionSubLabel: {
+    fontFamily:   'DMSans-Italic',
+    fontSize:     rf(12),
+    color:        T.textMute,
+    marginTop:    rp(2),
+    marginBottom: SPACING.md,
+    lineHeight:   rf(17),
+  },
+
+  // Confession type picker — small swatch + free-floating caption below it,
+  // same shape as the old theme-swatch picker (no card border boxing the
+  // text in — just the little color/pattern square, then plain text).
+  intentScroll: { marginHorizontal: -SPACING.md, marginBottom: SPACING.lg },
+  intentRow: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(4),
+    gap:               SPACING.sm,
+  },
+  intentCard: {
+    width:       rs(96),
+    alignItems:  'center',
+  },
+  intentCardFill: {
+    width:              rs(64),
+    height:             rs(64),
+    borderRadius:       RADIUS.md,
+    borderWidth:        1.5,
+    alignItems:        'center',
+    justifyContent:    'center',
+    position:          'relative',
+    overflow:          'hidden',
+  },
+  intentCardEmoji: { fontSize: rf(20) },
+  intentCardAccent: {
+    position:     'absolute',
+    bottom:       rp(6),
+    left:         rp(6),
+    width:        rs(14),
+    height:       rs(3),
+    borderRadius: rs(2),
+    opacity:      0.9,
+  },
+  intentCardLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10.5),
+    color:         T.text,
+    textAlign:     'center',
+    marginTop:     rp(6),
+  },
+  intentCardSub: {
+    fontFamily:    'DMSans-Regular',
+    fontSize:      rf(9),
+    color:         T.textMute,
+    lineHeight:    rf(12),
+    textAlign:     'center',
+    marginTop:     rp(2),
   },
 
   // Customize accordion (theme/mood/category/intensity/location/font/poll)
@@ -1350,46 +1379,6 @@ const s = StyleSheet.create({
     letterSpacing: 0.3,
   },
   chevronOpen: { transform: [{ rotate: '180deg' }] },
-
-  // Theme picker — flat row, just 3 themes, right under the card
-  themeRow: {
-    flexDirection: 'row',
-    gap:           SPACING.md,
-    marginBottom:  SPACING.md,
-  },
-  swatch: {
-    width:       rs(64),
-    alignItems:  'center',
-    gap:         rp(6),
-  },
-  swatchActive: {},
-  swatchFill: {
-    width:        rs(64),
-    height:       rs(64),
-    borderRadius: RADIUS.md,
-    overflow:     'hidden',
-    position:     'relative',
-  },
-  swatchAccent: {
-    position:      'absolute',
-    bottom:        rp(8),
-    left:          rp(8),
-    width:         rs(3),
-    height:        rs(18),
-    borderRadius:  rs(2),
-    opacity:       0.9,
-  },
-  swatchLock: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems:      'center',
-    justifyContent:  'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  swatchLabel: {
-    fontSize:      rf(10),
-    color:         T.textMute,
-    letterSpacing: 0.3,
-  },
 
   // One-word hint (section 11)
   hintBox: {

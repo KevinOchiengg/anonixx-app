@@ -7,13 +7,14 @@ import React, {
 } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, StatusBar, ActivityIndicator, Keyboard, Image,
+  StyleSheet, StatusBar, ActivityIndicator, Keyboard, Image, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Clock, Search, X, Flame, Users } from 'lucide-react-native';
+import { ArrowLeft, Clock, Search, X, Users } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import CalmPostCard from '../../components/feed/CalmPostCard';
+import { POST_TOPICS } from '../../config/postTopics';
 import { API_BASE_URL } from '../../config/api';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP,
@@ -23,30 +24,15 @@ import T from '../../utils/theme';
 const HISTORY_KEY   = '@anonixx_search_history';
 const MAX_HISTORY   = 10;
 const FILTERS       = ['all', 'recent', 'popular'];
-const SUGGESTIONS   = ['anxiety', 'loneliness', 'hope', 'healing', 'relationships', 'family'];
+const SUGGESTIONS   = ['secrets', 'heartbreak', 'late night thoughts', 'desire', 'carrying it alone', 'family'];
 const CONTENT_TYPES = [
   { id: 'posts',   label: 'Posts' },
-  { id: 'drops',   label: 'Drops' },
   { id: 'circles', label: 'Circles' },
 ];
 const LIVE_SEARCH_DEBOUNCE_MS = 400;
 const MIN_LIVE_QUERY_LEN = 2;
 
-// ─── Lightweight result rows for Drops / Circles ───────────────
-const DropResultRow = React.memo(({ item, onPress }) => (
-  <TouchableOpacity style={rowStyles.wrap} onPress={() => onPress(item)} activeOpacity={0.8}>
-    <View style={[rowStyles.iconBox, { backgroundColor: `${item.theme_accent || T.primary}22` }]}>
-      <Flame size={rs(16)} color={item.theme_accent || T.primary} />
-    </View>
-    <View style={{ flex: 1 }}>
-      <Text style={rowStyles.title} numberOfLines={2}>
-        {item.confession || `[${item.media_type} drop]`}
-      </Text>
-      <Text style={rowStyles.sub}>{item.category || 'confession'}</Text>
-    </View>
-  </TouchableOpacity>
-));
-
+// ─── Lightweight result row for Circles ────────────────────────
 const CircleResultRow = React.memo(({ item, onPress }) => (
   <TouchableOpacity style={rowStyles.wrap} onPress={() => onPress(item)} activeOpacity={0.8}>
     <View style={[rowStyles.iconBox, { backgroundColor: `${item.aura_color || T.primary}22` }]}>
@@ -80,6 +66,7 @@ export default function SearchScreen({ navigation }) {
   const [total,      setTotal]      = useState(0);
   const [filter,     setFilter]     = useState('all');
   const [contentType, setContentType] = useState('posts');
+  const [postTopic,   setPostTopic]   = useState(null);
   const liveSearchTimer = useRef(null);
 
   // Load history on mount, auto-focus input
@@ -107,14 +94,19 @@ export default function SearchScreen({ navigation }) {
     await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
   }, [history]);
 
-  const doSearch = useCallback(async (q = query, f = filter, type = contentType, { silent = false } = {}) => {
+  const doSearch = useCallback(async (
+    q = query, f = filter, type = contentType,
+    { silent = false, topic = postTopic } = {},
+  ) => {
     const trimmed = q.trim();
-    if (!trimmed) return;
+    // A facet alone (topic, no typed text) is a valid "browse by…" search —
+    // only bail if there's truly nothing to go on.
+    if (!trimmed && !(type === 'posts' && topic)) return;
 
     if (!silent) Keyboard.dismiss();
     setLoading(true);
     setSearched(true);
-    if (!silent) await saveHistory(trimmed);
+    if (!silent && trimmed) await saveHistory(trimmed);
 
     try {
       const token = await AsyncStorage.getItem('token');
@@ -123,14 +115,7 @@ export default function SearchScreen({ navigation }) {
       let list;
       let count;
 
-      if (type === 'drops') {
-        const params = new URLSearchParams({ q: trimmed, limit: '30' });
-        const res = await fetch(`${API_BASE_URL}/api/v1/drops/marketplace?${params}`, { headers });
-        data = await res.json();
-        if (!res.ok) throw new Error();
-        list = data.drops || [];
-        count = list.length;
-      } else if (type === 'circles') {
+      if (type === 'circles') {
         const params = new URLSearchParams({ q: trimmed, limit: '30' });
         const res = await fetch(`${API_BASE_URL}/api/v1/circles/?${params}`, { headers });
         data = await res.json();
@@ -138,7 +123,9 @@ export default function SearchScreen({ navigation }) {
         list = data.circles || [];
         count = list.length;
       } else {
-        const params = new URLSearchParams({ q: trimmed, filter: f, limit: '30' });
+        const params = new URLSearchParams({ filter: f, limit: '30' });
+        if (trimmed) params.set('q', trimmed);
+        if (topic) params.set('topic', topic);
         const res = await fetch(`${API_BASE_URL}/api/v1/posts/search?${params}`, { headers });
         data = await res.json();
         if (!res.ok) throw new Error();
@@ -153,7 +140,7 @@ export default function SearchScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [query, filter, contentType, saveHistory]);
+  }, [query, filter, contentType, postTopic, saveHistory]);
 
   const handleFilterChange = useCallback((f) => {
     setFilter(f);
@@ -162,8 +149,20 @@ export default function SearchScreen({ navigation }) {
 
   const handleContentTypeChange = useCallback((type) => {
     setContentType(type);
-    if (query.trim()) doSearch(query, filter, type);
-  }, [query, filter, doSearch]);
+    if (query.trim() || (type === 'posts' && postTopic)) {
+      doSearch(query, filter, type);
+    }
+  }, [query, filter, postTopic, doSearch]);
+
+  const handleTopicChange = useCallback((t) => {
+    const next = postTopic === t ? null : t;   // tap again to clear
+    setPostTopic(next);
+    if (!next && !query.trim()) {
+      setResults([]); setSearched(false); setTotal(0);
+      return;
+    }
+    doSearch(query, filter, 'posts', { topic: next });
+  }, [query, filter, postTopic, doSearch]);
 
   // Live search-as-you-type — debounced, doesn't touch history (only an
   // explicit submit/history-tap/suggestion-tap does that).
@@ -193,7 +192,6 @@ export default function SearchScreen({ navigation }) {
 
   const handlePostPress    = useCallback((post) => navigation.navigate('PostDetail', { post }), [navigation]);
   const handleViewThread   = useCallback((postId) => navigation.navigate('ThreadView', { postId }), [navigation]);
-  const handleDropPress    = useCallback((drop) => navigation.navigate('DropLanding', { dropId: drop.id }), [navigation]);
   const handleCirclePress  = useCallback((circle) => navigation.navigate('Circles', {
     screen: 'CircleProfile', params: { circleId: circle.id },
   }), [navigation]);
@@ -201,7 +199,6 @@ export default function SearchScreen({ navigation }) {
   const handleSave         = useCallback(() => {}, []);
 
   const renderResult = useCallback(({ item }) => {
-    if (contentType === 'drops')   return <DropResultRow item={item} onPress={handleDropPress} />;
     if (contentType === 'circles') return <CircleResultRow item={item} onPress={handleCirclePress} />;
     return (
       <CalmPostCard
@@ -213,7 +210,7 @@ export default function SearchScreen({ navigation }) {
         navigation={navigation}
       />
     );
-  }, [contentType, navigation, handleResponse, handleSave, handleViewThread, handlePostPress, handleDropPress, handleCirclePress]);
+  }, [contentType, navigation, handleResponse, handleSave, handleViewThread, handlePostPress, handleCirclePress]);
 
   const keyExtractor = useCallback((item, i) => item.id || String(i), []);
 
@@ -282,7 +279,10 @@ export default function SearchScreen({ navigation }) {
       contentContainerStyle={{ paddingTop: rh(4), paddingBottom: rh(60) }}
       ListHeaderComponent={
         <Text style={styles.resultCount}>
-          {total} result{total !== 1 ? 's' : ''} for "{query.trim()}"
+          {total} result{total !== 1 ? 's' : ''}
+          {query.trim() && ` for "${query.trim()}"`}
+          {!query.trim() && contentType === 'posts' && postTopic &&
+            ` in ${POST_TOPICS.find(t => t.id === postTopic)?.label}`}
         </Text>
       }
     />
@@ -290,7 +290,7 @@ export default function SearchScreen({ navigation }) {
     <View style={styles.centered}>
       <Search size={rs(48)} color={T.textMuted} />
       <Text style={styles.emptyTitle}>nothing found</Text>
-      <Text style={styles.emptyBody}>try different keywords or spelling</Text>
+      <Text style={styles.emptyBody}>try a different word — or a braver one</Text>
     </View>
   );
 
@@ -309,16 +309,15 @@ export default function SearchScreen({ navigation }) {
         </TouchableOpacity>
 
         <View style={styles.inputWrap}>
-          <Search size={rs(15)} color={T.textMuted} />
+          <Search size={rs(16)} color={T.textMuted} />
           <TextInput
             ref={inputRef}
             style={styles.input}
             value={query}
             onChangeText={setQuery}
             placeholder={
-              contentType === 'drops' ? 'search confessions…'
-              : contentType === 'circles' ? 'search circles…'
-              : 'search posts, confessions…'
+              contentType === 'circles' ? 'search circles by name…'
+              : 'search secrets, topics, names…'
             }
             placeholderTextColor={T.textMuted}
             returnKeyType="search"
@@ -334,37 +333,65 @@ export default function SearchScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Content type — Posts / Drops / Circles */}
-      <View style={styles.filterRow}>
+      {/* Content type — Posts / Circles — primary nav, underline tabs */}
+      <View style={styles.tabRow}>
         {CONTENT_TYPES.map(ct => (
           <TouchableOpacity
             key={ct.id}
-            style={[styles.filterChip, contentType === ct.id && styles.filterChipActive]}
+            style={styles.tab}
             onPress={() => handleContentTypeChange(ct.id)}
             hitSlop={HIT_SLOP}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.filterText, contentType === ct.id && styles.filterTextActive]}>
+            <Text style={[styles.tabText, contentType === ct.id && styles.tabTextActive]}>
               {ct.label}
             </Text>
+            {contentType === ct.id && <View style={styles.tabUnderline} />}
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* All / Recent / Popular — posts only */}
+      {/* Secondary filters — one cohesive zone, not stacked bordered panels */}
       {contentType === 'posts' && (
-        <View style={styles.filterRow}>
-          {FILTERS.map(f => (
-            <TouchableOpacity
-              key={f}
-              style={[styles.filterChip, filter === f && styles.filterChipActive]}
-              onPress={() => handleFilterChange(f)}
-              hitSlop={HIT_SLOP}
-            >
-              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.filtersZone}>
+          {/* All / Recent / Popular — quiet inline toggle */}
+          <View style={styles.sortRow}>
+            <Text style={styles.sortLabel}>Sort</Text>
+            {FILTERS.map(f => (
+              <TouchableOpacity
+                key={f}
+                onPress={() => handleFilterChange(f)}
+                hitSlop={HIT_SLOP}
+                style={[styles.sortChip, filter === f && styles.sortChipActive]}
+              >
+                <Text style={[styles.sortChipText, filter === f && styles.sortChipTextActive]}>
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Topic — narrows results even with no typed query */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.facetRow}
+          >
+            {POST_TOPICS.map(t => (
+              <TouchableOpacity
+                key={t.id}
+                style={[styles.facetChip, postTopic === t.id && styles.facetChipActive]}
+                onPress={() => handleTopicChange(t.id)}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.facetEmoji}>{t.emoji}</Text>
+                <Text style={[styles.facetText, postTopic === t.id && styles.facetTextActive]}>
+                  {t.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -383,10 +410,9 @@ const styles = StyleSheet.create({
     flexDirection:     'row',
     alignItems:        'center',
     paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(10),
+    paddingTop:        rp(6),
+    paddingBottom:     rp(12),
     gap:               SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
   },
   backBtn: {
     width:          rs(36),
@@ -398,44 +424,121 @@ const styles = StyleSheet.create({
     flex:            1,
     flexDirection:   'row',
     alignItems:      'center',
-    gap:             rp(8),
+    gap:             rp(9),
     backgroundColor: T.surfaceAlt,
     borderRadius:    RADIUS.full,
-    paddingHorizontal: rp(14),
-    paddingVertical: rp(9),
+    paddingHorizontal: rp(16),
+    paddingVertical: rp(11),
     borderWidth:     1,
     borderColor:     T.borderStrong,
   },
   input: {
-    flex:     1,
-    fontSize: FONT.md,
-    color:    T.text,
+    flex:       1,
+    fontFamily: 'DMSans-Regular',
+    fontSize:   FONT.md,
+    color:      T.text,
     paddingVertical: 0,
+    letterSpacing: 0.2,
   },
 
-  // Filters
-  filterRow: {
+  // Content type — primary nav, underline tabs (matches CirclesScreen's
+  // Discover/My Circles pattern, so this reads as the same app).
+  tabRow: {
     flexDirection:     'row',
     paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(12),
-    gap:               SPACING.xs,
+    gap:               SPACING.lg,
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
-  filterChip: {
-    paddingHorizontal: rp(14),
+  tab: {
+    paddingVertical: rp(10),
+    position:        'relative',
+  },
+  tabText: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      FONT.sm,
+    color:         T.textMuted,
+    letterSpacing: 0.3,
+  },
+  tabTextActive: { color: T.text },
+  tabUnderline: {
+    position:        'absolute',
+    bottom:          -1,
+    left:            0,
+    right:           0,
+    height:          rp(2),
+    borderRadius:    rp(1),
+    backgroundColor: T.primary,
+  },
+
+  // Secondary filters — one cohesive zone with a single outer border,
+  // instead of every sub-row boxing itself off with its own divider.
+  filtersZone: {
+    paddingTop:        rp(10),
+    paddingBottom:      rp(4),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    gap:               rp(2),
+  },
+
+  // All / Recent / Popular — quiet inline toggle, subordinate to the facet chips
+  sortRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: SPACING.md,
+    gap:               rp(6),
+    marginBottom:      rp(8),
+  },
+  sortLabel: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(10),
+    color:         T.textMute,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginRight:   rp(4),
+  },
+  sortChip: {
+    paddingHorizontal: rp(11),
+    paddingVertical:   rp(5),
+    borderRadius:      RADIUS.full,
+  },
+  sortChipActive: { backgroundColor: T.primaryDim },
+  sortChipText: {
+    fontFamily: 'DMSans-SemiBold',
+    fontSize:   rf(12),
+    color:      T.textMuted,
+  },
+  sortChipTextActive: { color: T.primary },
+
+  // Topic facet chips — horizontal scroll, tap again to clear
+  facetRow: {
+    flexDirection:     'row',
+    paddingHorizontal: SPACING.md,
     paddingVertical:   rp(6),
+    gap:               rp(8),
+  },
+  facetChip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(6),
+    paddingHorizontal: rp(13),
+    paddingVertical:   rp(7),
     borderRadius:      RADIUS.full,
     backgroundColor:   T.surface,
     borderWidth:       1,
     borderColor:       T.border,
   },
-  filterChipActive: {
+  facetChipActive: {
     backgroundColor: T.primaryDim,
     borderColor:     T.primaryBorder,
   },
-  filterText:       { fontSize: FONT.sm, fontWeight: '600', color: T.textSecondary },
-  filterTextActive: { color: T.primary },
+  facetEmoji: { fontSize: rf(12) },
+  facetText: {
+    fontFamily: 'DMSans-Bold',
+    fontSize:   rf(12),
+    color:      T.textSecondary,
+  },
+  facetTextActive: { color: T.primary },
 
   // Pre-search
   preSearch: {
@@ -448,29 +551,30 @@ const styles = StyleSheet.create({
     marginBottom:   SPACING.sm,
   },
   sectionLabel: {
+    fontFamily:    'DMSans-Bold',
     fontSize:      FONT.xs,
-    fontWeight:    '700',
     color:         T.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
   clearAll: {
+    fontFamily: 'DMSans-Bold',
     fontSize:   FONT.xs,
     color:      T.primary,
-    fontWeight: '500',
   },
   historyItem: {
     flexDirection:     'row',
     alignItems:        'center',
     gap:               SPACING.sm,
-    paddingVertical:   rp(11),
+    paddingVertical:   rp(12),
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
   historyText: {
-    flex:     1,
-    fontSize: FONT.sm,
-    color:    T.text,
+    flex:       1,
+    fontFamily: 'DMSans-Regular',
+    fontSize:   FONT.sm,
+    color:      T.text,
   },
   chips: {
     flexDirection: 'row',
@@ -479,26 +583,27 @@ const styles = StyleSheet.create({
     marginTop:     SPACING.sm,
   },
   chip: {
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(8),
+    paddingHorizontal: rp(15),
+    paddingVertical:   rp(9),
     borderRadius:      RADIUS.full,
     backgroundColor:   T.surface,
     borderWidth:       1,
     borderColor:       T.border,
   },
   chipText: {
+    fontFamily: 'DMSans-SemiBold',
     fontSize:   FONT.sm,
     color:      T.text,
-    fontWeight: '500',
   },
 
   // Results
   resultCount: {
+    fontFamily:        'DMSans-Italic',
     fontSize:          FONT.xs,
     color:             T.textSecondary,
     paddingHorizontal: SPACING.md,
+    paddingTop:        rp(12),
     paddingBottom:     rp(8),
-    fontStyle:         'italic',
   },
 
   // States
@@ -508,48 +613,63 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap:            SPACING.sm,
     paddingBottom:  rh(60),
+    paddingHorizontal: SPACING.xl,
   },
   loadingText: {
-    fontSize:  FONT.sm,
-    color:     T.textSecondary,
-    fontStyle: 'italic',
-    marginTop: rp(8),
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+    color:      T.textSecondary,
+    marginTop:  rp(8),
   },
   emptyTitle: {
-    fontSize:   FONT.xl,
-    fontWeight: '700',
-    color:      T.text,
-    marginTop:  SPACING.md,
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(24),
+    color:         T.text,
+    marginTop:     SPACING.md,
+    letterSpacing: 0.2,
   },
   emptyBody: {
-    fontSize: FONT.sm,
-    color:    T.textMuted,
-    textAlign: 'center',
+    fontFamily: 'DMSans-Italic',
+    fontSize:   FONT.sm,
+    color:      T.textMute,
+    textAlign:  'center',
+    marginTop:  rp(4),
   },
 });
 
-// ─── Drop / Circle result row styles ───────────────────────────
+// ─── Circle result row styles ───────────────────────────────────
 const rowStyles = StyleSheet.create({
   wrap: {
     flexDirection:     'row',
     alignItems:        'center',
     gap:               rp(12),
     paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(12),
+    paddingVertical:   rp(13),
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
   iconBox: {
-    width:          rs(40),
-    height:         rs(40),
-    borderRadius:   rs(20),
+    width:          rs(42),
+    height:         rs(42),
+    borderRadius:   rs(21),
     alignItems:     'center',
     justifyContent: 'center',
     overflow:       'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
-  title: { fontSize: FONT.sm, fontWeight: '600', color: T.text },
-  sub:   { fontSize: rf(11), color: T.textMuted, marginTop: rp(2) },
+  title: {
+    fontFamily: 'PlayfairDisplay-Italic',
+    fontSize:   rf(15),
+    color:      T.text,
+    letterSpacing: 0.2,
+  },
+  sub: {
+    fontFamily: 'DMSans-Regular',
+    fontSize:   rf(11),
+    color:      T.textMuted,
+    marginTop:  rp(3),
+    letterSpacing: 0.2,
+  },
   memberChip: { flexDirection: 'row', alignItems: 'center', gap: rp(3) },
-  memberChipText: { fontSize: rf(10), color: T.textMuted },
+  memberChipText: { fontFamily: 'DMSans-Bold', fontSize: rf(10), color: T.textMuted },
 });

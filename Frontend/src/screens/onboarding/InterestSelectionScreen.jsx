@@ -325,11 +325,13 @@ export default function InterestSelectionScreen({ navigation }) {
       }
 
       showToast({ type: 'success', message: 'Saved. Your feed will feel different now.' });
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      } else {
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      }
+      // InterestSelection is only ever reached right after a fresh signup
+      // (SignUpScreen.handleSignUp), sitting on top of AuthNav in the stack.
+      // goBack() would pop back onto AuthNav's cached SignUp screen — the
+      // form the user just submitted — instead of moving forward into the
+      // app, which reads as "signup looping back on itself." Always land
+      // in the main feed instead; there's nowhere else this should go.
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch {
       showToast({ type: 'error', message: 'Something went wrong. Please try again.' });
     } finally {
@@ -340,11 +342,11 @@ export default function InterestSelectionScreen({ navigation }) {
   const handleSkip = useCallback(() => {
     if (step < TOTAL_STEPS - 1) {
       goTo(step + 1);
-    } else if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      return;
     }
+    // Same reasoning as handleFinish above — always forward into the app,
+    // never back into the auth flow.
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   }, [step, goTo, navigation]);
 
   const STEP_META = [
@@ -435,7 +437,7 @@ export default function InterestSelectionScreen({ navigation }) {
                   onPress={() => setShowDisclaimer(true)}
                   hitSlop={HIT_SLOP}
                 >
-                  <Text style={styles.photoLinkText}>Use a real photo instead →</Text>
+                  <Text style={styles.photoLinkText}>Use a real photo instead</Text>
                 </TouchableOpacity>
               )}
 
@@ -542,7 +544,7 @@ export default function InterestSelectionScreen({ navigation }) {
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <Text style={styles.primaryBtnText}>
-              {isLastStep ? "Let's go →" : 'Continue →'}
+              {isLastStep ? "Let's go" : 'Continue'}
             </Text>
           )}
         </TouchableOpacity>

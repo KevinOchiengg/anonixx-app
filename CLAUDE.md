@@ -69,7 +69,7 @@ pytest tests/ -k "test_login" -v
 
 **Key screen groups:**
 - `screens/feed/` — main content feed with anonymous + authenticated posts
-- `screens/drops/` — confession marketplace with vibe scoring
+- `screens/drops/` — confessions (Drops), surfaced inline in the main feed, with vibe scoring
 - `screens/circles/` — audio rooms (Agora-powered live sessions)
 - `screens/connect/` — anonymous profile connections
 - `screens/dating/` — swipe-based matching
@@ -93,6 +93,6 @@ pytest tests/ -k "test_login" -v
 ### Key Cross-Cutting Concerns
 
 - Anonymous vs. authenticated posts are handled at the data model level — posts have an `is_anonymous` flag
-- The "Drops" feature is a confession marketplace: users post anonymous confessions, others can pay coins to reveal the author's identity (vibe score system)
+- The "Drops" feature: users post anonymous confessions (surfaced inline in the main feed, no standalone browse screen), others can pay coins to reveal the author's identity (vibe score system)
 - Circles are Agora-powered audio rooms with scheduled sessions, live participants, and a backend roster
-- Deep links: `anonixx://drop/:dropId` and `anonixx://confession`
+- Deep links: `anonixx://drop/:dropId`

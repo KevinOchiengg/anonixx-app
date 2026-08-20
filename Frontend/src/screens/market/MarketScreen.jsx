@@ -102,7 +102,7 @@ const MarketListCard = React.memo(({ item, onPress }) => {
 
           {isUnlocked ? (
             <View style={styles.unlockedPill}>
-              <Text style={styles.unlockedPillText}>Open →</Text>
+              <Text style={styles.unlockedPillText}>Open</Text>
             </View>
           ) : (
             <View style={styles.pricePill}>

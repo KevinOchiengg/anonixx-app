@@ -7,7 +7,9 @@
  *   Zone 1 — Background (diagonal gradient, grain, ghost quote mark)
  *   Zone 2 — Confession text (Playfair Italic, auto-scaling, accent line)
  *   Zone 3 — Mood tag + optional emotional context
- *   Zone 4 — Identity bar (anonixx + deep link)
+ *   Zone 4 — Identity bar (anonixx + "scan to read") + a corner QR stamp
+ *            that actually deep-links to the drop — the one part of a
+ *            screenshot that still works once it's off-platform.
  *
  * Renders at card aspect (1:1 square) — scales to parent width.
  * Use <DropCardRenderer confession=... theme=... /> anywhere a card is needed.
@@ -15,6 +17,8 @@
 import React, { useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Line } from 'react-native-svg';
+import QRCode from 'react-native-qrcode-svg';
 import { rf, rp, rs } from '../../utils/responsive';
 
 // ─── Themes ───────────────────────────────────────────────────
@@ -62,6 +66,162 @@ export const TIER_2_THEMES = Object.entries(DROP_THEMES)
   .filter(([, t]) => t.tier === 2)
   .map(([id, t]) => ({ id, ...t }));
 
+// ─── Confession types ──────────────────────────────────────────
+// The audience/nature a drop is written for — chosen at compose time
+// (DropsComposeScreen's "Confession Type" picker). Unlike DROP_THEMES
+// (which gates explicit-content tier), a confession type is purely about
+// who the drop is for and what it's asking for — it owns the card's whole
+// visual identity: palette + a distinct background pattern (see
+// CARD_PATTERNS below). When `intent` is passed to DropCardRenderer and
+// matches a key here, it overrides the theme-derived palette entirely;
+// `theme` still governs tier-gating upstream, untouched.
+// Trimmed to the 3 broadest intents + General as the default catch-all —
+// Single Parent / Gay / Lesbian were cut in favor of covering the widest
+// range of "why someone opens the app" (casual / serious / just lonely)
+// rather than specific-audience recognition.
+// Kept in sync with VALID_INTENTS in Backend/app/api/v1/drops.py — same ids.
+export const CARD_INTENTS = {
+  'no-strings': {
+    label: 'Sex for Fun',
+    sub:   'No strings attached',
+    emoji: '🔥',
+    pattern: 'streaks',
+    moodTag: 'reckless',
+    bgFrom: '#0a0000', bgTo: '#2b0505',
+    accent: '#FF1744', accentGlow: 'rgba(255,23,68,0.18)',
+    textColor: '#FFE4E4', ghostColor: 'rgba(255,23,68,0.06)',
+    moodColor: '#C97A7A', identityColor: '#FF1744',
+  },
+   'just-talk': {
+    label: 'Sex for Token',
+    sub:   'Exotic services for token.',
+    emoji: '🪙',
+    pattern: 'ripples',
+    moodTag: 'quiet',
+    bgFrom: '#050e14', bgTo: '#0e2432',
+    accent: '#4FC3E8', accentGlow: 'rgba(79,195,232,0.16)',
+    textColor: '#E3F6FC', ghostColor: 'rgba(79,195,232,0.06)',
+    moodColor: '#7FAAB8', identityColor: '#4FC3E8',
+  },
+  'real-connection': {
+    label: 'Relationship',
+    sub:   'Looking for a real relationship.',
+    emoji: '🌹',
+    pattern: 'constellation',
+    moodTag: 'longing',
+    bgFrom: '#12070c', bgTo: '#2a121b',
+    accent: '#FF6B8A', accentGlow: 'rgba(255,107,138,0.16)',
+    textColor: '#FBE8ED', ghostColor: 'rgba(255,107,138,0.06)',
+    moodColor: '#C98A9B', identityColor: '#FF6B8A',
+  },
+ 
+  'general': {
+    label: 'General',
+    sub:   'Just need to get this off my chest.',
+    emoji: '🌑',
+    pattern: 'none',
+    moodTag: 'unsent',
+    bgFrom: '#14060a', bgTo: '#2a0f18',
+    accent: '#FF3B7A', accentGlow: 'rgba(255,59,122,0.14)',
+    textColor: '#F6E6EC', ghostColor: 'rgba(255,59,122,0.05)',
+    moodColor: '#C48A98', identityColor: '#FF3B7A',
+  },
+};
+
+export const CARD_INTENT_LIST = Object.entries(CARD_INTENTS).map(([id, v]) => ({ id, ...v }));
+
+// ─── Seeded PRNG ────────────────────────────────────────────────
+// mulberry32 — small, fast, deterministic from a numeric seed. Used to
+// place pattern elements so the same confession always renders the same
+// pattern (no flicker/reflow), while different confessions get visibly
+// different layouts within the same intent.
+const mulberry32 = (seed) => {
+  let a = seed;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+// ─── Background patterns ────────────────────────────────────────
+// Each draws behind the confession text at low opacity, stroke-only (no
+// fill) so it reads as texture, not decoration competing with the words.
+// This is the thing a screenshot needs to stop a thumb mid-scroll — every
+// pattern is intent-specific, not a generic wash.
+const CardPattern = React.memo(function CardPattern({ type, width, height, color, seed }) {
+  if (!type || type === 'none') return null;
+  const rand = mulberry32((seed >>> 0) || 1);
+  const els = [];
+
+  if (type === 'streaks') {
+    // Sharp diagonal streaks, urgent energy, uneven rhythm from seed.
+    const n = 7;
+    let x = -width * 0.15;
+    for (let i = 0; i < n; i++) {
+      x += width * (0.1 + rand() * 0.09);
+      const len = height * (0.5 + rand() * 0.5);
+      const skew = width * 0.22;
+      els.push(
+        <Line key={i}
+          x1={x} y1={height} x2={x + skew} y2={height - len}
+          stroke={color} strokeWidth={i % 3 === 0 ? 2.4 : 1.1}
+          opacity={0.16 + (i % 3 === 0 ? 0.16 : 0)} />
+      );
+    }
+  }
+
+  if (type === 'constellation') {
+    // Scattered points connected by thin lines — finding each other.
+    const n = 9;
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      pts.push({ x: rand() * width, y: rand() * height, r: 1.2 + rand() * 1.6 });
+    }
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1 + Math.floor(rand() * 2)) % pts.length];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (dist < width * 0.55) {
+        els.push(
+          <Line key={`l${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+            stroke={color} strokeWidth={0.8} opacity={0.28} />
+        );
+      }
+    }
+    pts.forEach((p, i) => els.push(
+      <Circle key={`p${i}`} cx={p.x} cy={p.y} r={p.r} fill={color} opacity={0.55} />
+    ));
+  }
+
+  if (type === 'ripples') {
+    // Concentric ripples from an off-center source — a voice reaching out.
+    const cx = width * (0.6 + rand() * 0.25);
+    const cy = height * (0.2 + rand() * 0.2);
+    for (let i = 0; i < 6; i++) {
+      const r = width * (0.1 + i * 0.11);
+      els.push(
+        <Circle key={i} cx={cx} cy={cy} r={r}
+          stroke={color} strokeWidth={1} fill="none"
+          opacity={0.34 - i * 0.045} />
+      );
+    }
+  }
+
+  return (
+    <Svg
+      pointerEvents="none"
+      style={StyleSheet.absoluteFillObject}
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+    >
+      {els}
+    </Svg>
+  );
+});
+
 // ─── Card font styles ──────────────────────────────────────────
 // `fontFamily` names map to real loaded assets (see src/config/fonts.js,
 // wired up via useFonts() in App.js) — the fontStyle/fontWeight/
@@ -104,33 +264,6 @@ const getConfessionFontSize = (text, cardWidth) => {
   return Math.round(40 * scale);
 };
 
-// ─── Tease mode ──────────────────────────────────────────────
-// Cuts confession at a tension point — mid-thought, never at a period.
-// Approx 60-70% through the text, preferably after "I", "you", "we", "—".
-const applyTease = (text) => {
-  if (!text || text.length < 40) return { body: text, teased: false };
-  const cutZone = Math.floor(text.length * 0.65);
-  // Find the best cut point near the target — prefer after a dash or pronoun.
-  const windowStart = Math.max(20, cutZone - 25);
-  const windowEnd = Math.min(text.length - 10, cutZone + 25);
-  const candidates = [];
-  for (let i = windowStart; i < windowEnd; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-    // Prefer cutting after a dash or at a pronoun
-    if (ch === '—') candidates.push({ idx: i + 1, score: 10 });
-    else if (ch === ' ' && next && /^[A-Z]/.test(next)) candidates.push({ idx: i, score: 5 });
-    else if (ch === ' ') candidates.push({ idx: i, score: 2 });
-  }
-  if (candidates.length === 0) return { body: text, teased: false };
-  candidates.sort((a, b) => b.score - a.score);
-  const cut = candidates[0].idx;
-  return {
-    body: text.slice(0, cut).trimEnd() + '—',
-    teased: true,
-  };
-};
-
 // ─── Dynamic variation ───────────────────────────────────────
 // Deterministic per-card variation from a seed (drop ID or confession hash).
 // Prevents visual fatigue across the feed without looking random.
@@ -149,8 +282,12 @@ const getVariation = (seed) => {
     textShiftY:       ((s % 40) - 20),           // ±20px
     moodAlign:        (s % 2) === 0 ? 'left' : 'center',
     accentHeight:     0.85 + ((s % 30) / 100),   // 85% to 115%
-    quoteTop:         -((s % 40) + 20),          // vertical position of ghost quote
-    quoteLeft:        -((s % 30) + 10),
+    // Small positive jitter, not negative — the card clips overflow, so a
+    // negative top/left pushed the quote mark's top-left curl past the
+    // card edge and cut it off. Keeping both >= 0 keeps the glyph's
+    // characteristic shape fully visible while still varying its position.
+    quoteTop:         6 + (s % 16),               // 6 to 21
+    quoteLeft:         6 + (s % 12),               // 6 to 17
     rare,
   };
 };
@@ -160,8 +297,12 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   confession      = '',
   moodTag         = 'longing',
   emotionalContext= null,         // "written at 2:14am" | "kept for 3 years"
-  teaseMode       = false,        // forces tease regardless of random
   theme           = 'desire',
+  // Confession type — "no-strings" | "real-connection" | "just-talk" |
+  // "general". When set and recognized,
+  // fully overrides theme's palette + adds the intent's background pattern.
+  // `theme` keeps governing explicit-content tier gating upstream either way.
+  intent          = null,
   mediaUrl        = null,         // image/video background (overlay mode)
   layoutMode      = 'split',      // 'split' | 'overlay' (for image/video drops)
   confessionId    = null,         // deep-link slug
@@ -169,8 +310,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   cardWidth       = 360,          // scales everything proportionally
   showIdentityBar = true,
   // Compose-mode: type directly into the rendered card instead of a
-  // separate input box. Tease-cutting is a reader-facing effect, so it's
-  // suppressed while editable — the writer always sees their own full text.
+  // separate input box.
   editable        = false,
   onChangeText    = null,
   placeholder     = '',
@@ -181,14 +321,14 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   // letter-spacing values are what actually render the difference today.
   fontStyle       = 'classic',
 }) {
-  const t = DROP_THEMES[theme] || DROP_THEMES['desire'];
-  const variation = useMemo(() => getVariation(seed || confession), [seed, confession]);
-  const teaseResult = useMemo(
-    () => (teaseMode && !editable ? applyTease(confession) : { body: confession, teased: false }),
-    [confession, teaseMode, editable]
+  const t = CARD_INTENTS[intent] || DROP_THEMES[theme] || DROP_THEMES['desire'];
+  const patternSeed = useMemo(
+    () => stringSeed((seed || confession || '') + (intent || theme || '')),
+    [seed, confession, intent, theme]
   );
+  const variation = useMemo(() => getVariation(seed || confession), [seed, confession]);
 
-  const fontSize = getConfessionFontSize(teaseResult.body, cardWidth);
+  const fontSize = getConfessionFontSize(confession, cardWidth);
   const identityBarHeight = Math.round(cardWidth * 0.08); // 8% of card
 
   // Overlay mode — media fills the card, text sits on gradient
@@ -215,7 +355,11 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
             </Text>
 
             {/* Confession */}
-            <View style={[styles.overlayTextWrap, { paddingBottom: showIdentityBar ? identityBarHeight + rp(16) : rp(24) }]}>
+            <View style={[styles.overlayTextWrap, {
+              paddingBottom: showIdentityBar
+                ? identityBarHeight + (confessionId ? rp(30) : rp(16))
+                : rp(24),
+            }]}>
               <View style={[styles.accentLine, {
                 backgroundColor: t.accent,
                 opacity: 0.7,
@@ -230,22 +374,22 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
                   textShadowOffset: { width: 0, height: 2 },
                 }]}
               >
-                {teaseResult.body}
+                {confession}
               </Text>
-              {teaseResult.teased && (
-                <Text style={[styles.teaseHint, { color: t.accent }]}>see where this goes →</Text>
-              )}
             </View>
           </LinearGradient>
         </ImageBackground>
 
         {showIdentityBar && (
-          <IdentityBar
-            theme={t}
-            height={identityBarHeight}
-            confessionId={confessionId}
-            overlay
-          />
+          <>
+            <IdentityBar
+              theme={t}
+              height={identityBarHeight}
+              confessionId={confessionId}
+              overlay
+            />
+            <QrStamp theme={t} confessionId={confessionId} cardWidth={cardWidth} />
+          </>
         )}
       </View>
     );
@@ -266,6 +410,17 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
           backgroundColor: t.accentGlow,
           opacity: variation.rare ? 0.18 : 0.10,
         }]}
+      />
+
+      {/* Confession-type background pattern — the thing that makes a
+          screenshot of this card instantly read as "this is about X"
+          before a single word is read. */}
+      <CardPattern
+        type={t.pattern}
+        width={cardWidth}
+        height={cardWidth}
+        color={t.accent}
+        seed={patternSeed}
       />
 
       {/* Ghost quote mark — Playfair, partially cropped */}
@@ -291,8 +446,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
           }]}>
             <ConfessionBlock
               theme={t}
-              text={teaseResult.body}
-              teased={teaseResult.teased}
+              text={confession}
               fontSize={fontSize}
               accentHeight={variation.accentHeight}
               editable={editable}
@@ -324,12 +478,13 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
         // Text-only card
         <View style={[styles.textCardContent, {
           transform: [{ translateY: variation.textShiftY }],
-          paddingBottom: showIdentityBar ? identityBarHeight + rp(16) : rp(24),
+          paddingBottom: showIdentityBar
+            ? identityBarHeight + (confessionId ? rp(30) : rp(16))
+            : rp(24),
         }]}>
           <ConfessionBlock
             theme={t}
-            text={teaseResult.body}
-            teased={teaseResult.teased}
+            text={confession}
             fontSize={fontSize}
             accentHeight={variation.accentHeight}
             editable={editable}
@@ -348,11 +503,14 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
       )}
 
       {showIdentityBar && (
-        <IdentityBar
-          theme={t}
-          height={identityBarHeight}
-          confessionId={confessionId}
-        />
+        <>
+          <IdentityBar
+            theme={t}
+            height={identityBarHeight}
+            confessionId={confessionId}
+          />
+          <QrStamp theme={t} confessionId={confessionId} cardWidth={cardWidth} />
+        </>
       )}
     </LinearGradient>
   );
@@ -360,7 +518,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
 
 // ─── Sub-components ──────────────────────────────────────────
 const ConfessionBlock = React.memo(function ConfessionBlock({
-  theme, text, teased, fontSize, accentHeight,
+  theme, text, fontSize, accentHeight,
   editable, onChangeText, placeholder, maxLength, fontStyle,
 }) {
   const fontDef = CARD_FONT_STYLES[fontStyle] || CARD_FONT_STYLES['classic'];
@@ -397,11 +555,6 @@ const ConfessionBlock = React.memo(function ConfessionBlock({
           />
         ) : (
           <Text style={textStyle}>{text}</Text>
-        )}
-        {teased && (
-          <Text style={[styles.teaseHint, { color: theme.accent }]}>
-            see where this goes →
-          </Text>
         )}
       </View>
     </View>
@@ -451,13 +604,47 @@ const IdentityBar = React.memo(function IdentityBar({ theme, height, confessionI
       }}>
         anonixx
       </Text>
-      <Text style={{
-        fontFamily: 'DMSans-Regular',
-        fontSize:   rf(10),
-        color:      '#9A9AA3',
-      }}>
-        anonixx.app/c/{(confessionId || '••••••').toString().slice(0, 8)}
-      </Text>
+      {confessionId ? (
+        <Text style={{
+          fontFamily:    'DMSans-Italic',
+          fontSize:      rf(10),
+          color:         '#9A9AA3',
+          letterSpacing: 0.2,
+        }}>
+          scan to read →
+        </Text>
+      ) : (
+        <Text style={{
+          fontFamily: 'DMSans-Regular',
+          fontSize:   rf(10),
+          color:      '#5a5f70',
+        }}>
+          not dropped yet
+        </Text>
+      )}
+    </View>
+  );
+});
+
+// ─── QR stamp ──────────────────────────────────────────────────
+// A corner "wax seal" that's actually functional: scan it and it opens
+// this exact drop (https://anonixx.app/drop/:id — the app's real deep-link
+// route, see AppNavigator's linking config). The one part of a screenshot
+// that still works once it's off Anonixx and living on someone's feed.
+// No confessionId yet (compose preview, before the drop is saved) → no
+// working link to encode, so nothing renders.
+const QrStamp = React.memo(function QrStamp({ theme, confessionId, cardWidth }) {
+  if (!confessionId) return null;
+  const size = Math.round(cardWidth * 0.16);
+  const qrSize = size - rp(12);
+  const url = `https://anonixx.app/drop/${confessionId}`;
+  return (
+    <View style={[styles.qrStamp, {
+      width: size,
+      height: size,
+      borderColor: theme.accent + '55',
+    }]}>
+      <QRCode value={url} size={qrSize} color="#0b0f18" backgroundColor="#ffffff" />
     </View>
   );
 });
@@ -515,12 +702,6 @@ const styles = StyleSheet.create({
     margin:         0,
     textAlignVertical: 'top',
   },
-  teaseHint: {
-    fontFamily: 'DMSans-Regular',
-    fontSize:   rf(12),
-    marginTop:  rp(12),
-  },
-
   // Mood block
   moodWrap: {
     marginTop: rp(20),
@@ -537,6 +718,26 @@ const styles = StyleSheet.create({
     justifyContent:    'space-between',
     paddingHorizontal: rp(20),
     borderTopWidth:    1,
+  },
+
+  // QR stamp — a corner "wax seal", overlapping the identity bar so it
+  // reads big enough to actually scan.
+  qrStamp: {
+    position:        'absolute',
+    right:           rp(14),
+    bottom:          rp(10),
+    backgroundColor: '#ffffff',
+    borderRadius:    rs(10),
+    borderWidth:     2,
+    alignItems:      'center',
+    justifyContent:  'center',
+    padding:         rp(5),
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: rs(3) },
+    shadowOpacity:   0.35,
+    shadowRadius:    rs(6),
+    elevation:       6,
+    zIndex:          5,
   },
 
   // Overlay mode

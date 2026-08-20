@@ -24,6 +24,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
+import { POST_TOPICS, MAX_POST_TOPICS } from '../../config/postTopics';
 import T from '../../utils/theme';
 
 // ─── STATIC ──────────────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ export default function CreatePostScreen({ route, navigation }) {
   const [videoDuration,  setVideoDuration]  = useState(null);  // seconds
   const [promptIndex,    setPromptIndex]    = useState(0);
   const [isFocused,      setIsFocused]      = useState(false);
+  const [selectedTopics, setSelectedTopics] = useState([]);
 
   // Poll state
   const [pollEnabled,    setPollEnabled]    = useState(false);
@@ -209,6 +211,14 @@ export default function CreatePostScreen({ route, navigation }) {
       return !prev;
     });
   }, [thumbAnim]);
+
+  const toggleTopic = useCallback((id) => {
+    setSelectedTopics((prev) => {
+      if (prev.includes(id)) return prev.filter((t) => t !== id);
+      if (prev.length >= MAX_POST_TOPICS) return prev;
+      return [...prev, id];
+    });
+  }, []);
 
   const togglePoll = useCallback(() => {
     setPollEnabled(prev => {
@@ -345,7 +355,7 @@ export default function CreatePostScreen({ route, navigation }) {
 
       const postData = {
         content:      content.trim(),
-        topics:       [],
+        topics:       selectedTopics,
         is_anonymous: isAnonymous,
       };
 
@@ -401,7 +411,7 @@ export default function CreatePostScreen({ route, navigation }) {
     }
   }, [
     isAuthenticated, canPost, content, images,
-    videoUri, isAnonymous, pollEnabled, pollQuestion, pollOptions,
+    videoUri, isAnonymous, pollEnabled, pollQuestion, pollOptions, selectedTopics,
     navigation, showToast, dispatch,
   ]);
 
@@ -557,6 +567,39 @@ export default function CreatePostScreen({ route, navigation }) {
                   Poll
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            {/* ── Topic tags (optional) — powers Search's topic filter,
+                so tagging here is what makes that filter actually find
+                anything. Capped at MAX_POST_TOPICS. ─────────────────── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>
+                Tag it {selectedTopics.length > 0 ? `(${selectedTopics.length}/${MAX_POST_TOPICS})` : '(optional)'}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.topicsRow}
+              >
+                {POST_TOPICS.map((t) => {
+                  const active = selectedTopics.includes(t.id);
+                  return (
+                    <TouchableOpacity
+                      key={t.id}
+                      onPress={() => toggleTopic(t.id)}
+                      disabled={loading}
+                      hitSlop={HIT_SLOP}
+                      style={[styles.topicChip, active && styles.topicChipActive]}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.topicEmoji}>{t.emoji}</Text>
+                      <Text style={[styles.topicChipText, active && styles.topicChipTextActive]}>
+                        {t.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* ── Image previews ────────────────────────────────────────── */}
@@ -903,6 +946,29 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: rs(1),
   },
+  topicsRow: {
+    flexDirection: 'row',
+    gap:            rp(8),
+    marginTop:      SPACING.sm,
+  },
+  topicChip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(5),
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(7),
+    borderRadius:      RADIUS.full,
+    backgroundColor:   T.surface,
+    borderWidth:       1,
+    borderColor:       T.border,
+  },
+  topicChipActive: {
+    backgroundColor: T.primaryDim,
+    borderColor:     T.primaryBorder,
+  },
+  topicEmoji:      { fontSize: rf(12) },
+  topicChipText:   { fontSize: FONT.xs, fontWeight: '600', color: T.textSecondary },
+  topicChipTextActive: { color: T.primary },
   videoDurationBadge: {
     fontSize:        rf(11),
     color:           T.textSecondary,

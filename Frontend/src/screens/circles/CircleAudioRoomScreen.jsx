@@ -246,7 +246,7 @@ const HandRaiseRow = React.memo(({ count, onViewRaises }) => {
       <Text style={styles.handRaiseText}>
         {count} {count === 1 ? 'person wants' : 'people want'} to speak
       </Text>
-      <Text style={styles.handRaiseAction}>Approve →</Text>
+      <Text style={styles.handRaiseAction}>Approve</Text>
     </TouchableOpacity>
   );
 });

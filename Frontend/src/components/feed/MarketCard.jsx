@@ -22,7 +22,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Lock, Sparkles } from 'lucide-react-native';
+import { ChevronRight, Lock, Sparkles } from 'lucide-react-native';
 
 import { rf, rp, rs } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
@@ -92,7 +92,7 @@ const MarketCard = React.memo(({ item, onPress }) => {
             <Text style={styles.ctaText}>
               Unlock for {item.price_coins} coins
             </Text>
-            <Text style={styles.arrow}>→</Text>
+            <ChevronRight size={rs(15)} color={THEME.gold} />
           </View>
         </View>
       </View>

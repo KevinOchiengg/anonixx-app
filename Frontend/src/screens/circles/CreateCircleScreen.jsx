@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Camera, Check, ImageIcon } from 'lucide-react-native';
+import { ArrowLeft, Camera, Check, ImageIcon, X } from 'lucide-react-native';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
@@ -28,10 +28,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CLOUDINARY_CLOUD_NAME    = 'dojbdm2e1';
 const CLOUDINARY_UPLOAD_PRESET = 'anonix';
 
-const uploadToCloudinary = async (uri) => {
+const uploadToCloudinary = async (uri, nameHint = 'circle_avatar') => {
   const ext      = uri.split('.').pop() || 'jpg';
   const formData = new FormData();
-  formData.append('file', { uri, type: `image/${ext}`, name: `circle_avatar.${ext}` });
+  formData.append('file', { uri, type: `image/${ext}`, name: `${nameHint}.${ext}` });
   formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
   const res  = await fetch(
     `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
@@ -117,6 +117,7 @@ export default function CreateCircleScreen({ navigation }) {
   const [category,  setCategory]  = useState('');
   const [color,     setColor]     = useState(AURA_COLORS[0]);
   const [avatarUri, setAvatarUri] = useState(null);
+  const [bannerUri, setBannerUri] = useState(null);
   const [joinCost,  setJoinCost]  = useState('');
   const [facebookUrl,  setFacebookUrl]  = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
@@ -164,6 +165,21 @@ export default function CreateCircleScreen({ navigation }) {
     if (!result.canceled) setAvatarUri(result.assets[0].uri);
   }, [showToast]);
 
+  const handlePickBanner = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      showToast({ type: 'warning', message: 'Photo access is needed to set a banner.' });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.8,
+      allowsEditing: true,
+      aspect: [16, 9],
+    });
+    if (!result.canceled) setBannerUri(result.assets[0].uri);
+  }, [showToast]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleColorSelect = useCallback((c) => setColor(c), []);
 
@@ -186,9 +202,13 @@ export default function CreateCircleScreen({ navigation }) {
       const token = await AsyncStorage.getItem('token');
 
       let avatarUrl = null;
-      if (avatarUri) {
-        showToast({ type: 'info', message: 'Uploading avatar…' });
-        avatarUrl = await uploadToCloudinary(avatarUri);
+      let bannerUrl = null;
+      if (avatarUri || bannerUri) {
+        showToast({ type: 'info', message: 'Uploading images…' });
+        [avatarUrl, bannerUrl] = await Promise.all([
+          avatarUri ? uploadToCloudinary(avatarUri, 'circle_avatar') : Promise.resolve(null),
+          bannerUri ? uploadToCloudinary(bannerUri, 'circle_banner') : Promise.resolve(null),
+        ]);
       }
 
       const res = await fetch(`${API_BASE_URL}/api/v1/circles/create`, {
@@ -200,6 +220,7 @@ export default function CreateCircleScreen({ navigation }) {
           category:   category.trim().toLowerCase(),
           aura_color: color,
           avatar_url: avatarUrl,
+          banner_url: bannerUrl,
           join_cost:  parseInt(joinCost, 10) || 0,
           facebook_url:  facebookUrl.trim()  || null,
           instagram_url: instagramUrl.trim() || null,
@@ -218,7 +239,7 @@ export default function CreateCircleScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [name, bio, category, color, avatarUri, joinCost, facebookUrl, instagramUrl, snapchatUrl, navigation, showToast]);
+  }, [name, bio, category, color, avatarUri, bannerUri, joinCost, facebookUrl, instagramUrl, snapchatUrl, navigation, showToast]);
 
   // ──────────────────────────────────────────────────────────────────────────
   return (
@@ -264,6 +285,35 @@ export default function CreateCircleScreen({ navigation }) {
               color={color}
               onAvatarPress={handlePickAvatar}
             />
+
+            {/* ── Banner ── */}
+            <View style={styles.field}>
+              <SectionLabel label="Banner image" />
+              <Text style={styles.fieldHint}>Optional — the wide header shown at the top of your circle's page.</Text>
+              <TouchableOpacity
+                onPress={handlePickBanner}
+                activeOpacity={0.85}
+                style={[styles.bannerPicker, { borderColor: color + '44' }]}
+              >
+                {bannerUri ? (
+                  <>
+                    <Image source={{ uri: bannerUri }} style={styles.bannerImg} />
+                    <TouchableOpacity
+                      onPress={() => setBannerUri(null)}
+                      hitSlop={HIT_SLOP}
+                      style={styles.bannerRemoveBtn}
+                    >
+                      <X size={rs(14)} color="#fff" strokeWidth={2.5} />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <View style={styles.bannerPlaceholder}>
+                    <ImageIcon size={rs(20)} color={color} strokeWidth={1.5} />
+                    <Text style={[styles.bannerPlaceholderText, { color }]}>Add a banner</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
 
             {/* ── Name ── */}
             <View style={styles.field}>
@@ -508,6 +558,28 @@ const styles = StyleSheet.create({
     color:     T.textSecondary,
     marginTop: rp(3),
     fontStyle: 'italic',
+  },
+
+  // Banner
+  bannerPicker: {
+    width: '100%',
+    height: rs(120),
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    backgroundColor: T.inputBg,
+  },
+  bannerImg: { width: '100%', height: '100%' },
+  bannerPlaceholder: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: rp(6),
+  },
+  bannerPlaceholderText: { fontSize: FONT.xs, fontWeight: '700' },
+  bannerRemoveBtn: {
+    position: 'absolute', top: rp(8), right: rp(8),
+    width: rs(26), height: rs(26), borderRadius: rs(13),
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center', justifyContent: 'center',
   },
 
   // Fields

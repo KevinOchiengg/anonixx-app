@@ -327,7 +327,7 @@ export default function OnboardingScreen({ navigation }) {
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <Text style={styles.primaryBtnText}>
-              {isLastStep ? 'Enter Anonixx' : 'Continue →'}
+              {isLastStep ? 'Enter Anonixx' : 'Continue'}
             </Text>
           )}
         </TouchableOpacity>

@@ -36,7 +36,7 @@ def _is_adult(dob: date) -> bool:
 
 
 # ─── Models ───────────────────────────────────────────────────
-WELCOME_BONUS = 15  # Coins awarded to every new user
+WELCOME_BONUS = 90  # Coins awarded to every new user — enough for 3 Link up unlocks (30 each, see PostUnlockScreen.jsx UNLOCK_COST). Runs out after that; top-up required to keep unlocking.
 
 class RegisterRequest(BaseModel):
     email:         EmailStr

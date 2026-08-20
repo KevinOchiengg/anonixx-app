@@ -36,12 +36,37 @@ CONNECTION_CATEGORIES = {"open to connection", "need stability", "carrying this 
 
 # ==================== REQUEST MODELS ====================
 
+# Confession type — the audience/nature a drop is written for. Chosen at
+# compose time (DropsComposeScreen's "Confession Type" picker) and drives the
+# card's whole visual identity (DropCardRenderer.jsx's CARD_INTENTS) — colors
+# and background pattern, not just a label. Kept in sync with CARD_INTENTS
+# there; don't rename an id on one side without the other.
+# Trimmed to the 3 broadest intents + General as the default catch-all —
+# covers the widest range of "why someone opens the app" (casual / serious /
+# just lonely) rather than specific-audience recognition.
 VALID_INTENTS = [
-    "open to connection",   # ready to meet someone
-    "just need to be heard", # wants empathy, not necessarily romance
-    "looking for something real", # serious intent
-    "late night thoughts",  # reflective, no specific need
+    "no-strings",         # casual, no labels, no promises
+    "real-connection",    # tired of games, wants something real
+    "just-talk",          # no romance pressure, just wants company
+    "general",            # no specific audience — default
 ]
+
+# Display labels — mirrors CARD_INTENTS' `label` field in
+# DropCardRenderer.jsx exactly. Used to let a typed search query like
+# "sex for fun" resolve to the same drops as tapping that filter chip
+# (see get_marketplace's `q` handling below), not just the chip itself.
+INTENT_LABELS = {
+    "no-strings":      "Sex for Fun",
+    "just-talk":       "Sex for Token",
+    "real-connection": "Relationship",
+    "general":         "General",
+}
+
+# Intents that belong in the "Open to Connect" marketplace section — genuine
+# relationship-seeking ones. Excludes "no-strings" (casual, not relationship-
+# seeking), "just-talk" (companionship, not dating) and "general" (no stated
+# audience).
+CONNECTION_INTENTS = {"real-connection"}
 
 class DropPollInput(BaseModel):
     question: str
@@ -65,7 +90,6 @@ class CreateDropRequest(BaseModel):
     # Drop spec upgrade fields
     theme: Optional[str] = None                  # "desire", "after-dark", "midnight-sin"
     mood_tag: Optional[str] = None               # "longing", "restless", …
-    tease_mode: Optional[bool] = False           # cut confession mid-thought
     intensity: Optional[str] = None              # "soft" | "heavy" | "devastating"
     recognition_hint: Optional[str] = None       # one word, directed drops only
     # Share anonymously on Anonixx social. Tri-state: None/omitted = default
@@ -79,8 +103,14 @@ class CreateDropRequest(BaseModel):
     ai_refined:      Optional[bool] = False
     ai_refined_mode: Optional[str]  = None      # "holding_back" | "distill" | "find_words"
 
-    # Feed-as-drops upgrade
-    location:   Optional[str] = None            # freeform "Nairobi, Kenya" style hint
+    # Feed-as-drops upgrade — structured location, most-specific to least.
+    # Only country + county are backed by a real fixed list client-side
+    # (Kenya's 47 counties); sub_county/estate are freeform text everywhere
+    # since no reliable exhaustive dataset exists for either.
+    location_country:    Optional[str] = None   # e.g. "Kenya"
+    location_county:     Optional[str] = None   # e.g. "Nairobi" (or state/region for non-Kenya)
+    location_sub_county: Optional[str] = None   # e.g. "Westlands"
+    location_estate:     Optional[str] = None   # e.g. "Kilimani"
     poll:       Optional[DropPollInput] = None   # optional attached poll
     font_style: Optional[str] = None             # "classic" | "sultry-script" | "bold-tease"
 
@@ -153,7 +183,25 @@ VALID_INTENSITIES = {"soft", "heavy", "devastating"}
 # already ships (PlayfairDisplay / DMSans), not new font assets.
 FONT_STYLES = {"classic", "sultry-script", "bold-tease"}
 
-MAX_LOCATION_LEN = 80
+MAX_LOCATION_PART_LEN = 60
+
+
+def _build_location(country, county, sub_county, estate):
+    """Turns the 4 structured location inputs into (structured dict, display
+    string) — most-specific to least, e.g. "Kilimani, Westlands, Nairobi,
+    Kenya". Returns (None, None) if every part is empty."""
+    parts = {
+        "country":    (country or "").strip()[:MAX_LOCATION_PART_LEN] or None,
+        "county":     (county or "").strip()[:MAX_LOCATION_PART_LEN] or None,
+        "sub_county": (sub_county or "").strip()[:MAX_LOCATION_PART_LEN] or None,
+        "estate":     (estate or "").strip()[:MAX_LOCATION_PART_LEN] or None,
+    }
+    if not any(parts.values()):
+        return None, None
+    display = ", ".join(
+        v for v in [parts["estate"], parts["sub_county"], parts["county"], parts["country"]] if v
+    )
+    return parts, display
 
 # Section 8 — six text reactions. Anything else is rejected.
 VALID_REACTIONS = {
@@ -178,6 +226,18 @@ VALID_REPORT_REASONS = {
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _is_premium_active(user: dict) -> bool:
+    """True while a purchased plan is still running — see api/v1/premium.py.
+    `premium_active` is a legacy field some older accounts may still carry;
+    `is_premium` alone (no premium_until) is treated as never-expiring."""
+    if not user.get("is_premium") and not user.get("premium_active"):
+        return False
+    until = user.get("premium_until")
+    if not until:
+        return True
+    return _ensure_aware(until) > now_utc()
 
 
 def _ensure_aware(dt: datetime) -> datetime:
@@ -418,8 +478,9 @@ async def create_drop(
     if data.media_url and data.media_type not in ("image", "video", "voice"):
         raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'voice'")
 
-    if data.location and len(data.location) > MAX_LOCATION_LEN:
-        raise HTTPException(status_code=400, detail=f"Location must be {MAX_LOCATION_LEN} characters or less")
+    location_detail, location_display = _build_location(
+        data.location_country, data.location_county, data.location_sub_county, data.location_estate,
+    )
 
     font_style = (data.font_style or "classic").strip()
     if font_style not in FONT_STYLES:
@@ -496,7 +557,7 @@ async def create_drop(
     publisher_opt_in = (data.publisher_opt_in is not False) and not is_tier2
 
     # ── Daily drop limit (section 14) ───────────────────────────
-    is_premium = bool(user.get("is_premium") or user.get("premium_active"))
+    is_premium = _is_premium_active(user)
     if not is_premium:
         start_of_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
         drops_today = await db["drops"].count_documents({
@@ -537,7 +598,6 @@ async def create_drop(
         # ── Drop spec upgrade fields ──────────────────────────
         "theme": theme,
         "mood_tag": mood_tag,
-        "tease_mode": bool(data.tease_mode),
         "intensity": intensity,
         "recognition_hint": recognition_hint,
         "publisher_opt_in": publisher_opt_in,
@@ -557,12 +617,45 @@ async def create_drop(
         "ai_refined_mode": data.ai_refined_mode or None,
 
         # Feed-as-drops upgrade
-        "location":   data.location.strip() if data.location else None,
+        "location":        location_display,   # joined display string, e.g. "Kilimani, Westlands, Nairobi, Kenya"
+        "location_detail": location_detail,    # {country, county, sub_county, estate} — used for filtering
         "poll":       poll_data,
         "font_style": font_style,
     }
 
     await db["drops"].insert_one(drop)
+
+    # ── Mirror into the main feed as a genuine post ──────────────
+    # Drops surface inline in the main feed — but as an ordinary confession
+    # post (real likes/saves/comments via the Posts API), not the separate
+    # drop-card treatment with its own paywall/expiry/reactions. Tier-2
+    # (After Dark) drops are never published anywhere, so they're excluded
+    # here too, same as social publishing above.
+    if not is_tier2:
+        mirrored_poll = None
+        if poll_data:
+            mirrored_poll = {
+                **poll_data,
+                "ends_at": drop["expires_at"].isoformat() if drop.get("expires_at") else None,
+            }
+        await db["posts"].insert_one({
+            "_id": ObjectId(),
+            "user_id": current_user_id,
+            "content": drop["confession"],
+            "is_anonymous": True,
+            "anonymous_name": drop["sender_anonymous_name"],
+            "topics": [],
+            "images": [drop["media_url"]] if drop["media_url"] and drop["media_type"] == "image" else [],
+            "video_url": drop["media_url"] if drop["media_type"] == "video" else None,
+            "audio_url": drop["media_url"] if drop["media_type"] == "voice" else None,
+            "poll": mirrored_poll,
+            "thread_count": 0,
+            "views_count": 0,
+            "saves_count": 0,
+            "liked_by": [],
+            "likes_count": 0,
+            "created_at": drop["created_at"],
+        })
 
     # ── Auto-queue for Anonixx social publishing ────────────────
     # Eligible drops (Tier-1, not privately targeted, not already flagged,
@@ -653,11 +746,8 @@ async def create_drop(
 
     drop_id = str(drop["_id"])
 
-    preview = data.confession.strip() if data.confession else ("📷 image drop" if data.media_type == "image" else "🎥 video drop")
     return {
         "id": drop_id,
-        "share_link": f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open",
-        "share_text": f"{preview}\n\n— unlock to connect 👀\n{settings.BASE_URL}/api/v1/drops/{drop_id}/open",
         "expires_at": drop["expires_at"].isoformat(),
         "time_left": get_time_left(drop["expires_at"]),
         "is_night_mode": night,
@@ -705,234 +795,6 @@ async def _update_confession_streak(user_id: str, db):
             {"user_id": user_id},
             {"$set": {"streak": 1, "last_confession": today}}
         )
-
-
-# ==================== SHARE — WHATSAPP ====================
-# Anonymous relay: sends from Anonixx's own WhatsApp number so the
-# recipient never sees the sharer's real number. Guardrails are mandatory,
-# not optional — this exact mechanism is also how anonymous harassment
-# happens, so every send is rate-limited per (sender, recipient) pair and
-# checked against an opt-out list first.
-
-PHONE_RE = re.compile(r"^\+[1-9]\d{7,14}$")  # E.164
-WHATSAPP_SHARE_COOLDOWN_HOURS = 24
-
-
-class WhatsAppShareRequest(BaseModel):
-    phone_number: str
-
-
-@router.post("/{drop_id}/share/whatsapp")
-async def share_drop_whatsapp(
-    drop_id: str,
-    data: WhatsAppShareRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    from app.services.whatsapp_sender import whatsapp_sender
-
-    phone = data.phone_number.strip()
-    if not PHONE_RE.match(phone):
-        raise HTTPException(status_code=400, detail="Enter a valid phone number in international format, e.g. +254712345678.")
-
-    if not whatsapp_sender.is_configured():
-        raise HTTPException(status_code=503, detail="WhatsApp sharing isn't set up yet.")
-
-    if await db["whatsapp_optouts"].find_one({"phone_number": phone}):
-        raise HTTPException(status_code=403, detail="This number has opted out of Anonixx WhatsApp messages.")
-
-    cutoff = now_utc() - timedelta(hours=WHATSAPP_SHARE_COOLDOWN_HOURS)
-    recent = await db["whatsapp_shares"].find_one({
-        "sender_id": current_user_id,
-        "phone_number": phone,
-        "created_at": {"$gte": cutoff},
-    })
-    if recent:
-        raise HTTPException(status_code=429, detail="You already sent something to this number recently. Try again later.")
-
-    try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except Exception:
-        raise HTTPException(status_code=404, detail="Drop not found.")
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found.")
-
-    preview = (drop.get("confession") or "a confession").strip()
-    if len(preview) > 100:
-        preview = preview[:100] + "…"
-    link = f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open"
-
-    try:
-        await whatsapp_sender.send_drop_share(phone, preview, link)
-    except Exception:
-        raise HTTPException(status_code=502, detail="Could not send. Try again shortly.")
-
-    await db["whatsapp_shares"].insert_one({
-        "_id": ObjectId(),
-        "sender_id": current_user_id,
-        "drop_id": drop_id,
-        "phone_number": phone,
-        "created_at": now_utc(),
-    })
-
-    return {"sent": True, "message": "Sent. They'll see it's from Anonixx, not you."}
-
-
-@router.post("/whatsapp/opt-out")
-async def whatsapp_opt_out(data: WhatsAppShareRequest, db = Depends(get_database)):
-    """
-    Marks a number as opted out of future Anonixx WhatsApp sends.
-    TODO: wire this to a real Meta webhook (inbound "STOP" replies) before
-    launch — right now it only fires if something calls it directly.
-    """
-    phone = data.phone_number.strip()
-    if not PHONE_RE.match(phone):
-        raise HTTPException(status_code=400, detail="Invalid phone number.")
-    await db["whatsapp_optouts"].update_one(
-        {"phone_number": phone},
-        {"$setOnInsert": {"phone_number": phone, "created_at": now_utc()}},
-        upsert=True,
-    )
-    return {"opted_out": True}
-
-
-# ==================== MARKETPLACE ====================
-
-@router.get("/marketplace")
-async def get_marketplace(
-    category: Optional[str] = Query(None),
-    is_group: Optional[bool] = Query(None),
-    night_only: Optional[bool] = Query(False),
-    location: Optional[str] = Query(None),
-    q: Optional[str] = Query(None, description="Search by confession text"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, le=50),
-    current_user_id: Optional[str] = Depends(get_optional_user_id),
-    db = Depends(get_database)
-):
-    """Browse active confession cards."""
-    # All drops with is_marketplace: True are public.
-    # Drops with target_user_id set are ALSO in the marketplace —
-    # target_user_id only means "deliver to this person's inbox too."
-    # Legacy drops (before is_marketplace field existed) that have
-    # target_user_id: None are also included via the $or.
-    query = {
-        "is_active": True,
-        "expires_at": {"$gt": now_utc()},
-        "$or": [
-            {"is_marketplace": True},
-            {"target_user_id": None},   # backward compat for older drops
-        ],
-        # Hide flagged/hidden content from the public feed (section 19).
-        "moderation_status": {"$nin": ["flagged", "hidden"]},
-    }
-
-    if category and category in CATEGORIES:
-        query["category"] = category
-    if is_group is not None:
-        query["is_group"] = is_group
-    if night_only:
-        query["is_night_mode"] = True
-    if location and location.strip():
-        query["location"] = {"$regex": re.escape(location.strip()), "$options": "i"}
-    if q and q.strip():
-        query["confession"] = {"$regex": re.escape(q.strip()), "$options": "i"}
-
-    # Hide drops from anyone the current user has blocked.
-    if current_user_id:
-        viewer = await db["users"].find_one(
-            {"_id": ObjectId(current_user_id)}, {"blocked_user_ids": 1},
-        )
-        blocked_ids = viewer.get("blocked_user_ids", []) if viewer else []
-        if blocked_ids:
-            query["sender_id"] = {"$nin": blocked_ids}
-
-    total = await db["drops"].count_documents(query)
-
-    cursor = db["drops"].find(query).sort("created_at", -1).skip(skip).limit(limit)
-    drops = []
-
-    async for drop in cursor:
-        drop_id = str(drop["_id"])
-
-        # Check if current user already unlocked
-        already_unlocked = False
-        if current_user_id:
-            unlock = await db["drop_unlocks"].find_one({
-                "drop_id": drop_id,
-                "unlocker_id": current_user_id
-            })
-            already_unlocked = unlock is not None
-
-        poll_out = None
-        raw_poll = drop.get("poll")
-        if raw_poll:
-            voted_option = None
-            if current_user_id:
-                vote = await db["drop_poll_votes"].find_one({
-                    "drop_id": drop_id, "user_id": current_user_id,
-                })
-                voted_option = vote["option_index"] if vote else None
-            total = raw_poll.get("total_votes", 0)
-            options_out = [
-                {
-                    "text": o["text"],
-                    "votes": o.get("votes", 0) if voted_option is not None else None,
-                    "percent": round(o.get("votes", 0) / total * 100) if total > 0 and voted_option is not None else None,
-                }
-                for o in raw_poll.get("options", [])
-            ]
-            poll_out = {
-                "question": raw_poll["question"],
-                "options": options_out,
-                "total_votes": total,
-                "voted_option": voted_option,
-            }
-
-        drops.append({
-            "id": drop_id,
-            "confession": drop.get("confession"),
-            "media_url": drop.get("media_url"),
-            "media_type": drop.get("media_type"),
-            "card_image_url": drop.get("card_image_url"),
-            "category": drop["category"],
-            "is_group": drop["is_group"],
-            "group_size": drop.get("group_size"),
-            "price": drop["price"],
-            "is_night_mode": drop.get("is_night_mode", False),
-            "unlock_count": drop.get("unlock_count", 0),
-            "admirer_count": drop.get("admirer_count", 0),
-            "reactions": drop.get("reactions", [])[-5:],
-            "time_left": get_time_left(drop["expires_at"]),
-            "time_ago": get_time_ago(drop["created_at"]),
-            "created_at": drop["created_at"].isoformat() if drop.get("created_at") else None,
-            "already_unlocked": already_unlocked,
-            "intent": drop.get("intent"),
-
-            # ── Drop spec upgrade surface ────────────────────
-            "theme":       drop.get("theme", "desire"),
-            "mood_tag":    drop.get("mood_tag"),
-            "tease_mode":  bool(drop.get("tease_mode")),
-            "intensity":   drop.get("intensity"),
-            "tier":        drop.get("tier", 1),
-            "duration_seconds": drop.get("duration_seconds"),
-            "waveform_data":    drop.get("waveform_data"),
-            # Inspired-by attribution
-            "inspired_by_post_id": drop.get("inspired_by_post_id"),
-            # AI refinement disclosure
-            "ai_refined":          bool(drop.get("ai_refined", False)),
-
-            # ── Feed-as-drops upgrade ─────────────────────────
-            "location":   drop.get("location"),
-            "font_style": drop.get("font_style", "classic"),
-            "poll":       poll_out,
-        })
-
-    return {
-        "drops": drops,
-        "total": total,
-        "has_more": skip + limit < total,
-    }
 
 
 @router.post("/{drop_id}/vote")
@@ -1124,219 +986,6 @@ async def get_inspired_drops(
     }
 
 
-# ==================== OPEN TO CONNECT SECTION ====================
-
-@router.get("/marketplace/open-to-connect")
-async def get_open_to_connect(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, le=20),
-    current_user_id: Optional[str] = Depends(get_optional_user_id),
-    db = Depends(get_database)
-):
-    """
-    Dedicated section for drops from people open to real connection.
-    Surfaces drops with connection-oriented categories or explicit intent.
-    """
-    query = {
-        "is_active": True,
-        "expires_at": {"$gt": now_utc()},
-        "target_user_id": None,
-        "$or": [
-            {"category": {"$in": list(CONNECTION_CATEGORIES)}},
-            {"intent": {"$in": VALID_INTENTS[:3]}},  # open to connection, need to be heard, looking for something real
-        ]
-    }
-    if current_user_id:
-        query["sender_id"] = {"$ne": current_user_id}
-
-    drops = []
-    async for drop in db["drops"].find(query).sort("created_at", -1).skip(skip).limit(limit):
-        drop_id = str(drop["_id"])
-        already_unlocked = False
-        if current_user_id:
-            unlock = await db["drop_unlocks"].find_one({"drop_id": drop_id, "unlocker_id": current_user_id})
-            already_unlocked = unlock is not None
-        drops.append({
-            "id":             drop_id,
-            "confession":     drop.get("confession"),
-            "media_url":      drop.get("media_url"),
-            "media_type":     drop.get("media_type"),
-            "card_image_url": drop.get("card_image_url"),
-            "category":       drop["category"],
-            "intent":         drop.get("intent"),
-            "price":          drop["price"],
-            "is_night_mode":  drop.get("is_night_mode", False),
-            "unlock_count":   drop.get("unlock_count", 0),
-            "reactions":      drop.get("reactions", [])[-5:],
-            "time_left":      get_time_left(drop["expires_at"]),
-            "time_ago":       get_time_ago(drop["created_at"]),
-            "already_unlocked": already_unlocked,
-        })
-
-    return {"drops": drops, "has_more": len(drops) == limit}
-
-
-# ==================== DROP LANDING (deep link) ====================
-
-@router.get("/{drop_id}/landing")
-async def get_drop_landing(
-    drop_id: str,
-    current_user_id: Optional[str] = Depends(get_optional_user_id),
-    db = Depends(get_database)
-):
-    """
-    Called when someone taps a shared card link.
-    Returns the drop info for the landing screen.
-    """
-    try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    is_expired = _ensure_aware(drop["expires_at"]) < now_utc() or not drop.get("is_active", True)
-
-    # Track admirer (anonymous view)
-    if current_user_id and current_user_id != drop["sender_id"]:
-        existing = await db["admirer_logs"].find_one({
-            "drop_id": drop_id,
-            "viewer_id": current_user_id
-        })
-        if not existing:
-            await db["admirer_logs"].insert_one({
-                "drop_id": drop_id,
-                "drop_sender_id": drop["sender_id"],
-                "viewer_id": current_user_id,
-                "viewed_at": now_utc()
-            })
-            await db["drops"].update_one(
-                {"_id": ObjectId(drop_id)},
-                {"$inc": {"admirer_count": 1}}
-            )
-            # Notify sender
-            admirer_count = drop.get("admirer_count", 0) + 1
-            if admirer_count in [3, 5, 10, 25, 50]:
-                await send_push_notification(
-                    drop["sender_id"],
-                    f"{admirer_count} people are curious 👀",
-                    "Your confession card is getting attention.",
-                    db
-                )
-            await update_vibe_score(drop["sender_id"], "reaction_received", db)
-
-    # Stamp read_at for the targeted recipient the first time they open
-    # the landing. Idempotent: $setOnInsert preserves the original timestamp
-    # so the unread pulse in DropsInboxScreen.ReceivedDropItem quiets once
-    # and stays quiet even if they re-open later.
-    if (
-        current_user_id
-        and drop.get("target_user_id")
-        and current_user_id == drop.get("target_user_id")
-        and current_user_id != drop["sender_id"]
-    ):
-        await db["drop_inbox_reads"].update_one(
-            {"drop_id": drop_id, "viewer_id": current_user_id},
-            {"$setOnInsert": {
-                "drop_id":   drop_id,
-                "viewer_id": current_user_id,
-                "sender_id": drop["sender_id"],
-                "read_at":   now_utc(),
-            }},
-            upsert=True,
-        )
-
-    # Check if already unlocked
-    already_unlocked = False
-    if current_user_id:
-        unlock = await db["drop_unlocks"].find_one({
-            "drop_id": drop_id,
-            "unlocker_id": current_user_id
-        })
-        already_unlocked = unlock is not None
-
-    # Is the viewer the author of the post that inspired this drop?
-    # If so, they get a free unlock — surface this so the frontend can
-    # show "Connect free" instead of the payment options.
-    is_origin_author = False
-    if current_user_id and not already_unlocked and not (current_user_id == drop.get("sender_id")):
-        origin_post_id = drop.get("inspired_by_post_id")
-        if origin_post_id:
-            try:
-                origin_post = await db["posts"].find_one({"_id": ObjectId(origin_post_id)})
-                if origin_post and origin_post.get("user_id") == current_user_id:
-                    is_origin_author = True
-            except Exception:
-                pass
-
-    # What reaction (if any) has the viewer already sent? (section 8)
-    user_reaction = None
-    if current_user_id:
-        my_react = await db["drop_reactions"].find_one({
-            "drop_id": drop_id,
-            "reactor_id": current_user_id,
-        })
-        if my_react and my_react.get("reaction") in VALID_REACTIONS:
-            user_reaction = my_react["reaction"]
-
-    # Concurrent readers — "N are looking too" presence (section 12).
-    # Count distinct viewers who looked in the last 5 minutes.
-    five_min_ago = now_utc() - timedelta(minutes=5)
-    readers_now = await db["admirer_logs"].count_documents({
-        "drop_id":   drop_id,
-        "viewed_at": {"$gte": five_min_ago},
-    })
-    # Subtract the current viewer from "others looking too" count.
-    if current_user_id:
-        readers_now = max(0, readers_now - 1)
-
-    return {
-        "id":               drop_id,
-        "confession":       drop.get("confession"),
-        "media_url":        drop.get("media_url"),
-        "media_type":       drop.get("media_type"),
-        "category":         drop["category"],
-        "is_group":         drop["is_group"],
-        "group_size":       drop.get("group_size"),
-        "price":            drop["price"],
-        "is_night_mode":    drop.get("is_night_mode", False),
-        "is_expired":       is_expired,
-        "time_left":        get_time_left(drop["expires_at"]) if not is_expired else "expired",
-        "unlock_count":     drop.get("unlock_count", 0),
-        "admirer_count":    drop.get("admirer_count", 0),
-        "reactions":        drop.get("reactions", []),
-        "reaction_counts":  drop.get("reaction_counts", {r: 0 for r in VALID_REACTIONS}),
-        "user_reaction":    user_reaction,
-        "readers_now":      readers_now,
-        "already_unlocked":    already_unlocked,
-        "is_own_drop":         current_user_id == drop["sender_id"] if current_user_id else False,
-        "is_origin_author":    is_origin_author,
-        "origin_unlock_cost":  ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author else None,
-        "inspired_by_post_id": drop.get("inspired_by_post_id"),
-        "time_ago":         get_time_ago(drop["created_at"]),
-        "created_at":       drop["created_at"].isoformat() if drop.get("created_at") else None,
-
-        # ── Drop spec upgrade surface ────────────────────────
-        "theme":             drop.get("theme", "desire"),
-        "mood_tag":          drop.get("mood_tag"),
-        "tease_mode":        bool(drop.get("tease_mode")),
-        "intensity":         drop.get("intensity"),
-        # Hint is only shown to the target, never to random marketplace viewers.
-        "recognition_hint":  drop.get("recognition_hint") if (
-            not drop.get("target_user_id")
-            or current_user_id == drop.get("target_user_id")
-        ) else None,
-        "tier":              drop.get("tier", 1),
-        "published_at":      drop["published_at"].isoformat() if drop.get("published_at") else None,
-        "duration_seconds":  drop.get("duration_seconds"),
-        "waveform_data":     drop.get("waveform_data"),
-        "moderation_status": drop.get("moderation_status", "visible"),
-        "location":          drop.get("location"),
-        "font_style":        drop.get("font_style", "classic"),
-    }
-
-
 # ==================== CARD IMAGE ====================
 
 @router.patch("/{drop_id}/card-image")
@@ -1356,282 +1005,6 @@ async def set_card_image(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Drop not found or not yours")
     return {"ok": True}
-
-
-# ==================== OPEN / DEEP LINK REDIRECT ====================
-
-@router.get("/{drop_id}/open", response_class=HTMLResponse)
-async def open_drop_redirect(drop_id: str, db = Depends(get_database)):
-    """
-    HTTPS redirect page shared to social platforms.
-    When tapped, browser opens and immediately redirects to the deep link.
-    Messaging apps (WhatsApp, iMessage, Telegram) render https:// as tappable links.
-    """
-    deep_link     = f"anonixx://drop/{drop_id}"
-    store_ios     = "https://apps.apple.com/app/anonixx"
-    store_android = "https://play.google.com/store/apps/details?id=com.anonixx.app"
-    # Android Intent URL — prevents "Couldn't reach the server" error in Chrome
-    # Falls back to Play Store if app not installed
-    from urllib.parse import quote
-    fallback      = quote(store_android, safe='')
-    android_intent = f"intent://drop/{drop_id}#Intent;scheme=anonixx;package=com.anonixx.app;S.browser_fallback_url={fallback};end"
-
-    # Pull drop data for og tags
-    card_image_url = ""
-    og_title       = "Someone dropped an anonymous confession"
-    og_description = "Open Anonixx to see what they couldn't say out loud."
-
-    if ObjectId.is_valid(drop_id):
-        drop_doc = await db["drops"].find_one(
-            {"_id": ObjectId(drop_id)},
-            {"card_image_url": 1, "confession": 1, "media_type": 1},
-        )
-        if drop_doc:
-            card_image_url = drop_doc.get("card_image_url") or ""
-            confession     = drop_doc.get("confession") or ""
-            media_type     = drop_doc.get("media_type") or ""
-            if confession:
-                # truncate to 100 chars for og:description
-                snippet        = confession[:100] + ("…" if len(confession) > 100 else "")
-                og_description = f'"{snippet}"'
-            elif media_type == "image":
-                og_description = "An anonymous image drop. Tap to see it."
-            elif media_type == "video":
-                og_description = "An anonymous video drop. Tap to see it."
-
-    open_url = f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open"
-
-    if card_image_url:
-        img_type = "video/mp4" if card_image_url.endswith(".mp4") else "image/jpeg"
-        og_image_tags = f"""  <meta property="og:image"        content="{card_image_url}">
-  <meta property="og:image:secure_url" content="{card_image_url}">
-  <meta property="og:image:type"   content="{img_type}">
-  <meta property="og:image:width"  content="1200">
-  <meta property="og:image:height" content="630">
-  <meta name="twitter:card"        content="summary_large_image">
-  <meta name="twitter:image"       content="{card_image_url}">"""
-    else:
-        og_image_tags = ""
-
-    # Build confession/media content block
-    if confession:
-        content_block = f'<p class="confession">{confession}</p>'
-    elif card_image_url:
-        content_block = f'<img src="{card_image_url}" alt="Drop" class="drop-media">'
-    else:
-        content_block = '<p class="confession" style="color:rgba(255,255,255,0.2);font-style:italic;">something anonymous…</p>'
-
-    # Short domain for the link row baked into card
-    open_domain = open_url.replace("https://", "").replace("http://", "")
-
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta property="og:type"        content="website">
-  <meta property="og:url"         content="{open_url}">
-  <meta property="og:site_name"   content="Anonixx">
-  <meta property="og:title"       content="{og_title}">
-  <meta property="og:description" content="{og_description}">
-  <meta name="description"        content="{og_description}">
-  <meta name="twitter:title"      content="{og_title}">
-  <meta name="twitter:description" content="{og_description}">
-{og_image_tags}
-  <title>{og_title} · Anonixx</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital@0;1&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-    body {{
-      background: #0b0f18; color: #EAEAF0;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      min-height: 100vh; padding: 24px;
-    }}
-
-    /* ── The card — matches TextCard in ShareCardScreen.jsx ── */
-    .card {{
-      position: relative; overflow: hidden;
-      background: linear-gradient(135deg, #12151f 0%, #0c0f18 55%, #111420 100%);
-      border-radius: 18px;
-      border: 1px solid rgba(255,255,255,0.04);
-      padding: 32px 28px 28px;
-      max-width: 420px; width: 100%;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.85);
-    }}
-
-    /* Ghost " — background texture */
-    .ghost-quote {{
-      position: absolute; top: -28px; left: 10px;
-      font-family: 'Playfair Display', Georgia, serif;
-      font-size: 200px; line-height: 200px;
-      color: rgba(255,255,255,0.03);
-      pointer-events: none; user-select: none;
-    }}
-
-    /* "someone said this" label */
-    .secret-tag {{
-      font-size: 10px; color: rgba(255,99,74,0.60);
-      letter-spacing: 2.5px; text-transform: uppercase;
-      font-style: italic; margin-bottom: 14px;
-      font-family: 'DM Sans', sans-serif;
-    }}
-
-    /* Short red accent line */
-    .accent-line {{
-      width: 36px; height: 1.5px;
-      background: #FF634A; opacity: 0.7;
-      margin-bottom: 22px;
-    }}
-
-    /* Confession text */
-    .confession {{
-      font-family: 'Playfair Display', Georgia, serif;
-      font-size: 22px; font-style: italic;
-      color: #E8E8EE; line-height: 1.72;
-      letter-spacing: 0.3px; margin-bottom: 28px;
-    }}
-
-    /* Media drop */
-    .drop-media {{
-      width: 100%; border-radius: 10px;
-      display: block; margin-bottom: 28px;
-    }}
-
-    /* Tension break — right-leaning partial line */
-    .tension-line {{
-      width: 62%; height: 1px;
-      background: rgba(255,255,255,0.08);
-      margin-left: auto; margin-bottom: 18px;
-    }}
-
-    /* Footer row */
-    .footer-row {{
-      display: flex; justify-content: space-between;
-      align-items: center; margin-bottom: 22px;
-    }}
-    .anon-tag {{
-      font-family: 'Playfair Display', Georgia, serif;
-      font-size: 11px; font-style: italic;
-      color: rgba(255,255,255,0.38); letter-spacing: 0.5px;
-    }}
-
-    /* Brand signature */
-    .brand-sig {{
-      font-size: 10px; color: rgba(255,255,255,0.20);
-      letter-spacing: 5px; font-style: italic;
-      text-align: right; margin-bottom: 14px;
-      font-family: 'DM Sans', sans-serif;
-    }}
-
-    /* Link row baked into card */
-    .link-row {{
-      display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
-    }}
-    .link-dot {{
-      width: 5px; height: 5px; border-radius: 50%;
-      background: rgba(255,99,74,0.55); flex-shrink: 0;
-    }}
-    .link-text {{
-      font-size: 9px; color: rgba(255,99,74,0.65);
-      letter-spacing: 0.4px; font-style: italic;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      font-family: 'DM Sans', sans-serif;
-    }}
-
-    /* ── Below-card actions ── */
-    .actions {{
-      max-width: 420px; width: 100%; margin-top: 20px;
-    }}
-    .status {{
-      font-size: 13px; color: rgba(255,255,255,0.35);
-      text-align: center; font-style: italic;
-      margin-bottom: 0; font-family: 'DM Sans', sans-serif;
-    }}
-    .btn {{
-      display: block; background: #FF634A; color: #fff;
-      padding: 15px 24px; border-radius: 12px; text-align: center;
-      text-decoration: none; font-weight: 700; font-size: 15px;
-      margin-bottom: 10px; letter-spacing: 0.3px; cursor: pointer;
-      border: none; width: 100%;
-      font-family: 'DM Sans', sans-serif;
-      box-shadow: 0 4px 20px rgba(255,99,74,0.35);
-    }}
-    .btn-ghost {{
-      display: block; color: rgba(255,255,255,0.35);
-      padding: 12px 24px; border-radius: 12px; text-align: center;
-      text-decoration: none; font-size: 13px;
-      border: 1px solid rgba(255,255,255,0.08);
-      font-family: 'DM Sans', sans-serif;
-    }}
-    #download-section {{ display: none; }}
-  </style>
-  <script>
-    var isAndroid = /android/i.test(navigator.userAgent);
-    var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
-
-    // Detect if the app opened — browser loses focus when OS switches to the app
-    var appOpened = false;
-    document.addEventListener('visibilitychange', function() {{
-      if (document.hidden) appOpened = true;
-    }});
-    window.addEventListener('blur', function() {{ appOpened = true; }});
-    window.addEventListener('pagehide', function() {{ appOpened = true; }});
-
-    function tryOpenApp() {{
-      if (isAndroid) {{
-        window.location.href = "{android_intent}";
-        setTimeout(function() {{ if (!appOpened) showDownload(); }}, 2500);
-      }} else if (isIOS) {{
-        window.location.href = "{deep_link}";
-        setTimeout(function() {{ if (!appOpened) showDownload(); }}, 1500);
-      }} else {{
-        showDownload();
-      }}
-    }}
-
-    function showDownload() {{
-      document.getElementById('status').style.display = 'none';
-      document.getElementById('download-section').style.display = 'block';
-    }}
-
-    window.addEventListener('load', function() {{ setTimeout(tryOpenApp, 400); }});
-  </script>
-</head>
-<body>
-  <!-- The card — visually identical to TextCard in ShareCardScreen.jsx -->
-  <div class="card">
-    <span class="ghost-quote">&ldquo;</span>
-    <p class="secret-tag">someone said this</p>
-    <div class="accent-line"></div>
-    {content_block}
-    <div class="tension-line"></div>
-    <div class="footer-row">
-      <span class="anon-tag">— someone</span>
-    </div>
-    <p class="brand-sig">anonixx</p>
-    <div class="link-row">
-      <span class="link-dot"></span>
-      <span class="link-text">{open_domain}</span>
-    </div>
-  </div>
-
-  <!-- Below-card status / download -->
-  <div class="actions">
-    <p class="status" id="status">Opening Anonixx…</p>
-    <div id="download-section">
-      <p style="font-size:13px;color:rgba(255,255,255,0.40);text-align:center;margin-bottom:20px;font-style:italic;">
-        Get the app to unlock the full drop &amp; connect anonymously
-      </p>
-      <a class="btn" href="{store_android}">Get it on Android ↓</a>
-      <a class="btn-ghost" href="{store_ios}">Get it on iOS</a>
-    </div>
-  </div>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
 
 
 # ==================== REACT (pre-payment) ====================
@@ -2202,6 +1575,9 @@ async def get_drop_messages(
         messages.append({
             "id": str(msg["_id"]),
             "content": msg["content"],
+            "media_url": msg.get("media_url"),
+            "media_type": msg.get("media_type"),
+            "duration_seconds": msg.get("duration_seconds"),
             "sender_id": msg["sender_id"],
             "is_own": msg["sender_id"] == current_user_id,
             "time_ago": get_time_ago(msg["created_at"]),
@@ -2214,18 +1590,18 @@ async def get_drop_messages(
     # a chat_profile is reused across every unlocker who chats with them.
     chat_profile = await db["chat_profiles"].find_one({"user_id": conn["sender_id"]})
 
-    # Show the welcome media + play the welcome sound once per unlocker, the
-    # first time they open this connection — never to the sender viewing
-    # their own chat.
-    welcome_media = None
+    from app.api.v1.drop_calls import get_active_call_for_host
+    active_call = await get_active_call_for_host(conn["sender_id"], db)
+
+    # Show the welcome gallery (all of it, up to 3 items) + play the welcome
+    # sound once per unlocker, the first time they open this connection —
+    # never to the sender viewing their own chat.
+    welcome_gallery = []
     welcome_sound = None
     if not is_sender and chat_profile:
         shown_to = conn.get("welcome_shown_to", [])
         if current_user_id not in shown_to:
-            gallery = chat_profile.get("gallery", [])
-            idx = chat_profile.get("welcome_media_index", 0)
-            if gallery and 0 <= idx < len(gallery):
-                welcome_media = gallery[idx]
+            welcome_gallery = chat_profile.get("gallery", [])
             welcome_sound = chat_profile.get("welcome_sound", "soft-chime")
             await db["drop_connections"].update_one(
                 {"_id": ObjectId(connection_id)},
@@ -2240,16 +1616,23 @@ async def get_drop_messages(
             "other_anonymous_name": conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"],
             "is_revealed": conn["is_revealed_sender"] if is_sender else conn["is_revealed_unlocker"],
             "other_revealed": conn["is_revealed_unlocker"] if is_sender else conn["is_revealed_sender"],
+            "is_sender": is_sender,
+            "host_user_id": conn["sender_id"],
         },
         "chat_profile": {
-            "background_color":   chat_profile.get("background_color", "#151924") if chat_profile else "#151924",
-            "font_style":          chat_profile.get("font_style", "classic") if chat_profile else "classic",
-            "stickers":            chat_profile.get("stickers", []) if chat_profile else [],
+            "background_pattern": chat_profile.get("background_pattern", "midnight-solid") if chat_profile else "midnight-solid",
+            "font_style":          chat_profile.get("font_style", "clean-regular") if chat_profile else "clean-regular",
             "profile_picture_url": chat_profile.get("profile_picture_url") if chat_profile else None,
             "welcome_sound":       chat_profile.get("welcome_sound", "soft-chime") if chat_profile else "soft-chime",
+            # Always available (not gated to first-open) so either side of the
+            # chat can revisit it any time — see the gallery button in
+            # DropChatScreen, distinct from the once-only welcome takeover.
+            "gallery":             chat_profile.get("gallery", []) if chat_profile else [],
+            "call_mode":           chat_profile.get("call_mode", "solo") if chat_profile else "solo",
         },
-        "welcome_media": welcome_media,
+        "welcome_gallery": welcome_gallery,
         "welcome_sound": welcome_sound,
+        "active_call": active_call,
     }
 
 
@@ -2260,9 +1643,14 @@ async def send_drop_message(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    content = data.get("content", "").strip()
-    if not content:
+    content    = (data.get("content") or "").strip()
+    media_url  = data.get("media_url")
+    media_type = data.get("media_type")   # "voice" — only kind supported today
+
+    if not content and not media_url:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if media_url and media_type not in ("voice",):
+        raise HTTPException(status_code=400, detail="media_type must be 'voice'")
 
     try:
         conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
@@ -2280,6 +1668,9 @@ async def send_drop_message(
         "connection_id": connection_id,
         "sender_id": current_user_id,
         "content": content,
+        "media_url": media_url,
+        "media_type": media_type,
+        "duration_seconds": data.get("duration_seconds"),
         "created_at": now_utc()
     }
     await db["drop_messages"].insert_one(msg)
@@ -2292,19 +1683,53 @@ async def send_drop_message(
     other_id = conn["unlocker_id"] if current_user_id == conn["sender_id"] else conn["sender_id"]
     sender_name = conn["sender_anonymous_name"] if current_user_id == conn["sender_id"] else conn["unlocker_anonymous_name"]
 
+    notify_body = "🎙 Voice note" if media_type == "voice" else content[:60] + ("..." if len(content) > 60 else "")
     await send_push_notification(
         other_id,
         f"{sender_name} sent a message 💬",
-        content[:60] + ("..." if len(content) > 60 else ""),
+        notify_body,
         db
     )
 
     return {
         "id": str(msg["_id"]),
         "content": content,
+        "media_url": media_url,
+        "media_type": media_type,
+        "duration_seconds": msg["duration_seconds"],
         "time_ago": "just now",
         "created_at": msg["created_at"].isoformat(),
     }
+
+
+@router.get("/room/{host_user_id}/guests")
+async def list_room_guests(
+    host_user_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Everyone who's unlocked this host — the roster behind the 3-dot menu's
+    guest list. Only the host or one of their own unlockers can see it (same
+    exposure as a live group call already gives guests of each other)."""
+    is_host = current_user_id == host_user_id
+    if not is_host and not await db["drop_connections"].find_one(
+        {"sender_id": host_user_id, "unlocker_id": current_user_id}
+    ):
+        raise HTTPException(status_code=403, detail="Unlock a drop from this person first.")
+
+    from app.websockets.events import is_user_online
+
+    guests = []
+    async for conn in db["drop_connections"].find({"sender_id": host_user_id}):
+        guests.append({
+            "user_id": conn["unlocker_id"],
+            "anonymous_name": conn.get("unlocker_anonymous_name", "Anonymous"),
+            "is_online": is_user_online(conn["unlocker_id"]),
+            "unlocked_at": conn["_id"].generation_time.isoformat() if hasattr(conn["_id"], "generation_time") else None,
+        })
+
+    guests.sort(key=lambda g: g["is_online"], reverse=True)
+    return {"guests": guests, "is_host": is_host}
 
 
 # ==================== REVEAL ====================
@@ -2542,200 +1967,6 @@ async def renew_drop(
     }
 
 
-# ==================== INBOX ====================
-
-@router.get("/inbox")
-async def get_drops_inbox(
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """Your received unlocks + active cards summary."""
-    # Active drops you sent
-    active_drops = []
-    async for drop in db["drops"].find({
-        "sender_id": current_user_id,
-        "is_active": True,
-        "expires_at": {"$gt": now_utc()}
-    }).sort("created_at", -1):
-        drop_id = str(drop["_id"])
-        # Aggregate reaction counts for sender's own dashboard.
-        r_counts = drop.get("reaction_counts") or {r: 0 for r in VALID_REACTIONS}
-        active_drops.append({
-            "id":              drop_id,
-            "confession":      drop.get("confession"),
-            "media_url":       drop.get("media_url"),
-            "media_type":      drop.get("media_type"),
-            "card_image_url":  drop.get("card_image_url"),
-            "category":        drop["category"],
-            "unlock_count":    drop.get("unlock_count", 0),
-            "admirer_count":   drop.get("admirer_count", 0),
-            "reactions":       drop.get("reactions", []),
-            "reaction_counts": r_counts,
-            "time_left":       get_time_left(drop["expires_at"]),
-            "is_night_mode":   drop.get("is_night_mode", False),
-            "share_link":      f"{settings.BASE_URL}/api/v1/drops/{drop_id}/open",
-            "created_at":      drop["created_at"].isoformat() if drop.get("created_at") else None,
-
-            # ── Drop spec upgrade surface ────────────────────
-            "theme":            drop.get("theme", "desire"),
-            "mood_tag":         drop.get("mood_tag"),
-            "tease_mode":       bool(drop.get("tease_mode")),
-            "intensity":        drop.get("intensity"),
-            "recognition_hint": drop.get("recognition_hint"),
-            "tier":             drop.get("tier", 1),
-            "published_at":     drop["published_at"].isoformat() if drop.get("published_at") else None,
-            "publisher_opt_in": bool(drop.get("publisher_opt_in")),
-            "duration_seconds": drop.get("duration_seconds"),
-            "waveform_data":    drop.get("waveform_data"),
-            "moderation_status": drop.get("moderation_status", "visible"),
-        })
-
-    # Connections (chats)
-    connections = []
-    async for conn in db["drop_connections"].find({
-        "$or": [{"sender_id": current_user_id}, {"unlocker_id": current_user_id}]
-    }).sort("last_message_at", -1).limit(20):
-        is_sender = conn["sender_id"] == current_user_id
-        other_name = conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"]
-        last_msg = await db["drop_messages"].find_one(
-            {"connection_id": str(conn["_id"])},
-            sort=[("created_at", -1)]
-        )
-        connections.append({
-            "id": str(conn["_id"]),
-            "confession": conn["confession"],
-            "other_anonymous_name": other_name,
-            "is_sender": is_sender,
-            "last_message": last_msg["content"] if last_msg else None,
-            "message_count": conn.get("message_count", 0),
-            "is_revealed": conn["is_revealed_sender"] if is_sender else conn["is_revealed_unlocker"],
-            "other_revealed": conn["is_revealed_unlocker"] if is_sender else conn["is_revealed_sender"],
-        })
-
-    return {
-        "active_drops": active_drops,
-        "connections": connections,
-    }
-
-
-# ==================== RECEIVED (targeted drops) ====================
-
-@router.get("/received")
-async def get_received_drops(
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """
-    Drops that were anonymously targeted at the current user.
-    Sender identity is never exposed — not even after unlock.
-    """
-    received = []
-    five_min_ago = now_utc() - timedelta(minutes=5)
-
-    async for drop in db["drops"].find({
-        "target_user_id": current_user_id,
-        "is_active": True,
-        "moderation_status": {"$nin": ["hidden"]},
-    }).sort("created_at", -1).limit(50):
-        drop_id = str(drop["_id"])
-
-        already_unlocked = await db["drop_connections"].find_one({
-            "drop_id":     drop_id,
-            "unlocker_id": current_user_id,
-        })
-
-        # Unread tracking: we stamp `read_at` the first time the recipient
-        # opens the landing screen. `/received` itself never consumes the
-        # unread state — that's what drives the pulse in the inbox.
-        inbox_read = await db["drop_inbox_reads"].find_one({
-            "drop_id":   drop_id,
-            "viewer_id": current_user_id,
-        })
-        read_at = inbox_read.get("read_at") if inbox_read else None
-
-        # Presence: other people looking concurrently (last 5 min).
-        readers_now = await db["admirer_logs"].count_documents({
-            "drop_id":   drop_id,
-            "viewed_at": {"$gte": five_min_ago},
-            "viewer_id": {"$ne": current_user_id},
-        })
-
-        received.append({
-            "id":             drop_id,
-            "confession":     drop.get("confession"),
-            "media_url":      drop.get("media_url"),
-            "media_type":     drop.get("media_type"),
-            "card_image_url": drop.get("card_image_url"),
-            "category":       drop["category"],
-            "is_night_mode":  drop.get("is_night_mode", False),
-            "is_expired":     _ensure_aware(drop["expires_at"]) < now_utc(),
-            "time_left":      get_time_left(drop["expires_at"]),
-            "unlock_count":   drop.get("unlock_count", 0),
-            "reactions":      drop.get("reactions", []),
-            "already_unlocked": bool(already_unlocked),
-            "price":          drop.get("price", 2),
-            "created_at":     drop["created_at"].isoformat() if drop.get("created_at") else None,
-            "sent_at":        drop["created_at"].isoformat() if drop.get("created_at") else None,
-            "read_at":        read_at.isoformat() if read_at else None,
-            "readers_now":    readers_now,
-
-            # ── Drop spec upgrade surface ────────────────────
-            "theme":            drop.get("theme", "desire"),
-            "mood_tag":         drop.get("mood_tag"),
-            "tease_mode":       bool(drop.get("tease_mode")),
-            "intensity":        drop.get("intensity"),
-            "recognition_hint": drop.get("recognition_hint"),
-            "tier":             drop.get("tier", 1),
-            "duration_seconds": drop.get("duration_seconds"),
-            "waveform_data":    drop.get("waveform_data"),
-        })
-
-    return {"received": received}
-
-
-@router.post("/{drop_id}/mark-read")
-async def mark_drop_read(
-    drop_id: str,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    """
-    Stamp `read_at` on a drop the current user is the target of.
-    Idempotent — first call wins, re-opens don't overwrite the timestamp.
-    Silent no-op when the caller isn't the target (we never leak whether
-    a drop has a target or who it is, so non-targets just get {ok: true}).
-    """
-    if not ObjectId.is_valid(drop_id):
-        raise HTTPException(status_code=400, detail="Invalid drop ID")
-
-    drop = await db["drops"].find_one(
-        {"_id": ObjectId(drop_id)},
-        {"target_user_id": 1, "sender_id": 1},
-    )
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    # Only the targeted recipient can mark-read. Anyone else gets a silent
-    # ok so we don't expose targeting metadata through timing/error shape.
-    if (
-        drop.get("target_user_id")
-        and current_user_id == drop.get("target_user_id")
-        and current_user_id != drop.get("sender_id")
-    ):
-        await db["drop_inbox_reads"].update_one(
-            {"drop_id": drop_id, "viewer_id": current_user_id},
-            {"$setOnInsert": {
-                "drop_id":   drop_id,
-                "viewer_id": current_user_id,
-                "sender_id": drop["sender_id"],
-                "read_at":   now_utc(),
-            }},
-            upsert=True,
-        )
-
-    return {"ok": True}
-
-
 # ==================== VIBE SCORE ====================
 
 @router.get("/vibe-score")
@@ -2806,7 +2037,7 @@ async def get_daily_limit(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    is_premium = bool(user.get("is_premium") or user.get("premium_active"))
+    is_premium = _is_premium_active(user)
     if is_premium:
         return {
             "unlimited": True,

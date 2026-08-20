@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, RefreshCw, Menu, MapPin } from 'lucide-react-native';
+import { Search, RefreshCw, Menu } from 'lucide-react-native';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
@@ -17,10 +17,8 @@ import { ActiveVideoContext } from '../../context/VideoFeedContext';
 import { useToast } from '../../components/ui/Toast';
 import CalmPostCard from '../../components/feed/CalmPostCard';
 import FeedDivider from '../../components/feed/FeedDivider';
-import InspiredDropSheet from '../../components/feed/InspiredDropSheet';
 import MoodBalancer from '../../components/feed/MoodBalancer';
 import MarketCard from '../../components/feed/MarketCard';
-import DropFeedCard from '../../components/drops/DropFeedCard';
 import FeedAdCard from '../../components/feed/FeedAdCard';
 import AuthPromptModal from '../../components/modals/AuthPromptModal';
 import { useDispatch, useSelector } from 'react-redux';
@@ -156,11 +154,7 @@ export default function CalmFeedScreen({ navigation, route }) {
   const [activeVideoId, setActiveVideoId]   = useState(null);
   const [nextVideo, setNextVideo]           = useState(null);
   const [menuVisible, setMenuVisible]       = useState(false);
-  const [dropSheetPost, setDropSheetPost]   = useState(null);
-  const [dropsFeed, setDropsFeed]           = useState([]);
   const [feedAds, setFeedAds]               = useState([]);
-  const [locationFilter, setLocationFilter] = useState('');
-  const [locationFilterOpen, setLocationFilterOpen] = useState(false);
 
   const flatListRef   = useRef(null);
   const postsRef      = useRef([]);
@@ -182,49 +176,18 @@ export default function CalmFeedScreen({ navigation, route }) {
       .catch(() => { /* offline — feed just skips ad injection this session */ });
   }, []);
 
-  // Load the viewer's saved feed-location filter, if any.
-  useEffect(() => {
-    AsyncStorage.getItem('feedLocationFilter').then((v) => {
-      if (v) setLocationFilter(v);
-    }).catch(() => {});
-  }, []);
-
-  // Fetch Drops for in-feed injection — re-fetches when the location
-  // filter changes (debounced so typing doesn't spam the endpoint).
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const params = new URLSearchParams({ limit: '20' });
-        if (locationFilter.trim()) params.set('location', locationFilter.trim());
-        const res = await fetch(`${API_BASE_URL}/api/v1/drops/marketplace?${params}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setDropsFeed(data.drops || []);
-        }
-      } catch {
-        /* offline — feed just skips drop injection this session */
-      }
-    }, locationFilter ? 400 : 0);
-    return () => clearTimeout(timer);
-  }, [locationFilter]);
-
-  useEffect(() => {
-    AsyncStorage.setItem('feedLocationFilter', locationFilter).catch(() => {});
-  }, [locationFilter]);
-
-  // Inject Market + Drop cards into the post stream. Market every 7th post,
-  // Drops every 3rd post (distinct cadence). Stable across re-renders so
-  // VirtualizedList doesn't reconcile cells unnecessarily.
+  // Inject Market cards into the post stream, every 7th post. Drops no
+  // longer get a separate injection pass — a dropped confession is now a
+  // genuine post (see create_drop's post-mirroring on the backend), so it
+  // already flows through the normal `posts` array like any other post.
+  // Stable across re-renders so VirtualizedList doesn't reconcile cells
+  // unnecessarily.
   const feedWithExtras = useMemo(() => {
     if (!posts.length) return posts;
-    if (!marketFeed.length && !dropsFeed.length && !feedAds.length) return posts;
+    if (!marketFeed.length && !feedAds.length) return posts;
 
     const out = [];
     let mIdx = 0;
-    let dIdx = 0;
     let aIdx = 0;
     posts.forEach((p, i) => {
       out.push(p);
@@ -233,10 +196,6 @@ export default function CalmFeedScreen({ navigation, route }) {
         const m = marketFeed[mIdx++];
         out.push({ type: 'market', id: `market-${m.id}`, item: m });
       }
-      if (n % 3 === 0 && dIdx < dropsFeed.length) {
-        const d = dropsFeed[dIdx++];
-        out.push({ type: 'drop', id: `drop-${d.id}`, drop: d });
-      }
       if (n % FEED_AD_FREQUENCY === 0 && feedAds.length > 0) {
         const a = feedAds[aIdx % feedAds.length];
         aIdx++;
@@ -244,24 +203,15 @@ export default function CalmFeedScreen({ navigation, route }) {
       }
     });
     return out;
-  }, [posts, marketFeed, dropsFeed, feedAds]);
+  }, [posts, marketFeed, feedAds]);
 
   const handleMarketOpen = useCallback((id) => {
     navigation.navigate('MarketItem', { itemId: id });
   }, [navigation]);
 
-  const handleOozeIn = useCallback((drop) => {
-    if (!isAuthenticated) { showAuthPrompt('unlock'); return; }
-    navigation.navigate('DropLanding', { dropId: drop.id, autoOpenUnlock: true });
-  }, [isAuthenticated, navigation]);
-
   const handleAdPress = useCallback((ad) => {
-    if (ad.link_url?.startsWith('anonixx://drop/')) {
-      navigation.navigate('DropLanding', { dropId: ad.link_url.split('/').pop() });
-    } else {
-      Linking.openURL(ad.link_url).catch(() => {});
-    }
-  }, [navigation]);
+    Linking.openURL(ad.link_url).catch(() => {});
+  }, []);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
@@ -457,7 +407,7 @@ export default function CalmFeedScreen({ navigation, route }) {
         );
         showToast({
           type:    data.saved ? 'success' : 'info',
-          message: data.saved ? 'Post saved.' : 'Post unsaved.',
+          message: data.saved ? 'Kept in the dark, just for you.' : 'Unkept — back to the feed.',
         });
       } else if (response.status === 401) {
         await AsyncStorage.removeItem('token');
@@ -516,9 +466,6 @@ export default function CalmFeedScreen({ navigation, route }) {
     if (item.type === 'market') {
       return <MarketCard item={item.item} onPress={handleMarketOpen} />;
     }
-    if (item.type === 'drop') {
-      return <DropFeedCard drop={item.drop} onOozeIn={handleOozeIn} />;
-    }
     if (item.type === 'ad') {
       return <FeedAdCard ad={item.ad} onPress={handleAdPress} />;
     }
@@ -531,12 +478,11 @@ export default function CalmFeedScreen({ navigation, route }) {
           onViewThread={handleViewThread}
           onPress={handlePostPress}
           onMediaPress={handleMediaPress}
-          onDrop={setDropSheetPost}
         />
       );
     }
     return null;
-  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen, handleOozeIn, handleAdPress]);
+  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen, handleAdPress]);
 
   const keyExtractor = useCallback((item, index) => `${item.id || item.type}-${index}`, []);
 
@@ -625,17 +571,6 @@ export default function CalmFeedScreen({ navigation, route }) {
 
         <View style={styles.headerRight}>
           <TouchableOpacity
-            onPress={() => setLocationFilterOpen((v) => !v)}
-            style={styles.headerBtn}
-            hitSlop={HIT_SLOP}
-          >
-            <MapPin
-              size={rs(20)}
-              color={locationFilter ? THEME.primary : THEME.textSecondary}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
             onPress={() => navigation.navigate('Search')}
             style={styles.headerBtn}
             hitSlop={HIT_SLOP}
@@ -652,26 +587,6 @@ export default function CalmFeedScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </View>
-
-      {locationFilterOpen && (
-        <View style={styles.locationFilterRow}>
-          <MapPin size={rs(14)} color={THEME.textSecondary} />
-          <TextInput
-            style={styles.locationFilterInput}
-            value={locationFilter}
-            onChangeText={setLocationFilter}
-            placeholder="Filter drops by location…"
-            placeholderTextColor={THEME.textSecondary}
-            returnKeyType="done"
-            onSubmitEditing={() => setLocationFilterOpen(false)}
-          />
-          {!!locationFilter && (
-            <TouchableOpacity onPress={() => setLocationFilter('')} hitSlop={HIT_SLOP}>
-              <Text style={styles.locationFilterClear}>Clear</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
 
       <ActiveVideoContext.Provider value={{ activeVideoId }}>
         <FlatList
@@ -716,13 +631,6 @@ export default function CalmFeedScreen({ navigation, route }) {
         onClose={() => setMenuVisible(false)}
         navigation={navigation}
       />
-
-      <InspiredDropSheet
-        visible={!!dropSheetPost}
-        post={dropSheetPost}
-        onClose={() => setDropSheetPost(null)}
-        navigation={navigation}
-      />
     </View>
   );
 }
@@ -759,27 +667,6 @@ const styles = StyleSheet.create({
     borderRadius:   rs(19),
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  locationFilterRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(8),
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(8),
-    backgroundColor:   'rgba(255,255,255,0.03)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  locationFilterInput: {
-    flex:     1,
-    color:    THEME.text,
-    fontSize: FONT.sm,
-  },
-  locationFilterClear: {
-    color:    THEME.primary,
-    fontSize: FONT.xs,
-    fontWeight: '700',
-  },
-
   // Feed
   feedContent:  { paddingTop: rh(8) },
   feedFooter:   { height: rh(80), justifyContent: 'center', alignItems: 'center' },

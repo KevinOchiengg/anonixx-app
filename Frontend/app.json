@@ -50,10 +50,6 @@
           "data": [
             {
               "scheme": "anonixx",
-              "host": "drop"
-            },
-            {
-              "scheme": "anonixx",
               "host": "confession"
             },
             {

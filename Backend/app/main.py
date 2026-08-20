@@ -13,6 +13,7 @@ from app.api.v1 import publisher
 from app.api.v1 import messages
 from app.api.v1 import chat_profile
 from app.api.v1 import ads
+from app.api.v1 import drop_calls
 from app.api.v1 import (
     auth,
     coins,
@@ -24,8 +25,10 @@ from app.api.v1 import (
     rituals,
     connect,
     circles,
+    premium,
 )
 from app.tasks.publisher_worker import publisher_worker
+from app.tasks.circle_ad_cleanup import circle_ad_cleanup_worker
 
 
 async def _ensure_indexes():
@@ -78,9 +81,11 @@ async def _ensure_indexes():
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
     await _ensure_indexes()
-    await publisher_worker.start()   # start social publishing worker
+    await publisher_worker.start()          # start social publishing worker
+    await circle_ad_cleanup_worker.start()  # start circle ad expiry sweeper
     yield
-    await publisher_worker.stop()    # clean shutdown
+    await circle_ad_cleanup_worker.stop()   # clean shutdown
+    await publisher_worker.stop()
     await close_mongo_connection()
 
 
@@ -115,6 +120,7 @@ async def root():
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(coins.router, prefix=settings.API_V1_PREFIX)
+app.include_router(premium.router, prefix=settings.API_V1_PREFIX)
 app.include_router(posts.router, prefix=settings.API_V1_PREFIX)
 app.include_router(upload.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
@@ -134,6 +140,7 @@ app.include_router(publisher.router,  prefix=settings.API_V1_PREFIX)
 app.include_router(messages.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(chat_profile.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ads.router,          prefix=settings.API_V1_PREFIX)
+app.include_router(drop_calls.router,   prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

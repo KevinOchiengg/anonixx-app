@@ -25,7 +25,11 @@ class Settings(BaseSettings):
         "your-super-secret-key-change-in-production-at-least-32-characters-long"
     )
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    # No refresh-token flow is actually wired up client-side (the app only
+    # ever stores this one token), so it has to survive a whole real session
+    # on its own — 30 min was causing every authenticated action to start
+    # silently failing with 401 mid-session. 30 days instead.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # DATABASE
@@ -81,13 +85,6 @@ class Settings(BaseSettings):
     # Create a bot via @BotFather, add it as admin to the channel
     TELEGRAM_BOT_TOKEN:  str = "your-telegram-bot-token-here"
     TELEGRAM_CHANNEL_ID: str = "your-telegram-channel-id-here"  # e.g. "@anonixx" or "-100123456789"
-
-    # WhatsApp Cloud API — sends a drop card to a number on the user's behalf,
-    # from Anonixx's own business number (recipient never sees the sender's
-    # real number). Requires a Meta WhatsApp Business Platform app.
-    # Get these from developers.facebook.com > your app > WhatsApp > API Setup.
-    WHATSAPP_ACCESS_TOKEN:    str = "your-whatsapp-access-token-here"
-    WHATSAPP_PHONE_NUMBER_ID: str = "your-whatsapp-phone-number-id-here"
 
     # APP
     BASE_URL: str = "http://localhost:8000"
