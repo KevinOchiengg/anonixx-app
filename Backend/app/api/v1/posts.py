@@ -739,13 +739,13 @@ async def get_calm_feed(
 
     final_feed = []
     divider_texts = [
-        "keep scrolling.",
-        "someone typed this at 3am.",
-        "real people. real weight.",
-        "say something if it hits.",
-        "you've thought this too.",
-        "nobody said this out loud before.",
-        "this is what people actually feel.",
+        "keep scrolling. someone here might be exactly who you're looking for.",
+        "someone wrote this at 3am, hoping the right person would read it.",
+        "real people. real desire.",
+        "say something if it hits close to home.",
+        "you've felt this too — you're just not the only one.",
+        "nobody's said this out loud until now.",
+        "this is what people actually want, once no one's watching.",
     ]
 
     heavy_run = 0
@@ -758,7 +758,7 @@ async def get_calm_feed(
         final_feed.append(post)
 
         if heavy_run >= 2 and i + 1 < len(formatted_posts):
-            final_feed.append({"type": "mood_balancer", "text": "not everything is heavy. but most of it is."})
+            final_feed.append({"type": "mood_balancer", "text": "not everything here is heavy. some of it is just wanting."})
             heavy_run = 0
 
         if (i + 1) % 5 == 0 and i + 1 < len(formatted_posts):
