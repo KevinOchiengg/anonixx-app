@@ -14,6 +14,7 @@ from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
+from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.api.v1.drops import (
     update_vibe_score, send_push_notification,
     COINS_UNLOCK_COST, CASH_TO_COIN_RATE, DROP_REVENUE_SHARE_PCT,
@@ -70,6 +71,11 @@ class CreatePostRequest(BaseModel):
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
     poll: Optional[PollInput] = None
+    # Structured location — optional, same 4-level shape Drops already use.
+    location_country:    Optional[str] = None
+    location_county:     Optional[str] = None
+    location_sub_county: Optional[str] = None
+    location_estate:     Optional[str] = None
 
 class VoteRequest(BaseModel):
     option_index: int
@@ -468,6 +474,16 @@ async def create_post(
             "total_votes": 0,
         }
 
+    # Location: use what the request gave, otherwise fall back to the
+    # author's own home location (set in Settings) if they have one —
+    # lets location filtering work on regular posts without a dedicated
+    # location picker in the compose screen.
+    loc_country    = data.location_country    or user.get("location_country")
+    loc_county     = data.location_county     or user.get("location_county")
+    loc_sub_county = data.location_sub_county or user.get("location_sub_county")
+    loc_estate     = data.location_estate     or user.get("location_estate")
+    location_detail, location_display = build_location(loc_country, loc_county, loc_sub_county, loc_estate)
+
     post_data = {
         "_id": ObjectId(),
         "user_id": current_user_id,
@@ -485,6 +501,8 @@ async def create_post(
         "liked_by": [],
         "likes_count": 0,
         "created_at": now_utc(),
+        "location":        location_display,
+        "location_detail": location_detail,
     }
 
     await db["posts"].insert_one(post_data)
@@ -535,42 +553,19 @@ async def _create_post_connection(post_id: str, post: dict, unlocker_id: str, db
     return connection_id
 
 
-@router.post("/{post_id}/unlock")
-async def unlock_post(
-    post_id: str,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    """Pay coins to unlock a chat connection with this post's anonymous author."""
-    try:
-        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
-    except Exception:
-        raise HTTPException(status_code=404, detail="Post not found.")
-    if not post:
-        raise HTTPException(status_code=404, detail="Post not found.")
-    if post["user_id"] == current_user_id:
-        raise HTTPException(status_code=400, detail="Cannot unlock your own post.")
+async def _complete_post_unlock(post: dict, requester_id: str, db) -> None:
+    """The money-moving half of a post unlock — charges coins, credits the
+    author's 10% revenue share, and records the unlock. Shared by the
+    deprecated instant-unlock idempotent path and the unlock-requests accept
+    flow (app/api/v1/unlock_requests.py). Raises ValueError on insufficient
+    coins (bubbles up from debit_coins)."""
+    post_id = str(post["_id"])
 
-    existing = await db["drop_unlocks"].find_one({
-        "drop_id": post_id, "unlocker_id": current_user_id,
-    })
-    if existing:
-        connection_id = existing.get("connection_id") or await _create_post_connection(post_id, post, current_user_id, db)
-        return {"already_unlocked": True, "connection_id": connection_id}
-
-    try:
-        await debit_coins(
-            db=db, user_id=current_user_id, amount=COINS_UNLOCK_COST,
-            reason="post_reveal", description="Unlocked a confession's author",
-            meta={"post_id": post_id},
-        )
-    except ValueError as e:
-        if "Insufficient" in str(e):
-            raise HTTPException(
-                status_code=402,
-                detail=f"Not enough coins. You need {COINS_UNLOCK_COST} coins to unlock."
-            )
-        raise HTTPException(status_code=404, detail="User not found.")
+    await debit_coins(
+        db=db, user_id=requester_id, amount=COINS_UNLOCK_COST,
+        reason="post_reveal", description="Unlocked a confession's author",
+        meta={"post_id": post_id},
+    )
 
     # Same 10% creator payout Drops already pays — credited as coins, no cash payout.
     share = max(1, round(COINS_UNLOCK_COST * DROP_REVENUE_SHARE_PCT))
@@ -586,7 +581,7 @@ async def unlock_post(
     await db["drop_unlocks"].insert_one({
         "_id": ObjectId(),
         "drop_id": post_id,
-        "unlocker_id": current_user_id,
+        "unlocker_id": requester_id,
         "sender_id": post["user_id"],
         "method": "coins",
         "amount": COINS_UNLOCK_COST / CASH_TO_COIN_RATE,
@@ -595,7 +590,6 @@ async def unlock_post(
     })
 
     await update_vibe_score(post["user_id"], "card_unlocked", db)
-    connection_id = await _create_post_connection(post_id, post, current_user_id, db)
 
     await send_push_notification(
         post["user_id"],
@@ -604,25 +598,68 @@ async def unlock_post(
         db,
     )
 
-    return {"unlocked": True, "connection_id": connection_id, "coins_spent": COINS_UNLOCK_COST}
+
+@router.post("/{post_id}/unlock")
+async def unlock_post(
+    post_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Deprecated — unlocking a confession now requires the owner's approval
+    first. Kept only for the idempotent already-unlocked check so old clients
+    resume gracefully; a still-pending unlock must go through
+    POST /unlock-requests instead."""
+    try:
+        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if not post:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if post["user_id"] == current_user_id:
+        raise HTTPException(status_code=400, detail="Cannot unlock your own drop.")
+
+    existing = await db["drop_unlocks"].find_one({
+        "drop_id": post_id, "unlocker_id": current_user_id,
+    })
+    if existing:
+        connection_id = existing.get("connection_id") or await _create_post_connection(post_id, post, current_user_id, db)
+        return {"already_unlocked": True, "connection_id": connection_id}
+
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "message": "Direct unlock is disabled — send an unlock request instead.",
+            "use": "/api/v1/unlock-requests",
+        },
+    )
 
 
 @router.get("/search")
 async def search_posts(
-    q:      Optional[str] = Query(None, description="Search query — optional if a topic is given, to allow browsing by topic alone"),
+    q:      Optional[str] = Query(None, description="Search query — optional if a topic or location is given, to allow browsing without typing"),
     filter: str = Query("all", description="all | recent | popular"),
     topic:  Optional[str] = Query(None, description="Narrow results to one topic, e.g. 'anxiety'"),
+    location_country:    Optional[str] = Query(None, description="Exact match, e.g. 'Kenya'"),
+    location_county:     Optional[str] = Query(None, description="Exact match, e.g. 'Nairobi'"),
+    location_sub_county: Optional[str] = Query(None),
+    location_estate:     Optional[str] = Query(None),
     limit:  int = Query(20, le=50, ge=1),
     skip:   int = Query(0, ge=0),
     current_user_id: Optional[str] = Depends(get_optional_user_id),
     db = Depends(get_database),
 ):
     """Full-text search across post content, name, and topics. Case-insensitive.
-    A topic alone (no q) is a valid request — lets the UI offer "browse by topic"
-    without requiring the user to type anything first."""
+    A topic and/or location alone (no q) is a valid request — lets the UI
+    offer "browse by topic" / "browse by place" without requiring typed text.
+    Location match is exact-per-level (unlike the passive feed-location scope,
+    which quietly includes location-less posts) — a deliberate search for
+    "Nairobi" shouldn't surface unrelated, unplaced content."""
     query = (q or "").strip()
     valid_topic = topic if topic in AVAILABLE_TOPICS else None
-    if not query and not valid_topic:
+    loc_filter = build_location_search_filter(
+        location_country, location_county, location_sub_county, location_estate,
+    )
+    if not query and not valid_topic and not loc_filter:
         return {"results": [], "total": 0, "query": query}
 
     base_filter: dict = {}
@@ -641,6 +678,9 @@ async def search_posts(
     if filter == "recent":
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
         base_filter["created_at"] = {"$gte": cutoff}
+
+    if loc_filter:
+        base_filter = {"$and": [base_filter, loc_filter]} if base_filter else loc_filter
 
     sort_key = "likes_count" if filter == "popular" else "created_at"
 
@@ -696,7 +736,13 @@ async def get_calm_feed(
         # Run all three user-data lookups concurrently instead of sequentially
         async def _fetch_user_doc():
             return await db["users"].find_one(
-                {"_id": ObjectId(current_user_id)}, {"vibe_tags": 1, "blocked_user_ids": 1}
+                {"_id": ObjectId(current_user_id)},
+                {
+                    "vibe_tags": 1, "blocked_user_ids": 1,
+                    "location_country": 1, "location_county": 1,
+                    "location_sub_county": 1, "location_estate": 1,
+                    "feed_location_scope": 1,
+                },
             )
 
         streak_info, user_doc, user_affinities = await asyncio.gather(
@@ -723,11 +769,29 @@ async def get_calm_feed(
     # Fetch pool — 3× batch size (min 30) gives good shuffle variety at half the old cost
     POOL_SIZE = max(30, posts_to_load * 3)
     pool_query = {"user_id": {"$nin": blocked_ids}} if blocked_ids else {}
+
+    loc_filter = build_feed_location_filter(
+        {
+            "country":    user_doc.get("location_country")    if user_doc else None,
+            "county":     user_doc.get("location_county")     if user_doc else None,
+            "sub_county": user_doc.get("location_sub_county") if user_doc else None,
+            "estate":     user_doc.get("location_estate")     if user_doc else None,
+        },
+        user_doc.get("feed_location_scope") if user_doc else None,
+    )
+    if loc_filter:
+        pool_query = {"$and": [pool_query, loc_filter]} if pool_query else loc_filter
+
     pool = await db["posts"].find(pool_query) \
         .sort("created_at", -1) \
         .skip(session_posts) \
         .limit(POOL_SIZE) \
         .to_list(None)
+    # Pool came back short of a full page — this location/block scope has
+    # nothing left to give beyond here, regardless of the (unscoped) total
+    # count below. Without this, a scoped feed with sparse matches would
+    # report has_more=True forever and the client would loop on empty pages.
+    pool_exhausted = len(pool) < POOL_SIZE
 
     # Weighted shuffle — relevance-tiered but randomised within each tier
     shuffled = _weighted_shuffle(pool, user_vibe_topics, user_affinities)
@@ -765,7 +829,11 @@ async def get_calm_feed(
             final_feed.append({"type": "divider", "text": random.choice(divider_texts)})
 
     new_session_posts = session_posts + len(posts)
-    has_more = new_session_posts < total_posts and new_session_posts < SESSION_LIMIT
+    has_more = (
+        not pool_exhausted
+        and new_session_posts < total_posts
+        and new_session_posts < SESSION_LIMIT
+    )
 
     return {
         "posts": final_feed,
@@ -788,15 +856,15 @@ async def vote_on_poll(
     try:
         oid = ObjectId(post_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid post ID.")
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
 
     post = await db["posts"].find_one({"_id": oid})
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found.")
+        raise HTTPException(status_code=404, detail="Drop not found.")
 
     poll = post.get("poll")
     if not poll:
-        raise HTTPException(status_code=400, detail="This post has no poll.")
+        raise HTTPException(status_code=400, detail="This drop has no poll.")
 
     if poll.get("ends_at") and poll["ends_at"] < now_utc().isoformat():
         raise HTTPException(status_code=400, detail="This poll has ended.")
@@ -856,10 +924,10 @@ async def like_post(
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
     except:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     liked_by = post.get("liked_by", [])
     if current_user_id in liked_by:
@@ -886,7 +954,7 @@ async def like_post(
             db
         )
 
-    return {"message": "Post liked", "liked": True, "likes_count": updated.get("likes_count", 0)}
+    return {"message": "Drop liked", "liked": True, "likes_count": updated.get("likes_count", 0)}
 
 
 @router.delete("/{post_id}/like")
@@ -898,10 +966,10 @@ async def unlike_post(
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
     except:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     liked_by = post.get("liked_by", [])
     if current_user_id not in liked_by:
@@ -1001,10 +1069,10 @@ async def add_to_thread(
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
     except:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
@@ -1067,10 +1135,10 @@ async def get_thread(
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
     except:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
 
     thread_docs = await db["threads"].find(
         {"post_id": ObjectId(post_id)}
@@ -1193,13 +1261,13 @@ async def edit_post(
     try:
         oid = ObjectId(post_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid post ID.")
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
 
     post = await db["posts"].find_one({"_id": oid})
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found.")
+        raise HTTPException(status_code=404, detail="Drop not found.")
     if post["user_id"] != current_user_id:
-        raise HTTPException(status_code=403, detail="You can only edit your own posts.")
+        raise HTTPException(status_code=403, detail="You can only edit your own drops.")
 
     await db["posts"].update_one(
         {"_id": oid},
@@ -1217,13 +1285,13 @@ async def delete_post(
     try:
         oid = ObjectId(post_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid post ID.")
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
 
     post = await db["posts"].find_one({"_id": oid})
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found.")
+        raise HTTPException(status_code=404, detail="Drop not found.")
     if post["user_id"] != current_user_id:
-        raise HTTPException(status_code=403, detail="You can only delete your own posts.")
+        raise HTTPException(status_code=403, detail="You can only delete your own drops.")
 
     # Cascade delete
     await db["posts"].delete_one({"_id": oid})

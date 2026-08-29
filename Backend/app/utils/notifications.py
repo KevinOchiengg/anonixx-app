@@ -53,12 +53,12 @@ TEMPLATES = {
     # Posts
     "post_response": {
         "title": "Someone responded to your confession",
-        "body": "A new response on your post.",
+        "body": "A new response on your drop.",
         "data": {"type": "post_response"},
     },
     "post_like": {
         "title": "Someone felt your confession",
-        "body": "Your post resonated with someone.",
+        "body": "Your drop resonated with someone.",
         "data": {"type": "post_like"},
     },
 

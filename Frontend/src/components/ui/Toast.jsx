@@ -8,7 +8,7 @@
  *   // 1. Wrap your app root with <ToastProvider>
  *   // 2. In any component:
  *   const { showToast } = useToast();
- *   showToast({ type: 'success', message: 'Post created!' });
+ *   showToast({ type: 'success', message: 'Drop created!' });
  *   showToast({ type: 'error', message: 'Something went wrong.' });
  *   showToast({ type: 'info', message: 'Loading your feed...' });
  *   showToast({ type: 'warning', message: 'Connection unstable.' });

@@ -21,12 +21,13 @@ import {
   Platform, ScrollView, Image, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch } from 'react-redux';
 import {
-  ChevronLeft, ChevronDown, Images, BarChart2, Mic, Sparkles, Tag, Type,
+  ChevronLeft, ChevronDown, Images, BarChart2, Mic, Tag, Type,
   AlertTriangle, Trash2, X,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
@@ -36,11 +37,12 @@ import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
+import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
 
 import DropCardRenderer, {
-  DROP_THEMES, CARD_INTENTS, CARD_INTENT_LIST,
+  CARD_INTENTS, CARD_INTENT_LIST,
 } from '../../components/drops/DropCardRenderer';
 import T from '../../utils/theme';
 
@@ -98,13 +100,6 @@ const detectEdge = (text) => {
   return null;
 };
 
-// ─── AI Refinement modes ───────────────────────────────────────
-const REFINE_MODES = [
-  { id: 'holding_back', label: "I'm holding back", sub: 'say it fully' },
-  { id: 'distill',      label: 'Get to the heart', sub: 'cut to what matters' },
-  { id: 'find_words',   label: 'Find the words',   sub: 'say it better' },
-];
-
 // ─── Format chips ──────────────────────────────────────────────
 const FormatChip = React.memo(function FormatChip({ id, label, Icon, active, onPress }) {
   return (
@@ -152,6 +147,19 @@ const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
 export default function DropsComposeScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
+  const { isAuthenticated } = useAuth();
+
+  // Guests get sent straight to Login the moment they land here — composing
+  // a drop is a deliberate action, not a passive browse, so this checks on
+  // focus rather than waiting for a button press. Login has its own "Sign
+  // Up" link for anyone who doesn't have an account yet.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) {
+        navigation.navigate('AuthNav', { screen: 'Login' });
+      }
+    }, [isAuthenticated, navigation])
+  );
 
   // ── Inspired-by handoff (from feed Drop button) ──────────────
   // When a user taps the "drop" button on a feed confession card and
@@ -164,11 +172,10 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [format,   setFormat]   = useState('text');    // text | image | video | voice
   const [text,     setText]     = useState(initialText);
   const [cardIntent, setCardIntent] = useState('general');
-  // Theme (tier-gating only, never shown as its own picker anymore) is
-  // derived from the confession type — "No Strings" is the one type explicit
-  // enough to warrant the After Dark tier (never published, matches its
-  // nature); everything else is Tier 1.
-  const theme = cardIntent === 'no-strings' ? 'after-dark' : 'desire';
+  // After Dark / Tier-2 themes have been removed — every drop uses the
+  // single remaining theme. External social publishing is gated purely by
+  // the "Share to Anonixx socials" toggle below, not by confession type.
+  const theme = 'desire';
   // Mood tag (the "· longing ·" line on the card) is derived the same way —
   // each confession type has its own emotional register, so the tag should
   // shift with it instead of sitting on one word regardless of what's picked.
@@ -181,13 +188,6 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Tag a specific user (optional — drop still hits marketplace) ─
   const [taggedUser, setTaggedUser] = useState(null);
-
-  // ── AI text refinement (text drops only) ─────────────────────────
-  const [refineEnabled,     setRefineEnabled]     = useState(false);
-  const [refinedText,       setRefinedText]       = useState('');
-  const [showRefinePreview, setShowRefinePreview] = useState(false);
-  const [refining,          setRefining]          = useState(false);
-  const [selectedRefineMode, setSelectedRefineMode] = useState(null); // 'holding_back' | 'distill' | 'find_words'
 
   // ── Publisher opt-in (section 16) — Tier 2 is never published ─
   // Default ON: eligible drops auto-post to Anonixx's social pages to help
@@ -216,7 +216,6 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Progressive disclosure — collapsed by default so the compose
   // screen reads as "write + drop", not a settings form ────────────
-  const [refineUiOpen,  setRefineUiOpen]  = useState(false);
   const [tagSectionOpen, setTagSectionOpen] = useState(false);
 
   // ── Delivery tension (section 6) ──────────────────────────────
@@ -414,46 +413,6 @@ export default function DropsComposeScreen({ navigation, route }) {
     setPublisherOptIn(true);
   }, [format, theme, text, navigation]);
 
-  // ── AI text refinement ────────────────────────────────────────
-  // Calls POST /api/v1/drops/refine { confession, mode } → { original, refined, mode, mode_label }.
-  // Shows a side-by-side before/after; user picks which version to post.
-  const handleRefineText = useCallback(async (mode) => {
-    if (!text.trim() || !mode) return;
-    setRefining(true);
-    setRefinedText('');
-    setShowRefinePreview(false);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/refine`, {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ confession: text.trim(), mode }),
-      });
-      if (!res.ok) throw new Error('Refinement unavailable right now.');
-      const data = await res.json();
-      if (!data?.refined) throw new Error('Nothing came back. Try again.');
-      setRefinedText(data.refined);
-      setShowRefinePreview(true);
-    } catch (err) {
-      showToast({ type: 'warning', message: err.message || 'Could not refine. Try again.' });
-      setSelectedRefineMode(null);
-    } finally {
-      setRefining(false);
-    }
-  }, [text, showToast]);
-
-  const handleSelectRefineMode = useCallback((mode) => {
-    if (refining) return;
-    setSelectedRefineMode(mode);
-    setRefinedText('');
-    setShowRefinePreview(false);
-    setRefineEnabled(false);
-    handleRefineText(mode);
-  }, [refining, handleRefineText]);
-
   // ── Submit drop (client-side stub — posts to /drops) ───────────
   const handleDrop = useCallback(async () => {
     if (limitHit) {
@@ -481,9 +440,6 @@ export default function DropsComposeScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      const themeObjLocal = DROP_THEMES[theme];
-      const tier2 = themeObjLocal?.tier === 2;
-
       // Single-word hint — strip spaces, keep lowercase, cap at HINT_MAX.
       const hintClean = (hint || '')
         .trim()
@@ -491,8 +447,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         .slice(0, HINT_MAX)
         .toLowerCase();
 
-      // Use refined text if user accepted the AI suggestion, otherwise raw.
-      const confessionText = (refineEnabled && refinedText) ? refinedText : text.trim();
+      const confessionText = text.trim();
 
       const body = {
         category,
@@ -505,17 +460,11 @@ export default function DropsComposeScreen({ navigation, route }) {
         ...(taggedUser && hintClean ? { recognition_hint: hintClean } : {}),
         // Tag a specific user AND still hit marketplace.
         ...(taggedUser ? { target_user_id: taggedUser.id } : {}),
-        // Publisher opt-in is gated off for Tier 2 (after-dark is never published).
         // Tri-state server-side: explicit false is the only way to opt out.
-        publisher_opt_in: tier2 ? false : !!publisherOptIn,
+        publisher_opt_in: !!publisherOptIn,
         ...(mediaKind && mediaUri ? { media_type: mediaKind } : {}),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
-        // AI refinement — only stamped when the user accepted the suggestion.
-        ...(refineEnabled && refinedText ? {
-          ai_refined:      true,
-          ai_refined_mode: selectedRefineMode || undefined,
-        } : {}),
         ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
         ...(locationCounty.trim() ? { location_county: locationCounty.trim() } : {}),
         ...(locationSubCounty.trim() ? { location_sub_county: locationSubCounty.trim() } : {}),
@@ -594,14 +543,13 @@ export default function DropsComposeScreen({ navigation, route }) {
     }
   }, [
     limitHit, format, text, mediaUri, mediaKind, theme, cardIntent, moodTag, category,
-    intensity, hint, taggedUser, refineEnabled, refinedText, selectedRefineMode,
+    intensity, hint, taggedUser,
     publisherOptIn, dailyUsed, dailyLimit, fetchDailyLimit,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
     dispatch, navigation, showToast,
   ]);
 
   // ── Derived ───────────────────────────────────────────────────
-  const themeObj      = DROP_THEMES[theme];
   const canDrop       = format === 'text' ? !!text.trim() : !!mediaUri;
   const layoutMode    = 'split';
   const cardMediaUri  = format === 'media' ? (thumbUri || mediaUri) : null;
@@ -789,129 +737,6 @@ export default function DropsComposeScreen({ navigation, route }) {
           )}
 
 
-          {/* AI confession refinement — text drops only. Collapsed by
-              default: the header row is a compact tappable trigger; the
-              3 mode chips only appear once the user opens it. */}
-          {format === 'text' && !!text.trim() && (
-            <View style={s.refineBox}>
-              <TouchableOpacity
-                style={s.refineHeader}
-                onPress={() => setRefineUiOpen((v) => !v)}
-                activeOpacity={0.85}
-                hitSlop={HIT_SLOP}
-              >
-                <Sparkles size={rs(13)} color={selectedRefineMode ? T.primary : T.textMute} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.refineHeaderLabel, selectedRefineMode && { color: T.primary }]}>
-                    ✦  Help me send it right
-                  </Text>
-                  {!refineEnabled && (
-                    <Text style={s.refineHeaderSub}>
-                      Anonixx sharpens the words — your intentions stay intact
-                    </Text>
-                  )}
-                </View>
-                {!refineEnabled && (
-                  <ChevronDown
-                    size={rs(15)}
-                    color={T.textMute}
-                    style={refineUiOpen ? s.chevronOpen : null}
-                  />
-                )}
-              </TouchableOpacity>
-
-              {/* 3 emotional mode chips — only once opened, hidden once accepted */}
-              {!refineEnabled && refineUiOpen && (
-                <View style={s.refineModeRow}>
-                  {REFINE_MODES.map(({ id, label, sub }) => {
-                    const active = selectedRefineMode === id;
-                    return (
-                      <TouchableOpacity
-                        key={id}
-                        style={[s.refineModeBtn, active && s.refineModeBtnActive]}
-                        onPress={() => handleSelectRefineMode(id)}
-                        disabled={refining && active}
-                        hitSlop={HIT_SLOP}
-                        activeOpacity={0.8}
-                      >
-                        {refining && active ? (
-                          <ActivityIndicator size="small" color={T.primary} />
-                        ) : (
-                          <>
-                            <Text style={[s.refineModeBtnLabel, active && { color: T.primary }]}>
-                              {label}
-                            </Text>
-                            <Text style={s.refineModeBtnSub}>{sub}</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Side-by-side before / after preview */}
-              {showRefinePreview && !!refinedText && (
-                <View style={s.refinePreviewWrap}>
-                  <View style={s.refineSideBySide}>
-                    <View style={s.refineColumn}>
-                      <Text style={s.refineColLabel}>YOURS</Text>
-                      <Text style={s.refineColText}>{text.trim()}</Text>
-                    </View>
-                    <View style={s.refineColumnDivider} />
-                    <View style={s.refineColumn}>
-                      <Text style={[s.refineColLabel, { color: T.primary }]}>✦ REFINED</Text>
-                      <Text style={[s.refineColText, { color: T.text }]}>{refinedText}</Text>
-                    </View>
-                  </View>
-                  <View style={s.refinePreviewActions}>
-                    <TouchableOpacity
-                      style={[s.refineChoiceBtn, s.refineChoicePrimary]}
-                      onPress={() => { setRefineEnabled(true); setShowRefinePreview(false); }}
-                      hitSlop={HIT_SLOP}
-                    >
-                      <Text style={s.refineChoicePrimaryText}>Use ✦ refined</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={s.refineChoiceBtn}
-                      onPress={() => {
-                        setRefinedText(''); setShowRefinePreview(false);
-                        setRefineEnabled(false); setSelectedRefineMode(null);
-                      }}
-                      hitSlop={HIT_SLOP}
-                    >
-                      <Text style={s.refineChoiceGhostText}>Keep mine</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={s.refineChoiceBtn}
-                      onPress={() => { setRefinedText(''); setShowRefinePreview(false); }}
-                      hitSlop={HIT_SLOP}
-                    >
-                      <Text style={s.refineChoiceGhostText}>try another</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* Accepted state — user chose the refined version */}
-              {refineEnabled && !!refinedText && !showRefinePreview && (
-                <View style={s.refineAccepted}>
-                  <Text style={s.refineAcceptedText}>✦ Using refined version</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setRefineEnabled(false);
-                      setRefinedText('');
-                      setSelectedRefineMode(null);
-                    }}
-                    hitSlop={HIT_SLOP}
-                  >
-                    <Text style={s.refineAcceptedUndo}>undo</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
-
           {/* Dangerous edge warning — spec section 10 */}
           {edge && (
             <View style={s.edgeWarn}>
@@ -992,29 +817,23 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Anonixx Publisher opt-in (section 16) — Tier 2 is never
-              published. Compact single toggle row instead of a paragraph
-              + two buttons — it's a binary decision, doesn't need a
-              full explainer every time. */}
-          {themeObj?.tier !== 2 ? (
-            <View style={s.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
-                <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
-              </View>
-              <Switch
-                value={publisherOptIn}
-                onValueChange={(v) => (v ? handlePublisherYes() : setPublisherOptIn(false))}
-                trackColor={{ false: T.surfaceAlt, true: T.primary }}
-                thumbColor={publisherOptIn ? '#fff' : T.textMute}
-                ios_backgroundColor={T.surfaceAlt}
-              />
+          {/* Anonixx Publisher opt-in (section 16) — the only gate on
+              external social publishing. Compact single toggle row instead
+              of a paragraph + two buttons — it's a binary decision, doesn't
+              need a full explainer every time. */}
+          <View style={s.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
+              <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
             </View>
-          ) : (
-            <Text style={s.toggleRowLockedNote}>
-              After Dark drops stay inside Anonixx. Never published, never shared.
-            </Text>
-          )}
+            <Switch
+              value={publisherOptIn}
+              onValueChange={(v) => (v ? handlePublisherYes() : setPublisherOptIn(false))}
+              trackColor={{ false: T.surfaceAlt, true: T.primary }}
+              thumbColor={publisherOptIn ? '#fff' : T.textMute}
+              ios_backgroundColor={T.surfaceAlt}
+            />
+          </View>
 
           {/* Location — structured (country → county → sub-county → estate),
               helps interested people know you're reachable and powers the
@@ -1577,14 +1396,6 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
     marginTop:     rp(2),
   },
-  toggleRowLockedNote: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         T.textSec,
-    letterSpacing: 0.3,
-    lineHeight:    rf(18),
-    marginBottom:  SPACING.sm,
-  },
 
   footerNote: {
     fontFamily:    'DMSans-Italic',
@@ -1696,152 +1507,4 @@ const s = StyleSheet.create({
     lineHeight: rf(18),
   },
 
-  // ─── AI Confession Refinement ──────────────────────────────────
-  refineBox: {
-    backgroundColor:   'rgba(255,255,255,0.02)',
-    borderColor:       T.border,
-    borderWidth:       1,
-    borderRadius:      RADIUS.md,
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(12),
-    marginBottom:      SPACING.md,
-    gap:               rp(12),
-  },
-  refineHeader: {
-    flexDirection: 'row',
-    alignItems:    'flex-start',
-    gap:           rp(8),
-  },
-  refineHeaderLabel: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
-    color:         T.textSec,
-    letterSpacing: 0.5,
-  },
-  refineHeaderSub: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         T.textMute,
-    letterSpacing: 0.3,
-    marginTop:     rp(2),
-    lineHeight:    rf(16),
-  },
-  refineModeRow: {
-    flexDirection: 'row',
-    gap:           SPACING.xs,
-  },
-  refineModeBtn: {
-    flex:              1,
-    paddingHorizontal: rp(8),
-    paddingVertical:   rp(10),
-    borderRadius:      RADIUS.sm,
-    borderWidth:       1,
-    borderColor:       T.border,
-    backgroundColor:   'transparent',
-    alignItems:        'center',
-    minHeight:         rs(58),
-    justifyContent:    'center',
-  },
-  refineModeBtnActive: {
-    borderColor:     'rgba(255,99,74,0.45)',
-    backgroundColor: 'rgba(255,99,74,0.07)',
-  },
-  refineModeBtnLabel: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(11),
-    color:         T.textSec,
-    letterSpacing: 0.2,
-    textAlign:     'center',
-  },
-  refineModeBtnSub: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(10),
-    color:         T.textMute,
-    letterSpacing: 0.2,
-    textAlign:     'center',
-    marginTop:     rp(3),
-  },
-  // Side-by-side preview
-  refinePreviewWrap: {
-    gap: rp(10),
-  },
-  refineSideBySide: {
-    flexDirection: 'row',
-  },
-  refineColumn: {
-    flex: 1,
-    gap:  rp(6),
-  },
-  refineColumnDivider: {
-    width:            1,
-    backgroundColor:  'rgba(255,255,255,0.08)',
-    marginHorizontal: rp(10),
-  },
-  refineColLabel: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(9),
-    color:         T.textMute,
-    letterSpacing: 2,
-  },
-  refineColText: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(13),
-    color:         T.textSec,
-    lineHeight:    rf(20),
-    letterSpacing: 0.2,
-  },
-  refinePreviewActions: {
-    flexDirection: 'row',
-    gap:           SPACING.xs,
-    flexWrap:      'wrap',
-    marginTop:     rp(4),
-  },
-  refineChoiceBtn: {
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(7),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       T.border,
-  },
-  refineChoicePrimary: {
-    borderColor:     T.primary,
-    backgroundColor: 'rgba(255,99,74,0.12)',
-  },
-  refineChoicePrimaryText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(12),
-    color:         T.primary,
-    letterSpacing: 0.5,
-  },
-  refineChoiceGhostText: {
-    fontFamily:    'DMSans-Regular',
-    fontSize:      rf(12),
-    color:         T.textSec,
-    letterSpacing: 0.3,
-  },
-  // Accepted state
-  refineAccepted: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    backgroundColor:   'rgba(255,99,74,0.08)',
-    borderRadius:      RADIUS.sm,
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(8),
-    borderWidth:       1,
-    borderColor:       'rgba(255,99,74,0.25)',
-  },
-  refineAcceptedText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(12),
-    color:         T.primary,
-    letterSpacing: 0.3,
-  },
-  refineAcceptedUndo: {
-    fontFamily:         'DMSans-Regular',
-    fontSize:           rf(11),
-    color:              T.textMute,
-    letterSpacing:      0.3,
-    textDecorationLine: 'underline',
-  },
 });

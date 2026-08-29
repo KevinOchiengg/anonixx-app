@@ -828,7 +828,7 @@ export default function MediaFeedScreen({ route, navigation }) {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error();
-        showToast({ type: 'success', message: 'Post deleted.' });
+        showToast({ type: 'success', message: 'Drop deleted.' });
         navigation.goBack();
       } catch {
         showToast({ type: 'error', message: 'Could not delete. Try again.' });

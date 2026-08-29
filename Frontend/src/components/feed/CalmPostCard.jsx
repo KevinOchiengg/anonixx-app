@@ -561,7 +561,7 @@ function CalmPostCard({
     { icon: <Bookmark size={rs(18)} color={post.is_saved ? T.primary : T.textSecondary} fill={post.is_saved ? T.primary : 'none'} />, label: post.is_saved ? 'Unsave' : 'Save', onPress: () => { handleMenuClose(); onSave(post.id); } },
     { icon: <Share2 size={rs(18)} color={T.textSecondary} />, label: 'Share', onPress: () => { handleMenuClose(); handleShare(); } },
     { icon: <Link size={rs(18)} color={T.textSecondary} />, label: 'Copy Link', onPress: handleCopyLink },
-    { icon: <EyeOff size={rs(18)} color={T.textSecondary} />, label: 'Hide Post', onPress: handleMenuClose },
+    { icon: <EyeOff size={rs(18)} color={T.textSecondary} />, label: 'Hide Drop', onPress: handleMenuClose },
     { icon: <Flag size={rs(18)} color={T.primary} />, label: 'Report', onPress: handleReport, danger: true },
     { icon: <UserX size={rs(18)} color={T.primary} />, label: 'Block User', onPress: handleBlockUser, danger: true },
   ], [post.is_saved, post.id, onSave, handleShare, handleCopyLink, handleReport, handleBlockUser, handleMenuClose]);

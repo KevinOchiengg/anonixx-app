@@ -625,7 +625,7 @@ export default function PostDetailScreen({ route, navigation }) {
       });
       if (!res.ok) throw new Error();
       setShowOptions(false);
-      showToast({ type: 'success', message: 'Post deleted.' });
+      showToast({ type: 'success', message: 'Drop deleted.' });
       navigation.goBack();
     } catch {
       showToast({ type: 'error', message: 'Could not delete. Try again.' });
@@ -814,7 +814,7 @@ export default function PostDetailScreen({ route, navigation }) {
               style={optStyles.option}
               activeOpacity={0.7}
             >
-              <Text style={optStyles.optionText}>Edit post</Text>
+              <Text style={optStyles.optionText}>Edit drop</Text>
             </TouchableOpacity>
 
             <View style={optStyles.divider} />
@@ -827,7 +827,7 @@ export default function PostDetailScreen({ route, navigation }) {
             >
               {deleting
                 ? <ActivityIndicator size="small" color="#ef4444" />
-                : <Text style={[optStyles.optionText, optStyles.optionDestructive]}>Delete post</Text>
+                : <Text style={[optStyles.optionText, optStyles.optionDestructive]}>Delete drop</Text>
               }
             </TouchableOpacity>
 

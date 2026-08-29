@@ -44,10 +44,6 @@ class RegisterRequest(BaseModel):
     username:      Optional[str] = None
     referral_code: Optional[str] = None   # Optional referral code during signup
     date_of_birth: date                   # Anonixx is 18+ only — enforced at registration
-    # Separate from age itself — a deliberate, optional consent for the most
-    # explicit "After Dark" tier-2 content. Off by default client-side; can
-    # also be turned on later via PATCH /users/me/explicit-content-optin.
-    explicit_content_opt_in: bool = False
 
 class LoginRequest(BaseModel):
     email:    EmailStr
@@ -79,7 +75,6 @@ class UserResponse(BaseModel):
     anonymous_name: Optional[str]
     created_at:     str
     age_verified:            bool = False
-    explicit_content_opt_in: bool = False
 
 
 # ─── Helpers ──────────────────────────────────────────────────
@@ -131,7 +126,6 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
         "streak_count":   0,
         "date_of_birth":  data.date_of_birth.isoformat(),
         "age_verified":   True,       # DOB above already proves 18+ at this point
-        "explicit_content_opt_in": bool(data.explicit_content_opt_in),
         "blocked_user_ids": [],
         "created_at":     _now(),
         "updated_at":     _now(),
@@ -169,7 +163,6 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
             "is_admin":       user.get("is_admin", False),
             "coin_balance":   WELCOME_BONUS,
             "age_verified":            user.get("age_verified", False),
-            "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
         },
     }
 
@@ -193,7 +186,6 @@ async def login(data: LoginRequest, db=Depends(get_database)):
             "avatar_aura":    user.get("avatar_aura"),
             "is_admin":       user.get("is_admin", False),
             "age_verified":            user.get("age_verified", False),
-            "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
         },
     }
 
@@ -223,7 +215,6 @@ async def login_for_access_token(
             "avatar_aura":    user.get("avatar_aura"),
             "is_admin":       user.get("is_admin", False),
             "age_verified":            user.get("age_verified", False),
-            "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
         },
     }
 
@@ -243,7 +234,6 @@ async def get_current_user(
         "anonymous_name": user.get("anonymous_name"),
         "created_at":     user["created_at"].isoformat(),
         "age_verified":            user.get("age_verified", False),
-        "explicit_content_opt_in": user.get("explicit_content_opt_in", False),
     }
 
 

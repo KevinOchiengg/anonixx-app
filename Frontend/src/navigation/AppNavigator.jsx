@@ -25,6 +25,7 @@ import ReferralScreen from '../screens/profile/ReferralScreen';
 import LegalScreen from '../screens/settings/LegalScreen';
 import BlockListScreen from '../screens/settings/BlockListScreen';
 import ModerationHistoryScreen from '../screens/settings/ModerationHistoryScreen';
+import FeedLocationScreen from '../screens/settings/FeedLocationScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import DashboardScreen from '../screens/profile/DashboardScreen';
 import PremiumScreen from '../screens/profile/PremiumScreen';
@@ -35,6 +36,8 @@ import MarketScreen from '../screens/market/MarketScreen';
 import MarketItemScreen from '../screens/market/MarketItemScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
 import PostUnlockScreen from '../screens/drops/PostUnlockScreen';
+import UnlockWaitingScreen from '../screens/drops/UnlockWaitingScreen';
+import UnlockRequestsScreen from '../screens/drops/UnlockRequestsScreen';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminModerationScreen from '../screens/admin/AdminModerationScreen';
@@ -65,6 +68,7 @@ const linking = {
   config: {
     screens: {
       DropChat:              'drop-chat/:connectionId',
+      UnlockRequestsScreen:  'unlock-requests',
       VibeScore:             'vibe',
       Market:                'market',
       MarketItem:            'market/:itemId',
@@ -114,6 +118,8 @@ export default function AppNavigator() {
         <Stack.Screen name="DropsPoll" component={DropsPollScreen} />
         <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
         <Stack.Screen name="PostUnlock" component={PostUnlockScreen} />
+        <Stack.Screen name="UnlockWaitingScreen" component={UnlockWaitingScreen} />
+        <Stack.Screen name="UnlockRequestsScreen" component={UnlockRequestsScreen} />
         <Stack.Screen name="AdminDashboard"  component={AdminDashboardScreen} />
         <Stack.Screen name="AdminUsers"      component={AdminUsersScreen} />
         <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
@@ -130,6 +136,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Legal"          component={LegalScreen} />
         <Stack.Screen name="BlockList"          component={BlockListScreen} />
         <Stack.Screen name="ModerationHistory"  component={ModerationHistoryScreen} />
+        <Stack.Screen name="FeedLocation"       component={FeedLocationScreen} />
         <Stack.Screen name="Market"         component={MarketScreen} />
         <Stack.Screen name="MarketItem"     component={MarketItemScreen} />
       </Stack.Navigator>

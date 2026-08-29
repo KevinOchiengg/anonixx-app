@@ -138,14 +138,14 @@ export default function DashboardScreen({ navigation }) {
       });
       if (res.ok) {
         setPosts((prev) => prev.map((p) => (p.id === editingPost.id ? { ...p, content: editText.trim() } : p)));
-        showToast({ type: 'success', message: 'Post updated.' });
+        showToast({ type: 'success', message: 'Drop updated.' });
         setEditingPost(null);
       } else {
         const data = await res.json().catch(() => ({}));
-        showToast({ type: 'error', message: data.detail || 'Could not update post.' });
+        showToast({ type: 'error', message: data.detail || 'Could not update drop.' });
       }
     } catch {
-      showToast({ type: 'error', message: 'Could not update post. Try again.' });
+      showToast({ type: 'error', message: 'Could not update drop. Try again.' });
     } finally {
       setSavingEdit(false);
     }
@@ -153,7 +153,7 @@ export default function DashboardScreen({ navigation }) {
 
   const handleDelete = useCallback((post) => {
     Alert.alert(
-      'Delete this post?',
+      'Delete this drop?',
       'This removes it everywhere, permanently.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -168,12 +168,12 @@ export default function DashboardScreen({ navigation }) {
               });
               if (res.ok) {
                 setPosts((prev) => prev.filter((p) => p.id !== post.id));
-                showToast({ type: 'success', message: 'Post deleted.' });
+                showToast({ type: 'success', message: 'Drop deleted.' });
               } else {
-                showToast({ type: 'error', message: 'Could not delete post.' });
+                showToast({ type: 'error', message: 'Could not delete drop.' });
               }
             } catch {
-              showToast({ type: 'error', message: 'Could not delete post. Try again.' });
+              showToast({ type: 'error', message: 'Could not delete drop. Try again.' });
             } finally {
               setDeletingId(null);
             }
@@ -252,19 +252,19 @@ export default function DashboardScreen({ navigation }) {
         <View style={s.statsRow}>
           <StatCard icon={Coins} value={balance} label="Coins" color={THEME.warning} />
           <StatCard icon={Eye} value={totalViews} label="Total views" />
-          <StatCard icon={FileText} value={posts.length} label="Posts" />
+          <StatCard icon={FileText} value={posts.length} label="Drops" />
         </View>
 
         {/* My Posts */}
-        <SectionHeader title="My Posts" />
+        <SectionHeader title="My Drops" />
         {posts.length === 0 ? (
-          <Text style={s.emptyText}>You haven't posted anything yet.</Text>
+          <Text style={s.emptyText}>You haven't dropped anything yet.</Text>
         ) : (
           <View style={s.card}>
             {posts.map((post, idx) => (
               <View key={post.id} style={[s.postRow, idx === posts.length - 1 && { borderBottomWidth: 0 }]}>
                 <View style={s.postInfo}>
-                  <Text style={s.postContent} numberOfLines={2}>{post.content || '(media post)'}</Text>
+                  <Text style={s.postContent} numberOfLines={2}>{post.content || '(media drop)'}</Text>
                   <View style={s.postMetaRow}>
                     <Eye size={rs(11)} color={THEME.textMuted} />
                     <Text style={s.postMetaText}>{post.views_count}</Text>
@@ -373,7 +373,7 @@ export default function DashboardScreen({ navigation }) {
         <View style={s.modalOverlay}>
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Edit post</Text>
+              <Text style={s.modalTitle}>Edit drop</Text>
               <TouchableOpacity onPress={() => setEditingPost(null)} hitSlop={HIT_SLOP}>
                 <X size={rs(20)} color={THEME.textMuted} />
               </TouchableOpacity>

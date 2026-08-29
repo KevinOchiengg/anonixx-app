@@ -10,6 +10,7 @@ import {
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnread } from '../context/UnreadContext';
+import { useAuth } from '../context/AuthContext';
 import { rf } from '../utils/responsive';
 
 // Feed
@@ -21,8 +22,9 @@ import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
 import PostDetailScreen from '../screens/posts/PostDetailScreen';
 import InspirationThreadScreen from '../screens/drops/InspirationThreadScreen';
 
-// Connect chat screen — still used by Messages tab; the Connect tab itself
-// (ConnectScreen, and its own stack) is hidden from navigation, not deleted.
+// Connect chat screen — still used by Messages tab. ConnectScreen itself
+// (the standalone Connect tab) was removed as dead code — this is only
+// the chat surface, unrelated to that screen.
 import ChatScreen from '../screens/connect/ChatScreen';
 
 // Drops — DropsCompose now lives at the root AppNavigator stack (reachable
@@ -167,6 +169,7 @@ function ProfileStack() {
 export default function TabNavigator() {
   const insets      = useSafeAreaInsets();
   const { unreadCount } = useUnread();
+  const { isAuthenticated } = useAuth();
 
   return (
     <Tab.Navigator
@@ -212,6 +215,17 @@ export default function TabNavigator() {
           tabBarLabel: '',
           tabBarButton: (props) => <CustomTabBarButton {...props} />,
         }}
+        listeners={({ navigation }) => ({
+          // Guests get sent to Login the instant they tap Create, instead
+          // of the tab switching and DropsComposeScreen's own focus-effect
+          // guard bouncing them a beat later — same destination, no flash.
+          tabPress: (e) => {
+            if (!isAuthenticated) {
+              e.preventDefault();
+              navigation.navigate('AuthNav', { screen: 'Login' });
+            }
+          },
+        })}
       />
       <Tab.Screen
         name="Circles"

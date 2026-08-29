@@ -7,9 +7,6 @@
  * consents TWICE. The second screen is deliberately slower, italic, and
  * names the specific risk: "your words become public."
  *
- * Tier 2 (After Dark) themes are filtered out upstream and cannot reach
- * this screen. If one somehow does, we hard-refuse.
- *
  * Voice drops get an additional acknowledgement: the voice itself will
  * be heard outside Anonixx — we surface that explicitly.
  *
@@ -37,14 +34,11 @@ import {
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
-import { useToast } from '../../components/ui/Toast';
 import { DROP_THEMES } from '../../components/drops/DropCardRenderer';
 import { T } from '../../utils/colorTokens';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 
 export default function DropsPublishScreen({ navigation, route }) {
-  const { showToast } = useToast();
-
   // ── Params from caller ─────────────────────────────────────────
   const {
     format   = 'text',
@@ -55,7 +49,6 @@ export default function DropsPublishScreen({ navigation, route }) {
 
   const themeObj = DROP_THEMES[theme] || DROP_THEMES['desire'];
   const isVoice  = format === 'voice';
-  const isTier2  = themeObj.tier === 2;
 
   // ── Steps: 1 = soft ask, 2 = final italic confirmation ─────────
   const [step, setStep] = useState(1);
@@ -71,18 +64,6 @@ export default function DropsPublishScreen({ navigation, route }) {
       useNativeDriver: true,
     }).start();
   }, [step, fade]);
-
-  // ── Tier 2 hard refuse ─────────────────────────────────────────
-  useEffect(() => {
-    if (isTier2) {
-      showToast({
-        type: 'warning',
-        title: 'Not publishable',
-        message: 'After Dark drops stay inside Anonixx. Always.',
-      });
-      navigation.goBack();
-    }
-  }, [isTier2, navigation, showToast]);
 
   // ── Actions ────────────────────────────────────────────────────
   const handleKeepPrivate = useCallback(() => {
@@ -103,9 +84,6 @@ export default function DropsPublishScreen({ navigation, route }) {
     setSubmitting(false);
     navigation.goBack();
   }, [navigation, onConfirmed, submitting]);
-
-  // ── Render ─────────────────────────────────────────────────────
-  if (isTier2) return null;
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>

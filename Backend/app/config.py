@@ -57,9 +57,6 @@ class Settings(BaseSettings):
     AGORA_APP_ID: str = ""
     AGORA_APP_CERTIFICATE: str = ""
 
-    # ANTHROPIC (AI confession refinement)
-    ANTHROPIC_API_KEY: Optional[str] = None
-
     # RESEND (email)
     RESEND_API_KEY: str = ""
     FROM_EMAIL: str = "Anonixx <noreply@anonixx.app>"

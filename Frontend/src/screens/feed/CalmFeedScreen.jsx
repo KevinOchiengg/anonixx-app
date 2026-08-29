@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, RefreshCw, Menu } from 'lucide-react-native';
+import { Search, RefreshCw, Menu, MapPin } from 'lucide-react-native';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
@@ -32,6 +32,14 @@ import { THEME } from '../../utils/theme';
 
 // Matches DEFAULT_FEED_AD_FREQUENCY in Backend/app/api/v1/ads.py
 const FEED_AD_FREQUENCY = 8;
+
+// Mirrors FEED_LOCATION_SCOPES in Backend/app/api/v1/users.py
+const LOCATION_SCOPE_LABELS = {
+  country:    'Country',
+  county:     'Region',
+  sub_county: 'Area',
+  estate:     'Nearby',
+};
 
 // ── Stars ─────────────────────────────────────────────────────
 const STARS = Array.from({ length: 80 }, (_, i) => ({
@@ -126,7 +134,7 @@ const SessionLimitView = React.memo(({ hasMore, onContinue, onClose }) => (
         </TouchableOpacity>
         {hasMore && (
           <TouchableOpacity onPress={onContinue} style={styles.limitBtnPrimary} activeOpacity={0.85}>
-            <Text style={styles.limitBtnPrimaryText}>5 more posts</Text>
+            <Text style={styles.limitBtnPrimaryText}>5 more drops</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -137,7 +145,7 @@ const SessionLimitView = React.memo(({ hasMore, onContinue, onClose }) => (
 
 // ── Main screen ───────────────────────────────────────────────
 export default function CalmFeedScreen({ navigation, route }) {
-  const { isAuthenticated, checkAuth } = useAuth();
+  const { isAuthenticated, checkAuth, user } = useAuth();
   const insets                         = useSafeAreaInsets();
   const { showToast }                  = useToast();
   const dispatch                       = useDispatch();
@@ -413,7 +421,7 @@ export default function CalmFeedScreen({ navigation, route }) {
         await AsyncStorage.removeItem('token');
         showToast({ type: 'error', title: 'Session Expired', message: 'Please sign in again.' });
       } else {
-        showToast({ type: 'error', message: 'Could not save post. Try again.' });
+        showToast({ type: 'error', message: 'Could not save drop. Try again.' });
       }
     } catch {
       showToast({ type: 'error', message: 'Something went wrong. Check your connection.' });
@@ -570,6 +578,19 @@ export default function CalmFeedScreen({ navigation, route }) {
         <Text style={styles.headerLogo}>anonixx</Text>
 
         <View style={styles.headerRight}>
+          {isAuthenticated && user?.feed_location_scope && user.feed_location_scope !== 'off' && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('FeedLocation')}
+              style={styles.locationPill}
+              hitSlop={HIT_SLOP}
+            >
+              <MapPin size={rs(12)} color={THEME.primary} />
+              <Text style={styles.locationPillText}>
+                {LOCATION_SCOPE_LABELS[user.feed_location_scope] || 'Nearby'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             onPress={() => navigation.navigate('Search')}
             style={styles.headerBtn}
@@ -666,6 +687,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius:   rs(19),
     backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  locationPill: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(4),
+    paddingHorizontal: rp(10),
+    height:            rs(30),
+    borderRadius:      rs(15),
+    backgroundColor:   'rgba(255,99,74,0.10)',
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.25)',
+  },
+  locationPillText: {
+    fontSize:      rf(11),
+    fontWeight:    '700',
+    color:         THEME.primary,
+    letterSpacing: 0.2,
   },
   // Feed
   feedContent:  { paddingTop: rh(8) },

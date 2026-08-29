@@ -22,12 +22,10 @@ import QRCode from 'react-native-qrcode-svg';
 import { rf, rp, rs } from '../../utils/responsive';
 
 // ─── Themes ───────────────────────────────────────────────────
-// Each theme defines the mood. Tier 1 is open to all, Tier 2 requires 18+
-// verification + a separate explicit-content opt-in (see api/v1/drops.py).
-// Reduced to 3 curated themes — mirrors Backend/app/api/v1/drops.py's
-// TIER_1_THEMES/TIER_2_THEMES exactly, keep both in sync if this changes.
+// After Dark / Tier-2 themes have been removed entirely — every drop uses
+// the same base theme now. What used to be theme-based colors are now
+// driven by confession type instead (see CARD_INTENTS below).
 export const DROP_THEMES = {
-  // ── Tier 1 ──
   'desire': {
     tier: 1,
     label: 'Desire',
@@ -36,45 +34,14 @@ export const DROP_THEMES = {
     textColor: '#F6E6EC', ghostColor: 'rgba(255,59,122,0.05)',
     moodColor: '#C48A98', identityColor: '#FF3B7A',
   },
-
-  // ── Tier 2 (18+ verified, explicit opt-in required) ──
-  // Midnight Sin listed first within this tier per request — still gated
-  // identically to After Dark, this only affects display order.
-  'midnight-sin': {
-    tier: 2,
-    label: 'Midnight Sin',
-    bgFrom: '#02030a', bgTo: '#0a0418',
-    accent: '#FF006E', accentGlow: 'rgba(255,0,110,0.14)',
-    textColor: '#F2D8E4', ghostColor: 'rgba(255,0,110,0.05)',
-    moodColor: '#A0708A', identityColor: '#FF006E',
-  },
-  'after-dark': {
-    tier: 2,
-    label: 'After Dark',
-    bgFrom: '#08020c', bgTo: '#1a0824',
-    accent: '#B026FF', accentGlow: 'rgba(176,38,255,0.14)',
-    textColor: '#EEDDFF', ghostColor: 'rgba(176,38,255,0.05)',
-    moodColor: '#8B6BA8', identityColor: '#B026FF',
-  },
 };
-
-export const TIER_1_THEMES = Object.entries(DROP_THEMES)
-  .filter(([, t]) => t.tier === 1)
-  .map(([id, t]) => ({ id, ...t }));
-
-export const TIER_2_THEMES = Object.entries(DROP_THEMES)
-  .filter(([, t]) => t.tier === 2)
-  .map(([id, t]) => ({ id, ...t }));
 
 // ─── Confession types ──────────────────────────────────────────
 // The audience/nature a drop is written for — chosen at compose time
-// (DropsComposeScreen's "Confession Type" picker). Unlike DROP_THEMES
-// (which gates explicit-content tier), a confession type is purely about
-// who the drop is for and what it's asking for — it owns the card's whole
+// (DropsComposeScreen's "Confession Type" picker). It owns the card's whole
 // visual identity: palette + a distinct background pattern (see
 // CARD_PATTERNS below). When `intent` is passed to DropCardRenderer and
-// matches a key here, it overrides the theme-derived palette entirely;
-// `theme` still governs tier-gating upstream, untouched.
+// matches a key here, it overrides the theme-derived palette entirely.
 // Trimmed to the 3 broadest intents + General as the default catch-all —
 // Single Parent / Gay / Lesbian were cut in favor of covering the widest
 // range of "why someone opens the app" (casual / serious / just lonely)

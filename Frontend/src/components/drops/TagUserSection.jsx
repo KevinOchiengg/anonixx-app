@@ -148,7 +148,7 @@ export default function TagUserSection({ taggedUser, onTag, onClear }) {
         TAG SOMEONE · <Text style={s.eyebrowMute}>optional</Text>
       </Text>
       <Text style={s.subText}>
-        Hits the marketplace. If you tag someone they also receive it — anonymously.
+        If you tag someone they also receive it — anonymously.
       </Text>
 
       {/* Recent partners */}

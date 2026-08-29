@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
@@ -13,6 +13,7 @@ from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.notifications import send_push_notification as _notify
+from app.utils.location import build_location
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
@@ -88,7 +89,7 @@ class CreateDropRequest(BaseModel):
     intent: Optional[str] = None  # what the sender is open to
 
     # Drop spec upgrade fields
-    theme: Optional[str] = None                  # "desire", "after-dark", "midnight-sin"
+    theme: Optional[str] = None                  # "desire" — only theme left
     mood_tag: Optional[str] = None               # "longing", "restless", …
     intensity: Optional[str] = None              # "soft" | "heavy" | "devastating"
     recognition_hint: Optional[str] = None       # one word, directed drops only
@@ -99,9 +100,6 @@ class CreateDropRequest(BaseModel):
     duration_seconds: Optional[float] = None     # voice drops
     waveform_data: Optional[List[float]] = None  # voice drops
     inspired_by_post_id: Optional[str] = None   # feed post that triggered this drop
-    # AI refinement — set when the user accepted a suggested refinement
-    ai_refined:      Optional[bool] = False
-    ai_refined_mode: Optional[str]  = None      # "holding_back" | "distill" | "find_words"
 
     # Feed-as-drops upgrade — structured location, most-specific to least.
     # Only country + county are backed by a real fixed list client-side
@@ -113,11 +111,6 @@ class CreateDropRequest(BaseModel):
     location_estate:     Optional[str] = None   # e.g. "Kilimani"
     poll:       Optional[DropPollInput] = None   # optional attached poll
     font_style: Optional[str] = None             # "classic" | "sultry-script" | "bold-tease"
-
-
-class RefineConfessionRequest(BaseModel):
-    confession: str
-    mode: str  # "holding_back" | "distill" | "find_words"
 
 
 class ReactToDropRequest(BaseModel):
@@ -162,15 +155,11 @@ class ReportDropRequest(BaseModel):
 # ==================== SPEC CONSTANTS ====================
 
 # Drop themes — mirrors DROP_THEMES in the frontend (DropCardRenderer.jsx).
-# Tier-2 themes are never published and are 18+ gated (age_verified AND
-# explicit_content_opt_in both required — see the /drops POST handler below).
-# NOTE: these previously didn't match the frontend's real theme ids at all
-# (only "cinematic-coral"/"after-dark" happened to overlap) — every other
-# theme selection was silently rejected by the check below. Now reduced to
-# the 3 curated themes and kept in exact sync with the frontend.
-TIER_1_THEMES = {"desire"}
-TIER_2_THEMES = {"after-dark", "midnight-sin"}
-VALID_THEMES = TIER_1_THEMES | TIER_2_THEMES
+# After Dark / Tier-2 themes have been removed entirely — every drop is
+# treated the same regardless of confession type; only external social
+# publishing (Facebook/Telegram/etc.) is gated, and that's purely the
+# poster's own opt-in choice (publisher_opt_in), not a theme restriction.
+VALID_THEMES = {"desire"}
 
 VALID_MOOD_TAGS = {
     "longing", "restless", "tender", "bitter", "hopeful",
@@ -182,26 +171,6 @@ VALID_INTENSITIES = {"soft", "heavy", "devastating"}
 # Card-text font presets — style composition on the two font families the app
 # already ships (PlayfairDisplay / DMSans), not new font assets.
 FONT_STYLES = {"classic", "sultry-script", "bold-tease"}
-
-MAX_LOCATION_PART_LEN = 60
-
-
-def _build_location(country, county, sub_county, estate):
-    """Turns the 4 structured location inputs into (structured dict, display
-    string) — most-specific to least, e.g. "Kilimani, Westlands, Nairobi,
-    Kenya". Returns (None, None) if every part is empty."""
-    parts = {
-        "country":    (country or "").strip()[:MAX_LOCATION_PART_LEN] or None,
-        "county":     (county or "").strip()[:MAX_LOCATION_PART_LEN] or None,
-        "sub_county": (sub_county or "").strip()[:MAX_LOCATION_PART_LEN] or None,
-        "estate":     (estate or "").strip()[:MAX_LOCATION_PART_LEN] or None,
-    }
-    if not any(parts.values()):
-        return None, None
-    display = ", ".join(
-        v for v in [parts["estate"], parts["sub_county"], parts["county"], parts["country"]] if v
-    )
-    return parts, display
 
 # Section 8 — six text reactions. Anything else is rejected.
 VALID_REACTIONS = {
@@ -329,9 +298,18 @@ async def send_push_notification(user_id: str, title: str, body: str, db):
         print(f"⚠️ Push notification failed: {e}")
 
 
-async def trigger_mpesa_stk(phone: str, amount: float, account_ref: str, description: str) -> dict:
+async def trigger_mpesa_stk(
+    phone: str, amount: float, account_ref: str, description: str,
+    amount_kes: Optional[int] = None,
+) -> dict:
     """
     Trigger M-Pesa STK Push. Returns { success, checkout_request_id, error }
+
+    `amount` is USD, converted to KES via a flat approximate FX rate below —
+    kept for callers (e.g. reveal_mpesa) that don't yet have a real geo price.
+    Pass `amount_kes` instead to charge an exact, already-geo-priced KES
+    figure (see get_drop_unlock_price in geo_pricing.py) and skip that
+    approximation.
     """
     try:
         import base64
@@ -370,7 +348,7 @@ async def trigger_mpesa_stk(phone: str, amount: float, account_ref: str, descrip
                     "Password": password,
                     "Timestamp": timestamp,
                     "TransactionType": "CustomerPayBillOnline",
-                    "Amount": int(amount * 130),  # USD to KES approx
+                    "Amount": amount_kes if amount_kes is not None else int(amount * 130),  # USD to KES approx
                     "PartyA": phone,
                     "PartyB": shortcode,
                     "PhoneNumber": phone,
@@ -478,7 +456,7 @@ async def create_drop(
     if data.media_url and data.media_type not in ("image", "video", "voice"):
         raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'voice'")
 
-    location_detail, location_display = _build_location(
+    location_detail, location_display = build_location(
         data.location_country, data.location_county, data.location_sub_county, data.location_estate,
     )
 
@@ -533,18 +511,6 @@ async def create_drop(
     if intensity not in VALID_INTENSITIES:
         raise HTTPException(status_code=400, detail="intensity must be soft, heavy, or devastating")
 
-    # Tier 2 themes (After Dark) are 18+ only and never published on social.
-    # Signup itself is a hard 18+ gate (age_verified is always true past
-    # registration), so that's sufficient on its own now — the separate
-    # explicit_content_opt_in toggle no longer gates theme selection, only
-    # a viewer's own feed preferences elsewhere.
-    is_tier2 = theme in TIER_2_THEMES
-    if is_tier2 and not bool(user.get("age_verified")):
-        raise HTTPException(
-            status_code=403,
-            detail="After Dark themes are 18+. Verify your age in Settings to unlock.",
-        )
-
     # One-word recognition hint (section 11)
     recognition_hint = None
     if data.recognition_hint:
@@ -552,9 +518,10 @@ async def create_drop(
         if parts:
             recognition_hint = parts[0].lower()[:16]
 
-    # Publisher opt-in is forced off for Tier 2 themes regardless of client input.
-    # Otherwise defaults True (auto-queue) unless the client explicitly opted out.
-    publisher_opt_in = (data.publisher_opt_in is not False) and not is_tier2
+    # Publisher opt-in — the only gate on external social publishing (Facebook/
+    # Telegram/etc.) is the poster's own choice. Defaults True (auto-queue)
+    # unless the client explicitly opted out.
+    publisher_opt_in = (data.publisher_opt_in is not False)
 
     # ── Daily drop limit (section 14) ───────────────────────────
     is_premium = _is_premium_active(user)
@@ -601,7 +568,7 @@ async def create_drop(
         "intensity": intensity,
         "recognition_hint": recognition_hint,
         "publisher_opt_in": publisher_opt_in,
-        "tier": 2 if is_tier2 else 1,
+        "tier": 1,
         "published_at": None,            # set by POST /drops/:id/publish
         "duration_seconds": float(data.duration_seconds) if data.duration_seconds else None,
         "waveform_data": (data.waveform_data or None) if data.media_type == "voice" else None,
@@ -612,9 +579,6 @@ async def create_drop(
         # All drops are always public in the marketplace.
         # target_user_id means "also deliver to this inbox" — not "private only".
         "is_marketplace": True,
-        # AI refinement metadata — used to surface the ✦ disclosure marker
-        "ai_refined":      bool(data.ai_refined),
-        "ai_refined_mode": data.ai_refined_mode or None,
 
         # Feed-as-drops upgrade
         "location":        location_display,   # joined display string, e.g. "Kilimani, Westlands, Nairobi, Kenya"
@@ -624,41 +588,49 @@ async def create_drop(
     }
 
     await db["drops"].insert_one(drop)
+    drop_id_str = str(drop["_id"])
 
     # ── Mirror into the main feed as a genuine post ──────────────
-    # Drops surface inline in the main feed — but as an ordinary confession
+    # Every drop surfaces inline in the main feed — as an ordinary confession
     # post (real likes/saves/comments via the Posts API), not the separate
-    # drop-card treatment with its own paywall/expiry/reactions. Tier-2
-    # (After Dark) drops are never published anywhere, so they're excluded
-    # here too, same as social publishing above.
-    if not is_tier2:
-        mirrored_poll = None
-        if poll_data:
-            mirrored_poll = {
-                **poll_data,
-                "ends_at": drop["expires_at"].isoformat() if drop.get("expires_at") else None,
-            }
-        await db["posts"].insert_one({
-            "_id": ObjectId(),
-            "user_id": current_user_id,
-            "content": drop["confession"],
-            "is_anonymous": True,
-            "anonymous_name": drop["sender_anonymous_name"],
-            "topics": [],
-            "images": [drop["media_url"]] if drop["media_url"] and drop["media_type"] == "image" else [],
-            "video_url": drop["media_url"] if drop["media_type"] == "video" else None,
-            "audio_url": drop["media_url"] if drop["media_type"] == "voice" else None,
-            "poll": mirrored_poll,
-            "thread_count": 0,
-            "views_count": 0,
-            "saves_count": 0,
-            "liked_by": [],
-            "likes_count": 0,
-            "created_at": drop["created_at"],
-        })
+    # drop-card treatment with its own paywall/expiry/reactions. Whether it
+    # ALSO reaches external social platforms (Facebook/Telegram/etc.) is a
+    # completely separate decision, gated purely by the poster's own
+    # publisher_opt_in choice below — never by the drop's content itself.
+    mirrored_poll = None
+    if poll_data:
+        mirrored_poll = {
+            **poll_data,
+            "ends_at": drop["expires_at"].isoformat() if drop.get("expires_at") else None,
+        }
+    await db["posts"].insert_one({
+        "_id": ObjectId(),
+        "user_id": current_user_id,
+        "content": drop["confession"],
+        "is_anonymous": True,
+        "anonymous_name": drop["sender_anonymous_name"],
+        "topics": [],
+        "images": [drop["media_url"]] if drop["media_url"] and drop["media_type"] == "image" else [],
+        "video_url": drop["media_url"] if drop["media_type"] == "video" else None,
+        "audio_url": drop["media_url"] if drop["media_type"] == "voice" else None,
+        "poll": mirrored_poll,
+        "thread_count": 0,
+        "views_count": 0,
+        "saves_count": 0,
+        "liked_by": [],
+        "likes_count": 0,
+        "created_at": drop["created_at"],
+        "location":        location_display,
+        "location_detail": location_detail,
+        # Back-link to the drop record this post mirrors. NOT a type
+        # distinction — a drop IS a post in Anonixx; this only exists so the
+        # feed post can reach its drop's extra machinery (expiry, unlock
+        # pricing, reactions) which still lives in the `drops` collection.
+        "source_drop_id": drop_id_str,
+    })
 
     # ── Auto-queue for Anonixx social publishing ────────────────
-    # Eligible drops (Tier-1, not privately targeted, not already flagged,
+    # Eligible drops (not privately targeted, not already flagged,
     # not explicitly opted out) queue for cross-posting immediately — no
     # manual "Publish" tap needed. POST /{drop_id}/publish still works as a
     # manual re-trigger for drops that skipped auto-queue (e.g. targeted).
@@ -744,10 +716,8 @@ async def create_drop(
     # Update confession streak
     await _update_confession_streak(current_user_id, db)
 
-    drop_id = str(drop["_id"])
-
     return {
-        "id": drop_id,
+        "id": drop_id_str,
         "expires_at": drop["expires_at"].isoformat(),
         "time_left": get_time_left(drop["expires_at"]),
         "is_night_mode": night,
@@ -858,51 +828,6 @@ async def vote_on_drop_poll(
         "voted_option": data.option_index,
         "total_votes": total,
         "options": options_out,
-    }
-
-
-# ==================== AI CONFESSION REFINEMENT ====================
-
-@router.post("/refine")
-async def refine_confession_endpoint(
-    data: RefineConfessionRequest,
-    current_user_id: str = Depends(get_current_user_id),
-):
-    """
-    AI-assisted confession refinement.
-
-    Accepts raw text + an emotional mode; returns a refined version alongside
-    the original so the frontend can render a side-by-side comparison.
-    The user decides which version to post. If they accept the refinement the
-    drop is stamped with ai_refined=True and ai_refined_mode=<mode>.
-
-    Modes:
-      holding_back  — removes the filter, surfaces suppressed emotion
-      distill       — cuts to the single most powerful feeling
-      find_words    — reconstructs with more emotional precision
-    """
-    from app.utils.ai_refine import refine_confession, MODES
-
-    if data.mode not in MODES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown mode '{data.mode}'. Choose from: {', '.join(MODES.keys())}",
-        )
-    if not data.confession.strip():
-        raise HTTPException(status_code=400, detail="Confession cannot be empty.")
-
-    refined = await refine_confession(data.confession.strip(), data.mode)
-    if refined is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Refinement is unavailable right now. Your words are good as they are.",
-        )
-
-    return {
-        "original":   data.confession.strip(),
-        "refined":    refined,
-        "mode":       data.mode,
-        "mode_label": MODES[data.mode]["label"],
     }
 
 
@@ -1214,6 +1139,7 @@ async def unlock_drop_coins(
 async def unlock_drop_mpesa(
     drop_id: str,
     data: MpesaUnlockRequest,
+    request: Request,
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
@@ -1239,10 +1165,19 @@ async def unlock_drop_mpesa(
     if existing:
         raise HTTPException(status_code=400, detail="Already unlocked")
 
-    price = drop.get("price", DROP_PRICE_USD)
+    # M-Pesa is a Kenya-region payment method regardless of the caller's
+    # resolved IP tier (diaspora users on Kenyan numbers included), so this
+    # always uses the M-Pesa/PPP KES price — not a raw FX conversion of the
+    # flat USD figure like the old DROP_PRICE_USD did.
+    from app.api.v1.geo_pricing import get_drop_unlock_price
+    price_info = get_drop_unlock_price(tier=3, is_mpesa_country=True, is_group=bool(drop.get("is_group")))
+    kes_price  = price_info["kes"]
+    coin_equivalent = round(price_info["usd"] * CASH_TO_COIN_RATE)
+
     result = await trigger_mpesa_stk(
         phone=data.phone_number,
-        amount=price,
+        amount=price_info["usd"],
+        amount_kes=kes_price,
         account_ref=f"DROP_{drop_id[:8].upper()}",
         description="Anonixx Drop Unlock"
     )
@@ -1250,14 +1185,17 @@ async def unlock_drop_mpesa(
     if not result["success"]:
         raise HTTPException(status_code=402, detail=result.get("error", "Payment failed"))
 
-    # Store pending unlock
+    # Store pending unlock — coin_equivalent travels with it so the M-Pesa
+    # callback credits the drop owner's revenue share off what was actually
+    # charged (geo-priced), not the flat creation-time price.
     await db["drop_unlock_pending"].update_one(
         {"drop_id": drop_id, "unlocker_id": current_user_id},
         {"$set": {
             "drop_id": drop_id,
             "unlocker_id": current_user_id,
             "checkout_request_id": result["checkout_request_id"],
-            "amount": price,
+            "amount_kes": kes_price,
+            "coin_equivalent": coin_equivalent,
             "created_at": now_utc()
         }},
         upsert=True
@@ -1266,7 +1204,7 @@ async def unlock_drop_mpesa(
     return {
         "message": "STK push sent. Enter your M-Pesa PIN to unlock.",
         "checkout_request_id": result["checkout_request_id"],
-        "amount": price,
+        "amount_kes": kes_price,
     }
 
 
@@ -1276,6 +1214,7 @@ async def unlock_drop_mpesa(
 async def unlock_drop_stripe(
     drop_id: str,
     data: StripeUnlockRequest,
+    request: Request,
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
@@ -1300,22 +1239,35 @@ async def unlock_drop_stripe(
     if existing:
         raise HTTPException(status_code=400, detail="Already unlocked")
 
+    # Geo-price the same way coins.py's Stripe flow does — resolve the
+    # caller's country from IP (never trust a client-supplied country) and
+    # charge the matching PPP tier instead of a flat $2/$3 worldwide.
+    from app.api.v1.geo_pricing import country_from_ip, TIER_MAP, get_drop_unlock_price
+    forwarded   = request.headers.get("X-Forwarded-For", "")
+    ip          = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "")
+    country     = await country_from_ip(ip)
+    tier        = TIER_MAP.get(country, 2)
+    price_info  = get_drop_unlock_price(tier, is_mpesa_country=False, is_group=bool(drop.get("is_group")))
+
     try:
         import stripe
         stripe.api_key = settings.STRIPE_SECRET_KEY
-        price = drop.get("price", DROP_PRICE_USD)
 
         intent = stripe.PaymentIntent.create(
-            amount=int(price * 100),
+            amount=price_info["usd_cents"],
             currency="usd",
             payment_method=data.payment_method_id,
             confirm=True,
-            metadata={"drop_id": drop_id, "unlocker_id": current_user_id},
+            metadata={"drop_id": drop_id, "unlocker_id": current_user_id, "geo_tier": str(tier)},
             automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
         )
 
         if intent.status == "succeeded":
-            await _complete_unlock(drop_id, current_user_id, drop, "stripe", db)
+            coin_equivalent = round(price_info["usd"] * CASH_TO_COIN_RATE)
+            await _complete_unlock(
+                drop_id, current_user_id, drop, "stripe", db,
+                coin_equivalent=coin_equivalent, amount_charged=price_info["usd"],
+            )
             connection_id = await _create_drop_connection(drop_id, drop, current_user_id, db)
             return {
                 "message": "Unlocked! You can now chat.",
@@ -1366,7 +1318,11 @@ async def mpesa_callback(payload: dict, db = Depends(get_database)):
             "unlocker_id": unlocker_id
         })
         if not existing:
-            await _complete_unlock(drop_id, unlocker_id, drop, "mpesa", db)
+            await _complete_unlock(
+                drop_id, unlocker_id, drop, "mpesa", db,
+                coin_equivalent=pending.get("coin_equivalent"),
+                amount_charged=pending.get("amount_kes"),
+            )
             await _create_drop_connection(drop_id, drop, unlocker_id, db)
 
         # Clean up pending
@@ -1434,8 +1390,16 @@ async def _credit_revenue_share(drop: dict, coin_equivalent: int, db):
         pass  # sender account missing — don't fail the unlocker's flow over it
 
 
-async def _complete_unlock(drop_id: str, unlocker_id: str, drop: dict, method: str, db, coin_equivalent: Optional[int] = None):
-    """Shared unlock completion logic."""
+async def _complete_unlock(
+    drop_id: str, unlocker_id: str, drop: dict, method: str, db,
+    coin_equivalent: Optional[int] = None, amount_charged: Optional[float] = None,
+):
+    """Shared unlock completion logic.
+
+    `amount_charged` should be the actual geo-priced amount the unlocker paid
+    (see get_drop_unlock_price) — falls back to the drop's flat creation-time
+    price only for the coins path, where no cash changed hands.
+    """
     if coin_equivalent is None:
         cash_price = drop.get("price", DROP_PRICE_USD)
         coin_equivalent = round(cash_price * CASH_TO_COIN_RATE)
@@ -1447,7 +1411,7 @@ async def _complete_unlock(drop_id: str, unlocker_id: str, drop: dict, method: s
         "unlocker_id": unlocker_id,
         "sender_id": drop["sender_id"],
         "method": method,
-        "amount": drop.get("price", DROP_PRICE_USD),
+        "amount": amount_charged if amount_charged is not None else drop.get("price", DROP_PRICE_USD),
         "sender_anonymous_name": drop["sender_anonymous_name"],
         "created_at": now_utc()
     })
@@ -2092,12 +2056,6 @@ async def publish_drop(
 
     if drop["sender_id"] != current_user_id:
         raise HTTPException(status_code=403, detail="Only the sender can publish this drop")
-
-    if drop.get("tier") == 2 or drop.get("theme") in TIER_2_THEMES:
-        raise HTTPException(
-            status_code=400,
-            detail="After Dark drops stay inside Anonixx and can never be published.",
-        )
 
     if drop.get("moderation_status") == "hidden":
         raise HTTPException(status_code=400, detail="This drop is under review and cannot be published.")
