@@ -14,6 +14,7 @@ from app.api.v1 import messages
 from app.api.v1 import chat_profile
 from app.api.v1 import ads
 from app.api.v1 import drop_calls
+from app.api.v1 import unlock_requests
 from app.api.v1 import (
     auth,
     coins,
@@ -71,6 +72,18 @@ async def _ensure_indexes():
             unique=True,
             partialFilterExpression={"iap_transaction_id": {"$exists": True}},
             background=True,
+        )
+        await db["drop_unlock_requests"].create_index(
+            [("target_type", 1), ("target_id", 1), ("requester_id", 1)],
+            unique=True,
+            partialFilterExpression={"status": "pending"},
+            background=True,
+        )
+        await db["drop_unlock_requests"].create_index(
+            [("owner_id", 1), ("status", 1), ("created_at", 1)], background=True
+        )
+        await db["drop_unlock_requests"].create_index(
+            [("target_type", 1), ("target_id", 1), ("status", 1)], background=True
         )
         log.info("MongoDB indexes verified.")
     except Exception as exc:
@@ -141,6 +154,7 @@ app.include_router(messages.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(chat_profile.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ads.router,          prefix=settings.API_V1_PREFIX)
 app.include_router(drop_calls.router,   prefix=settings.API_V1_PREFIX)
+app.include_router(unlock_requests.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

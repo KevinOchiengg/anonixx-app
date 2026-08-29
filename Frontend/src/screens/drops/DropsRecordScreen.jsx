@@ -30,6 +30,7 @@ import {
   KeyboardAvoidingView, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useAudioRecorder, useAudioRecorderState,
@@ -51,6 +52,7 @@ import { awardMilestone } from '../../store/slices/coinsSlice';
 import { DROP_THEMES } from '../../components/drops/DropCardRenderer';
 import { T } from '../../utils/colorTokens';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
+import { useAuth } from '../../context/AuthContext';
 
 const SCREEN_W      = Dimensions.get('window').width;
 const MAX_DURATION  = 180;      // seconds — spec: 3 minutes
@@ -99,6 +101,17 @@ const RecordingDot = React.memo(function RecordingDot({ visible, pulse }) {
 export default function DropsRecordScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
+  const { isAuthenticated } = useAuth();
+
+  // Reachable directly via anonixx://drops/voice — guards guests who land
+  // here via deep link, bypassing DropsComposeScreen's own guard.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) {
+        navigation.navigate('AuthNav', { screen: 'Login' });
+      }
+    }, [isAuthenticated, navigation])
+  );
 
   const theme        = route?.params?.theme    || 'desire';
   const moodTag      = route?.params?.moodTag  || 'longing';
@@ -123,9 +136,7 @@ export default function DropsRecordScreen({ navigation, route }) {
 
   // Anonixx Publisher opt-in (section 16). Voice drops route through
   // DropsPublishScreen for the extra "they'll hear your voice" consent.
-  // Tier-2 themes are refused upstream.
   const [publisherOptIn, setPublisherOptIn] = useState(false);
-  const isTier2 = themeObj.tier === 2;
 
   // ── Animations ────────────────────────────────────────────────
   const redPulse    = useRef(new Animated.Value(0)).current;
@@ -243,14 +254,13 @@ export default function DropsRecordScreen({ navigation, route }) {
   // Publisher opt-in — voice always goes through the double-consent screen
   // because the acknowledgement copy is different ("people will hear your voice").
   const handlePublisherAsk = useCallback(() => {
-    if (isTier2) return; // UI already hidden for tier-2; belt-and-suspenders
     navigation.navigate?.('DropsPublish', {
       format:  'voice',
       theme,
       preview: caption?.trim() || '',
       onConfirmed: (ok) => setPublisherOptIn(!!ok),
     });
-  }, [isTier2, navigation, theme, caption]);
+  }, [navigation, theme, caption]);
 
   const handlePublisherNo = useCallback(() => {
     setPublisherOptIn(false);
@@ -330,8 +340,7 @@ export default function DropsRecordScreen({ navigation, route }) {
         duration_seconds: Math.round(playerStatus.duration || elapsed),
         waveform_data:    (capturedLevels || levels).slice(),
         confession:       caption?.trim() || undefined,
-        // Publisher opt-in is forced off for Tier 2 (After Dark never leaves).
-        publisher_opt_in: isTier2 ? false : !!publisherOptIn,
+        publisher_opt_in: !!publisherOptIn,
         // Tag a specific user — carried over from the compose screen when
         // the user tagged someone before switching to Voice format.
         ...(targetUserId ? { target_user_id: targetUserId } : {}),
@@ -366,7 +375,7 @@ export default function DropsRecordScreen({ navigation, route }) {
 
       // Voice publishing: follow up with the dedicated publish endpoint to
       // insert into publisher_queue. Non-fatal — the drop is saved either way.
-      if (newDropId && !isTier2 && publisherOptIn) {
+      if (newDropId && publisherOptIn) {
         try {
           const pubRes = await fetch(`${API_BASE_URL}/api/v1/drops/${newDropId}/publish`, {
             method:  'POST',
@@ -408,7 +417,7 @@ export default function DropsRecordScreen({ navigation, route }) {
   }, [
     recordedUri, theme, moodTag, caption, elapsed,
     capturedLevels, levels, playerStatus.duration,
-    publisherOptIn, isTier2,
+    publisherOptIn,
     dispatch, navigation, showToast,
   ]);
 
@@ -620,7 +629,7 @@ export default function DropsRecordScreen({ navigation, route }) {
           </Text>
 
           {/* Anonixx Publisher opt-in (section 16) — voice only, after preview */}
-          {hasRecording && !isTier2 && (
+          {hasRecording && (
             <View style={styles.publisherBox}>
               <Text style={styles.publisherQ}>
                 Allow Anonixx to share this voice anonymously on our social pages?
@@ -659,13 +668,6 @@ export default function DropsRecordScreen({ navigation, route }) {
               </View>
               <Text style={styles.publisherNote}>
                 Your identity never leaves Anonixx. Your voice will.
-              </Text>
-            </View>
-          )}
-          {hasRecording && isTier2 && (
-            <View style={styles.publisherBox}>
-              <Text style={styles.publisherLocked}>
-                After Dark voice drops stay inside Anonixx. Never published, never shared.
               </Text>
             </View>
           )}
@@ -941,14 +943,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     marginTop:     rp(8),
   },
-  publisherLocked: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         T.textSec,
-    letterSpacing: 0.3,
-    lineHeight:    rf(18),
-  },
-
   // Send
   sendBtn: {
     marginTop:         SPACING.xl,

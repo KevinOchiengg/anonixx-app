@@ -58,12 +58,9 @@ class User(BaseModel):
 
     # ✅ NEW: Age verification + safety
     # Self-attested date of birth, required at signup — Anonixx is 18+ only.
-    # age_verified is set True at signup once date_of_birth proves adulthood;
-    # explicit_content_opt_in is a separate, narrower consent gating the most
-    # explicit "After Dark" content specifically (see api/v1/drops.py).
+    # age_verified is set True at signup once date_of_birth proves adulthood.
     date_of_birth: Optional[date] = None
     age_verified: bool = False
-    explicit_content_opt_in: bool = False
     blocked_user_ids: List[str] = []
 
     # Coins
@@ -120,4 +117,3 @@ class UserResponse(BaseModel):
     coin_balance: int
     created_at: datetime
     age_verified: bool = False
-    explicit_content_opt_in: bool = False

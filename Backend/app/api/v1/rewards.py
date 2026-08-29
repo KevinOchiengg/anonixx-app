@@ -28,11 +28,15 @@ STREAK_RESET_HRS   = 48     # Gap that resets streak
 MONTHLY_CLAIM_CAP  = 28     # Max claims per calendar month
 
 STREAK_MILESTONES = {
-    7:   15,   # Bonus coins at day 7
-    14:  25,
-    30:  50,
-    60:  100,
-    100: 200,
+    # Tuned to stay a retention hook, not a coin faucet — milestones alone
+    # used to add up to 390 coins by day 100 (13 free unlocks on top of the
+    # daily-claim base); ~60% cut across the board keeps the celebration
+    # without meaningfully denting the incentive to buy coins.
+    7:   5,    # Bonus coins at day 7
+    14:  10,
+    30:  20,
+    60:  40,
+    100: 75,
 }
 
 ONE_TIME_MILESTONES = {

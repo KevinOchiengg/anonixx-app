@@ -125,7 +125,7 @@ export default function ThreadViewScreen({ route, navigation }) {
 
   const handleSendReply = async () => {
     if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to reply to posts', [
+      Alert.alert('Sign in Required', 'Please sign in to reply to drops', [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign In',
@@ -239,7 +239,7 @@ export default function ThreadViewScreen({ route, navigation }) {
               <View style={styles.originalPostWrapper}>
                 <View style={styles.accentBar} />
                 <View style={styles.originalPost}>
-                  <Text style={styles.originalLabel}>Original Post</Text>
+                  <Text style={styles.originalLabel}>Original Drop</Text>
                   <Text style={styles.originalContent}>{postContent}</Text>
                 </View>
               </View>

@@ -13,6 +13,7 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDispatch } from 'react-redux';
 import { X } from 'lucide-react-native';
@@ -24,10 +25,22 @@ import { awardMilestone } from '../../store/slices/coinsSlice';
 import { DROP_THEMES } from '../../components/drops/DropCardRenderer';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import T from '../../utils/theme';
+import { useAuth } from '../../context/AuthContext';
 
 export default function DropsPollScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
+  const { isAuthenticated } = useAuth();
+
+  // Reachable directly via anonixx://drops/poll — guards guests who land
+  // here via deep link, bypassing DropsComposeScreen's own guard.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) {
+        navigation.navigate('AuthNav', { screen: 'Login' });
+      }
+    }, [isAuthenticated, navigation])
+  );
 
   const theme        = route?.params?.theme        || 'desire';
   const moodTag       = route?.params?.moodTag      || 'longing';
@@ -36,7 +49,6 @@ export default function DropsPollScreen({ navigation, route }) {
   const targetUserId  = route?.params?.target_user_id || undefined;
 
   const themeObj = DROP_THEMES[theme] || DROP_THEMES['desire'];
-  const isTier2  = themeObj.tier === 2;
 
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions,  setPollOptions]  = useState(['', '']);
@@ -75,8 +87,7 @@ export default function DropsPollScreen({ navigation, route }) {
           question: pollQuestion.trim(),
           options:  pollOptions.filter((o) => o.trim()).slice(0, 4),
         },
-        // Publisher opt-in is forced off for Tier 2 (After Dark never leaves).
-        publisher_opt_in: isTier2 ? false : !!publisherOptIn,
+        publisher_opt_in: !!publisherOptIn,
         ...(targetUserId ? { target_user_id: targetUserId } : {}),
       };
 
@@ -119,7 +130,7 @@ export default function DropsPollScreen({ navigation, route }) {
     }
   }, [
     canSend, category, confession, theme, moodTag, pollQuestion, pollOptions,
-    isTier2, publisherOptIn, targetUserId, dispatch, navigation, showToast,
+    publisherOptIn, targetUserId, dispatch, navigation, showToast,
   ]);
 
   return (
@@ -180,25 +191,19 @@ export default function DropsPollScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
-          {isTier2 ? (
-            <Text style={s.toggleRowLockedNote}>
-              After Dark drops stay inside Anonixx. Never published, never shared.
-            </Text>
-          ) : (
-            <View style={s.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
-                <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
-              </View>
-              <Switch
-                value={publisherOptIn}
-                onValueChange={setPublisherOptIn}
-                trackColor={{ false: T.surfaceAlt, true: T.primary }}
-                thumbColor={publisherOptIn ? '#fff' : T.textMute}
-                ios_backgroundColor={T.surfaceAlt}
-              />
+          <View style={s.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
+              <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
             </View>
-          )}
+            <Switch
+              value={publisherOptIn}
+              onValueChange={setPublisherOptIn}
+              trackColor={{ false: T.surfaceAlt, true: T.primary }}
+              thumbColor={publisherOptIn ? '#fff' : T.textMute}
+              ios_backgroundColor={T.surfaceAlt}
+            />
+          </View>
 
           <TouchableOpacity
             style={[s.sendBtn, (!canSend || sending) && s.sendBtnDisabled]}
@@ -290,14 +295,6 @@ const s = StyleSheet.create({
     color:         T.textMute,
     letterSpacing: 0.2,
     marginTop:     rp(2),
-  },
-  toggleRowLockedNote: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         T.textSec,
-    letterSpacing: 0.3,
-    lineHeight:    rf(18),
-    marginBottom:  SPACING.md,
   },
 
   sendBtn: {

@@ -77,6 +77,35 @@ MPESA_PRICES: dict[str, int] = {
     "starter": 50, "popular": 100, "value": 250, "power": 500,
 }
 
+# ─── Drop-unlock pricing ───────────────────────────────────────────────────
+# Cash price to unlock a drop's identity — same PPP tiers as the coin
+# packages above. Tier 3 (M-Pesa) gets its own hand-picked KES price, not a
+# raw FX conversion of the USD figure (that's what DROP_PRICE_USD /
+# GROUP_DROP_PRICE_USD in drops.py used to do, charging the same number
+# worldwide).
+DROP_UNLOCK_USD_CENTS: dict[str, dict[int, int]] = {
+    "single": {1: 200, 2: 99},    # $2.00 tier 1 / $0.99 tier 2
+    "group":  {1: 300, 2: 149},   # $3.00 tier 1 / $1.49 tier 2
+}
+DROP_UNLOCK_KES: dict[str, int] = {
+    "single": 150,
+    "group":  250,
+}
+
+
+def get_drop_unlock_price(tier: int, is_mpesa_country: bool, is_group: bool = False) -> dict:
+    """Geo-aware drop-unlock price, mirroring build_packages()'s PPP tiers.
+
+    Returns { usd, usd_cents, kes? } — `kes` only present for M-Pesa countries.
+    """
+    kind        = "group" if is_group else "single"
+    stripe_tier = min(tier, 2)      # Tier 3 (M-Pesa) falls back to tier-2 USD, same as coins
+    usd_cents   = DROP_UNLOCK_USD_CENTS[kind][stripe_tier]
+    result = {"usd": usd_cents / 100, "usd_cents": usd_cents}
+    if is_mpesa_country:
+        result["kes"] = DROP_UNLOCK_KES[kind]
+    return result
+
 
 def build_packages(tier: int, is_mpesa_country: bool) -> list[dict]:
     """Return full package list with geo-correct pricing for this user."""

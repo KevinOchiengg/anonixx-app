@@ -167,7 +167,7 @@ export default function SavedPostsScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
           <ArrowLeft size={rs(22)} color={T.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Saved Thoughts</Text>
+        <Text style={styles.headerTitle}>Saved Drops</Text>
         <View style={{ width: rs(22) }} />
       </View>
 
@@ -198,7 +198,7 @@ export default function SavedPostsScreen({ navigation }) {
             <Text style={styles.countText}>
               <Text style={styles.countNum}>{savedPosts.length}</Text>
               {'  '}
-              {savedPosts.length === 1 ? 'saved thought' : 'saved thoughts'}
+              {savedPosts.length === 1 ? 'saved drop' : 'saved drops'}
             </Text>
           </View>
 

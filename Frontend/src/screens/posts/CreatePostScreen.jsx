@@ -348,7 +348,7 @@ export default function CreatePostScreen({ route, navigation }) {
           body:    JSON.stringify({ content: content.trim() }),
         });
         if (!res.ok) throw new Error();
-        showToast({ type: 'success', message: 'Post updated.' });
+        showToast({ type: 'success', message: 'Drop updated.' });
         navigation.goBack();
         return;
       }
@@ -404,7 +404,7 @@ export default function CreatePostScreen({ route, navigation }) {
       navigation.navigate('Feed', { screen: 'FeedMain', params: { refresh: Date.now() } });
 
     } catch (err) {
-      showToast({ type: 'error', message: err?.message || 'Couldn\'t post. Please try again.' });
+      showToast({ type: 'error', message: err?.message || 'Couldn\'t share your drop. Please try again.' });
     } finally {
       setLoading(false);
       setUploadProgress('');

@@ -70,7 +70,7 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{postCount ?? '—'}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
+            <Text style={styles.statLabel}>Drops</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{reactionCount ?? '—'}</Text>
@@ -92,7 +92,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.dashboardTitle}>Your Dashboard</Text>
-            <Text style={styles.dashboardSubtitle}>Posts, activity, coins & earnings</Text>
+            <Text style={styles.dashboardSubtitle}>Drops, activity, coins & earnings</Text>
           </View>
           <ChevronRight size={20} color={THEME.textMuted} />
         </TouchableOpacity>

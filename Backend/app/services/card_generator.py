@@ -40,12 +40,9 @@ cloudinary.config(
 CARD_SIZE = 1080
 
 # Ported directly from DropCardRenderer.jsx's DROP_THEMES (bgFrom, bgTo,
-# textColor) — kept in exact sync with the frontend's 3 curated themes and
-# Backend/app/api/v1/drops.py's TIER_1_THEMES/TIER_2_THEMES.
+# textColor) — kept in exact sync with the frontend's only remaining theme.
 _THEME_GRADIENTS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]] = {
-    "desire":       ((20, 6, 10),  (42, 15, 24), (246, 230, 236)),
-    "after-dark":   ((8, 2, 12),   (26, 8, 36),  (238, 221, 255)),
-    "midnight-sin": ((2, 3, 10),   (10, 4, 24),  (242, 216, 228)),
+    "desire": ((20, 6, 10), (42, 15, 24), (246, 230, 236)),
 }
 _DEFAULT_GRADIENT = _THEME_GRADIENTS["desire"]
 

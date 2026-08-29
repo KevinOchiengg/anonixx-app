@@ -119,7 +119,7 @@ const GUIDELINES = {
       body: 'You can talk about dark feelings — depression, suicidal ideation, rage, shame. What you cannot do is use the platform to plan harm or encourage others toward it.',
     },
     {
-      heading: 'The Drops Marketplace',
+      heading: 'Drops',
       body: 'Revealing someone\'s identity in Drops uses real coins. Do not use that context to harm, expose, or target the person outside Anonixx.',
     },
     {

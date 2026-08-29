@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Clock, Search, X, Users } from 'lucide-react-native';
+import { ArrowLeft, Clock, Search, X, Users, MapPin } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import CalmPostCard from '../../components/feed/CalmPostCard';
+import LocationField from '../../components/drops/LocationField';
 import { POST_TOPICS } from '../../config/postTopics';
 import { API_BASE_URL } from '../../config/api';
 import {
@@ -25,8 +26,10 @@ const HISTORY_KEY   = '@anonixx_search_history';
 const MAX_HISTORY   = 10;
 const FILTERS       = ['all', 'recent', 'popular'];
 const SUGGESTIONS   = ['secrets', 'heartbreak', 'late night thoughts', 'desire', 'carrying it alone', 'family'];
+// A drop IS a post in Anonixx — there's deliberately no drops-vs-posts
+// split here, only Drops (the app's confessions) vs Circles.
 const CONTENT_TYPES = [
-  { id: 'posts',   label: 'Posts' },
+  { id: 'posts',   label: 'Drops' },
   { id: 'circles', label: 'Circles' },
 ];
 const LIVE_SEARCH_DEBOUNCE_MS = 400;
@@ -67,7 +70,14 @@ export default function SearchScreen({ navigation }) {
   const [filter,     setFilter]     = useState('all');
   const [contentType, setContentType] = useState('posts');
   const [postTopic,   setPostTopic]   = useState(null);
+  const [locationOpen,    setLocationOpen]    = useState(false);
+  const [locCountry,      setLocCountry]      = useState('');
+  const [locCounty,       setLocCounty]       = useState('');
+  const [locSubCounty,    setLocSubCounty]    = useState('');
+  const [locEstate,       setLocEstate]       = useState('');
   const liveSearchTimer = useRef(null);
+
+  const hasLocationFilter = !!(locCountry || locCounty || locSubCounty || locEstate);
 
   // Load history on mount, auto-focus input
   useEffect(() => {
@@ -96,12 +106,16 @@ export default function SearchScreen({ navigation }) {
 
   const doSearch = useCallback(async (
     q = query, f = filter, type = contentType,
-    { silent = false, topic = postTopic } = {},
+    {
+      silent = false, topic = postTopic,
+      country = locCountry, county = locCounty, subCounty = locSubCounty, estate = locEstate,
+    } = {},
   ) => {
     const trimmed = q.trim();
-    // A facet alone (topic, no typed text) is a valid "browse by…" search —
-    // only bail if there's truly nothing to go on.
-    if (!trimmed && !(type === 'posts' && topic)) return;
+    const hasLocation = !!(country || county || subCounty || estate);
+    // A facet alone (topic and/or location, no typed text) is a valid
+    // "browse by…" search — only bail if there's truly nothing to go on.
+    if (!trimmed && !(type === 'posts' && (topic || hasLocation))) return;
 
     if (!silent) Keyboard.dismiss();
     setLoading(true);
@@ -126,6 +140,10 @@ export default function SearchScreen({ navigation }) {
         const params = new URLSearchParams({ filter: f, limit: '30' });
         if (trimmed) params.set('q', trimmed);
         if (topic) params.set('topic', topic);
+        if (country)   params.set('location_country', country);
+        if (county)    params.set('location_county', county);
+        if (subCounty) params.set('location_sub_county', subCounty);
+        if (estate)    params.set('location_estate', estate);
         const res = await fetch(`${API_BASE_URL}/api/v1/posts/search?${params}`, { headers });
         data = await res.json();
         if (!res.ok) throw new Error();
@@ -140,7 +158,7 @@ export default function SearchScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [query, filter, contentType, postTopic, saveHistory]);
+  }, [query, filter, contentType, postTopic, locCountry, locCounty, locSubCounty, locEstate, saveHistory]);
 
   const handleFilterChange = useCallback((f) => {
     setFilter(f);
@@ -149,20 +167,53 @@ export default function SearchScreen({ navigation }) {
 
   const handleContentTypeChange = useCallback((type) => {
     setContentType(type);
-    if (query.trim() || (type === 'posts' && postTopic)) {
+    if (query.trim() || (type === 'posts' && (postTopic || hasLocationFilter))) {
       doSearch(query, filter, type);
     }
+  }, [query, filter, postTopic, hasLocationFilter, doSearch]);
+
+  // Location fields update live as you pick them — same "browse by facet
+  // alone" behavior the topic chips already have.
+  const handleLocationChange = useCallback((next) => {
+    const stillFiltered = query.trim() || postTopic
+      || next.country || next.county || next.subCounty || next.estate;
+    if (!stillFiltered) {
+      setResults([]); setSearched(false); setTotal(0);
+      return;
+    }
+    doSearch(query, filter, 'posts', {
+      country: next.country, county: next.county, subCounty: next.subCounty, estate: next.estate,
+    });
   }, [query, filter, postTopic, doSearch]);
+
+  const updateLocation = useCallback((patch) => {
+    const next = {
+      country:   patch.country   ?? locCountry,
+      county:    patch.county    ?? locCounty,
+      subCounty: patch.subCounty ?? locSubCounty,
+      estate:    patch.estate    ?? locEstate,
+    };
+    if (patch.country   !== undefined) setLocCountry(patch.country);
+    if (patch.county    !== undefined) setLocCounty(patch.county);
+    if (patch.subCounty !== undefined) setLocSubCounty(patch.subCounty);
+    if (patch.estate    !== undefined) setLocEstate(patch.estate);
+    handleLocationChange(next);
+  }, [locCountry, locCounty, locSubCounty, locEstate, handleLocationChange]);
+
+  const handleClearLocation = useCallback(() => {
+    setLocCountry(''); setLocCounty(''); setLocSubCounty(''); setLocEstate('');
+    handleLocationChange({ country: '', county: '', subCounty: '', estate: '' });
+  }, [handleLocationChange]);
 
   const handleTopicChange = useCallback((t) => {
     const next = postTopic === t ? null : t;   // tap again to clear
     setPostTopic(next);
-    if (!next && !query.trim()) {
+    if (!next && !query.trim() && !hasLocationFilter) {
       setResults([]); setSearched(false); setTotal(0);
       return;
     }
     doSearch(query, filter, 'posts', { topic: next });
-  }, [query, filter, postTopic, doSearch]);
+  }, [query, filter, postTopic, hasLocationFilter, doSearch]);
 
   // Live search-as-you-type — debounced, doesn't touch history (only an
   // explicit submit/history-tap/suggestion-tap does that).
@@ -283,6 +334,8 @@ export default function SearchScreen({ navigation }) {
           {query.trim() && ` for "${query.trim()}"`}
           {!query.trim() && contentType === 'posts' && postTopic &&
             ` in ${POST_TOPICS.find(t => t.id === postTopic)?.label}`}
+          {contentType === 'posts' && hasLocationFilter &&
+            ` near ${[locEstate, locSubCounty, locCounty, locCountry].filter(Boolean).join(', ')}`}
         </Text>
       }
     />
@@ -377,6 +430,19 @@ export default function SearchScreen({ navigation }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.facetRow}
           >
+            <TouchableOpacity
+              style={[styles.facetChip, hasLocationFilter && styles.facetChipActive]}
+              onPress={() => setLocationOpen((v) => !v)}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.8}
+            >
+              <MapPin size={rs(12)} color={hasLocationFilter ? T.primary : T.textSecondary} />
+              <Text style={[styles.facetText, hasLocationFilter && styles.facetTextActive]}>
+                {hasLocationFilter
+                  ? [locEstate, locSubCounty, locCounty, locCountry].filter(Boolean)[0]
+                  : 'Location'}
+              </Text>
+            </TouchableOpacity>
             {POST_TOPICS.map(t => (
               <TouchableOpacity
                 key={t.id}
@@ -392,6 +458,29 @@ export default function SearchScreen({ navigation }) {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {/* Location filter panel — collapsed by default, exact-match
+              search (unlike the passive feed-location scope, this doesn't
+              fall back to including unplaced posts). */}
+          {locationOpen && (
+            <View style={styles.locationPanel}>
+              <LocationField
+                country={locCountry}
+                county={locCounty}
+                subCounty={locSubCounty}
+                estate={locEstate}
+                onChangeCountry={(v) => updateLocation({ country: v })}
+                onChangeCounty={(v) => updateLocation({ county: v })}
+                onChangeSubCounty={(v) => updateLocation({ subCounty: v })}
+                onChangeEstate={(v) => updateLocation({ estate: v })}
+              />
+              {hasLocationFilter && (
+                <TouchableOpacity onPress={handleClearLocation} hitSlop={HIT_SLOP} style={styles.clearLocationBtn}>
+                  <Text style={styles.clearAll}>Clear location</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       )}
 
@@ -539,6 +628,13 @@ const styles = StyleSheet.create({
     color:      T.textSecondary,
   },
   facetTextActive: { color: T.primary },
+
+  locationPanel: {
+    paddingHorizontal: SPACING.md,
+    paddingTop:        rp(4),
+    paddingBottom:     rp(10),
+  },
+  clearLocationBtn: { alignSelf: 'flex-start', marginTop: rp(8), padding: rp(4) },
 
   // Pre-search
   preSearch: {

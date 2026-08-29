@@ -285,10 +285,12 @@ export default function MessagesScreen({ navigation }) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [onlineIds,   setOnlineIds]   = useState(new Set());
   const [typingIds,   setTypingIds]   = useState(new Set());
+  const [pendingUnlockCount, setPendingUnlockCount] = useState(0);
 
-  // ── Load inbox — calls the two live production endpoints in parallel ──
-  // /connect/chats     → connect conversations
-  // /drops/connections → drop marketplace chats
+  // ── Load inbox — calls the live production endpoints in parallel ──
+  // /connect/chats       → connect conversations
+  // /drops/connections   → drop marketplace chats
+  // /unlock-requests/incoming → confessions of mine other people want to unlock
   // Merged and sorted by last_message_at descending on the frontend.
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -298,14 +300,17 @@ export default function MessagesScreen({ navigation }) {
 
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [connectRes, dropsRes] = await Promise.all([
+      const [connectRes, dropsRes, unlockReqRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v1/connect/chats`,      { headers }),
         fetch(`${API_BASE_URL}/api/v1/drops/connections`,  { headers }),
+        fetch(`${API_BASE_URL}/api/v1/unlock-requests/incoming`, { headers }),
       ]);
 
       // Parse both — treat non-ok as empty, not fatal
       const connectData = connectRes.ok  ? await connectRes.json().catch(() => [])  : [];
       const dropsData   = dropsRes.ok    ? await dropsRes.json().catch(() => [])    : [];
+      const unlockReqData = unlockReqRes.ok ? await unlockReqRes.json().catch(() => ({})) : {};
+      setPendingUnlockCount((unlockReqData?.requests || []).length);
 
       // Normalise connect chats → inbox shape
       // Production endpoint returns { chats: [...] } with field "chat_id"
@@ -397,17 +402,23 @@ export default function MessagesScreen({ navigation }) {
       }, 3000);
     };
 
+    const handleUnlockRequestChange = () => loadInbox();
+
     socketService.on?.('user_online',  handleOnline);
     socketService.on?.('user_offline', handleOffline);
     socketService.on?.('user_typing',  handleTyping);
+    socketService.on?.('unlock_request_received',  handleUnlockRequestChange);
+    socketService.on?.('unlock_request_cancelled', handleUnlockRequestChange);
 
     return () => {
       socketService.off?.('user_online',  handleOnline);
       socketService.off?.('user_offline', handleOffline);
       socketService.off?.('user_typing',  handleTyping);
+      socketService.off?.('unlock_request_received',  handleUnlockRequestChange);
+      socketService.off?.('unlock_request_cancelled', handleUnlockRequestChange);
       Object.values(typingTimers).forEach(clearTimeout);
     };
-  }, [socketService]);
+  }, [socketService, loadInbox]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -478,6 +489,21 @@ export default function MessagesScreen({ navigation }) {
         <AnonixxDemoCard onPress={handleOpenDemo} />
       </View>
 
+      {/* Unlock requests banner — pending approvals never auto-charge, so
+          this is the entry point into reviewing/accepting them. */}
+      {pendingUnlockCount > 0 && (
+        <TouchableOpacity
+          style={styles.unlockBanner}
+          onPress={() => navigation.navigate('UnlockRequestsScreen')}
+          activeOpacity={0.85}
+        >
+          <Flame size={rs(16)} color={T.primary} />
+          <Text style={styles.unlockBannerText}>
+            {pendingUnlockCount} {pendingUnlockCount === 1 ? 'person wants' : 'people want'} to unlock your confessions
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Content */}
       {loading && !refreshing ? (
         <View style={styles.centered}>
@@ -531,6 +557,18 @@ const styles = StyleSheet.create({
   // List
   centered:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, paddingBottom: rs(100), gap: SPACING.xs },
+
+  // Unlock requests banner
+  unlockBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    marginHorizontal: SPACING.md, marginTop: SPACING.sm,
+    backgroundColor: T.primaryDim, borderRadius: RADIUS.md,
+    borderWidth: 1, borderColor: T.primaryBorder,
+    paddingHorizontal: SPACING.md, paddingVertical: rp(10),
+  },
+  unlockBannerText: {
+    flex: 1, fontSize: FONT.sm, fontWeight: '600', color: T.text,
+  },
 
   // Anonixx demo row
   demoWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },

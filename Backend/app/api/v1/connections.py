@@ -66,7 +66,7 @@ async def send_connection_invite(
         post = await db["posts"].find_one({"_id": data.target_post_id})
     
     if not post:
-        raise HTTPException(status_code=404, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Drop not found")
     
     target_user_id = post["user_id"]
     

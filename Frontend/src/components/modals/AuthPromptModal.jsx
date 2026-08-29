@@ -22,8 +22,8 @@ export default function AuthPromptModal({
   const { theme } = useTheme()
 
   const actionMessages = {
-    respond: 'Sign up to respond to this post',
-    save: 'Sign up to save posts',
+    respond: 'Sign up to respond to this drop',
+    save: 'Sign up to save drops',
     post: 'Sign up to share your thoughts',
     comment: 'Sign up to join the conversation',
     connect: 'Sign up to make connections',

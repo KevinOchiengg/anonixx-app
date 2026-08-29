@@ -17,17 +17,24 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+FEED_LOCATION_SCOPES = {"off", "country", "county", "sub_county", "estate"}
+
+
 class UpdateProfileRequest(BaseModel):
     interests: Optional[list[str]] = None
     anonymous_name: Optional[str] = None
+    # Home location — powers the feed's location filter. Same 4-level shape
+    # Drops already use (country -> county -> sub_county -> estate).
+    location_country:    Optional[str] = None
+    location_county:     Optional[str] = None
+    location_sub_county: Optional[str] = None
+    location_estate:     Optional[str] = None
+    # "off" | "country" | "county" | "sub_county" | "estate"
+    feed_location_scope: Optional[str] = None
 
 
 class VerifyAgeRequest(BaseModel):
     date_of_birth: date
-
-
-class ExplicitOptInRequest(BaseModel):
-    opt_in: bool
 
 
 class ReportUserRequest(BaseModel):
@@ -54,6 +61,11 @@ async def get_current_user(
         "avatar_url":     user.get("avatar_url"),
         "interests":      user.get("interests", []),
         "created_at":     user["created_at"].isoformat(),
+        "location_country":    user.get("location_country"),
+        "location_county":     user.get("location_county"),
+        "location_sub_county": user.get("location_sub_county"),
+        "location_estate":     user.get("location_estate"),
+        "feed_location_scope": user.get("feed_location_scope") or "off",
     }
 
 
@@ -65,23 +77,41 @@ async def update_profile(
 ):
     """Update user profile"""
     update_data = {}
-    
+
     if data.interests is not None:
         update_data["interests"] = data.interests
-    
+
     if data.anonymous_name is not None:
         update_data["anonymous_name"] = data.anonymous_name
-    
+
+    if data.location_country is not None:
+        update_data["location_country"] = data.location_country
+    if data.location_county is not None:
+        update_data["location_county"] = data.location_county
+    if data.location_sub_county is not None:
+        update_data["location_sub_county"] = data.location_sub_county
+    if data.location_estate is not None:
+        update_data["location_estate"] = data.location_estate
+
+    if data.feed_location_scope is not None:
+        if data.feed_location_scope not in FEED_LOCATION_SCOPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid feed_location_scope. Choose from: {', '.join(sorted(FEED_LOCATION_SCOPES))}",
+            )
+        update_data["feed_location_scope"] = data.feed_location_scope
+
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
-    
-    result = await db["users"].update_one(
+
+    user_exists = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"_id": 1})
+    if not user_exists:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await db["users"].update_one(
         {"_id": ObjectId(current_user_id)},
         {"$set": update_data}
     )
-    
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
 
     return {"message": "Profile updated successfully"}
 
@@ -114,31 +144,6 @@ async def verify_age(
         }},
     )
     return {"age_verified": True}
-
-
-@router.patch("/me/explicit-content-optin")
-async def set_explicit_content_optin(
-    data: ExplicitOptInRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    """
-    Separate, narrower consent gating Tier-2 "After Dark" drop themes —
-    distinct from base account eligibility (age_verified). Requires the
-    account to already be age-verified.
-    """
-    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if not user.get("age_verified"):
-        raise HTTPException(status_code=403, detail="Verify your age first")
-
-    await db["users"].update_one(
-        {"_id": ObjectId(current_user_id)},
-        {"$set": {"explicit_content_opt_in": bool(data.opt_in)}},
-    )
-    return {"explicit_content_opt_in": bool(data.opt_in)}
 
 
 @router.get("/me/blocked")
