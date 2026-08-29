@@ -82,7 +82,9 @@ async def _resolve_target(target_type: str, target_id: str, db) -> dict:
         return {
             "doc": doc,
             "owner_id": doc["user_id"],
-            "expires_at": doc["created_at"] + timedelta(hours=CARD_EXPIRY_HOURS),
+            # _ensure_aware because Mongo hands back naive datetimes — without
+            # it this expiry can't be compared against now_utc() below.
+            "expires_at": _ensure_aware(doc["created_at"]) + timedelta(hours=CARD_EXPIRY_HOURS),
             "confession_snippet": (doc.get("content") or "")[:140],
         }
 
