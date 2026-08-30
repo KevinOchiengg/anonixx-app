@@ -27,19 +27,6 @@ export const createBroadcast = async (data) => {
   return response.json();
 };
 
-export const getBroadcasts = async (skip = 0, limit = 20, vibeTags = null) => {
-  let url = `${API_BASE_URL}/api/v1/connect/broadcasts?skip=${skip}&limit=${limit}`;
-  if (vibeTags) {
-    url += `&vibe_tags=${vibeTags}`;
-  }
-
-  const response = await fetch(url, {
-    headers: await getHeaders(),
-  });
-
-  return response.json();
-};
-
 export const getMyActiveBroadcast = async () => {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/connect/broadcasts/my-active`,
