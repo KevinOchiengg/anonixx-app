@@ -2128,7 +2128,8 @@ async def publish_drop(
     Anonixx Publisher social pages. The client only calls this after
     two explicit confirmations (DropsPublishScreen steps 1 + 2).
 
-    Tier 2 drops can never be published — the server refuses.
+    Publishing is gated purely by the poster's own consent — there are no
+    content tiers restricting it.
     """
     if not data.confirmed:
         raise HTTPException(status_code=400, detail="Explicit confirmation required")

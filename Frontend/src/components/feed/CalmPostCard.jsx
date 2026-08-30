@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import * as Clipboard from 'expo-clipboard';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
   BarChart2, Bookmark, ChevronRight, Coins, EyeOff, Feather, Flag, Flame, Heart, Link, Link2,
-  MessageCircle, MoreHorizontal, Play, Share2, UserX, VolumeX, X,
+  MessageCircle, MoreHorizontal, Pause, Play, Share2, UserX, VolumeX, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -133,22 +134,91 @@ const BARS = Array.from({ length: 28 }, (_, i) => ({
   id: i, height: Math.sin(i * 0.8) * 12 + 8 + (i % 3) * 4,
 }));
 
-const AudioPlayer = React.memo(({ onMediaPress }) => (
-  <TouchableOpacity style={styles.audioWrap} onPress={onMediaPress} activeOpacity={0.85} hitSlop={HIT_SLOP}>
-    <View style={styles.audioPlayBtn}>
-      <Play size={rs(18)} color="#fff" fill="#fff" />
-    </View>
-    <View style={styles.audioRight}>
-      <View style={styles.waveform}>
-        {BARS.map(b => <View key={b.id} style={[styles.waveBar, { height: b.height }]} />)}
+// Real playback — this used to be a decorative shell (a play icon and static
+// bars that only navigated away), so voice drops never actually played in the
+// feed despite saying "tap to play".
+const AudioPlayer = React.memo(({ audioUrl }) => {
+  const player   = useAudioPlayer(null);
+  const status   = useAudioPlayerStatus(player);
+  const loaded   = useRef(false);
+
+  const playing  = !!status.playing;
+  const duration = status.duration || 0;
+  const progress = duration > 0 ? (status.currentTime || 0) / duration : 0;
+
+  // Stop if the card unmounts (scrolled far away, navigated off the feed) —
+  // otherwise audio keeps playing over whatever the user opens next.
+  useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
+
+  // Restart from the top once a clip ends, so tapping again replays it.
+  useEffect(() => {
+    if (status.didJustFinish) {
+      // seekTo is async — .catch here, since a rejected promise would escape
+      // a plain try/catch.
+      try {
+        player.pause();
+        Promise.resolve(player.seekTo(0)).catch(() => {});
+      } catch {}
+    }
+  }, [status.didJustFinish, player]);
+
+  const toggle = useCallback(async () => {
+    if (!audioUrl) return;
+    try {
+      if (!loaded.current) {
+        await setAudioModeAsync({ playsInSilentModeIOS: true });
+        player.replace({ uri: audioUrl });
+        loaded.current = true;
+        player.play();
+        return;
+      }
+      if (playing) player.pause();
+      else player.play();
+    } catch { /* silent — a failed clip shouldn't break the card */ }
+  }, [audioUrl, playing, player]);
+
+  const fmt = (secs) => {
+    const s = Math.max(0, Math.floor(secs || 0));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  return (
+    <View style={styles.audioWrap}>
+      <TouchableOpacity
+        style={styles.audioPlayBtn}
+        onPress={toggle}
+        activeOpacity={0.85}
+        hitSlop={HIT_SLOP}
+      >
+        {playing
+          ? <Pause size={rs(18)} color="#fff" fill="#fff" />
+          : <Play  size={rs(18)} color="#fff" fill="#fff" />}
+      </TouchableOpacity>
+      <View style={styles.audioRight}>
+        <View style={styles.waveform}>
+          {BARS.map((b, i) => (
+            <View
+              key={b.id}
+              style={[
+                styles.waveBar,
+                { height: b.height },
+                progress > 0 && i / BARS.length <= progress && styles.waveBarPlayed,
+              ]}
+            />
+          ))}
+        </View>
+        <View style={styles.audioMeta}>
+          <Text style={styles.audioMetaText}>
+            {playing || progress > 0
+              ? `${fmt(status.currentTime)} / ${fmt(duration)}`
+              : 'tap to play'}
+          </Text>
+          <Text style={styles.audioMetaText}>audio confession</Text>
+        </View>
       </View>
-      <View style={styles.audioMeta}>
-        <Text style={styles.audioMetaText}>tap to play</Text>
-        <Text style={styles.audioMetaText}>audio confession</Text>
-      </View>
     </View>
-  </TouchableOpacity>
-));
+  );
+});
 
 // ─── Video Player ─────────────────────────────────────────────
 // FIX: VideoView uses Android SurfaceView which renders above all RN views.
@@ -621,7 +691,7 @@ function CalmPostCard({
               />
             )}
 
-            {post.audio_url && <AudioPlayer onMediaPress={handleMediaPress} />}
+            {post.audio_url && <AudioPlayer audioUrl={post.audio_url} />}
 
             {poll && (
               <PollCard poll={poll} postId={post.id} isAuthenticated={isAuthenticated} onVote={handleVote} />
@@ -764,6 +834,7 @@ const styles = StyleSheet.create({
   audioRight:       { flex: 1 },
   waveform:         { flexDirection: 'row', alignItems: 'center', gap: rp(2), height: rs(36) },
   waveBar:          { width: rp(3), borderRadius: rp(2), backgroundColor: 'rgba(255,255,255,0.12)' },
+  waveBarPlayed:    { backgroundColor: T.primary },
   audioMeta:        { flexDirection: 'row', justifyContent: 'space-between', marginTop: rp(4) },
   audioMetaText:    { fontSize: FONT.xs, color: T.textSecondary },
   actions:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: rp(2) },

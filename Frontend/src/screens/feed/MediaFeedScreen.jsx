@@ -456,16 +456,38 @@ const AudioSlide = ({
     if (audioStatus.didJustFinish) progressAnim.setValue(0);
   }, [progress, audioStatus.didJustFinish]);
 
-  // Auto-pause when slide leaves view
+  // Load the clip once, then autoplay/pause with the slide — same behaviour
+  // as the video player above, so scrolling onto a voice drop just plays it.
+  const audioLoaded = useRef(false);
   useEffect(() => {
-    if (!isActive) audioPlayer.pause();
-  }, [isActive]);
+    let cancelled = false;
+    if (!isActive) {
+      audioPlayer.pause();
+      return;
+    }
+    (async () => {
+      try {
+        await setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
+        if (cancelled) return;
+        if (!audioLoaded.current && post.audio_url) {
+          audioPlayer.replace({ uri: post.audio_url });
+          audioLoaded.current = true;
+        }
+        audioPlayer.play();
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isActive, post.audio_url]);
 
   const togglePlay = async () => {
     try {
-      if (audioStatus.status === 'idle') {
+      // Previously keyed off `audioStatus.status === 'idle'`, but expo-audio's
+      // AudioStatus has no `status` field — that comparison was always false,
+      // so replace() never ran and nothing ever loaded. Use isLoaded instead.
+      if (!audioLoaded.current) {
         await setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
         audioPlayer.replace({ uri: post.audio_url });
+        audioLoaded.current = true;
         audioPlayer.play();
       } else if (playing) {
         audioPlayer.pause();

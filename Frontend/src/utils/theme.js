@@ -69,11 +69,13 @@ const palette = {
   goldBg:     'rgba(251,191,36,0.08)',
   goldBorder: 'rgba(251,191,36,0.30)',
 
-  // ─── Tier 2 / After Dark — purple ──────────────────────────────────────────
-  tier2:       '#B36BFF',
-  tier2Dim:    'rgba(179,107,255,0.08)',
-  tier2Border: 'rgba(179,107,255,0.40)',
-  purple:      '#a855f7',     // softer purple alias (referrals, legacy uses)
+  // ─── Vivid purple — vibe-score tiers, accents ─────────────────────────────
+  // (was "Tier 2 / After Dark" before those themes were removed; it's just a
+  // colour now, with no content-tier meaning attached.)
+  violet:       '#B36BFF',
+  violetDim:    'rgba(179,107,255,0.08)',
+  violetBorder: 'rgba(179,107,255,0.40)',
+  purple:       '#a855f7',    // softer purple alias (referrals, legacy uses)
 
   // ─── Drop messages — violet ─────────────────────────────────────────────────
   drop:       '#A78BFA',

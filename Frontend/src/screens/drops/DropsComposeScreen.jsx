@@ -183,7 +183,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Tag a specific user (optional — drop still hits marketplace) ─
   const [taggedUser, setTaggedUser] = useState(null);
 
-  // ── Publisher opt-in (section 16) — Tier 2 is never published ─
+  // ── Publisher opt-in (section 16) ─────────────────────────────
   // Default ON: eligible drops auto-post to Anonixx's social pages to help
   // the poster get noticed. This is an opt-OUT toggle, not opt-in.
   const [publisherOptIn, setPublisherOptIn] = useState(true);
@@ -278,13 +278,13 @@ export default function DropsComposeScreen({ navigation, route }) {
     }
     if (f === 'voice') {
       navigation.navigate?.('DropsRecord', {
-        theme, moodTag, category, text,
+        theme, cardIntent, moodTag, category, text,
         target_user_id: taggedUser?.id || undefined,
       });
     }
     if (f === 'poll') {
       navigation.navigate?.('DropsPoll', {
-        theme, moodTag, category, text,
+        theme, cardIntent, moodTag, category, text,
         target_user_id: taggedUser?.id || undefined,
       });
     }

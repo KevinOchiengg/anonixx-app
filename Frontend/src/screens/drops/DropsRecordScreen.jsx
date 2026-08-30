@@ -49,7 +49,7 @@ import {
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
-import { DROP_THEMES } from '../../components/drops/DropCardRenderer';
+import { DROP_THEMES, CARD_INTENTS } from '../../components/drops/DropCardRenderer';
 import { T } from '../../utils/colorTokens';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useAuth } from '../../context/AuthContext';
@@ -114,10 +114,13 @@ export default function DropsRecordScreen({ navigation, route }) {
   );
 
   const theme        = route?.params?.theme    || 'desire';
+  const cardIntent   = route?.params?.cardIntent || 'general';
   const moodTag      = route?.params?.moodTag  || 'longing';
   const category     = route?.params?.category || 'love';
   const targetUserId = route?.params?.target_user_id || undefined;
-  const themeObj  = DROP_THEMES[theme] || DROP_THEMES['desire'];
+  // Confession type owns the palette (same as the compose preview and the
+  // rendered card) — theme is the legacy fallback and is always 'desire' now.
+  const themeObj  = CARD_INTENTS[cardIntent] || DROP_THEMES[theme] || DROP_THEMES['desire'];
   const accent    = themeObj.accent;
 
   // ── Recorder ──────────────────────────────────────────────────
@@ -336,6 +339,7 @@ export default function DropsRecordScreen({ navigation, route }) {
         media_url:  upData.secure_url,
         media_type: 'voice',
         theme,
+        intent:     cardIntent,   // drives the card's palette/pattern
         mood_tag:   moodTag,
         duration_seconds: Math.round(playerStatus.duration || elapsed),
         waveform_data:    (capturedLevels || levels).slice(),

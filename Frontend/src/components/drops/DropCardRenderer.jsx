@@ -262,10 +262,10 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   moodTag         = 'longing',
   emotionalContext= null,         // "written at 2:14am" | "kept for 3 years"
   theme           = 'desire',
-  // Confession type — "no-strings" | "real-connection" | "just-talk" |
-  // "general". When set and recognized,
-  // fully overrides theme's palette + adds the intent's background pattern.
-  // `theme` keeps governing explicit-content tier gating upstream either way.
+  // Confession type — "real-connection" | "general" | "no-strings" |
+  // "just-talk". When set and recognized, fully overrides theme's palette
+  // and adds the intent's background pattern. `theme` is only the legacy
+  // fallback for drops created before intents existed.
   intent          = null,
   mediaUrl        = null,         // image/video background (overlay mode)
   layoutMode      = 'split',      // 'split' | 'overlay' (for image/video drops)

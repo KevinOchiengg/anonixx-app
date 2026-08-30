@@ -68,10 +68,10 @@ export const lightTheme = {
   goldBg:     'rgba(251,191,36,0.10)',
   goldBorder: 'rgba(251,191,36,0.35)',
 
-  tier2:       '#B36BFF',
-  tier2Dim:    'rgba(179,107,255,0.10)',
-  tier2Border: 'rgba(179,107,255,0.40)',
-  purple:      '#a855f7',
+  violet:       '#B36BFF',
+  violetDim:    'rgba(179,107,255,0.10)',
+  violetBorder: 'rgba(179,107,255,0.40)',
+  purple:       '#a855f7',
 
   drop:       '#A78BFA',
   dropDim:    'rgba(167,139,250,0.12)',
