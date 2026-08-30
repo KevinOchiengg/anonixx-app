@@ -37,7 +37,7 @@ import { API_BASE_URL } from '../../config/api';
 const TIERS = [
   { name: 'Fresh',     emoji: '🌱', color: '#47FFB8', min: 0,   max: 49  },
   { name: 'Awakening', emoji: '✨', color: '#FFD700', min: 50,  max: 99  },
-  { name: 'Rising',    emoji: '🌙', color: T.tier2,   min: 100, max: 199 },
+  { name: 'Rising',    emoji: '🌙', color: T.violet,  min: 100, max: 199 },
   { name: 'Electric',  emoji: '⚡', color: '#47B8FF', min: 200, max: 499 },
   { name: 'Legendary', emoji: '🔥', color: T.primary, min: 500, max: 999 },
 ];

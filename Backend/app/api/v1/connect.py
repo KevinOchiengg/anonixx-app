@@ -6,7 +6,7 @@ Flow: Feed → Tap profile → View anonymous profile → Send connect request �
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from bson import ObjectId
 from enum import Enum
 
@@ -86,6 +86,49 @@ def other_participant(chat: dict, user_id: str) -> str:
 
 # ==================== ANONYMOUS PROFILE ====================
 
+# Vibe tiers — kept in step with TIERS in
+# Frontend/src/screens/drops/VibeScoreScreen.jsx. Computed server-side so the
+# profile sheet doesn't need its own copy of the thresholds.
+VIBE_TIERS = [
+    (0,   49,   "Fresh",     "🌱"),
+    (50,  99,   "Awakening", "✨"),
+    (100, 199,  "Rising",    "🌙"),
+    (200, 499,  "Electric",  "⚡"),
+    (500, None, "Legendary", "🔥"),
+]
+
+
+def _vibe_tier(score: int) -> dict:
+    for lo, hi, name, emoji in VIBE_TIERS:
+        if score >= lo and (hi is None or score <= hi):
+            return {"name": name, "emoji": emoji}
+    return {"name": "Fresh", "emoji": "🌱"}
+
+
+# Declared before /profile/{anonymous_name} so "id" is never swallowed as a name.
+@router.get("/profile/id/{user_id}")
+async def get_anonymous_profile_by_id(
+    user_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database)
+):
+    """
+    Same profile as the by-name route, resolved by user id.
+
+    Preferred over the name lookup: anonymous_name is randomly generated and
+    not unique, so looking a profile up by name can land on the wrong person
+    (and make is_self resolve incorrectly). Clients that have the id — every
+    feed card does — should use this.
+    """
+    try:
+        user = await db["users"].find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        user = None
+    if not user:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return await _build_anonymous_profile(user, current_user_id, db)
+
+
 @router.get("/profile/{anonymous_name}")
 async def get_anonymous_profile(
     anonymous_name: str,
@@ -93,20 +136,28 @@ async def get_anonymous_profile(
     db = Depends(get_database)
 ):
     """
-    Get a user's anonymous profile.
-    Shown when tapping a name/avatar on the feed.
-    Returns only non-identifying info.
+    Get a user's anonymous profile by name.
+
+    Kept for already-installed app builds. Prefer /profile/id/{user_id} —
+    anonymous names aren't unique, so this can resolve to the wrong user.
     """
     user = await get_user_by_anonymous_name(anonymous_name, db)
 
     if not user:
         raise HTTPException(status_code=404, detail="Profile not found")
 
+    return await _build_anonymous_profile(user, current_user_id, db)
+
+
+async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict:
+    """Shared profile payload for both lookup routes."""
     target_id = str(user["_id"])
 
-    # Can't view own profile this way
-    if target_id == current_user_id:
-        raise HTTPException(status_code=400, detail="This is your own profile")
+    # Viewing yourself is allowed — it doubles as a "this is how others see
+    # you" preview. This used to 400, which left the profile sheet showing an
+    # error and a retry button that could never succeed. The client uses
+    # is_self to swap the connect action for something sensible instead.
+    is_self = target_id == current_user_id
 
     # Get confession count
     confession_count = await db["posts"].count_documents({
@@ -114,12 +165,13 @@ async def get_anonymous_profile(
         "post_type": {"$ne": "response"}
     })
 
-    # Check connect status between these two users
+    # Check connect status between these two users. Skipped entirely when
+    # viewing yourself — the both-directions $or below would otherwise match
+    # your own requests/chats and report you as "chatting" with yourself.
     connect_status = None
     chat_id = None
 
-    # Check if pending request exists (either direction)
-    pending = await db["connect_requests"].find_one({
+    pending = None if is_self else await db["connect_requests"].find_one({
         "$or": [
             {"from_user_id": current_user_id, "to_user_id": target_id},
             {"from_user_id": target_id, "to_user_id": current_user_id}
@@ -127,7 +179,9 @@ async def get_anonymous_profile(
         "status": RequestStatus.PENDING
     })
 
-    if pending:
+    if is_self:
+        pass
+    elif pending:
         connect_status = "pending"
     else:
         # Check if active chat exists
@@ -146,15 +200,103 @@ async def get_anonymous_profile(
     created_at = user.get("created_at", datetime.now(timezone.utc))
     join_date = created_at.strftime("%B %Y")
 
+    # How many people they've actually connected with — the sheet already
+    # rendered this stat, but nothing ever returned it, so it never showed.
+    connections_count = await db["drop_connections"].count_documents({
+        "$or": [{"sender_id": target_id}, {"unlocker_id": target_id}]
+    })
+
+    vibe_doc = await db["vibe_scores"].find_one({"user_id": target_id}, {"score": 1, "events": 1})
+    vibe_score = (vibe_doc or {}).get("score", 0)
+    vibe_events = (vibe_doc or {}).get("events", {}) or {}
+
+    # Posting streak — the "shows up consistently" signal.
+    streak_doc = await db["confession_streaks"].find_one(
+        {"user_id": target_id}, {"streak": 1, "longest_streak": 1}
+    ) or {}
+
+    # A few of their actual drops. A count tells you nothing about someone;
+    # their own words are the most informative thing on the profile. These
+    # are already public in the feed, so nothing new is exposed here.
+    recent_drops = []
+    async for p in db["posts"].find(
+        {"user_id": target_id, "post_type": {"$ne": "response"}},
+        {"content": 1, "created_at": 1, "likes_count": 1, "audio_url": 1,
+         "video_url": 1, "images": 1},
+    ).sort("created_at", -1).limit(3):
+        text = (p.get("content") or "").strip()
+        recent_drops.append({
+            "id": str(p["_id"]),
+            "excerpt": (text[:160] + "…") if len(text) > 160 else text,
+            "likes_count": p.get("likes_count", 0),
+            "has_media": bool(p.get("audio_url") or p.get("video_url") or p.get("images")),
+            "created_at": p["created_at"].isoformat() if p.get("created_at") else None,
+        })
+
+    # Age, not date of birth — a number is standard profile info, an exact
+    # birthday is identifying.
+    age = None
+    dob = user.get("date_of_birth")
+    if dob:
+        try:
+            if isinstance(dob, str):
+                dob = date.fromisoformat(dob)
+            elif isinstance(dob, datetime):
+                dob = dob.date()
+            today = datetime.now(timezone.utc).date()
+            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+        except Exception:
+            age = None
+
+    # Location is deliberately coarse — county + country only. Anonixx users
+    # set sub-county and estate for feed scoping, but showing that on a public
+    # profile would narrow an "anonymous" poster down to a neighbourhood.
+    location = ", ".join(
+        v for v in [user.get("location_county"), user.get("location_country")]
+        if v and str(v).strip()
+    ) or None
+
+    # Coarse recency instead of an exact timestamp — enough to know whether
+    # a reply is likely, without publishing someone's activity pattern.
+    from app.websockets.events import is_user_online
+    is_online = is_user_online(target_id)
+    last_seen = None
+    if not is_online and user.get("last_login"):
+        ll = user["last_login"]
+        if ll.tzinfo is None:
+            ll = ll.replace(tzinfo=timezone.utc)
+        days = (datetime.now(timezone.utc) - ll).days
+        last_seen = (
+            "Active today"      if days <= 0 else
+            "Active yesterday"  if days == 1 else
+            f"Active {days} days ago" if days < 7 else
+            "Active this month" if days < 31 else
+            "Active a while ago"
+        )
+
     return {
         "user_id": target_id,               # internal id — needed for typing/call routing
+        "is_self": is_self,                 # viewing your own profile preview
         "anonymous_name": user["anonymous_name"],
         "avatar": user.get("avatar", "ghost"),
         "avatar_color": user.get("avatar_color", "#FF634A"),
         "avatar_aura": user.get("avatar_aura", "purple_glow"),
         "vibe_tags": user.get("vibe_tags", [])[:3],
         "confession_count": confession_count,
+        "connections_count": connections_count,
+        "vibe_score": vibe_score,
+        "vibe_tier": _vibe_tier(vibe_score),
+        "reactions_received": vibe_events.get("reaction_received", 0),
+        "streak": streak_doc.get("streak", 0),
+        "longest_streak": streak_doc.get("longest_streak", 0),
+        "recent_drops": recent_drops,
         "join_date": join_date,
+        "age": age,
+        "location": location,
+        "interests": user.get("interests", [])[:6],
+        "is_premium": bool(user.get("is_premium")),
+        "is_online": is_online,
+        "last_seen": last_seen,
         "connect_status": connect_status,   # null | "pending" | "chatting"
         "chat_id": chat_id,                 # set if already chatting
         "gender": user.get("gender"),       # male | female | nonbinary | prefer_not_to_say | null

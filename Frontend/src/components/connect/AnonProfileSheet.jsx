@@ -15,7 +15,7 @@ import {
   StyleSheet, Text, TouchableOpacity, View, ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X, MessageCircle, UserCheck, Clock } from 'lucide-react-native';
+import { X, MessageCircle, UserCheck, Clock, Crown, MapPin } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../ui/Toast';
 import {
@@ -65,7 +65,7 @@ const VibeTag = React.memo(({ tag, accentColor }) => (
 
 // ─── Main Component ───────────────────────────────────────────
 export default function AnonProfileSheet({
-  visible, anonymousName, onClose, navigation,
+  visible, anonymousName, userId, onClose, navigation,
 }) {
   const { showToast }  = useToast();
   const [profile,      setProfile]      = useState(null);
@@ -132,10 +132,14 @@ export default function AnonProfileSheet({
         setError('Sign in to view profiles.');
         return;
       }
-      const res  = await fetch(
-        `${API_BASE_URL}/api/v1/connect/profile/${encodeURIComponent(anonymousName)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // Prefer the id route — anonymous names are randomly generated and not
+      // unique, so a name lookup can land on a different user entirely (and
+      // then is_self resolves against the wrong person). Fall back to the
+      // name route only when a card didn't give us an id.
+      const url = userId
+        ? `${API_BASE_URL}/api/v1/connect/profile/id/${encodeURIComponent(userId)}`
+        : `${API_BASE_URL}/api/v1/connect/profile/${encodeURIComponent(anonymousName)}`;
+      const res  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Could not load profile.');
       setProfile(data);
@@ -144,7 +148,7 @@ export default function AnonProfileSheet({
     } finally {
       setLoading(false);
     }
-  }, [anonymousName]);
+  }, [anonymousName, userId]);
 
   useEffect(() => {
     if (visible && anonymousName) {
@@ -298,17 +302,49 @@ export default function AnonProfileSheet({
                 ]} />
               </Animated.View>
 
-              {/* Name */}
-              <Text style={styles.name}>{profile.anonymous_name}</Text>
+              {/* Name (+ premium mark) */}
+              <View style={styles.nameRow}>
+                <Text style={styles.name}>{profile.anonymous_name}</Text>
+                {profile.is_premium && (
+                  <Crown size={rs(15)} color={T.gold} fill={T.gold} />
+                )}
+              </View>
 
-              {/* Gender badge — only shown if gender is set and not prefer_not_to_say */}
-              {profile.gender && GENDER_BADGE[profile.gender] && (
-                <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
-                  <Text style={[styles.genderBadgeText, { color: accentColor }]}>
-                    {GENDER_BADGE[profile.gender].symbol}{'  '}{GENDER_BADGE[profile.gender].label}
+              {/* Presence — online now, or a coarse "last active" */}
+              {(profile.is_online || profile.last_seen) && (
+                <View style={styles.presenceRow}>
+                  {profile.is_online && <View style={styles.onlineDot} />}
+                  <Text style={[styles.presenceText, profile.is_online && { color: T.success }]}>
+                    {profile.is_online ? 'Online now' : profile.last_seen}
                   </Text>
                 </View>
               )}
+
+              {/* Identity chips — gender / age / location */}
+              <View style={styles.chipRow}>
+                {profile.gender && GENDER_BADGE[profile.gender] && (
+                  <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
+                    <Text style={[styles.genderBadgeText, { color: accentColor }]}>
+                      {GENDER_BADGE[profile.gender].symbol}{'  '}{GENDER_BADGE[profile.gender].label}
+                    </Text>
+                  </View>
+                )}
+                {profile.age != null && (
+                  <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
+                    <Text style={[styles.genderBadgeText, { color: accentColor }]}>
+                      {profile.age}
+                    </Text>
+                  </View>
+                )}
+                {!!profile.location && (
+                  <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
+                    <MapPin size={rs(11)} color={accentColor} />
+                    <Text style={[styles.genderBadgeText, { color: accentColor }]}>
+                      {'  '}{profile.location}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               {/* Vibe tags */}
               {profile.vibe_tags?.length > 0 && (
@@ -319,37 +355,93 @@ export default function AnonProfileSheet({
                 </View>
               )}
 
+              {/* Vibe tier — the raw score alone means nothing to a viewer */}
+              {profile.vibe_tier && (
+                <View style={[styles.tierPill, { borderColor: accentColor + '40' }]}>
+                  <Text style={styles.tierEmoji}>{profile.vibe_tier.emoji}</Text>
+                  <Text style={[styles.tierName, { color: accentColor }]}>
+                    {profile.vibe_tier.name}
+                  </Text>
+                  <Text style={styles.tierScore}>{profile.vibe_score ?? 0} pts</Text>
+                </View>
+              )}
+
               {/* Stats */}
               <View style={styles.statsRow}>
-                <StatItem
-                  value={profile.confession_count ?? 0}
-                  label="confessions"
-                />
+                <StatItem value={profile.confession_count ?? 0} label="drops" />
                 <View style={styles.statDivider} />
-                <StatItem
-                  value={profile.join_date || '—'}
-                  label="member since"
-                />
-                {profile.connections_count != null && (
+                <StatItem value={profile.connections_count ?? 0} label="connections" />
+                <View style={styles.statDivider} />
+                <StatItem value={profile.reactions_received ?? 0} label="reactions" />
+                {profile.streak > 0 && (
                   <>
                     <View style={styles.statDivider} />
-                    <StatItem
-                      value={profile.connections_count}
-                      label="connections"
-                    />
+                    <StatItem value={`${profile.streak}d`} label="streak" />
                   </>
                 )}
               </View>
 
-              {/* Bio / mood if present */}
-              {profile.mood && (
-                <View style={[styles.moodCard, { borderColor: accentColor + '25' }]}>
-                  <Text style={styles.moodLabel}>current mood</Text>
-                  <Text style={styles.moodText}>{profile.mood}</Text>
+              <Text style={styles.memberSince}>
+                Member since {profile.join_date || '—'}
+              </Text>
+
+              {/* Interests */}
+              {profile.interests?.length > 0 && (
+                <View style={styles.sectionBlock}>
+                  <Text style={styles.sectionLabel}>Into</Text>
+                  <View style={styles.vibesRow}>
+                    {profile.interests.map(item => (
+                      <VibeTag key={item} tag={item} accentColor={accentColor} />
+                    ))}
+                  </View>
                 </View>
               )}
 
-              {/* Connect button */}
+              {/* Recent drops — their own words say more than any counter */}
+              {profile.recent_drops?.length > 0 && (
+                <View style={styles.sectionBlock}>
+                  <Text style={styles.sectionLabel}>Recent drops</Text>
+                  {profile.recent_drops.map(d => (
+                    <View key={d.id} style={[styles.dropCard, { borderColor: accentColor + '20' }]}>
+                      <Text style={styles.dropText} numberOfLines={3}>
+                        {d.excerpt || (d.has_media ? 'Shared something without words.' : '—')}
+                      </Text>
+                      <View style={styles.dropMetaRow}>
+                        {d.has_media && (
+                          <Text style={styles.dropMeta}>media</Text>
+                        )}
+                        {d.likes_count > 0 && (
+                          <Text style={styles.dropMeta}>
+                            {d.likes_count} {d.likes_count === 1 ? 'like' : 'likes'}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Your own profile — you can't connect to yourself, so this
+                  becomes a preview of how everyone else sees you. */}
+              {profile.is_self ? (
+                <View style={styles.selfBlock}>
+                  <Text style={styles.selfNote}>This is how others see you.</Text>
+                  <TouchableOpacity
+                    style={[styles.connectBtn, { backgroundColor: accentColor }]}
+                    onPress={() => {
+                      onClose?.();
+                      navigation?.navigate?.('Dashboard');
+                    }}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.connectBtnInner}>
+                      <UserCheck size={rs(16)} color="#fff" />
+                      <Text style={styles.connectBtnText}>Go to your dashboard</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ) : (
               <TouchableOpacity
                 style={[
                   styles.connectBtn,
@@ -388,9 +480,12 @@ export default function AnonProfileSheet({
                   </View>
                 )}
               </TouchableOpacity>
+              )}
 
               {/* Sub-copy */}
-              <Text style={styles.connectSub}>{connectCopy.sub}</Text>
+              {!profile.is_self && (
+                <Text style={styles.connectSub}>{connectCopy.sub}</Text>
+              )}
 
             </ScrollView>
           </Animated.View>
@@ -523,8 +618,41 @@ const styles = StyleSheet.create({
     fontFamily:    'PlayfairDisplay-Bold',
   },
 
-  // Gender badge
+  nameRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    justifyContent:'center',
+    gap:           rp(7),
+  },
+
+  // Presence
+  presenceRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    justifyContent:'center',
+    gap:           rp(6),
+  },
+  onlineDot: {
+    width: rs(7), height: rs(7), borderRadius: rs(4),
+    backgroundColor: T.success,
+  },
+  presenceText: {
+    fontSize:      FONT.xs,
+    color:         T.textMuted,
+    letterSpacing: 0.2,
+  },
+
+  // Identity chips — gender / age / location
+  chipRow: {
+    flexDirection:  'row',
+    flexWrap:       'wrap',
+    justifyContent: 'center',
+    alignItems:     'center',
+    gap:            rp(8),
+  },
   genderBadge: {
+    flexDirection:     'row',
+    alignItems:        'center',
     paddingHorizontal: rp(14),
     paddingVertical:   rp(5),
     borderRadius:      RADIUS.full,
@@ -535,6 +663,79 @@ const styles = StyleSheet.create({
     fontSize:      FONT.sm,
     fontWeight:    '600',
     letterSpacing: 0.3,
+  },
+
+  memberSince: {
+    fontSize:      FONT.xs,
+    color:         T.textMuted,
+    textAlign:     'center',
+    letterSpacing: 0.2,
+  },
+
+  // Own-profile preview
+  selfBlock: {
+    width: '100%',
+    gap:   rp(10),
+  },
+  selfNote: {
+    fontSize:      FONT.sm,
+    color:         T.textMuted,
+    textAlign:     'center',
+    fontStyle:     'italic',
+    letterSpacing: 0.2,
+  },
+
+  // Vibe tier pill
+  tierPill: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(7),
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(7),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    backgroundColor:   'rgba(255,255,255,0.04)',
+  },
+  tierEmoji: { fontSize: rf(14) },
+  tierName:  { fontSize: FONT.sm, fontWeight: '700', letterSpacing: 0.3 },
+  tierScore: { fontSize: FONT.xs, color: T.textMuted },
+
+  // Recent drops
+  dropCard: {
+    width:           '100%',
+    backgroundColor: T.surfaceAlt,
+    borderRadius:    RADIUS.md,
+    borderWidth:     1,
+    padding:         SPACING.md,
+    gap:             rp(6),
+  },
+  dropText: {
+    fontSize:   FONT.sm,
+    color:      T.text,
+    fontStyle:  'italic',
+    lineHeight: rf(20),
+    fontFamily: 'PlayfairDisplay-Italic',
+  },
+  dropMetaRow: {
+    flexDirection: 'row',
+    gap:           rp(10),
+  },
+  dropMeta: {
+    fontSize:      rf(10),
+    color:         T.textMuted,
+    letterSpacing: 0.3,
+  },
+  sectionBlock: {
+    width: '100%',
+    gap:   rp(10),
+  },
+  sectionLabel: {
+    fontSize:      rf(10),
+    color:         T.textMuted,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    fontWeight:    '700',
+    textAlign:     'center',
   },
 
   // Vibe tags
@@ -582,29 +783,6 @@ const styles = StyleSheet.create({
     width:           1,
     height:          rp(28),
     backgroundColor: T.border,
-  },
-
-  // Mood card
-  moodCard: {
-    width:             '100%',
-    backgroundColor:   T.surfaceAlt,
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    padding:           SPACING.md,
-    gap:               rp(4),
-  },
-  moodLabel: {
-    fontSize:      FONT.xs,
-    color:         T.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  moodText: {
-    fontSize:  FONT.md,
-    color:     T.text,
-    fontStyle: 'italic',
-    lineHeight: rf(22),
-    fontFamily: 'PlayfairDisplay-Italic',
   },
 
   // Connect button

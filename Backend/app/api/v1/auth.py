@@ -95,16 +95,40 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
+_NAME_ADJECTIVES = [
+    "Quiet", "Gentle", "Brave", "Kind", "Thoughtful", "Peaceful",
+    "Calm", "Hopeful", "Strong", "Soft", "Wise", "Warm",
+]
+_NAME_NOUNS = [
+    "Soul", "Heart", "Spirit", "Mind", "Voice", "Light",
+    "Star", "Moon", "Sky", "Dream", "Hope", "Dawn",
+]
+
+
 def generate_anonymous_name() -> str:
-    adjectives = [
-        "Quiet", "Gentle", "Brave", "Kind", "Thoughtful", "Peaceful",
-        "Calm", "Hopeful", "Strong", "Soft", "Wise", "Warm",
-    ]
-    nouns = [
-        "Soul", "Heart", "Spirit", "Mind", "Voice", "Light",
-        "Star", "Moon", "Sky", "Dream", "Hope", "Dawn",
-    ]
-    return f"{random.choice(adjectives)} {random.choice(nouns)} {random.randint(100, 999)}"
+    return f"{random.choice(_NAME_ADJECTIVES)} {random.choice(_NAME_NOUNS)} {random.randint(100, 999)}"
+
+
+async def generate_unique_anonymous_name(db, attempts: int = 12) -> str:
+    """Anonymous name that isn't already taken.
+
+    The pool is only 12 x 12 x 900 = 129,600 names, so by the birthday
+    paradox duplicates become likely at a few hundred users — and a shared
+    name means one person's profile can resolve to another's. Retry a few
+    times, then widen the number range so this can't fail outright.
+    """
+    for _ in range(attempts):
+        name = generate_anonymous_name()
+        if not await db["users"].find_one({"anonymous_name": name}, {"_id": 1}):
+            return name
+    # Pool is crowded — fall back to a wider suffix rather than risk a clash.
+    while True:
+        name = (
+            f"{random.choice(_NAME_ADJECTIVES)} {random.choice(_NAME_NOUNS)} "
+            f"{random.randint(1000, 999999)}"
+        )
+        if not await db["users"].find_one({"anonymous_name": name}, {"_id": 1}):
+            return name
 
 
 # ─── Endpoints ────────────────────────────────────────────────
@@ -122,7 +146,7 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
         "email":          data.email,
         "username":       data.username or data.email.split("@")[0],
         "password":       get_password_hash(data.password),
-        "anonymous_name": generate_anonymous_name(),
+        "anonymous_name": await generate_unique_anonymous_name(db),
         # Random by default so anyone who never visits avatar settings still
         # gets a distinct look rather than everyone sharing one fixed aura.
         "avatar_aura":    random.choice(list(AvatarAura)).value,

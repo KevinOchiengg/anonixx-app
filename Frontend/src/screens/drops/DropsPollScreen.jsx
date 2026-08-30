@@ -22,7 +22,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../.
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
-import { DROP_THEMES } from '../../components/drops/DropCardRenderer';
+import { DROP_THEMES, CARD_INTENTS } from '../../components/drops/DropCardRenderer';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import T from '../../utils/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -43,12 +43,15 @@ export default function DropsPollScreen({ navigation, route }) {
   );
 
   const theme        = route?.params?.theme        || 'desire';
+  const cardIntent    = route?.params?.cardIntent   || 'general';
   const moodTag       = route?.params?.moodTag      || 'longing';
   const category      = route?.params?.category     || 'love';
   const confession    = route?.params?.text         || '';
   const targetUserId  = route?.params?.target_user_id || undefined;
 
-  const themeObj = DROP_THEMES[theme] || DROP_THEMES['desire'];
+  // Confession type owns the palette (same as the compose preview and the
+  // rendered card) — theme is the legacy fallback and is always 'desire' now.
+  const themeObj = CARD_INTENTS[cardIntent] || DROP_THEMES[theme] || DROP_THEMES['desire'];
 
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions,  setPollOptions]  = useState(['', '']);
@@ -82,6 +85,7 @@ export default function DropsPollScreen({ navigation, route }) {
         category,
         confession: confession.trim() || undefined,
         theme,
+        intent:     cardIntent,   // drives the card's palette/pattern
         mood_tag:   moodTag,
         poll: {
           question: pollQuestion.trim(),

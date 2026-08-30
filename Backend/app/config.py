@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # DATABASE
     MONGODB_URL: str = "mongodb://localhost:27017"
-    DATABASE_NAME: str = "afterdark_dev"
+    DATABASE_NAME: str = "anonixx"
 
     # STRIPE
     STRIPE_SECRET_KEY: str = ""

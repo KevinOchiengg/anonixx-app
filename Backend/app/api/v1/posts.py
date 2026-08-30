@@ -213,6 +213,12 @@ async def batch_format_posts(posts: list, current_user_id: Optional[str], db) ->
         created_at_iso = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
         formatted.append({
             "id": pid,
+            # Author id — lets the client open a profile by id instead of by
+            # anonymous_name, which is randomly generated and not unique.
+            # No new anonymity loss: anonymous_name is already a stable
+            # per-user identifier on every post, so this exposes no
+            # correlation that wasn't already possible.
+            "user_id": post.get("user_id"),
             "content": content,
             "is_anonymous": post.get("is_anonymous", True),
             "anonymous_name": post.get("anonymous_name"),
