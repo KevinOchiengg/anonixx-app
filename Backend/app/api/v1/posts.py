@@ -18,7 +18,7 @@ from app.utils.location import build_location, build_feed_location_filter, build
 from app.api.v1.drops import (
     update_vibe_score, send_push_notification,
     COINS_UNLOCK_COST, CASH_TO_COIN_RATE, DROP_POST_COST,
-    unlock_cost_for, unlock_reward_for, expiry_hours_for,
+    unlock_cost_for, unlock_reward_for,
 )
 
 # ── Simple in-process TTL cache for expensive count query ─────
