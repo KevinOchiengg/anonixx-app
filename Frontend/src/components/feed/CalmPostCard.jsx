@@ -26,7 +26,7 @@ const { width: W, height: H } = Dimensions.get('window');
 const BASE_URL = 'https://anonixx-app.onrender.com';
 // Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
 // tapping Link up is never a price surprise.
-const UNLOCK_COST = 30;
+const UNLOCK_COST = 50;
 
 // removeClippedSubviews unmounts/remounts cards as they scroll in and out
 // of the render window — without this, every remount of the same video

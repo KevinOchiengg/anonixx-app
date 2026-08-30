@@ -57,6 +57,8 @@ const StarryBackground = React.memo(() => (
 
 const MAX_IMAGES               = 5;
 const MAX_CHARS                = 2000;
+// Must match DROP_POST_COST in Backend/app/api/v1/drops.py
+const POST_COST                = 10;
 const MAX_POLL_OPTIONS         = 4;
 const MAX_VIDEO_DURATION_SECS  = 600;   // 10 minutes
 
@@ -390,6 +392,14 @@ export default function CreatePostScreen({ route, navigation }) {
         body:    JSON.stringify(postData),
       });
       const data = await res.json();
+      if (res.status === 402) {
+        showToast({
+          type:    'warning',
+          title:   'Not enough coins',
+          message: data.detail || `Posting a drop costs ${POST_COST} coins.`,
+        });
+        return;
+      }
       if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
 
       dispatch(awardMilestone('first_post'));

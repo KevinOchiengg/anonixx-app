@@ -162,6 +162,13 @@ async def list_active_ads(
     now = now_utc()
     await db["feed_ads"].delete_many({"expires_at": {"$lte": now}})
 
+    # Premium perk: an ad-free feed. Enforced here rather than client-side so
+    # it holds regardless of which app build is asking.
+    if current_user_id:
+        from app.api.v1.drops import is_premium_user_id
+        if await is_premium_user_id(current_user_id, db):
+            return {"ads": []}
+
     cursor = db["feed_ads"].find({
         "status": "approved",
         "expires_at": {"$gt": now},

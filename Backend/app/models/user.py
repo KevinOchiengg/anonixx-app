@@ -63,8 +63,11 @@ class User(BaseModel):
     age_verified: bool = False
     blocked_user_ids: List[str] = []
 
-    # Coins
+    # Coins. `coin_balance` is everything spendable in-app; `withdrawable_coins`
+    # is the earned subset that may be cashed out (signup bonus and purchased
+    # coins never count) — see WITHDRAWABLE_REASONS in utils/coin_service.py.
     coin_balance: int = 100
+    withdrawable_coins: int = 0
 
     # Metadata
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

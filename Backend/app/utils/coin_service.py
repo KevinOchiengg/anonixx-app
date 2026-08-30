@@ -13,6 +13,14 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Only coins EARNED from real activity may be cashed out. The signup bonus
+# and purchased coins are fully spendable in-app but never withdrawable —
+# otherwise registering an account (or buying with a stolen card) becomes a
+# direct cash-out path. `withdrawable_coins` on the user doc tracks this
+# earned subset; see api/v1/coins.py's /withdraw.
+WITHDRAWABLE_REASONS = {"drop_unlock_reward"}
+
+
 async def credit_coins(
     db,
     user_id: str,
@@ -27,9 +35,13 @@ async def credit_coins(
     Returns the new balance.
     Raises ValueError if user not found.
     """
+    inc = {"coin_balance": amount}
+    if reason in WITHDRAWABLE_REASONS:
+        inc["withdrawable_coins"] = amount
+
     result = await db.users.find_one_and_update(
         {"_id": ObjectId(user_id)},
-        {"$inc": {"coin_balance": amount}},
+        {"$inc": inc},
         return_document=True,
     )
     if not result:
@@ -58,6 +70,7 @@ async def debit_coins(
     reason: str,
     description: str,
     meta: Optional[dict] = None,
+    from_withdrawable: bool = False,
 ) -> int:
     """
     Atomically subtract `amount` coins from user's balance.
@@ -65,10 +78,23 @@ async def debit_coins(
     Creates a transaction record.
     Returns the new balance.
     Raises ValueError if insufficient coins or user not found.
+
+    Ordinary spending draws from granted/purchased coins first, so a user's
+    earned (withdrawable) balance survives until nothing else is left — the
+    $min below just clamps it to whatever balance remains. A withdrawal is
+    different: pass from_withdrawable=True and it reduces the earned bucket
+    by the full amount, since that's exactly what's being cashed out.
     """
+    remaining = {"$subtract": ["$coin_balance", amount]}
+    new_withdrawable = (
+        {"$max": [0, {"$subtract": [{"$ifNull": ["$withdrawable_coins", 0]}, amount]}]}
+        if from_withdrawable
+        else {"$min": [{"$ifNull": ["$withdrawable_coins", 0]}, remaining]}
+    )
+
     result = await db.users.find_one_and_update(
         {"_id": ObjectId(user_id), "coin_balance": {"$gte": amount}},
-        {"$inc": {"coin_balance": -amount}},
+        [{"$set": {"coin_balance": remaining, "withdrawable_coins": new_withdrawable}}],
         return_document=True,
     )
     if not result:

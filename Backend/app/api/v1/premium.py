@@ -1,9 +1,15 @@
 """
 api/v1/premium.py — Anonixx Premium subscription purchase.
 
-The only real perk today: unlimited Drops per day (free accounts get 3 —
-see DAILY_DROP_LIMIT_FREE in drops.py). is_premium/premium_until on the
-user doc gate that check.
+Perks (all defined and enforced in drops.py — see the PREMIUM_* constants
+and the unlock_cost_for / unlock_reward_for / expiry_hours_for helpers):
+  • Unlocks cost 25 coins instead of 50      (keyed on the UNLOCKER)
+  • Unlock reward is 10 coins instead of 5   (keyed on the DROP OWNER)
+  • Your drops stay live 72h instead of 24h  (keyed on the POSTER)
+  • Ad-free feed                             (GET /ads/active returns [])
+
+The old "unlimited Drops per day" perk is gone — that cap was removed and
+posting is unlimited for everyone now.
 
 Mirrors the coin-purchase pattern in coins.py exactly:
   M-Pesa  — STK push, poll status, Safaricom callback credits on success.

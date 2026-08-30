@@ -31,7 +31,7 @@ from bson import ObjectId
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import debit_coins
-from app.api.v1.drops import CARD_EXPIRY_HOURS, _ensure_aware, send_push_notification
+from app.api.v1.drops import _ensure_aware, send_push_notification, expiry_hours_for
 from app.websockets.unlock_requests import (
     emit_unlock_request_received,
     emit_unlock_request_accepted,
@@ -79,12 +79,14 @@ async def _resolve_target(target_type: str, target_id: str, db) -> dict:
             doc = None
         if not doc:
             raise HTTPException(status_code=404, detail="Drop not found.")
+        # Premium authors' drops stay live 72h instead of 24h.
+        hours = await expiry_hours_for(doc["user_id"], db)
         return {
             "doc": doc,
             "owner_id": doc["user_id"],
             # _ensure_aware because Mongo hands back naive datetimes — without
             # it this expiry can't be compared against now_utc() below.
-            "expires_at": _ensure_aware(doc["created_at"]) + timedelta(hours=CARD_EXPIRY_HOURS),
+            "expires_at": _ensure_aware(doc["created_at"]) + timedelta(hours=hours),
             "confession_snippet": (doc.get("content") or "")[:140],
         }
 
@@ -126,7 +128,7 @@ async def _charge_and_complete(req: dict, target_doc: dict, db) -> str:
         await _complete_post_unlock(target_doc, requester_id, db)
     else:
         from app.api.v1.drops import (
-            COINS_UNLOCK_COST, ORIGIN_AUTHOR_UNLOCK_COST, _complete_unlock,
+            ORIGIN_AUTHOR_UNLOCK_COST, _complete_unlock, unlock_cost_for,
         )
 
         # Origin-author discount, mirroring unlock_drop_coins — if this drop
@@ -140,7 +142,10 @@ async def _charge_and_complete(req: dict, target_doc: dict, db) -> str:
                     is_origin_author = True
             except Exception:
                 pass
-        cost = ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author else COINS_UNLOCK_COST
+        cost = (
+            ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author
+            else await unlock_cost_for(requester_id, db)
+        )
 
         await debit_coins(
             db=db, user_id=requester_id, amount=cost, reason="drop_reveal",

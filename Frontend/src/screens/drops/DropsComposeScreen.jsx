@@ -4,7 +4,7 @@
  * The new compose surface for Anonixx Drops.
  * Three formats (Text / Media / Voice) + an independent Poll toggle,
  * live card preview, confession-type picker, unsent draft layer,
- * daily-limit counter, dangerous-edge warning.
+ * dangerous-edge warning. Posting is unlimited — there's no daily cap.
  *
  * Drops are rendered via <DropCardRenderer /> — this screen is only state,
  * composition and gating. All visual identity lives in the renderer.
@@ -50,15 +50,10 @@ const SCREEN_W = Dimensions.get('window').width;
 const CARD_W   = SCREEN_W - SPACING.md * 2;
 const MAX_CHARS = 500;
 
-// ─── Daily limit ────────────────────────────────────────────────
-// Free tier defaults to 3/day; the server is the source of truth and can
-// grant unlimited (premium). AsyncStorage is a same-day fallback so the
-// counter doesn't reset to zero when the network blips between drops.
-const DAILY_LIMIT = 3;
-const DRAFT_KEY   = 'anonixx.drops.draft.v1';
-const LIMIT_KEY   = 'anonixx.drops.daily.v1';
+const DRAFT_KEY = 'anonixx.drops.draft.v1';
 
-const todayKey = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+// Must match DROP_POST_COST in Backend/app/api/v1/drops.py
+const POST_COST = 10;
 
 // ─── Formats ───────────────────────────────────────────────────
 const FORMATS = [
@@ -138,7 +133,6 @@ const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
       <Text style={[s.intentCardLabel, active && { color: def.accent }]}>
         {def.label}
       </Text>
-      <Text style={s.intentCardSub}>{def.sub}</Text>
     </TouchableOpacity>
   );
 });
@@ -223,14 +217,6 @@ export default function DropsComposeScreen({ navigation, route }) {
   // moment of sending feels intentional rather than reflexive.
   const [sending, setSending] = useState(false);
 
-  // ── Daily limit ───────────────────────────────────────────────
-  // Server is authoritative; local count is a same-day fallback.
-  const [dailyUsed,  setDailyUsed]  = useState(0);
-  const [dailyLimit, setDailyLimit] = useState(DAILY_LIMIT); // server-reported
-  const [unlimited,  setUnlimited]  = useState(false);        // premium flag
-  const dropsLeft = unlimited ? Infinity : Math.max(0, dailyLimit - dailyUsed);
-  const limitHit  = !unlimited && dailyUsed >= dailyLimit;
-
   // ── Entrance animation ────────────────────────────────────────
   const fade = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -239,44 +225,11 @@ export default function DropsComposeScreen({ navigation, route }) {
     }).start();
   }, [fade]);
 
-  // ── Fetch server-side daily limit ─────────────────────────────
-  // Authoritative over local storage — includes the unlimited flag for
-  // premium users and the resets_at for future copy tweaks.
-  const fetchDailyLimit = useCallback(async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-      const res = await fetch(`${API_BASE_URL}/api/v1/drops/daily-limit`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data && typeof data === 'object') {
-        if (typeof data.unlimited === 'boolean') setUnlimited(data.unlimited);
-        if (typeof data.limit     === 'number')  setDailyLimit(data.limit);
-        if (typeof data.used      === 'number')  setDailyUsed(data.used);
-      }
-    } catch {
-      /* offline — fall back to local count */
-    }
-  }, []);
-
-  // Refresh whenever the screen focuses (e.g. user drops, navigates away,
-  // comes back — we don't want a stale counter).
-  useEffect(() => {
-    const unsub = navigation.addListener?.('focus', fetchDailyLimit);
-    fetchDailyLimit();
-    return () => { if (typeof unsub === 'function') unsub(); };
-  }, [navigation, fetchDailyLimit]);
-
-  // ── Load draft + limit on mount ───────────────────────────────
+  // ── Load draft on mount ───────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const [draftRaw, limitRaw] = await Promise.all([
-          AsyncStorage.getItem(DRAFT_KEY),
-          AsyncStorage.getItem(LIMIT_KEY),
-        ]);
+        const draftRaw = await AsyncStorage.getItem(DRAFT_KEY);
 
         if (draftRaw) {
           try {
@@ -294,13 +247,6 @@ export default function DropsComposeScreen({ navigation, route }) {
               if (hasContent) setShowUnsentBanner(true);
             }
           } catch { /* corrupt draft — ignore */ }
-        }
-
-        if (limitRaw) {
-          try {
-            const l = JSON.parse(limitRaw);
-            if (l && l.date === todayKey()) setDailyUsed(l.count || 0);
-          } catch { /* ignore */ }
         }
       } catch { /* storage unavailable — ignore */ }
     })();
@@ -415,15 +361,6 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Submit drop (client-side stub — posts to /drops) ───────────
   const handleDrop = useCallback(async () => {
-    if (limitHit) {
-      showToast({
-        type: 'warning',
-        title: 'Daily limit reached',
-        message: 'Come back tomorrow. The quiet helps.',
-      });
-      return;
-    }
-
     if (format === 'text' && !text.trim()) {
       showToast({ type: 'warning', message: 'Write your confession first.' });
       return;
@@ -481,14 +418,12 @@ export default function DropsComposeScreen({ navigation, route }) {
         body: JSON.stringify(body),
       });
 
-      if (res.status === 429) {
-        // Server-enforced daily cap — sync local state and bail cleanly.
+      if (res.status === 402) {
         const err = await res.json().catch(() => ({}));
-        setDailyUsed(dailyLimit);  // force limitHit true
         showToast({
           type:    'warning',
-          title:   'Daily limit reached',
-          message: err?.detail || 'Come back tomorrow. The quiet helps.',
+          title:   'Not enough coins',
+          message: err?.detail || `Posting a drop costs ${POST_COST} coins.`,
         });
         return;
       }
@@ -505,15 +440,6 @@ export default function DropsComposeScreen({ navigation, route }) {
       // for social by the server at creation time — no follow-up call
       // needed. POST /drops/{id}/publish still exists as a manual re-trigger
       // for drops that skipped auto-queue (e.g. tagged drops).
-
-      // Increment local daily count immediately for snappy UI, then
-      // re-sync from the server (authoritative — handles unlimited).
-      const nextCount = dailyUsed + 1;
-      setDailyUsed(nextCount);
-      await AsyncStorage.setItem(LIMIT_KEY, JSON.stringify({
-        date: todayKey(), count: nextCount,
-      }));
-      fetchDailyLimit();
 
       // Clear draft
       await AsyncStorage.removeItem(DRAFT_KEY);
@@ -542,9 +468,8 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    limitHit, format, text, mediaUri, mediaKind, theme, cardIntent, moodTag, category,
-    intensity, hint, taggedUser,
-    publisherOptIn, dailyUsed, dailyLimit, fetchDailyLimit,
+    format, text, mediaUri, mediaKind, theme, cardIntent, moodTag, category,
+    intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
     dispatch, navigation, showToast,
   ]);
@@ -575,36 +500,14 @@ export default function DropsComposeScreen({ navigation, route }) {
           <View style={{ width: rs(24) }} />
         </View>
 
-        {/* Daily limit strip (section 14) */}
-        {limitHit ? (
-          <View style={[s.limitStrip, s.limitStripHit]}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.limitTitleHit}>You've sent enough for one day.</Text>
-              <Text style={s.limitSubHit}>
-                Come back tomorrow — or go unlimited and keep sending.
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={s.upgradeBtn}
-              onPress={() => navigation.navigate?.('Premium')}
-              activeOpacity={0.85}
-              hitSlop={HIT_SLOP}
-            >
-              <Text style={s.upgradeBtnText}>Upgrade</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
+        {/* Unsent-draft strip — there's no posting cap, so this row only
+            exists to offer discarding a restored draft. */}
+        {hasDraft && (
           <View style={s.limitStrip}>
-            <Text style={s.limitText}>
-              {unlimited
-                ? 'Unlimited drops — premium.'
-                : `${dropsLeft} of ${dailyLimit} drops left today`}
-            </Text>
-            {hasDraft && (
-              <TouchableOpacity onPress={handleDiscardDraft} hitSlop={HIT_SLOP}>
-                <Trash2 size={rs(14)} color={T.textMute} />
-              </TouchableOpacity>
-            )}
+            <Text style={s.limitText}>Unsent draft restored.</Text>
+            <TouchableOpacity onPress={handleDiscardDraft} hitSlop={HIT_SLOP}>
+              <Trash2 size={rs(14)} color={T.textMute} />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -854,9 +757,9 @@ export default function DropsComposeScreen({ navigation, route }) {
 
           {/* Drop button */}
           <TouchableOpacity
-            style={[s.dropBtn, (!canDrop || loading || limitHit || sending) && s.dropBtnDisabled]}
+            style={[s.dropBtn, (!canDrop || loading || sending) && s.dropBtnDisabled]}
             onPress={handleDrop}
-            disabled={!canDrop || loading || limitHit || sending}
+            disabled={!canDrop || loading || sending}
             activeOpacity={0.85}
           >
             {sending ? (
@@ -869,9 +772,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             ) : loading ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={s.dropBtnText}>
-                {limitHit ? 'That\'s enough sending for today' : 'Send it  ↗'}
-              </Text>
+              <Text style={s.dropBtnText}>Send it — {POST_COST} coins  ↗</Text>
             )}
           </TouchableOpacity>
 
@@ -921,34 +822,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
-  limitStripHit: { backgroundColor: 'rgba(251,146,60,0.06)' },
   limitText:     { fontSize: rf(11), color: T.textSec, letterSpacing: 0.3, flex: 1 },
-  limitTitleHit: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(13),
-    color:         T.warn,
-    letterSpacing: 0.3,
-  },
-  limitSubHit: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         T.textSec,
-    letterSpacing: 0.3,
-    marginTop:     rp(2),
-  },
-  upgradeBtn: {
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(8),
-    borderRadius:      RADIUS.full,
-    backgroundColor:   T.primary,
-    marginLeft:        SPACING.sm,
-  },
-  upgradeBtnText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(11),
-    color:         '#fff',
-    letterSpacing: 0.5,
-  },
 
   // Unsent restoration banner (section 5)
   unsentBanner: {
@@ -1130,9 +1004,9 @@ const s = StyleSheet.create({
     lineHeight:   rf(17),
   },
 
-  // Confession type picker — small swatch + free-floating caption below it,
-  // same shape as the old theme-swatch picker (no card border boxing the
-  // text in — just the little color/pattern square, then plain text).
+  // Confession type picker — small swatch + its label below it, same shape
+  // as the old theme-swatch picker (no card border boxing the text in —
+  // just the little color/pattern square, then the label).
   intentScroll: { marginHorizontal: -SPACING.md, marginBottom: SPACING.lg },
   intentRow: {
     paddingHorizontal: SPACING.md,
@@ -1170,15 +1044,6 @@ const s = StyleSheet.create({
     textAlign:     'center',
     marginTop:     rp(6),
   },
-  intentCardSub: {
-    fontFamily:    'DMSans-Regular',
-    fontSize:      rf(9),
-    color:         T.textMute,
-    lineHeight:    rf(12),
-    textAlign:     'center',
-    marginTop:     rp(2),
-  },
-
   // Customize accordion (theme/mood/category/intensity/location/font/poll)
   // Shared flat toggle-row pattern — used by the Customize trigger and
   // the Tag-someone trigger, so both collapsible rows read as one system.

@@ -24,6 +24,30 @@ CARD_EXPIRY_HOURS = 24
 NIGHT_MODE_START = 22  # 10pm
 NIGHT_MODE_END = 3     # 3am
 
+# ── Economy ──────────────────────────────────────────────────────
+# Both sides of a drop pay, and Anonixx keeps the spread. The poster's
+# reward is a deliberately FLAT hook — a small "someone wanted you" payout
+# that's spendable in-app or withdrawable (see coins.py's /withdraw) —
+# NOT a cut of what the unlocker paid.
+#
+#   post   10 coins   → paid by the poster
+#   unlock 50 coins   → paid by the unlocker
+#   reward  5 coins   → credited to the poster per unlock
+#                       Anonixx nets 45; poster breaks even after 2 unlocks.
+DROP_POST_COST         = 10   # charged on BOTH /drops and /posts creation —
+                              # charging only one leaves the other a free bypass
+UNLOCK_REWARD_COINS    = 5    # flat, replaces the old percentage share
+
+# ── Premium perks ────────────────────────────────────────────────
+# Premium's entire value proposition lives here (see api/v1/premium.py).
+# Which side of a transaction a perk applies to matters:
+#   • unlock cost → the UNLOCKER's premium status
+#   • reward      → the DROP OWNER's premium status
+#   • expiry      → the POSTER's premium status, frozen at creation
+PREMIUM_UNLOCK_COST         = 25   # vs COINS_UNLOCK_COST (50)
+PREMIUM_UNLOCK_REWARD_COINS = 10   # vs UNLOCK_REWARD_COINS (5)
+PREMIUM_CARD_EXPIRY_HOURS   = 72   # vs CARD_EXPIRY_HOURS (24)
+
 CATEGORIES = [
     # Social
     "love", "fun", "adventure", "friendship", "spicy",
@@ -42,14 +66,13 @@ CONNECTION_CATEGORIES = {"open to connection", "need stability", "carrying this 
 # card's whole visual identity (DropCardRenderer.jsx's CARD_INTENTS) — colors
 # and background pattern, not just a label. Kept in sync with CARD_INTENTS
 # there; don't rename an id on one side without the other.
-# Trimmed to the 3 broadest intents + General as the default catch-all —
-# covers the widest range of "why someone opens the app" (casual / serious /
-# just lonely) rather than specific-audience recognition.
+# Listed in the same order the compose picker shows them, so the two files
+# read side by side. Order is cosmetic here — this is a membership check.
 VALID_INTENTS = [
-    "no-strings",         # casual, no labels, no promises
-    "real-connection",    # tired of games, wants something real
-    "just-talk",          # no romance pressure, just wants company
-    "general",            # no specific audience — default
+    "real-connection",    # "Relationship"   — wants something real
+    "general",            # "General"        — no specific audience, default
+    "no-strings",         # "Sex for Fun"    — casual, no strings attached
+    "just-talk",          # "Sex for Token"  — paid/transactional arrangement
 ]
 
 # Display labels — mirrors CARD_INTENTS' `label` field in
@@ -57,16 +80,16 @@ VALID_INTENTS = [
 # "sex for fun" resolve to the same drops as tapping that filter chip
 # (see get_marketplace's `q` handling below), not just the chip itself.
 INTENT_LABELS = {
-    "no-strings":      "Sex for Fun",
-    "just-talk":       "Sex for Token",
     "real-connection": "Relationship",
     "general":         "General",
+    "no-strings":      "Sex for Fun",
+    "just-talk":       "Sex for Token",
 }
 
 # Intents that belong in the "Open to Connect" marketplace section — genuine
-# relationship-seeking ones. Excludes "no-strings" (casual, not relationship-
-# seeking), "just-talk" (companionship, not dating) and "general" (no stated
-# audience).
+# relationship-seeking ones. Excludes "no-strings" and "just-talk" (both
+# explicitly casual/transactional, not relationship-seeking) and "general"
+# (no stated audience).
 CONNECTION_INTENTS = {"real-connection"}
 
 class DropPollInput(BaseModel):
@@ -182,9 +205,6 @@ VALID_REACTIONS = {
     "I needed to read this.",
 }
 
-# Section 14 — daily drop cap for free tier. Premium users bypass.
-DAILY_DROP_LIMIT_FREE = 3
-
 # Section 19 — valid report reasons.
 VALID_REPORT_REASONS = {
     "abuse", "doxxing", "self-harm-concern", "spam", "explicit", "other",
@@ -216,13 +236,45 @@ def _ensure_aware(dt: datetime) -> datetime:
     return dt
 
 
+async def is_premium_user_id(user_id: str, db) -> bool:
+    """_is_premium_active by user id — for the perk checks below, where the
+    relevant user is usually not the caller (e.g. the drop's owner)."""
+    if not user_id:
+        return False
+    try:
+        user = await db["users"].find_one(
+            {"_id": ObjectId(user_id)},
+            {"is_premium": 1, "premium_active": 1, "premium_until": 1},
+        )
+    except Exception:
+        return False
+    return _is_premium_active(user) if user else False
+
+
+async def unlock_cost_for(user_id: str, db) -> int:
+    """What this user pays to unlock — premium halves it."""
+    return PREMIUM_UNLOCK_COST if await is_premium_user_id(user_id, db) else COINS_UNLOCK_COST
+
+
+async def unlock_reward_for(owner_id: str, db) -> int:
+    """Flat coins the drop's owner earns per unlock — premium doubles it.
+    Deliberately not a percentage of what the unlocker paid: this is an
+    engagement reward, not a revenue split."""
+    return PREMIUM_UNLOCK_REWARD_COINS if await is_premium_user_id(owner_id, db) else UNLOCK_REWARD_COINS
+
+
+async def expiry_hours_for(user_id: str, db) -> int:
+    """How long this user's drops stay live — premium gets 72h vs 24h."""
+    return PREMIUM_CARD_EXPIRY_HOURS if await is_premium_user_id(user_id, db) else CARD_EXPIRY_HOURS
+
+
 def is_night_mode() -> bool:
     hour = now_utc().hour
     return hour >= NIGHT_MODE_START or hour < NIGHT_MODE_END
 
 
-def get_expiry() -> datetime:
-    return now_utc() + timedelta(hours=CARD_EXPIRY_HOURS)
+def get_expiry(hours: int = CARD_EXPIRY_HOURS) -> datetime:
+    return now_utc() + timedelta(hours=hours)
 
 
 def get_time_ago(dt: datetime) -> str:
@@ -523,20 +575,6 @@ async def create_drop(
     # unless the client explicitly opted out.
     publisher_opt_in = (data.publisher_opt_in is not False)
 
-    # ── Daily drop limit (section 14) ───────────────────────────
-    is_premium = _is_premium_active(user)
-    if not is_premium:
-        start_of_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
-        drops_today = await db["drops"].count_documents({
-            "sender_id": current_user_id,
-            "created_at": {"$gte": start_of_day},
-        })
-        if drops_today >= DAILY_DROP_LIMIT_FREE:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Daily drop limit reached ({DAILY_DROP_LIMIT_FREE}). Come back tomorrow or upgrade to Premium.",
-            )
-
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD
 
@@ -551,7 +589,10 @@ async def create_drop(
         "is_group": data.is_group,
         "group_size": data.group_size if data.is_group else None,
         "price": price,
-        "expires_at": get_expiry(),
+        # Premium perk: 72h on the feed instead of 24h.
+        "expires_at": get_expiry(
+            PREMIUM_CARD_EXPIRY_HOURS if _is_premium_active(user) else CARD_EXPIRY_HOURS
+        ),
         "is_active": True,
         "is_night_mode": night,
         "unlock_count": 0,
@@ -586,6 +627,23 @@ async def create_drop(
         "poll":       poll_data,
         "font_style": font_style,
     }
+
+    # Posting costs coins — charged after all validation above, so a rejected
+    # drop never takes someone's balance. Mirrored in posts.py's create_post;
+    # charging only one route would leave the other a free bypass.
+    try:
+        await debit_coins(
+            db=db, user_id=current_user_id, amount=DROP_POST_COST,
+            reason="drop_post", description="Posted a drop",
+            meta={"drop_id": str(drop["_id"])},
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(
+                status_code=402,
+                detail=f"Not enough coins. Posting a drop costs {DROP_POST_COST} coins.",
+            )
+        raise HTTPException(status_code=404, detail="User not found.")
 
     await db["drops"].insert_one(drop)
     drop_id_str = str(drop["_id"])
@@ -722,6 +780,7 @@ async def create_drop(
         "time_left": get_time_left(drop["expires_at"]),
         "is_night_mode": night,
         "price": price,
+        "coins_spent": DROP_POST_COST,
         "message": "Your card is live. Share it anywhere. 🔥",
     }
 
@@ -1048,7 +1107,7 @@ async def unreact_to_drop(
 
 # ==================== UNLOCK — COINS ====================
 
-COINS_UNLOCK_COST         = 30   # coins required to unlock a drop
+COINS_UNLOCK_COST         = 50   # coins required to unlock a drop
 ORIGIN_AUTHOR_UNLOCK_COST = 10   # discounted rate for the author of the inspiring post
 
 @router.post("/{drop_id}/unlock/coins")
@@ -1095,7 +1154,12 @@ async def unlock_drop_coins(
         except Exception:
             pass
 
-    cost = ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author else COINS_UNLOCK_COST
+    # Origin-author rate already beats the premium rate, so it wins outright
+    # rather than stacking — the cheaper of the two applies either way.
+    cost = (
+        ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author
+        else await unlock_cost_for(current_user_id, db)
+    )
 
     # Debit coins (raises ValueError on insufficient balance)
     try:
@@ -1367,24 +1431,28 @@ async def poll_unlock_status(
 
 
 # Approximate coins-per-dollar rate (from the Tier-1 "starter" package: 55
-# coins / $0.99), used only to convert a cash unlock's USD price into a
-# coin-equivalent figure for the drop-owner's 10% revenue share below —
-# never charged to a user directly.
+# coins / $0.99). Only used to record a cash unlock's coin-equivalent on the
+# unlock row — the poster's reward is flat and no longer derived from it.
 CASH_TO_COIN_RATE = 55 / 0.99
-DROP_REVENUE_SHARE_PCT = 0.10
 
 
-async def _credit_revenue_share(drop: dict, coin_equivalent: int, db):
-    """Credit the drop owner 10% of what an unlock cost (in coins)."""
-    share = max(1, round(coin_equivalent * DROP_REVENUE_SHARE_PCT))
+async def _credit_reward(drop: dict, coin_equivalent: int, db):
+    """Credit the drop owner their flat reward for someone unlocking them.
+    Fixed (5, or 10 for premium) regardless of what the unlocker paid —
+    a hook, not a revenue split."""
+    reward = await unlock_reward_for(drop["sender_id"], db)
     try:
         await credit_coins(
             db=db,
             user_id=drop["sender_id"],
-            amount=share,
-            reason="drop_revenue_share",
-            description="10% share from a drop unlock",
-            meta={"drop_id": str(drop["_id"]), "unlock_cost_coins": coin_equivalent},
+            amount=reward,
+            reason="drop_unlock_reward",
+            description=f"+{reward} coins — someone unlocked your drop",
+            meta={
+                "drop_id": str(drop["_id"]),
+                "unlock_cost_coins": coin_equivalent,
+                "reward_coins": reward,
+            },
         )
     except ValueError:
         pass  # sender account missing — don't fail the unlocker's flow over it
@@ -1403,7 +1471,7 @@ async def _complete_unlock(
     if coin_equivalent is None:
         cash_price = drop.get("price", DROP_PRICE_USD)
         coin_equivalent = round(cash_price * CASH_TO_COIN_RATE)
-    await _credit_revenue_share(drop, coin_equivalent, db)
+    await _credit_reward(drop, coin_equivalent, db)
 
     await db["drop_unlocks"].insert_one({
         "_id": ObjectId(),
@@ -1914,7 +1982,7 @@ async def renew_drop(
     if drop["sender_id"] != current_user_id:
         raise HTTPException(status_code=403, detail="Not your drop")
 
-    new_expiry = get_expiry()
+    new_expiry = get_expiry(await expiry_hours_for(current_user_id, db))
     await db["drops"].update_one(
         {"_id": ObjectId(drop_id)},
         {"$set": {
@@ -1983,48 +2051,23 @@ def _next_tier(score: int) -> int:
     return score
 
 
-# ==================== DAILY LIMIT (section 14) ====================
+# ==================== DAILY LIMIT (removed) ====================
 
-@router.get("/daily-limit")
-async def get_daily_limit(
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
+@router.get("/daily-limit", deprecated=True)
+async def get_daily_limit(current_user_id: str = Depends(get_current_user_id)):
     """
-    How many drops the current user has posted today vs the cap.
-    The frontend (DropsComposeScreen) uses this to render the
-    "N of 3 drops left today" strip and gate the Drop button.
-
-    Premium users get `unlimited: true`.
+    Deprecated — there is no posting cap any more. Kept only so already-
+    installed app builds keep working: they read `unlimited` off this
+    response, and a 404 here would make them fall back to their own local
+    3/day counter and stay capped. Safe to delete once those builds have
+    rolled over.
     """
-    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    is_premium = _is_premium_active(user)
-    if is_premium:
-        return {
-            "unlimited": True,
-            "used":      0,
-            "limit":     None,
-            "left":      None,
-            "resets_at": None,
-        }
-
-    start_of_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow     = start_of_day + timedelta(days=1)
-
-    used = await db["drops"].count_documents({
-        "sender_id": current_user_id,
-        "created_at": {"$gte": start_of_day},
-    })
-
     return {
-        "unlimited": False,
-        "used":      used,
-        "limit":     DAILY_DROP_LIMIT_FREE,
-        "left":      max(0, DAILY_DROP_LIMIT_FREE - used),
-        "resets_at": tomorrow.isoformat(),
+        "unlimited": True,
+        "used":      0,
+        "limit":     None,
+        "left":      None,
+        "resets_at": None,
     }
 
 

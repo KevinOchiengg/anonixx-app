@@ -47,32 +47,11 @@ export const DROP_THEMES = {
 // range of "why someone opens the app" (casual / serious / just lonely)
 // rather than specific-audience recognition.
 // Kept in sync with VALID_INTENTS in Backend/app/api/v1/drops.py — same ids.
+// Key order here IS the picker's display order (CARD_INTENT_LIST below is
+// built straight off Object.entries), so reordering these reorders the UI.
 export const CARD_INTENTS = {
-  'no-strings': {
-    label: 'Sex for Fun',
-    sub:   'No strings attached',
-    emoji: '🔥',
-    pattern: 'streaks',
-    moodTag: 'reckless',
-    bgFrom: '#0a0000', bgTo: '#2b0505',
-    accent: '#FF1744', accentGlow: 'rgba(255,23,68,0.18)',
-    textColor: '#FFE4E4', ghostColor: 'rgba(255,23,68,0.06)',
-    moodColor: '#C97A7A', identityColor: '#FF1744',
-  },
-   'just-talk': {
-    label: 'Sex for Token',
-    sub:   'Exotic services for token.',
-    emoji: '🪙',
-    pattern: 'ripples',
-    moodTag: 'quiet',
-    bgFrom: '#050e14', bgTo: '#0e2432',
-    accent: '#4FC3E8', accentGlow: 'rgba(79,195,232,0.16)',
-    textColor: '#E3F6FC', ghostColor: 'rgba(79,195,232,0.06)',
-    moodColor: '#7FAAB8', identityColor: '#4FC3E8',
-  },
   'real-connection': {
     label: 'Relationship',
-    sub:   'Looking for a real relationship.',
     emoji: '🌹',
     pattern: 'constellation',
     moodTag: 'longing',
@@ -81,10 +60,8 @@ export const CARD_INTENTS = {
     textColor: '#FBE8ED', ghostColor: 'rgba(255,107,138,0.06)',
     moodColor: '#C98A9B', identityColor: '#FF6B8A',
   },
- 
   'general': {
     label: 'General',
-    sub:   'Just need to get this off my chest.',
     emoji: '🌑',
     pattern: 'none',
     moodTag: 'unsent',
@@ -92,6 +69,26 @@ export const CARD_INTENTS = {
     accent: '#FF3B7A', accentGlow: 'rgba(255,59,122,0.14)',
     textColor: '#F6E6EC', ghostColor: 'rgba(255,59,122,0.05)',
     moodColor: '#C48A98', identityColor: '#FF3B7A',
+  },
+  'no-strings': {
+    label: 'Sex for Fun',
+    emoji: '🔥',
+    pattern: 'streaks',
+    moodTag: 'reckless',
+    bgFrom: '#0a0000', bgTo: '#2b0505',
+    accent: '#FF1744', accentGlow: 'rgba(255,23,68,0.18)',
+    textColor: '#FFE4E4', ghostColor: 'rgba(255,23,68,0.06)',
+    moodColor: '#C97A7A', identityColor: '#FF1744',
+  },
+  'just-talk': {
+    label: 'Sex for Token',
+    emoji: '🪙',
+    pattern: 'ripples',
+    moodTag: 'quiet',
+    bgFrom: '#050e14', bgTo: '#0e2432',
+    accent: '#4FC3E8', accentGlow: 'rgba(79,195,232,0.16)',
+    textColor: '#E3F6FC', ghostColor: 'rgba(79,195,232,0.06)',
+    moodColor: '#7FAAB8', identityColor: '#4FC3E8',
   },
 };
 
