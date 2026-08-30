@@ -3,25 +3,6 @@ from typing import List, Optional
 from datetime import datetime
 
 
-# ==================== BROADCAST ====================
-class Broadcast(BaseModel):
-    id: Optional[str] = Field(alias="_id", default=None)
-    user_id: str
-    anonymous_name: str
-    content: str
-    vibe_tags: List[str] = []
-    mood_emoji: Optional[str] = None
-    intention_tag: Optional[str] = None
-    timezone: Optional[str] = None
-    is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    expires_at: datetime
-    response_count: int = 0
-    
-    class Config:
-        populate_by_name = True
-
-
 # ==================== CONNECTION ====================
 class ConnectionStatus:
     PENDING = "pending"
@@ -68,23 +49,6 @@ class Message(BaseModel):
     
     class Config:
         populate_by_name = True
-
-
-# ==================== VIBE TAGS ====================
-VIBE_TAGS = [
-    "night owl", "early bird", "deep talks", "old soul", "bookworm",
-    "creative", "overthinker", "needs space", "adventurous", "homebody",
-    "music lover", "nature person", "city dweller", "coffee addict",
-    "tea enthusiast", "spiritual", "logical", "emotional", "sarcastic", "sincere",
-]
-
-INTENTION_TAGS = [
-    "seeking connection",
-    "just talking",
-    "seeing where it goes"
-]
-
-MOOD_EMOJIS = ["🌙", "💭", "🌊", "🌱", "✨", "🔥", "❄️", "🌸"]
 
 
 # ==================== IDENTITY REVEAL ====================

@@ -302,88 +302,83 @@ export default function AnonProfileSheet({
                 ]} />
               </Animated.View>
 
-              {/* Name (+ premium mark) */}
-              <View style={styles.nameRow}>
-                <Text style={styles.name}>{profile.anonymous_name}</Text>
-                {profile.is_premium && (
-                  <Crown size={rs(15)} color={T.gold} fill={T.gold} />
-                )}
-              </View>
-
-              {/* Presence — online now, or a coarse "last active" */}
-              {(profile.is_online || profile.last_seen) && (
-                <View style={styles.presenceRow}>
-                  {profile.is_online && <View style={styles.onlineDot} />}
-                  <Text style={[styles.presenceText, profile.is_online && { color: T.success }]}>
-                    {profile.is_online ? 'Online now' : profile.last_seen}
-                  </Text>
+              {/* Identity cluster — name, presence, chips and tier belong
+                  together, so they're grouped with tight internal spacing
+                  rather than each taking the parent's full section gap. */}
+              <View style={styles.headerBlock}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>{profile.anonymous_name}</Text>
+                  {profile.is_premium && (
+                    <Crown size={rs(15)} color={T.gold} fill={T.gold} />
+                  )}
                 </View>
-              )}
 
-              {/* Identity chips — gender / age / location */}
-              <View style={styles.chipRow}>
-                {profile.gender && GENDER_BADGE[profile.gender] && (
-                  <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
-                    <Text style={[styles.genderBadgeText, { color: accentColor }]}>
-                      {GENDER_BADGE[profile.gender].symbol}{'  '}{GENDER_BADGE[profile.gender].label}
+                {(profile.is_online || profile.last_seen) && (
+                  <View style={styles.presenceRow}>
+                    {profile.is_online && <View style={styles.onlineDot} />}
+                    <Text style={[styles.presenceText, profile.is_online && { color: T.success }]}>
+                      {profile.is_online ? 'Online now' : profile.last_seen}
                     </Text>
                   </View>
                 )}
-                {profile.age != null && (
-                  <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
-                    <Text style={[styles.genderBadgeText, { color: accentColor }]}>
-                      {profile.age}
+
+                {/* gender / age / location */}
+                <View style={styles.chipRow}>
+                  {profile.gender && GENDER_BADGE[profile.gender] && (
+                    <View style={[styles.chip, { borderColor: accentColor + '40' }]}>
+                      <Text style={[styles.chipText, { color: accentColor }]}>
+                        {GENDER_BADGE[profile.gender].symbol} {GENDER_BADGE[profile.gender].label}
+                      </Text>
+                    </View>
+                  )}
+                  {profile.age != null && (
+                    <View style={[styles.chip, { borderColor: accentColor + '40' }]}>
+                      <Text style={[styles.chipText, { color: accentColor }]}>
+                        {profile.age}
+                      </Text>
+                    </View>
+                  )}
+                  {!!profile.location && (
+                    <View style={[styles.chip, { borderColor: accentColor + '40' }]}>
+                      <MapPin size={rs(11)} color={accentColor} />
+                      <Text style={[styles.chipText, { color: accentColor }]}>
+                        {profile.location}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {profile.vibe_tier && (
+                  <View style={[styles.tierPill, { borderColor: accentColor + '40' }]}>
+                    <Text style={styles.tierEmoji}>{profile.vibe_tier.emoji}</Text>
+                    <Text style={[styles.tierName, { color: accentColor }]}>
+                      {profile.vibe_tier.name}
                     </Text>
-                  </View>
-                )}
-                {!!profile.location && (
-                  <View style={[styles.genderBadge, { borderColor: accentColor + '40' }]}>
-                    <MapPin size={rs(11)} color={accentColor} />
-                    <Text style={[styles.genderBadgeText, { color: accentColor }]}>
-                      {'  '}{profile.location}
-                    </Text>
+                    <Text style={styles.tierScore}>{profile.vibe_score ?? 0} pts</Text>
                   </View>
                 )}
               </View>
 
-              {/* Vibe tags */}
-              {profile.vibe_tags?.length > 0 && (
-                <View style={styles.vibesRow}>
-                  {profile.vibe_tags.map(tag => (
-                    <VibeTag key={tag} tag={tag} accentColor={accentColor} />
-                  ))}
+              {/* Stats card — one bounded surface so the numbers read as a
+                  set instead of floating loose in the scroll. */}
+              <View style={styles.statsCard}>
+                <View style={styles.statsRow}>
+                  <StatItem value={profile.confession_count ?? 0} label="drops" />
+                  <View style={styles.statDivider} />
+                  <StatItem value={profile.connections_count ?? 0} label="connections" />
+                  <View style={styles.statDivider} />
+                  <StatItem value={profile.reactions_received ?? 0} label="reactions" />
+                  {profile.streak > 0 && (
+                    <>
+                      <View style={styles.statDivider} />
+                      <StatItem value={`${profile.streak}d`} label="streak" />
+                    </>
+                  )}
                 </View>
-              )}
-
-              {/* Vibe tier — the raw score alone means nothing to a viewer */}
-              {profile.vibe_tier && (
-                <View style={[styles.tierPill, { borderColor: accentColor + '40' }]}>
-                  <Text style={styles.tierEmoji}>{profile.vibe_tier.emoji}</Text>
-                  <Text style={[styles.tierName, { color: accentColor }]}>
-                    {profile.vibe_tier.name}
-                  </Text>
-                  <Text style={styles.tierScore}>{profile.vibe_score ?? 0} pts</Text>
-                </View>
-              )}
-
-              {/* Stats */}
-              <View style={styles.statsRow}>
-                <StatItem value={profile.confession_count ?? 0} label="drops" />
-                <View style={styles.statDivider} />
-                <StatItem value={profile.connections_count ?? 0} label="connections" />
-                <View style={styles.statDivider} />
-                <StatItem value={profile.reactions_received ?? 0} label="reactions" />
-                {profile.streak > 0 && (
-                  <>
-                    <View style={styles.statDivider} />
-                    <StatItem value={`${profile.streak}d`} label="streak" />
-                  </>
-                )}
+                <Text style={styles.memberSince}>
+                  Member since {profile.join_date || '—'}
+                </Text>
               </View>
-
-              <Text style={styles.memberSince}>
-                Member since {profile.join_date || '—'}
-              </Text>
 
               {/* Interests */}
               {profile.interests?.length > 0 && (
@@ -618,6 +613,13 @@ const styles = StyleSheet.create({
     fontFamily:    'PlayfairDisplay-Bold',
   },
 
+  // Name/presence/chips/tier read as one unit — tight internal spacing, so
+  // the parent's larger section gap only separates actual sections.
+  headerBlock: {
+    width:      '100%',
+    alignItems: 'center',
+    gap:        rp(8),
+  },
   nameRow: {
     flexDirection: 'row',
     alignItems:    'center',
@@ -648,21 +650,22 @@ const styles = StyleSheet.create({
     flexWrap:       'wrap',
     justifyContent: 'center',
     alignItems:     'center',
-    gap:            rp(8),
+    gap:            rp(6),
   },
-  genderBadge: {
+  chip: {
     flexDirection:     'row',
     alignItems:        'center',
-    paddingHorizontal: rp(14),
+    gap:               rp(4),
+    paddingHorizontal: rp(11),
     paddingVertical:   rp(5),
     borderRadius:      RADIUS.full,
     borderWidth:       1,
     backgroundColor:   'rgba(255,255,255,0.04)',
   },
-  genderBadgeText: {
-    fontSize:      FONT.sm,
+  chipText: {
+    fontSize:      FONT.xs,
     fontWeight:    '600',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 
   memberSince: {
@@ -758,20 +761,25 @@ const styles = StyleSheet.create({
   },
 
   // Stats
-  statsRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
+  // The card owns the surface; the row inside is just layout. Stats share
+  // the width evenly so 3 or 4 of them stay centred and don't overflow.
+  statsCard: {
+    width:             '100%',
     backgroundColor:   T.surfaceAlt,
     borderRadius:      RADIUS.md,
-    paddingVertical:   rp(16),
-    paddingHorizontal: rp(24),
-    gap:               rp(20),
     borderWidth:       1,
     borderColor:       T.border,
-    width:             '100%',
-    justifyContent:    'center',
+    paddingVertical:   rp(16),
+    paddingHorizontal: rp(12),
+    gap:               rp(12),
   },
-  statItem:   { alignItems: 'center', gap: rp(4) },
+  statsRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-around',
+    width:          '100%',
+  },
+  statItem:   { alignItems: 'center', gap: rp(4), flex: 1 },
   statValue:  { fontSize: FONT.lg, fontWeight: '700', color: T.text },
   statLabel:  {
     fontSize:      FONT.xs,

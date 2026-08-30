@@ -338,34 +338,16 @@ async def send_push_notification(user_id: str, title: str, body: str, db):
 
 # ==================== FEED SCORING ====================
 
-# Maps vibe tags (user profile) → topic categories (post metadata)
-_VIBE_TO_TOPIC: dict[str, str] = {
-    "raising kids alone":    "family",
-    "starting over":         "self_growth",
-    "been through a lot":    "trauma",
-    "healing in progress":   "self_growth",
-    "carrying a lot":        "anxiety",
-    "still standing":        "self_growth",
-    "lost right now":        "depression",
-    "rebuilding myself":     "self_growth",
-    "need someone steady":   "relationships",
-    "looking for something real": "relationships",
-    "just need to be heard": "loneliness",
-    "open to connection":    "relationships",
-    "not looking for games": "relationships",
-    "no rush":               "relationships",
-    "emotionally available": "relationships",
-    "blunt but caring":      "relationships",
-    "soft but strong":       "self_growth",
-    "overthinks everything": "anxiety",
-    "here for the long run": "relationships",
-    "ready to try again":    "relationships",
-}
+# Vibe tags are gone, and with them the vibe→topic mapping that used to seed
+# `user_vibe_topics`. It was mostly broken anyway: 6 of the 7 topics it
+# produced (anxiety, depression, trauma, loneliness, relationships,
+# self_growth) no longer exist in AVAILABLE_TOPICS, so they could never match
+# a post. Personalisation now rests entirely on behavioural affinities
+# (get_behavioral_interests), which reflect what people actually engage with.
 
 
 def _score_post(
     post: dict,
-    user_vibe_topics: set[str],
     user_affinities: dict[str, float],
     now: datetime,
 ) -> float:
@@ -373,7 +355,6 @@ def _score_post(
     Returns a relevance score for a single post.
 
     Weights (approximate ceiling):
-      vibe overlap   — 40 pts per matching topic  (signal: "this is for someone like me")
       affinity       — up to 30 pts per topic      (signal: "you've engaged with this before")
       recency        — up to 25 pts                (decays linearly over 7 days)
       engagement     — up to 15 pts (log-scaled)   (signal: "others found it worth reacting to")
@@ -381,11 +362,7 @@ def _score_post(
     score = 0.0
     post_topics = set(post.get("topics", []))
 
-    # 1. Vibe-tag overlap (high weight)
-    for topic in user_vibe_topics & post_topics:
-        score += 40
-
-    # 2. Behavioural affinity (medium-high weight, capped per topic)
+    # 1. Behavioural affinity (medium-high weight, capped per topic)
     for topic in post_topics:
         score += min(user_affinities.get(topic, 0) * 2, 30)
 
@@ -410,7 +387,6 @@ def _score_post(
 
 def _weighted_shuffle(
     posts: list,
-    user_vibe_topics: set[str],
     user_affinities: dict[str, float],
 ) -> list:
     """
@@ -418,13 +394,13 @@ def _weighted_shuffle(
     then concatenate: high → medium → low.
 
     Tier thresholds (roughly):
-      high   ≥ 50  — strong vibe/affinity match or very recent + engaged
+      high   ≥ 50  — strong affinity match or very recent + engaged
       medium 20–49 — some overlap or moderately recent
       low    < 20  — cold / old / unseen territory (still gets shown for serendipity)
     """
     now = datetime.now(timezone.utc)
     scored = [
-        (_score_post(p, user_vibe_topics, user_affinities, now), p)
+        (_score_post(p, user_affinities, now), p)
         for p in posts
     ]
 
@@ -762,7 +738,6 @@ async def get_calm_feed(
 
     streak_info = None
     user_doc = None
-    user_vibe_topics: set[str] = set()
     user_affinities: dict[str, float] = {}
 
     if current_user_id:
@@ -771,7 +746,7 @@ async def get_calm_feed(
             return await db["users"].find_one(
                 {"_id": ObjectId(current_user_id)},
                 {
-                    "vibe_tags": 1, "blocked_user_ids": 1,
+                    "blocked_user_ids": 1,
                     "location_country": 1, "location_county": 1,
                     "location_sub_county": 1, "location_estate": 1,
                     "feed_location_scope": 1,
@@ -783,12 +758,6 @@ async def get_calm_feed(
             _fetch_user_doc(),
             get_behavioral_interests(current_user_id, db),
         )
-
-        if user_doc:
-            for tag in user_doc.get("vibe_tags", []):
-                mapped = _VIBE_TO_TOPIC.get(tag)
-                if mapped:
-                    user_vibe_topics.add(mapped)
 
     blocked_ids = user_doc.get("blocked_user_ids", []) if user_doc else []
 
@@ -827,7 +796,7 @@ async def get_calm_feed(
     pool_exhausted = len(pool) < POOL_SIZE
 
     # Weighted shuffle — relevance-tiered but randomised within each tier
-    shuffled = _weighted_shuffle(pool, user_vibe_topics, user_affinities)
+    shuffled = _weighted_shuffle(pool, user_affinities)
 
     # Slice to the requested batch size, then apply emotion interleaving
     posts = shuffled[:posts_to_load]

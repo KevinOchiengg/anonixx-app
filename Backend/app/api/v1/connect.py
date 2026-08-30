@@ -61,9 +61,6 @@ class BlockRequest(BaseModel):
     chat_id: str
     reason: Optional[str] = None
 
-class UpdateVibesRequest(BaseModel):
-    vibe_tags: List[str]        # Max 3
-
 
 # ==================== HELPERS ====================
 
@@ -281,7 +278,8 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "avatar": user.get("avatar", "ghost"),
         "avatar_color": user.get("avatar_color", "#FF634A"),
         "avatar_aura": user.get("avatar_aura", "purple_glow"),
-        "vibe_tags": user.get("vibe_tags", [])[:3],
+        # Vibe tags were removed entirely — a profile shows the user's own
+        # interests instead of a canned personality label.
         "confession_count": confession_count,
         "connections_count": connections_count,
         "vibe_score": vibe_score,
@@ -301,70 +299,6 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "chat_id": chat_id,                 # set if already chatting
         "gender": user.get("gender"),       # male | female | nonbinary | prefer_not_to_say | null
     }
-
-
-# ==================== VIBE TAGS ====================
-
-VALID_VIBE_TAGS = [
-    # Situation — where you are
-    "raising kids alone", "starting over", "been through a lot",
-    "healing in progress", "carrying a lot", "still standing",
-    "lost right now", "rebuilding myself",
-    # Need — what you need
-    "need someone steady", "looking for something real",
-    "just need to be heard", "open to connection",
-    "not looking for games", "no rush",
-    # Voice — how you show up
-    "emotionally available", "blunt but caring",
-    "soft but strong", "overthinks everything",
-    "here for the long run", "ready to try again",
-]
-
-@router.get("/vibes/options")
-async def get_vibe_options():
-    """Get all available emotional signal tags"""
-    return {
-        "vibe_tags": VALID_VIBE_TAGS,
-        "groups": {
-            "situation": [
-                "raising kids alone", "starting over", "been through a lot",
-                "healing in progress", "carrying a lot", "still standing",
-                "lost right now", "rebuilding myself",
-            ],
-            "need": [
-                "need someone steady", "looking for something real",
-                "just need to be heard", "open to connection",
-                "not looking for games", "no rush",
-            ],
-            "voice": [
-                "emotionally available", "blunt but caring",
-                "soft but strong", "overthinks everything",
-                "here for the long run", "ready to try again",
-            ],
-        }
-    }
-
-@router.put("/vibes")
-async def update_vibe_tags(
-    data: UpdateVibesRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """Update user's vibe tags (max 5)"""
-    # Validate
-    invalid = [t for t in data.vibe_tags if t not in VALID_VIBE_TAGS]
-    if invalid:
-        raise HTTPException(status_code=400, detail=f"Invalid vibe tags: {invalid}")
-
-    if len(data.vibe_tags) > 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 vibe tags allowed")
-
-    await db["users"].update_one(
-        {"_id": ObjectId(current_user_id)},
-        {"$set": {"vibe_tags": data.vibe_tags}}
-    )
-
-    return {"message": "Vibe tags updated", "vibe_tags": data.vibe_tags}
 
 
 # ==================== CONNECT REQUESTS ====================
@@ -431,7 +365,6 @@ async def send_connect_request(
         "from_anonymous_name": sender.get("anonymous_name", "Anonymous"),
         "from_avatar": sender.get("avatar", "ghost"),
         "from_avatar_color": sender.get("avatar_color", "#FF634A"),
-        "from_vibe_tags": sender.get("vibe_tags", [])[:3],
         "to_user_id": target_id,
         "to_anonymous_name": data.to_anonymous_name,
         "status": RequestStatus.PENDING,
@@ -474,7 +407,6 @@ async def get_incoming_requests(
             "from_anonymous_name": req["from_anonymous_name"],
             "from_avatar": req.get("from_avatar", "ghost"),
             "from_avatar_color": req.get("from_avatar_color", "#FF634A"),
-            "from_vibe_tags": req.get("from_vibe_tags", []),
             "created_at": req["created_at"].isoformat(),
             "expires_at": req["expires_at"].isoformat()
         })
