@@ -31,7 +31,13 @@ from bson import ObjectId
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import debit_coins
-from app.api.v1.drops import _ensure_aware, send_push_notification, expiry_hours_for
+from app.api.v1.drops import _ensure_aware, send_push_notification
+
+# Pending requests now carry their own clock. They used to inherit the
+# confession's expiry, but drops no longer expire until they're unlocked —
+# without this a request nobody answered would sit in an owner's inbox
+# forever.
+REQUEST_EXPIRY_DAYS = 7
 from app.websockets.unlock_requests import (
     emit_unlock_request_received,
     emit_unlock_request_accepted,
@@ -69,9 +75,12 @@ class AcceptAllBody(BaseModel):
 # ==================== HELPERS ====================
 
 async def _resolve_target(target_type: str, target_id: str, db) -> dict:
-    """Returns {doc, owner_id, expires_at, confession_snippet} for a post or
-    drop. Posts have no stored expiry — one is computed here from
-    CARD_EXPIRY_HOURS and frozen onto the request at creation time."""
+    """Returns {doc, owner_id, target_expires_at, confession_snippet}.
+
+    `target_expires_at` is None for anything that never expires — which is
+    every drop until its first unlock, and every plain feed post. It is NOT
+    the request's own expiry; see REQUEST_EXPIRY_DAYS for that.
+    """
     if target_type == "post":
         try:
             doc = await db["posts"].find_one({"_id": ObjectId(target_id)})
@@ -79,14 +88,10 @@ async def _resolve_target(target_type: str, target_id: str, db) -> dict:
             doc = None
         if not doc:
             raise HTTPException(status_code=404, detail="Drop not found.")
-        # Premium authors' drops stay live 72h instead of 24h.
-        hours = await expiry_hours_for(doc["user_id"], db)
         return {
             "doc": doc,
             "owner_id": doc["user_id"],
-            # _ensure_aware because Mongo hands back naive datetimes — without
-            # it this expiry can't be compared against now_utc() below.
-            "expires_at": _ensure_aware(doc["created_at"]) + timedelta(hours=hours),
+            "target_expires_at": None,   # feed posts don't expire
             "confession_snippet": (doc.get("content") or "")[:140],
         }
 
@@ -97,10 +102,11 @@ async def _resolve_target(target_type: str, target_id: str, db) -> dict:
             doc = None
         if not doc:
             raise HTTPException(status_code=404, detail="Drop not found.")
+        exp = doc.get("expires_at")
         return {
             "doc": doc,
             "owner_id": doc["sender_id"],
-            "expires_at": _ensure_aware(doc["expires_at"]),
+            "target_expires_at": _ensure_aware(exp) if exp else None,
             "confession_snippet": (doc.get("confession") or "")[:140],
         }
 
@@ -226,14 +232,19 @@ async def create_unlock_request(
             )
 
     target = await _resolve_target(data.target_type, data.target_id, db)
-    doc, owner_id, expires_at, snippet = (
-        target["doc"], target["owner_id"], target["expires_at"], target["confession_snippet"],
+    doc, owner_id, target_expires_at, snippet = (
+        target["doc"], target["owner_id"], target["target_expires_at"],
+        target["confession_snippet"],
     )
 
     if owner_id == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own confession.")
-    if expires_at < now_utc():
+    # None = never expires (un-unlocked drop, or a plain feed post).
+    if target_expires_at is not None and target_expires_at < now_utc():
         raise HTTPException(status_code=400, detail="This confession has expired.")
+
+    # The request's own window, independent of the confession's lifetime.
+    expires_at = now_utc() + timedelta(days=REQUEST_EXPIRY_DAYS)
 
     existing_unlock = await db["drop_unlocks"].find_one({
         "drop_id": data.target_id, "unlocker_id": current_user_id,

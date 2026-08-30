@@ -30,6 +30,7 @@ from app.api.v1 import (
 )
 from app.tasks.publisher_worker import publisher_worker
 from app.tasks.circle_ad_cleanup import circle_ad_cleanup_worker
+from app.tasks.drop_cleanup import drop_cleanup_worker
 
 
 async def _ensure_indexes():
@@ -96,8 +97,10 @@ async def lifespan(app: FastAPI):
     await _ensure_indexes()
     await publisher_worker.start()          # start social publishing worker
     await circle_ad_cleanup_worker.start()  # start circle ad expiry sweeper
+    await drop_cleanup_worker.start()       # delete drops past their post-unlock grace
     yield
-    await circle_ad_cleanup_worker.stop()   # clean shutdown
+    await drop_cleanup_worker.stop()        # clean shutdown
+    await circle_ad_cleanup_worker.stop()
     await publisher_worker.stop()
     await close_mongo_connection()
 

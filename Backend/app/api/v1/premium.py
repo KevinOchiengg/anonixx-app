@@ -2,11 +2,15 @@
 api/v1/premium.py — Anonixx Premium subscription purchase.
 
 Perks (all defined and enforced in drops.py — see the PREMIUM_* constants
-and the unlock_cost_for / unlock_reward_for / expiry_hours_for helpers):
+and the unlock_cost_for / unlock_reward_for / grace_days_for helpers):
   • Unlocks cost 25 coins instead of 50      (keyed on the UNLOCKER)
   • Unlock reward is 10 coins instead of 5   (keyed on the DROP OWNER)
-  • Your drops stay live 72h instead of 24h  (keyed on the POSTER)
+  • Unlocked drops survive 14 days instead
+    of 7 before cleanup deletes them         (keyed on the POSTER)
   • Ad-free feed                             (GET /ads/active returns [])
+
+Drops no longer expire on a timer: one stays live indefinitely until its
+first unlock, which is what starts the grace window above.
 
 The old "unlimited Drops per day" perk is gone — that cap was removed and
 posting is unlimited for everyone now.

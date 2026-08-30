@@ -20,7 +20,13 @@ router = APIRouter(prefix="/drops", tags=["Drops"])
 DROP_PRICE_USD = 2.00
 REVEAL_PRICE_USD = 1.00
 GROUP_DROP_PRICE_USD = 3.00
-CARD_EXPIRY_HOURS = 24
+# Drop lifecycle — drops do NOT expire on a timer. A drop stays live
+# indefinitely until someone unlocks it; the first unlock starts a grace
+# window, and once that passes tasks/drop_cleanup.py deletes the drop and
+# its mirrored feed post. Chats survive: drop_connections copies the
+# confession text onto itself, so conversations people paid for outlive it.
+# `expires_at: None` on a drop therefore means "never unlocked, never dies".
+UNLOCKED_GRACE_DAYS = 7
 NIGHT_MODE_START = 22  # 10pm
 NIGHT_MODE_END = 3     # 3am
 
@@ -43,10 +49,10 @@ UNLOCK_REWARD_COINS    = 5    # flat, replaces the old percentage share
 # Which side of a transaction a perk applies to matters:
 #   • unlock cost → the UNLOCKER's premium status
 #   • reward      → the DROP OWNER's premium status
-#   • expiry      → the POSTER's premium status, frozen at creation
-PREMIUM_UNLOCK_COST         = 25   # vs COINS_UNLOCK_COST (50)
-PREMIUM_UNLOCK_REWARD_COINS = 10   # vs UNLOCK_REWARD_COINS (5)
-PREMIUM_CARD_EXPIRY_HOURS   = 72   # vs CARD_EXPIRY_HOURS (24)
+#   • grace       → the POSTER's premium status, applied at first unlock
+PREMIUM_UNLOCK_COST          = 25   # vs COINS_UNLOCK_COST (50)
+PREMIUM_UNLOCK_REWARD_COINS  = 10   # vs UNLOCK_REWARD_COINS (5)
+PREMIUM_UNLOCKED_GRACE_DAYS  = 14   # vs UNLOCKED_GRACE_DAYS (7)
 
 CATEGORIES = [
     # Social
@@ -263,18 +269,22 @@ async def unlock_reward_for(owner_id: str, db) -> int:
     return PREMIUM_UNLOCK_REWARD_COINS if await is_premium_user_id(owner_id, db) else UNLOCK_REWARD_COINS
 
 
-async def expiry_hours_for(user_id: str, db) -> int:
-    """How long this user's drops stay live — premium gets 72h vs 24h."""
-    return PREMIUM_CARD_EXPIRY_HOURS if await is_premium_user_id(user_id, db) else CARD_EXPIRY_HOURS
+async def grace_days_for(user_id: str, db) -> int:
+    """Days a drop survives after its FIRST unlock before cleanup deletes it
+    — premium gets 14 vs 7, twice the window to collect further unlocks."""
+    return PREMIUM_UNLOCKED_GRACE_DAYS if await is_premium_user_id(user_id, db) else UNLOCKED_GRACE_DAYS
+
+
+def is_expired(expires_at: Optional[datetime]) -> bool:
+    """A drop with no expires_at has never been unlocked and never dies."""
+    if expires_at is None:
+        return False
+    return _ensure_aware(expires_at) < now_utc()
 
 
 def is_night_mode() -> bool:
     hour = now_utc().hour
     return hour >= NIGHT_MODE_START or hour < NIGHT_MODE_END
-
-
-def get_expiry(hours: int = CARD_EXPIRY_HOURS) -> datetime:
-    return now_utc() + timedelta(hours=hours)
 
 
 def get_time_ago(dt: datetime) -> str:
@@ -290,10 +300,17 @@ def get_time_ago(dt: datetime) -> str:
     return dt.strftime("%b %Y")
 
 
-def get_time_left(expires_at: datetime) -> str:
+def get_time_left(expires_at: Optional[datetime]) -> Optional[str]:
+    """None means the drop has never been unlocked, so nothing is counting
+    down — callers render no timer at all rather than a fake one."""
+    if expires_at is None:
+        return None
     delta = _ensure_aware(expires_at) - now_utc()
     if delta.total_seconds() <= 0:
         return "expired"
+    days = delta.days
+    if days >= 1:
+        return f"{days}d left"
     hours = int(delta.total_seconds() // 3600)
     minutes = int((delta.total_seconds() % 3600) // 60)
     if hours > 0:
@@ -589,10 +606,10 @@ async def create_drop(
         "is_group": data.is_group,
         "group_size": data.group_size if data.is_group else None,
         "price": price,
-        # Premium perk: 72h on the feed instead of 24h.
-        "expires_at": get_expiry(
-            PREMIUM_CARD_EXPIRY_HOURS if _is_premium_active(user) else CARD_EXPIRY_HOURS
-        ),
+        # No countdown at creation — the drop stays live until somebody
+        # unlocks it, and only then does the grace clock start (see
+        # _complete_unlock). None here means "never unlocked, never dies".
+        "expires_at": None,
         "is_active": True,
         "is_night_mode": night,
         "unlock_count": 0,
@@ -776,8 +793,8 @@ async def create_drop(
 
     return {
         "id": drop_id_str,
-        "expires_at": drop["expires_at"].isoformat(),
-        "time_left": get_time_left(drop["expires_at"]),
+        "expires_at": None,          # nothing counting down until first unlock
+        "time_left": None,
         "is_night_mode": night,
         "price": price,
         "coins_spent": DROP_POST_COST,
@@ -924,7 +941,12 @@ async def get_inspired_drops(
     query = {
         "inspired_by_post_id": post_id,
         "is_active":           True,
-        "expires_at":          {"$gt": now_utc()},
+        # expires_at is null until a drop's first unlock — those are live
+        # forever, so "not expired" has to mean null OR still in the future.
+        "$or": [
+            {"expires_at": None},
+            {"expires_at": {"$gt": now_utc()}},
+        ],
         "moderation_status":   {"$nin": ["flagged", "hidden"]},
     }
 
@@ -1025,7 +1047,7 @@ async def react_to_drop(
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot react to your own drop")
 
-    if _ensure_aware(drop["expires_at"]) < now_utc():
+    if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired")
 
     # Atomic upsert: one reaction per user per drop. If one exists we rotate
@@ -1129,7 +1151,7 @@ async def unlock_drop_coins(
         raise HTTPException(status_code=404, detail="Drop not found.")
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop.")
-    if _ensure_aware(drop["expires_at"]) < now_utc():
+    if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired.")
 
     # Idempotent: already unlocked?
@@ -1218,7 +1240,7 @@ async def unlock_drop_mpesa(
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
 
-    if _ensure_aware(drop["expires_at"]) < now_utc():
+    if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired")
 
     # Already unlocked?
@@ -1293,7 +1315,7 @@ async def unlock_drop_stripe(
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
 
-    if _ensure_aware(drop["expires_at"]) < now_utc():
+    if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired")
 
     existing = await db["drop_unlocks"].find_one({
@@ -1487,6 +1509,18 @@ async def _complete_unlock(
         {"_id": ObjectId(drop_id)},
         {"$inc": {"unlock_count": 1}}
     )
+
+    # First unlock starts the deletion clock. The `expires_at: None` filter is
+    # what makes this fire once and only once — a second unlock finds the
+    # field already set and doesn't extend the window, so the drop can't be
+    # kept alive indefinitely by a trickle of unlocks. (None also matches a
+    # missing field, so drops predating this field behave the same.)
+    grace_days = await grace_days_for(drop["sender_id"], db)
+    await db["drops"].update_one(
+        {"_id": ObjectId(drop_id), "expires_at": None},
+        {"$set": {"expires_at": now_utc() + timedelta(days=grace_days)}},
+    )
+
     await update_vibe_score(drop["sender_id"], "card_unlocked", db)
 
     # Notify sender
@@ -1982,7 +2016,16 @@ async def renew_drop(
     if drop["sender_id"] != current_user_id:
         raise HTTPException(status_code=403, detail="Not your drop")
 
-    new_expiry = get_expiry(await expiry_hours_for(current_user_id, db))
+    # Only unlocked drops have a clock to renew. A never-unlocked drop is
+    # already live indefinitely, so there's nothing to extend.
+    if drop.get("expires_at") is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This drop isn't counting down — it stays live until someone unlocks it.",
+        )
+
+    grace_days = await grace_days_for(current_user_id, db)
+    new_expiry = now_utc() + timedelta(days=grace_days)
     await db["drops"].update_one(
         {"_id": ObjectId(drop_id)},
         {"$set": {
@@ -1993,7 +2036,7 @@ async def renew_drop(
     )
 
     return {
-        "message": "Drop renewed for another 24 hours 🔥",
+        "message": f"Drop renewed for another {grace_days} days 🔥",
         "expires_at": new_expiry.isoformat(),
         "time_left": get_time_left(new_expiry),
     }
