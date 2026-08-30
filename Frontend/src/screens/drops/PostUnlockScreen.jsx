@@ -23,8 +23,8 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { fetchBalance } from '../../store/slices/coinsSlice';
 
-// Must match COINS_UNLOCK_COST in Backend/app/api/v1/posts.py
-const UNLOCK_COST = 30;
+// Must match COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
+const UNLOCK_COST = 50;
 // Must match MAX_REQUEST_VIDEO_SECONDS in Backend/app/api/v1/unlock_requests.py
 const MAX_CLUE_VIDEO_SECONDS = 30;
 

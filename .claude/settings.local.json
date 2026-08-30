@@ -6,7 +6,8 @@
       "Bash(./venv/Scripts/python.exe e2e_unlock_race.py)",
       "Bash(./venv/Scripts/python.exe -c ' *)",
       "Bash(curl -s -m 20 https://anonixx-app.onrender.com/health)",
-      "Bash(curl -s -m 20 -o /dev/null -w \"unlock-requests route status \\(no auth\\): %{http_code}\\\\n\" -X POST https://anonixx-app.onrender.com/api/v1/unlock-requests)"
+      "Bash(curl -s -m 20 -o /dev/null -w \"unlock-requests route status \\(no auth\\): %{http_code}\\\\n\" -X POST https://anonixx-app.onrender.com/api/v1/unlock-requests)",
+      "Bash(git push *)"
     ]
   }
 }

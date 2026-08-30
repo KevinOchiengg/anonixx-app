@@ -99,14 +99,22 @@ async def get_coin_balance(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    user = await db.users.find_one({"_id": ObjectId(current_user_id)}, {"coin_balance": 1})
+    user = await db.users.find_one(
+        {"_id": ObjectId(current_user_id)},
+        {"coin_balance": 1, "withdrawable_coins": 1},
+    )
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     balance = user.get("coin_balance", 0)
+    # Spendable vs cashable are different numbers — estimated_kes quotes the
+    # earned subset only, so the withdraw screen never dangles a figure the
+    # user can't actually take out.
+    earned = user.get("withdrawable_coins", 0)
     return {
         "balance": balance,
+        "withdrawable_coins": earned,
         "payout_rate_kes_per_coin": PAYOUT_RATE_KES_PER_COIN,
-        "estimated_kes": round(balance * PAYOUT_RATE_KES_PER_COIN, 2),
+        "estimated_kes": round(earned * PAYOUT_RATE_KES_PER_COIN, 2),
     }
 
 
@@ -188,6 +196,24 @@ async def request_withdrawal(
     if not data.mpesa_number.strip():
         raise HTTPException(status_code=400, detail="M-Pesa number is required.")
 
+    # Only EARNED coins are cashable. Without this, the signup bonus would be
+    # free money for anyone willing to register throwaway accounts, and
+    # purchased coins would be a card-fraud laundering path.
+    user = await db.users.find_one(
+        {"_id": ObjectId(current_user_id)}, {"withdrawable_coins": 1}
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    earned = user.get("withdrawable_coins", 0)
+    if data.amount_coins > earned:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Only coins you've earned can be withdrawn. You have {earned} "
+                "earned coin(s) — the rest are for spending in Anonixx."
+            ),
+        )
+
     try:
         new_balance = await debit_coins(
             db          = db,
@@ -195,6 +221,7 @@ async def request_withdrawal(
             amount      = data.amount_coins,
             reason      = "withdrawal_request",
             description = f"Withdrawal request — {data.amount_coins} coins",
+            from_withdrawable = True,
         )
     except ValueError as e:
         if "Insufficient" in str(e):

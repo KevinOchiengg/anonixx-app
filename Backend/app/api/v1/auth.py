@@ -36,7 +36,12 @@ def _is_adult(dob: date) -> bool:
 
 
 # ─── Models ───────────────────────────────────────────────────
-WELCOME_BONUS = 90  # Coins awarded to every new user — enough for 3 Link up unlocks (30 each, see PostUnlockScreen.jsx UNLOCK_COST). Runs out after that; top-up required to keep unlocking.
+# Free-tier coins every new user starts with, to learn how Anonixx works
+# before paying anything: ~100 drops (10 each) or 20 unlocks (50 each), or
+# any mix. Once it's spent, topping up via M-Pesa/Stripe/PayPal is the only
+# way to keep going. NOT withdrawable — see WITHDRAWABLE_REASONS in
+# utils/coin_service.py; only earned reward coins can be cashed out.
+WELCOME_BONUS = 1000
 
 class RegisterRequest(BaseModel):
     email:         EmailStr

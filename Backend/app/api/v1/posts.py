@@ -17,7 +17,8 @@ from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.api.v1.drops import (
     update_vibe_score, send_push_notification,
-    COINS_UNLOCK_COST, CASH_TO_COIN_RATE, DROP_REVENUE_SHARE_PCT,
+    COINS_UNLOCK_COST, CASH_TO_COIN_RATE, DROP_POST_COST,
+    unlock_cost_for, unlock_reward_for, expiry_hours_for,
 )
 
 # ── Simple in-process TTL cache for expensive count query ─────
@@ -505,8 +506,29 @@ async def create_post(
         "location_detail": location_detail,
     }
 
+    # Posting costs coins — charged last, so a validation failure above never
+    # takes someone's balance. Same cost as /drops; charging only one route
+    # would leave the other a free bypass.
+    try:
+        await debit_coins(
+            db=db, user_id=current_user_id, amount=DROP_POST_COST,
+            reason="drop_post", description="Posted a drop",
+            meta={"post_id": str(post_data["_id"])},
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(
+                status_code=402,
+                detail=f"Not enough coins. Posting a drop costs {DROP_POST_COST} coins.",
+            )
+        raise HTTPException(status_code=404, detail="User not found.")
+
     await db["posts"].insert_one(post_data)
-    return {"id": str(post_data["_id"]), "message": "Your words might help someone tonight."}
+    return {
+        "id": str(post_data["_id"]),
+        "coins_spent": DROP_POST_COST,
+        "message": "Your words might help someone tonight.",
+    }
 
 
 # ==================== UNLOCK (Link up) ====================
@@ -555,25 +577,30 @@ async def _create_post_connection(post_id: str, post: dict, unlocker_id: str, db
 
 async def _complete_post_unlock(post: dict, requester_id: str, db) -> None:
     """The money-moving half of a post unlock — charges coins, credits the
-    author's 10% revenue share, and records the unlock. Shared by the
-    deprecated instant-unlock idempotent path and the unlock-requests accept
-    flow (app/api/v1/unlock_requests.py). Raises ValueError on insufficient
-    coins (bubbles up from debit_coins)."""
+    author's revenue share, and records the unlock. Shared by the deprecated
+    instant-unlock idempotent path and the unlock-requests accept flow
+    (app/api/v1/unlock_requests.py). Raises ValueError on insufficient coins
+    (bubbles up from debit_coins).
+
+    Both premium perks apply here, and they key off different people: the
+    unlocker's premium sets the cost, the author's sets their share."""
     post_id = str(post["_id"])
 
+    cost = await unlock_cost_for(requester_id, db)
     await debit_coins(
-        db=db, user_id=requester_id, amount=COINS_UNLOCK_COST,
+        db=db, user_id=requester_id, amount=cost,
         reason="post_reveal", description="Unlocked a confession's author",
         meta={"post_id": post_id},
     )
 
-    # Same 10% creator payout Drops already pays — credited as coins, no cash payout.
-    share = max(1, round(COINS_UNLOCK_COST * DROP_REVENUE_SHARE_PCT))
+    # Same flat reward Drops pays — a hook, not a cut of what was paid.
+    reward = await unlock_reward_for(post["user_id"], db)
     try:
         await credit_coins(
-            db=db, user_id=post["user_id"], amount=share,
-            reason="drop_revenue_share", description="10% share from someone unlocking your confession",
-            meta={"post_id": post_id, "unlock_cost_coins": COINS_UNLOCK_COST},
+            db=db, user_id=post["user_id"], amount=reward,
+            reason="drop_unlock_reward",
+            description=f"+{reward} coins — someone unlocked your drop",
+            meta={"post_id": post_id, "unlock_cost_coins": cost, "reward_coins": reward},
         )
     except ValueError:
         pass  # author account missing — don't fail the unlocker's flow over it
@@ -584,7 +611,7 @@ async def _complete_post_unlock(post: dict, requester_id: str, db) -> None:
         "unlocker_id": requester_id,
         "sender_id": post["user_id"],
         "method": "coins",
-        "amount": COINS_UNLOCK_COST / CASH_TO_COIN_RATE,
+        "amount": cost / CASH_TO_COIN_RATE,
         "sender_anonymous_name": post.get("anonymous_name") or "Anonymous",
         "created_at": now_utc(),
     })
