@@ -4,12 +4,14 @@ import { Alert, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuth } from '../context/AuthContext'
 import { logout as logoutAction } from '../store/slices/authSlice'
+import { useToast } from '../components/ui/Toast'
 import { API_BASE_URL } from '../config/api'
 
 
 export const useLogout = (navigation) => {
   const dispatch = useDispatch()
   const { logout: authContextLogout } = useAuth()
+  const { showToast } = useToast()
 
   const logout = useCallback(async () => {
     console.log('🔴 LOGOUT STARTED')
@@ -43,27 +45,23 @@ export const useLogout = (navigation) => {
       await AsyncStorage.multiRemove(['token', 'user'])
       console.log('✅ AsyncStorage cleared')
 
-      // 6. Navigate to Auth screen
+      // 6. Land back on the main feed — the app is guest-browsable, so
+      // there's no "logged out" screen to force someone onto.
       if (navigation) {
         navigation.reset({
           index: 0,
-          routes: [{ name: 'Auth', params: { screen: 'Login' } }],
+          routes: [{ name: 'Main' }],
         })
-        console.log('✅ Navigated to Login screen')
+        console.log('✅ Navigated to Main feed')
       }
 
+      showToast({ type: 'success', message: "You're signed out." })
       console.log('🔴 LOGOUT COMPLETE')
     } catch (error) {
       console.error('❌ Logout error:', error)
-
-      // Web-compatible alert
-      if (Platform.OS === 'web') {
-        alert('Failed to logout. Please try again.')
-      } else {
-        Alert.alert('Error', 'Failed to logout. Please try again.')
-      }
+      showToast({ type: 'error', message: 'Could not sign out. Try again.' })
     }
-  }, [navigation, dispatch, authContextLogout])
+  }, [navigation, dispatch, authContextLogout, showToast])
 
   const confirmLogout = useCallback(() => {
     console.log('🔴 confirmLogout called')
