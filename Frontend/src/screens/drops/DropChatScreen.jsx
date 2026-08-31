@@ -29,7 +29,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Audio } from 'expo-av';
 import {
   Send, Sparkles, CheckCircle, Eye, X, Video, Phone, MoreVertical,
-  Mic, Play, Pause, RotateCcw, Settings, Flag, ShieldOff, Users,
+  Mic, Play, Pause, RotateCcw, Settings, Flag, ShieldOff, Users, AlertTriangle,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -792,6 +792,39 @@ export default function DropChatScreen({ route, navigation }) {
     );
   }, [connection, showToast]);
 
+  // Only the unlocker can file this — they're the one who actually paid
+  // coins to link up, so they're the one who can say it was a bait
+  // confession. An admin reviews before any refund/strike happens.
+  const handleReportDeceptive = useCallback(() => {
+    if (!connectionId) return;
+    Alert.alert(
+      'This confession was fake?',
+      "We'll review it. If confirmed, you get your coins back and they take a strike.",
+      [
+        {
+          text: 'Report it', style: 'destructive',
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const res   = await fetch(`${API_BASE_URL}/api/v1/deception-reports`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body:    JSON.stringify({ connection_id: connectionId }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(data.detail || 'Could not send report.');
+              setShowMoreMenu(false);
+              showToast({ type: 'success', message: 'Report sent for review.' });
+            } catch (e) {
+              showToast({ type: 'error', message: e.message || 'Could not send report. Try again.' });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [connectionId, showToast]);
+
   // Header right: audio / video call icons + reveal pill/tag + 3-dot menu —
   // the room's controls live in the header now, not a full-width bar.
   const HeaderRight = useMemo(() => {
@@ -1199,6 +1232,10 @@ export default function DropChatScreen({ route, navigation }) {
                 <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>
                   <Flag size={rs(16)} color={T.text} strokeWidth={1.8} />
                   <Text style={s.menuActionText}>Report</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.menuAction} onPress={handleReportDeceptive} hitSlop={HIT_SLOP}>
+                  <AlertTriangle size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>This wasn't real</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.menuAction} onPress={handleBlockHost} hitSlop={HIT_SLOP}>
                   <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />

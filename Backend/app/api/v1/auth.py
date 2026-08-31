@@ -54,9 +54,6 @@ class LoginRequest(BaseModel):
     email:    EmailStr
     password: str
 
-class UpdateInterestsRequest(BaseModel):
-    interests: list[str]
-
 class UpdateGenderRequest(BaseModel):
     gender: str  # 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say'
 
@@ -413,55 +410,6 @@ async def update_profile(
     }
 
 
-@router.put("/interests")
-async def update_interests(
-    data: UpdateInterestsRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db=Depends(get_database),
-):
-    if len(data.interests) > 5:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Maximum 5 interests allowed")
-
-    result = await db["users"].update_one(
-        {"_id": ObjectId(current_user_id)},
-        {"$set": {"interests": data.interests, "updated_at": _now()}},
-    )
-    if result.modified_count == 0:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    # Trigger referral conversion on first onboarding completion
-    user = await db["users"].find_one(
-        {"_id": ObjectId(current_user_id)},
-        {"referred_by_user_id": 1, "referral_completed": 1},
-    )
-    if user and user.get("referred_by_user_id") and not user.get("referral_completed"):
-        from app.api.v1.referrals import REFERRER_REWARD, REFERRED_REWARD, _now as ref_now
-        from app.utils.coin_service import credit_coins as _credit
-        referrer_id   = user["referred_by_user_id"]
-        current_month = _now().strftime("%Y-%m")
-        referrer_doc  = await db["users"].find_one(
-            {"_id": ObjectId(referrer_id)},
-            {"monthly_ref_count": 1, "monthly_ref_month": 1},
-        )
-        if referrer_doc:
-            stored_month  = referrer_doc.get("monthly_ref_month", "")
-            monthly_count = referrer_doc.get("monthly_ref_count", 0) if stored_month == current_month else 0
-            if monthly_count < 20:
-                await _credit(db, referrer_id, REFERRER_REWARD, "referral_bonus",
-                              "A friend joined using your link", {"referred_user_id": current_user_id})
-                await db["users"].update_one(
-                    {"_id": ObjectId(referrer_id)},
-                    {"$set": {"monthly_ref_month": current_month, "monthly_ref_count": monthly_count + 1},
-                     "$inc": {"total_referrals": 1}},
-                )
-        await _credit(db, current_user_id, REFERRED_REWARD, "referral_bonus",
-                      "Joined via a friend's referral", {"referrer_id": referrer_id})
-        await db["users"].update_one(
-            {"_id": ObjectId(current_user_id)},
-            {"$set": {"referral_completed": True, "referral_completed_at": _now()}},
-        )
-
-    return {"message": "Interests updated successfully", "interests": data.interests}
 
 
 @router.put("/gender")

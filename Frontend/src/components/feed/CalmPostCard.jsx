@@ -784,6 +784,7 @@ function CalmPostCard({
         onClose={() => setProfileSheetVisible(false)}
         userId={post.user_id}
         anonymousName={post.anonymous_name}
+        post={post}
         navigation={navigation}
       />
     </View>

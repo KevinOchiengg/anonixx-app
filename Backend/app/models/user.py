@@ -63,6 +63,12 @@ class User(BaseModel):
     age_verified: bool = False
     blocked_user_ids: List[str] = []
 
+    # Deceptive-confession strikes — see api/v1/deception_reports.py. Strike
+    # 2 suspends posting for 7 days; strike 3+ deactivates the account
+    # (is_active=False, same field the admin ban toggle uses).
+    deception_strikes: int = 0
+    posting_suspended_until: Optional[datetime] = None
+
     # Coins. `coin_balance` is everything spendable in-app; `withdrawable_coins`
     # is the earned subset that may be cashed out (signup bonus and purchased
     # coins never count) — see WITHDRAWABLE_REASONS in utils/coin_service.py.

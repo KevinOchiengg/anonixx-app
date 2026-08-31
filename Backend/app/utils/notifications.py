@@ -73,6 +73,28 @@ TEMPLATES = {
         "body": "They paid to connect with you. Say something.",
         "data": {"type": "drop_unlocked"},
     },
+
+    # Deception reports — see api/v1/deception_reports.py
+    "deception_refund": {
+        "title": "You've been refunded",
+        "body": "The confession you reported was confirmed deceptive. Your coins are back.",
+        "data": {"type": "deception_refund"},
+    },
+    "deception_strike_warning": {
+        "title": "A confession you posted was reported",
+        "body": "It was confirmed deceptive. This is a strike on your account — repeat strikes lead to a posting suspension, then a ban.",
+        "data": {"type": "deception_strike_warning"},
+    },
+    "deception_strike_suspended": {
+        "title": "Posting suspended",
+        "body": "A second confirmed deceptive confession means you can't post for 7 days.",
+        "data": {"type": "deception_strike_suspended"},
+    },
+    "deception_strike_banned": {
+        "title": "Account deactivated",
+        "body": "Repeated confirmed deceptive confessions have deactivated your account.",
+        "data": {"type": "deception_strike_banned"},
+    },
 }
 
 

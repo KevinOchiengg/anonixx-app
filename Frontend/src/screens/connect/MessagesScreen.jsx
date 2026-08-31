@@ -288,10 +288,8 @@ export default function MessagesScreen({ navigation }) {
   const [pendingUnlockCount, setPendingUnlockCount] = useState(0);
 
   // ── Load inbox — calls the live production endpoints in parallel ──
-  // /connect/chats       → connect conversations
-  // /drops/connections   → drop marketplace chats
+  // /drops/connections   → Link Up chats (the only chat surface there is)
   // /unlock-requests/incoming → confessions of mine other people want to unlock
-  // Merged and sorted by last_message_at descending on the frontend.
   const loadInbox = useCallback(async () => {
     setLoading(true);
     try {
@@ -300,47 +298,14 @@ export default function MessagesScreen({ navigation }) {
 
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [connectRes, dropsRes, unlockReqRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/v1/connect/chats`,      { headers }),
+      const [dropsRes, unlockReqRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v1/drops/connections`,  { headers }),
         fetch(`${API_BASE_URL}/api/v1/unlock-requests/incoming`, { headers }),
       ]);
 
-      // Parse both — treat non-ok as empty, not fatal
-      const connectData = connectRes.ok  ? await connectRes.json().catch(() => [])  : [];
       const dropsData   = dropsRes.ok    ? await dropsRes.json().catch(() => [])    : [];
       const unlockReqData = unlockReqRes.ok ? await unlockReqRes.json().catch(() => ({})) : {};
       setPendingUnlockCount((unlockReqData?.requests || []).length);
-
-      // Normalise connect chats → inbox shape
-      // Production endpoint returns { chats: [...] } with field "chat_id"
-      const rawConnect = connectData?.chats || (Array.isArray(connectData) ? connectData : []);
-      const REVEAL_THRESHOLD = 30;
-      const connectItems = rawConnect.map(c => {
-        const msgCount   = c.message_count || 0;
-        const isUnlocked = c.is_unlocked   || false;
-        return {
-          id:                   c.chat_id || c.id,   // production uses chat_id
-          chat_type:            'connect',
-          other_anonymous_name: c.other_anonymous_name || 'Anonymous',
-          other_avatar:         c.other_avatar         || 'ghost',
-          other_avatar_color:   c.other_avatar_color   || '#FF634A',
-          other_user_id:        c.other_user_id        || '',
-          last_message:         c.last_message         || null,
-          last_message_at:      c.last_message_at      || null,
-          unread_count:         c.unread_count         || 0,
-          is_unlocked:          isUnlocked,
-          messages_left:        isUnlocked ? null : Math.max(0, REVEAL_THRESHOLD - msgCount),
-          reveal_status:        c.reveal_status        || null,
-          reveal_initiator:     c.reveal_initiator     || false,
-          message_count:        msgCount,
-          drop_id:              null,
-          confession:           null,
-          is_sender:            null,
-          is_revealed:          null,
-          other_revealed:       null,
-        };
-      });
 
       // Normalise drop connections → inbox shape
       // Production endpoint returns { connections: [...] } with field "id"
@@ -367,8 +332,8 @@ export default function MessagesScreen({ navigation }) {
         other_revealed:       d.other_revealed ?? null,
       }));
 
-      // Merge and sort by most-recent message
-      const merged = [...connectItems, ...dropItems].sort((a, b) => {
+      // Sort by most-recent message
+      const merged = [...dropItems].sort((a, b) => {
         const ta = a.last_message_at || '';
         const tb = b.last_message_at || '';
         return tb.localeCompare(ta);
@@ -428,17 +393,7 @@ export default function MessagesScreen({ navigation }) {
 
   // ── Open chat — route by type ─────────────────────────────
   const handleOpenChat = useCallback((item) => {
-    if (item.chat_type === 'drop') {
-      navigation.navigate('DropChat', { connectionId: item.id });
-    } else {
-      navigation.navigate('Chat', {
-        chatId:           item.id,
-        otherName:        item.other_anonymous_name,
-        otherAvatar:      item.other_avatar,
-        otherAvatarColor: item.other_avatar_color,
-        otherUserId:      item.other_user_id,
-      });
-    }
+    navigation.navigate('DropChat', { connectionId: item.id });
   }, [navigation]);
 
   const handleOpenDemo = useCallback(() => navigation.navigate('DemoChat'), [navigation]);

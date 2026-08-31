@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Users, Flag, DollarSign, TrendingUp, Megaphone } from 'lucide-react-native';
+import { ArrowLeft, Users, Flag, DollarSign, TrendingUp, Megaphone, AlertTriangle } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -138,6 +138,14 @@ export default function AdminDashboardScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={s.navCardTitle}>Feed ads</Text>
             <Text style={s.navCardDesc}>Sponsored ad submissions awaiting review</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={s.navCard} onPress={() => navigation.navigate('AdminDeceptionReports')} activeOpacity={0.85}>
+          <AlertTriangle size={rs(20)} color={T.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.navCardTitle}>Deception reports</Text>
+            <Text style={s.navCardDesc}>Fake confession claims — refund + strike on confirm</Text>
           </View>
         </TouchableOpacity>
       </ScrollView>

@@ -22,11 +22,6 @@ import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
 import PostDetailScreen from '../screens/posts/PostDetailScreen';
 import InspirationThreadScreen from '../screens/drops/InspirationThreadScreen';
 
-// Connect chat screen — still used by Messages tab. ConnectScreen itself
-// (the standalone Connect tab) was removed as dead code — this is only
-// the chat surface, unrelated to that screen.
-import ChatScreen from '../screens/connect/ChatScreen';
-
 // Drops — DropsCompose now lives at the root AppNavigator stack (reachable
 // from anywhere, incl. the Create tab button below); DropChat stays here
 // since Messages needs it directly.
@@ -147,7 +142,6 @@ function MessagesStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MessagesMain" component={MessagesScreen} />
-      <Stack.Screen name="Chat"         component={ChatScreen} />
       <Stack.Screen name="DropChat"     component={DropChatScreen} />
       <Stack.Screen name="DropCall"     component={DropCallScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="DemoChat"     component={DemoChatScreen} />
