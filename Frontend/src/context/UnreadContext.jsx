@@ -6,8 +6,6 @@ import React, {
   createContext, useContext, useState, useEffect, useCallback, useRef,
 } from 'react';
 import { AppState } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../config/api';
 
 const UnreadContext = createContext({ unreadCount: 0, refreshUnread: () => {} });
 
@@ -15,21 +13,12 @@ export function UnreadProvider({ children }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const intervalRef = useRef(null);
 
+  // NOTE: the old connect_chats unread source was removed along with the
+  // free Connect system. Link Up's drop_connections chats don't track
+  // per-message read state yet, so there's no real unread count to report
+  // right now — this always resolves to 0 until that's built.
   const fetchUnread = useCallback(async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) { setUnreadCount(0); return; }
-
-      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/chats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const total = (data.chats || []).reduce((sum, c) => sum + (c.unread_count || 0), 0);
-      setUnreadCount(total);
-    } catch {
-      // silent — network errors should not surface here
-    }
+    setUnreadCount(0);
   }, []);
 
   // Poll every 30 s while app is foregrounded

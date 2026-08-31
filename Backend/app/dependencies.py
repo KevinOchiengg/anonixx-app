@@ -45,14 +45,20 @@ async def get_current_user_id(
         
         user = await db["users"].find_one({"_id": ObjectId(user_id)})
         print(f"🔍 Auth - User found: {user is not None}")
-        
+
         if not user:
             print(f"❌ Auth - User not found in database")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found"
             )
-        
+
+        if not user.get("is_active", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been suspended."
+            )
+
         print(f"✅ Auth - Success for user: {user.get('username')}")
         return user_id
         

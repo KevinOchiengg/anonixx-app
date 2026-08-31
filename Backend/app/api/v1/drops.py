@@ -567,6 +567,16 @@ async def create_drop(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    suspended_until = user.get("posting_suspended_until")
+    if suspended_until:
+        if suspended_until.tzinfo is None:
+            suspended_until = suspended_until.replace(tzinfo=timezone.utc)
+        if suspended_until > datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Posting suspended until {suspended_until.strftime('%B %d, %Y')} — a confession you posted was confirmed deceptive.",
+            )
+
     # ── Spec upgrade field validation (sections 11, 13, 16) ─────
     theme = (data.theme or "desire").strip()
     if theme not in VALID_THEMES:

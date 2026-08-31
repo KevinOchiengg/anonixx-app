@@ -16,9 +16,6 @@ function Loading() {
   return <View style={{ flex: 1, backgroundColor: T.background }} />;
 }
 
-import ChatScreen from '../screens/connect/ChatScreen';
-import CallScreen from '../screens/connect/CallScreen';
-import UnlockPremiumScreen from '../screens/connect/UnlockPremiumScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
 import CoinsScreen from '../screens/profile/CoinsScreen';
 import ReferralScreen from '../screens/profile/ReferralScreen';
@@ -41,6 +38,7 @@ import UnlockRequestsScreen from '../screens/drops/UnlockRequestsScreen';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminModerationScreen from '../screens/admin/AdminModerationScreen';
+import AdminDeceptionReportsScreen from '../screens/admin/AdminDeceptionReportsScreen';
 import AdminAdsScreen from '../screens/admin/AdminAdsScreen';
 import CreateAdScreen from '../screens/feed/CreateAdScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
@@ -107,10 +105,7 @@ export default function AppNavigator() {
           name="InterestSelection"
           component={InterestSelectionScreen}
         />
-        <Stack.Screen name="UnlockPremium" component={UnlockPremiumScreen} />
         <Stack.Screen name="Premium" component={PremiumScreen} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
-        <Stack.Screen name="Call" component={CallScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="DropChat" component={DropChatScreen} />
         <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
         <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
@@ -123,6 +118,7 @@ export default function AppNavigator() {
         <Stack.Screen name="AdminDashboard"  component={AdminDashboardScreen} />
         <Stack.Screen name="AdminUsers"      component={AdminUsersScreen} />
         <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
+        <Stack.Screen name="AdminDeceptionReports" component={AdminDeceptionReportsScreen} />
         <Stack.Screen name="AdminAds"        component={AdminAdsScreen} />
         <Stack.Screen name="CreateAd"        component={CreateAdScreen} />
         {/* Accessible from HamburgerMenu across all tabs */}

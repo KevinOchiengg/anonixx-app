@@ -15,7 +15,12 @@ import {
   StyleSheet, Text, TouchableOpacity, View, ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X, MessageCircle, UserCheck, Clock, Crown, MapPin } from 'lucide-react-native';
+import { X, UserCheck, Crown, MapPin, Link2, Coins } from 'lucide-react-native';
+
+// Matches UNLOCK_COST in CalmPostCard.jsx / PostUnlockScreen.jsx — same
+// coin-gated Link Up flow, just entered from the profile sheet instead of
+// the post card directly.
+const UNLOCK_COST = 50;
 import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../ui/Toast';
 import {
@@ -39,10 +44,13 @@ const AVATAR_MAP = {
   current: '⚡', still:  '🌊', hollow: '🫙',   signal:  '📡',
 };
 
-const CONNECT_COPY = {
-  default:  { label: 'I want to know you',  sub: "They won't know it's you." },
-  pending:  { label: 'Waiting for them…',    sub: 'Your request is out there.' },
-  chatting: { label: 'Open the conversation', sub: 'You\'re already connected.' },
+// Mirrors INTENT_LABELS in Backend/app/api/v1/drops.py / CARD_INTENTS in
+// DropCardRenderer.jsx — same vocabulary, just with an emoji for the pill.
+const HERE_FOR_EMOJI = {
+  'Relationship':  '🌹',
+  'Sex for Fun':   '🔥',
+  'Sex for Token': '🪙',
+  'General':       '🌑',
 };
 
 // ─── Stat Item ────────────────────────────────────────────────
@@ -53,25 +61,14 @@ const StatItem = React.memo(({ value, label }) => (
   </View>
 ));
 
-// ─── Vibe Tag ─────────────────────────────────────────────────
-const VibeTag = React.memo(({ tag, accentColor }) => (
-  <View style={[styles.vibeTag, {
-    backgroundColor: accentColor + '15',
-    borderColor:     accentColor + '35',
-  }]}>
-    <Text style={[styles.vibeTagText, { color: accentColor }]}>{tag}</Text>
-  </View>
-));
-
 // ─── Main Component ───────────────────────────────────────────
 export default function AnonProfileSheet({
-  visible, anonymousName, userId, onClose, navigation,
+  visible, anonymousName, userId, post, onClose, navigation,
 }) {
   const { showToast }  = useToast();
   const [profile,      setProfile]      = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
-  const [connectLoading, setConnectLoading] = useState(false);
 
   const slideAnim     = useRef(new Animated.Value(H)).current;
   const backdropOp    = useRef(new Animated.Value(0)).current;
@@ -162,60 +159,18 @@ export default function AnonProfileSheet({
     }
   }, [visible, anonymousName]);
 
-  // ── Send the actual request (called after coin gate confirms) ──
-  const sendConnectRequest = useCallback(async () => {
-    setConnectLoading(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        showToast({ type: 'error', message: 'Sign in to connect.' });
-        return;
-      }
-      const res  = await fetch(`${API_BASE_URL}/api/v1/connect/request`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ to_anonymous_name: anonymousName }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Could not send request.');
-      setProfile(p => ({ ...p, connect_status: 'pending' }));
-      showToast({ type: 'success', message: 'Request sent. Now wait.' });
-    } catch (e) {
-      showToast({ type: 'error', message: e.message || 'Could not send request.' });
-    } finally {
-      setConnectLoading(false);
-    }
-  }, [anonymousName, showToast]);
-
-  // ── Connect button handler ─────────────────────────────────
-  const handleConnect = useCallback(() => {
-    if (!profile || connectLoading) return;
-
-    // Already chatting → open chat directly (free)
-    if (profile.connect_status === 'chatting' && profile.chat_id) {
-      closeSheet();
-      setTimeout(() => {
-        navigation?.navigate('Chat', {
-          chatId:          profile.chat_id,
-          otherName:       anonymousName,
-          otherAvatar:     profile.avatar,
-          otherAvatarColor: profile.avatar_color,
-          otherUserId:     profile.user_id,
-        });
-      }, 300);
-      return;
-    }
-
-    if (profile.connect_status === 'pending') return;
-
-    // New request → send directly, no coin cost
-    sendConnectRequest();
-  }, [profile, connectLoading, anonymousName, closeSheet, navigation]);
+  // ── Link up — the only way to actually reach someone. Coin-gated on
+  // PostUnlockScreen itself; this just gets you there with the post that
+  // opened this sheet in the first place. ──────────────────────
+  const handleLinkUp = useCallback(() => {
+    if (!post) return;
+    closeSheet();
+    setTimeout(() => {
+      navigation?.navigate('PostUnlock', { post });
+    }, 300);
+  }, [post, closeSheet, navigation]);
 
   const accentColor = profile?.avatar_color ?? T.primary;
-  const connectStatus = profile?.connect_status ?? 'default';
-  const connectCopy   = CONNECT_COPY[connectStatus] ?? CONNECT_COPY.default;
-  const isDisabled    = connectStatus === 'pending' || connectLoading;
 
   // ──────────────────────────────────────────────────────────
   return (
@@ -348,13 +303,12 @@ export default function AnonProfileSheet({
                   )}
                 </View>
 
-                {profile.vibe_tier && (
+                {profile.here_for && (
                   <View style={[styles.tierPill, { borderColor: accentColor + '40' }]}>
-                    <Text style={styles.tierEmoji}>{profile.vibe_tier.emoji}</Text>
+                    <Text style={styles.tierEmoji}>{HERE_FOR_EMOJI[profile.here_for] || '💫'}</Text>
                     <Text style={[styles.tierName, { color: accentColor }]}>
-                      {profile.vibe_tier.name}
+                      {profile.here_for}
                     </Text>
-                    <Text style={styles.tierScore}>{profile.vibe_score ?? 0} pts</Text>
                   </View>
                 )}
               </View>
@@ -365,7 +319,7 @@ export default function AnonProfileSheet({
                 <View style={styles.statsRow}>
                   <StatItem value={profile.confession_count ?? 0} label="drops" />
                   <View style={styles.statDivider} />
-                  <StatItem value={profile.connections_count ?? 0} label="connections" />
+                  <StatItem value={profile.connections_count ?? 0} label="link ups" />
                   <View style={styles.statDivider} />
                   <StatItem value={profile.reactions_received ?? 0} label="reactions" />
                   {profile.streak > 0 && (
@@ -380,43 +334,7 @@ export default function AnonProfileSheet({
                 </Text>
               </View>
 
-              {/* Interests */}
-              {profile.interests?.length > 0 && (
-                <View style={styles.sectionBlock}>
-                  <Text style={styles.sectionLabel}>Into</Text>
-                  <View style={styles.vibesRow}>
-                    {profile.interests.map(item => (
-                      <VibeTag key={item} tag={item} accentColor={accentColor} />
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {/* Recent drops — their own words say more than any counter */}
-              {profile.recent_drops?.length > 0 && (
-                <View style={styles.sectionBlock}>
-                  <Text style={styles.sectionLabel}>Recent drops</Text>
-                  {profile.recent_drops.map(d => (
-                    <View key={d.id} style={[styles.dropCard, { borderColor: accentColor + '20' }]}>
-                      <Text style={styles.dropText} numberOfLines={3}>
-                        {d.excerpt || (d.has_media ? 'Shared something without words.' : '—')}
-                      </Text>
-                      <View style={styles.dropMetaRow}>
-                        {d.has_media && (
-                          <Text style={styles.dropMeta}>media</Text>
-                        )}
-                        {d.likes_count > 0 && (
-                          <Text style={styles.dropMeta}>
-                            {d.likes_count} {d.likes_count === 1 ? 'like' : 'likes'}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Your own profile — you can't connect to yourself, so this
+              {/* Your own profile — you can't link up with yourself, so this
                   becomes a preview of how everyone else sees you. */}
               {profile.is_self ? (
                 <View style={styles.selfBlock}>
@@ -438,48 +356,25 @@ export default function AnonProfileSheet({
                 </View>
               ) : (
               <TouchableOpacity
-                style={[
-                  styles.connectBtn,
-                  { backgroundColor: accentColor },
-                  isDisabled       && styles.connectBtnDisabled,
-                  connectStatus === 'chatting' && [
-                    styles.connectBtnChatting,
-                    { borderColor: accentColor },
-                  ],
-                ]}
-                onPress={handleConnect}
-                disabled={isDisabled}
+                style={[styles.connectBtn, { backgroundColor: accentColor }]}
+                onPress={handleLinkUp}
                 hitSlop={HIT_SLOP}
                 activeOpacity={0.85}
               >
-                {connectLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <View style={styles.connectBtnInner}>
-                    {connectStatus === 'chatting' && (
-                      <MessageCircle size={rs(16)} color={accentColor} />
-                    )}
-                    {connectStatus === 'pending' && (
-                      <Clock size={rs(16)} color={T.textSecondary} />
-                    )}
-                    {connectStatus === 'default' && (
-                      <UserCheck size={rs(16)} color="#fff" />
-                    )}
-                    <Text style={[
-                      styles.connectBtnText,
-                      isDisabled && { color: T.textSecondary },
-                      connectStatus === 'chatting' && { color: accentColor },
-                    ]}>
-                      {connectCopy.label}
-                    </Text>
+                <View style={styles.connectBtnInner}>
+                  <Link2 size={rs(16)} color="#fff" />
+                  <Text style={styles.connectBtnText}>Link up</Text>
+                  <View style={styles.linkUpCostPill}>
+                    <Coins size={rs(11)} color="#fff" />
+                    <Text style={styles.linkUpCostText}>{UNLOCK_COST}</Text>
                   </View>
-                )}
+                </View>
               </TouchableOpacity>
               )}
 
               {/* Sub-copy */}
               {!profile.is_self && (
-                <Text style={styles.connectSub}>{connectCopy.sub}</Text>
+                <Text style={styles.connectSub}>They won't know it's you until they link up too.</Text>
               )}
 
             </ScrollView>
@@ -701,64 +596,6 @@ const styles = StyleSheet.create({
   },
   tierEmoji: { fontSize: rf(14) },
   tierName:  { fontSize: FONT.sm, fontWeight: '700', letterSpacing: 0.3 },
-  tierScore: { fontSize: FONT.xs, color: T.textMuted },
-
-  // Recent drops
-  dropCard: {
-    width:           '100%',
-    backgroundColor: T.surfaceAlt,
-    borderRadius:    RADIUS.md,
-    borderWidth:     1,
-    padding:         SPACING.md,
-    gap:             rp(6),
-  },
-  dropText: {
-    fontSize:   FONT.sm,
-    color:      T.text,
-    fontStyle:  'italic',
-    lineHeight: rf(20),
-    fontFamily: 'PlayfairDisplay-Italic',
-  },
-  dropMetaRow: {
-    flexDirection: 'row',
-    gap:           rp(10),
-  },
-  dropMeta: {
-    fontSize:      rf(10),
-    color:         T.textMuted,
-    letterSpacing: 0.3,
-  },
-  sectionBlock: {
-    width: '100%',
-    gap:   rp(10),
-  },
-  sectionLabel: {
-    fontSize:      rf(10),
-    color:         T.textMuted,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    fontWeight:    '700',
-    textAlign:     'center',
-  },
-
-  // Vibe tags
-  vibesRow: {
-    flexDirection:  'row',
-    flexWrap:       'wrap',
-    justifyContent: 'center',
-    gap:            rp(8),
-  },
-  vibeTag: {
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(7),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-  },
-  vibeTagText: {
-    fontSize:      FONT.sm,
-    letterSpacing: 0.2,
-    fontWeight:    '500',
-  },
 
   // Stats
   // The card owns the surface; the row inside is just layout. Stats share
@@ -806,17 +643,6 @@ const styles = StyleSheet.create({
     elevation:      6,
     marginTop:      SPACING.xs,
   },
-  connectBtnDisabled: {
-    backgroundColor: T.surfaceAlt,
-    shadowOpacity:   0,
-    elevation:       0,
-  },
-  connectBtnChatting: {
-    backgroundColor: 'transparent',
-    borderWidth:     1.5,
-    shadowOpacity:   0,
-    elevation:       0,
-  },
   connectBtnInner: {
     flexDirection: 'row',
     alignItems:    'center',
@@ -827,6 +653,20 @@ const styles = StyleSheet.create({
     fontSize:      FONT.md,
     fontWeight:    '700',
     letterSpacing: 0.3,
+  },
+  linkUpCostPill: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(3),
+    paddingHorizontal: rp(8),
+    paddingVertical:   rp(3),
+    borderRadius:      RADIUS.full,
+    backgroundColor:   'rgba(255,255,255,0.18)',
+  },
+  linkUpCostText: {
+    color:      '#fff',
+    fontSize:   FONT.xs,
+    fontWeight: '700',
   },
 
   // Sub-copy

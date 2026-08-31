@@ -6,15 +6,15 @@ from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection
 from app.sio import sio
 import app.websockets.events  # noqa: F401 — registers all @sio.event handlers
-from app.api.v1 import payments, geo_pricing, market
+from app.api.v1 import geo_pricing, market
 from app.api.v1 import drops, rewards, referrals
 from app.api.v1 import admin
 from app.api.v1 import publisher
-from app.api.v1 import messages
 from app.api.v1 import chat_profile
 from app.api.v1 import ads
 from app.api.v1 import drop_calls
 from app.api.v1 import unlock_requests
+from app.api.v1 import deception_reports
 from app.api.v1 import (
     auth,
     coins,
@@ -50,17 +50,17 @@ async def _ensure_indexes():
         )
         await db["post_threads"].create_index([("post_id", 1)],    background=True)
         await db["threads"].create_index([("post_id", 1)],         background=True)
-        await db["connect_messages"].create_index(
-            [("chat_id", 1), ("created_at", -1)], background=True
-        )
-        await db["connect_messages"].create_index(
-            [("chat_id", 1), ("sender_id", 1), ("is_read", 1)], background=True
-        )
         await db["drop_messages"].create_index(
             [("connection_id", 1), ("created_at", -1)], background=True
         )
         await db["publisher_queue"].create_index(
             [("status", 1), ("submitted_at", 1)], background=True
+        )
+        await db["deception_reports"].create_index(
+            [("connection_id", 1), ("reporter_id", 1)], unique=True, background=True
+        )
+        await db["deception_reports"].create_index(
+            [("status", 1), ("created_at", -1)], background=True
         )
         await db["market_items"].create_index(
             [("status", 1), ("published_at", -1)], background=True
@@ -144,7 +144,6 @@ app.include_router(impact.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connections.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connect.router, prefix=settings.API_V1_PREFIX)
-app.include_router(payments.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(geo_pricing.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(market.router,        prefix=settings.API_V1_PREFIX)
 app.include_router(drops.router, prefix=settings.API_V1_PREFIX)
@@ -153,11 +152,11 @@ app.include_router(referrals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(circles.router,    prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(publisher.router,  prefix=settings.API_V1_PREFIX)
-app.include_router(messages.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(chat_profile.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ads.router,          prefix=settings.API_V1_PREFIX)
 app.include_router(drop_calls.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(unlock_requests.router, prefix=settings.API_V1_PREFIX)
+app.include_router(deception_reports.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

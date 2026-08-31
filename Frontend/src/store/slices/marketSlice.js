@@ -10,7 +10,7 @@
  *   error         string | null
  */
 
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
 
@@ -158,8 +158,13 @@ export const { clearMarketError } = marketSlice.actions;
 
 // ─── Selectors ────────────────────────────────────────────────────────────────
 
-export const selectMarketFeed = (state) =>
-  state.market.feed.map((id) => state.market.items[id]).filter(Boolean);
+// Memoized — .map/.filter would otherwise build a new array reference on
+// every call, making useSelector think the value changed on every store
+// update even when feed/items didn't, causing needless rerenders.
+export const selectMarketFeed = createSelector(
+  [(state) => state.market.feed, (state) => state.market.items],
+  (feed, items) => feed.map((id) => items[id]).filter(Boolean),
+);
 
 export const selectMarketItem = (id) => (state) => state.market.items[id] ?? null;
 

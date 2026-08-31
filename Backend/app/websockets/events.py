@@ -1,28 +1,14 @@
 """
-Socket.IO event handlers for real-time chat.
-
-Events (client → server):
-  join_chat    { chatId }        — join a chat room; triggers delivery acks
-  leave_chat   { chatId }        — leave a chat room
-  messages_read { chatId }       — mark all incoming messages in chat as read
-
-Events (server → client):
-  new_message       { ...message }                 → sent to user_{recipient_id}
-  messages_delivered { chatId, messageIds: [...] } → sent to user_{sender_id}
-  messages_read      { chatId, messageIds: [...] } → sent to user_{sender_id}
+Socket.IO event handlers — presence (connect/disconnect) only. The old
+chat-room events (join_chat/leave_chat/messages_read/user_typing) were
+tied to the now-removed connect_messages system and have been deleted;
+Link Up's DropChatScreen doesn't use realtime sockets for messaging.
 """
-
-from datetime import datetime, timezone
-from bson import ObjectId
 
 from app.sio import sio
 from app.database import db as _db_holder
 from app.core.jwt import decode_token
 from app.websockets.activity import emit_high_activity
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _db():
@@ -93,135 +79,3 @@ def is_user_online(user_id: str) -> bool:
     return user_id in _online_users
 
 
-# ─── Chat room management ─────────────────────────────────────────────────────
-
-@sio.event
-async def join_chat(sid: str, data: dict):
-    """
-    Client opened a chat screen.
-    1. Join the chat room (for future real-time messages).
-    2. Mark any undelivered messages from the other user as delivered.
-    3. Notify the sender with a `messages_delivered` event.
-    """
-    user_id = _sid_to_user.get(sid)
-    if not user_id:
-        return
-
-    chat_id = data.get("chatId")
-    if not chat_id:
-        return
-
-    await sio.enter_room(sid, f"chat_{chat_id}")
-
-    database = _db()
-    if database is None:
-        return
-
-    # Find undelivered messages from the other participant
-    undelivered = await database["connect_messages"].find(
-        {
-            "chat_id":      chat_id,
-            "sender_id":    {"$ne": user_id},
-            "is_delivered": False,
-        },
-        {"_id": 1, "sender_id": 1},
-    ).to_list(length=200)
-
-    if not undelivered:
-        return
-
-    object_ids = [m["_id"] for m in undelivered]
-    msg_ids    = [str(m["_id"]) for m in undelivered]
-    sender_id  = undelivered[0]["sender_id"]   # 2-person chat: one sender
-
-    await database["connect_messages"].update_many(
-        {"_id": {"$in": object_ids}},
-        {"$set": {"is_delivered": True, "delivered_at": _now()}},
-    )
-
-    await sio.emit(
-        "messages_delivered",
-        {"chatId": chat_id, "messageIds": msg_ids},
-        room=f"user_{sender_id}",
-    )
-
-
-@sio.event
-async def leave_chat(sid: str, data: dict):
-    chat_id = data.get("chatId")
-    if chat_id:
-        await sio.leave_room(sid, f"chat_{chat_id}")
-
-
-# ─── Read receipts ────────────────────────────────────────────────────────────
-
-@sio.event
-async def messages_read(sid: str, data: dict):
-    """
-    Client signals all visible messages in a chat have been read.
-    1. Mark them as read + delivered in the DB.
-    2. Notify the sender with a `messages_read` event.
-    """
-    user_id = _sid_to_user.get(sid)
-    if not user_id:
-        return
-
-    chat_id = data.get("chatId")
-    if not chat_id:
-        return
-
-    database = _db()
-    if database is None:
-        return
-
-    unread = await database["connect_messages"].find(
-        {
-            "chat_id":   chat_id,
-            "sender_id": {"$ne": user_id},
-            "is_read":   False,
-        },
-        {"_id": 1, "sender_id": 1},
-    ).to_list(length=200)
-
-    if not unread:
-        return
-
-    object_ids = [m["_id"] for m in unread]
-    msg_ids    = [str(m["_id"]) for m in unread]
-    sender_id  = unread[0]["sender_id"]
-
-    await database["connect_messages"].update_many(
-        {"_id": {"$in": object_ids}},
-        {"$set": {"is_read": True, "is_delivered": True, "read_at": _now()}},
-    )
-
-    await sio.emit(
-        "messages_read",
-        {"chatId": chat_id, "messageIds": msg_ids},
-        room=f"user_{sender_id}",
-    )
-
-
-# ─── Typing indicator ─────────────────────────────────────────────────────────
-
-@sio.event
-async def user_typing(sid: str, data: dict):
-    """
-    Client signals they are typing in a chat.
-    Forwards a `user_typing` event to the recipient.
-
-    Client emits: user_typing { chatId, recipientId }
-    """
-    sender_id = _sid_to_user.get(sid)
-    if not sender_id:
-        return
-
-    recipient_id = data.get("recipientId")
-    if not recipient_id:
-        return
-
-    await sio.emit(
-        "user_typing",
-        {"userId": sender_id, "chatId": data.get("chatId")},
-        room=f"user_{recipient_id}",
-    )
