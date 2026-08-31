@@ -1,10 +1,11 @@
 import React from 'react';
-import { Image, View, StyleSheet } from 'react-native';
-import { User } from 'lucide-react-native';
+import { Image, View, Text, StyleSheet } from 'react-native';
 import T from '../../utils/theme';
 import { rs } from '../../utils/responsive';
 
-export default function Avatar({ uri, size = 40 }) {
+// Real photo if the user set one, otherwise the first initial of their
+// name — no emoji/preset avatars.
+export default function Avatar({ uri, size = 40, name }) {
   return (
     <View style={[
       styles.container,
@@ -16,7 +17,9 @@ export default function Avatar({ uri, size = 40 }) {
           style={{ width: size, height: size, borderRadius: size / 2 }}
         />
       ) : (
-        <User size={size * 0.5} color={T.avatarIcon} />
+        <Text style={{ fontSize: size * 0.4, fontWeight: '700', color: T.primary }}>
+          {name?.[0]?.toUpperCase() || '?'}
+        </Text>
       )}
     </View>
   );

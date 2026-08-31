@@ -12,7 +12,7 @@ import React, {
 } from 'react';
 import {
   Animated, Dimensions, Modal, PanResponder, ScrollView,
-  StyleSheet, Text, TouchableOpacity, View, ActivityIndicator,
+  StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, UserCheck, Crown, MapPin, Link2, Coins } from 'lucide-react-native';
@@ -35,13 +35,6 @@ const GENDER_BADGE = {
   male:     { symbol: '♂', label: 'Male' },
   female:   { symbol: '♀', label: 'Female' },
   nonbinary: { symbol: '⚧', label: 'Non-binary' },
-};
-
-const AVATAR_MAP = {
-  ghost:   '👻', shadow: '🌑', flame: '🔥',   void:    '🕳️',
-  storm:   '⛈️', smoke:  '💨', eclipse: '🌘',  shard:   '🔷',
-  moth:    '🦋', raven:  '🐦', mirror: '🪞',   ember:   '🕯️',
-  current: '⚡', still:  '🌊', hollow: '🫙',   signal:  '📡',
 };
 
 // Mirrors INTENT_LABELS in Backend/app/api/v1/drops.py / CARD_INTENTS in
@@ -170,7 +163,7 @@ export default function AnonProfileSheet({
     }, 300);
   }, [post, closeSheet, navigation]);
 
-  const accentColor = profile?.avatar_color ?? T.primary;
+  const accentColor = T.primary;
 
   // ──────────────────────────────────────────────────────────
   return (
@@ -238,7 +231,8 @@ export default function AnonProfileSheet({
               bounces={false}
             >
 
-              {/* Avatar */}
+              {/* Avatar — their real photo if they set one, otherwise the
+                  first initial of their anonymous name. */}
               <Animated.View style={[
                 styles.avatarCircle,
                 {
@@ -247,9 +241,13 @@ export default function AnonProfileSheet({
                   transform:       [{ scale: avatarScale }],
                 }
               ]}>
-                <Text style={styles.avatarEmoji}>
-                  {AVATAR_MAP[profile.avatar] ?? '👤'}
-                </Text>
+                {profile.avatar_url ? (
+                  <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarInitial}>
+                    {profile.anonymous_name?.[0]?.toUpperCase() || 'A'}
+                  </Text>
+                )}
                 {/* Pulse ring */}
                 <View style={[
                   styles.avatarGlow,
@@ -488,7 +486,8 @@ const styles = StyleSheet.create({
     position:       'relative',
     marginBottom:   SPACING.xs,
   },
-  avatarEmoji: { fontSize: rf(40) },
+  avatarImage: { width: '100%', height: '100%', borderRadius: rs(45) },
+  avatarInitial: { fontSize: rf(36), fontWeight: '700', color: T.primary },
   avatarGlow: {
     position:     'absolute',
     width:        rs(110),

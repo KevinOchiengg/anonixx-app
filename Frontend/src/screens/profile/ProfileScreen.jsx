@@ -56,10 +56,9 @@ export default function ProfileScreen({ navigation }) {
       <ScrollView style={styles.scrollView}>
         <View style={styles.profileHeader}>
           <Avatar
-            uri={user?.avatar}
+            uri={user?.avatar_url}
             size={100}
             name={user?.username || user?.anonymous_name}
-            isPremium={user?.is_premium}
           />
           <Text style={styles.username}>
             {user?.username || user?.anonymous_name}

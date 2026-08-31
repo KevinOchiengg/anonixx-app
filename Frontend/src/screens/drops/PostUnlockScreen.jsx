@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDispatch, useSelector } from 'react-redux';
-import { Flame, Lock, Camera, Video as VideoIcon, X } from 'lucide-react-native';
+import { Flame, Camera, Video as VideoIcon, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 
@@ -195,7 +195,13 @@ export default function PostUnlockScreen({ route, navigation }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={s.iconWrap}>
-          <Lock size={rs(28)} color={T.primary} strokeWidth={2} />
+          {post?.avatar_url ? (
+            <Image source={{ uri: post.avatar_url }} style={s.avatarImage} />
+          ) : (
+            <Text style={s.avatarInitial}>
+              {post?.anonymous_name?.[0]?.toUpperCase() || 'A'}
+            </Text>
+          )}
         </View>
 
         <Text style={s.authorName}>{post?.anonymous_name || 'Anonymous'}</Text>
@@ -250,18 +256,23 @@ export default function PostUnlockScreen({ route, navigation }) {
         </Text>
 
         {canAfford ? (
-          <TouchableOpacity
-            style={s.unlockBtn}
-            onPress={handleUnlock}
-            disabled={unlocking}
-            activeOpacity={0.88}
-            hitSlop={HIT_SLOP}
-          >
-            {unlocking
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.unlockBtnText}>Request to link up — {UNLOCK_COST} coins if accepted</Text>
-            }
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={s.unlockBtn}
+              onPress={handleUnlock}
+              disabled={unlocking}
+              activeOpacity={0.88}
+              hitSlop={HIT_SLOP}
+            >
+              {unlocking
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={s.unlockBtnText}>Link up</Text>
+              }
+            </TouchableOpacity>
+            <Text style={s.chargeNote}>
+              {UNLOCK_COST} coins — only deducted if they accept your request.
+            </Text>
+          </>
         ) : (
           <TouchableOpacity
             style={s.topUpBtn}
@@ -293,7 +304,10 @@ const s = StyleSheet.create({
     width: rs(56), height: rs(56), borderRadius: rs(28),
     backgroundColor: T.primaryDim, alignItems: 'center', justifyContent: 'center',
     marginBottom: SPACING.lg, borderWidth: 1, borderColor: 'rgba(255,99,74,0.25)',
+    overflow: 'hidden',
   },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarInitial: { fontSize: FONT.lg, fontWeight: '700', color: T.primary },
   authorName: { fontSize: FONT.lg, fontWeight: '700', color: T.text, fontFamily: 'PlayfairDisplay-Bold', marginBottom: SPACING.sm },
   confession: {
     fontSize: FONT.md, color: T.textSecondary, textAlign: 'center',
@@ -338,6 +352,10 @@ const s = StyleSheet.create({
     shadowColor: T.primary, shadowOffset: { width: 0, height: rs(8) }, shadowOpacity: 0.45, shadowRadius: rs(20), elevation: 10,
   },
   unlockBtnText: { color: '#fff', fontSize: FONT.lg, fontWeight: '700' },
+  chargeNote: {
+    fontSize: FONT.xs, color: T.textMute, textAlign: 'center',
+    marginTop: rp(10), lineHeight: rf(17),
+  },
   topUpBtn: {
     height: BUTTON_HEIGHT, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center',
     backgroundColor: T.surfaceAlt, width: '100%', borderWidth: 1, borderColor: T.border,

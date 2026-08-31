@@ -911,18 +911,28 @@ export default function DropChatScreen({ route, navigation }) {
         style={{ flex: 1 }}
       >
 
-      {/* Poster's themed profile picture — only ever visible post-unlock,
-          since this connection doc wouldn't exist otherwise. Tappable into
+      {/* Poster's profile picture — only ever visible post-unlock, since
+          this connection doc wouldn't exist otherwise. Falls back to their
+          account avatar_url (see chat_profile.py's _sanitize), then to a
+          first-initial circle if no photo exists anywhere. Tappable into
           the gallery any time it has items, for either side of the chat —
           not just the unlocker's one-time welcome takeover below. */}
-      {chatProfile?.profile_picture_url && (
+      {chatProfile && (
         <TouchableOpacity
           style={s.profileRow}
           activeOpacity={chatProfile?.gallery?.length ? 0.8 : 1}
           onPress={() => chatProfile?.gallery?.length && setGalleryViewerOpen(true)}
         >
           <View>
-            <Image source={{ uri: chatProfile.profile_picture_url }} style={s.profileAvatar} />
+            {chatProfile.profile_picture_url ? (
+              <Image source={{ uri: chatProfile.profile_picture_url }} style={s.profileAvatar} />
+            ) : (
+              <View style={[s.profileAvatar, s.profileAvatarInitialWrap]}>
+                <Text style={s.profileAvatarInitialText}>
+                  {headerTitle?.[0]?.toUpperCase() || 'A'}
+                </Text>
+              </View>
+            )}
             {chatProfile?.gallery?.length > 0 && (
               <View style={s.galleryBadge}>
                 <Text style={s.galleryBadgeText}>{chatProfile.gallery.length}</Text>
@@ -1309,6 +1319,16 @@ const s = StyleSheet.create({
     borderRadius: rs(28),
     borderWidth:  2,
     borderColor:  T.primaryBorder,
+  },
+  profileAvatarInitialWrap: {
+    backgroundColor: T.surfaceAlt,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  profileAvatarInitialText: {
+    fontSize:   rf(22),
+    fontWeight: '700',
+    color:      T.primary,
   },
   welcomeOverlay: {
     flex:            1,

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, FlatList, RefreshControl,
-  StyleSheet, Text, TouchableOpacity, View,
+  StyleSheet, Text, TouchableOpacity, View, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,14 +14,6 @@ import { API_BASE_URL } from '../../config/api';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useUnread } from '../../context/UnreadContext';
 import T from '../../utils/theme';
-
-// ─── Constants ────────────────────────────────────────────────
-const AVATAR_MAP = {
-  ghost: '👻', shadow: '🌑', flame: '🔥', void: '🕳️',
-  storm: '⛈️', smoke: '💨', eclipse: '🌘', shard: '🔷',
-  moth: '🦋', raven: '🐦‍⬛',
-};
-const getAvatar = (name) => AVATAR_MAP[name] || '👤';
 
 // ─── Helpers ──────────────────────────────────────────────────
 function formatChatTime(isoString) {
@@ -85,7 +77,7 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
   const hasUnread    = item.unread_count > 0;
   const isLow        = !isDrop && !item.is_unlocked && item.messages_left !== null && item.messages_left !== undefined && item.messages_left <= 3;
   const isLocked     = !isDrop && !item.is_unlocked && item.messages_left === 0;
-  const avatarColor  = item.other_avatar_color || (isDrop ? T.drop : T.primary);
+  const avatarColor  = isDrop ? T.drop : T.primary;
   const pulseAnim    = useRef(new Animated.Value(1)).current;
   const slideAnim    = useRef(new Animated.Value(0)).current;
 
@@ -107,10 +99,11 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
 
   const handlePress = useCallback(() => onPress(item), [onPress, item]);
 
-  // Avatar — drops get a confession emoji; connect gets the avatar slug
-  const avatarContent = isDrop
-    ? <Text style={styles.chatAvatarEmoji}>🔥</Text>
-    : <Text style={styles.chatAvatarEmoji}>{getAvatar(item.other_avatar)}</Text>;
+  // Avatar — their real photo if they set one, otherwise the first
+  // initial of their anonymous name.
+  const avatarContent = item.other_avatar_url
+    ? <Image source={{ uri: item.other_avatar_url }} style={styles.chatAvatarImage} />
+    : <Text style={styles.chatAvatarInitial}>{item.other_anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>;
 
   const avatarBorderColor = isDrop
     ? T.drop + '55'
@@ -314,8 +307,7 @@ export default function MessagesScreen({ navigation }) {
         id:                   d.id,
         chat_type:            'drop',
         other_anonymous_name: d.other_anonymous_name || 'Anonymous',
-        other_avatar:         null,
-        other_avatar_color:   null,
+        other_avatar_url:     d.other_avatar_url || null,
         other_user_id:        d.other_user_id || '',   // not in prod response — ok, used for typing only
         last_message:         d.last_message  || null,
         last_message_at:      d.last_message_at || null,
@@ -583,7 +575,8 @@ const styles = StyleSheet.create({
     width: rs(52), height: rs(52), borderRadius: rs(26),
     alignItems: 'center', justifyContent: 'center', borderWidth: 1.5,
   },
-  chatAvatarEmoji: { fontSize: rf(24) },
+  chatAvatarImage: { width: '100%', height: '100%', borderRadius: rs(26) },
+  chatAvatarInitial: { fontSize: rf(20), fontWeight: '700', color: T.text },
   onlineDot: {
     position: 'absolute', bottom: rp(1), right: rp(1),
     width: rs(13), height: rs(13), borderRadius: rs(7),
