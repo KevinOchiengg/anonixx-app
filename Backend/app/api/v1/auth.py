@@ -16,7 +16,6 @@ from app.config import settings
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins
 from app.utils.email import send_password_reset_otp
-from app.models.user import AvatarAura
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -62,8 +61,6 @@ class UpdateProfileRequest(BaseModel):
     email:          Optional[EmailStr]= None
     anonymous_name: Optional[str]     = None
     avatar_url:     Optional[str]     = None   # Cloudinary URL for real photo
-    avatar:         Optional[str]     = None   # Emoji avatar ID (e.g. "ghost", "owl")
-    avatar_color:   Optional[str]     = None   # Hex color for preset avatar
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -144,9 +141,6 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
         "username":       data.username or data.email.split("@")[0],
         "password":       get_password_hash(data.password),
         "anonymous_name": await generate_unique_anonymous_name(db),
-        # Random by default so anyone who never visits avatar settings still
-        # gets a distinct look rather than everyone sharing one fixed aura.
-        "avatar_aura":    random.choice(list(AvatarAura)).value,
         "interests":      [],
         "coin_balance":   0,          # Start at 0; welcome bonus credited below
         "streak_count":   0,
@@ -185,7 +179,6 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
             "username":       user["username"],
             "anonymous_name": user["anonymous_name"],
             "avatar_url":     user.get("avatar_url"),
-            "avatar_aura":    user.get("avatar_aura"),
             "is_admin":       user.get("is_admin", False),
             "coin_balance":   WELCOME_BONUS,
             "age_verified":            user.get("age_verified", False),
@@ -209,7 +202,6 @@ async def login(data: LoginRequest, db=Depends(get_database)):
             "username":       user.get("username"),
             "anonymous_name": user.get("anonymous_name"),
             "avatar_url":     user.get("avatar_url"),
-            "avatar_aura":    user.get("avatar_aura"),
             "is_admin":       user.get("is_admin", False),
             "age_verified":            user.get("age_verified", False),
         },
@@ -238,7 +230,6 @@ async def login_for_access_token(
             "username":       user.get("username"),
             "anonymous_name": user.get("anonymous_name"),
             "avatar_url":     user.get("avatar_url"),
-            "avatar_aura":    user.get("avatar_aura"),
             "is_admin":       user.get("is_admin", False),
             "age_verified":            user.get("age_verified", False),
         },
@@ -383,12 +374,6 @@ async def update_profile(
         update["anonymous_name"]            = aname
         update["anonymous_name_changed_at"] = _now()
 
-    # ── Avatar (preset emoji) ─────────────────────────────────
-    if data.avatar is not None:
-        update["avatar"] = data.avatar
-    if data.avatar_color is not None:
-        update["avatar_color"] = data.avatar_color
-
     # ── Profile photo (Cloudinary URL) ───────────────────────
     if data.avatar_url is not None:
         update["avatar_url"] = data.avatar_url
@@ -405,8 +390,6 @@ async def update_profile(
         "email":          refreshed.get("email"),
         "anonymous_name": refreshed.get("anonymous_name"),
         "avatar_url":     refreshed.get("avatar_url"),
-        "avatar":         refreshed.get("avatar"),
-        "avatar_color":   refreshed.get("avatar_color"),
     }
 
 

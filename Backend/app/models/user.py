@@ -1,19 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timezone, date
 from typing import Optional, List
-from enum import Enum
-
-
-# ==================== ENUMS ====================
-
-class AvatarAura(str, Enum):
-    """Anonymous avatar auras (no photos allowed)"""
-    PURPLE_GLOW = "purple_glow"
-    RED_SHADOW = "red_shadow"
-    GREEN_MIST = "green_mist"
-    BLUE_VOID = "blue_void"
-    DARK_PHANTOM = "dark_phantom"
-    CORAL_FLAME = "coral_flame"
 
 
 # ==================== MODELS ====================
@@ -27,13 +14,12 @@ class User(BaseModel):
     # Anonymous identity
     anonymous_name: Optional[str] = None
 
-    # ✅ NEW: Anonymous avatar (no photos)
-    avatar_aura: AvatarAura = AvatarAura.PURPLE_GLOW
-
-    # Profile
+    # Profile — a real photo if the user chose to set one; no avatar photo
+    # shown otherwise (the client falls back to the first initial of
+    # anonymous_name).
     display_name: Optional[str] = None
     bio: Optional[str] = None
-    avatar_url: Optional[str] = None  # Keep for backward compatibility
+    avatar_url: Optional[str] = None
     cover_image_url: Optional[str] = None
 
     # ✅ User interests (selected during onboarding)
@@ -89,7 +75,6 @@ class User(BaseModel):
                 "email": "user@echo.com",
                 "username": "johndoe",
                 "anonymous_name": "Quiet Soul 427",
-                "avatar_aura": "purple_glow",
                 "interests": ["anxiety", "relationships"],
                 "city": "San Francisco",
                 "age_range": "20s",
@@ -112,7 +97,6 @@ class UserResponse(BaseModel):
     email: str
     username: Optional[str]
     anonymous_name: Optional[str]
-    avatar_aura: str
     display_name: Optional[str]
     bio: Optional[str]
     avatar_url: Optional[str]

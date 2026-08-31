@@ -79,13 +79,21 @@ class GalleryMediaInput(BaseModel):
     duration_seconds: Optional[float] = None
 
 
-def _sanitize(doc: dict) -> dict:
+def _sanitize(doc: dict, user: Optional[dict] = None) -> dict:
+    """
+    `user` is the owner's account doc. profile_picture_url falls back to
+    their account-level avatar_url when they haven't set a picture
+    specifically for the chat interface — anonymous_name is included so the
+    client can fall back further, to a first initial, if neither exists.
+    """
     call_mode  = doc.get("call_mode") or "solo"
     max_guests = 1 if call_mode == "solo" else FREE_GUEST_CAP + doc.get("purchased_slots", 0)
+    user = user or {}
     return {
         "background_pattern": doc.get("background_pattern") or "midnight-solid",
         "font_style":          doc.get("font_style") or "clean-regular",
-        "profile_picture_url": doc.get("profile_picture_url"),
+        "profile_picture_url": doc.get("profile_picture_url") or user.get("avatar_url"),
+        "anonymous_name":      user.get("anonymous_name"),
         "gallery":             doc.get("gallery", []),
         "welcome_sound":       doc.get("welcome_sound") or "soft-chime",
         "call_mode":           call_mode,
@@ -100,10 +108,11 @@ async def get_my_chat_profile(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    doc = await db["chat_profiles"].find_one({"user_id": current_user_id})
-    if not doc:
-        return None
-    return _sanitize(doc)
+    doc  = await db["chat_profiles"].find_one({"user_id": current_user_id}) or {}
+    user = await db["users"].find_one(
+        {"_id": ObjectId(current_user_id)}, {"avatar_url": 1, "anonymous_name": 1},
+    )
+    return _sanitize(doc, user)
 
 
 @router.put("/me")
@@ -284,7 +293,8 @@ async def get_chat_profile(
         if not connection:
             raise HTTPException(status_code=403, detail="Unlock a drop from this person to view their profile.")
 
-    doc = await db["chat_profiles"].find_one({"user_id": user_id})
-    if not doc:
-        return None
-    return _sanitize(doc)
+    doc  = await db["chat_profiles"].find_one({"user_id": user_id}) or {}
+    user = await db["users"].find_one(
+        {"_id": ObjectId(user_id)}, {"avatar_url": 1, "anonymous_name": 1},
+    )
+    return _sanitize(doc, user)

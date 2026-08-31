@@ -45,6 +45,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
   const [backgroundPattern, setBackgroundPattern] = useState(DEFAULT_BACKGROUND_PATTERN);
   const [fontStyle, setFontStyle]             = useState(DEFAULT_CHAT_FONT);
   const [profilePictureUrl, setProfilePictureUrl] = useState(null);
+  const [anonymousName, setAnonymousName]     = useState('');
   const [gallery, setGallery]                 = useState([]);
   const [welcomeSound, setWelcomeSound]       = useState('soft-chime');
   const [callMode, setCallMode]               = useState('solo');
@@ -72,6 +73,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
             setBackgroundPattern(data.background_pattern || DEFAULT_BACKGROUND_PATTERN);
             setFontStyle(data.font_style || DEFAULT_CHAT_FONT);
             setProfilePictureUrl(data.profile_picture_url || null);
+            setAnonymousName(data.anonymous_name || '');
             setGallery(data.gallery || []);
             setWelcomeSound(data.welcome_sound || 'soft-chime');
             setCallMode(data.call_mode || 'solo');
@@ -280,17 +282,25 @@ export default function ChatProfileSetupScreen({ navigation }) {
           This is what people see once they unlock a chat with you — decorate it however fits your vibe.
         </Text>
 
-        {/* Profile picture */}
+        {/* Profile picture — pulled from your account photo by default;
+            tap to set a different one just for chat. Falls back to your
+            first initial if you haven't set a photo anywhere. */}
         <Text style={styles.sectionLabel}>Profile picture</Text>
         <TouchableOpacity onPress={handlePickProfilePicture} activeOpacity={0.85} style={styles.avatarWrap}>
           {profilePictureUrl ? (
             <Image source={{ uri: profilePictureUrl }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Camera size={rs(24)} color={T.textMute} />
+              <Text style={styles.avatarInitialText}>
+                {anonymousName?.[0]?.toUpperCase() || '?'}
+              </Text>
             </View>
           )}
+          <View style={styles.avatarEditBadge}>
+            <Camera size={rs(12)} color="#fff" />
+          </View>
         </TouchableOpacity>
+        <Text style={styles.avatarHint}>Tap to change</Text>
 
         {/* Background pattern */}
         <Text style={styles.sectionLabel}>Background</Text>
@@ -485,7 +495,7 @@ const styles = StyleSheet.create({
     marginBottom: rp(10),
   },
 
-  avatarWrap: { alignSelf: 'flex-start' },
+  avatarWrap: { alignSelf: 'flex-start', position: 'relative' },
   avatar: {
     width:  rs(80),
     height: rs(80),
@@ -497,6 +507,18 @@ const styles = StyleSheet.create({
     justifyContent:  'center',
     borderWidth:     1,
     borderColor:     T.border,
+  },
+  avatarInitialText: { fontSize: rf(28), fontWeight: '700', color: T.primary },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: rs(24), height: rs(24), borderRadius: rs(12),
+    backgroundColor: T.primary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: T.background,
+  },
+  avatarHint: {
+    fontFamily: 'DMSans-Italic', fontSize: rf(11), color: T.textMute,
+    marginTop: rp(6),
   },
 
   swatchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(12) },

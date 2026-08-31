@@ -165,9 +165,7 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "user_id": target_id,               # internal id — needed for Link Up routing
         "is_self": is_self,                 # viewing your own profile preview
         "anonymous_name": user["anonymous_name"],
-        "avatar": user.get("avatar", "ghost"),
-        "avatar_color": user.get("avatar_color", "#FF634A"),
-        "avatar_aura": user.get("avatar_aura", "purple_glow"),
+        "avatar_url": user.get("avatar_url"),   # real photo if set — client falls back to initials
         "confession_count": confession_count,
         "connections_count": connections_count,
         "here_for": here_for,               # "Relationship" | "Sex for Fun" | "Sex for Token" | "General" | null

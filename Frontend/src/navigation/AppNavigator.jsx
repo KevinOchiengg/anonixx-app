@@ -45,7 +45,6 @@ import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
 import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
 import DropsPollScreen from '../screens/drops/DropsPollScreen';
-import InterestSelectionScreen from '../screens/onboarding/InterestSelectionScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
 
@@ -99,12 +98,8 @@ export default function AppNavigator() {
           ? <Stack.Screen name="Splash" component={Loading} />
           : <Stack.Screen name="Main" component={TabNavigator} />
         }
-        {/* Keep these accessible for deep links + post-auth navigation */}
+        {/* Keep accessible for deep links */}
         <Stack.Screen name="AuthNav" component={AuthNavigator} />
-        <Stack.Screen
-          name="InterestSelection"
-          component={InterestSelectionScreen}
-        />
         <Stack.Screen name="Premium" component={PremiumScreen} />
         <Stack.Screen name="DropChat" component={DropChatScreen} />
         <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />

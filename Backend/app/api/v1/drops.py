@@ -1601,9 +1601,25 @@ async def get_drop_connections(
             {"unlocker_id": current_user_id}
         ]
     }
-    connections = []
-    async for conn in db["drop_connections"].find(query).sort("last_message_at", -1):
+    raw_connections = await db["drop_connections"].find(query).sort("last_message_at", -1).to_list(None)
+
+    # Batch-fetch the other participant's current avatar_url — read live
+    # rather than relying on the connection's denormalised name snapshot,
+    # since a photo can be added/changed anytime after the connection formed.
+    other_ids = set()
+    for conn in raw_connections:
         is_sender = conn["sender_id"] == current_user_id
+        other_ids.add(conn["unlocker_id"] if is_sender else conn["sender_id"])
+    avatar_by_id = {}
+    if other_ids:
+        valid_ids = [ObjectId(oid) for oid in other_ids if ObjectId.is_valid(oid)]
+        async for u in db["users"].find({"_id": {"$in": valid_ids}}, {"avatar_url": 1}):
+            avatar_by_id[str(u["_id"])] = u.get("avatar_url")
+
+    connections = []
+    for conn in raw_connections:
+        is_sender = conn["sender_id"] == current_user_id
+        other_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
         other_name = conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"]
 
         last_msg = await db["drop_messages"].find_one(
@@ -1616,6 +1632,7 @@ async def get_drop_connections(
             "drop_id": conn["drop_id"],
             "confession": conn["confession"],
             "other_anonymous_name": other_name,
+            "other_avatar_url": avatar_by_id.get(other_id),
             "is_sender": is_sender,
             "message_count": conn.get("message_count", 0),
             "last_message": last_msg["content"] if last_msg else None,

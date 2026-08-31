@@ -296,7 +296,9 @@ export default function EditProfileScreen({ navigation }) {
               <Image source={{ uri: avatarUri }} style={styles.avatarImage} resizeMode="cover" />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <User size={rs(44)} color={T.textMuted} strokeWidth={1.5} />
+                <Text style={styles.avatarInitial}>
+                  {(anonymousName || user?.anonymous_name)?.[0]?.toUpperCase() || '?'}
+                </Text>
               </View>
             )}
             {uploadingAvatar && (
@@ -531,6 +533,7 @@ const styles = StyleSheet.create({
     borderWidth:     rs(2),
     borderColor:     T.primaryBorder,
   },
+  avatarInitial: { fontSize: rs(40), fontWeight: '700', color: T.primary },
   avatarOverlay: {
     position:        'absolute',
     top: 0, left: 0, right: 0, bottom: 0,

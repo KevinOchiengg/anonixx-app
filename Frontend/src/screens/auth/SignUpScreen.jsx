@@ -23,7 +23,6 @@ import {
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
 import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift, Cake } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
 import { THEME } from '../../utils/theme';
 
@@ -191,18 +190,23 @@ export default function SignUpScreen({ navigation }) {
             body: JSON.stringify({ code }),
           });
           if (applyRes.ok) {
-            await AsyncStorage.setItem('pendingReferralComplete', '1');
+            // No separate onboarding step exists anymore to trigger this
+            // later — complete it right away.
+            fetch(`${API_BASE_URL}/api/v1/referrals/complete`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${result.token}` },
+            }).catch(() => {});
           }
         } catch { /* fire-and-forget */ }
       }
 
       showToast({ type: 'success', title: 'Account created!', message: "Welcome to Anonixx 🌑" });
 
+      // Land straight in the main feed — there's no separate identity-setup
+      // step anymore. reset (not navigate) so signup/login screens aren't
+      // sitting underneath in the stack.
       setTimeout(() => {
-        // Push, don't reset — keeps whatever screen sent the user to sign up
-        // underneath, so InterestSelection's own goBack() lands them back
-        // there once identity setup is done (or skipped).
-        navigation.navigate('InterestSelection');
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       }, 600);
     } catch (err) {
       const msg = err?.detail || err?.message || '';
