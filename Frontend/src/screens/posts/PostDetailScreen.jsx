@@ -10,40 +10,31 @@
  * 5. All 17 rules applied
  */
 import React, {
-  useCallback, useEffect, useRef, useState, useMemo,
+  useCallback, useEffect, useRef, useState,
 } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput,
+  View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, Image, StyleSheet, Dimensions,
-  Modal, RefreshControl, FlatList,
-  Animated, PanResponder, KeyboardAvoidingView, Platform, Share,
+  Modal, RefreshControl,
+  Animated, Platform, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ArrowLeft, Send, Bookmark, Share2, Heart,
+  ArrowLeft, Bookmark, Share2, Heart,
   MessageCircle, X, ChevronLeft, ChevronRight,
-  ChevronDown, MoreHorizontal, CornerDownRight,
+  MoreHorizontal,
 } from 'lucide-react-native';
 import {
-  rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP,
+  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
 } from '../../utils/responsive';
 import { useToast }  from '../../components/ui/Toast';
 import { useAuth }   from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
-import GifPicker from '../../components/common/GifPicker';
+import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
-
-// ─── GIF / Emoji config ───────────────────────────────────────
-const EMOJI_CATEGORIES = [
-  { label: '🔥',  emojis: ['🔥','💯','⚡','✨','💫','🌙','🌚','🌝','👀','💀','👻','🤡','🫠','🥶','🥵'] },
-  { label: '😂',  emojis: ['😂','🤣','😭','😍','🥰','😘','😎','🥹','😳','🤯','😱','🤬','😡','🥺','😤'] },
-  { label: '❤️',  emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','❣️','💕','💞','💓','💗','💖'] },
-  { label: '👍',  emojis: ['👍','👎','🙌','👏','🤝','🙏','💪','✌️','🤞','🫶','🫂','🤦','🤷','💁','🙋'] },
-  { label: '😈',  emojis: ['😈','👿','💩','🤮','🤢','🫡','🫣','🫤','😶','😑','😏','😒','🙄','😬','🤥'] },
-];
 
 // ─── Image Gallery ────────────────────────────────────────────
 const ImageGalleryModal = React.memo(({ visible, images, initialIndex, onClose }) => {
@@ -73,299 +64,6 @@ const ImageGalleryModal = React.memo(({ visible, images, initialIndex, onClose }
           </>
         )}
       </View>
-    </Modal>
-  );
-});
-
-// ─── Emoji Picker ─────────────────────────────────────────────
-const EmojiPicker = React.memo(({ onSelect }) => {
-  const [activeCategory, setActiveCategory] = useState(0);
-  return (
-    <View style={csStyles.pickerPanel}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={csStyles.emojiTabs}>
-        {EMOJI_CATEGORIES.map((cat, i) => (
-          <TouchableOpacity key={i} onPress={() => setActiveCategory(i)} hitSlop={HIT_SLOP}
-            style={[csStyles.emojiTab, activeCategory === i && csStyles.emojiTabActive]}>
-            <Text style={csStyles.emojiTabLabel}>{cat.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-      <View style={csStyles.emojiGrid}>
-        {EMOJI_CATEGORIES[activeCategory].emojis.map((emoji, i) => (
-          <TouchableOpacity key={i} onPress={() => onSelect(emoji)} hitSlop={HIT_SLOP} style={csStyles.emojiBtn}>
-            <Text style={csStyles.emojiText}>{emoji}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-});
-
-// ─── Comment Item (TikTok-style collapsible replies) ─────────
-const CommentItem = React.memo(({ item, onReply, replyingTo }) => {
-  const active     = replyingTo === item.id;
-  const replies    = item.replies ?? [];
-  const replyCount = replies.length;
-  const [expanded, setExpanded] = useState(false);
-
-  const toggleReplies = useCallback((e) => {
-    e?.stopPropagation?.();
-    setExpanded(prev => !prev);
-  }, []);
-
-  return (
-    <View style={csStyles.commentItem}>
-      <View style={csStyles.commentAvatar}>
-        <Text style={csStyles.commentAvatarText}>
-          {item.anonymous_name?.[0]?.toUpperCase() || 'A'}
-        </Text>
-      </View>
-      <View style={csStyles.commentBody}>
-        <Text style={csStyles.commentAuthor}>{item.anonymous_name || 'Anonymous'}</Text>
-        <Text style={csStyles.commentText}>{item.content}</Text>
-        {item.gif_url ? (
-          <Image source={{ uri: item.gif_url }} style={csStyles.commentGif} resizeMode="cover" />
-        ) : null}
-        <Text style={csStyles.commentTime}>{item.time_ago}</Text>
-
-        {replyCount > 0 && !expanded && (
-          <TouchableOpacity onPress={toggleReplies} hitSlop={HIT_SLOP} style={csStyles.expandRepliesBtn}>
-            <View style={csStyles.expandRepliesLine} />
-            <Text style={csStyles.expandRepliesText}>
-              {replyCount} {replyCount === 1 ? 'reply' : 'replies'} ▾
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {expanded && (
-          <>
-            {replies.map(r => (
-              <View key={r.id ?? r.content} style={csStyles.replyItem}>
-                <CornerDownRight size={rs(12)} color={T.textMuted} />
-                <View style={csStyles.replyAvatar}>
-                  <Text style={csStyles.replyAvatarText}>{r.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
-                </View>
-                <View style={csStyles.replyBody}>
-                  <Text style={csStyles.replyAuthor}>{r.anonymous_name || 'Anonymous'}</Text>
-                  <Text style={csStyles.replyText}>{r.content}</Text>
-                </View>
-              </View>
-            ))}
-            <TouchableOpacity onPress={toggleReplies} hitSlop={HIT_SLOP} style={csStyles.expandRepliesBtn}>
-              <View style={csStyles.expandRepliesLine} />
-              <Text style={csStyles.expandRepliesText}>Hide replies ▴</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        <TouchableOpacity
-          onPress={(e) => { e?.stopPropagation?.(); onReply(active ? null : item.id); }}
-          hitSlop={HIT_SLOP}
-          style={csStyles.replyBtn}
-        >
-          <Text style={[csStyles.replyBtnText, active && { color: T.primary }]}>
-            {active ? 'cancel reply' : 'reply'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-});
-
-// ─── Comment Sheet — 80% ─────────────────────────────────────
-const CommentBottomSheet = React.memo(({
-  visible, postId, isAuthenticated, navigation, onClose, onCountChange,
-}) => {
-  const { showToast } = useToast();
-  const [comments,   setComments]   = useState([]);
-  const [loading,    setLoading]    = useState(false);
-  const [text,       setText]       = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [picker,     setPicker]     = useState(null); // null | 'emoji' | 'gif'
-  const slideAnim = useRef(new Animated.Value(H)).current;
-  const inputRef  = useRef(null);
-
-  useEffect(() => {
-    if (visible) {
-      setComments([]); setReplyingTo(null);
-      loadComments();
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 65 }).start();
-    } else {
-      Animated.timing(slideAnim, { toValue: H, duration: 220, useNativeDriver: true }).start();
-    }
-  }, [visible]);
-
-  // Focus input when reply target is set — delay lets re-render settle
-  useEffect(() => {
-    if (replyingTo) {
-      const t = setTimeout(() => inputRef.current?.focus(), 100);
-      return () => clearTimeout(t);
-    }
-  }, [replyingTo]);
-
-  const loadComments = useCallback(async () => {
-    setLoading(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      if (res.ok) { setComments(data.threads || []); onCountChange?.(data.threads?.length || 0); }
-    } catch { showToast({ type: 'error', message: 'Could not load comments.' }); }
-    finally { setLoading(false); }
-  }, [postId, onCountChange, showToast]);
-
-  const submitComment = useCallback(async (gifUrl = null) => {
-    if (!gifUrl && !text.trim()) return;
-    if (!isAuthenticated) { navigation.navigate('AuthNav', { screen: 'Login' }); return; }
-    setSubmitting(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const body  = {
-        content:    gifUrl ? '' : text.trim(),
-        ...(gifUrl     && { gif_url:   gifUrl }),
-        ...(replyingTo && { parent_id: replyingTo }),
-      };
-      const res  = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        const newComment = { ...data, gif_url: gifUrl ?? undefined };
-        if (replyingTo) {
-          setComments(prev => prev.map(c =>
-            c.id === replyingTo ? { ...c, replies: [...(c.replies ?? []), newComment] } : c
-          ));
-        } else {
-          setComments(prev => [newComment, ...prev]);
-          onCountChange?.(comments.length + 1);
-        }
-        setText(''); setReplyingTo(null); setPicker(null);
-      } else { showToast({ type: 'error', message: 'Could not post comment.' }); }
-    } catch { showToast({ type: 'error', message: 'Could not post comment.' }); }
-    finally { setSubmitting(false); }
-  }, [text, isAuthenticated, postId, replyingTo, comments.length, navigation, onCountChange, showToast]);
-
-  const handleEmojiSelect = useCallback((emoji) => {
-    setText(prev => prev + emoji);
-    inputRef.current?.focus();
-  }, []);
-
-  const handleGifSelect = useCallback((url) => {
-    submitComment(url);
-  }, [submitComment]);
-
-  const handleClose = useCallback(() => {
-    Animated.timing(slideAnim, { toValue: H, duration: 220, useNativeDriver: true }).start(onClose);
-  }, [onClose]);
-
-  const panResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx),
-    onPanResponderMove: (_, g) => { if (g.dy > 0) slideAnim.setValue(g.dy); },
-    onPanResponderRelease: (_, g) => {
-      if (g.dy > 80) handleClose();
-      else Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
-    },
-  })).current;
-
-  const handleReply  = useCallback((id) => setReplyingTo(id), []);
-  const keyExtractor = useCallback((item, i) => item.id || String(i), []);
-  const renderItem   = useCallback(({ item }) => (
-    <CommentItem item={item} onReply={handleReply} replyingTo={replyingTo} />
-  ), [handleReply, replyingTo]);
-
-  const replyingComment = useMemo(
-    () => replyingTo ? comments.find(c => c.id === replyingTo) : null,
-    [replyingTo, comments]
-  );
-
-  return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
-      <TouchableOpacity style={csStyles.backdrop} activeOpacity={1} onPress={handleClose} />
-      <Animated.View style={[csStyles.sheet, { transform: [{ translateY: slideAnim }] }]} {...panResponder.panHandlers}>
-        <View style={csStyles.handleRow}><View style={csStyles.handleBar} /></View>
-        <View style={csStyles.sheetHeader}>
-          <Text style={csStyles.sheetTitle}>{comments.length} {comments.length === 1 ? 'thought' : 'thoughts'}</Text>
-          <TouchableOpacity onPress={handleClose} hitSlop={HIT_SLOP}>
-            <ChevronDown size={rs(20)} color={T.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {replyingTo && replyingComment && (
-          <View style={csStyles.replyIndicator}>
-            <CornerDownRight size={rs(13)} color={T.primary} />
-            <Text style={csStyles.replyIndicatorText} numberOfLines={1}>
-              Replying to {replyingComment.anonymous_name || 'Anonymous'}
-            </Text>
-            <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={HIT_SLOP}>
-              <X size={rs(14)} color={T.textMuted} />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {loading ? (
-          <View style={csStyles.center}><ActivityIndicator color={T.primary} /></View>
-        ) : comments.length === 0 ? (
-          <View style={csStyles.center}>
-            <Text style={csStyles.emptyEmoji}>🌑</Text>
-            <Text style={csStyles.emptyText}>no one has said anything yet.{'\n'}say something.</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={comments}
-            keyExtractor={keyExtractor}
-            renderItem={renderItem}
-            style={csStyles.list}
-            contentContainerStyle={csStyles.listContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            removeClippedSubviews
-            maxToRenderPerBatch={8}
-            windowSize={5}
-            initialNumToRender={6}
-          />
-        )}
-
-        {picker === 'emoji' && <EmojiPicker onSelect={handleEmojiSelect} />}
-        {picker === 'gif'   && <GifPicker   onSelect={handleGifSelect}   />}
-
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={csStyles.inputRow}>
-            <TouchableOpacity onPress={() => setPicker(p => p === 'emoji' ? null : 'emoji')}
-              hitSlop={HIT_SLOP} style={[csStyles.pickerToggle, picker === 'emoji' && csStyles.pickerToggleActive]}>
-              <Text style={csStyles.pickerToggleText}>😊</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setPicker(p => p === 'gif' ? null : 'gif')}
-              hitSlop={HIT_SLOP} style={[csStyles.pickerToggle, picker === 'gif' && csStyles.pickerToggleActive]}>
-              <Text style={csStyles.pickerToggleLabel}>GIF</Text>
-            </TouchableOpacity>
-            <TextInput
-              ref={inputRef}
-              style={csStyles.input}
-              value={text}
-              onChangeText={setText}
-              onFocus={() => setPicker(null)}
-              placeholder={replyingTo ? 'write a reply…' : isAuthenticated ? 'say what you actually think…' : 'sign in to say what you think…'}
-              placeholderTextColor={T.textMuted}
-              multiline
-              maxLength={500}
-              editable={isAuthenticated}
-            />
-            <TouchableOpacity
-              style={[csStyles.sendBtn, (!text.trim() || submitting) && { opacity: 0.4 }]}
-              onPress={() => submitComment()}
-              disabled={!text.trim() || submitting}
-              hitSlop={HIT_SLOP}
-            >
-              {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={rs(16)} color="#fff" />}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Animated.View>
     </Modal>
   );
 });
@@ -797,56 +495,6 @@ const gStyles = StyleSheet.create({
   nextBtn:    { position: 'absolute', right: SPACING.md, top: '50%', marginTop: -rs(25), padding: rp(10), backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: RADIUS.full },
   counter:    { position: 'absolute', bottom: rp(50), alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: SPACING.md, paddingVertical: rp(6), borderRadius: RADIUS.full },
   counterText:{ color: '#fff', fontSize: FONT.sm, fontWeight: '600' },
-});
-
-const csStyles = StyleSheet.create({
-  backdrop:      { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)' },
-  sheet:         { position: 'absolute', bottom: 0, left: 0, right: 0, height: H * 0.80, backgroundColor: T.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderTopWidth: 1, borderTopColor: T.borderStrong, shadowColor: '#000', shadowOffset: { width: 0, height: -rs(8) }, shadowOpacity: 0.5, shadowRadius: rs(24), elevation: 20 },
-  handleRow:     { alignItems: 'center', paddingTop: rp(12), paddingBottom: rp(4) },
-  handleBar:     { width: rs(36), height: rp(4), borderRadius: rp(2), backgroundColor: T.borderStrong },
-  sheetHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: T.border },
-  sheetTitle:    { fontSize: FONT.sm, fontWeight: '700', color: T.text },
-  replyIndicator:{ flexDirection: 'row', alignItems: 'center', gap: rp(8), paddingHorizontal: SPACING.md, paddingVertical: rp(8), backgroundColor: T.primaryDim, borderBottomWidth: 1, borderBottomColor: T.primaryBorder },
-  replyIndicatorText: { flex: 1, fontSize: FONT.xs, color: T.primary, fontWeight: '600' },
-  center:        { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl, gap: SPACING.sm },
-  emptyEmoji:    { fontSize: rf(32) },
-  emptyText:     { fontSize: FONT.sm, color: T.textSecondary, fontStyle: 'italic', textAlign: 'center', lineHeight: rf(22) },
-  list:          { flex: 1, paddingHorizontal: SPACING.md },
-  listContent:   { paddingTop: SPACING.sm, paddingBottom: SPACING.sm },
-  commentItem:   { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
-  commentAvatar: { width: rs(32), height: rs(32), borderRadius: rs(16), backgroundColor: T.avatarBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.primaryBorder, flexShrink: 0 },
-  commentAvatarText: { fontSize: FONT.sm, fontWeight: '700', color: T.primary },
-  commentBody:   { flex: 1 },
-  commentAuthor: { fontSize: FONT.sm, fontWeight: '600', color: T.text, marginBottom: rp(3) },
-  commentText:   { fontSize: FONT.sm, color: T.textSecondary, lineHeight: rf(20) },
-  commentTime:   { fontSize: FONT.xs, color: T.textMuted, marginTop: rp(3), opacity: 0.7 },
-  replyItem:     { flexDirection: 'row', alignItems: 'flex-start', gap: rp(6), marginTop: rp(10), paddingLeft: rp(4) },
-  replyAvatar:   { width: rs(24), height: rs(24), borderRadius: rs(12), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  replyAvatarText:{ fontSize: rf(10), fontWeight: '700', color: T.primary },
-  replyBody:     { flex: 1 },
-  replyAuthor:   { fontSize: FONT.xs, fontWeight: '600', color: T.text, marginBottom: rp(2) },
-  replyText:     { fontSize: FONT.xs, color: T.textSecondary, lineHeight: rf(17) },
-  pickerPanel:       { backgroundColor: T.surfaceAlt, borderTopWidth: 1, borderTopColor: T.border, maxHeight: rs(220) },
-  emojiTabs:         { flexDirection: 'row', paddingHorizontal: rp(12), paddingVertical: rp(8), borderBottomWidth: 1, borderBottomColor: T.border },
-  emojiTab:          { paddingHorizontal: rp(12), paddingVertical: rp(6), borderRadius: RADIUS.sm, marginRight: rp(4) },
-  emojiTabActive:    { backgroundColor: T.primaryDim },
-  emojiTabLabel:     { fontSize: rf(18) },
-  emojiGrid:         { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: rp(8), paddingVertical: rp(8) },
-  emojiBtn:          { width: rs(44), height: rs(44), alignItems: 'center', justifyContent: 'center' },
-  emojiText:         { fontSize: rf(24) },
-  commentGif:        { width: rs(160), height: rs(100), borderRadius: RADIUS.sm, marginTop: rp(6) },
-  pickerToggle:      { width: rs(34), height: rs(34), borderRadius: rs(17), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.border },
-  pickerToggleActive:{ backgroundColor: T.primaryDim, borderColor: T.primaryBorder },
-  pickerToggleText:  { fontSize: rf(17) },
-  pickerToggleLabel: { fontSize: rf(9), fontWeight: '800', color: T.primary, letterSpacing: 0.5 },
-  inputRow:   { flexDirection: 'row', alignItems: 'center', gap: rp(6), paddingHorizontal: rp(12), paddingVertical: rp(10), borderTopWidth: 1, borderTopColor: T.border },
-  input:      { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: rs(22), paddingHorizontal: rp(14), paddingVertical: rp(10), fontSize: FONT.sm, color: T.text, borderWidth: 1, borderColor: T.border, maxHeight: rs(80) },
-  sendBtn:    { width: rs(38), height: rs(38), borderRadius: rs(19), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
-  expandRepliesBtn:  { flexDirection: 'row', alignItems: 'center', gap: rp(8), marginTop: rp(8), paddingVertical: rp(4) },
-  expandRepliesLine: { width: rs(20), height: 1, backgroundColor: T.primaryBorder },
-  expandRepliesText: { fontSize: FONT.xs, color: T.primary, fontWeight: '600' },
-  replyBtn:          { marginTop: rp(6) },
-  replyBtnText:      { fontSize: FONT.xs, color: T.textMuted, fontWeight: '500' },
 });
 
 const rStyles = StyleSheet.create({

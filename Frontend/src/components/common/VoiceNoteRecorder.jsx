@@ -1,125 +1,142 @@
 /**
  * VoiceNoteRecorder.jsx
- * Compact record → preview → send widget for voice-note attachments,
- * capped at 3 minutes. Reuses the expo-audio recorder pattern from
- * DropsRecordScreen.jsx but drops the waveform/speed-picker chrome —
- * this is a small inline attachment, not a full compose flow.
+ * WhatsApp-style hold-to-record mic button for comment inputs.
+ *
+ *   press and hold  → starts recording
+ *   slide left      → arms cancel ("release to cancel")
+ *   release         → uploads and sends immediately, no preview step
+ *   30s             → auto-stops and sends
+ *
+ * Renders as the mic button itself (drop it straight into an input row);
+ * while recording it floats a status pill above the button with a pulsing
+ * dot, the elapsed timer, and the slide-to-cancel hint.
+ *
+ * 30s is short enough that holding a finger down is comfortable, which is
+ * why there's no WhatsApp-style "lock" gesture here — by the time locking
+ * would be worth it, the recording has already hit the cap.
  *
  * Uploads via /upload/audio (not the direct-Cloudinary /upload/sign path
  * DropsRecordScreen uses) because it returns Cloudinary's reported
- * duration, which the caller needs for server-side duration validation.
+ * duration, which the caller sends back for server-side validation.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, Platform,
+  View, Text, StyleSheet, ActivityIndicator, Animated, Platform, PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  useAudioRecorder, useAudioRecorderState,
-  useAudioPlayer, useAudioPlayerStatus,
-  AudioModule, RecordingPresets,
+  useAudioRecorder, useAudioRecorderState, AudioModule, RecordingPresets,
 } from 'expo-audio';
-import { Mic, Square, Play, Pause, X, Send, RotateCcw } from 'lucide-react-native';
-import { rs, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { Mic, Trash2 } from 'lucide-react-native';
+import { rs, rp, FONT, RADIUS } from '../../utils/responsive';
 import { useToast } from '../ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 
-export const MAX_VOICE_NOTE_SECONDS = 180;   // 3 minutes
+export const MAX_VOICE_NOTE_SECONDS = 30;
+
+// How far left the finger has to travel before release means "throw it away"
+const CANCEL_THRESHOLD = 80;
 
 const formatTime = (seconds) => {
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export default function VoiceNoteRecorder({ onSend, onCancel }) {
+export default function VoiceNoteRecorder({ onSend, disabled }) {
   const { showToast } = useToast();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recState = useAudioRecorderState(recorder, 100);
 
-  const [recordedUri, setRecordedUri] = useState(null);
-  const [elapsed,     setElapsed]     = useState(0);
-  const [uploading,   setUploading]   = useState(false);
+  const [recording,  setRecording]  = useState(false);
+  const [willCancel, setWillCancel] = useState(false);
+  const [uploading,  setUploading]  = useState(false);
+  const [elapsed,    setElapsed]    = useState(0);
 
-  const pulse = useRef(new Animated.Value(0)).current;
+  const pulse  = useRef(new Animated.Value(0)).current;
+  // PanResponder is created once, so everything it touches goes through refs
+  // rather than captured state — otherwise it fires against a stale closure.
+  const cancelRef    = useRef(false);
+  const recordingRef = useRef(false);
+  const startRef     = useRef(null);
+  const finishRef    = useRef(null);
 
   useEffect(() => {
     (async () => {
       try {
         const perm = await AudioModule.requestRecordingPermissionsAsync();
-        if (!perm.granted) {
-          showToast({ type: 'warning', message: 'Microphone access is needed to record.' });
-          return;
-        }
+        if (!perm.granted) return;
         await AudioModule.setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       } catch {}
     })();
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
-    if (recState.isRecording) {
+    if (recording) {
       Animated.loop(Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 700, useNativeDriver: true }),
       ])).start();
     } else {
       pulse.stopAnimation();
       pulse.setValue(0);
     }
-  }, [recState.isRecording, pulse]);
+  }, [recording, pulse]);
 
-  const handleStop = useCallback(async () => {
+  const start = useCallback(async () => {
+    if (disabled || recordingRef.current) return;
     try {
-      await recorder.stop();
-      if (recorder.uri) setRecordedUri(recorder.uri);
-    } catch {
-      showToast({ type: 'error', message: 'Recording stopped unexpectedly.' });
-    }
-  }, [recorder, showToast]);
-
-  useEffect(() => {
-    if (!recState.isRecording) return;
-    setElapsed(Math.min(MAX_VOICE_NOTE_SECONDS, (recState.durationMillis || 0) / 1000));
-    if ((recState.durationMillis || 0) >= MAX_VOICE_NOTE_SECONDS * 1000) handleStop();
-  }, [recState.durationMillis, recState.isRecording, handleStop]);
-
-  const handleStart = useCallback(async () => {
-    try {
+      const perm = await AudioModule.requestRecordingPermissionsAsync();
+      if (!perm.granted) {
+        showToast({ type: 'warning', message: 'Microphone access is needed to record.' });
+        return;
+      }
+      cancelRef.current = false;
+      setWillCancel(false);
       setElapsed(0);
-      setRecordedUri(null);
+      recordingRef.current = true;
+      setRecording(true);
       await recorder.prepareToRecordAsync();
       recorder.record();
     } catch {
+      recordingRef.current = false;
+      setRecording(false);
       showToast({ type: 'error', message: 'Could not start recording.' });
     }
-  }, [recorder, showToast]);
+  }, [disabled, recorder, showToast]);
 
-  const handleRedo = useCallback(() => {
-    setRecordedUri(null);
-    setElapsed(0);
-  }, []);
+  const finish = useCallback(async () => {
+    if (!recordingRef.current) return;
+    recordingRef.current = false;
+    setRecording(false);
 
-  const player       = useAudioPlayer(recordedUri ? { uri: recordedUri } : null);
-  const playerStatus = useAudioPlayerStatus(player);
+    let uri = null;
+    try {
+      await recorder.stop();
+      uri = recorder.uri;
+    } catch {}
 
-  const togglePlay = useCallback(() => {
-    if (!recordedUri) return;
-    if (playerStatus.playing) {
-      player.pause();
-    } else {
-      if (playerStatus.currentTime >= (playerStatus.duration || 0) - 0.1) player.seekTo(0);
-      player.play();
+    const cancelled = cancelRef.current;
+    cancelRef.current = false;
+    setWillCancel(false);
+
+    // Too short to be intentional — treat a stray tap as a cancel rather
+    // than firing off a half-second of silence.
+    const tooShort = elapsed < 1;
+    if (cancelled || tooShort || !uri) {
+      if (tooShort && !cancelled) {
+        showToast({ type: 'info', message: 'Hold to record.' });
+      }
+      setElapsed(0);
+      return;
     }
-  }, [recordedUri, player, playerStatus.playing, playerStatus.currentTime, playerStatus.duration]);
 
-  const handleSend = useCallback(async () => {
-    if (!recordedUri) return;
     setUploading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       const form  = new FormData();
       form.append('file', {
-        uri:  recordedUri,
+        uri,
         name: `voice-note.${Platform.OS === 'ios' ? 'm4a' : 'mp4'}`,
         type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
       });
@@ -132,120 +149,118 @@ export default function VoiceNoteRecorder({ onSend, onCancel }) {
       const data = await res.json();
       onSend({ url: data.url, duration: Math.round(data.duration || elapsed) });
     } catch {
-      showToast({ type: 'error', message: 'Could not upload voice note. Try again.' });
+      showToast({ type: 'error', message: 'Could not send voice note. Try again.' });
     } finally {
       setUploading(false);
+      setElapsed(0);
     }
-  }, [recordedUri, elapsed, onSend, showToast]);
+  }, [recorder, elapsed, onSend, showToast]);
 
-  const nearLimit = elapsed >= MAX_VOICE_NOTE_SECONDS - 20;
+  // Keep the refs pointing at the latest closures for the PanResponder.
+  startRef.current  = start;
+  finishRef.current = finish;
+
+  useEffect(() => {
+    if (!recording) return;
+    const secs = (recState.durationMillis || 0) / 1000;
+    setElapsed(Math.min(MAX_VOICE_NOTE_SECONDS, secs));
+    if (secs >= MAX_VOICE_NOTE_SECONDS) finishRef.current?.();
+  }, [recState.durationMillis, recording]);
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant:   () => { startRef.current?.(); },
+      onPanResponderMove:    (_, g) => {
+        const shouldCancel = g.dx < -CANCEL_THRESHOLD;
+        if (shouldCancel !== cancelRef.current) {
+          cancelRef.current = shouldCancel;
+          setWillCancel(shouldCancel);
+        }
+      },
+      onPanResponderRelease:   () => { finishRef.current?.(); },
+      onPanResponderTerminate: () => { finishRef.current?.(); },
+    }),
+  ).current;
+
+  const nearLimit = elapsed >= MAX_VOICE_NOTE_SECONDS - 5;
 
   return (
     <View style={styles.wrap}>
-      {!recordedUri ? (
-        <>
-          <View style={styles.timerRow}>
-            <Animated.View style={[
-              styles.dot,
-              recState.isRecording && {
-                transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }],
-                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }),
-              },
-            ]} />
-            <Text style={[styles.timerText, nearLimit && { color: T.primary }]}>
-              {formatTime(elapsed)} / {formatTime(MAX_VOICE_NOTE_SECONDS)}
-            </Text>
-          </View>
-          <View style={styles.controlsRow}>
-            <TouchableOpacity onPress={onCancel} hitSlop={HIT_SLOP} style={styles.iconBtn}>
-              <X size={rs(18)} color={T.textMuted} />
-            </TouchableOpacity>
-            {recState.isRecording ? (
-              <TouchableOpacity onPress={handleStop} hitSlop={HIT_SLOP} style={[styles.recordBtn, styles.recordBtnActive]}>
-                <Square size={rs(20)} color="#fff" fill="#fff" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={handleStart} hitSlop={HIT_SLOP} style={styles.recordBtn}>
-                <Mic size={rs(22)} color="#fff" />
-              </TouchableOpacity>
-            )}
-            <View style={styles.iconBtnGhost} />
-          </View>
-        </>
-      ) : (
-        <View style={styles.previewRow}>
-          <TouchableOpacity onPress={togglePlay} hitSlop={HIT_SLOP} style={styles.playBtn}>
-            {playerStatus.playing
-              ? <Pause size={rs(16)} color="#fff" />
-              : <Play size={rs(16)} color="#fff" />}
-          </TouchableOpacity>
-          <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity onPress={handleRedo} hitSlop={HIT_SLOP} style={styles.iconBtn}>
-            <RotateCcw size={rs(16)} color={T.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleSend} disabled={uploading} hitSlop={HIT_SLOP} style={styles.sendBtn}>
-            {uploading ? <ActivityIndicator size="small" color="#fff" /> : <Send size={rs(16)} color="#fff" />}
-          </TouchableOpacity>
+      {recording && (
+        <View style={[styles.pill, willCancel && styles.pillCancel]} pointerEvents="none">
+          {willCancel ? (
+            <>
+              <Trash2 size={rs(13)} color={T.danger} />
+              <Text style={[styles.pillText, { color: T.danger }]}>release to cancel</Text>
+            </>
+          ) : (
+            <>
+              <Animated.View style={[styles.recDot, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) }]} />
+              <Text style={[styles.pillTime, nearLimit && { color: T.danger }]}>
+                {formatTime(elapsed)}
+              </Text>
+              <Text style={styles.pillHint}>‹ slide to cancel</Text>
+            </>
+          )}
         </View>
       )}
+
+      <View
+        {...pan.panHandlers}
+        style={[
+          styles.micBtn,
+          recording && styles.micBtnActive,
+          willCancel && styles.micBtnCancel,
+        ]}
+      >
+        {uploading
+          ? <ActivityIndicator size="small" color={T.primary} />
+          : <Mic size={rs(17)} color={recording ? '#fff' : T.textMuted} />}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  wrap: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  micBtn: {
+    width: rs(36), height: rs(36), borderRadius: rs(18),
     backgroundColor: T.surfaceAlt,
-    borderRadius:    RADIUS.md,
-    borderWidth:     1,
-    borderColor:     T.border,
-    padding:         SPACING.sm,
-    gap:             rp(8),
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: T.borderStrong,
   },
-  timerRow: {
+  micBtnActive: { backgroundColor: T.primary, borderColor: T.primary },
+  micBtnCancel: { backgroundColor: T.danger, borderColor: T.danger },
+
+  // Floats above the mic button while recording.
+  pill: {
+    position: 'absolute',
+    bottom: rs(46),
+    right: 0,
     flexDirection: 'row',
-    alignItems:    'center',
-    justifyContent: 'center',
-    gap:           rp(6),
+    alignItems: 'center',
+    gap: rp(8),
+    paddingHorizontal: rp(12),
+    paddingVertical: rp(8),
+    borderRadius: RADIUS.full,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.borderStrong,
+    minWidth: rs(190),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: rs(4) },
+    shadowOpacity: 0.4,
+    shadowRadius: rs(10),
+    elevation: 8,
   },
-  dot: {
+  pillCancel: { borderColor: T.danger, justifyContent: 'center' },
+  recDot: {
     width: rs(8), height: rs(8), borderRadius: rs(4),
-    backgroundColor: T.primary,
+    backgroundColor: T.danger,
   },
-  timerText: {
-    fontFamily: 'DMSans-SemiBold',
-    fontSize:   FONT.sm,
-    color:      T.textSecondary,
-  },
-  controlsRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'space-between',
-  },
-  iconBtn: {
-    width: rs(34), height: rs(34), borderRadius: rs(17),
-    alignItems: 'center', justifyContent: 'center',
-  },
-  iconBtnGhost: { width: rs(34), height: rs(34) },
-  recordBtn: {
-    width: rs(52), height: rs(52), borderRadius: rs(26),
-    backgroundColor: T.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  recordBtnActive: { backgroundColor: '#c0392b' },
-  previewRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           rp(10),
-  },
-  playBtn: {
-    width: rs(34), height: rs(34), borderRadius: rs(17),
-    backgroundColor: T.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sendBtn: {
-    width: rs(34), height: rs(34), borderRadius: rs(17),
-    backgroundColor: T.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  pillTime: { fontSize: FONT.sm, color: T.text, fontFamily: 'DMSans-Bold' },
+  pillHint: { flex: 1, textAlign: 'right', fontSize: FONT.xs, color: T.textMuted, fontFamily: 'DMSans-Regular' },
+  pillText: { fontSize: FONT.xs, fontFamily: 'DMSans-SemiBold' },
 });

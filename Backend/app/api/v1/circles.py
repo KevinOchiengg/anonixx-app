@@ -38,7 +38,7 @@ router = APIRouter(prefix="/circles", tags=["circles"])
 ROLE_CREATOR = "creator"
 ROLE_ADMIN   = "admin"
 
-MAX_VOICE_COMMENT_SECONDS = 180   # 3 minutes
+MAX_VOICE_COMMENT_SECONDS = 30   # 30 seconds — hold-to-record, WhatsApp style
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -570,7 +570,7 @@ class CircleCommentCreate(BaseModel):
     voice_duration: Optional[int] = None   # seconds, from the upload response
 
 
-def format_circle_comment(c: dict) -> dict:
+def format_circle_comment(c: dict, current_user_id: Optional[str] = None) -> dict:
     return {
         "id":             fmt_id(c),
         "user_id":        c["user_id"],
@@ -581,6 +581,7 @@ def format_circle_comment(c: dict) -> dict:
         "voice_url":      c.get("voice_url"),
         "voice_duration": c.get("voice_duration"),
         "created_at":     c["created_at"].isoformat(),
+        "is_own":         current_user_id is not None and c["user_id"] == current_user_id,
     }
 
 
@@ -604,7 +605,7 @@ async def create_circle_comment(
     if data.voice_url and (data.voice_duration or 0) > MAX_VOICE_COMMENT_SECONDS:
         raise HTTPException(
             status_code=400,
-            detail=f"Voice notes can't be longer than {MAX_VOICE_COMMENT_SECONDS // 60} minutes."
+            detail=f"Voice notes can't be longer than {MAX_VOICE_COMMENT_SECONDS} seconds."
         )
     if contains_contact_info(content):
         raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
@@ -629,7 +630,7 @@ async def create_circle_comment(
         {"_id": oid(post_id)},
         {"$inc": {"comment_count": 1}}
     )
-    return format_circle_comment(doc)
+    return format_circle_comment(doc, str(current_user.id))
 
 
 @router.get("/{circle_id}/posts/{post_id}/comments")
@@ -647,7 +648,8 @@ async def list_circle_comments(
         "circle_id": circle_id, "circle_post_id": post_id,
     }).sort("created_at", 1).skip(skip).limit(limit)
 
-    return {"comments": [format_circle_comment(c) async for c in cursor]}
+    current_user_id = str(current_user.id)
+    return {"comments": [format_circle_comment(c, current_user_id) async for c in cursor]}
 
 
 # ─── Linkup (unlock a comment author) ────────────────────────────────────────
