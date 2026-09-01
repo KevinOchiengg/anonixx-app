@@ -1089,6 +1089,8 @@ async def get_saved_posts(
 
 # ==================== THREADS / COMMENTS ====================
 
+MAX_VOICE_COMMENT_SECONDS = 30   # 30 seconds — mirrors Circles' comment voice notes
+
 @router.post("/{post_id}/thread")
 async def add_to_thread(
     post_id: str,
@@ -1096,14 +1098,22 @@ async def add_to_thread(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    content   = data.get("content", "").strip()
-    gif_url   = data.get("gif_url",   "").strip() if data.get("gif_url")   else None
-    image_url = data.get("image_url", "").strip() if data.get("image_url") else None
-    parent_id = data.get("parent_id")
+    content        = data.get("content", "").strip()
+    gif_url        = data.get("gif_url",   "").strip() if data.get("gif_url")   else None
+    image_url      = data.get("image_url", "").strip() if data.get("image_url") else None
+    voice_url      = data.get("voice_url", "").strip() if data.get("voice_url") else None
+    voice_duration = data.get("voice_duration")
+    parent_id      = data.get("parent_id")
 
-    # Require at least one of: text, gif, or image
-    if not content and not gif_url and not image_url:
-        raise HTTPException(status_code=400, detail="Comment must have text, a GIF, or an image.")
+    # Require at least one of: text, gif, image, or voice note
+    if not content and not gif_url and not image_url and not voice_url:
+        raise HTTPException(status_code=400, detail="Comment must have text, a GIF, an image, or a voice note.")
+
+    if voice_url and (voice_duration or 0) > MAX_VOICE_COMMENT_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Voice notes can't be longer than {MAX_VOICE_COMMENT_SECONDS} seconds."
+        )
 
     if contains_contact_info(content):
         raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
@@ -1132,6 +1142,9 @@ async def add_to_thread(
         thread_doc["gif_url"] = gif_url
     if image_url:
         thread_doc["image_url"] = image_url
+    if voice_url:
+        thread_doc["voice_url"] = voice_url
+        thread_doc["voice_duration"] = voice_duration
     if parent_id:
         try:
             thread_doc["parent_id"] = ObjectId(parent_id)
@@ -1165,6 +1178,9 @@ async def add_to_thread(
         response["gif_url"] = gif_url
     if image_url:
         response["image_url"] = image_url
+    if voice_url:
+        response["voice_url"] = voice_url
+        response["voice_duration"] = voice_duration
     return response
 
 
@@ -1203,6 +1219,9 @@ async def get_thread(
             d["gif_url"] = t["gif_url"]
         if t.get("image_url"):
             d["image_url"] = t["image_url"]
+        if t.get("voice_url"):
+            d["voice_url"] = t["voice_url"]
+            d["voice_duration"] = t.get("voice_duration")
         return d
 
     by_id = {str(t["_id"]): fmt(t) for t in thread_docs}

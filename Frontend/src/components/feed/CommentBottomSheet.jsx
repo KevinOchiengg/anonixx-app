@@ -10,15 +10,69 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  ChevronDown, CornerDownRight, Heart, ImageIcon, MessageCircle, Send, X,
+  ChevronDown, CornerDownRight, Heart, ImageIcon, MessageCircle, Pause, Play, Send, X,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
+import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
 
 const { width: W, height: H } = Dimensions.get('window');
 
 const AVATAR_BG = '#1e2330';
+
+// ─── Voice note playback ────────────────────────────────────────
+const AudioPlayer = React.memo(({ uri }) => {
+  const player = useAudioPlayer(null);
+  const status = useAudioPlayerStatus(player);
+  const loaded = useRef(false);
+
+  const playing  = !!status.playing;
+  const duration = status.duration || 0;
+
+  useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
+
+  useEffect(() => {
+    if (status.didJustFinish) {
+      try {
+        player.pause();
+        Promise.resolve(player.seekTo(0)).catch(() => {});
+      } catch {}
+    }
+  }, [status.didJustFinish, player]);
+
+  const toggle = useCallback(async () => {
+    if (!uri) return;
+    try {
+      if (!loaded.current) {
+        await setAudioModeAsync({ playsInSilentModeIOS: true });
+        player.replace({ uri });
+        loaded.current = true;
+        player.play();
+        return;
+      }
+      if (playing) player.pause();
+      else player.play();
+    } catch {}
+  }, [uri, playing, player]);
+
+  const fmt = (secs) => {
+    const s = Math.max(0, Math.floor(secs || 0));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  return (
+    <TouchableOpacity style={st.audioWrap} onPress={toggle} activeOpacity={0.85} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <View style={st.audioPlayBtn}>
+        {playing ? <Pause size={14} color="#fff" fill="#fff" /> : <Play size={14} color="#fff" fill="#fff" />}
+      </View>
+      <Text style={st.audioTimeText}>
+        {playing || status.currentTime > 0 ? fmt(status.currentTime) : fmt(duration)}
+      </Text>
+    </TouchableOpacity>
+  );
+});
 
 // ─── Emoji picker ─────────────────────────────────────────────
 const EMOJI_CATS = [
@@ -57,10 +111,11 @@ const EmojiPicker = React.memo(({ onSelect }) => {
 
 // ─── Comment row ──────────────────────────────────────────────
 const CommentItem = React.memo(({
-  item, isFirst, isHot, onReply, replyingTo, onLike, depth = 0,
+  item, isFirst, isHot, onReply, replyingTo, onLike, onOpenImage, depth = 0,
 }) => {
   const isReplying = replyingTo === item.id;
   const replies    = item.replies ?? [];
+  const isOwn      = !!(item.is_own_reply || item._optimistic);
   const [expanded, setExpanded] = useState(false);
   const likeScale = useRef(new Animated.Value(1)).current;
 
@@ -76,17 +131,19 @@ const CommentItem = React.memo(({
     ? `${(item.likes_count / 1000).toFixed(1)}k`
     : (item.likes_count || 0).toString();
 
+  const mediaUri = item.image_url || item.gif_url;
+
   return (
-    <View style={[st.commentItem, depth > 0 && st.commentItemReply]}>
-      <View style={st.commentAvatar}>
+    <View style={[st.commentItem, depth > 0 && st.commentItemReply, isOwn && st.commentItemOwn]}>
+      <View style={[st.commentAvatar, isOwn && st.commentAvatarOwn]}>
         <Text style={st.commentAvatarText}>
           {item.anonymous_name?.[0]?.toUpperCase() || 'A'}
         </Text>
       </View>
-      <View style={st.commentBody}>
-        <View style={st.commentMetaRow}>
+      <View style={[st.commentBody, isOwn && st.commentBodyOwn]}>
+        <View style={[st.commentMetaRow, isOwn && st.commentMetaRowOwn]}>
           <Text style={st.commentAuthor} numberOfLines={1}>
-            {item.anonymous_name || 'Anonymous'}
+            {isOwn ? 'You' : (item.anonymous_name || 'Anonymous')}
           </Text>
           {isFirst && !isHot && (
             <View style={st.firstBadge}>
@@ -98,12 +155,22 @@ const CommentItem = React.memo(({
               <Text style={st.hotBadgeText}>🔥 hot</Text>
             </View>
           )}
-          <Text style={st.commentTime}>{item.time_ago || 'just now'}</Text>
         </View>
-        {item.content ? <Text style={st.commentText}>{item.content}</Text> : null}
-        {item.gif_url   ? <Image source={{ uri: item.gif_url   }} style={st.commentGif}   resizeMode="cover" /> : null}
-        {item.image_url ? <Image source={{ uri: item.image_url }} style={st.commentImage} resizeMode="contain" /> : null}
-        <View style={st.commentActions}>
+
+        <View style={[st.bubble, isOwn && st.bubbleOwn]}>
+          {item.content ? (
+            <Text style={[st.commentText, isOwn && st.commentTextOwn]}>{item.content}</Text>
+          ) : null}
+          {mediaUri ? (
+            <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenImage(mediaUri)}>
+              <Image source={{ uri: mediaUri }} style={st.commentImage} resizeMode="cover" />
+            </TouchableOpacity>
+          ) : null}
+          {item.voice_url ? <View style={{ marginTop: item.content ? 6 : 0 }}><AudioPlayer uri={item.voice_url} /></View> : null}
+          <Text style={[st.bubbleTime, isOwn && st.bubbleTimeOwn]}>{item.time_ago || 'just now'}</Text>
+        </View>
+
+        <View style={[st.commentActions, isOwn && st.commentActionsOwn]}>
           <View style={st.commentActionsLeft}>
             {depth === 0 && (
               <TouchableOpacity
@@ -160,6 +227,7 @@ const CommentItem = React.memo(({
                 onReply={onReply}
                 replyingTo={replyingTo}
                 onLike={onLike}
+                onOpenImage={onOpenImage}
                 depth={1}
               />
             ))}
@@ -184,6 +252,7 @@ export const CommentBottomSheet = React.memo(({
   const [sortBy,         setSortBy]         = useState('new');
   const [picker,         setPicker]         = useState(null);
   const [imageUploading, setImageUploading] = useState(false);
+  const [viewerUri,      setViewerUri]      = useState(null);
 
   const slideAnim = useRef(new Animated.Value(H)).current;
   const inputRef  = useRef(null);
@@ -229,23 +298,25 @@ export const CommentBottomSheet = React.memo(({
     finally { setLoading(false); }
   };
 
-  const submit = async (gifUrl = null, imageUrl = null) => {
-    if (!gifUrl && !imageUrl && !text.trim()) return;
+  const submit = async (gifUrl = null, imageUrl = null, voiceUrl = null, voiceDuration = null) => {
+    if (!gifUrl && !imageUrl && !voiceUrl && !text.trim()) return;
     if (!isAuthenticated) {
-      navigation?.navigate?.('Auth', { screen: 'Login' });
+      navigation?.navigate?.('AuthNav', { screen: 'Login' });
       return;
     }
     const optimisticId = `opt_${Date.now()}`;
     const optimistic = {
       id: optimisticId,
-      content: (gifUrl || imageUrl) ? '' : text.trim(),
+      content: (gifUrl || imageUrl || voiceUrl) ? '' : text.trim(),
       anonymous_name: 'You',
       time_ago: 'just now',
       likes_count: 0,
       liked_by_me: false,
       replies: [],
-      gif_url:   gifUrl   ?? undefined,
-      image_url: imageUrl ?? undefined,
+      gif_url:        gifUrl        ?? undefined,
+      image_url:      imageUrl      ?? undefined,
+      voice_url:      voiceUrl      ?? undefined,
+      voice_duration: voiceDuration ?? undefined,
       _optimistic: true,
     };
 
@@ -275,9 +346,10 @@ export const CommentBottomSheet = React.memo(({
     try {
       const token = await AsyncStorage.getItem('token');
       const body  = {
-        content: (gifUrl || imageUrl) ? '' : savedText,
+        content: (gifUrl || imageUrl || voiceUrl) ? '' : savedText,
         ...(gifUrl       && { gif_url:   gifUrl }),
         ...(imageUrl     && { image_url: imageUrl }),
+        ...(voiceUrl     && { voice_url: voiceUrl, voice_duration: voiceDuration }),
         ...(savedReplyTo && { parent_id: savedReplyTo }),
       };
       const res  = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
@@ -287,7 +359,14 @@ export const CommentBottomSheet = React.memo(({
       });
       const data = await res.json();
       if (res.ok) {
-        const real = { ...data, gif_url: gifUrl ?? undefined, image_url: imageUrl ?? undefined, _optimistic: false };
+        const real = {
+          ...data,
+          gif_url:        gifUrl        ?? undefined,
+          image_url:      imageUrl      ?? undefined,
+          voice_url:      voiceUrl      ?? undefined,
+          voice_duration: voiceDuration ?? undefined,
+          _optimistic: false,
+        };
         if (savedReplyTo) {
           setComments(prev =>
             prev.map(c =>
@@ -346,7 +425,7 @@ export const CommentBottomSheet = React.memo(({
 
   const pickImage = useCallback(async () => {
     if (!isAuthenticated) {
-      navigation?.navigate?.('Auth', { screen: 'Login' });
+      navigation?.navigate?.('AuthNav', { screen: 'Login' });
       return;
     }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -378,6 +457,7 @@ export const CommentBottomSheet = React.memo(({
         name: 'comment_photo.jpg',
         type: 'image/jpeg',
       });
+      form.append('watermark', 'true');
       const uploadRes  = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -390,6 +470,10 @@ export const CommentBottomSheet = React.memo(({
     } catch {}
     finally { setImageUploading(false); }
   }, [isAuthenticated, navigation, submit]);
+
+  const handleVoiceSend = useCallback(({ url, duration }) => {
+    submit(null, null, url, duration);
+  }, [submit]);
 
   const handleClose = useCallback(() => {
     Animated.timing(slideAnim, { toValue: H, duration: 220, useNativeDriver: true }).start(onClose);
@@ -438,6 +522,7 @@ export const CommentBottomSheet = React.memo(({
       onReply={setReplyingTo}
       replyingTo={replyingTo}
       onLike={handleLike}
+      onOpenImage={setViewerUri}
     />
   ), [firstCommentId, hotCommentId, replyingTo, handleLike]);
 
@@ -498,7 +583,7 @@ export const CommentBottomSheet = React.memo(({
             <CornerDownRight size={13} color={T.primary} />
             <Text style={st.replyBannerText} numberOfLines={1}>
               Replying to{' '}
-              <Text style={{ fontWeight: '700' }}>
+              <Text style={{ fontWeight: '700', fontFamily: 'DMSans-Bold' }}>
                 {replyingComment.anonymous_name || 'Anonymous'}
               </Text>
             </Text>
@@ -553,6 +638,8 @@ export const CommentBottomSheet = React.memo(({
         {/* Input — paddingBottom respects phone nav bar */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={[st.inputRow, { paddingBottom: 12 + insets.bottom }]}>
+            {/* Hold to record, release to send */}
+            <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} />
             <TouchableOpacity
               onPress={() => setPicker(p => (p === 'emoji' ? null : 'emoji'))}
               style={[st.emojiToggle, picker === 'emoji' && st.emojiToggleActive]}
@@ -607,6 +694,17 @@ export const CommentBottomSheet = React.memo(({
           </View>
         </KeyboardAvoidingView>
       </Animated.View>
+
+      <Modal visible={!!viewerUri} transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
+        <TouchableWithoutFeedback onPress={() => setViewerUri(null)}>
+          <View style={st.viewerBackdrop}>
+            <TouchableOpacity style={st.viewerCloseBtn} onPress={() => setViewerUri(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <X size={22} color="#fff" />
+            </TouchableOpacity>
+            <Image source={{ uri: viewerUri }} style={st.viewerImage} resizeMode="contain" />
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </Modal>
   );
 });
@@ -635,8 +733,8 @@ const st = StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: T.text },
-  headerSub:   { fontWeight: '500', color: T.textSecondary },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: T.text, fontFamily: 'PlayfairDisplay-Bold' },
+  headerSub:   { fontWeight: '500', color: T.textSecondary, fontFamily: 'PlayfairDisplay-Italic' },
   sortPill: {
     flexDirection: 'row',
     backgroundColor: T.surfaceAlt,
@@ -645,7 +743,7 @@ const st = StyleSheet.create({
   },
   sortBtn:           { paddingHorizontal: 14, paddingVertical: 6 },
   sortBtnActive:     { backgroundColor: T.primaryDim },
-  sortBtnText:       { fontSize: 12, fontWeight: '700', color: T.textMuted },
+  sortBtnText:       { fontSize: 12, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
   sortBtnTextActive: { color: T.primary },
   replyBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -653,16 +751,17 @@ const st = StyleSheet.create({
     backgroundColor: T.primaryDim,
     borderBottomWidth: 1, borderBottomColor: T.primaryBorder,
   },
-  replyBannerText: { flex: 1, fontSize: 12, color: T.primary },
+  replyBannerText: { flex: 1, fontSize: 12, color: T.primary, fontFamily: 'DMSans-Regular' },
   center:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 44, gap: 10 },
   emptyEmoji:{ fontSize: 42 },
-  emptyTitle:{ fontSize: 18, fontWeight: '800', color: T.text, letterSpacing: 0.3 },
-  emptyBody: { fontSize: 14, color: T.textMuted, textAlign: 'center', lineHeight: 21, fontStyle: 'italic' },
+  emptyTitle:{ fontSize: 18, fontWeight: '800', color: T.text, letterSpacing: 0.3, fontFamily: 'PlayfairDisplay-Bold' },
+  emptyBody: { fontSize: 14, color: T.textMuted, textAlign: 'center', lineHeight: 21, fontFamily: 'PlayfairDisplay-Italic' },
   list:        { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 },
   commentItem:      { flexDirection: 'row', gap: 11, marginBottom: 18 },
   commentItemReply: { marginTop: 10, marginLeft: 2, marginBottom: 10 },
+  commentItemOwn:   { flexDirection: 'row-reverse' },
   commentAvatar: {
     width: 34, height: 34, borderRadius: 17,
     backgroundColor: AVATAR_BG,
@@ -670,36 +769,68 @@ const st = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)',
     flexShrink: 0,
   },
-  commentAvatarText: { fontSize: 13, fontWeight: '700', color: T.primary },
+  commentAvatarOwn:  { borderColor: T.primary },
+  commentAvatarText: { fontSize: 13, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
   commentBody:       { flex: 1 },
+  commentBodyOwn:    { alignItems: 'flex-end' },
   commentMetaRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginBottom: 4, flexWrap: 'wrap',
   },
-  commentAuthor: { fontSize: 13, fontWeight: '700', color: T.text },
-  commentTime:   { fontSize: 11, color: T.textMuted, marginLeft: 'auto' },
+  commentMetaRowOwn: { flexDirection: 'row-reverse' },
+  commentAuthor: { fontSize: 13, fontWeight: '700', color: T.text, fontFamily: 'DMSans-Bold' },
   firstBadge: {
     paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
-    backgroundColor: 'rgba(251,191,36,0.15)',
-    borderWidth: 1, borderColor: 'rgba(251,191,36,0.35)',
+    backgroundColor: T.goldDim,
+    borderWidth: 1, borderColor: T.goldBorder,
   },
-  firstBadgeText: { fontSize: 10, fontWeight: '700', color: '#FBBF24' },
+  firstBadgeText: { fontSize: 10, fontWeight: '700', color: T.gold, fontFamily: 'DMSans-Bold' },
   hotBadge: {
     paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
-    backgroundColor: 'rgba(255,99,74,0.15)',
-    borderWidth: 1, borderColor: 'rgba(255,99,74,0.35)',
+    backgroundColor: T.primaryDim,
+    borderWidth: 1, borderColor: T.primaryBorder,
   },
-  hotBadgeText:   { fontSize: 10, fontWeight: '700', color: '#FF634A' },
-  commentText:    { fontSize: 14, color: T.textSecondary, lineHeight: 21 },
-  commentGif:     { width: 160, height: 100, borderRadius: 10, marginTop: 6 },
-  commentImage:   { width: 160, height: 120, borderRadius: 10, marginTop: 6, borderWidth: 1, borderColor: T.borderStrong },
+  hotBadgeText:   { fontSize: 10, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
+  // ── WhatsApp-style chat bubble ──────────────────────────────
+  bubble: {
+    backgroundColor: T.surfaceAlt,
+    borderRadius: 16,
+    borderTopLeftRadius: 4,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: T.borderStrong,
+    maxWidth: '92%',
+    alignSelf: 'flex-start',
+  },
+  bubbleOwn: {
+    backgroundColor: T.primaryDim,
+    borderColor: T.primaryBorder,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 4,
+    alignSelf: 'flex-end',
+  },
+  commentText:    { fontSize: 14, color: T.textSecondary, lineHeight: 21, fontFamily: 'DMSans-Regular' },
+  commentTextOwn: { color: T.text },
+  commentImage:   { width: 160, height: 120, borderRadius: 10, borderWidth: 1, borderColor: T.borderStrong },
+  bubbleTime:     { fontSize: 10, color: T.textMuted, marginTop: 4, alignSelf: 'flex-end', fontFamily: 'DMSans-Regular' },
+  bubbleTimeOwn:  { color: T.textMuted },
+  audioWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: T.surfaceAlt, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start',
+  },
+  audioPlayBtn: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  audioTimeText: { fontSize: 11, color: T.textSecondary, fontWeight: '600', fontFamily: 'DMSans-SemiBold' },
   commentActions:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  commentActionsOwn:  { flexDirection: 'row-reverse' },
   commentActionsLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   commentActionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
   commentLikeBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 8 },
-  commentActionCount: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.4)' },
-  commentActionText:  { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
-  repliesCountText:   { fontSize: 12, fontWeight: '700', color: T.primary },
+  commentActionCount: { fontSize: 12, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
+  commentActionText:  { fontSize: 12, fontWeight: '600', color: T.textMuted, fontFamily: 'DMSans-SemiBold' },
+  repliesCountText:   { fontSize: 12, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
   repliesWrap:        { marginTop: 10, paddingLeft: 4 },
   pickerPanel: {
     backgroundColor: T.surfaceAlt,
@@ -738,7 +869,7 @@ const st = StyleSheet.create({
     paddingLeft: 16, paddingRight: 8, paddingVertical: 8,
     maxHeight: 90,
   },
-  input: { flex: 1, fontSize: 14, color: T.text, lineHeight: 20, paddingVertical: 2 },
+  input: { flex: 1, fontSize: 14, color: T.text, lineHeight: 20, paddingVertical: 2, fontFamily: 'DMSans-Regular' },
   imageInInput: {
     width: 30, height: 30, borderRadius: 15,
     alignItems: 'center', justifyContent: 'center', marginLeft: 4,
@@ -752,4 +883,12 @@ const st = StyleSheet.create({
     shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
   sendBtnDisabled: { opacity: 0.4 },
+  viewerBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.95)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  viewerCloseBtn: {
+    position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8,
+  },
+  viewerImage: { width: W, height: H * 0.8 },
 });

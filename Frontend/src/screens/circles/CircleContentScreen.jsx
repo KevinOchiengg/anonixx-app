@@ -21,6 +21,7 @@ import React, {
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, TextInput,
   ActivityIndicator, Image, Modal, ScrollView, KeyboardAvoidingView, Platform,
+  Dimensions, TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -30,7 +31,7 @@ import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-au
 import {
   ArrowLeft, Lock, Plus, Megaphone, X, Film, Check, ShieldCheck, Clock,
   RotateCcw, MessageCircle, Play, Pause, FileText, Image as ImageIcon,
-  Video as VideoIcon, Music, Paperclip, Send, Smile, Mic,
+  Video as VideoIcon, Music, Paperclip, Send, Smile,
 } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
@@ -40,6 +41,8 @@ import T from '../../utils/theme';
 import GifPicker from '../../components/common/GifPicker';
 import VoiceNoteRecorder from '../../components/common/VoiceNoteRecorder';
 import AnonProfileSheet from '../../components/connect/AnonProfileSheet';
+
+const { width: W, height: H } = Dimensions.get('window');
 
 // ─── Inline audio player — post audio_url or a comment's voice_url ───
 const AudioPlayer = React.memo(({ uri, compact }) => {
@@ -171,26 +174,35 @@ const AdCard = React.memo(({ ad, onPress }) => (
 ));
 
 // ─── Comment item ───────────────────────────────────────────────
-const CommentItem = React.memo(({ comment, onPressAuthor }) => (
-  <View style={s.commentRow}>
-    <TouchableOpacity onPress={() => onPressAuthor(comment)} hitSlop={HIT_SLOP} style={s.commentAvatar}>
-      <Text style={s.commentAvatarText}>{comment.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
-    </TouchableOpacity>
-    <View style={s.commentBody}>
-      <TouchableOpacity onPress={() => onPressAuthor(comment)} hitSlop={HIT_SLOP}>
-        <Text style={s.commentAuthor}>{comment.anonymous_name || 'Anonymous'}</Text>
+const CommentItem = React.memo(({ comment, onPressAuthor, onOpenImage }) => {
+  const isOwn = !!comment.is_own;
+  const mediaUri = comment.image_url || comment.gif_url;
+  return (
+    <View style={[s.commentRow, isOwn && s.commentRowOwn]}>
+      <TouchableOpacity onPress={() => onPressAuthor(comment)} hitSlop={HIT_SLOP} style={[s.commentAvatar, isOwn && s.commentAvatarOwn]}>
+        <Text style={s.commentAvatarText}>{comment.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
       </TouchableOpacity>
-      {!!comment.content && <Text style={s.commentText}>{comment.content}</Text>}
-      {!!comment.image_url && <Image source={{ uri: comment.image_url }} style={s.commentImage} resizeMode="cover" />}
-      {!!comment.gif_url && <Image source={{ uri: comment.gif_url }} style={s.commentImage} resizeMode="cover" />}
-      {!!comment.voice_url && (
-        <View style={{ marginTop: rp(6) }}>
-          <AudioPlayer uri={comment.voice_url} compact />
+      <View style={[s.commentBody, isOwn && s.commentBodyOwn]}>
+        <TouchableOpacity onPress={() => onPressAuthor(comment)} hitSlop={HIT_SLOP}>
+          <Text style={s.commentAuthor}>{isOwn ? 'You' : (comment.anonymous_name || 'Anonymous')}</Text>
+        </TouchableOpacity>
+        <View style={[s.commentBubble, isOwn && s.commentBubbleOwn]}>
+          {!!comment.content && <Text style={[s.commentText, isOwn && s.commentTextOwn]}>{comment.content}</Text>}
+          {!!mediaUri && (
+            <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenImage(mediaUri)}>
+              <Image source={{ uri: mediaUri }} style={s.commentImage} resizeMode="cover" />
+            </TouchableOpacity>
+          )}
+          {!!comment.voice_url && (
+            <View style={{ marginTop: comment.content ? rp(6) : 0 }}>
+              <AudioPlayer uri={comment.voice_url} compact />
+            </View>
+          )}
         </View>
-      )}
+      </View>
     </View>
-  </View>
-));
+  );
+});
 
 // ─── Comments sheet ─────────────────────────────────────────────
 const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountChange, onOpenProfile }) => {
@@ -201,8 +213,8 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
   const [pickedImage, setPickedImage] = useState(null);
   const [pickedGif, setPickedGif]     = useState(null);
   const [showGif, setShowGif]         = useState(false);
-  const [showRecorder, setShowRecorder] = useState(false);
   const [submitting, setSubmitting]   = useState(false);
+  const [viewerUri, setViewerUri]     = useState(null);
 
   const authHeaders = useCallback(async (json = false) => {
     const token = await AsyncStorage.getItem('token');
@@ -231,13 +243,13 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
   useEffect(() => {
     if (visible) {
       setComments([]); setText(''); setPickedImage(null); setPickedGif(null);
-      setShowGif(false); setShowRecorder(false);
+      setShowGif(false);
       load();
     }
   }, [visible, load]);
 
   const handlePickImage = useCallback(async () => {
-    setShowGif(false); setShowRecorder(false);
+    setShowGif(false);
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       showToast({ type: 'warning', message: 'Gallery access is needed.' });
@@ -256,7 +268,6 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
   }, []);
 
   const handleVoiceSend = useCallback(async ({ url, duration }) => {
-    setShowRecorder(false);
     setSubmitting(true);
     try {
       const res = await fetch(
@@ -289,6 +300,7 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
       if (pickedImage) {
         const form = new FormData();
         form.append('file', { uri: pickedImage, name: 'comment.jpg', type: 'image/jpeg' });
+        form.append('watermark', 'true');
         const upRes = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
           method: 'POST', headers: await authHeaders(), body: form,
         });
@@ -339,7 +351,7 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
           ) : (
             <ScrollView style={s.commentsList} showsVerticalScrollIndicator={false}>
               {comments.map((c) => (
-                <CommentItem key={c.id} comment={c} onPressAuthor={onOpenProfile} />
+                <CommentItem key={c.id} comment={c} onPressAuthor={onOpenProfile} onOpenImage={setViewerUri} />
               ))}
               {comments.length === 0 && (
                 <Text style={s.emptyText}>No comments yet. Say something.</Text>
@@ -348,9 +360,6 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
           )}
 
           {showGif && <GifPicker onSelect={handleSelectGif} />}
-          {showRecorder && (
-            <VoiceNoteRecorder onSend={handleVoiceSend} onCancel={() => setShowRecorder(false)} />
-          )}
 
           {(pickedImage || pickedGif) && (
             <View style={s.commentPreviewRow}>
@@ -361,38 +370,46 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
             </View>
           )}
 
-          {!showRecorder && (
-            <View style={s.commentComposerRow}>
-              <TouchableOpacity onPress={handlePickImage} hitSlop={HIT_SLOP} style={s.commentAttachBtn}>
-                <ImageIcon size={rs(18)} color={T.textMuted} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setShowGif((v) => !v); setShowRecorder(false); }} hitSlop={HIT_SLOP} style={s.commentAttachBtn}>
-                <Smile size={rs(18)} color={showGif ? T.primary : T.textMuted} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setShowRecorder(true); setShowGif(false); }} hitSlop={HIT_SLOP} style={s.commentAttachBtn}>
-                <Mic size={rs(18)} color={T.textMuted} />
-              </TouchableOpacity>
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="say something…"
-                placeholderTextColor={T.textMuted}
-                style={s.commentInput}
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                onPress={handleSubmit}
-                disabled={submitting || (!text.trim() && !pickedImage && !pickedGif)}
-                hitSlop={HIT_SLOP}
-                style={[s.commentSendBtn, { opacity: submitting || (!text.trim() && !pickedImage && !pickedGif) ? 0.4 : 1 }]}
-              >
-                {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={rs(15)} color="#fff" />}
-              </TouchableOpacity>
-            </View>
-          )}
+          <View style={s.commentComposerRow}>
+            <TouchableOpacity onPress={handlePickImage} hitSlop={HIT_SLOP} style={s.commentAttachBtn}>
+              <ImageIcon size={rs(18)} color={T.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowGif((v) => !v)} hitSlop={HIT_SLOP} style={s.commentAttachBtn}>
+              <Smile size={rs(18)} color={showGif ? T.primary : T.textMuted} />
+            </TouchableOpacity>
+            {/* Hold to record, release to send */}
+            <VoiceNoteRecorder onSend={handleVoiceSend} />
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="say something…"
+              placeholderTextColor={T.textMuted}
+              style={s.commentInput}
+              multiline
+              maxLength={500}
+            />
+            <TouchableOpacity
+              onPress={handleSubmit}
+              disabled={submitting || (!text.trim() && !pickedImage && !pickedGif)}
+              hitSlop={HIT_SLOP}
+              style={[s.commentSendBtn, { opacity: submitting || (!text.trim() && !pickedImage && !pickedGif) ? 0.4 : 1 }]}
+            >
+              {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={rs(15)} color="#fff" />}
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal visible={!!viewerUri} transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
+        <TouchableWithoutFeedback onPress={() => setViewerUri(null)}>
+          <View style={s.viewerBackdrop}>
+            <TouchableOpacity style={s.viewerCloseBtn} onPress={() => setViewerUri(null)} hitSlop={HIT_SLOP}>
+              <X size={rs(22)} color="#fff" />
+            </TouchableOpacity>
+            <Image source={{ uri: viewerUri }} style={s.viewerImage} resizeMode="contain" />
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </Modal>
   );
 });
@@ -572,6 +589,7 @@ export default function CircleContentScreen({ route, navigation }) {
       for (const uri of images) {
         const form = new FormData();
         form.append('file', { uri, name: 'circle_image.jpg', type: 'image/jpeg' });
+        form.append('watermark', 'true');
         const res = await fetch(`${API_BASE_URL}/api/v1/upload/image`, { method: 'POST', headers: await authHeaders(), body: form });
         if (!res.ok) throw new Error('Image upload failed');
         uploadedImages.push((await res.json()).url);
@@ -581,6 +599,7 @@ export default function CircleContentScreen({ route, navigation }) {
       if (videoUri) {
         const form = new FormData();
         form.append('file', { uri: videoUri, name: 'circle_video.mp4', type: 'video/mp4' });
+        form.append('watermark', 'true');
         const res = await fetch(`${API_BASE_URL}/api/v1/upload/video`, { method: 'POST', headers: await authHeaders(), body: form });
         if (!res.ok) throw new Error('Video upload failed');
         videoUrl = (await res.json()).url;
@@ -1304,15 +1323,34 @@ const s = StyleSheet.create({
   commentsSheet: { height: '75%' },
   commentsList: { flex: 1, marginTop: rp(4) },
   commentRow: { flexDirection: 'row', gap: rp(10), paddingVertical: rp(10), borderBottomWidth: 1, borderBottomColor: T.border },
+  commentRowOwn: { flexDirection: 'row-reverse' },
   commentAvatar: {
     width: rs(32), height: rs(32), borderRadius: rs(16), backgroundColor: T.primaryDim,
     alignItems: 'center', justifyContent: 'center',
   },
+  commentAvatarOwn: { borderWidth: 1, borderColor: T.primary },
   commentAvatarText: { fontSize: rf(13), fontWeight: '700', color: T.primary },
   commentBody: { flex: 1, gap: rp(3) },
+  commentBodyOwn: { alignItems: 'flex-end' },
   commentAuthor: { fontSize: rf(12), fontWeight: '700', color: T.text },
+  // WhatsApp-style chat bubble
+  commentBubble: {
+    backgroundColor: T.surfaceAlt, borderRadius: rs(16), borderTopLeftRadius: rs(4),
+    borderWidth: 1, borderColor: T.border,
+    paddingHorizontal: rp(12), paddingVertical: rp(8),
+    maxWidth: '92%', alignSelf: 'flex-start',
+  },
+  commentBubbleOwn: {
+    backgroundColor: T.primaryDim, borderColor: T.primaryBorder,
+    borderTopLeftRadius: rs(16), borderTopRightRadius: rs(4),
+    alignSelf: 'flex-end',
+  },
   commentText: { fontSize: FONT.sm, color: T.textSecondary, lineHeight: rf(19) },
-  commentImage: { width: rs(140), height: rs(100), borderRadius: RADIUS.sm, marginTop: rp(6) },
+  commentTextOwn: { color: T.text },
+  commentImage: { width: rs(140), height: rs(100), borderRadius: RADIUS.sm },
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
+  viewerCloseBtn: { position: 'absolute', top: rp(50), right: rp(20), zIndex: 10, padding: rp(8) },
+  viewerImage: { width: W, height: H * 0.8 },
   commentPreviewRow: { position: 'relative', alignSelf: 'flex-start', marginTop: rp(6) },
   commentPreviewImg: { width: rs(56), height: rs(56), borderRadius: RADIUS.sm },
   commentPreviewRemove: {

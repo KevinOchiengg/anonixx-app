@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from app.database import get_database
 from app.config import settings
 from app.dependencies import get_current_user_id
@@ -14,6 +14,26 @@ logger = logging.getLogger("uvicorn.error")
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 MAX_VIDEO_DURATION_SECONDS = 600   # 10 minutes
+
+# Soft, bottom-right "anonixx" text watermark burned into publicly-shared
+# media (drop posts, circle posts, comment images) at upload time — not
+# applied to private media (profile photos, chat/DM attachments, unlock
+# "clue" media). Callers opt in with watermark=true.
+WATERMARK_TRANSFORMATION = [{
+    "overlay": {
+        "font_family": "Arial",
+        "font_size":   36,
+        "text":        "anonixx",
+    },
+    "color":   "white",
+    "opacity": 35,
+    "gravity": "south_east",
+    "x": 18,
+    "y": 18,
+}]
+WATERMARK_TRANSFORMATION_STRING, _ = cloudinary.utils.generate_transformation_string(
+    transformation=WATERMARK_TRANSFORMATION
+)
 
 
 def _require_cloudinary_configured():
@@ -38,6 +58,11 @@ from pydantic import BaseModel as _BaseModel
 
 class _SignRequest(_BaseModel):
     resource_type: str = "image"   # "image" | "video" (also used for audio) | "raw" (generic files)
+    # Soft "anonixx" watermark burned in at upload time — only meaningful for
+    # image/video, and only set true by callers uploading publicly-shared
+    # content (drop posts, circle posts). Must be part of the signed params
+    # since the client uploads directly to Cloudinary from here on.
+    watermark: bool = False
 
 _SIGN_FOLDERS = {
     "image": "anonixx/images",
@@ -61,14 +86,20 @@ async def get_upload_signature(
     try:
         timestamp = int(time.time())
         params    = {"folder": folder, "timestamp": timestamp}
+        watermark = data.watermark and data.resource_type in ("image", "video")
+        if watermark:
+            params["transformation"] = WATERMARK_TRANSFORMATION_STRING
         signature = cloudinary.utils.api_sign_request(params, settings.CLOUDINARY_API_SECRET)
-        return {
+        response = {
             "signature":   signature,
             "timestamp":   timestamp,
             "api_key":     settings.CLOUDINARY_API_KEY,
             "cloud_name":  settings.CLOUDINARY_CLOUD_NAME,
             "folder":      folder,
         }
+        if watermark:
+            response["transformation"] = WATERMARK_TRANSFORMATION_STRING
+        return response
     except Exception as e:
         logger.error(f"Upload signature generation failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Could not generate upload signature: {str(e)}")
@@ -79,6 +110,7 @@ async def get_upload_signature(
 @router.post("/image")
 async def upload_image(
     file: UploadFile = File(...),
+    watermark: bool = Form(False),
     current_user_id: str = Depends(get_current_user_id),
 ):
     _require_cloudinary_configured()
@@ -101,6 +133,7 @@ async def upload_image(
                 # (handles HEIC from iOS, WEBP, etc.)
                 format="jpg",
                 allowed_formats=["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"],
+                **({"transformation": WATERMARK_TRANSFORMATION} if watermark else {}),
             ),
         )
         return {
@@ -147,6 +180,7 @@ async def upload_audio(
 @router.post("/video")
 async def upload_video(
     file: UploadFile = File(...),
+    watermark: bool = Form(False),
     current_user_id: str = Depends(get_current_user_id),
 ):
     _require_cloudinary_configured()
@@ -162,6 +196,7 @@ async def upload_video(
                 contents,
                 folder="anonixx/videos",
                 resource_type="video",
+                **({"transformation": WATERMARK_TRANSFORMATION} if watermark else {}),
             ),
         )
 

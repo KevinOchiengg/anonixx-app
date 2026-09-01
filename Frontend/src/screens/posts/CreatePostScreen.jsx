@@ -82,14 +82,17 @@ const PROMPTS = [
 ];
 
 const uploadToCloudinary = async (uri, resourceType = 'image', token) => {
-  // Get short-lived signed params from our backend (JWT-gated)
+  // Get short-lived signed params from our backend (JWT-gated). Drop posts
+  // are public content, so we opt into the soft "anonixx" watermark here —
+  // the transformation string comes back signed and must be echoed to
+  // Cloudinary verbatim below.
   const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body:    JSON.stringify({ resource_type: resourceType === 'video' ? 'video' : 'image' }),
+    body:    JSON.stringify({ resource_type: resourceType === 'video' ? 'video' : 'image', watermark: true }),
   });
   if (!signRes.ok) throw new Error('Could not get upload signature.');
-  const { signature, timestamp, api_key, cloud_name, folder } = await signRes.json();
+  const { signature, timestamp, api_key, cloud_name, folder, transformation } = await signRes.json();
 
   const ext      = uri.split('?')[0].split('.').pop()?.toLowerCase() || '';
   const mimeType = resourceType === 'video' ? `video/${ext || 'mp4'}` : `image/${ext || 'jpeg'}`;
@@ -99,6 +102,7 @@ const uploadToCloudinary = async (uri, resourceType = 'image', token) => {
   formData.append('timestamp', String(timestamp));
   formData.append('signature', signature);
   formData.append('folder',    folder);
+  if (transformation) formData.append('transformation', transformation);
 
   const res  = await fetch(
     `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
