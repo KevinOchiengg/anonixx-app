@@ -22,7 +22,7 @@ import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
-import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift, Cake } from 'lucide-react-native';
+import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift, Cake, ArrowLeft } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import { THEME } from '../../utils/theme';
 
@@ -232,6 +232,16 @@ export default function SignUpScreen({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
       <StarryBackground />
       <GlowOrb />
+
+      {/* Top bar — back button, top-left */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={HIT_SLOP}
+        >
+          <ArrowLeft size={rs(22)} color={THEME.text} />
+        </TouchableOpacity>
+      </View>
 
       <KeyboardAvoidingView
         style={styles.kav}
@@ -522,6 +532,7 @@ const styles = StyleSheet.create({
     borderRadius: rs(150), backgroundColor: THEME.primary,
     opacity: 0.05, top: rh(-80), right: rs(-60),
   },
+  topBar:       { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
   kav:          { flex: 1 },
   scroll:       { flex: 1 },
   scrollContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },

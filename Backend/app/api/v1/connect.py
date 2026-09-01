@@ -168,7 +168,7 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "avatar_url": user.get("avatar_url"),   # real photo if set — client falls back to initials
         "confession_count": confession_count,
         "connections_count": connections_count,
-        "here_for": here_for,               # "Relationship" | "Sex for Fun" | "Sex for Token" | "General" | null
+        "here_for": here_for,               # "Relationship" | "No Strings" | "Generous Arrangement" | "General" | null
         "reactions_received": reactions_received,
         "streak": streak_doc.get("streak", 0),
         "longest_streak": streak_doc.get("longest_streak", 0),

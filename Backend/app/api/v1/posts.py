@@ -15,6 +15,7 @@ from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
+from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.api.v1.drops import (
     update_vibe_score, send_push_notification,
     COINS_UNLOCK_COST, CASH_TO_COIN_RATE, DROP_POST_COST,
@@ -451,6 +452,9 @@ async def create_post(
                 detail=f"Posting suspended until {suspended_until.strftime('%B %d, %Y')} — a confession you posted was confirmed deceptive.",
             )
 
+    if contains_contact_info(data.content):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+
     valid_topics = [t for t in data.topics if t in AVAILABLE_TOPICS] or ["general"]
 
     poll_data = None
@@ -460,6 +464,8 @@ async def create_post(
             raise HTTPException(status_code=400, detail="Poll requires 2–4 options.")
         if not data.poll.question.strip():
             raise HTTPException(status_code=400, detail="Poll question cannot be empty.")
+        if contains_contact_info(data.poll.question) or any(contains_contact_info(o) for o in options):
+            raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
         poll_data = {
             "question": data.poll.question.strip(),
             "options": [{"text": o, "votes": 0} for o in options],
@@ -814,14 +820,35 @@ async def get_calm_feed(
     formatted_posts = await batch_format_posts(posts, current_user_id, db)
 
     final_feed = []
+    # Short, in-voice relationship/sex-ed beats dropped between posts — meant
+    # to be funny and a little disarming, not a lecture. Real information
+    # (consent, testing, boundaries, communication) delivered the way the
+    # rest of the app talks, not the way a health class does.
     divider_texts = [
-        "keep scrolling. someone here might be exactly who you're looking for.",
-        "someone wrote this at 3am, hoping the right person would read it.",
-        "real people. real desire.",
-        "say something if it hits close to home.",
-        "you've felt this too — you're just not the only one.",
-        "nobody's said this out loud until now.",
-        "this is what people actually want, once no one's watching.",
+        "consent isn't a mood killer. it's the whole point.",
+        "'not tonight' is a full sentence. no follow-up required.",
+        "get tested. it's not paranoia, it's respect.",
+        "communication is the actual foreplay.",
+        "aftercare isn't extra. it's part of it.",
+        "a good partner asks. a great one keeps asking.",
+        "boundaries aren't walls. they're directions.",
+        "the orgasm gap is real — ask more questions, not less.",
+        "protection isn't romantic. until it's the reason there's a next time.",
+        "you're allowed to change your mind mid-anything.",
+        "flirting is a skill. reading 'no' is a requirement.",
+        "your worth was never measured in who replies first.",
+    ]
+
+    # Tonal relief after a run of heavy posts — different job than the
+    # dividers above: not a beat to teach something, just a breath before
+    # the next heavy one lands.
+    mood_balancer_texts = [
+        "not everything here is heavy. some of it is just wanting.",
+        "breathe. the next one's lighter.",
+        "not every honest thing has to hurt.",
+        "some of what's real here is soft, not sad.",
+        "you're allowed to want something good, too.",
+        "this isn't just pain. it's desire too.",
     ]
 
     heavy_run = 0
@@ -834,7 +861,7 @@ async def get_calm_feed(
         final_feed.append(post)
 
         if heavy_run >= 2 and i + 1 < len(formatted_posts):
-            final_feed.append({"type": "mood_balancer", "text": "not everything here is heavy. some of it is just wanting."})
+            final_feed.append({"type": "mood_balancer", "text": random.choice(mood_balancer_texts)})
             heavy_run = 0
 
         if (i + 1) % 5 == 0 and i + 1 < len(formatted_posts):
@@ -1077,6 +1104,9 @@ async def add_to_thread(
     # Require at least one of: text, gif, or image
     if not content and not gif_url and not image_url:
         raise HTTPException(status_code=400, detail="Comment must have text, a GIF, or an image.")
+
+    if contains_contact_info(content):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
 
     try:
         post = await db["posts"].find_one({"_id": ObjectId(post_id)})
@@ -1337,6 +1367,28 @@ async def get_available_topics():
             {"id": "health",        "name": "🏥 Health",        "emoji": "🏥"},
         ]
     }
+
+
+# ==================== SINGLE POST FETCH ====================
+# Hydrates a full post object from just an id — e.g. a circle ad only stores
+# a drop_id, so the client fetches the post here before navigating to
+# PostDetail (there's no working id-only deep link route to rely on instead).
+
+@router.get("/{post_id}")
+async def get_post_by_id(
+    post_id: str,
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database),
+):
+    try:
+        post = await db["posts"].find_one({"_id": ObjectId(post_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if not post:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+
+    formatted = await batch_format_posts([post], current_user_id, db)
+    return formatted[0]
 
 
 # ==================== OPEN / DEEP LINK REDIRECT ====================

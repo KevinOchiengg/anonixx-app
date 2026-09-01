@@ -216,7 +216,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
         }),
       });
       if (!res.ok) throw new Error('Save failed');
-      showToast({ type: 'success', message: 'Chat interface saved.' });
+      showToast({ type: 'success', message: 'Your room, your rules. Saved.' });
       navigation.replace ? navigation.replace('MessagesMain') : navigation.navigate('MessagesMain');
     } catch {
       showToast({ type: 'error', message: 'Could not save. Try again.' });

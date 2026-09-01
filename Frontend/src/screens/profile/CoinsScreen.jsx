@@ -317,7 +317,7 @@ export default function CoinsScreen({ navigation }) {
   const ListEmpty = useMemo(() => (
     <View style={styles.emptyWrap}>
       <Coins size={rs(40)} color={THEME.border} />
-      <Text style={styles.emptyTitle}>No transactions yet</Text>
+      <Text style={styles.emptyTitle}>Nothing spent or earned yet</Text>
       <Text style={styles.emptySub}>
         Claim your daily reward or top up to get started.
       </Text>

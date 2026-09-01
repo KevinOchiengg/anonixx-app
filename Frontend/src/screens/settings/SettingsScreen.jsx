@@ -86,8 +86,8 @@ export default function SettingsScreen({ navigation }) {
   const handleDeleteAccount = useCallback(() => {
     showToast({
       type:    'warning',
-      title:   'Are you sure?',
-      message: 'Contact support to permanently delete your account and all your data.',
+      title:   'This is permanent',
+      message: 'Your account and everything in it get erased for good. Contact support to do it.',
     });
   }, [showToast]);
 

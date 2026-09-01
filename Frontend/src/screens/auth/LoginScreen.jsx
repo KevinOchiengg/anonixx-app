@@ -2,7 +2,6 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -13,8 +12,6 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
-
-const LOGO = require('../../../assets/logo.png');
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { login } from '../../store/slices/authSlice';
@@ -155,6 +152,22 @@ export default function LoginScreen({ navigation }) {
       <StarryBackground />
       <GlowOrb />
 
+      {/* Top bar — back button, top-left */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={HIT_SLOP}
+        >
+          <ArrowLeft size={rs(22)} color={THEME.text} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Brand — top-left, matching SignUpScreen */}
+      <View style={styles.brandMark}>
+        <View style={styles.brandDot} />
+        <Text style={styles.brandText}>ANONIXX</Text>
+      </View>
+
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -164,9 +177,6 @@ export default function LoginScreen({ navigation }) {
           opacity:   fadeAnim,
           transform: [{ translateY: slideAnim }],
         }]}>
-
-          {/* Logo */}
-          <Image source={LOGO} style={styles.logoImage} resizeMode="contain" />
 
           {/* Header */}
           <View style={styles.header}>
@@ -306,6 +316,8 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.background },
 
+  topBar: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
+
   glowOrb: {
     position:        'absolute',
     width:           rs(320),
@@ -325,12 +337,9 @@ const styles = StyleSheet.create({
     paddingBottom:     SPACING.lg,
   },
 
-  logoImage: {
-    width:        200,
-    height:       54,
-    alignSelf:    'center',
-    marginBottom: SPACING.xxl,
-  },
+  brandMark: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
+  brandDot:  { width: rs(8), height: rs(8), borderRadius: rs(4), backgroundColor: THEME.primary, shadowColor: THEME.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: rs(6), elevation: 4 },
+  brandText: { fontSize: rf(11), fontWeight: '800', fontFamily: 'DMSans-Bold', color: THEME.primary, letterSpacing: rs(3), opacity: 0.8 },
 
   header:   { marginBottom: SPACING.xl },
   title: {

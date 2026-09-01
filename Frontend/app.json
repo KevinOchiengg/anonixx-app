@@ -8,8 +8,6 @@
     "scheme": "anonixx",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
       "backgroundColor": "#0b0f18"
     },
     "assetBundlePatterns": [

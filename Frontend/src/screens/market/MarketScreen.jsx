@@ -120,7 +120,7 @@ const MarketListCard = React.memo(({ item, onPress }) => {
 const EmptyState = React.memo(() => (
   <View style={styles.emptyWrap}>
     <ShoppingBag size={rs(40)} color={THEME.border} />
-    <Text style={styles.emptyTitle}>The market is empty</Text>
+    <Text style={styles.emptyTitle}>Nothing dropped here yet</Text>
     <Text style={styles.emptySub}>
       Check back soon — Anonixx posts exclusive intel and stories regularly.
     </Text>

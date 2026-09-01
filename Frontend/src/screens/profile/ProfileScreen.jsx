@@ -113,14 +113,14 @@ export default function ProfileScreen({ navigation }) {
             onPress={() => navigation.navigate('Premium')}
           >
             <LinearGradient
-              colors={['#a855f7', '#14b8a6']}
+              colors={[THEME.primary, THEME.gold]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.premiumCard}
             >
-              <Text style={styles.premiumTitle}>👑 Upgrade to Premium</Text>
+              <Text style={styles.premiumTitle}>👑 Anonixx Premium</Text>
               <Text style={styles.premiumSubtitle}>
-                Unlock exclusive features
+                Cheaper unlocks. Bigger payouts. No ads.
               </Text>
             </LinearGradient>
           </TouchableOpacity>

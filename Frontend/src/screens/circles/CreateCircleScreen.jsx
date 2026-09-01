@@ -118,7 +118,6 @@ export default function CreateCircleScreen({ navigation }) {
   const [color,     setColor]     = useState(AURA_COLORS[0]);
   const [avatarUri, setAvatarUri] = useState(null);
   const [bannerUri, setBannerUri] = useState(null);
-  const [joinCost,  setJoinCost]  = useState('');
   const [facebookUrl,  setFacebookUrl]  = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
   const [snapchatUrl,  setSnapchatUrl]  = useState('');
@@ -221,7 +220,6 @@ export default function CreateCircleScreen({ navigation }) {
           aura_color: color,
           avatar_url: avatarUrl,
           banner_url: bannerUrl,
-          join_cost:  parseInt(joinCost, 10) || 0,
           facebook_url:  facebookUrl.trim()  || null,
           instagram_url: instagramUrl.trim() || null,
           snapchat_url:  snapchatUrl.trim()  || null,
@@ -239,7 +237,7 @@ export default function CreateCircleScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [name, bio, category, color, avatarUri, bannerUri, joinCost, facebookUrl, instagramUrl, snapchatUrl, navigation, showToast]);
+  }, [name, bio, category, color, avatarUri, bannerUri, facebookUrl, instagramUrl, snapchatUrl, navigation, showToast]);
 
   // ──────────────────────────────────────────────────────────────────────────
   return (
@@ -352,7 +350,7 @@ export default function CreateCircleScreen({ navigation }) {
               <TextInput
                 value={category}
                 onChangeText={setCategory}
-                placeholder="e.g. love, healing, debate, midnight…"
+                placeholder="e.g. photos, videos, audio, confessions, music, comedy, art, spicy…"
                 placeholderTextColor={T.textMuted}
                 style={styles.input}
                 maxLength={30}
@@ -382,21 +380,6 @@ export default function CreateCircleScreen({ navigation }) {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
-
-            {/* ── Join cost ── */}
-            <View style={styles.field}>
-              <SectionLabel label="Join cost (coins)" />
-              <Text style={styles.fieldHint}>Leave blank or 0 to keep it free to join.</Text>
-              <TextInput
-                value={joinCost}
-                onChangeText={(v) => setJoinCost(v.replace(/[^0-9]/g, ''))}
-                placeholder="0"
-                placeholderTextColor={T.textMuted}
-                style={styles.input}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
             </View>
 
             {/* ── Social links ── */}

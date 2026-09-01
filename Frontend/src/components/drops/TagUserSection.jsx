@@ -228,7 +228,7 @@ export default function TagUserSection({ taggedUser, onTag, onClear }) {
 
       {/* No results */}
       {!searchLoading && userQuery.length > 0 && userResults.length === 0 && !taggedUser && (
-        <Text style={s.noResults}>No users found for "{userQuery}"</Text>
+        <Text style={s.noResults}>nobody by that name.</Text>
       )}
 
       {/* Confirmed tag strip */}

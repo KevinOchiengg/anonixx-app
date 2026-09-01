@@ -35,11 +35,6 @@ import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
 import CirclesScreen from '../screens/circles/CirclesScreen';
 import CircleProfileScreen from '../screens/circles/CircleProfileScreen';
 import CreateCircleScreen from '../screens/circles/CreateCircleScreen';
-import ScheduleEventScreen from '../screens/circles/ScheduleEventScreen';
-import WaitingRoomScreen from '../screens/circles/WaitingRoomScreen';
-import CircleLiveScreen from '../screens/circles/CircleLiveScreen';
-import CircleAudioRoomScreen from '../screens/circles/CircleAudioRoomScreen';
-import CircleDashboardScreen from '../screens/circles/CircleDashboardScreen';
 import CircleContentScreen from '../screens/circles/CircleContentScreen';
 
 // Messages
@@ -127,11 +122,6 @@ function CirclesStack() {
       <Stack.Screen name="CirclesMain" component={CirclesScreen} />
       <Stack.Screen name="CircleProfile" component={CircleProfileScreen} />
       <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
-      <Stack.Screen name="ScheduleEvent" component={ScheduleEventScreen} />
-      <Stack.Screen name="WaitingRoom" component={WaitingRoomScreen} />
-      <Stack.Screen name="CircleLive" component={CircleLiveScreen} />
-      <Stack.Screen name="CircleAudioRoom" component={CircleAudioRoomScreen} />
-      <Stack.Screen name="CircleDashboard" component={CircleDashboardScreen} />
       <Stack.Screen name="CircleContent" component={CircleContentScreen} />
     </Stack.Navigator>
   );

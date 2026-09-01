@@ -350,7 +350,7 @@ export default function CreatePostScreen({ route, navigation }) {
           body:    JSON.stringify({ content: content.trim() }),
         });
         if (!res.ok) throw new Error();
-        showToast({ type: 'success', message: 'Drop updated.' });
+        showToast({ type: 'success', message: 'Updated. Still yours.' });
         navigation.goBack();
         return;
       }

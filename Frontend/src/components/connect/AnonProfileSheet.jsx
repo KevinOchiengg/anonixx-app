@@ -40,10 +40,10 @@ const GENDER_BADGE = {
 // Mirrors INTENT_LABELS in Backend/app/api/v1/drops.py / CARD_INTENTS in
 // DropCardRenderer.jsx — same vocabulary, just with an emoji for the pill.
 const HERE_FOR_EMOJI = {
-  'Relationship':  '🌹',
-  'Sex for Fun':   '🔥',
-  'Sex for Token': '🪙',
-  'General':       '🌑',
+  'Relationship':          '🌹',
+  'No Strings':            '🔥',
+  'Generous Arrangement':  '🪙',
+  'General':               '🌑',
 };
 
 // ─── Stat Item ────────────────────────────────────────────────
@@ -56,7 +56,7 @@ const StatItem = React.memo(({ value, label }) => (
 
 // ─── Main Component ───────────────────────────────────────────
 export default function AnonProfileSheet({
-  visible, anonymousName, userId, post, onClose, navigation,
+  visible, anonymousName, userId, post, linkupTarget, onClose, navigation,
 }) {
   const { showToast }  = useToast();
   const [profile,      setProfile]      = useState(null);
@@ -119,7 +119,7 @@ export default function AnonProfileSheet({
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        setError('Sign in to view profiles.');
+        setError('Sign in to see who they are.');
         return;
       }
       // Prefer the id route — anonymous names are randomly generated and not
@@ -153,15 +153,16 @@ export default function AnonProfileSheet({
   }, [visible, anonymousName]);
 
   // ── Link up — the only way to actually reach someone. Coin-gated on
-  // PostUnlockScreen itself; this just gets you there with the post that
-  // opened this sheet in the first place. ──────────────────────
+  // PostUnlockScreen itself; this just gets you there with either the post
+  // that opened this sheet, or a lightweight linkupTarget (e.g. a Circle
+  // comment) when there's no post object to hand over. ─────────
   const handleLinkUp = useCallback(() => {
-    if (!post) return;
+    if (!post && !linkupTarget) return;
     closeSheet();
     setTimeout(() => {
-      navigation?.navigate('PostUnlock', { post });
+      navigation?.navigate('PostUnlock', post ? { post } : { linkupTarget });
     }, 300);
-  }, [post, closeSheet, navigation]);
+  }, [post, linkupTarget, closeSheet, navigation]);
 
   const accentColor = T.primary;
 

@@ -17,6 +17,7 @@ import { ToastProvider } from './src/components/ui/Toast';
 import { UnreadProvider } from './src/context/UnreadContext';
 import { STRIPE_PUBLISHABLE_KEY } from './src/config/api';
 import { FONT_MAP } from './src/config/fonts';
+import AppLoadingScreen from './src/components/common/AppLoadingScreen';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -56,11 +57,11 @@ const styles = StyleSheet.create({
 export default function App() {
   const [fontsLoaded, fontError] = useFonts(FONT_MAP);
 
-  // Keep the native splash screen (app.json's `splash` config) up until
-  // fonts are ready — every screen in the app references these font
-  // families, so rendering before they load would flash system-font text.
+  // The native splash (app.json's `splash` config) hands off to this the
+  // instant JS takes over — custom fonts aren't ready yet, so this briefly
+  // renders in the system font before Fraunces/DM Sans finish loading.
   if (!fontsLoaded && !fontError) {
-    return null;
+    return <AppLoadingScreen />;
   }
 
   return (

@@ -1,10 +1,10 @@
 /**
  * CirclesScreen.jsx
- * Browse and discover Circles — anonymous audio/live rooms.
+ * Browse and discover Circles — admin-curated content feeds.
  *
  * Design: Dark city at night. Each Circle is a light in the darkness.
- * Live circles pulse. Everything breathes slowly.
- * The user feels like they're about to step into something real.
+ * Everything breathes slowly. The user feels like they're about to step
+ * into something real.
  */
 import React, {
   useState, useEffect, useCallback, useRef, useMemo,
@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Plus, Search, Radio, X, Coins, ChevronRight } from 'lucide-react-native';
+import { Plus, Search, X, ChevronRight } from 'lucide-react-native';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
 } from '../../utils/responsive';
@@ -28,16 +28,19 @@ import T from '../../utils/theme';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ─── Static data ──────────────────────────────────────────────────────────────
+// Content-type categories — Circles are curated feeds now, not live rooms,
+// so these describe what a circle mostly posts rather than a conversation
+// vibe. Keep in sync with CreateCircleScreen.jsx's category field hint.
 const CATEGORIES = [
-  { id: 'all',        label: 'All',        emoji: '✨' },
-  { id: 'love',       label: 'Love',       emoji: '💔' },
-  { id: 'fun',        label: 'Fun',        emoji: '😈' },
-  { id: 'confession', label: 'Confess',    emoji: '🕯️' },
-  { id: 'support',    label: 'Comfort',    emoji: '🤍' },
-  { id: 'debate',     label: 'Hot Takes',  emoji: '🔥' },
-  { id: 'music',      label: 'Music',      emoji: '🎵' },
-  { id: 'spicy',      label: 'Spicy',      emoji: '🌶️' },
-  { id: 'midnight',   label: 'Midnight',   emoji: '🌙' },
+  { id: 'all',         label: 'All',         emoji: '✨' },
+  { id: 'photos',      label: 'Photos',      emoji: '📸' },
+  { id: 'videos',      label: 'Videos',      emoji: '🎬' },
+  { id: 'audio',       label: 'Audio',       emoji: '🎙️' },
+  { id: 'confessions', label: 'Confessions', emoji: '🕯️' },
+  { id: 'music',       label: 'Music',       emoji: '🎵' },
+  { id: 'comedy',      label: 'Comedy',      emoji: '😂' },
+  { id: 'art',         label: 'Art',         emoji: '🎨' },
+  { id: 'spicy',       label: 'Spicy',       emoji: '🌶️' },
 ];
 
 const TABS = ['Discover', 'My Circles'];
@@ -45,64 +48,15 @@ const TABS = ['Discover', 'My Circles'];
 const EMPTY_COPY = {
   discover: {
     title:    'The dark is quiet tonight.',
-    subtitle: 'No circles have opened yet.\nBe the first voice in the room.',
-    cta:      'Open the Room',
+    subtitle: 'No circles have opened yet.\nBe the first to start one.',
+    cta:      'Start a Circle',
   },
   mine: {
-    title:    "You haven't entered any circles.",
-    subtitle: 'Find a circle that speaks to you\nand step inside.',
-    cta:      "See Who's Talking",
+    title:    "You aren't following any circles.",
+    subtitle: 'Find a circle that speaks to you\nand follow along.',
+    cta:      'Discover Circles',
   },
 };
-
-// ─── Live Pulse Animation ─────────────────────────────────────────────────────
-const LivePulse = React.memo(() => {
-  const pulse1 = useRef(new Animated.Value(1)).current;
-  const pulse2 = useRef(new Animated.Value(1)).current;
-  const op1    = useRef(new Animated.Value(0.6)).current;
-  const op2    = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulse1, { toValue: 1.8, duration: 1200, useNativeDriver: true }),
-          Animated.timing(pulse1, { toValue: 1,   duration: 0,    useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(op1, { toValue: 0, duration: 1200, useNativeDriver: true }),
-          Animated.timing(op1, { toValue: 0.6, duration: 0, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.delay(400),
-          Animated.timing(pulse2, { toValue: 1.8, duration: 1200, useNativeDriver: true }),
-          Animated.timing(pulse2, { toValue: 1,   duration: 0,    useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.delay(400),
-          Animated.timing(op2, { toValue: 0, duration: 1200, useNativeDriver: true }),
-          Animated.timing(op2, { toValue: 0.3, duration: 0, useNativeDriver: true }),
-        ]),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-
-  return (
-    <View style={styles.pulseContainer}>
-      <Animated.View style={[
-        styles.pulseRing,
-        { transform: [{ scale: pulse1 }], opacity: op1 }
-      ]} />
-      <Animated.View style={[
-        styles.pulseRing,
-        { transform: [{ scale: pulse2 }], opacity: op2 }
-      ]} />
-      <View style={styles.pulseDot} />
-    </View>
-  );
-});
 
 // ─── Circle Card ──────────────────────────────────────────────────────────────
 const CircleCard = React.memo(({ circle, index, onPress }) => {
@@ -148,8 +102,6 @@ const CircleCard = React.memo(({ circle, index, onPress }) => {
 
   const handlePress = useCallback(() => onPress(circle.id), [circle.id, onPress]);
 
-  const isLive    = circle.is_live;
-  const isOpen    = circle.room_open && !isLive;
   const auraColor = circle.aura_color ?? T.primary;
 
   return (
@@ -164,12 +116,7 @@ const CircleCard = React.memo(({ circle, index, onPress }) => {
         hitSlop={HIT_SLOP}
         activeOpacity={1}
       >
-        {/* Glow border when live */}
-        {isLive && (
-          <View style={[styles.cardGlowBorder, { borderColor: auraColor + '45' }]} />
-        )}
-
-        <View style={[styles.card, { borderColor: auraColor + (isLive ? '55' : '22') }]}>
+        <View style={[styles.card, { borderColor: auraColor + '22' }]}>
           {/* Banner — the circle's own photo, or its aura color as a gradient
               wash when it hasn't set one. Every circle reads as "designed"
               either way, never a blank strip. */}
@@ -191,22 +138,6 @@ const CircleCard = React.memo(({ circle, index, onPress }) => {
               pointerEvents="none"
             />
 
-            {(isLive || isOpen) && (
-              <View style={styles.bannerTopRow} pointerEvents="none">
-                {isLive ? (
-                  <View style={styles.liveBadge}>
-                    <Radio size={rs(9)} color={T.live} />
-                    <Text style={styles.liveBadgeText}>LIVE</Text>
-                  </View>
-                ) : (
-                  <View style={styles.openBadge}>
-                    <View style={styles.openDot} />
-                    <Text style={styles.openBadgeText}>OPEN</Text>
-                  </View>
-                )}
-              </View>
-            )}
-
             <View style={styles.bannerBottomRow}>
               <View style={styles.avatarRing}>
                 <View style={[styles.avatarWrap, { backgroundColor: auraColor + '35' }]}>
@@ -217,7 +148,6 @@ const CircleCard = React.memo(({ circle, index, onPress }) => {
                       <Text style={styles.avatarEmoji}>{circle.avatar_emoji ?? '🎭'}</Text>
                     )}
                   </View>
-                  {isLive && <LivePulse />}
                 </View>
               </View>
               <Text style={styles.bannerName} numberOfLines={1}>
@@ -241,19 +171,13 @@ const CircleCard = React.memo(({ circle, index, onPress }) => {
                 <View style={styles.yourBadge}>
                   <Text style={styles.yourBadgeText}>yours</Text>
                 </View>
-              ) : circle.is_member ? (
+              ) : circle.is_following ? (
                 <View style={styles.memberBadge}>
-                  <Text style={styles.memberBadgeText}>inside</Text>
-                </View>
-              ) : circle.join_cost > 0 ? (
-                <View style={styles.pricePill}>
-                  <Coins size={rs(11)} color={T.gold} strokeWidth={2} />
-                  <Text style={styles.pricePillText}>{circle.join_cost}</Text>
-                  <ChevronRight size={rs(11)} color={T.gold} strokeWidth={2.5} />
+                  <Text style={styles.memberBadgeText}>Following</Text>
                 </View>
               ) : (
                 <View style={styles.freePill}>
-                  <Text style={styles.freePillText}>Free entry</Text>
+                  <Text style={styles.freePillText}>Follow</Text>
                   <ChevronRight size={rs(11)} color={T.textSecondary} strokeWidth={2.5} />
                 </View>
               )}
@@ -389,7 +313,7 @@ export default function CirclesScreen({ navigation }) {
 
       const [discoverRes, myRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v1/circles/?${params}`, { headers }),
-        fetch(`${API_BASE_URL}/api/v1/circles/my/joined`, { headers }),
+        fetch(`${API_BASE_URL}/api/v1/circles/my/following`, { headers }),
       ]);
 
       if (discoverRes.ok) {
@@ -409,14 +333,6 @@ export default function CirclesScreen({ navigation }) {
   }, [activeCategory, showToast]);
 
   useEffect(() => { fetchCircles(); }, [fetchCircles]);
-
-  // Live activity — a small proof-of-life line under the header, since
-  // "who's actually here right now" is the thing that makes a discovery
-  // screen feel alive instead of a static directory.
-  const liveCount = useMemo(
-    () => circles.filter(c => c.is_live).length,
-    [circles]
-  );
 
   // ── Search filter ─────────────────────────────────────────────────────────
   const displayCircles = useMemo(() => {
@@ -497,14 +413,6 @@ export default function CirclesScreen({ navigation }) {
               <Text style={styles.headerSub}>
                 where strangers speak their truth
               </Text>
-              {activeTab === 0 && liveCount > 0 && (
-                <View style={styles.liveNowRow}>
-                  <View style={styles.liveNowDot} />
-                  <Text style={styles.liveNowText}>
-                    {liveCount} {liveCount === 1 ? 'circle is' : 'circles are'} live right now
-                  </Text>
-                </View>
-              )}
             </>
           )}
         </View>
@@ -663,24 +571,6 @@ const styles = StyleSheet.create({
     fontFamily: 'PlayfairDisplay-Italic',
     letterSpacing: 0.2,
   },
-  liveNowRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           rp(5),
-    marginTop:     rp(6),
-  },
-  liveNowDot: {
-    width:           rs(6),
-    height:          rs(6),
-    borderRadius:    rs(3),
-    backgroundColor: T.live,
-  },
-  liveNowText: {
-    fontSize:      rf(11),
-    color:         T.live,
-    fontFamily:    'DMSans-SemiBold',
-    letterSpacing: 0.1,
-  },
   headerRight: {
     flexDirection:  'row',
     alignItems:     'center',
@@ -816,16 +706,6 @@ const styles = StyleSheet.create({
   // Circle card — banner-led "poster" cards, the circle's own photo (or its
   // aura color as a gradient wash) doing the work a plain row list can't.
   cardWrapper: {},
-  cardGlowBorder: {
-    position:     'absolute',
-    top:          -1,
-    left:         -1,
-    right:        -1,
-    bottom:       -1,
-    borderRadius: RADIUS.lg + 1,
-    borderWidth:  1,
-    zIndex:       0,
-  },
   card: {
     backgroundColor: T.surface,
     borderRadius:    RADIUS.lg,
@@ -842,11 +722,6 @@ const styles = StyleSheet.create({
   },
   bannerImg: { width: '100%', height: '100%' },
   bannerScrim: { ...StyleSheet.absoluteFillObject },
-  bannerTopRow: {
-    position: 'absolute',
-    top:      SPACING.sm,
-    right:    SPACING.sm,
-  },
   bannerBottomRow: {
     position: 'absolute',
     left:  SPACING.sm,
@@ -921,46 +796,7 @@ const styles = StyleSheet.create({
     flex:       1,
   },
 
-  // Badges — live over the banner
-  liveBadge: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             rp(3),
-    backgroundColor: 'rgba(255,99,74,0.22)',
-    borderWidth:     1,
-    borderColor:     'rgba(255,99,74,0.5)',
-    paddingHorizontal: rp(7),
-    paddingVertical:   rp(3),
-    borderRadius:    RADIUS.sm,
-  },
-  liveBadgeText: {
-    fontSize:    rf(9),
-    fontWeight:  '800',
-    fontFamily:  'DMSans-Bold',
-    color:       '#fff',
-    letterSpacing: 0.8,
-  },
-  openBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: rp(4),
-    backgroundColor: 'rgba(76,175,80,0.22)',
-    borderWidth:     1,
-    borderColor:     'rgba(76,175,80,0.5)',
-    paddingHorizontal: rp(7),
-    paddingVertical:   rp(3),
-    borderRadius:    RADIUS.sm,
-  },
-  openDot: {
-    width: rs(5), height: rs(5), borderRadius: rs(3), backgroundColor: T.open,
-  },
-  openBadgeText: {
-    fontSize:    rf(9),
-    fontWeight:  '800',
-    fontFamily:  'DMSans-Bold',
-    color:       '#fff',
-    letterSpacing: 0.8,
-  },
+  // Badges
   yourBadge: {
     backgroundColor: T.primaryDim,
     borderWidth:     1,
@@ -990,24 +826,6 @@ const styles = StyleSheet.create({
     color:      T.textMuted,
   },
 
-  // Price — the one thing a discovery card for paid communities can't hide
-  pricePill: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             rp(4),
-    backgroundColor: T.goldBg,
-    borderWidth:     1,
-    borderColor:     T.goldBorder,
-    paddingHorizontal: rp(8),
-    paddingVertical:   rp(3),
-    borderRadius:    RADIUS.sm,
-  },
-  pricePillText: {
-    fontSize:   rf(11),
-    fontWeight: '800',
-    fontFamily: 'DMSans-Bold',
-    color:      T.gold,
-  },
   freePill: {
     flexDirection:   'row',
     alignItems:      'center',
@@ -1024,31 +842,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'DMSans-Bold',
     color:      T.textSecondary,
-  },
-
-  // Live pulse — sits on the avatar's corner, scaled to the smaller banner avatar
-  pulseContainer: {
-    position:       'absolute',
-    bottom:         -rp(1),
-    right:          -rp(1),
-    width:          rs(13),
-    height:         rs(13),
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-  pulseRing: {
-    position:        'absolute',
-    width:           rs(13),
-    height:          rs(13),
-    borderRadius:    rs(7),
-    borderWidth:     1.5,
-    borderColor:     T.primary,
-  },
-  pulseDot: {
-    width:           rs(7),
-    height:          rs(7),
-    borderRadius:    rs(4),
-    backgroundColor: T.primary,
   },
 
   // Skeleton — mirrors the banner-led card shape while loading

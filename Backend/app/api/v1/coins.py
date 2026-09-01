@@ -47,7 +47,6 @@ def _now() -> datetime:
 SPEND_COSTS = {
     "connect_unlock": 60,
     "drop_reveal":    30,
-    "circle_entry":   20,
     "streak_freeze":  50,
 }
 
@@ -184,9 +183,8 @@ async def request_withdrawal(
 ):
     """
     Queue a cash withdrawal for coins earned via drop-unlock revenue share.
-    Mirrors the circle_payouts accumulator pattern in circles.py — coins are
-    debited immediately, the request lands in `withdrawal_requests` as
-    "pending", and an admin pays it out manually (no automated M-Pesa B2C
+    Coins are debited immediately, the request lands in `withdrawal_requests`
+    as "pending", and an admin pays it out manually (no automated M-Pesa B2C
     integration exists yet). If a request is later rejected, the coins
     should be credited back via `credit_coins(reason="withdrawal_request")`
     — that reversal path is an admin-tool follow-up, not built here.

@@ -71,7 +71,7 @@ export const CARD_INTENTS = {
     moodColor: '#C48A98', identityColor: '#FF3B7A',
   },
   'no-strings': {
-    label: 'Sex for Fun',
+    label: 'No Strings',
     emoji: '🔥',
     pattern: 'streaks',
     moodTag: 'reckless',
@@ -81,7 +81,7 @@ export const CARD_INTENTS = {
     moodColor: '#C97A7A', identityColor: '#FF1744',
   },
   'just-talk': {
-    label: 'Sex for Token',
+    label: 'Generous Arrangement',
     emoji: '🪙',
     pattern: 'ripples',
     moodTag: 'quiet',

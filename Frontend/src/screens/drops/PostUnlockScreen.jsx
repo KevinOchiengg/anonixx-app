@@ -59,10 +59,20 @@ const uploadToCloudinary = async (uri, resourceType, token) => {
 };
 
 export default function PostUnlockScreen({ route, navigation }) {
-  const { post } = route.params ?? {};
+  const { post, linkupTarget } = route.params ?? {};
   const dispatch = useDispatch();
   const { showToast } = useToast();
   const coinBalance = useSelector((state) => state.coins.balance);
+
+  // A post carries its own id/name/content; a linkupTarget (e.g. a Circle
+  // comment) is a lighter shape — { target_type, target_id, anonymous_name,
+  // preview_text } — since there's no full post object to hand over. Either
+  // way this screen just needs a target_type/target_id to send and a name/
+  // snippet to display.
+  const targetType    = post ? 'post' : (linkupTarget?.target_type || 'post');
+  const targetId      = post ? post.id : linkupTarget?.target_id;
+  const displayName   = post ? post.anonymous_name : linkupTarget?.anonymous_name;
+  const displayText   = post ? post.content : linkupTarget?.preview_text;
 
   const [unlocking, setUnlocking] = useState(false);
 
@@ -123,12 +133,12 @@ export default function PostUnlockScreen({ route, navigation }) {
   }, []);
 
   const handleUnlock = useCallback(async () => {
-    if (unlocking || !post?.id) return;
+    if (unlocking || !targetId) return;
     setUnlocking(true);
     try {
       const token = await AsyncStorage.getItem('token');
 
-      const body = { target_type: 'post', target_id: post.id, payment_method: 'coins' };
+      const body = { target_type: targetType, target_id: targetId, payment_method: 'coins' };
       if (mediaUri && mediaType) {
         try {
           body.media_url = await uploadToCloudinary(mediaUri, mediaType, token);
@@ -162,10 +172,10 @@ export default function PostUnlockScreen({ route, navigation }) {
       if (requestId) {
         navigation.replace('UnlockWaitingScreen', {
           requestId,
-          targetType: 'post',
-          targetId: post.id,
-          ownerAnonymousName: post.anonymous_name,
-          confessionSnippet: post.content,
+          targetType,
+          targetId,
+          ownerAnonymousName: displayName,
+          confessionSnippet: displayText,
         });
         return;
       }
@@ -181,7 +191,7 @@ export default function PostUnlockScreen({ route, navigation }) {
     } finally {
       setUnlocking(false);
     }
-  }, [unlocking, post?.id, post?.anonymous_name, post?.content, mediaUri, mediaType, mediaDuration, navigation, showToast]);
+  }, [unlocking, targetType, targetId, displayName, displayText, mediaUri, mediaType, mediaDuration, navigation, showToast]);
 
   const canAfford = coinBalance >= UNLOCK_COST;
 
@@ -199,16 +209,16 @@ export default function PostUnlockScreen({ route, navigation }) {
             <Image source={{ uri: post.avatar_url }} style={s.avatarImage} />
           ) : (
             <Text style={s.avatarInitial}>
-              {post?.anonymous_name?.[0]?.toUpperCase() || 'A'}
+              {displayName?.[0]?.toUpperCase() || 'A'}
             </Text>
           )}
         </View>
 
-        <Text style={s.authorName}>{post?.anonymous_name || 'Anonymous'}</Text>
+        <Text style={s.authorName}>{displayName || 'Anonymous'}</Text>
 
-        {!!post?.content && (
+        {!!displayText && (
           <Text style={s.confession} numberOfLines={6}>
-            &ldquo;{post.content}&rdquo;
+            &ldquo;{displayText}&rdquo;
           </Text>
         )}
 

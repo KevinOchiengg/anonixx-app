@@ -32,11 +32,11 @@ import { useToast }  from '../../components/ui/Toast';
 import { useAuth }   from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
+import GifPicker from '../../components/common/GifPicker';
 
 const { width: W, height: H } = Dimensions.get('window');
 
 // ─── GIF / Emoji config ───────────────────────────────────────
-const TENOR_API_KEY = 'YOUR_TENOR_API_KEY';
 const EMOJI_CATEGORIES = [
   { label: '🔥',  emojis: ['🔥','💯','⚡','✨','💫','🌙','🌚','🌝','👀','💀','👻','🤡','🫠','🥶','🥵'] },
   { label: '😂',  emojis: ['😂','🤣','😭','😍','🥰','😘','😎','🥹','😳','🤯','😱','🤬','😡','🥺','😤'] },
@@ -97,66 +97,6 @@ const EmojiPicker = React.memo(({ onSelect }) => {
           </TouchableOpacity>
         ))}
       </View>
-    </View>
-  );
-});
-
-// ─── GIF Picker ───────────────────────────────────────────────
-const GifPicker = React.memo(({ onSelect }) => {
-  const [query,   setQuery]   = useState('');
-  const [gifs,    setGifs]    = useState([]);
-  const [loading, setLoading] = useState(false);
-  const searchRef = useRef(null);
-
-  useEffect(() => {
-    searchGifs('');
-    setTimeout(() => searchRef.current?.focus(), 150);
-  }, []);
-
-  const searchGifs = useCallback(async (q) => {
-    setLoading(true);
-    try {
-      const endpoint = q.trim()
-        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${TENOR_API_KEY}&limit=20&media_filter=gif`
-        : `https://tenor.googleapis.com/v2/featured?key=${TENOR_API_KEY}&limit=20&media_filter=gif`;
-      const res  = await fetch(endpoint);
-      const data = await res.json();
-      setGifs(data.results ?? []);
-    } catch {}
-    finally { setLoading(false); }
-  }, []);
-
-  const handleSearch = useCallback((t) => {
-    setQuery(t);
-    if (t.length === 0 || t.length >= 2) searchGifs(t);
-  }, [searchGifs]);
-
-  return (
-    <View style={csStyles.pickerPanel}>
-      <View style={csStyles.gifSearchRow}>
-        <TextInput ref={searchRef} value={query} onChangeText={handleSearch}
-          placeholder="Search GIFs…" placeholderTextColor={T.textMuted}
-          style={csStyles.gifSearchInput} returnKeyType="search"
-          onSubmitEditing={() => searchGifs(query)} />
-      </View>
-      {loading ? (
-        <View style={csStyles.gifLoading}><ActivityIndicator color={T.primary} size="small" /></View>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} style={csStyles.gifGrid} keyboardShouldPersistTaps="handled">
-          <View style={csStyles.gifGridInner}>
-            {gifs.map((gif, i) => {
-              const url = gif.media_formats?.gif?.url ?? gif.media_formats?.tinygif?.url;
-              if (!url) return null;
-              return (
-                <TouchableOpacity key={gif.id ?? i} onPress={() => onSelect(url)}
-                  activeOpacity={0.85} style={csStyles.gifThumb}>
-                  <Image source={{ uri: url }} style={csStyles.gifThumbImg} resizeMode="cover" />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
-      )}
     </View>
   );
 });
@@ -409,7 +349,7 @@ const CommentBottomSheet = React.memo(({
               value={text}
               onChangeText={setText}
               onFocus={() => setPicker(null)}
-              placeholder={replyingTo ? 'write a reply…' : isAuthenticated ? 'say what you actually think…' : 'sign in to comment…'}
+              placeholder={replyingTo ? 'write a reply…' : isAuthenticated ? 'say what you actually think…' : 'sign in to say what you think…'}
               placeholderTextColor={T.textMuted}
               multiline
               maxLength={500}
@@ -548,7 +488,7 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleLike = useCallback(async () => {
     if (!isAuthenticated) {
-      showToast({ type: 'warning', message: 'Sign in to like confessions.' });
+      showToast({ type: 'warning', message: "Sign in to like it — they'll never know it was you." });
       navigation.navigate('AuthNav', { screen: 'Login' });
       return;
     }
@@ -574,7 +514,7 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleSave = useCallback(async () => {
     if (!isAuthenticated) {
-      showToast({ type: 'info', message: 'Sign in to save confessions.' });
+      showToast({ type: 'info', message: 'Sign in to save it for later.' });
       navigation.navigate('AuthNav', { screen: 'Login' });
       return;
     }
@@ -586,7 +526,7 @@ export default function PostDetailScreen({ route, navigation }) {
       const data = await res.json();
       if (res.ok) {
         setPost(p => ({ ...p, is_saved: data.saved }));
-        showToast({ type: 'success', message: data.saved ? 'Saved.' : 'Removed from saved.' });
+        showToast({ type: 'success', message: data.saved ? 'Saved for later.' : 'Removed from saved.' });
       }
     } catch { showToast({ type: 'error', message: 'Could not save. Try again.' }); }
   }, [isAuthenticated, post.id, navigation, showToast]);
@@ -625,7 +565,7 @@ export default function PostDetailScreen({ route, navigation }) {
       });
       if (!res.ok) throw new Error();
       setShowOptions(false);
-      showToast({ type: 'success', message: 'Drop deleted.' });
+      showToast({ type: 'success', message: 'Gone for good.' });
       navigation.goBack();
     } catch {
       showToast({ type: 'error', message: 'Could not delete. Try again.' });
@@ -894,13 +834,6 @@ const csStyles = StyleSheet.create({
   emojiGrid:         { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: rp(8), paddingVertical: rp(8) },
   emojiBtn:          { width: rs(44), height: rs(44), alignItems: 'center', justifyContent: 'center' },
   emojiText:         { fontSize: rf(24) },
-  gifSearchRow:      { paddingHorizontal: rp(12), paddingVertical: rp(8), borderBottomWidth: 1, borderBottomColor: T.border },
-  gifSearchInput:    { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: RADIUS.sm, paddingHorizontal: rp(12), paddingVertical: rp(8), fontSize: FONT.sm, color: T.text, borderWidth: 1, borderColor: T.border },
-  gifLoading:        { height: rs(100), alignItems: 'center', justifyContent: 'center' },
-  gifGrid:           { flex: 1 },
-  gifGridInner:      { flexDirection: 'row', flexWrap: 'wrap', padding: rp(4), gap: rp(4) },
-  gifThumb:          { width: (W - rp(32)) / 3, height: rs(80), borderRadius: RADIUS.sm, overflow: 'hidden', backgroundColor: T.surface },
-  gifThumbImg:       { width: '100%', height: '100%' },
   commentGif:        { width: rs(160), height: rs(100), borderRadius: RADIUS.sm, marginTop: rp(6) },
   pickerToggle:      { width: rs(34), height: rs(34), borderRadius: rs(17), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.border },
   pickerToggleActive:{ backgroundColor: T.primaryDim, borderColor: T.primaryBorder },

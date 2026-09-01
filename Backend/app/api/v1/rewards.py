@@ -42,7 +42,7 @@ STREAK_MILESTONES = {
 ONE_TIME_MILESTONES = {
     "first_post":    {"coins": 10, "description": "Posted your first confession"},
     "first_drop":    {"coins": 10, "description": "Dropped your first confession"},
-    "first_circle":  {"coins": 10, "description": "Joined your first Circle"},
+    "first_circle":  {"coins": 10, "description": "Followed your first Circle"},
     "complete_profile": {"coins": 15, "description": "Completed your profile"},
     "ten_connections":  {"coins": 20, "description": "Made 10 connections"},
     "five_referrals":   {"coins": 75, "description": "Referred 5 friends"},

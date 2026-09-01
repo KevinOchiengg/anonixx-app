@@ -68,7 +68,7 @@ export const useLogout = (navigation) => {
 
     // ✅ Web-compatible confirmation
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm('Are you sure you want to sign out?')
+      const confirmed = window.confirm("Sign out? Everything's still here when you're back.")
       console.log('🔴 User response:', confirmed ? 'confirmed' : 'cancelled')
 
       if (confirmed) {
@@ -78,7 +78,7 @@ export const useLogout = (navigation) => {
       // Native Alert for mobile
       Alert.alert(
         'Sign Out',
-        'Are you sure you want to sign out?',
+        "Everything's still here when you're back.",
         [
           {
             text: 'Cancel',

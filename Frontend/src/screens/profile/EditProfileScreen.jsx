@@ -254,7 +254,7 @@ export default function EditProfileScreen({ navigation }) {
         anonymous_name: data.anonymous_name,
         gender,
       });
-      showToast({ type: 'success', message: 'Profile updated.' });
+      showToast({ type: 'success', message: "That's more like you." });
       navigation.goBack();
     } catch {
       showToast({ type: 'error', message: 'Something went wrong. Check your connection.' });
