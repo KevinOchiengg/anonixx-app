@@ -449,7 +449,7 @@ const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) => {
           );
         })}
       </View>
-      {!hasVoted && !isExpired && !isAuthenticated && <Text style={styles.pollSignInHint}>Sign in to vote</Text>}
+      {!hasVoted && !isExpired && !isAuthenticated && <Text style={styles.pollSignInHint}>Sign in to vote anonymously</Text>}
     </View>
   );
 });
@@ -489,7 +489,7 @@ function CalmPostCard({
 
   const handleLike = useCallback(async () => {
     if (animating) return;
-    if (!isAuthenticated) { showToast({ type: 'warning', message: 'Sign in to like confessions.' }); return; }
+    if (!isAuthenticated) { showToast({ type: 'warning', message: "Sign in to like it — they'll never know it was you." }); return; }
     setAnimating(true);
     const newLiked = !liked;
     setLiked(newLiked);
@@ -551,7 +551,7 @@ function CalmPostCard({
   }, [liked, isAuthenticated, post.id, scaleAnim, showToast]);
 
   const handleVote = useCallback(async (optionIndex) => {
-    if (!isAuthenticated) { showToast({ type: 'info', message: 'Sign in to vote.' }); return; }
+    if (!isAuthenticated) { showToast({ type: 'info', message: 'Sign in to vote — your pick stays anonymous.' }); return; }
     try {
       const token = await AsyncStorage.getItem('token');
       const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/vote`, {

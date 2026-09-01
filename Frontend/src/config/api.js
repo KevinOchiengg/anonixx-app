@@ -15,4 +15,11 @@ export const API_BASE_URL = BACKENDS.production;
 export const STRIPE_PUBLISHABLE_KEY =
   process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? 'pk_test_REPLACE_WITH_YOUR_KEY';
 
-export default { API_BASE_URL, BACKENDS, STRIPE_PUBLISHABLE_KEY };
+/**
+ * Tenor GIF search key (safe to expose in client code — it's a public API key).
+ * Set EXPO_PUBLIC_TENOR_API_KEY in your .env file to enable GIF search.
+ */
+export const TENOR_API_KEY =
+  process.env.EXPO_PUBLIC_TENOR_API_KEY ?? 'YOUR_TENOR_API_KEY';
+
+export default { API_BASE_URL, BACKENDS, STRIPE_PUBLISHABLE_KEY, TENOR_API_KEY };

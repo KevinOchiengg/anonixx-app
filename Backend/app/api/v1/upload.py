@@ -37,7 +37,13 @@ cloudinary.config(
 from pydantic import BaseModel as _BaseModel
 
 class _SignRequest(_BaseModel):
-    resource_type: str = "image"   # "image" | "video"  (Cloudinary uses "video" for audio too)
+    resource_type: str = "image"   # "image" | "video" (also used for audio) | "raw" (generic files)
+
+_SIGN_FOLDERS = {
+    "image": "anonixx/images",
+    "video": "anonixx/videos",
+    "raw":   "anonixx/files",
+}
 
 @router.post("/sign")
 async def get_upload_signature(
@@ -51,7 +57,7 @@ async def get_upload_signature(
             detail="Media uploads are not configured on this server. Contact support."
         )
     # Route files to type-specific folders
-    folder = "anonixx/videos" if data.resource_type == "video" else "anonixx/images"
+    folder = _SIGN_FOLDERS.get(data.resource_type, "anonixx/images")
     try:
         timestamp = int(time.time())
         params    = {"folder": folder, "timestamp": timestamp}

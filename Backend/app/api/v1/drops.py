@@ -14,6 +14,7 @@ from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.notifications import send_push_notification as _notify
 from app.utils.location import build_location
+from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
@@ -62,9 +63,6 @@ CATEGORIES = [
     "open to connection", "just need to be heard",
 ]
 
-# Categories that surface in the "Open to Connect" dedicated section
-CONNECTION_CATEGORIES = {"open to connection", "need stability", "carrying this alone", "starting over"}
-
 # ==================== REQUEST MODELS ====================
 
 # Confession type — the audience/nature a drop is written for. Chosen at
@@ -75,28 +73,20 @@ CONNECTION_CATEGORIES = {"open to connection", "need stability", "carrying this 
 # Listed in the same order the compose picker shows them, so the two files
 # read side by side. Order is cosmetic here — this is a membership check.
 VALID_INTENTS = [
-    "real-connection",    # "Relationship"   — wants something real
-    "general",            # "General"        — no specific audience, default
-    "no-strings",         # "Sex for Fun"    — casual, no strings attached
-    "just-talk",          # "Sex for Token"  — paid/transactional arrangement
+    "real-connection",    # "Relationship"          — wants something real
+    "general",            # "General"               — no specific audience, default
+    "no-strings",         # "No Strings"             — casual, no strings attached
+    "just-talk",          # "Generous Arrangement"   — paid/transactional arrangement
 ]
 
 # Display labels — mirrors CARD_INTENTS' `label` field in
-# DropCardRenderer.jsx exactly. Used to let a typed search query like
-# "sex for fun" resolve to the same drops as tapping that filter chip
-# (see get_marketplace's `q` handling below), not just the chip itself.
+# DropCardRenderer.jsx exactly.
 INTENT_LABELS = {
     "real-connection": "Relationship",
     "general":         "General",
-    "no-strings":      "Sex for Fun",
-    "just-talk":       "Sex for Token",
+    "no-strings":      "No Strings",
+    "just-talk":       "Generous Arrangement",
 }
-
-# Intents that belong in the "Open to Connect" marketplace section — genuine
-# relationship-seeking ones. Excludes "no-strings" and "just-talk" (both
-# explicitly casual/transactional, not relationship-seeking) and "general"
-# (no stated audience).
-CONNECTION_INTENTS = {"real-connection"}
 
 class DropPollInput(BaseModel):
     question: str
@@ -445,28 +435,6 @@ async def trigger_mpesa_stk(
 
 # ==================== HELPERS ============================
 
-_CONTACT_INFO_PATTERNS = [
-    re.compile(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", re.IGNORECASE),          # email
-    re.compile(r"(\+?\d[\d\-\s()]{7,}\d)"),                             # phone number
-    re.compile(r"(?:^|\s)@[a-z0-9._]{2,}", re.IGNORECASE),              # @handle
-    re.compile(r"\b(wa\.me|t\.me|snapchat\.com|instagram\.com|tiktok\.com|facebook\.com)\/\S+", re.IGNORECASE),
-    re.compile(r"\bsnap(?:chat)?\s*[:：]\s*\S+", re.IGNORECASE),
-    re.compile(r"\btelegram\s*[:：]\s*\S+", re.IGNORECASE),
-    re.compile(r"\b(whatsapp|whats app)\b", re.IGNORECASE),
-]
-
-
-def _contains_contact_info(text: Optional[str]) -> bool:
-    """
-    Confessions stay public until someone pays to unlock a chat — contact
-    info (phone/email/social handles) can't be smuggled into the public
-    card text. Chat messages after unlock are exempt from this check.
-    """
-    if not text:
-        return False
-    return any(p.search(text) for p in _CONTACT_INFO_PATTERNS)
-
-
 def _media_preview_url(media_url: Optional[str], media_type: Optional[str]) -> Optional[str]:
     """
     Returns a static image URL suitable for og:image.
@@ -516,11 +484,8 @@ async def create_drop(
     if data.confession and len(data.confession) > 500:
         raise HTTPException(status_code=400, detail="Confession must be 500 characters or less")
 
-    if _contains_contact_info(data.confession):
-        raise HTTPException(
-            status_code=400,
-            detail="Remove contact info from your confession — you can share it after someone unlocks.",
-        )
+    if contains_contact_info(data.confession):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
 
     if data.media_url and data.media_type not in ("image", "video", "voice"):
         raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'voice'")
@@ -540,8 +505,8 @@ async def create_drop(
             raise HTTPException(status_code=400, detail="Poll requires 2–4 options.")
         if not data.poll.question.strip():
             raise HTTPException(status_code=400, detail="Poll question cannot be empty.")
-        if _contains_contact_info(data.poll.question) or any(_contains_contact_info(o) for o in poll_options):
-            raise HTTPException(status_code=400, detail="Remove contact info from your poll.")
+        if contains_contact_info(data.poll.question) or any(contains_contact_info(o) for o in poll_options):
+            raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
         poll_data = {
             "question": data.poll.question.strip(),
             "options": [{"text": o, "votes": 0} for o in poll_options],

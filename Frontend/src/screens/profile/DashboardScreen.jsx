@@ -138,7 +138,7 @@ export default function DashboardScreen({ navigation }) {
       });
       if (res.ok) {
         setPosts((prev) => prev.map((p) => (p.id === editingPost.id ? { ...p, content: editText.trim() } : p)));
-        showToast({ type: 'success', message: 'Drop updated.' });
+        showToast({ type: 'success', message: 'Updated. Still yours.' });
         setEditingPost(null);
       } else {
         const data = await res.json().catch(() => ({}));
@@ -168,7 +168,7 @@ export default function DashboardScreen({ navigation }) {
               });
               if (res.ok) {
                 setPosts((prev) => prev.filter((p) => p.id !== post.id));
-                showToast({ type: 'success', message: 'Drop deleted.' });
+                showToast({ type: 'success', message: 'Gone for good.' });
               } else {
                 showToast({ type: 'error', message: 'Could not delete drop.' });
               }
@@ -239,7 +239,7 @@ export default function DashboardScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} style={s.headerBtn}>
           <ArrowLeft size={rs(20)} color={THEME.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Dashboard</Text>
+        <Text style={s.headerTitle}>Your Drops</Text>
         <View style={s.headerBtn} />
       </View>
 

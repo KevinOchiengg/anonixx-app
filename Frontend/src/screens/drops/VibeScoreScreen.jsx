@@ -64,7 +64,7 @@ const getProgress = (score) => {
 const EmptyState = React.memo(({ onCreateDrop }) => (
   <View style={s.centered}>
     <Star size={rs(40)} color={T.textMute} strokeWidth={1.5} />
-    <Text style={s.errorTitle}>No score yet</Text>
+    <Text style={s.errorTitle}>Unrated. For now.</Text>
     <Text style={s.errorSub}>
       Start creating drops to build your vibe score.
     </Text>

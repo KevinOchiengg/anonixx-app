@@ -814,7 +814,7 @@ export default function MediaFeedScreen({ route, navigation }) {
   const handleLike = useCallback(
     async (postId) => {
       if (!isAuthenticated) {
-        showToast({ type: 'warning', message: 'Sign in to like this.' });
+        showToast({ type: 'warning', message: "Sign in to like it — they'll never know it was you." });
         navigation.navigate('AuthNav', { screen: 'Login' });
         return;
       }
@@ -850,7 +850,7 @@ export default function MediaFeedScreen({ route, navigation }) {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error();
-        showToast({ type: 'success', message: 'Drop deleted.' });
+        showToast({ type: 'success', message: 'Gone for good.' });
         navigation.goBack();
       } catch {
         showToast({ type: 'error', message: 'Could not delete. Try again.' });

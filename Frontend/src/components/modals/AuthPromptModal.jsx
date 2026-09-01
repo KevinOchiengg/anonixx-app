@@ -22,12 +22,12 @@ export default function AuthPromptModal({
   const { theme } = useTheme()
 
   const actionMessages = {
-    respond: 'Sign up to respond to this drop',
-    save: 'Sign up to save drops',
-    post: 'Sign up to share your thoughts',
-    comment: 'Sign up to join the conversation',
-    connect: 'Sign up to make connections',
-    default: 'Sign up to continue',
+    respond: 'Say what you really think — anonymously.',
+    save: 'Keep this one for later.',
+    post: 'Drop something real.',
+    comment: 'Join the conversation — no name required.',
+    connect: 'Link up with someone.',
+    default: 'Sign up to keep going.',
   }
 
   const message = actionMessages[action] || actionMessages.default
@@ -59,7 +59,7 @@ export default function AuthPromptModal({
             </Text>
 
             <Text style={[styles.subtitle, { color: theme.textTertiary }]}>
-              Your truth, no name required. Join the community.
+              No names. No judgment. Just what's real.
             </Text>
 
             {/* Buttons */}

@@ -125,7 +125,7 @@ export default function ThreadViewScreen({ route, navigation }) {
 
   const handleSendReply = async () => {
     if (!isAuthenticated) {
-      Alert.alert('Sign in Required', 'Please sign in to reply to drops', [
+      Alert.alert('Sign in required', "Sign in to join the conversation — anonymously, of course.", [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign In',
@@ -182,7 +182,7 @@ export default function ThreadViewScreen({ route, navigation }) {
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert('Success', data.message);
+        Alert.alert('Sent', "It's out there now.");
         setReplyText('');
         loadThreads();
 
@@ -249,8 +249,8 @@ export default function ThreadViewScreen({ route, navigation }) {
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyText}>
                     {isAuthenticated
-                      ? 'No replies yet. Be the first to respond.'
-                      : 'No replies yet. Sign in to start a conversation.'}
+                      ? 'quiet in here. say something first.'
+                      : 'No replies yet. Sign in to be the first.'}
                   </Text>
                 </View>
               ) : (
@@ -311,8 +311,8 @@ export default function ThreadViewScreen({ route, navigation }) {
                   onChangeText={setReplyText}
                   placeholder={
                     isAuthenticated
-                      ? 'Write your reply...'
-                      : 'Sign in to reply...'
+                      ? 'say what you actually think…'
+                      : 'Sign in to reply anonymously...'
                   }
                   placeholderTextColor={THEME.textSecondary}
                   multiline

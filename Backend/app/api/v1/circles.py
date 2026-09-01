@@ -1,61 +1,44 @@
 """
 circles.py — Anonixx Circles
 
-A Circle is a permanent anonymous audio room with a topic.
-Free to join. When the creator goes live (video), members get a 5-min free preview
-on paid events, then locked out until they pay.
-
-Two modes:
-  ROOM   → always-on anonymous audio room, free for all members
-  LIVE   → creator triggers video live, members get 5-min preview (paid events only)
+A Circle is an admin-curated content feed with a topic. Circle admins post
+multi-media content (free or coin-gated); anyone can browse and comment;
+users follow the circles that resonate with them. Regular (non-admin) users
+can buy ad slots that promote one of their own main-feed Drops into a
+circle's feed.
 
 Roles:
-  CREATOR → permanent access, full controls, cannot be kicked
-  ADMIN   → permanent access, can approve hand raises + kick members
-  MEMBER  → free audio room, 5-min preview on paid live events
+  CREATOR → owns the circle, posts, manages admins, cannot be removed
+  ADMIN   → posts content, moderates ads, approved by the creator
 
 Collections:
-  circles                — circle entity
-  circle_members         — followers + role
-  circle_events          — scheduled/live video events
-  circle_event_payments  — paid entry + preview timer records
-  circle_gifts           — anonymous gifts during live
-  circle_hand_raises     — hand raise requests in audio room
-  circle_kicks           — kicked member records
-  circle_hot_seats       — hot seat invitations
-  circle_payouts         — creator payout accumulator
+  circles              — circle entity
+  circle_members       — admin role assignments (creator_id lives on the circle doc itself)
+  circle_follows       — who follows which circle (free, no coins)
+  circle_posts         — admin-authored content, coin-unlockable per item
+  circle_post_unlocks  — who has paid to unlock which post
+  circle_comments      — user comments on a post (text/photo/GIF/voice note)
+  circle_ads           — regular-user-bought ad slots promoting their own Drops
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 from bson import ObjectId
 import re
 from app.core.security import get_current_user
 from app.database import get_database
 from app.models.user import User
-from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
+from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 
 router = APIRouter(prefix="/circles", tags=["circles"])
 
-CREATOR_CUT     = 0.80
-ANONIXX_CUT     = 0.20
-TOKEN_EXPIRY    = 86400       # 24 hours in seconds
-MAX_STAGE       = 5           # max speakers on stage at once
-PREVIEW_SECONDS = 300         # 5-minute free preview on paid live events
-GIFT_TIERS      = {
-    "spark":   10,
-    "bolt":    50,
-    "crystal": 200,
-    "crown":   500,
-}
-TIER_EMOJIS = {"spark": "🔥", "bolt": "⚡", "crystal": "💎", "crown": "👑"}
-
 ROLE_CREATOR = "creator"
 ROLE_ADMIN   = "admin"
-ROLE_MEMBER  = "member"
+
+MAX_VOICE_COMMENT_SECONDS = 180   # 3 minutes
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,7 +66,15 @@ async def get_circle_or_404(db, circle_id: str) -> dict:
 
 
 async def get_member_doc(db, circle_id: str, user_id: str) -> Optional[dict]:
+    """Admin-role assignments only — plain following isn't tracked here."""
     return await db.circle_members.find_one({
+        "circle_id": circle_id,
+        "user_id":   user_id,
+    })
+
+
+async def get_follow_doc(db, circle_id: str, user_id: str) -> Optional[dict]:
+    return await db.circle_follows.find_one({
         "circle_id": circle_id,
         "user_id":   user_id,
     })
@@ -102,6 +93,15 @@ async def assert_creator_or_admin(db, circle: dict, user_id: str):
         raise HTTPException(status_code=403, detail="Only the creator or admins can do this.")
 
 
+async def assert_regular_user(db, circle: dict, user_id: str):
+    """Ad slots are for regular users only — not the circle's own creator/admins."""
+    if str(circle.get("creator_id", "")) == str(user_id):
+        raise HTTPException(status_code=403, detail="Circle admins can't buy ad slots in their own circle.")
+    m = await get_member_doc(db, fmt_id(circle), user_id)
+    if m and m.get("role") == ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Circle admins can't buy ad slots in their own circle.")
+
+
 def member_range_label(count: int) -> str:
     if count < 5:   return "Intimate"
     if count < 20:  return "Small"
@@ -110,127 +110,30 @@ def member_range_label(count: int) -> str:
     return "Thriving"
 
 
-def generate_agora_token(channel: str, uid: int, role: str = "publisher") -> str:
-    if not settings.AGORA_APP_ID or not settings.AGORA_APP_CERTIFICATE:
-        raise HTTPException(
-            status_code=503,
-            detail="Audio rooms are not configured yet. Add AGORA_APP_ID and AGORA_APP_CERTIFICATE to your .env file."
-        )
-    from agora_token_builder import RtcTokenBuilder
-    expire_at  = int(_now().timestamp()) + TOKEN_EXPIRY
-    agora_role = 1 if role == "publisher" else 2
-    return RtcTokenBuilder.buildTokenWithUid(
-        settings.AGORA_APP_ID,
-        settings.AGORA_APP_CERTIFICATE,
-        channel,
-        uid,
-        agora_role,
-        expire_at,
-    )
-
-
-def format_circle(circle: dict, member_doc: Optional[dict], user_id: str) -> dict:
-    count      = circle.get("member_count", 0)
+def format_circle(circle: dict, admin_doc: Optional[dict], is_following: bool, user_id: str) -> dict:
+    count      = circle.get("follower_count", 0)
     is_creator = str(circle.get("creator_id", "")) == str(user_id)
-    role       = (
-        ROLE_CREATOR if is_creator
-        else member_doc.get("role", ROLE_MEMBER) if member_doc
-        else None
-    )
+    role       = ROLE_CREATOR if is_creator else (ROLE_ADMIN if admin_doc else None)
     return {
-        "id":            fmt_id(circle),
-        "name":          circle["name"],
-        "bio":           circle.get("bio", ""),
-        "category":      circle.get("category"),
-        "aura_color":    circle.get("aura_color", "#FF634A"),
-        "avatar_emoji":  circle.get("avatar_emoji", "🎭"),
-        "avatar_url":    circle.get("avatar_url"),
-        "banner_url":    circle.get("banner_url"),
-        "facebook_url":  circle.get("facebook_url"),
-        "instagram_url": circle.get("instagram_url"),
-        "snapchat_url":  circle.get("snapchat_url"),
-        "join_cost":     circle.get("join_cost", 0),
-        "member_count":  count,
-        "member_range":  member_range_label(count),
-        "is_creator":    is_creator,
-        "is_admin":      role == ROLE_ADMIN,
-        "is_member":     member_doc is not None,
-        "role":          role,
-        "room_open":     circle.get("room_open", False),
-        "is_live":       circle.get("is_live", False),
-        "live_event_id": circle.get("live_event_id"),
-        "created_at":    circle.get("created_at", _now()).isoformat(),
+        "id":             fmt_id(circle),
+        "name":           circle["name"],
+        "bio":            circle.get("bio", ""),
+        "category":       circle.get("category"),
+        "aura_color":     circle.get("aura_color", "#FF634A"),
+        "avatar_emoji":   circle.get("avatar_emoji", "🎭"),
+        "avatar_url":     circle.get("avatar_url"),
+        "banner_url":     circle.get("banner_url"),
+        "facebook_url":   circle.get("facebook_url"),
+        "instagram_url":  circle.get("instagram_url"),
+        "snapchat_url":   circle.get("snapchat_url"),
+        "follower_count": count,
+        "member_range":   member_range_label(count),
+        "is_creator":     is_creator,
+        "is_admin":       role == ROLE_ADMIN,
+        "is_following":   is_following,
+        "role":           role,
+        "created_at":     circle.get("created_at", _now()).isoformat(),
     }
-
-
-def _format_event(event: dict) -> dict:
-    return {
-        "id":           fmt_id(event),
-        "title":        event["title"],
-        "description":  event.get("description", ""),
-        "entry_fee":    event.get("entry_fee", 0),
-        "scheduled_at": event["scheduled_at"].isoformat() if event.get("scheduled_at") else None,
-        "status":       event["status"],
-        "is_live":      event.get("is_live", False),
-        "viewer_count": event.get("viewer_count", 0),
-        "peak_viewers": event.get("peak_viewers", 0),
-        "total_gifts":  event.get("total_gifts", 0),
-        "started_at":   event["started_at"].isoformat() if event.get("started_at") else None,
-    }
-
-
-# ─── Preview timer helpers ────────────────────────────────────────────────────
-
-async def get_preview_record(db, event_id: str, user_id: str) -> Optional[dict]:
-    return await db.circle_event_payments.find_one({
-        "event_id": event_id,
-        "user_id":  user_id,
-    })
-
-
-async def get_preview_seconds_remaining(preview: Optional[dict]) -> int:
-    if not preview:
-        return PREVIEW_SECONDS
-    used = preview.get("preview_seconds_used", 0)
-    return max(0, PREVIEW_SECONDS - used)
-
-
-async def tick_preview_timer(db, preview: Optional[dict]) -> int:
-    """Record join time — elapsed will be calculated on next pause."""
-    if not preview:
-        return PREVIEW_SECONDS
-    remaining = await get_preview_seconds_remaining(preview)
-    if remaining <= 0:
-        return 0
-    await db.circle_event_payments.update_one(
-        {"_id": preview["_id"]},
-        {"$set": {"preview_joined_at": _now()}}
-    )
-    return remaining
-
-
-async def pause_preview_timer(db, preview: Optional[dict]):
-    """Add elapsed seconds since last join to preview_seconds_used."""
-    if not preview:
-        return
-    joined_at = preview.get("preview_joined_at")
-    if not joined_at:
-        return
-    if joined_at.tzinfo is None:
-        joined_at = joined_at.replace(tzinfo=timezone.utc)
-    elapsed  = int((_now() - joined_at).total_seconds())
-    new_used = min(
-        preview.get("preview_seconds_used", 0) + elapsed,
-        PREVIEW_SECONDS,
-    )
-    await db.circle_event_payments.update_one(
-        {"_id": preview["_id"]},
-        {"$set": {
-            "preview_seconds_used": new_used,
-            "preview_joined_at":    None,
-            "preview_locked":       new_used >= PREVIEW_SECONDS,
-        }}
-    )
 
 
 # ─── Request models ───────────────────────────────────────────────────────────
@@ -246,22 +149,6 @@ class CircleCreate(BaseModel):
     facebook_url:  Optional[str] = None
     instagram_url: Optional[str] = None
     snapchat_url:  Optional[str] = None
-    join_cost:    int = 0   # coins required to join — 0 stays free
-
-
-class EventSchedule(BaseModel):
-    title:        str
-    description:  str = ""
-    entry_fee:    int = 0
-    scheduled_at: str
-
-
-class JoinEventRequest(BaseModel):
-    phone_number: Optional[str] = None
-
-
-class GiftRequest(BaseModel):
-    tier: str
 
 
 # ─── Create circle ────────────────────────────────────────────────────────────
@@ -272,7 +159,7 @@ async def create_circle(
     current_user: User = Depends(get_current_user),
 ):
     # Circles are curated by the Anonixx team (or its AI bot account) only —
-    # not user-created. Regular users join and consume, they don't open one.
+    # not user-created. Regular users follow and consume, they don't open one.
     if not getattr(current_user, "is_admin", False):
         raise HTTPException(status_code=403, detail="Only Anonixx admins can create circles.")
 
@@ -282,41 +169,28 @@ async def create_circle(
         raise HTTPException(status_code=400, detail="Tell people what your circle is about.")
     if not data.category:
         raise HTTPException(status_code=400, detail="Choose a category.")
-    if data.join_cost < 0:
-        raise HTTPException(status_code=400, detail="join_cost can't be negative.")
 
     db  = await get_database()
     now = _now()
 
-    result    = await db.circles.insert_one({
-        "name":          data.name.strip(),
-        "bio":           data.bio.strip(),
-        "category":      data.category,
-        "aura_color":    data.aura_color,
-        "avatar_emoji":  data.avatar_emoji or "🎭",
-        "avatar_url":    data.avatar_url,
-        "banner_url":    data.banner_url,
-        "facebook_url":  data.facebook_url,
-        "instagram_url": data.instagram_url,
-        "snapchat_url":  data.snapchat_url,
-        "join_cost":     data.join_cost,
-        "creator_id":    str(current_user.id),
-        "member_count":  1,
-        "room_open":     False,
-        "is_live":       False,
-        "live_event_id": None,
-        "is_active":     True,
-        "created_at":    now,
-        "updated_at":    now,
+    result = await db.circles.insert_one({
+        "name":           data.name.strip(),
+        "bio":            data.bio.strip(),
+        "category":       data.category,
+        "aura_color":     data.aura_color,
+        "avatar_emoji":   data.avatar_emoji or "🎭",
+        "avatar_url":     data.avatar_url,
+        "banner_url":     data.banner_url,
+        "facebook_url":   data.facebook_url,
+        "instagram_url":  data.instagram_url,
+        "snapchat_url":   data.snapchat_url,
+        "creator_id":     str(current_user.id),
+        "follower_count": 0,
+        "is_active":      True,
+        "created_at":     now,
+        "updated_at":     now,
     })
     circle_id = str(result.inserted_id)
-
-    await db.circle_members.insert_one({
-        "circle_id": circle_id,
-        "user_id":   str(current_user.id),
-        "role":      ROLE_CREATOR,
-        "joined_at": now,
-    })
 
     return {"id": circle_id, "message": "Your circle is alive."}
 
@@ -341,7 +215,7 @@ async def list_circles(
 
     circles = (
         await db.circles.find(query)
-        .sort([("is_live", -1), ("room_open", -1), ("member_count", -1)])
+        .sort([("follower_count", -1), ("created_at", -1)])
         .skip(skip)
         .limit(limit)
         .to_list(None)
@@ -351,7 +225,8 @@ async def list_circles(
     for c in circles:
         cid = fmt_id(c)
         m   = await get_member_doc(db, cid, str(current_user.id))
-        result.append(format_circle(c, m, str(current_user.id)))
+        f   = await get_follow_doc(db, cid, str(current_user.id))
+        result.append(format_circle(c, m, f is not None, str(current_user.id)))
 
     return {"circles": result, "has_more": len(result) == limit}
 
@@ -369,22 +244,24 @@ async def my_created(current_user: User = Depends(get_current_user)):
     result = []
     for c in circles:
         m = await get_member_doc(db, fmt_id(c), str(current_user.id))
-        result.append(format_circle(c, m, str(current_user.id)))
+        f = await get_follow_doc(db, fmt_id(c), str(current_user.id))
+        result.append(format_circle(c, m, f is not None, str(current_user.id)))
     return {"circles": result}
 
 
-@router.get("/my/joined")
-async def my_joined(current_user: User = Depends(get_current_user)):
-    db          = await get_database()
-    memberships = await db.circle_members.find({
+@router.get("/my/following")
+async def my_following(current_user: User = Depends(get_current_user)):
+    db      = await get_database()
+    follows = await db.circle_follows.find({
         "user_id": str(current_user.id),
     }).to_list(None)
 
     result = []
-    for mem in memberships:
-        c = await db.circles.find_one({"_id": oid(mem["circle_id"]), "is_active": True})
+    for flw in follows:
+        c = await db.circles.find_one({"_id": oid(flw["circle_id"]), "is_active": True})
         if c:
-            result.append(format_circle(c, mem, str(current_user.id)))
+            m = await get_member_doc(db, fmt_id(c), str(current_user.id))
+            result.append(format_circle(c, m, True, str(current_user.id)))
     return {"circles": result}
 
 
@@ -398,52 +275,14 @@ async def get_circle(
     db     = await get_database()
     circle = await get_circle_or_404(db, circle_id)
     m      = await get_member_doc(db, circle_id, str(current_user.id))
-    return format_circle(circle, m, str(current_user.id))
+    f      = await get_follow_doc(db, circle_id, str(current_user.id))
+    return format_circle(circle, m, f is not None, str(current_user.id))
 
 
-# ─── Join / leave ─────────────────────────────────────────────────────────────
+# ─── Follow / unfollow ────────────────────────────────────────────────────────
 
-@router.post("/{circle_id}/join")
-async def join_circle(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    m      = await get_member_doc(db, circle_id, str(current_user.id))
-
-    if m:
-        return {"message": "You're already in this circle."}
-
-    cost = circle.get("join_cost", 0)
-    if cost > 0 and str(circle.get("creator_id", "")) != str(current_user.id):
-        try:
-            await debit_coins(
-                db=db, user_id=str(current_user.id), amount=cost,
-                reason="circle_join", description=f"Joined {circle['name']}",
-                meta={"circle_id": circle_id},
-            )
-        except ValueError as e:
-            if "Insufficient" in str(e):
-                raise HTTPException(status_code=402, detail=f"Not enough coins. You need {cost} coins to join.")
-            raise HTTPException(status_code=404, detail="User not found.")
-
-    now = _now()
-    await db.circle_members.insert_one({
-        "circle_id": circle_id,
-        "user_id":   str(current_user.id),
-        "role":      ROLE_MEMBER,
-        "joined_at": now,
-    })
-    await db.circles.update_one(
-        {"_id": oid(circle_id)},
-        {"$inc": {"member_count": 1}}
-    )
-    return {"message": "You're in the circle."}
-
-
-@router.post("/{circle_id}/leave")
-async def leave_circle(
+@router.post("/{circle_id}/follow")
+async def follow_circle(
     circle_id:    str,
     current_user: User = Depends(get_current_user),
 ):
@@ -451,18 +290,44 @@ async def leave_circle(
     circle = await get_circle_or_404(db, circle_id)
 
     if str(circle.get("creator_id", "")) == str(current_user.id):
-        raise HTTPException(status_code=400, detail="Creators can't leave their own circle.")
+        raise HTTPException(status_code=400, detail="You already own this circle.")
 
-    m = await get_member_doc(db, circle_id, str(current_user.id))
-    if not m:
-        raise HTTPException(status_code=400, detail="You're not in this circle.")
+    existing = await get_follow_doc(db, circle_id, str(current_user.id))
+    if existing:
+        return {"message": "You're already following this circle.", "first_follow": False}
 
-    await db.circle_members.delete_one({"_id": m["_id"]})
+    is_first_ever = await db.circle_follows.count_documents({"user_id": str(current_user.id)}) == 0
+
+    await db.circle_follows.insert_one({
+        "circle_id":   circle_id,
+        "user_id":     str(current_user.id),
+        "followed_at": _now(),
+    })
     await db.circles.update_one(
         {"_id": oid(circle_id)},
-        {"$inc": {"member_count": -1}}
+        {"$inc": {"follower_count": 1}}
     )
-    return {"message": "You've left the circle."}
+    return {"message": "You're following this circle.", "first_follow": is_first_ever}
+
+
+@router.post("/{circle_id}/unfollow")
+async def unfollow_circle(
+    circle_id:    str,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    circle = await get_circle_or_404(db, circle_id)
+
+    existing = await get_follow_doc(db, circle_id, str(current_user.id))
+    if not existing:
+        raise HTTPException(status_code=400, detail="You're not following this circle.")
+
+    await db.circle_follows.delete_one({"_id": existing["_id"]})
+    await db.circles.update_one(
+        {"_id": oid(circle_id)},
+        {"$inc": {"follower_count": -1}}
+    )
+    return {"message": "You've unfollowed the circle."}
 
 
 # ─── Admin management ─────────────────────────────────────────────────────────
@@ -480,13 +345,17 @@ async def elevate_to_admin(
     if str(user_id) == str(current_user.id):
         raise HTTPException(status_code=400, detail="You're already the creator.")
 
-    m = await get_member_doc(db, circle_id, user_id)
-    if not m:
-        raise HTTPException(status_code=404, detail="This person isn't in your circle.")
+    target_user = await db.users.find_one({"_id": oid(user_id)})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found.")
 
     await db.circle_members.update_one(
-        {"_id": m["_id"]},
-        {"$set": {"role": ROLE_ADMIN, "elevated_at": _now()}}
+        {"circle_id": circle_id, "user_id": user_id},
+        {
+            "$set": {"role": ROLE_ADMIN, "elevated_at": _now()},
+            "$setOnInsert": {"circle_id": circle_id, "user_id": user_id},
+        },
+        upsert=True,
     )
     return {"message": "They're now an admin of this circle."}
 
@@ -505,10 +374,7 @@ async def remove_admin(
     if not m or m.get("role") != ROLE_ADMIN:
         raise HTTPException(status_code=404, detail="Admin not found.")
 
-    await db.circle_members.update_one(
-        {"_id": m["_id"]},
-        {"$set": {"role": ROLE_MEMBER}}
-    )
+    await db.circle_members.delete_one({"_id": m["_id"]})
     return {"message": "Admin role removed."}
 
 
@@ -533,924 +399,6 @@ async def list_admins(
     }
 
 
-# ─── Audio Room ───────────────────────────────────────────────────────────────
-
-@router.post("/{circle_id}/room/open")
-async def open_room(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator(circle, str(current_user.id))
-
-    if circle.get("is_live"):
-        raise HTTPException(status_code=400, detail="End the live event before opening the audio room.")
-
-    await db.circles.update_one(
-        {"_id": oid(circle_id)},
-        {"$set": {"room_open": True, "room_opened_at": _now()}}
-    )
-    return {"message": "The room is open. People can hear you now."}
-
-
-@router.post("/{circle_id}/room/close")
-async def close_room(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator(circle, str(current_user.id))
-
-    await db.circles.update_one(
-        {"_id": oid(circle_id)},
-        {"$set": {"room_open": False}}
-    )
-    await db.circle_hand_raises.delete_many({"circle_id": circle_id})
-    return {"message": "The room is closed."}
-
-
-@router.get("/{circle_id}/room/token")
-async def get_room_token(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-
-    if not circle.get("room_open"):
-        raise HTTPException(status_code=403, detail="The room isn't open yet.")
-
-    is_creator = str(circle.get("creator_id", "")) == str(current_user.id)
-    m          = await get_member_doc(db, circle_id, str(current_user.id))
-
-    if not m and not is_creator:
-        raise HTTPException(status_code=403, detail="Join the circle first.")
-
-    kicked = await db.circle_kicks.find_one({
-        "circle_id": circle_id,
-        "user_id":   str(current_user.id),
-    })
-    if kicked:
-        raise HTTPException(status_code=403, detail="You've been removed from this room.")
-
-    is_admin   = bool(m and m.get("role") == ROLE_ADMIN)
-    hand_raise = await db.circle_hand_raises.find_one({
-        "circle_id": circle_id,
-        "user_id":   str(current_user.id),
-        "status":    "approved",
-    })
-
-    role    = "publisher" if (is_creator or is_admin or hand_raise) else "subscriber"
-    channel = f"circle_room_{circle_id}"
-    uid     = abs(hash(str(current_user.id))) % (2**32)
-    token   = generate_agora_token(channel, uid, role)
-
-    return {
-        "token":   token,
-        "channel": channel,
-        "uid":     uid,
-        "role":    role,
-        "app_id":  settings.AGORA_APP_ID,
-    }
-
-
-# ─── Hand raises ─────────────────────────────────────────────────────────────
-
-@router.post("/{circle_id}/room/raise")
-async def raise_hand(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-
-    if not circle.get("room_open"):
-        raise HTTPException(status_code=403, detail="The room isn't open.")
-
-    m = await get_member_doc(db, circle_id, str(current_user.id))
-    if not m:
-        raise HTTPException(status_code=403, detail="Join the circle first.")
-
-    existing = await db.circle_hand_raises.find_one({
-        "circle_id": circle_id,
-        "user_id":   str(current_user.id),
-        "status":    {"$in": ["pending", "approved"]},
-    })
-    if existing:
-        return {"message": "Your hand is already raised."}
-
-    await db.circle_hand_raises.insert_one({
-        "circle_id": circle_id,
-        "user_id":   str(current_user.id),
-        "status":    "pending",
-        "raised_at": _now(),
-    })
-    return {"message": "Hand raised. Waiting for the host."}
-
-
-@router.get("/{circle_id}/room/raises")
-async def get_pending_raises(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator_or_admin(db, circle, str(current_user.id))
-
-    raises = await db.circle_hand_raises.find(
-        {"circle_id": circle_id, "status": "pending"}
-    ).sort("raised_at", 1).to_list(50)
-
-    result = []
-    for r in raises:
-        user = await db.users.find_one({"_id": oid(r["user_id"])})
-        anon_name = (user or {}).get("anonymous_name") or "Anonymous"
-        result.append({"id": r["user_id"], "anon_name": anon_name})
-
-    return {"raises": result}
-
-
-@router.post("/{circle_id}/room/approve/{user_id}")
-async def approve_speaker(
-    circle_id:    str,
-    user_id:      str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator_or_admin(db, circle, str(current_user.id))
-
-    approved_count = await db.circle_hand_raises.count_documents({
-        "circle_id": circle_id,
-        "status":    "approved",
-    })
-    if approved_count >= MAX_STAGE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Stage is full. Maximum {MAX_STAGE} speakers at once."
-        )
-
-    result = await db.circle_hand_raises.update_one(
-        {"circle_id": circle_id, "user_id": user_id, "status": "pending"},
-        {"$set": {"status": "approved", "approved_at": _now()}}
-    )
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Hand raise not found.")
-
-    return {"message": "Speaker approved."}
-
-
-@router.post("/{circle_id}/room/kick/{user_id}")
-async def kick_from_room(
-    circle_id:    str,
-    user_id:      str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator_or_admin(db, circle, str(current_user.id))
-
-    if str(user_id) == str(circle.get("creator_id", "")):
-        raise HTTPException(status_code=403, detail="Cannot kick the creator.")
-
-    await db.circle_hand_raises.update_many(
-        {"circle_id": circle_id, "user_id": user_id},
-        {"$set": {"status": "kicked"}}
-    )
-    await db.circle_kicks.update_one(
-        {"circle_id": circle_id, "user_id": user_id},
-        {"$set": {"kicked_at": _now(), "kicked_by": str(current_user.id)}},
-        upsert=True,
-    )
-    return {"message": "They've been removed from the room."}
-
-
-@router.get("/{circle_id}/room/status")
-async def room_status(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db         = await get_database()
-    circle     = await get_circle_or_404(db, circle_id)
-    is_creator = str(circle.get("creator_id", "")) == str(current_user.id)
-    m          = await get_member_doc(db, circle_id, str(current_user.id))
-    is_admin   = bool(m and m.get("role") == ROLE_ADMIN)
-
-    speakers = await db.circle_hand_raises.find({
-        "circle_id": circle_id, "status": "approved",
-    }).to_list(None)
-
-    pending = await db.circle_hand_raises.find({
-        "circle_id": circle_id, "status": "pending",
-    }).to_list(None)
-
-    my_raise = await db.circle_hand_raises.find_one({
-        "circle_id": circle_id,
-        "user_id":   str(current_user.id),
-        "status":    {"$in": ["pending", "approved"]},
-    })
-
-    kicked = await db.circle_kicks.find_one({
-        "circle_id": circle_id, "user_id": str(current_user.id),
-    })
-
-    return {
-        "room_open":      circle.get("room_open", False),
-        "speaker_count":  len(speakers),
-        "pending_raises": len(pending) if (is_creator or is_admin) else None,
-        "my_hand_status": my_raise["status"] if my_raise else None,
-        "is_kicked":      kicked is not None,
-    }
-
-
-# ─── Live Events ──────────────────────────────────────────────────────────────
-
-@router.post("/{circle_id}/events/schedule", status_code=201)
-async def schedule_event(
-    circle_id:    str,
-    data:         EventSchedule,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator(circle, str(current_user.id))
-
-    if not data.title.strip():
-        raise HTTPException(status_code=400, detail="Give your event a title.")
-
-    try:
-        scheduled_at = datetime.fromisoformat(data.scheduled_at.replace("Z", "+00:00"))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid date format.")
-
-    if scheduled_at <= _now():
-        raise HTTPException(status_code=400, detail="Schedule your event in the future.")
-
-    result = await db.circle_events.insert_one({
-        "circle_id":    circle_id,
-        "creator_id":   str(current_user.id),
-        "title":        data.title.strip(),
-        "description":  data.description.strip(),
-        "entry_fee":    data.entry_fee,
-        "scheduled_at": scheduled_at,
-        "status":       "scheduled",
-        "is_live":      False,
-        "started_at":   None,
-        "ended_at":     None,
-        "viewer_count": 0,
-        "peak_viewers": 0,
-        "total_gifts":  0,
-        "created_at":   _now(),
-    })
-    return {"id": str(result.inserted_id), "message": "Event scheduled. Your circle will be notified."}
-
-
-@router.get("/{circle_id}/events")
-async def list_events(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db = await get_database()
-    await get_circle_or_404(db, circle_id)
-    events = await db.circle_events.find({
-        "circle_id": circle_id,
-        "status":    {"$in": ["scheduled", "live"]},
-    }).sort("scheduled_at", 1).to_list(None)
-    return {"events": [_format_event(e) for e in events]}
-
-
-@router.post("/{circle_id}/events/{event_id}/go-live")
-async def go_live(
-    circle_id:    str,
-    event_id:     str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator(circle, str(current_user.id))
-
-    event = await db.circle_events.find_one({"_id": oid(event_id), "circle_id": circle_id})
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found.")
-    if event["status"] == "live":
-        raise HTTPException(status_code=400, detail="Already live.")
-    if event["status"] == "ended":
-        raise HTTPException(status_code=400, detail="This event has ended.")
-
-    now = _now()
-    await db.circle_events.update_one(
-        {"_id": oid(event_id)},
-        {"$set": {"status": "live", "is_live": True, "started_at": now}}
-    )
-    await db.circles.update_one(
-        {"_id": oid(circle_id)},
-        {"$set": {"is_live": True, "live_event_id": event_id, "room_open": False}}
-    )
-    await db.circle_hand_raises.delete_many({"circle_id": circle_id})
-    await db.circle_kicks.delete_many({"circle_id": circle_id})
-
-    return {"message": "You're live. The world is listening."}
-
-
-@router.post("/{circle_id}/events/{event_id}/end-live")
-async def end_live(
-    circle_id:    str,
-    event_id:     str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator(circle, str(current_user.id))
-
-    now = _now()
-    await db.circle_events.update_one(
-        {"_id": oid(event_id)},
-        {"$set": {"status": "ended", "is_live": False, "ended_at": now}}
-    )
-    await db.circles.update_one(
-        {"_id": oid(circle_id)},
-        {"$set": {"is_live": False, "live_event_id": None}}
-    )
-    await db.circle_hot_seats.delete_many({"event_id": event_id})
-    return {"message": "The circle has closed. It was real while it lasted."}
-
-
-# ─── Join live event (preview + payment) ─────────────────────────────────────
-
-@router.post("/{circle_id}/events/{event_id}/join")
-async def join_live_event(
-    circle_id:    str,
-    event_id:     str,
-    data:         JoinEventRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Join a live event.
-    Free events  → instant permanent access.
-    Paid events  → 5-min preview, timer pauses on leave, resumes on rejoin.
-                   Preview expires → locked. Pay to unlock permanently.
-    Creator/Admin → always instant access.
-    """
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    event  = await db.circle_events.find_one({"_id": oid(event_id), "circle_id": circle_id})
-
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found.")
-    if event["status"] == "ended":
-        raise HTTPException(status_code=400, detail="This live has ended. It only existed in the moment.")
-    if event["status"] != "live":
-        raise HTTPException(status_code=400, detail="This event hasn't started yet.")
-
-    user_id    = str(current_user.id)
-    is_creator = str(circle.get("creator_id", "")) == user_id
-    m          = await get_member_doc(db, circle_id, user_id)
-    is_admin   = bool(m and m.get("role") == ROLE_ADMIN)
-    entry_fee  = event.get("entry_fee", 0)
-
-    # Creator and admins — permanent access always
-    if is_creator or is_admin:
-        return {"status": "granted", "access": "permanent", "message": "You're in."}
-
-    preview = await get_preview_record(db, event_id, user_id)
-
-    # Already paid
-    if preview and preview.get("status") == "completed":
-        await tick_preview_timer(db, preview)
-        return {"status": "granted", "access": "permanent", "message": "Welcome back."}
-
-    # Free event
-    if entry_fee == 0:
-        if not preview:
-            await db.circle_event_payments.insert_one({
-                "circle_id":            circle_id,
-                "event_id":             event_id,
-                "user_id":              user_id,
-                "amount_kes":           0,
-                "status":               "completed",
-                "provider":             "free",
-                "preview_seconds_used": 0,
-                "preview_joined_at":    None,
-                "preview_locked":       False,
-                "created_at":           _now(),
-                "paid_at":              _now(),
-            })
-        return {"status": "granted", "access": "permanent", "message": "You're in."}
-
-    # Paid event — handle preview timer
-    if preview:
-        await pause_preview_timer(db, preview)
-        preview   = await get_preview_record(db, event_id, user_id)
-        remaining = await get_preview_seconds_remaining(preview)
-
-        if preview.get("preview_locked") or remaining <= 0:
-            raise HTTPException(
-                status_code=402,
-                detail="Your preview has ended. Pay to stay in the circle."
-            )
-
-        remaining = await tick_preview_timer(db, preview)
-        return {
-            "status":               "preview",
-            "access":               "preview",
-            "preview_seconds_left": remaining,
-            "message":              f"You have {remaining // 60}m {remaining % 60}s left.",
-        }
-
-    # First time on paid event — start preview
-    now = _now()
-    await db.circle_event_payments.insert_one({
-        "circle_id":            circle_id,
-        "event_id":             event_id,
-        "user_id":              user_id,
-        "amount_kes":           entry_fee,
-        "creator_cut_kes":      round(entry_fee * CREATOR_CUT),
-        "anonixx_cut_kes":      round(entry_fee * ANONIXX_CUT),
-        "checkout_request_id":  None,
-        "status":               "preview",
-        "provider":             None,
-        "preview_seconds_used": 0,
-        "preview_joined_at":    now,
-        "preview_locked":       False,
-        "created_at":           now,
-        "paid_at":              None,
-    })
-
-    return {
-        "status":               "preview",
-        "access":               "preview",
-        "preview_seconds_left": PREVIEW_SECONDS,
-        "message":              "You have 5 minutes. Make them count.",
-    }
-
-
-@router.post("/{circle_id}/events/{event_id}/pay")
-async def pay_for_event(
-    circle_id:    str,
-    event_id:     str,
-    data:         JoinEventRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """Pay to unlock permanent access after preview expires."""
-    db    = await get_database()
-    event = await db.circle_events.find_one({"_id": oid(event_id), "circle_id": circle_id})
-
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found.")
-    if event["status"] == "ended":
-        raise HTTPException(status_code=400, detail="This live has ended.")
-
-    user_id   = str(current_user.id)
-    entry_fee = event.get("entry_fee", 0)
-
-    if entry_fee == 0:
-        raise HTTPException(status_code=400, detail="This event is free.")
-
-    preview = await get_preview_record(db, event_id, user_id)
-    if preview and preview.get("status") == "completed":
-        return {"message": "You already have full access."}
-
-    if not data.phone_number:
-        raise HTTPException(status_code=400, detail="Phone number required.")
-
-    phone = data.phone_number.strip().replace(" ", "")
-    if phone.startswith("0"):
-        phone = "254" + phone[1:]
-    elif phone.startswith("7") or phone.startswith("1"):
-        phone = "254" + phone
-    if len(phone) < 12:
-        raise HTTPException(status_code=400, detail="Invalid M-Pesa number.")
-
-    try:
-        from app.utils.mpesa import MPesaClient
-        mpesa    = MPesaClient()
-        response = await mpesa.stk_push(
-            phone=phone,
-            amount=entry_fee,
-            reference=f"LIVE-{event_id[:8]}",
-            description=f"Enter: {event.get('title', 'Circle Live')}",
-        )
-    except Exception:
-        raise HTTPException(status_code=502, detail="Payment service unavailable.")
-
-    if not response.get("success"):
-        raise HTTPException(status_code=502, detail="Could not initiate payment.")
-
-    checkout_id = response.get("CheckoutRequestID")
-    now         = _now()
-
-    if preview:
-        await db.circle_event_payments.update_one(
-            {"_id": preview["_id"]},
-            {"$set": {
-                "checkout_request_id": checkout_id,
-                "status":              "pending",
-                "provider":            "mpesa",
-            }}
-        )
-    else:
-        await db.circle_event_payments.insert_one({
-            "circle_id":            circle_id,
-            "event_id":             event_id,
-            "user_id":              user_id,
-            "amount_kes":           entry_fee,
-            "creator_cut_kes":      round(entry_fee * CREATOR_CUT),
-            "anonixx_cut_kes":      round(entry_fee * ANONIXX_CUT),
-            "checkout_request_id":  checkout_id,
-            "status":               "pending",
-            "provider":             "mpesa",
-            "preview_seconds_used": PREVIEW_SECONDS,
-            "preview_joined_at":    None,
-            "preview_locked":       True,
-            "created_at":           now,
-            "paid_at":              None,
-        })
-
-    return {"checkout_request_id": checkout_id, "status": "pending"}
-
-
-@router.get("/{circle_id}/events/{event_id}/pay/status/{checkout_id}")
-async def pay_status(
-    circle_id:   str,
-    event_id:    str,
-    checkout_id: str,
-    current_user: User = Depends(get_current_user),
-):
-    db      = await get_database()
-    payment = await db.circle_event_payments.find_one({
-        "checkout_request_id": checkout_id,
-        "user_id":             str(current_user.id),
-        "event_id":            event_id,
-    })
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found.")
-    return {"status": payment.get("status", "pending")}
-
-
-@router.post("/events/pay/callback")
-async def live_payment_callback(callback_data: dict):
-    """Safaricom callback — register URL in M-Pesa dashboard."""
-    try:
-        stk         = callback_data.get("Body", {}).get("stkCallback", {})
-        result_code = stk.get("ResultCode")
-        checkout_id = stk.get("CheckoutRequestID")
-
-        if not checkout_id:
-            return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-        db      = await get_database()
-        payment = await db.circle_event_payments.find_one({
-            "checkout_request_id": checkout_id,
-        })
-        if not payment or payment.get("status") == "completed":
-            return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-        now = _now()
-        if result_code == 0:
-            await db.circle_event_payments.update_one(
-                {"_id": payment["_id"]},
-                {"$set": {
-                    "status":         "completed",
-                    "paid_at":        now,
-                    "preview_locked": False,
-                }}
-            )
-            circle = await db.circles.find_one({"_id": oid(payment["circle_id"])})
-            if circle:
-                creator_cut = payment.get("creator_cut_kes", 0)
-                await db.circle_payouts.update_one(
-                    {
-                        "circle_id":  payment["circle_id"],
-                        "creator_id": str(circle.get("creator_id", "")),
-                        "status":     "pending",
-                    },
-                    {
-                        "$inc": {"amount_kes": creator_cut},
-                        "$setOnInsert": {
-                            "circle_id":  payment["circle_id"],
-                            "creator_id": str(circle.get("creator_id", "")),
-                            "status":     "pending",
-                            "created_at": now,
-                        },
-                        "$set": {"updated_at": now},
-                    },
-                    upsert=True,
-                )
-        else:
-            await db.circle_event_payments.update_one(
-                {"_id": payment["_id"]},
-                {"$set": {"status": "failed"}}
-            )
-    except Exception:
-        pass
-
-    return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-
-# ─── Live event token ─────────────────────────────────────────────────────────
-
-@router.get("/{circle_id}/events/{event_id}/token")
-async def get_live_token(
-    circle_id:    str,
-    event_id:     str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    event  = await db.circle_events.find_one({"_id": oid(event_id), "circle_id": circle_id})
-
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found.")
-    if event["status"] != "live":
-        raise HTTPException(status_code=403, detail="This event isn't live yet.")
-
-    user_id    = str(current_user.id)
-    is_creator = str(circle.get("creator_id", "")) == user_id
-    m          = await get_member_doc(db, circle_id, user_id)
-    is_admin   = bool(m and m.get("role") == ROLE_ADMIN)
-
-    if not is_creator and not is_admin:
-        preview = await get_preview_record(db, event_id, user_id)
-        if not preview:
-            raise HTTPException(status_code=403, detail="Join the event first.")
-
-        if preview.get("status") == "completed":
-            pass  # full access
-        else:
-            await pause_preview_timer(db, preview)
-            preview   = await get_preview_record(db, event_id, user_id)
-            remaining = await get_preview_seconds_remaining(preview)
-            if remaining <= 0 or preview.get("preview_locked"):
-                raise HTTPException(
-                    status_code=402,
-                    detail="Your preview has ended. Pay to stay in the circle."
-                )
-            await tick_preview_timer(db, preview)
-
-    role    = "publisher" if is_creator else "subscriber"
-    channel = f"circle_live_{event_id}"
-    uid     = abs(hash(user_id)) % (2**32)
-    token   = generate_agora_token(channel, uid, role)
-
-    await db.circle_events.update_one(
-        {"_id": oid(event_id)},
-        {"$inc": {"viewer_count": 1}}
-    )
-
-    return {
-        "token":   token,
-        "channel": channel,
-        "uid":     uid,
-        "role":    role,
-        "app_id":  settings.AGORA_APP_ID,
-    }
-
-
-# ─── Preview status poll ──────────────────────────────────────────────────────
-
-@router.get("/{circle_id}/events/{event_id}/preview/status")
-async def preview_status(
-    circle_id:    str,
-    event_id:     str,
-    current_user: User = Depends(get_current_user),
-):
-    """Frontend polls every 15s during preview to know remaining time."""
-    db      = await get_database()
-    preview = await get_preview_record(db, event_id, str(current_user.id))
-
-    if not preview:
-        return {"status": "not_joined"}
-
-    if preview.get("status") == "completed":
-        return {"status": "paid", "seconds_left": None}
-
-    await pause_preview_timer(db, preview)
-    preview = await get_preview_record(db, event_id, str(current_user.id))
-    if not preview:
-        return {"status": "not_joined"}
-
-    remaining = await get_preview_seconds_remaining(preview)
-
-    if remaining <= 0 or preview.get("preview_locked"):
-        return {"status": "locked", "seconds_left": 0}
-
-    await tick_preview_timer(db, preview)
-    return {"status": "preview", "seconds_left": remaining}
-
-
-# ─── Anonymous Gifts ──────────────────────────────────────────────────────────
-
-@router.post("/{circle_id}/events/{event_id}/gift")
-async def send_gift(
-    circle_id:    str,
-    event_id:     str,
-    data:         GiftRequest,
-    current_user: User = Depends(get_current_user),
-):
-    db    = await get_database()
-    event = await db.circle_events.find_one({"_id": oid(event_id), "circle_id": circle_id})
-
-    if not event or event["status"] != "live":
-        raise HTTPException(status_code=400, detail="Gifts are only for live events.")
-
-    tier_amount = GIFT_TIERS.get(data.tier)
-    if not tier_amount:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid gift tier. Choose: {', '.join(GIFT_TIERS.keys())}"
-        )
-
-    now = _now()
-    await db.circle_gifts.insert_one({
-        "circle_id":       circle_id,
-        "event_id":        event_id,
-        "sender_id":       str(current_user.id),
-        "tier":            data.tier,
-        "amount_kes":      tier_amount,
-        "creator_cut_kes": round(tier_amount * CREATOR_CUT),
-        "anonixx_cut_kes": round(tier_amount * ANONIXX_CUT),
-        "sent_at":         now,
-    })
-    await db.circle_events.update_one(
-        {"_id": oid(event_id)},
-        {"$inc": {"total_gifts": tier_amount}}
-    )
-
-    return {
-        "message":    f"A stranger sent {TIER_EMOJIS.get(data.tier, '🎁')}",
-        "tier":       data.tier,
-        "amount_kes": tier_amount,
-    }
-
-
-# ─── Hot Seat ─────────────────────────────────────────────────────────────────
-
-@router.post("/{circle_id}/events/{event_id}/hotseat/pull")
-async def pull_to_hotseat(
-    circle_id:    str,
-    event_id:     str,
-    current_user: User = Depends(get_current_user),
-):
-    import random
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator(circle, str(current_user.id))
-
-    paid_viewers = await db.circle_event_payments.find({
-        "event_id": event_id,
-        "status":   "completed",
-        "user_id":  {"$ne": str(current_user.id)},
-    }).to_list(None)
-
-    if not paid_viewers:
-        raise HTTPException(status_code=400, detail="No paid members in the live to pull.")
-
-    selected = random.choice(paid_viewers)
-    now      = _now()
-
-    await db.circle_hot_seats.insert_one({
-        "circle_id":  circle_id,
-        "event_id":   event_id,
-        "user_id":    selected["user_id"],
-        "status":     "pending",
-        "created_at": now,
-        "expires_at": now + timedelta(seconds=15),
-    })
-
-    return {
-        "user_id": selected["user_id"],
-        "message": "Hot Seat request sent. They have 15 seconds to decide.",
-    }
-
-
-@router.post("/{circle_id}/events/{event_id}/hotseat/accept")
-async def accept_hotseat(
-    circle_id:    str,
-    event_id:     str,
-    current_user: User = Depends(get_current_user),
-):
-    db = await get_database()
-    hs = await db.circle_hot_seats.find_one({
-        "event_id": event_id,
-        "user_id":  str(current_user.id),
-        "status":   "pending",
-    })
-    if not hs:
-        raise HTTPException(status_code=404, detail="No Hot Seat invitation found.")
-
-    expires_at = hs.get("expires_at")
-    if not expires_at:
-        raise HTTPException(status_code=400, detail="The invitation expired.")
-    if getattr(expires_at, "tzinfo", None) is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < _now():
-        raise HTTPException(status_code=400, detail="The invitation expired.")
-
-    await db.circle_hot_seats.update_one(
-        {"_id": hs["_id"]},
-        {"$set": {"status": "accepted", "accepted_at": _now()}}
-    )
-
-    channel = f"circle_live_{event_id}"
-    uid     = abs(hash(str(current_user.id))) % (2**32)
-    token   = generate_agora_token(channel, uid, "publisher")
-
-    return {
-        "token":   token,
-        "channel": channel,
-        "uid":     uid,
-        "app_id":  settings.AGORA_APP_ID,
-        "message": "You're on. Speak your truth.",
-    }
-
-
-@router.post("/{circle_id}/events/{event_id}/hotseat/decline")
-async def decline_hotseat(
-    circle_id:    str,
-    event_id:     str,
-    current_user: User = Depends(get_current_user),
-):
-    db = await get_database()
-    await db.circle_hot_seats.update_one(
-        {"event_id": event_id, "user_id": str(current_user.id), "status": "pending"},
-        {"$set": {"status": "declined"}}
-    )
-    return {"message": "You stayed in the shadows."}
-
-
-# ─── Creator Dashboard ────────────────────────────────────────────────────────
-
-@router.get("/{circle_id}/dashboard")
-async def creator_dashboard(
-    circle_id:    str,
-    current_user: User = Depends(get_current_user),
-):
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_creator(circle, str(current_user.id))
-
-    event_agg = await db.circle_event_payments.aggregate([
-        {"$match": {"circle_id": circle_id, "status": "completed"}},
-        {"$group": {"_id": None, "total": {"$sum": "$creator_cut_kes"}}},
-    ]).to_list(None)
-    event_earn = event_agg[0]["total"] if event_agg else 0
-
-    gift_agg = await db.circle_gifts.aggregate([
-        {"$match": {"circle_id": circle_id}},
-        {"$group": {"_id": None, "total": {"$sum": "$creator_cut_kes"}}},
-    ]).to_list(None)
-    gift_earn = gift_agg[0]["total"] if gift_agg else 0
-
-    pending_doc    = await db.circle_payouts.find_one({
-        "circle_id":  circle_id,
-        "creator_id": str(current_user.id),
-        "status":     "pending",
-    })
-    pending_payout = pending_doc["amount_kes"] if pending_doc else 0
-
-    today       = _now()
-    days_ahead  = (7 - today.weekday()) % 7 or 7
-    next_monday = (today + timedelta(days=days_ahead)).strftime("%a %b %-d")
-
-    past_events = await db.circle_events.find({
-        "circle_id": circle_id,
-        "status":    "ended",
-    }).sort("ended_at", -1).limit(10).to_list(None)
-
-    admin_count = await db.circle_members.count_documents({
-        "circle_id": circle_id,
-        "role":      ROLE_ADMIN,
-    })
-
-    return {
-        "circle": {
-            "id":           fmt_id(circle),
-            "name":         circle["name"],
-            "member_count": circle.get("member_count", 0),
-            "member_range": member_range_label(circle.get("member_count", 0)),
-            "admin_count":  admin_count,
-        },
-        "total_earnings_kes": event_earn + gift_earn,
-        "event_earnings_kes": event_earn,
-        "gift_earnings_kes":  gift_earn,
-        "pending_payout_kes": pending_payout,
-        "next_payout_date":   next_monday,
-        "past_events": [
-            {
-                "id":           fmt_id(e),
-                "title":        e["title"],
-                "peak_viewers": e.get("peak_viewers", 0),
-                "total_gifts":  e.get("total_gifts", 0),
-                "entry_fee":    e.get("entry_fee", 0),
-                "ended_at":     e["ended_at"].isoformat() if e.get("ended_at") else None,
-            }
-            for e in past_events
-        ],
-    }
-
-
 # ─── Delete circle ────────────────────────────────────────────────────────────
 
 @router.delete("/{circle_id}")
@@ -1471,35 +419,37 @@ async def delete_circle(
 
 # ==================== CONTENT FEED ====================
 # Posts inside a circle — admin/circle-admin only to create, coin-unlockable
-# per item (blurred until paid), visible to members only (the paid join is
-# what gates the group's content, not each individual post).
+# per item (blurred until paid). Visible to anyone browsing the circle;
+# following is a personalization relation, not a paywall.
 
 class CirclePostCreate(BaseModel):
-    caption:      str = ""
-    media_url:    Optional[str] = None
-    media_type:   Optional[str] = None   # "image" | "video"
-    unlock_price: int = 0                # coins; 0 = free to view
+    caption:        str = ""
+    images:         List[str] = []
+    video_url:      Optional[str] = None
+    audio_url:      Optional[str] = None
+    audio_duration: Optional[int] = None
+    file_url:       Optional[str] = None
+    file_name:      Optional[str] = None
+    unlock_price:   int = 0   # coins; 0 = free to view
 
 
 def format_circle_post(post: dict, unlocked: bool) -> dict:
     locked = post.get("unlock_price", 0) > 0 and not unlocked
     return {
-        "id":            fmt_id(post),
-        "caption":       post.get("caption", ""),
-        "media_type":    post.get("media_type"),
-        # Blurred posts never leak the real media URL to an unpaid viewer.
-        "media_url":     None if locked else post.get("media_url"),
-        "unlock_price":  post.get("unlock_price", 0),
-        "locked":        locked,
-        "created_at":    post["created_at"].isoformat(),
+        "id":             fmt_id(post),
+        "caption":        post.get("caption", ""),
+        # Blurred posts never leak media to an unpaid viewer.
+        "images":         [] if locked else post.get("images", []),
+        "video_url":      None if locked else post.get("video_url"),
+        "audio_url":      None if locked else post.get("audio_url"),
+        "audio_duration": None if locked else post.get("audio_duration"),
+        "file_url":       None if locked else post.get("file_url"),
+        "file_name":      None if locked else post.get("file_name"),
+        "unlock_price":   post.get("unlock_price", 0),
+        "locked":         locked,
+        "comment_count":  post.get("comment_count", 0),
+        "created_at":     post["created_at"].isoformat(),
     }
-
-
-async def assert_member(db, circle_id: str, user_id: str):
-    m = await get_member_doc(db, circle_id, user_id)
-    if not m:
-        raise HTTPException(status_code=403, detail="Join this circle to see its content.")
-    return m
 
 
 @router.post("/{circle_id}/posts", status_code=201)
@@ -1512,20 +462,26 @@ async def create_circle_post(
     circle = await get_circle_or_404(db, circle_id)
     await assert_creator_or_admin(db, circle, str(current_user.id))
 
-    if not data.caption.strip() and not data.media_url:
+    has_media = bool(data.images or data.video_url or data.audio_url or data.file_url)
+    if not data.caption.strip() and not has_media:
         raise HTTPException(status_code=400, detail="Add a caption or attach media.")
     if data.unlock_price < 0:
         raise HTTPException(status_code=400, detail="unlock_price can't be negative.")
 
     now = _now()
     result = await db.circle_posts.insert_one({
-        "circle_id":    circle_id,
-        "created_by":   str(current_user.id),
-        "caption":      data.caption.strip(),
-        "media_url":    data.media_url,
-        "media_type":   data.media_type,
-        "unlock_price": data.unlock_price,
-        "created_at":   now,
+        "circle_id":      circle_id,
+        "created_by":     str(current_user.id),
+        "caption":        data.caption.strip(),
+        "images":         data.images,
+        "video_url":      data.video_url,
+        "audio_url":      data.audio_url,
+        "audio_duration": data.audio_duration,
+        "file_url":       data.file_url,
+        "file_name":      data.file_name,
+        "unlock_price":   data.unlock_price,
+        "comment_count":  0,
+        "created_at":     now,
     })
     return {"id": str(result.inserted_id), "message": "Posted to the circle."}
 
@@ -1539,7 +495,6 @@ async def list_circle_posts(
 ):
     db     = await get_database()
     circle = await get_circle_or_404(db, circle_id)
-    await assert_member(db, circle_id, str(current_user.id))
 
     cursor = db.circle_posts.find({"circle_id": circle_id}).sort("created_at", -1).skip(skip).limit(limit)
     posts  = [p async for p in cursor]
@@ -1567,7 +522,6 @@ async def unlock_circle_post(
 ):
     db     = await get_database()
     circle = await get_circle_or_404(db, circle_id)
-    await assert_member(db, circle_id, str(current_user.id))
 
     post = await db.circle_posts.find_one({"_id": oid(post_id), "circle_id": circle_id})
     if not post:
@@ -1603,14 +557,194 @@ async def unlock_circle_post(
     return format_circle_post(post, True)
 
 
+# ==================== COMMENTS ====================
+# Anyone can comment on a circle post — text, a photo, a GIF, or a voice
+# note capped at 3 minutes (enforced here even though the client also caps
+# recording length, since nothing upstream can be trusted to have done that).
+
+class CircleCommentCreate(BaseModel):
+    content:        str = ""
+    image_url:      Optional[str] = None
+    gif_url:        Optional[str] = None
+    voice_url:      Optional[str] = None
+    voice_duration: Optional[int] = None   # seconds, from the upload response
+
+
+def format_circle_comment(c: dict) -> dict:
+    return {
+        "id":             fmt_id(c),
+        "user_id":        c["user_id"],
+        "anonymous_name": c.get("anonymous_name", "Anonymous"),
+        "content":        c.get("content", ""),
+        "image_url":      c.get("image_url"),
+        "gif_url":        c.get("gif_url"),
+        "voice_url":      c.get("voice_url"),
+        "voice_duration": c.get("voice_duration"),
+        "created_at":     c["created_at"].isoformat(),
+    }
+
+
+@router.post("/{circle_id}/posts/{post_id}/comments", status_code=201)
+async def create_circle_comment(
+    circle_id:    str,
+    post_id:      str,
+    data:         CircleCommentCreate,
+    current_user: User = Depends(get_current_user),
+):
+    db     = await get_database()
+    await get_circle_or_404(db, circle_id)
+
+    post = await db.circle_posts.find_one({"_id": oid(post_id), "circle_id": circle_id})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+
+    content = data.content.strip()
+    if not content and not data.image_url and not data.gif_url and not data.voice_url:
+        raise HTTPException(status_code=400, detail="Comment must have text, a photo, a GIF, or a voice note.")
+    if data.voice_url and (data.voice_duration or 0) > MAX_VOICE_COMMENT_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Voice notes can't be longer than {MAX_VOICE_COMMENT_SECONDS // 60} minutes."
+        )
+    if contains_contact_info(content):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+
+    now = _now()
+    doc = {
+        "circle_id":      circle_id,
+        "circle_post_id": post_id,
+        "user_id":        str(current_user.id),
+        "anonymous_name": current_user.anonymous_name or "Anonymous",
+        "content":        content,
+        "image_url":      data.image_url,
+        "gif_url":        data.gif_url,
+        "voice_url":      data.voice_url,
+        "voice_duration": data.voice_duration,
+        "created_at":     now,
+    }
+    result   = await db.circle_comments.insert_one(doc)
+    doc["_id"] = result.inserted_id
+
+    await db.circle_posts.update_one(
+        {"_id": oid(post_id)},
+        {"$inc": {"comment_count": 1}}
+    )
+    return format_circle_comment(doc)
+
+
+@router.get("/{circle_id}/posts/{post_id}/comments")
+async def list_circle_comments(
+    circle_id:    str,
+    post_id:      str,
+    skip:         int = Query(0, ge=0),
+    limit:        int = Query(50, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+):
+    db = await get_database()
+    await get_circle_or_404(db, circle_id)
+
+    cursor = db.circle_comments.find({
+        "circle_id": circle_id, "circle_post_id": post_id,
+    }).sort("created_at", 1).skip(skip).limit(limit)
+
+    return {"comments": [format_circle_comment(c) async for c in cursor]}
+
+
+# ─── Linkup (unlock a comment author) ────────────────────────────────────────
+# Mirrors posts.py's _create_post_connection / _complete_post_unlock so
+# app/api/v1/unlock_requests.py can treat a circle comment as just another
+# unlock target — same drop_unlocks/drop_connections collections, so
+# DropChatScreen opens the resulting chat with no changes on its end.
+
+async def _create_circle_comment_connection(comment_id: str, comment: dict, unlocker_id: str, db) -> str:
+    existing_conn = await db["drop_connections"].find_one({
+        "drop_id": comment_id, "unlocker_id": unlocker_id,
+    })
+    if existing_conn:
+        await db["drop_unlocks"].update_one(
+            {"drop_id": comment_id, "unlocker_id": unlocker_id},
+            {"$set": {"connection_id": str(existing_conn["_id"])}},
+        )
+        return str(existing_conn["_id"])
+
+    unlocker      = await db["users"].find_one({"_id": oid(unlocker_id)})
+    unlocker_name = unlocker.get("anonymous_name", "Anonymous") if unlocker else "Anonymous"
+    sender_name   = comment.get("anonymous_name") or "Anonymous"
+
+    conn = {
+        "_id":                     ObjectId(),
+        "drop_id":                 comment_id,
+        "sender_id":               comment["user_id"],
+        "sender_anonymous_name":   sender_name,
+        "unlocker_id":             unlocker_id,
+        "unlocker_anonymous_name": unlocker_name,
+        "confession":              comment.get("content", ""),
+        "message_count":           0,
+        "is_revealed_sender":      False,
+        "is_revealed_unlocker":    False,
+        "created_at":              _now(),
+        "last_message_at":         _now(),
+    }
+    await db["drop_connections"].insert_one(conn)
+    connection_id = str(conn["_id"])
+
+    await db["drop_unlocks"].update_one(
+        {"drop_id": comment_id, "unlocker_id": unlocker_id},
+        {"$set": {"connection_id": connection_id, "sender_anonymous_name": sender_name}},
+    )
+    return connection_id
+
+
+async def _complete_circle_comment_unlock(comment: dict, requester_id: str, db) -> None:
+    from app.api.v1.drops import unlock_cost_for, unlock_reward_for, CASH_TO_COIN_RATE, send_push_notification
+    comment_id = str(comment["_id"])
+
+    cost = await unlock_cost_for(requester_id, db)
+    await debit_coins(
+        db=db, user_id=requester_id, amount=cost,
+        reason="circle_comment_reveal", description="Unlocked a circle commenter",
+        meta={"comment_id": comment_id},
+    )
+
+    # Same flat reward Drops/posts pay — a hook, not a cut of what was paid.
+    reward = await unlock_reward_for(comment["user_id"], db)
+    try:
+        await credit_coins(
+            db=db, user_id=comment["user_id"], amount=reward,
+            reason="drop_unlock_reward",
+            description=f"+{reward} coins — someone unlocked your comment",
+            meta={"comment_id": comment_id, "unlock_cost_coins": cost, "reward_coins": reward},
+        )
+    except ValueError:
+        pass  # author account missing — don't fail the unlocker's flow over it
+
+    await db["drop_unlocks"].insert_one({
+        "_id":                    ObjectId(),
+        "drop_id":                comment_id,
+        "unlocker_id":            requester_id,
+        "sender_id":              comment["user_id"],
+        "method":                 "coins",
+        "amount":                 cost / CASH_TO_COIN_RATE,
+        "sender_anonymous_name":  comment.get("anonymous_name") or "Anonymous",
+        "created_at":             _now(),
+    })
+
+    await send_push_notification(
+        comment["user_id"],
+        "Someone unlocked your comment 🔓",
+        "Someone just paid to connect with you.",
+        db,
+    )
+
+
 # ==================== ADS ====================
-# Any member can buy an ad slot in a circle's feed — priced by how long it
-# runs. New ads land as "pending" and only reach the feed once the circle's
-# creator/admin approves them — the app is anonymous and adult-adjacent
-# enough that an unmoderated self-serve queue is too easy to abuse. The
-# duration clock starts at approval, not purchase, so review time never eats
-# into what the buyer paid for. Physical cleanup of expired ads is a real
-# scheduled job (see app/tasks/circle_ad_cleanup.py), not a read-time filter.
+# Regular (non-admin) users can buy an ad slot in a circle's feed that
+# promotes one of their own Drops — priced by how long it runs. New ads
+# land as "pending" and only reach the feed once the circle's creator/admin
+# approves them. The duration clock starts at approval, not purchase, so
+# review time never eats into what the buyer paid for. Physical cleanup of
+# expired ads is a real scheduled job (see app/tasks/circle_ad_cleanup.py),
+# not a read-time filter.
 
 AD_COINS_PER_HOUR = 5
 MAX_AD_HOURS      = 24 * 14   # 2 weeks
@@ -1621,23 +755,29 @@ AD_STATUS_REJECTED = "rejected"
 
 
 class CircleAdCreate(BaseModel):
-    title:          str
-    media_url:      Optional[str] = None
-    link_url:       str            # internal (anonixx://…) or external URL the ad promotes
+    drop_id:        str    # one of the buyer's own Drops, promoted into the circle feed
     duration_hours: int
 
 
-def format_circle_ad(ad: dict) -> dict:
+async def format_circle_ad(db, ad: dict) -> dict:
+    # Drops and their feed-mirrored posts are different documents with
+    # different ids (see unlock_requests.py's docstring) — the ad stores the
+    # raw drops._id (same convention as Backend/app/api/v1/ads.py's main-feed
+    # ads), so the preview and the tap-through target both resolve via the
+    # mirrored posts doc (posts.source_drop_id), not the drop itself.
+    drop = await db.drops.find_one({"_id": oid(ad["drop_id"])})
+    post = await db.posts.find_one({"source_drop_id": ad["drop_id"]}, {"_id": 1})
     return {
-        "id":         fmt_id(ad),
-        "title":      ad["title"],
-        "media_url":  ad.get("media_url"),
-        "link_url":   ad["link_url"],
-        "status":     ad.get("status", AD_STATUS_APPROVED),
-        "duration_hours": ad.get("duration_hours"),
-        "coins_spent":    ad.get("coins_spent", 0),
-        "expires_at": ad["expires_at"].isoformat() if ad.get("expires_at") else None,
-        "created_at": ad["created_at"].isoformat(),
+        "id":              fmt_id(ad),
+        "drop_id":         ad["drop_id"],
+        "post_id":         str(post["_id"]) if post else None,
+        "preview_caption": (drop.get("confession") or "")[:140] if drop else None,
+        "preview_image":   drop.get("media_url") if drop and drop.get("media_type") == "image" else None,
+        "status":          ad.get("status", AD_STATUS_APPROVED),
+        "duration_hours":  ad.get("duration_hours"),
+        "coins_spent":     ad.get("coins_spent", 0),
+        "expires_at":      ad["expires_at"].isoformat() if ad.get("expires_at") else None,
+        "created_at":      ad["created_at"].isoformat(),
     }
 
 
@@ -1649,12 +789,14 @@ async def create_circle_ad(
 ):
     db     = await get_database()
     circle = await get_circle_or_404(db, circle_id)
-    await assert_member(db, circle_id, str(current_user.id))
+    await assert_regular_user(db, circle, str(current_user.id))
 
-    if not data.title.strip():
-        raise HTTPException(status_code=400, detail="Give your ad a title.")
-    if not data.link_url.strip():
-        raise HTTPException(status_code=400, detail="Add a link for your ad to point to.")
+    try:
+        drop = await db.drops.find_one({"_id": oid(data.drop_id), "sender_id": str(current_user.id)})
+    except Exception:
+        drop = None
+    if not drop:
+        raise HTTPException(status_code=404, detail="Pick one of your own Drops to link this ad to.")
     if data.duration_hours <= 0 or data.duration_hours > MAX_AD_HOURS:
         raise HTTPException(status_code=400, detail=f"Duration must be between 1 and {MAX_AD_HOURS} hours.")
 
@@ -1663,7 +805,7 @@ async def create_circle_ad(
         await debit_coins(
             db=db, user_id=str(current_user.id), amount=cost,
             reason="circle_ad", description=f"Ad in {circle['name']} for {data.duration_hours}h",
-            meta={"circle_id": circle_id},
+            meta={"circle_id": circle_id, "drop_id": data.drop_id},
         )
     except ValueError as e:
         if "Insufficient" in str(e):
@@ -1674,9 +816,7 @@ async def create_circle_ad(
     result = await db.circle_ads.insert_one({
         "circle_id":      circle_id,
         "created_by":     str(current_user.id),
-        "title":          data.title.strip(),
-        "media_url":      data.media_url,
-        "link_url":       data.link_url.strip(),
+        "drop_id":        data.drop_id,
         "status":         AD_STATUS_PENDING,
         "duration_hours": data.duration_hours,
         "coins_spent":    cost,
@@ -1695,9 +835,8 @@ async def list_circle_ads(
     current_user: User = Depends(get_current_user),
 ):
     """Feed-facing list — approved and still running only."""
-    db     = await get_database()
-    circle = await get_circle_or_404(db, circle_id)
-    await assert_member(db, circle_id, str(current_user.id))
+    db = await get_database()
+    await get_circle_or_404(db, circle_id)
 
     now = _now()
     cursor = db.circle_ads.find({
@@ -1705,7 +844,7 @@ async def list_circle_ads(
         "status":    AD_STATUS_APPROVED,
         "expires_at": {"$gt": now},
     }).sort("created_at", -1)
-    return {"ads": [format_circle_ad(a) async for a in cursor]}
+    return {"ads": [await format_circle_ad(db, a) async for a in cursor]}
 
 
 @router.get("/{circle_id}/ads/mine")
@@ -1713,15 +852,14 @@ async def list_my_circle_ads(
     circle_id:    str,
     current_user: User = Depends(get_current_user),
 ):
-    """Lets a member track the ads they've submitted — pending/approved/rejected."""
+    """Lets a user track the ads they've submitted — pending/approved/rejected."""
     db = await get_database()
     await get_circle_or_404(db, circle_id)
-    await assert_member(db, circle_id, str(current_user.id))
 
     cursor = db.circle_ads.find(
         {"circle_id": circle_id, "created_by": str(current_user.id)}
     ).sort("created_at", -1)
-    return {"ads": [format_circle_ad(a) async for a in cursor]}
+    return {"ads": [await format_circle_ad(db, a) async for a in cursor]}
 
 
 @router.get("/{circle_id}/ads/pending")
@@ -1737,7 +875,7 @@ async def list_pending_circle_ads(
     cursor = db.circle_ads.find(
         {"circle_id": circle_id, "status": AD_STATUS_PENDING}
     ).sort("created_at", 1)
-    return {"ads": [format_circle_ad(a) async for a in cursor]}
+    return {"ads": [await format_circle_ad(db, a) async for a in cursor]}
 
 
 @router.post("/{circle_id}/ads/{ad_id}/approve")

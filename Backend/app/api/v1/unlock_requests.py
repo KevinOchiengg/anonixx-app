@@ -7,7 +7,8 @@ into a request the owner must Accept (or Accept All, per-confession) before
 any coins move and before a chat connection exists.
 
 Data model — one row per attempt in `drop_unlock_requests`:
-    target_type   "post" | "drop"       — posts and their mirrored drops are
+    target_type   "post" | "drop" | "circle_comment" — posts, their mirrored
+                                            drops, and circle comments are all
                                             different Mongo documents with
                                             different ids; never conflate them
     target_id, owner_id, requester_id, requester_anonymous_name,
@@ -55,7 +56,7 @@ def now_utc() -> datetime:
 MAX_REQUEST_VIDEO_SECONDS = 30   # a quick clue, not a full drop-style upload
 
 class CreateUnlockRequestBody(BaseModel):
-    target_type: str            # "post" | "drop"
+    target_type: str            # "post" | "drop" | "circle_comment"
     target_id: str
     payment_method: str = "coins"
     # Optional — a photo or short video the requester chooses to attach so
@@ -110,13 +111,31 @@ async def _resolve_target(target_type: str, target_id: str, db) -> dict:
             "confession_snippet": (doc.get("confession") or "")[:140],
         }
 
-    raise HTTPException(status_code=400, detail="target_type must be 'post' or 'drop'.")
+    if target_type == "circle_comment":
+        try:
+            doc = await db["circle_comments"].find_one({"_id": ObjectId(target_id)})
+        except Exception:
+            doc = None
+        if not doc:
+            raise HTTPException(status_code=404, detail="Comment not found.")
+        snippet = doc.get("content") or ("Voice note" if doc.get("voice_url") else "Photo" if doc.get("image_url") else "GIF")
+        return {
+            "doc": doc,
+            "owner_id": doc["user_id"],
+            "target_expires_at": None,   # comments don't expire
+            "confession_snippet": snippet[:140],
+        }
+
+    raise HTTPException(status_code=400, detail="target_type must be 'post', 'drop', or 'circle_comment'.")
 
 
 async def _create_connection_for_target(target_type: str, target_id: str, target_doc: dict, requester_id: str, db) -> str:
     if target_type == "post":
         from app.api.v1.posts import _create_post_connection
         return await _create_post_connection(target_id, target_doc, requester_id, db)
+    if target_type == "circle_comment":
+        from app.api.v1.circles import _create_circle_comment_connection
+        return await _create_circle_comment_connection(target_id, target_doc, requester_id, db)
     from app.api.v1.drops import _create_drop_connection
     return await _create_drop_connection(target_id, target_doc, requester_id, db)
 
@@ -132,6 +151,9 @@ async def _charge_and_complete(req: dict, target_doc: dict, db) -> str:
     if target_type == "post":
         from app.api.v1.posts import _complete_post_unlock
         await _complete_post_unlock(target_doc, requester_id, db)
+    elif target_type == "circle_comment":
+        from app.api.v1.circles import _complete_circle_comment_unlock
+        await _complete_circle_comment_unlock(target_doc, requester_id, db)
     else:
         from app.api.v1.drops import (
             ORIGIN_AUTHOR_UNLOCK_COST, _complete_unlock, unlock_cost_for,
@@ -214,8 +236,8 @@ async def create_unlock_request(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    if data.target_type not in ("post", "drop"):
-        raise HTTPException(status_code=400, detail="target_type must be 'post' or 'drop'.")
+    if data.target_type not in ("post", "drop", "circle_comment"):
+        raise HTTPException(status_code=400, detail="target_type must be 'post', 'drop', or 'circle_comment'.")
     if data.payment_method != "coins":
         # Stripe/M-Pesa need an off-session charge design (SetupIntent, SCA
         # fallback) that doesn't exist yet — reject cleanly instead of

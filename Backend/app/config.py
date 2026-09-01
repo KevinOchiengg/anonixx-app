@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     MPESA_ENVIRONMENT: str = "sandbox"  # sandbox | production
     MPESA_CALLBACK_URL: str = "http://localhost:8000/api/v1/payments/mpesa/callback"
 
-    # AGORA
+    # AGORA — used by Drop voice/video calls (app/api/v1/drop_calls.py), not Circles
     AGORA_APP_ID: str = ""
     AGORA_APP_CERTIFICATE: str = ""
 

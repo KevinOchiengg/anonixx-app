@@ -13,12 +13,39 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useStripe } from '@stripe/stripe-react-native'
 
-import { ArrowLeft, Check, Crown } from 'lucide-react-native'
+import { ArrowLeft, Check, Crown, EyeOff, Coins, TrendingUp, Clock3 } from 'lucide-react-native'
+import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive'
 import { useToast } from '../../components/ui/Toast'
 import { API_BASE_URL } from '../../config/api'
+import T from '../../utils/theme'
 
-const features = [
-  'Unlimited Drops every day — free accounts get 3',
+// Mirrors the real perk math in Backend/app/api/v1/drops.py (unlock_cost_for
+// / unlock_reward_for / grace_days_for) and the ad-free check in ads.py's
+// list_active_ads — this is what premium actually changes today. There is
+// no posting cap on either tier any more (see drops.py's deprecated
+// /daily-limit route), so "unlimited drops" isn't a premium perk — it's
+// just how the app works now.
+const FEATURES = [
+  {
+    icon: EyeOff,
+    title: 'No ads. Just drops.',
+    body: 'Premium clears the ads out of your feed completely.',
+  },
+  {
+    icon: Coins,
+    title: 'Cheaper to link up',
+    body: '25 coins instead of 50 to unlock and connect with someone.',
+  },
+  {
+    icon: TrendingUp,
+    title: 'You earn more, too',
+    body: '10 coins (not 5) every time someone unlocks one of your drops.',
+  },
+  {
+    icon: Clock3,
+    title: 'Your drops stick around',
+    body: '14 days to collect unlocks after the first one — double the usual window.',
+  },
 ]
 
 // Mirrors Backend/app/api/v1/premium.py PREMIUM_PLANS — used to render the
@@ -107,10 +134,10 @@ const MpesaForm = React.memo(({ planId, onSuccess, onError }) => {
   if (polling) {
     return (
       <View style={styles.waitingBox}>
-        <ActivityIndicator size="large" color="#22c55e" />
+        <ActivityIndicator size="large" color={T.mpesa} />
         <Text style={styles.waitingTitle}>Check your phone</Text>
         <Text style={styles.waitingBody}>Enter your M-Pesa PIN to complete the payment.</Text>
-        <TouchableOpacity onPress={() => { clearInterval(pollRef.current); setPolling(false) }}>
+        <TouchableOpacity onPress={() => { clearInterval(pollRef.current); setPolling(false) }} hitSlop={HIT_SLOP}>
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
       </View>
@@ -123,7 +150,7 @@ const MpesaForm = React.memo(({ planId, onSuccess, onError }) => {
         value={phone}
         onChangeText={setPhone}
         placeholder="07XX XXX XXX"
-        placeholderTextColor="#6b7280"
+        placeholderTextColor={T.textMuted}
         keyboardType="phone-pad"
         maxLength={13}
         style={styles.formInput}
@@ -131,7 +158,7 @@ const MpesaForm = React.memo(({ planId, onSuccess, onError }) => {
       <Text style={styles.formHint}>You'll receive an STK push on this number.</Text>
       <TouchableOpacity
         onPress={handlePay}
-        style={[styles.payBtn, { backgroundColor: '#22c55e' }]}
+        style={[styles.payBtn, { backgroundColor: T.mpesa }]}
         disabled={loading}
         activeOpacity={0.85}
       >
@@ -182,7 +209,7 @@ const StripeForm = React.memo(({ planId, onSuccess, onError }) => {
     <View style={styles.formGap}>
       <TouchableOpacity
         onPress={handlePay}
-        style={[styles.payBtn, { backgroundColor: '#635BFF' }]}
+        style={[styles.payBtn, { backgroundColor: T.stripe }]}
         disabled={loading}
         activeOpacity={0.85}
       >
@@ -209,8 +236,8 @@ const SuccessOverlay = React.memo(({ onContinue }) => {
       <Animated.View style={[styles.successCard, { transform: [{ scale }] }]}>
         <Text style={styles.successEmoji}>✨</Text>
         <Text style={styles.successTitle}>You're in.</Text>
-        <Text style={styles.successBody}>Unlimited Drops, starting now.</Text>
-        <TouchableOpacity onPress={onContinue} style={styles.successBtn} activeOpacity={0.85}>
+        <Text style={styles.successBody}>Cheaper unlocks. Bigger payouts. No ads. Go.</Text>
+        <TouchableOpacity onPress={onContinue} style={styles.successBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
           <Text style={styles.successBtnText}>Continue</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -246,31 +273,37 @@ export default function PremiumScreen({ navigation }) {
       {success && <SuccessOverlay onContinue={handleContinue} />}
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <ArrowLeft size={24} color='#ffffff' />
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
+          <ArrowLeft size={rs(22)} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Anonixx Premium</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: rs(22) }} />
       </View>
 
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         <View style={styles.heroSection}>
           <View style={styles.crownContainer}>
-            <Crown size={64} color='#fbbf24' />
+            <Crown size={rs(56)} color={T.gold} fill={T.gold} />
           </View>
-          <Text style={styles.heroTitle}>Go deeper. No limits, no waiting.</Text>
+          <Text style={styles.heroTitle}>Go deeper. Spend less. Keep more.</Text>
           <Text style={styles.heroSubtitle}>One less thing standing between you and the truth</Text>
         </View>
 
         <View style={styles.featuresContainer}>
-          {features.map((feature, index) => (
-            <View key={index} style={styles.featureRow}>
-              <View style={styles.checkIcon}>
-                <Check size={20} color='#10b981' />
+          {FEATURES.map((feature, index) => {
+            const Icon = feature.icon
+            return (
+              <View key={index} style={styles.featureRow}>
+                <View style={styles.featureIcon}>
+                  <Icon size={rs(18)} color={T.primary} />
+                </View>
+                <View style={styles.featureTextWrap}>
+                  <Text style={styles.featureTitle}>{feature.title}</Text>
+                  <Text style={styles.featureBody}>{feature.body}</Text>
+                </View>
               </View>
-              <Text style={styles.featureText}>{feature}</Text>
-            </View>
-          ))}
+            )
+          })}
         </View>
 
         <Text style={styles.plansTitle}>Choose Your Plan</Text>
@@ -279,6 +312,7 @@ export default function PremiumScreen({ navigation }) {
             key={plan.id}
             onPress={() => setSelectedPlan(plan.id)}
             style={[styles.planCard, selectedPlan === plan.id && styles.planCardSelected]}
+            activeOpacity={0.85}
           >
             {plan.save && (
               <View style={styles.saveBadge}>
@@ -291,7 +325,7 @@ export default function PremiumScreen({ navigation }) {
             </View>
             {selectedPlan === plan.id && (
               <View style={styles.selectedIndicator}>
-                <Check size={20} color='#ffffff' />
+                <Check size={rs(18)} color='#ffffff' />
               </View>
             )}
           </TouchableOpacity>
@@ -307,7 +341,7 @@ export default function PremiumScreen({ navigation }) {
               activeOpacity={0.85}
             >
               <Text style={styles.methodFlag}>{m.flag}</Text>
-              <Text style={[styles.methodLabel, method === m.id && { color: '#fff' }]}>{m.label}</Text>
+              <Text style={[styles.methodLabel, method === m.id && { color: T.text }]}>{m.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -328,175 +362,187 @@ export default function PremiumScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a1a' },
+  container: { flex: 1, backgroundColor: T.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: rp(12),
     borderBottomWidth: 1,
-    borderBottomColor: '#374151',
+    borderBottomColor: T.border,
   },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#ffffff' },
+  headerTitle: { fontSize: FONT.lg, fontWeight: '700', color: T.text, fontFamily: 'PlayfairDisplay-Bold' },
   scrollView: { flex: 1 },
-  heroSection: { alignItems: 'center', paddingVertical: 40 },
+  heroSection: { alignItems: 'center', paddingVertical: SPACING.xxl },
   crownContainer: {
-    backgroundColor: 'rgba(251, 191, 36, 0.2)',
-    padding: 20,
-    borderRadius: 50,
-    marginBottom: 20,
+    backgroundColor: T.goldDim,
+    borderWidth: 1,
+    borderColor: T.goldBorder,
+    padding: SPACING.lg,
+    borderRadius: rs(50),
+    marginBottom: SPACING.lg,
   },
   heroTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
+    fontSize: rf(26),
+    fontWeight: '800',
+    color: T.text,
+    marginBottom: SPACING.xs,
     textAlign: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: SPACING.lg,
+    fontFamily: 'PlayfairDisplay-Bold',
+    letterSpacing: -0.3,
   },
-  heroSubtitle: { fontSize: 16, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 32 },
-  featuresContainer: { paddingHorizontal: 16, marginBottom: 32 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  checkIcon: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    padding: 8,
-    borderRadius: 20,
-    marginRight: 12,
+  heroSubtitle: {
+    fontSize: FONT.sm,
+    color: T.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.xl,
+    fontFamily: 'PlayfairDisplay-Italic',
   },
-  featureText: { color: '#ffffff', fontSize: 16, flex: 1 },
+
+  // Features
+  featuresContainer: { paddingHorizontal: SPACING.md, marginBottom: SPACING.xl, gap: SPACING.md },
+  featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
+  featureIcon: {
+    backgroundColor: T.primaryDim,
+    borderWidth: 1,
+    borderColor: T.primaryBorder,
+    padding: rp(9),
+    borderRadius: RADIUS.full,
+  },
+  featureTextWrap: { flex: 1, paddingTop: rp(2) },
+  featureTitle: { color: T.text, fontSize: FONT.md, fontWeight: '700', fontFamily: 'DMSans-Bold' },
+  featureBody: { color: T.textSecondary, fontSize: FONT.sm, marginTop: rp(2), lineHeight: rf(19) },
+
   plansTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    fontSize: FONT.lg,
+    fontWeight: '700',
+    color: T.text,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    fontFamily: 'PlayfairDisplay-Bold',
   },
   planCard: {
-    backgroundColor: '#16213e',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: T.surface,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#374151',
+    borderColor: T.border,
     position: 'relative',
   },
-  planCardSelected: { borderColor: '#a855f7' },
+  planCardSelected: { borderColor: T.primary },
   saveBadge: {
     position: 'absolute',
-    top: -12,
-    right: 20,
-    backgroundColor: '#10b981',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    top: -rp(12),
+    right: SPACING.lg,
+    backgroundColor: T.success,
+    paddingHorizontal: rp(12),
+    paddingVertical: rp(4),
+    borderRadius: RADIUS.md,
   },
-  saveText: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
+  saveText: { color: '#ffffff', fontSize: rf(10), fontWeight: '800', fontFamily: 'DMSans-Bold' },
   planInfo: { flex: 1 },
-  planName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  planPrice: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#a855f7',
-  },
-  selectedIndicator: {
-    backgroundColor: '#a855f7',
-    borderRadius: 20,
-    padding: 8,
-  },
+  planName: { fontSize: FONT.md, fontWeight: '700', color: T.text, marginBottom: rp(4), fontFamily: 'DMSans-Bold' },
+  planPrice: { fontSize: rf(22), fontWeight: '800', color: T.primary, fontFamily: 'PlayfairDisplay-Bold' },
+  selectedIndicator: { backgroundColor: T.primary, borderRadius: RADIUS.full, padding: rp(8) },
 
   // Payment method
   sectionLabel: {
-    fontSize: 12,
+    fontSize: FONT.xs,
     fontWeight: '700',
-    color: '#9ca3af',
+    color: T.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    paddingHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 10,
+    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.xs,
+    marginBottom: rp(10),
+    fontFamily: 'DMSans-Bold',
   },
-  methodRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 16 },
+  methodRow: { flexDirection: 'row', gap: rp(10), paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   methodBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
+    gap: rp(8),
+    paddingVertical: rp(14),
+    borderRadius: RADIUS.md,
     borderWidth: 1.5,
-    borderColor: '#374151',
-    backgroundColor: '#16213e',
+    borderColor: T.border,
+    backgroundColor: T.surface,
   },
-  methodBtnActive: { borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.12)' },
-  methodFlag: { fontSize: 18 },
-  methodLabel: { fontSize: 15, fontWeight: '600', color: '#9ca3af' },
+  methodBtnActive: { borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
+  methodFlag: { fontSize: rf(18) },
+  methodLabel: { fontSize: FONT.sm, fontWeight: '600', color: T.textSecondary, fontFamily: 'DMSans-SemiBold' },
 
   // Payment forms
-  formContainer: { paddingHorizontal: 16, marginBottom: 16 },
-  formGap: { gap: 10 },
+  formContainer: { paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
+  formGap: { gap: rp(10) },
   formInput: {
-    backgroundColor: '#16213e',
-    color: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
+    backgroundColor: T.surface,
+    color: T.text,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: rp(14),
+    fontSize: FONT.md,
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: T.border,
+    fontFamily: 'DMSans-Regular',
   },
-  formHint: { fontSize: 12, color: '#9ca3af' },
+  formHint: { fontSize: FONT.xs, color: T.textSecondary, fontFamily: 'DMSans-Regular' },
   payBtn: {
-    height: 54,
-    borderRadius: 14,
+    height: BUTTON_HEIGHT,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginTop: rp(4),
   },
-  payBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  payBtnText: { color: '#fff', fontSize: FONT.md, fontWeight: '700', fontFamily: 'DMSans-Bold' },
 
-  waitingBox: { alignItems: 'center', gap: 10, paddingVertical: 24 },
-  waitingTitle: { fontSize: 18, fontWeight: '700', color: '#ffffff' },
-  waitingBody: { fontSize: 14, color: '#9ca3af', textAlign: 'center', lineHeight: 20 },
-  cancelText: { color: '#9ca3af', fontSize: 14, marginTop: 4 },
+  waitingBox: { alignItems: 'center', gap: rp(10), paddingVertical: SPACING.xl },
+  waitingTitle: { fontSize: FONT.lg, fontWeight: '700', color: T.text, fontFamily: 'PlayfairDisplay-Bold' },
+  waitingBody: { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: rf(20), fontFamily: 'DMSans-Regular' },
+  cancelText: { color: T.textSecondary, fontSize: FONT.sm, marginTop: rp(4), fontFamily: 'DMSans-Regular' },
 
   disclaimer: {
-    color: '#6b7280',
-    fontSize: 12,
+    color: T.textMuted,
+    fontSize: FONT.xs,
     textAlign: 'center',
-    paddingHorizontal: 32,
-    marginTop: 8,
-    marginBottom: 32,
+    paddingHorizontal: SPACING.xl,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xl,
+    fontFamily: 'DMSans-Regular',
   },
 
   // Success overlay
   successOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10,10,26,0.96)',
+    backgroundColor: 'rgba(11,15,24,0.96)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 99,
-    padding: 24,
+    padding: SPACING.lg,
   },
-  successCard: { alignItems: 'center', gap: 10 },
-  successEmoji: { fontSize: 64 },
-  successTitle: { fontSize: 28, fontWeight: '800', color: '#ffffff' },
-  successBody: { fontSize: 16, color: '#9ca3af', textAlign: 'center' },
+  successCard: { alignItems: 'center', gap: rp(10) },
+  successEmoji: { fontSize: rf(56) },
+  successTitle: { fontSize: rf(26), fontWeight: '800', color: T.text, fontFamily: 'PlayfairDisplay-Bold' },
+  successBody: { fontSize: FONT.md, color: T.textSecondary, textAlign: 'center', fontFamily: 'DMSans-Regular' },
   successBtn: {
-    backgroundColor: '#a855f7',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 14,
-    marginTop: 10,
+    backgroundColor: T.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginTop: rp(10),
+    shadowColor: T.primary,
+    shadowOffset: { width: 0, height: rs(4) },
+    shadowOpacity: 0.35,
+    shadowRadius: rs(10),
+    elevation: 6,
   },
-  successBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  successBtnText: { color: '#fff', fontSize: FONT.md, fontWeight: '700', fontFamily: 'DMSans-Bold' },
 })

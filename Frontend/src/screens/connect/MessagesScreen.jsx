@@ -120,7 +120,7 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
   } else if (isDrop && !item.last_message && item.confession) {
     previewText = `"${item.confession}"`;
   } else {
-    previewText = item.last_message || 'No messages yet';
+    previewText = item.last_message || 'nothing said yet';
   }
 
   return (

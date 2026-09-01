@@ -1,19 +1,17 @@
 import { useEffect } from 'react';
-import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useDispatch } from 'react-redux';
 import { useAuth } from '../context/AuthContext';
 import { detectLocation } from '../store/slices/locationSlice';
-import T from '../utils/theme';
+import AppLoadingScreen from '../components/common/AppLoadingScreen';
 
-// One loading moment, not two: the native splash (app.json's `splash`
-// config) is already up before this file even runs. This just holds the
-// exact same solid background color for the brief gap while AuthContext's
-// `loading` flag resolves (an AsyncStorage read, usually well under
-// 100ms) — no separate logo/headline screen layered on top of it.
+// One loading moment, not two: App.js already shows AppLoadingScreen for
+// the font-loading gap, so reusing it here for the brief AsyncStorage read
+// while AuthContext's `loading` flag resolves (usually well under 100ms)
+// means the two gaps read as one continuous beat, not a screen swap.
 function Loading() {
-  return <View style={{ flex: 1, backgroundColor: T.background }} />;
+  return <AppLoadingScreen />;
 }
 
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
