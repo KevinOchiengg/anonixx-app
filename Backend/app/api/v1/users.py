@@ -42,6 +42,10 @@ class ReportUserRequest(BaseModel):
     note: Optional[str] = None
 
 
+class PushTokenRequest(BaseModel):
+    token: str
+
+
 @router.get("/me")
 async def get_current_user(
     current_user_id: str = Depends(get_current_user_id),
@@ -114,6 +118,23 @@ async def update_profile(
     )
 
     return {"message": "Profile updated successfully"}
+
+
+@router.post("/push-token")
+async def register_push_token(
+    data: PushTokenRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Not content-feature-specific — just happens to live here now. Used by
+    every push notification sender (drops, circles, unlocks, etc.) to find a
+    user's Expo push token."""
+    await db["push_tokens"].update_one(
+        {"user_id": current_user_id},
+        {"$set": {"token": data.token, "updated_at": _now()}},
+        upsert=True,
+    )
+    return {"message": "Push token registered"}
 
 
 @router.post("/me/verify-age")

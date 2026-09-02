@@ -1,19 +1,14 @@
 /**
- * PostDetailScreen.jsx
- * Full confession view with comments, related confessions.
- *
- * Fixes applied:
- * 1. Comment sheet → 80% height, reply threading, full content visible
- * 2. Related confessions → navigate to Feed tab at that post (not PostDetail)
- * 3. Related cards → no like/message buttons
- * 4. Entrance animations
- * 5. All 17 rules applied
+ * DropDetailScreen.jsx
+ * Full drop view with comments, related drops. Replaces the old
+ * PostDetailScreen — same layout/behavior, repointed at the native
+ * /api/v1/drops/* endpoints instead of the removed posts feature.
  */
 import React, {
   useCallback, useEffect, useRef, useState,
 } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
+  View, Text, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Image, StyleSheet, Dimensions,
   Modal, RefreshControl,
   Animated, Platform, Share,
@@ -26,7 +21,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react-native';
 import {
-  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP,
+  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT,
 } from '../../utils/responsive';
 import { useToast }  from '../../components/ui/Toast';
 import { useAuth }   from '../../context/AuthContext';
@@ -73,7 +68,7 @@ const RelatedCard = React.memo(({ post, onPress }) => {
   const preview     = (post.content?.length ?? 0) > 120 ? post.content.substring(0, 120) + '…' : post.content;
   const handlePress = useCallback(() => onPress(post), [post, onPress]);
   const hasCaption  = (post.content?.length ?? 0) > 0;
-  const hasImage    = (post.images?.length ?? 0) > 0;
+  const hasImage    = !!(post.media_url && post.media_type === 'image');
   const hasVideo    = !!post.video_url;
 
   return (
@@ -93,7 +88,7 @@ const RelatedCard = React.memo(({ post, onPress }) => {
       ) : null}
       {!hasCaption && hasImage ? (
         <Image
-          source={{ uri: post.images[0] }}
+          source={{ uri: post.media_url }}
           style={rStyles.mediaThumb}
           resizeMode="cover"
         />
@@ -103,11 +98,9 @@ const RelatedCard = React.memo(({ post, onPress }) => {
           <Text style={rStyles.videoThumbLabel}>video</Text>
         </View>
       ) : null}
-      {post.topics?.length > 0 && (
+      {post.mood_tag && (
         <View style={rStyles.tagsRow}>
-          {post.topics.slice(0, 3).map(t => (
-            <View key={t} style={rStyles.tag}><Text style={rStyles.tagText}>{t}</Text></View>
-          ))}
+          <View style={rStyles.tag}><Text style={rStyles.tagText}>{post.mood_tag}</Text></View>
         </View>
       )}
     </TouchableOpacity>
@@ -115,7 +108,7 @@ const RelatedCard = React.memo(({ post, onPress }) => {
 });
 
 // ─── Main Screen ──────────────────────────────────────────────
-export default function PostDetailScreen({ route, navigation }) {
+export default function DropDetailScreen({ route, navigation }) {
   const { post: initialPost } = route.params;
   const { isAuthenticated }   = useAuth();
   const { showToast }         = useToast();
@@ -133,11 +126,16 @@ export default function PostDetailScreen({ route, navigation }) {
   const [showOptions,      setShowOptions]      = useState(false);
   const [deleting,         setDeleting]         = useState(false);
   const [contentExpanded,  setContentExpanded]  = useState(false);
+  const [editVisible,      setEditVisible]      = useState(false);
+  const [editText,         setEditText]         = useState('');
+  const [saving,           setSaving]           = useState(false);
 
   const likeScaleAnim = useRef(new Animated.Value(1)).current;
   const headerOp      = useRef(new Animated.Value(0)).current;
   const contentOp     = useRef(new Animated.Value(0)).current;
   const contentY      = useRef(new Animated.Value(rs(16))).current;
+
+  const images = (post.media_url && post.media_type === 'image') ? [post.media_url] : [];
 
   useEffect(() => {
     Animated.parallel([
@@ -152,7 +150,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const fetchThreadCount = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/thread`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/thread`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -165,18 +163,18 @@ export default function PostDetailScreen({ route, navigation }) {
     try {
       const token   = await AsyncStorage.getItem('token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res     = await fetch(`${API_BASE_URL}/api/v1/posts/calm-feed?session_posts=0`, { headers });
+      const res     = await fetch(`${API_BASE_URL}/api/v1/drops/feed?session_posts=0`, { headers });
       const data    = await res.json();
       if (res.ok) {
-        const topics  = post.topics || [];
-        const all     = (data.posts || []).filter(p => p.type === 'post' && p.id !== post.id);
-        const matched = all.filter(p => p.topics?.some(t => topics.includes(t)));
-        const rest    = all.filter(p => !p.topics?.some(t => topics.includes(t)));
+        const mood    = post.mood_tag;
+        const all     = (data.posts || []).filter(p => p.type === 'drop' && p.id !== post.id);
+        const matched = all.filter(p => mood && p.mood_tag === mood);
+        const rest    = all.filter(p => !(mood && p.mood_tag === mood));
         setRelatedPosts([...matched, ...rest].slice(0, 10));
       }
     } catch {}
     finally { setRelatedLoading(false); }
-  }, [post.id, post.topics]);
+  }, [post.id, post.mood_tag]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -199,7 +197,7 @@ export default function PostDetailScreen({ route, navigation }) {
     ]).start();
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/like`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/like`, {
         method: newLiked ? 'POST' : 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -218,7 +216,7 @@ export default function PostDetailScreen({ route, navigation }) {
     }
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/save`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/save`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -231,33 +229,50 @@ export default function PostDetailScreen({ route, navigation }) {
 
   const handleShare = useCallback(async () => {
     try {
-      const shareUrl = `${API_BASE_URL}/api/v1/posts/${post.id}/open`;
       const preview  = post.content?.substring(0, 120) ?? '';
       const ellipsis = (post.content?.length ?? 0) > 120 ? '…' : '';
-      const body = `🎭 *anonixx.confession*\n\n_"${preview}${ellipsis}"_\n\n*someone just said this. anonymously.*\n*find out here →* ${shareUrl}`;
-      await Share.share(
-        Platform.OS === 'ios' ? { message: body, url: shareUrl } : { message: body },
-      );
+      await Share.share({ message: `"${preview}${ellipsis}" — Anonixx` });
     } catch {}
-  }, [post.id, post.content]);
+  }, [post.content]);
 
   const openGallery  = useCallback((i) => { setGalleryIndex(i); setGalleryVisible(true);  }, []);
   const closeGallery = useCallback(() => setGalleryVisible(false), []);
 
   const handleEdit = useCallback(() => {
     setShowOptions(false);
-    navigation.navigate('CreatePost', {
-      editMode:       true,
-      postId:         post.id,
-      initialContent: post.content,
-    });
-  }, [post.id, post.content, navigation]);
+    setEditText(post.content || '');
+    setEditVisible(true);
+  }, [post.content]);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editText.trim()) {
+      showToast({ type: 'warning', message: 'Content cannot be empty.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ content: editText.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      setPost(p => ({ ...p, content: editText.trim() }));
+      setEditVisible(false);
+      showToast({ type: 'success', message: 'Drop updated.' });
+    } catch {
+      showToast({ type: 'error', message: 'Could not save changes. Try again.' });
+    } finally {
+      setSaving(false);
+    }
+  }, [editText, post.id, showToast]);
 
   const handleDelete = useCallback(async () => {
     setDeleting(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}`, {
         method:  'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -272,7 +287,7 @@ export default function PostDetailScreen({ route, navigation }) {
     }
   }, [post.id, navigation, showToast]);
 
-  // ── Related → navigate to Feed tab, scroll to that post ───
+  // ── Related → navigate to Feed tab, scroll to that drop ───
   const handleRelatedPress = useCallback((relPost) => {
     navigation.navigate('Feed', {
       screen: 'FeedMain',
@@ -344,19 +359,17 @@ export default function PostDetailScreen({ route, navigation }) {
               );
             })()}
 
-            {post.topics?.length > 0 && (
+            {post.mood_tag && (
               <View style={styles.topicsRow}>
-                {post.topics.map(t => (
-                  <View key={t} style={styles.topicTag}>
-                    <Text style={styles.topicTagText}>{t}</Text>
-                  </View>
-                ))}
+                <View style={styles.topicTag}>
+                  <Text style={styles.topicTagText}>{post.mood_tag}</Text>
+                </View>
               </View>
             )}
 
-            {post.images?.length > 0 && (
+            {images.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
-                {post.images.map((uri, i) => (
+                {images.map((uri, i) => (
                   <TouchableOpacity key={i} onPress={() => openGallery(i)} activeOpacity={0.9} hitSlop={HIT_SLOP}>
                     <Image source={{ uri }} style={styles.postImage} resizeMode="cover" />
                   </TouchableOpacity>
@@ -423,16 +436,16 @@ export default function PostDetailScreen({ route, navigation }) {
         onCountChange={setThreadCount}
       />
 
-      {(post.images?.length ?? 0) > 0 && (
+      {images.length > 0 && (
         <ImageGalleryModal
           visible={galleryVisible}
-          images={post.images}
+          images={images}
           initialIndex={galleryIndex}
           onClose={closeGallery}
         />
       )}
 
-      {/* ── Post options sheet (own posts only) ─────────────── */}
+      {/* ── Drop options sheet (own drops only) ─────────────── */}
       <Modal
         visible={showOptions}
         transparent
@@ -480,6 +493,50 @@ export default function PostDetailScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* ── Edit drop modal ──────────────────────────────────── */}
+      <Modal
+        visible={editVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditVisible(false)}
+      >
+        <View style={editStyles.backdrop}>
+          <View style={editStyles.card}>
+            <Text style={editStyles.title}>Edit drop</Text>
+            <TextInput
+              value={editText}
+              onChangeText={setEditText}
+              style={editStyles.input}
+              multiline
+              maxLength={2000}
+              placeholder="What's on your mind?"
+              placeholderTextColor={T.textMuted}
+              autoFocus
+            />
+            <View style={editStyles.row}>
+              <TouchableOpacity
+                onPress={() => setEditVisible(false)}
+                style={[editStyles.btn, editStyles.btnSecondary]}
+                activeOpacity={0.8}
+              >
+                <Text style={editStyles.btnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveEdit}
+                disabled={saving}
+                style={[editStyles.btn, editStyles.btnPrimary]}
+                activeOpacity={0.85}
+              >
+                {saving
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={editStyles.btnPrimaryText}>Save</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
     </SafeAreaView>
@@ -581,4 +638,24 @@ const optStyles = StyleSheet.create({
   optionText:        { fontSize: FONT.md, fontWeight: '600', color: T.text },
   optionDestructive: { color: '#ef4444' },
   optionCancel:      { fontSize: FONT.md, color: T.textSecondary, fontWeight: '500' },
+});
+
+const editStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
+  card: {
+    width: '100%', backgroundColor: T.surface, borderRadius: RADIUS.lg,
+    padding: SPACING.lg, borderWidth: 1, borderColor: T.border,
+  },
+  title: { fontSize: FONT.md, fontWeight: '700', color: T.text, marginBottom: SPACING.sm },
+  input: {
+    minHeight: rs(120), maxHeight: rs(240), borderRadius: RADIUS.md,
+    borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surfaceAlt,
+    color: T.text, fontSize: FONT.sm, padding: SPACING.sm, textAlignVertical: 'top',
+  },
+  row: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md },
+  btn: { flex: 1, height: BUTTON_HEIGHT, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
+  btnSecondary: { backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border },
+  btnSecondaryText: { color: T.text, fontSize: FONT.sm, fontWeight: '600' },
+  btnPrimary: { backgroundColor: T.primary },
+  btnPrimaryText: { color: '#fff', fontSize: FONT.sm, fontWeight: '700' },
 });

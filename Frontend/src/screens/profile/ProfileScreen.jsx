@@ -32,7 +32,7 @@ export default function ProfileScreen({ navigation }) {
       try {
         const token   = await AsyncStorage.getItem('token')
         const headers = token ? { Authorization: `Bearer ${token}` } : {}
-        const res     = await fetch(`${API_BASE_URL}/api/v1/posts/mine`, { headers })
+        const res     = await fetch(`${API_BASE_URL}/api/v1/drops/mine`, { headers })
         if (res.ok) {
           const data = await res.json()
           setPostCount(data.total_posts ?? 0)

@@ -82,9 +82,8 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
     is_self = target_id == current_user_id
 
     # Get confession count
-    confession_count = await db["posts"].count_documents({
-        "user_id": target_id,
-        "post_type": {"$ne": "response"}
+    confession_count = await db["drops"].count_documents({
+        "sender_id": target_id,
     })
 
     # Join date — month + year only

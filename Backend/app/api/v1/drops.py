@@ -4,16 +4,20 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
+from pymongo import ReturnDocument
 import httpx
 import random
 import re
+import asyncio
+import math
+import time
 
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.notifications import send_push_notification as _notify
-from app.utils.location import build_location
+from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
@@ -118,7 +122,6 @@ class CreateDropRequest(BaseModel):
     publisher_opt_in: Optional[bool] = None
     duration_seconds: Optional[float] = None     # voice drops
     waveform_data: Optional[List[float]] = None  # voice drops
-    inspired_by_post_id: Optional[str] = None   # feed post that triggered this drop
 
     # Feed-as-drops upgrade — structured location, most-specific to least.
     # Only country + county are backed by a real fixed list client-side
@@ -605,7 +608,6 @@ async def create_drop(
         "published_at": None,            # set by POST /drops/:id/publish
         "duration_seconds": float(data.duration_seconds) if data.duration_seconds else None,
         "waveform_data": (data.waveform_data or None) if data.media_type == "voice" else None,
-        "inspired_by_post_id": data.inspired_by_post_id or None,
         "reaction_counts": {r: 0 for r in VALID_REACTIONS},
         "report_count": 0,
         "moderation_status": "visible",   # "visible" | "flagged" | "hidden"
@@ -618,6 +620,13 @@ async def create_drop(
         "location_detail": location_detail,    # {country, county, sub_county, estate} — used for filtering
         "poll":       poll_data,
         "font_style": font_style,
+
+        # ── Native social engagement (like/save/comment/view) ─
+        "liked_by":     [],
+        "likes_count":  0,
+        "saves_count":  0,
+        "thread_count": 0,
+        "views_count":  0,
     }
 
     # Posting costs coins — charged after all validation above, so a rejected
@@ -639,45 +648,6 @@ async def create_drop(
 
     await db["drops"].insert_one(drop)
     drop_id_str = str(drop["_id"])
-
-    # ── Mirror into the main feed as a genuine post ──────────────
-    # Every drop surfaces inline in the main feed — as an ordinary confession
-    # post (real likes/saves/comments via the Posts API), not the separate
-    # drop-card treatment with its own paywall/expiry/reactions. Whether it
-    # ALSO reaches external social platforms (Facebook/Telegram/etc.) is a
-    # completely separate decision, gated purely by the poster's own
-    # publisher_opt_in choice below — never by the drop's content itself.
-    mirrored_poll = None
-    if poll_data:
-        mirrored_poll = {
-            **poll_data,
-            "ends_at": drop["expires_at"].isoformat() if drop.get("expires_at") else None,
-        }
-    await db["posts"].insert_one({
-        "_id": ObjectId(),
-        "user_id": current_user_id,
-        "content": drop["confession"],
-        "is_anonymous": True,
-        "anonymous_name": drop["sender_anonymous_name"],
-        "topics": [],
-        "images": [drop["media_url"]] if drop["media_url"] and drop["media_type"] == "image" else [],
-        "video_url": drop["media_url"] if drop["media_type"] == "video" else None,
-        "audio_url": drop["media_url"] if drop["media_type"] == "voice" else None,
-        "poll": mirrored_poll,
-        "thread_count": 0,
-        "views_count": 0,
-        "saves_count": 0,
-        "liked_by": [],
-        "likes_count": 0,
-        "created_at": drop["created_at"],
-        "location":        location_display,
-        "location_detail": location_detail,
-        # Back-link to the drop record this post mirrors. NOT a type
-        # distinction — a drop IS a post in Anonixx; this only exists so the
-        # feed post can reach its drop's extra machinery (expiry, unlock
-        # pricing, reactions) which still lives in the `drops` collection.
-        "source_drop_id": drop_id_str,
-    })
 
     # ── Auto-queue for Anonixx social publishing ────────────────
     # Eligible drops (not privately targeted, not already flagged,
@@ -725,31 +695,6 @@ async def create_drop(
             "status":            "queued",
             "retry_count":       0,
         })
-
-    # Increment the all-time inspired_drop_count on the originating feed post.
-    # This counter never decrements — drops expiring doesn't erase the social proof.
-    if data.inspired_by_post_id:
-        try:
-            from bson import ObjectId as _ObjId
-            post = await db["posts"].find_one_and_update(
-                {"_id": _ObjId(data.inspired_by_post_id)},
-                {"$inc": {"inspired_drop_count": 1}},
-                return_document=True,
-            )
-            # Notify the original post author — but never notify the user about
-            # their own action (they're the one resonating).
-            if post and post.get("user_id") and post["user_id"] != current_user_id:
-                await _notify(
-                    user_id     = post["user_id"],
-                    template_key= "drop_resonated",
-                    db          = db,
-                    extra_data  = {
-                        "post_id": data.inspired_by_post_id,
-                        "drop_id": str(drop["_id"]),
-                    },
-                )
-        except Exception:
-            pass  # invalid id or post deleted — don't fail the drop creation
 
     # Notify target user privately — they see no sender identity
     if data.target_user_id:
@@ -879,91 +824,6 @@ async def vote_on_drop_poll(
         "voted_option": data.option_index,
         "total_votes": total,
         "options": options_out,
-    }
-
-
-# ==================== INSPIRATION THREAD ====================
-
-@router.get("/inspired-by/{post_id}")
-async def get_inspired_drops(
-    post_id: str,
-    skip:  int = Query(0, ge=0),
-    limit: int = Query(20, le=50),
-    current_user_id: Optional[str] = Depends(get_optional_user_id),
-    db = Depends(get_database),
-):
-    """
-    Return all active drops that were inspired by a specific feed post.
-    Used by InspirationThreadScreen to render the confession + its reply drops.
-    Also returns the originating post for header context.
-    """
-    # Fetch originating feed post for header context
-    origin_post = None
-    try:
-        from bson import ObjectId as _ObjId
-        raw = await db["posts"].find_one({"_id": _ObjId(post_id)})
-        if raw:
-            origin_post = {
-                "id":         post_id,
-                "content":    raw.get("content", ""),
-                "time_ago":   get_time_ago(raw["created_at"]) if raw.get("created_at") else "",
-                "anonymous_name": raw.get("anonymous_name", "Anonymous"),
-                "topics":     raw.get("topics", []),
-            }
-    except Exception:
-        pass  # invalid id or post deleted — thread still shows without header
-
-    query = {
-        "inspired_by_post_id": post_id,
-        "is_active":           True,
-        # expires_at is null until a drop's first unlock — those are live
-        # forever, so "not expired" has to mean null OR still in the future.
-        "$or": [
-            {"expires_at": None},
-            {"expires_at": {"$gt": now_utc()}},
-        ],
-        "moderation_status":   {"$nin": ["flagged", "hidden"]},
-    }
-
-    total  = await db["drops"].count_documents(query)
-    cursor = db["drops"].find(query).sort("created_at", -1).skip(skip).limit(limit)
-
-    drops = []
-    async for drop in cursor:
-        drop_id = str(drop["_id"])
-        already_unlocked = False
-        if current_user_id:
-            unlock = await db["drop_unlocks"].find_one({
-                "drop_id":    drop_id,
-                "unlocker_id": current_user_id,
-            })
-            already_unlocked = unlock is not None
-
-        drops.append({
-            "id":              drop_id,
-            "confession":      drop.get("confession"),
-            "media_url":       drop.get("media_url"),
-            "media_type":      drop.get("media_type"),
-            "card_image_url":  drop.get("card_image_url"),
-            "category":        drop["category"],
-            "price":           drop["price"],
-            "is_night_mode":   drop.get("is_night_mode", False),
-            "unlock_count":    drop.get("unlock_count", 0),
-            "reactions":       drop.get("reactions", [])[-3:],
-            "time_left":       get_time_left(drop["expires_at"]),
-            "time_ago":        get_time_ago(drop["created_at"]),
-            "already_unlocked": already_unlocked,
-            "theme":           drop.get("theme", "desire"),
-            "mood_tag":        drop.get("mood_tag"),
-            "intensity":       drop.get("intensity"),
-            "tier":            drop.get("tier", 1),
-        })
-
-    return {
-        "origin_post":  origin_post,
-        "drops":        drops,
-        "total":        total,
-        "has_more":     skip + limit < total,
     }
 
 
@@ -1100,6 +960,834 @@ async def unreact_to_drop(
             )
 
     return {"message": "Reaction withdrawn"}
+
+
+# ==================== LIKE / SAVE / THREAD / VIEW ====================
+# Native social engagement for drops — ported from the old posts.py, which
+# used to be reached indirectly via a mirrored "posts" document every drop
+# created on itself. That mirror is gone (see create_drop) — these endpoints
+# are now the real, direct thing.
+
+MAX_VOICE_COMMENT_SECONDS = 30   # mirrors Circles' + the old posts comment voice notes
+
+
+@router.post("/{drop_id}/like")
+async def like_drop(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    liked_by = drop.get("liked_by", [])
+    if current_user_id in liked_by:
+        return {"message": "Already liked", "liked": True, "likes_count": drop.get("likes_count", 0)}
+
+    # $addToSet (not $push) so a duplicate/racing request never double-counts
+    # the same user, and find_one_and_update returns the drop's real
+    # post-increment count instead of guessing pre_fetch_count + 1.
+    updated = await db["drops"].find_one_and_update(
+        {"_id": ObjectId(drop_id)},
+        {"$addToSet": {"liked_by": current_user_id}, "$inc": {"likes_count": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+
+    await update_drop_affinity(current_user_id, drop.get("mood_tag"), "like", db)
+
+    if drop["sender_id"] != current_user_id:
+        await send_push_notification(
+            drop["sender_id"],
+            "Someone felt your words ❤️",
+            "A confession you shared just got a like.",
+            db,
+        )
+
+    return {"message": "Drop liked", "liked": True, "likes_count": updated.get("likes_count", 0)}
+
+
+@router.delete("/{drop_id}/like")
+async def unlike_drop(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    liked_by = drop.get("liked_by", [])
+    if current_user_id not in liked_by:
+        return {"message": "Not liked", "liked": False, "likes_count": drop.get("likes_count", 0)}
+
+    updated = await db["drops"].find_one_and_update(
+        {"_id": ObjectId(drop_id)},
+        {"$pull": {"liked_by": current_user_id}, "$inc": {"likes_count": -1}},
+        return_document=ReturnDocument.AFTER,
+    )
+
+    return {"message": "Drop unliked", "liked": False, "likes_count": max(0, updated.get("likes_count", 0))}
+
+
+@router.post("/{drop_id}/save")
+async def save_drop(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    existing = await db["saved_drops"].find_one({"drop_id": drop_id, "user_id": current_user_id})
+
+    if existing:
+        await db["saved_drops"].delete_one({"_id": existing["_id"]})
+        try:
+            await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"saves_count": -1}})
+        except Exception:
+            pass
+        return {"message": "Drop removed from saved", "saved": False}
+
+    await db["saved_drops"].insert_one({
+        "_id":        ObjectId(),
+        "drop_id":    drop_id,
+        "user_id":    current_user_id,
+        "created_at": now_utc(),
+    })
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+        await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"saves_count": 1}})
+        if drop:
+            await update_drop_affinity(current_user_id, drop.get("mood_tag"), "save", db)
+    except Exception:
+        pass
+
+    return {"message": "Saved to your collection", "saved": True}
+
+
+@router.get("/saved")
+async def get_saved_drops(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    saved_cursor = db["saved_drops"].find({"user_id": current_user_id}).sort("created_at", -1)
+    saved = []
+
+    async for s in saved_cursor:
+        try:
+            drop = await db["drops"].find_one({"_id": ObjectId(s["drop_id"])})
+        except Exception:
+            continue
+        if not drop:
+            continue
+
+        saved_at = s["created_at"]
+        if saved_at.tzinfo is None:
+            saved_at = saved_at.replace(tzinfo=timezone.utc)
+        saved.append({
+            "id":             str(drop["_id"]),
+            "confession":     drop.get("confession"),
+            "media_url":      drop.get("media_url"),
+            "media_type":     drop.get("media_type"),
+            "mood_tag":       drop.get("mood_tag"),
+            "saved_at":       saved_at.isoformat(),
+            "saved_days_ago": (now_utc() - saved_at).days,
+        })
+
+    return {"saved_drops": saved, "total": len(saved)}
+
+
+@router.post("/{drop_id}/thread")
+async def add_to_drop_thread(
+    drop_id: str,
+    data: dict,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    content        = data.get("content", "").strip()
+    gif_url        = data.get("gif_url",   "").strip() if data.get("gif_url")   else None
+    image_url      = data.get("image_url", "").strip() if data.get("image_url") else None
+    voice_url      = data.get("voice_url", "").strip() if data.get("voice_url") else None
+    voice_duration = data.get("voice_duration")
+    parent_id      = data.get("parent_id")
+
+    if not content and not gif_url and not image_url and not voice_url:
+        raise HTTPException(status_code=400, detail="Comment must have text, a GIF, an image, or a voice note.")
+
+    if voice_url and (voice_duration or 0) > MAX_VOICE_COMMENT_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Voice notes can't be longer than {MAX_VOICE_COMMENT_SECONDS} seconds.",
+        )
+
+    if contains_contact_info(content):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    thread_doc = {
+        "drop_id":        drop_id,
+        "user_id":        current_user_id,
+        "content":        content,
+        "anonymous_name": user.get("anonymous_name", "Anonymous"),
+        "liked_by":       [],
+        "likes_count":    0,
+        "created_at":     now_utc(),
+    }
+    if gif_url:
+        thread_doc["gif_url"] = gif_url
+    if image_url:
+        thread_doc["image_url"] = image_url
+    if voice_url:
+        thread_doc["voice_url"] = voice_url
+        thread_doc["voice_duration"] = voice_duration
+    if parent_id:
+        thread_doc["parent_id"] = parent_id
+
+    result = await db["drop_threads"].insert_one(thread_doc)
+    await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"thread_count": 1}})
+
+    await update_drop_affinity(current_user_id, drop.get("mood_tag"), "comment", db)
+
+    if drop["sender_id"] != current_user_id:
+        await send_push_notification(
+            drop["sender_id"],
+            "Someone responded to a thought like yours 💬",
+            "A confession you shared just got a reply.",
+            db,
+        )
+
+    response = {
+        "id":             str(result.inserted_id),
+        "content":        content,
+        "anonymous_name": user.get("anonymous_name", "Anonymous"),
+        "time_ago":       "just now",
+        "likes_count":    0,
+        "liked_by_me":    False,
+        "replies":        [],
+        "message":        "Reply added",
+    }
+    if gif_url:
+        response["gif_url"] = gif_url
+    if image_url:
+        response["image_url"] = image_url
+    if voice_url:
+        response["voice_url"] = voice_url
+        response["voice_duration"] = voice_duration
+    return response
+
+
+@router.get("/{drop_id}/thread")
+async def get_drop_thread(
+    drop_id: str,
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database),
+):
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+
+    thread_docs = await db["drop_threads"].find(
+        {"drop_id": drop_id}
+    ).sort("created_at", 1).to_list(None)
+
+    def fmt(t):
+        d = {
+            "id":             str(t["_id"]),
+            "content":        t.get("content", ""),
+            "anonymous_name": t.get("anonymous_name", "Anonymous"),
+            "created_at":     t["created_at"].isoformat(),
+            "time_ago":       get_time_ago(t["created_at"]),
+            "likes_count":    t.get("likes_count", 0),
+            "liked_by_me":    current_user_id in t.get("liked_by", []) if current_user_id else False,
+            "is_own_reply":   t.get("user_id") == current_user_id if current_user_id else False,
+            "replies":        [],
+        }
+        if t.get("gif_url"):
+            d["gif_url"] = t["gif_url"]
+        if t.get("image_url"):
+            d["image_url"] = t["image_url"]
+        if t.get("voice_url"):
+            d["voice_url"] = t["voice_url"]
+            d["voice_duration"] = t.get("voice_duration")
+        return d
+
+    by_id = {str(t["_id"]): fmt(t) for t in thread_docs}
+    top   = []
+    for t_raw in thread_docs:
+        tid = str(t_raw["_id"])
+        pid = t_raw.get("parent_id")
+        if pid and str(pid) in by_id:
+            by_id[str(pid)]["replies"].append(by_id[tid])
+        else:
+            top.append(by_id[tid])
+
+    top.sort(key=lambda x: x["created_at"], reverse=True)
+
+    return {"threads": top, "thread_count": len(top)}
+
+
+@router.post("/{drop_id}/thread/{comment_id}/like")
+async def like_drop_comment(
+    drop_id: str,
+    comment_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    try:
+        comment = await db["drop_threads"].find_one({"_id": ObjectId(comment_id), "drop_id": drop_id})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    liked_by = comment.get("liked_by", [])
+    if current_user_id in liked_by:
+        return {"liked": True, "likes_count": comment.get("likes_count", 0)}
+
+    updated = await db["drop_threads"].find_one_and_update(
+        {"_id": ObjectId(comment_id)},
+        {"$addToSet": {"liked_by": current_user_id}, "$inc": {"likes_count": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    return {"liked": True, "likes_count": updated.get("likes_count", 0)}
+
+
+@router.delete("/{drop_id}/thread/{comment_id}/like")
+async def unlike_drop_comment(
+    drop_id: str,
+    comment_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    try:
+        comment = await db["drop_threads"].find_one({"_id": ObjectId(comment_id), "drop_id": drop_id})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    liked_by = comment.get("liked_by", [])
+    if current_user_id not in liked_by:
+        return {"liked": False, "likes_count": comment.get("likes_count", 0)}
+
+    updated = await db["drop_threads"].find_one_and_update(
+        {"_id": ObjectId(comment_id)},
+        {"$pull": {"liked_by": current_user_id}, "$inc": {"likes_count": -1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    return {"liked": False, "likes_count": max(0, updated.get("likes_count", 0))}
+
+
+@router.post("/{drop_id}/view")
+async def view_drop(
+    drop_id: str,
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database),
+):
+    try:
+        await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}})
+        if current_user_id:
+            await db["drop_views"].update_one(
+                {"drop_id": drop_id, "user_id": current_user_id},
+                {"$set": {"drop_id": drop_id, "user_id": current_user_id, "viewed_at": now_utc()}},
+                upsert=True,
+            )
+    except Exception as e:
+        print(f"⚠️ View tracking skipped: {e}")
+    return {"status": "success"}
+
+
+# ==================== FEED ====================
+# Native main-feed algorithm — ported from the old posts.py get_calm_feed,
+# which used to serve the main feed by reading the "posts" documents every
+# drop silently mirrored itself into. Adapted to read `drops` directly:
+# drops don't have posts' `topics` array, just a single `mood_tag` (one of
+# VALID_MOOD_TAGS below), so behavioural affinity keys off that instead.
+# posts' heavy/light emotional-pacing interleave doesn't have a real analog
+# here — that was built around posts' mental-health-specific topic taxonomy
+# (grief, spiraling, etc.), and none of drops' four mood tags map onto it
+# without inventing a fake mapping, so it's intentionally not ported.
+
+VALID_MOOD_TAGS = {"longing", "unsent", "reckless", "quiet"}
+
+_drop_count_cache: dict = {"value": 0, "ts": 0.0}
+_DROP_COUNT_TTL = 120   # refresh every 2 minutes
+
+
+async def get_behavioral_interests(user_id: str, db) -> dict:
+    doc = await db["user_affinities"].find_one({"user_id": user_id})
+    if doc:
+        return doc.get("affinities", {})
+    return {}
+
+
+async def update_drop_affinity(user_id: str, mood_tag: Optional[str], action: str, db):
+    weights = {"like": 3, "save": 2, "comment": 1}
+    weight = weights.get(action, 1)
+    if not mood_tag or mood_tag not in VALID_MOOD_TAGS:
+        return
+    await db["user_affinities"].update_one(
+        {"user_id": user_id},
+        {"$inc": {f"affinities.{mood_tag}": weight}, "$set": {"updated_at": now_utc()}},
+        upsert=True,
+    )
+
+
+async def track_feed_streak(user_id: str, db) -> dict:
+    today = now_utc().date().isoformat()
+    doc = await db["user_streaks"].find_one({"user_id": user_id})
+
+    if not doc:
+        await db["user_streaks"].insert_one({
+            "user_id": user_id, "streak": 1, "last_visit": today,
+            "longest_streak": 1, "created_at": now_utc(),
+        })
+        return {"streak": 1, "is_new_day": True, "message": "Welcome to Anonixx 🌱"}
+
+    last_visit = doc.get("last_visit")
+    current_streak = doc.get("streak", 1)
+    longest = doc.get("longest_streak", 1)
+
+    if last_visit == today:
+        return {"streak": current_streak, "is_new_day": False, "message": None}
+
+    yesterday = (now_utc() - timedelta(days=1)).date().isoformat()
+
+    if last_visit == yesterday:
+        new_streak = current_streak + 1
+        new_longest = max(longest, new_streak)
+        streak_messages = {
+            2:  "2 days in a row 🔥",
+            3:  "3 days straight. You're building something.",
+            7:  "One week. This space is yours now 🌟",
+            14: "Two weeks of showing up 💪",
+            30: "30 days. You belong here 🏆",
+        }
+        message = streak_messages.get(new_streak, f"{new_streak} days in a row 🔥" if new_streak % 7 == 0 else None)
+        await db["user_streaks"].update_one(
+            {"user_id": user_id},
+            {"$set": {"streak": new_streak, "last_visit": today, "longest_streak": new_longest}},
+        )
+        return {"streak": new_streak, "is_new_day": True, "message": message}
+    else:
+        await db["user_streaks"].update_one(
+            {"user_id": user_id},
+            {"$set": {"streak": 1, "last_visit": today}},
+        )
+        return {"streak": 1, "is_new_day": True, "message": None}
+
+
+def _score_drop(drop: dict, user_affinities: dict, now: datetime) -> float:
+    score = 0.0
+    mood = drop.get("mood_tag")
+    if mood:
+        score += min(user_affinities.get(mood, 0) * 2, 30)
+
+    created_at = drop.get("created_at")
+    if created_at:
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        age_hours = (now - created_at).total_seconds() / 3600
+        score += 25 * max(0.0, 1.0 - age_hours / 168)
+
+    engagement = (
+        drop.get("likes_count", 0)
+        + drop.get("saves_count", 0) * 1.5
+        + drop.get("thread_count", 0) * 2
+    )
+    score += min(math.log1p(engagement) * 3, 15)
+    return score
+
+
+def _weighted_shuffle_drops(drops: list, user_affinities: dict) -> list:
+    now = datetime.now(timezone.utc)
+    scored = [(_score_drop(d, user_affinities, now), d) for d in drops]
+    high   = [d for s, d in scored if s >= 50]
+    medium = [d for s, d in scored if 20 <= s < 50]
+    low    = [d for s, d in scored if s < 20]
+    random.shuffle(high)
+    random.shuffle(medium)
+    random.shuffle(low)
+    return high + medium + low
+
+
+async def batch_format_drops(drops: list, current_user_id: Optional[str], db) -> list:
+    drop_ids     = [str(d["_id"]) for d in drops]
+    drop_ids_obj = [d["_id"] for d in drops]
+
+    thread_counts = {}
+    async for item in db["drop_threads"].aggregate([
+        {"$match": {"drop_id": {"$in": drop_ids}}},
+        {"$group": {"_id": "$drop_id", "count": {"$sum": 1}}},
+    ]):
+        thread_counts[item["_id"]] = item["count"]
+
+    saved_set = set()
+    liked_set = set()
+    voted_map: dict[str, int] = {}
+
+    if current_user_id:
+        async for s in db["saved_drops"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}):
+            saved_set.add(s["drop_id"])
+
+        async for d in db["drops"].find(
+            {"_id": {"$in": drop_ids_obj}, "liked_by": current_user_id}, {"_id": 1}
+        ):
+            liked_set.add(str(d["_id"]))
+
+        async for v in db["drop_poll_votes"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}):
+            voted_map[v["drop_id"]] = v["option_index"]
+
+    formatted = []
+    for drop in drops:
+        did = str(drop["_id"])
+        raw_poll = drop.get("poll")
+        poll_out = None
+        if raw_poll:
+            voted_option = voted_map.get(did)
+            options_out = []
+            total = raw_poll.get("total_votes", 0)
+            for opt in raw_poll.get("options", []):
+                votes = opt.get("votes", 0)
+                options_out.append({
+                    "text": opt["text"],
+                    "votes": votes if voted_option is not None else None,
+                    "percent": round(votes / total * 100) if total > 0 and voted_option is not None else None,
+                })
+            poll_out = {
+                "question":     raw_poll["question"],
+                "options":      options_out,
+                "total_votes":  total,
+                "voted_option": voted_option,
+            }
+
+        confession = drop.get("confession") or ""
+        created_at = drop.get("created_at")
+        has_media  = bool(drop.get("media_url"))
+        if (not confession and not has_media) or not created_at:
+            continue
+        created_at_iso = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+        formatted.append({
+            "id":               did,
+            "user_id":          drop.get("sender_id"),
+            "content":          confession,
+            "anonymous_name":   drop.get("sender_anonymous_name"),
+            "mood_tag":         drop.get("mood_tag"),
+            "theme":            drop.get("theme"),
+            "intensity":        drop.get("intensity"),
+            "media_url":        drop.get("media_url"),
+            "media_type":       drop.get("media_type"),
+            "video_url":        drop.get("media_url") if drop.get("media_type") == "video" else None,
+            "audio_url":        drop.get("media_url") if drop.get("media_type") == "voice" else None,
+            "card_image_url":   drop.get("card_image_url"),
+            "poll":             poll_out,
+            "thread_count":     thread_counts.get(did, 0),
+            "views_count":      drop.get("views_count", 0),
+            "saves_count":      drop.get("saves_count", 0),
+            "likes_count":      drop.get("likes_count", 0),
+            "is_liked":         did in liked_set,
+            "is_saved":         did in saved_set,
+            "created_at":       created_at_iso,
+            "time_ago":         get_time_ago(created_at),
+            "is_own_post":      drop.get("sender_id") == current_user_id if current_user_id else False,
+            "type":             "drop",
+        })
+
+    return formatted
+
+
+@router.get("/feed")
+async def get_drops_feed(
+    session_posts: int = Query(0, ge=0),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    db = Depends(get_database),
+):
+    current_user_id = None
+    if authorization:
+        try:
+            from jose import jwt
+            token = authorization.replace("Bearer ", "")
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            current_user_id = payload.get("sub")
+        except Exception as e:
+            print(f"⚠️ Guest token: {e}")
+
+    SESSION_LIMIT = 50
+    BATCH_SIZE = 10
+
+    if session_posts >= SESSION_LIMIT:
+        return {
+            "posts": [], "message": "session_limit", "has_more": False,
+            "session_posts": session_posts, "is_guest": current_user_id is None,
+        }
+
+    drops_to_load = min(BATCH_SIZE, SESSION_LIMIT - session_posts)
+
+    streak_info = None
+    user_doc = None
+    user_affinities: dict = {}
+
+    if current_user_id:
+        async def _fetch_user_doc():
+            return await db["users"].find_one(
+                {"_id": ObjectId(current_user_id)},
+                {
+                    "blocked_user_ids": 1,
+                    "location_country": 1, "location_county": 1,
+                    "location_sub_county": 1, "location_estate": 1,
+                    "feed_location_scope": 1,
+                },
+            )
+
+        streak_info, user_doc, user_affinities = await asyncio.gather(
+            track_feed_streak(current_user_id, db),
+            _fetch_user_doc(),
+            get_behavioral_interests(current_user_id, db),
+        )
+
+    blocked_ids = user_doc.get("blocked_user_ids", []) if user_doc else []
+
+    now_ts = time.monotonic()
+    if now_ts - _drop_count_cache["ts"] > _DROP_COUNT_TTL:
+        _drop_count_cache["value"] = await db["drops"].count_documents({})
+        _drop_count_cache["ts"]    = now_ts
+    total_drops = _drop_count_cache["value"]
+
+    POOL_SIZE = max(30, drops_to_load * 3)
+    pool_query = {"sender_id": {"$nin": blocked_ids}} if blocked_ids else {}
+
+    loc_filter = build_feed_location_filter(
+        {
+            "country":    user_doc.get("location_country")    if user_doc else None,
+            "county":     user_doc.get("location_county")     if user_doc else None,
+            "sub_county": user_doc.get("location_sub_county") if user_doc else None,
+            "estate":     user_doc.get("location_estate")     if user_doc else None,
+        },
+        user_doc.get("feed_location_scope") if user_doc else None,
+    )
+    if loc_filter:
+        pool_query = {"$and": [pool_query, loc_filter]} if pool_query else loc_filter
+
+    pool = await db["drops"].find(pool_query) \
+        .sort("created_at", -1) \
+        .skip(session_posts) \
+        .limit(POOL_SIZE) \
+        .to_list(None)
+    pool_exhausted = len(pool) < POOL_SIZE
+
+    shuffled = _weighted_shuffle_drops(pool, user_affinities)
+    drops = shuffled[:drops_to_load]
+    formatted_drops = await batch_format_drops(drops, current_user_id, db)
+
+    final_feed = []
+    # Same generic relationship/sex-ed divider beats posts.py used — not
+    # posts-specific copy, reused verbatim.
+    divider_texts = [
+        "consent isn't a mood killer. it's the whole point.",
+        "'not tonight' is a full sentence. no follow-up required.",
+        "get tested. it's not paranoia, it's respect.",
+        "communication is the actual foreplay.",
+        "aftercare isn't extra. it's part of it.",
+        "a good partner asks. a great one keeps asking.",
+        "boundaries aren't walls. they're directions.",
+        "the orgasm gap is real — ask more questions, not less.",
+        "protection isn't romantic. until it's the reason there's a next time.",
+        "you're allowed to change your mind mid-anything.",
+        "flirting is a skill. reading 'no' is a requirement.",
+        "your worth was never measured in who replies first.",
+    ]
+
+    for i, drop in enumerate(formatted_drops):
+        final_feed.append(drop)
+        if (i + 1) % 5 == 0 and i + 1 < len(formatted_drops):
+            final_feed.append({"type": "divider", "text": random.choice(divider_texts)})
+
+    new_session_posts = session_posts + len(drops)
+    has_more = (
+        not pool_exhausted
+        and new_session_posts < total_drops
+        and new_session_posts < SESSION_LIMIT
+    )
+
+    return {
+        "posts":         final_feed,
+        "has_more":      has_more,
+        "session_posts": new_session_posts,
+        "is_guest":      current_user_id is None,
+        "streak":        streak_info,
+    }
+
+
+@router.get("/search")
+async def search_drops(
+    q:                   Optional[str] = Query(None),
+    mood_tag:            Optional[str] = Query(None),
+    filter:              str = Query("recent"),
+    location_country:    Optional[str] = Query(None),
+    location_county:     Optional[str] = Query(None),
+    location_sub_county: Optional[str] = Query(None),
+    location_estate:     Optional[str] = Query(None),
+    limit: int = Query(20, le=50, ge=1),
+    skip:  int = Query(0, ge=0),
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database),
+):
+    """Full-text search across drop confessions + sender name. Case-insensitive."""
+    query = (q or "").strip()
+    valid_mood = mood_tag if mood_tag in VALID_MOOD_TAGS else None
+    loc_filter = build_location_search_filter(
+        location_country, location_county, location_sub_county, location_estate,
+    )
+    if not query and not valid_mood and not loc_filter:
+        return {"results": [], "total": 0, "query": query}
+
+    base_filter: dict = {}
+    if query:
+        safe_query = re.escape(query)
+        rx = {"$regex": safe_query, "$options": "i"}
+        base_filter["$or"] = [
+            {"confession":            rx},
+            {"sender_anonymous_name": rx},
+        ]
+
+    if valid_mood:
+        base_filter["mood_tag"] = valid_mood
+
+    if filter == "recent":
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        base_filter["created_at"] = {"$gte": cutoff}
+
+    if loc_filter:
+        base_filter = {"$and": [base_filter, loc_filter]} if base_filter else loc_filter
+
+    sort_key = "likes_count" if filter == "popular" else "created_at"
+
+    total = await db["drops"].count_documents(base_filter)
+    raw   = await db["drops"].find(base_filter) \
+                .sort(sort_key, -1) \
+                .skip(skip) \
+                .limit(limit) \
+                .to_list(limit)
+
+    results = await batch_format_drops(raw, current_user_id, db)
+    return {"results": results, "total": total, "query": query, "filter": filter}
+
+
+# ==================== MY DROPS (dashboard) ====================
+
+@router.get("/mine")
+async def get_my_drops(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Every drop the current user has authored — used by the user dashboard's
+    'My Drops' section (edit/delete live there, not in the public feed)."""
+    cursor = db["drops"].find({"sender_id": current_user_id}).sort("created_at", -1)
+    drops = await cursor.to_list(200)
+
+    total_views = 0
+    total_likes = 0
+    formatted = []
+    for drop in drops:
+        created_at = drop.get("created_at")
+        views = drop.get("views_count", 0)
+        likes = drop.get("likes_count", 0)
+        total_views += views
+        total_likes += likes
+        formatted.append({
+            "id":           str(drop["_id"]),
+            "content":      drop.get("confession") or "",
+            "media_url":    drop.get("media_url"),
+            "media_type":   drop.get("media_type"),
+            "views_count":  views,
+            "likes_count":  likes,
+            "saves_count":  drop.get("saves_count", 0),
+            "created_at":   created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+            "edited_at":    drop["edited_at"].isoformat() if drop.get("edited_at") else None,
+            "time_ago":     get_time_ago(created_at) if created_at else "",
+        })
+
+    return {
+        "posts":       formatted,
+        "total_posts": len(formatted),
+        "total_views": total_views,
+        "total_likes": total_likes,
+    }
+
+
+class EditDropRequest(BaseModel):
+    content: str
+
+
+@router.patch("/{drop_id}")
+async def edit_drop(
+    drop_id: str,
+    data: EditDropRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="Content cannot be empty.")
+
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
+
+    drop = await db["drops"].find_one({"_id": oid})
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if drop["sender_id"] != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own drops.")
+
+    await db["drops"].update_one(
+        {"_id": oid},
+        {"$set": {"confession": data.content.strip(), "edited_at": now_utc()}},
+    )
+    return {"message": "Drop updated."}
+
+
+@router.delete("/{drop_id}")
+async def delete_drop(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
+
+    drop = await db["drops"].find_one({"_id": oid})
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if drop["sender_id"] != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own drops.")
+
+    # Cascade delete
+    await db["drops"].delete_one({"_id": oid})
+    await db["drop_threads"].delete_many({"drop_id": drop_id})
+    await db["saved_drops"].delete_many({"drop_id": drop_id})
+    await db["drop_views"].delete_many({"drop_id": drop_id})
+
+    return {"message": "Gone for good."}
 
 
 # ==================== UNLOCK — COINS ====================

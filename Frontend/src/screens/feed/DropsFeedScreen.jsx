@@ -4,7 +4,7 @@ import React, {
 import {
   View, FlatList, ActivityIndicator, StyleSheet,
   StatusBar, Text, TouchableOpacity, Animated, RefreshControl,
-  Easing, TextInput, Linking,
+  Easing, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,7 +15,7 @@ import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
 import { ActiveVideoContext } from '../../context/VideoFeedContext';
 import { useToast } from '../../components/ui/Toast';
-import CalmPostCard from '../../components/feed/CalmPostCard';
+import DropCard from '../../components/feed/DropCard';
 import FeedDivider from '../../components/feed/FeedDivider';
 import MoodBalancer from '../../components/feed/MoodBalancer';
 import MarketCard from '../../components/feed/MarketCard';
@@ -144,7 +144,7 @@ const SessionLimitView = React.memo(({ hasMore, onContinue, onClose }) => (
 
 
 // ── Main screen ───────────────────────────────────────────────
-export default function CalmFeedScreen({ navigation, route }) {
+export default function DropsFeedScreen({ navigation, route }) {
   const { isAuthenticated, checkAuth, user } = useAuth();
   const insets                         = useSafeAreaInsets();
   const { showToast }                  = useToast();
@@ -184,12 +184,8 @@ export default function CalmFeedScreen({ navigation, route }) {
       .catch(() => { /* offline — feed just skips ad injection this session */ });
   }, []);
 
-  // Inject Market cards into the post stream, every 7th post. Drops no
-  // longer get a separate injection pass — a dropped confession is now a
-  // genuine post (see create_drop's post-mirroring on the backend), so it
-  // already flows through the normal `posts` array like any other post.
-  // Stable across re-renders so VirtualizedList doesn't reconcile cells
-  // unnecessarily.
+  // Inject Market/Ad cards into the drop stream, every Nth drop. Stable
+  // across re-renders so VirtualizedList doesn't reconcile cells unnecessarily.
   const feedWithExtras = useMemo(() => {
     if (!posts.length) return posts;
     if (!marketFeed.length && !feedAds.length) return posts;
@@ -228,11 +224,11 @@ export default function CalmFeedScreen({ navigation, route }) {
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     const visibleVideo = viewableItems.find(
-      (v) => v.item?.type === 'post' && v.item?.video_url
+      (v) => v.item?.type === 'drop' && v.item?.video_url
     );
     if (visibleVideo) {
       setActiveVideoId(visibleVideo.item.id);
-      const videoPosts = postsRef.current.filter((p) => p.type === 'post' && p.video_url);
+      const videoPosts = postsRef.current.filter((p) => p.type === 'drop' && p.video_url);
       const idx = videoPosts.findIndex((p) => p.id === visibleVideo.item.id);
       setNextVideo(videoPosts[idx + 1] || null);
     } else {
@@ -271,7 +267,7 @@ export default function CalmFeedScreen({ navigation, route }) {
       const controller = new AbortController();
       const timeout    = setTimeout(() => controller.abort(), 30000);   // 30 s
       const response   = await fetch(
-        `${API_BASE_URL}/api/v1/posts/calm-feed?session_posts=${currentOffset}`,
+        `${API_BASE_URL}/api/v1/drops/feed?session_posts=${currentOffset}`,
         { headers, signal: controller.signal }
       );
       clearTimeout(timeout);
@@ -348,47 +344,11 @@ export default function CalmFeedScreen({ navigation, route }) {
 
   const handleMediaPress = useCallback((post, startTime = 0) => {
     const mediaPosts = postsRef.current.filter(
-      (p) => p.type === 'post' && (p.video_url || p.audio_url)
+      (p) => p.type === 'drop' && (p.video_url || p.audio_url)
     );
     const startIndex = mediaPosts.findIndex((p) => p.id === post.id);
     navigation.navigate('MediaFeed', { posts: mediaPosts, startIndex: Math.max(0, startIndex), startTime });
   }, [navigation]);
-
-  const handleResponse = useCallback(async (postId, responseType) => {
-    if (!isAuthenticated) { showAuthPrompt('respond'); return; }
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        showToast({ type: 'error', title: 'Session Expired', message: 'Please sign in again.' });
-        navigation.navigate('AuthNav', { screen: 'Login' });
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/respond`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ type: responseType }),
-      });
-
-      if (response.ok) {
-        setPosts((prev) =>
-          prev.map((item) =>
-            item.type === 'post' && item.id === postId
-              ? { ...item, user_response: responseType }
-              : item
-          )
-        );
-      } else if (response.status === 401) {
-        await AsyncStorage.removeItem('token');
-        showToast({ type: 'error', title: 'Session Expired', message: 'Please sign in again.' });
-        navigation.navigate('AuthNav', { screen: 'Login' });
-      } else {
-        showToast({ type: 'error', message: 'Could not send response. Try again.' });
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Something went wrong. Check your connection.' });
-    }
-  }, [isAuthenticated, navigation, showAuthPrompt, showToast]);
 
   const handleSave = useCallback(async (postId) => {
     if (!isAuthenticated) { showAuthPrompt('save'); return; }
@@ -399,7 +359,7 @@ export default function CalmFeedScreen({ navigation, route }) {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/save`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/save`, {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -408,7 +368,7 @@ export default function CalmFeedScreen({ navigation, route }) {
         const data = await response.json();
         setPosts((prev) =>
           prev.map((item) =>
-            item.type === 'post' && item.id === postId
+            item.type === 'drop' && item.id === postId
               ? { ...item, is_saved: data.saved }
               : item
           )
@@ -428,29 +388,21 @@ export default function CalmFeedScreen({ navigation, route }) {
     }
   }, [isAuthenticated, showAuthPrompt, showToast]);
 
-  const handleViewThread = useCallback(async (postId) => {
-    try {
+  const handlePostPress = useCallback((post) => {
+    // Fire-and-forget view tracking — don't block navigation on this
+    (async () => {
       const token = await AsyncStorage.getItem('token');
-      // Fire-and-forget view tracking — don't block navigation on this
-      fetch(`${API_BASE_URL}/api/v1/posts/${postId}/view`, {
+      fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/view`, {
         method:  'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }).catch(() => {});
-
-      const post = postsRef.current.find((p) => p.type === 'post' && p.id === postId);
-      if (post) navigation.navigate('ThreadView', { postId, postContent: post.content });
-    } catch {
-      showToast({ type: 'error', message: 'Could not open thread.' });
-    }
-  }, [navigation, showToast]);
-
-  const handlePostPress = useCallback((post) => {
-    navigation.navigate('PostDetail', { post });
+    })();
+    navigation.navigate('DropDetail', { post });
   }, [navigation]);
 
   const handleVideoChange = useCallback((newPostId) => {
     setActiveVideoId(newPostId);
-    const videoPosts = postsRef.current.filter((p) => p.type === 'post' && p.video_url);
+    const videoPosts = postsRef.current.filter((p) => p.type === 'drop' && p.video_url);
     const idx = videoPosts.findIndex((p) => p.id === newPostId);
     setNextVideo(videoPosts[idx + 1] || null);
     const nextIndex = postsRef.current.findIndex((p) => p.id === newPostId);
@@ -477,20 +429,18 @@ export default function CalmFeedScreen({ navigation, route }) {
     if (item.type === 'ad') {
       return <FeedAdCard ad={item.ad} onPress={handleAdPress} />;
     }
-    if (item.type === 'post') {
+    if (item.type === 'drop') {
       return (
-        <CalmPostCard
+        <DropCard
           post={item}
-          onResponse={handleResponse}
           onSave={handleSave}
-          onViewThread={handleViewThread}
           onPress={handlePostPress}
           onMediaPress={handleMediaPress}
         />
       );
     }
     return null;
-  }, [handleResponse, handleSave, handleViewThread, handlePostPress, handleMediaPress, handleMarketOpen, handleAdPress]);
+  }, [handleSave, handlePostPress, handleMediaPress, handleMarketOpen, handleAdPress]);
 
   const keyExtractor = useCallback((item, index) => `${item.id || item.type}-${index}`, []);
 

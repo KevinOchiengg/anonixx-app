@@ -20,18 +20,18 @@ async def get_impact_dashboard(
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     
-    # Count posts created
-    posts_count = await db["posts"].count_documents({
-        "user_id": current_user_id
+    # Count drops created
+    posts_count = await db["drops"].count_documents({
+        "sender_id": current_user_id
     })
-    
-    posts_this_week = await db["posts"].count_documents({
-        "user_id": current_user_id,
+
+    posts_this_week = await db["drops"].count_documents({
+        "sender_id": current_user_id,
         "created_at": {"$gte": week_ago}
     })
-    
-    posts_this_month = await db["posts"].count_documents({
-        "user_id": current_user_id,
+
+    posts_this_month = await db["drops"].count_documents({
+        "sender_id": current_user_id,
         "created_at": {"$gte": month_ago}
     })
     
@@ -50,16 +50,16 @@ async def get_impact_dashboard(
         "created_at": {"$gte": month_ago}
     })
     
-    # Get responses received on user's posts
-    user_posts = await db["posts"].find({"user_id": current_user_id}).to_list(None)
-    post_ids = [str(p["_id"]) for p in user_posts]
-    
+    # Get responses received on user's drops
+    user_drops = await db["drops"].find({"sender_id": current_user_id}).to_list(None)
+    post_ids = [str(p["_id"]) for p in user_drops]
+
     responses_received = await db["post_responses"].count_documents({
         "post_id": {"$in": post_ids}
     })
-    
-    # Get saves on user's posts
-    saves_received = sum([p.get("saves_count", 0) for p in user_posts])
+
+    # Get saves on user's drops
+    saves_received = sum([p.get("saves_count", 0) for p in user_drops])
     
     # Get thread participation
     threads_created = await db["post_threads"].count_documents({

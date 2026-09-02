@@ -92,7 +92,7 @@ export default function DashboardScreen({ navigation }) {
       const headers = await authHeaders();
       const [balRes, postsRes, txRes, actRes, wdRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v1/coins/balance`, { headers }),
-        fetch(`${API_BASE_URL}/api/v1/posts/mine`, { headers }),
+        fetch(`${API_BASE_URL}/api/v1/drops/mine`, { headers }),
         fetch(`${API_BASE_URL}/api/v1/coins/transactions`, { headers }),
         fetch(`${API_BASE_URL}/api/v1/impact/dashboard`, { headers }),
         fetch(`${API_BASE_URL}/api/v1/coins/withdraw/history`, { headers }),
@@ -131,7 +131,7 @@ export default function DashboardScreen({ navigation }) {
     if (!editText.trim() || !editingPost) return;
     setSavingEdit(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${editingPost.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/drops/${editingPost.id}`, {
         method: 'PATCH',
         headers: await authHeaders(true),
         body: JSON.stringify({ content: editText.trim() }),
@@ -162,7 +162,7 @@ export default function DashboardScreen({ navigation }) {
           onPress: async () => {
             setDeletingId(post.id);
             try {
-              const res = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}`, {
+              const res = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}`, {
                 method: 'DELETE',
                 headers: await authHeaders(),
               });

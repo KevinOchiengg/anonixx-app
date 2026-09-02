@@ -285,7 +285,7 @@ export const CommentBottomSheet = React.memo(({
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/thread`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -352,7 +352,7 @@ export const CommentBottomSheet = React.memo(({
         ...(voiceUrl     && { voice_url: voiceUrl, voice_duration: voiceDuration }),
         ...(savedReplyTo && { parent_id: savedReplyTo }),
       };
-      const res  = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread`, {
+      const res  = await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/thread`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify(body),
@@ -416,7 +416,7 @@ export const CommentBottomSheet = React.memo(({
     );
     try {
       const token = await AsyncStorage.getItem('token');
-      await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/thread/${commentId}/like`, {
+      await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/thread/${commentId}/like`, {
         method:  toLike ? 'POST' : 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

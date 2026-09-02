@@ -42,7 +42,7 @@ async function registerPushToken(token) {
 
     console.log('📲 Expo push token:', pushToken);
 
-    await fetch(`${API_BASE_URL}/api/v1/posts/push-token`, {
+    await fetch(`${API_BASE_URL}/api/v1/users/push-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
