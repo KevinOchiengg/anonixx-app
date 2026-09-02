@@ -134,13 +134,41 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
     if not _is_adult(data.date_of_birth):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Anonixx is for adults 18+")
 
+    # The username someone picks at signup IS their public anonymous name —
+    # there's no separate identity-setup step anymore, so this is the only
+    # chance to enforce the same rules update_profile applies to a later
+    # anonymous_name change (format, profanity, case-insensitive uniqueness
+    # against both fields, since the two are the same value from here on).
+    chosen_name = (data.username or "").strip()
+    if chosen_name:
+        if not _ANON_NAME_RE.match(chosen_name):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Username must be 3–30 characters — letters, numbers, dots, hyphens or underscores only",
+            )
+        if _contains_profanity(chosen_name):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
+        name_clash = await db["users"].find_one({
+            "$or": [
+                {"username":       {"$regex": f"^{re.escape(chosen_name)}$", "$options": "i"}},
+                {"anonymous_name": {"$regex": f"^{re.escape(chosen_name)}$", "$options": "i"}},
+            ]
+        })
+        if name_clash:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username is already taken")
+        anonymous_name = chosen_name
+    else:
+        # No username supplied (shouldn't happen via SignUpScreen, which
+        # requires one) — fall back to a random pseudonym as before.
+        anonymous_name = await generate_unique_anonymous_name(db)
+
     user_id = ObjectId()
     user = {
         "_id":            user_id,
         "email":          data.email,
-        "username":       data.username or data.email.split("@")[0],
+        "username":       chosen_name or data.email.split("@")[0],
         "password":       get_password_hash(data.password),
-        "anonymous_name": await generate_unique_anonymous_name(db),
+        "anonymous_name": anonymous_name,
         "interests":      [],
         "coin_balance":   0,          # Start at 0; welcome bonus credited below
         "streak_count":   0,

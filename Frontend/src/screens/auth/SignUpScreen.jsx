@@ -130,7 +130,7 @@ export default function SignUpScreen({ navigation }) {
     const username = formData.username.trim();
     const email    = formData.email.trim();
 
-    if (!username)                              e.username = 'Username is required';
+    if (!username)                              e.username = 'Pick a name';
     else if (username.length < 3)               e.username = 'At least 3 characters';
     else if (!/^[a-zA-Z0-9_]+$/.test(username)) e.username = 'Letters, numbers and _ only';
 
@@ -173,7 +173,7 @@ export default function SignUpScreen({ navigation }) {
     try {
       const dob = `${formData.dobYear}-${formData.dobMonth.padStart(2, '0')}-${formData.dobDay.padStart(2, '0')}`;
       const result = await dispatch(signup({
-        username:      formData.username.trim().toLowerCase(),
+        username:      formData.username.trim(),
         email:         formData.email.trim().toLowerCase(),
         password:      formData.password,
         date_of_birth: dob,
@@ -210,7 +210,7 @@ export default function SignUpScreen({ navigation }) {
       }, 600);
     } catch (err) {
       const msg = err?.detail || err?.message || '';
-      if (msg.toLowerCase().includes('email') && msg.toLowerCase().includes('exist')) {
+      if (msg.toLowerCase().includes('email') && (msg.toLowerCase().includes('exist') || msg.toLowerCase().includes('already registered'))) {
         showToast({ type: 'error', title: 'Email taken', message: 'An account with this email already exists.' });
         setErrors((prev) => ({ ...prev, email: 'Already in use' }));
       } else if (msg.toLowerCase().includes('username')) {
@@ -268,9 +268,9 @@ export default function SignUpScreen({ navigation }) {
               <Text style={styles.subtitle}>No names. No judgment. Just what's real.</Text>
             </View>
 
-            {/* Username */}
+            {/* Anonymous name (stored as "username" — this is what shows on your posts/comments) */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Username</Text>
+              <Text style={styles.label}>Anonymous name</Text>
               <View style={[
                 styles.inputRow,
                 focused === 'username' && styles.inputRowFocused,
@@ -283,7 +283,7 @@ export default function SignUpScreen({ navigation }) {
                   onFocus={() => setFocused('username')}
                   onBlur={() => setFocused('')}
                   onSubmitEditing={() => emailRef.current?.focus()}
-                  placeholder="your_username"
+                  placeholder="what should we call you?"
                   placeholderTextColor={THEME.textSecondary}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -295,7 +295,10 @@ export default function SignUpScreen({ navigation }) {
                   <CheckCircle2 size={ICON.md} color="#22c55e" strokeWidth={2} style={styles.fieldIcon} />
                 )}
               </View>
-              {errors.username ? <Text style={styles.fieldError}>{errors.username}</Text> : null}
+              {errors.username
+                ? <Text style={styles.fieldError}>{errors.username}</Text>
+                : <Text style={styles.fieldHint}>This is what everyone sees you as — no real names. Letters, numbers, and underscores only, 3–30 characters.</Text>
+              }
             </View>
 
             {/* Email */}
@@ -561,6 +564,7 @@ const styles = StyleSheet.create({
   input:           { flex: 1, fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT },
   eyeBtn:          { padding: rp(4), marginLeft: rp(6) },
   fieldError:      { color: THEME.error, fontSize: rf(11), fontFamily: 'DMSans-SemiBold', marginTop: SPACING.xs, marginLeft: rp(4), fontWeight: '500' },
+  fieldHint:       { color: THEME.textMuted, fontSize: rf(11), fontFamily: 'DMSans-Regular', marginTop: SPACING.xs, marginLeft: rp(4), lineHeight: rf(15) },
 
   // Date of birth — DD / MM / YYYY
   dobInput:        { fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, width: rs(36), textAlign: 'center' },
