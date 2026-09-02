@@ -134,7 +134,7 @@ export default function LoginScreen({ navigation }) {
 
     } catch (error) {
       const msg = error?.detail || error?.message || '';
-      if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('invalid')) {
+      if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect')) {
         showToast({ type: 'error', message: 'Incorrect email or password.' });
       } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
         showToast({ type: 'error', message: 'Check your internet and try again.' });

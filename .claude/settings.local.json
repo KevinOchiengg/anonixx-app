@@ -58,7 +58,23 @@
       "Bash(where adb *)",
       "Bash(adb version *)",
       "Bash(adb devices *)",
-      "Bash(grep -n \"^\\\\.env$\\\\|^\\\\.env\\\\b\\\\|Backend/.env\" Backend/.gitignore .gitignore)"
+      "Bash(grep -n \"^\\\\.env$\\\\|^\\\\.env\\\\b\\\\|Backend/.env\" Backend/.gitignore .gitignore)",
+      "Bash(curl -s -o /dev/null -w \"health check: %{http_code}\\\\n\" https://anonixx-app.onrender.com/health --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP_CODE=%{http_code}\\\\n' -X POST https://anonixx-app.onrender.com/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-test-2026-09-02@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\"}' --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP_CODE=%{http_code}\\\\n' -X POST https://anonixx-app.onrender.com/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-dup-test-2026-09-02@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\"}' --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST https://anonixx-app.onrender.com/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-name-test-1@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\",\"username\":\"QuietWolf92\"}' --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST https://anonixx-app.onrender.com/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-name-test-2@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\",\"username\":\"quietwolf92\"}' --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST https://anonixx-app.onrender.com/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-name-test-3@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\",\"username\":\"fuckboy\"}' --max-time 30)",
+      "Bash(\"./venv/Scripts/python.exe\" -m uvicorn app.main:app --host 127.0.0.1 --port 8123)",
+      "Bash(curl -s -o /dev/null -w \"local health: %{http_code}\\\\n\" http://127.0.0.1:8123/health --max-time 15)",
+      "Bash(tasklist //FI \"IMAGENAME eq python.exe\")",
+      "Bash(curl -s -o /dev/null -w \"still alive?: %{http_code}\\\\n\" http://127.0.0.1:8123/health --max-time 8)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-name-test-1@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\",\"username\":\"QuietWolf92\"}' --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-name-test-2@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\",\"username\":\"quietwolf92\"}' --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-name-test-3@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\",\"username\":\"fuckboy\"}' --max-time 30)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"diag-name-test-4@example.com\",\"password\":\"TestPass123!\",\"date_of_birth\":\"2000-01-01\",\"username\":\"has spaces\"}' --max-time 30)",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name = 'python.exe'\" | Where-Object { $_.CommandLine -match 'uvicorn' } | ForEach-Object { Write-Output \"Killing PID $\\($_.ProcessId\\): $\\($_.CommandLine\\)\"; Stop-Process -Id $_.ProcessId -Force })",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST https://anonixx-app.onrender.com/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"definitely-not-a-real-account@example.com\",\"password\":\"WrongPass123!\"}' --max-time 30)"
     ]
   }
 }
