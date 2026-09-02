@@ -1,11 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
-import * as Clipboard from 'expo-clipboard';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
-  BarChart2, Bookmark, ChevronRight, Coins, EyeOff, Feather, Flag, Flame, Heart, Link, Link2,
+  BarChart2, Bookmark, Coins, EyeOff, Flag, Heart, Link2,
   MessageCircle, MoreHorizontal, Pause, Play, Share2, UserX, VolumeX, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,7 +23,6 @@ import { useToast } from '../ui/Toast';
 import { CommentBottomSheet } from './CommentBottomSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
-const BASE_URL = 'https://anonixx-app.onrender.com';
 // Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
 // tapping Link up is never a price surprise.
 const UNLOCK_COST = 50;
@@ -134,9 +132,6 @@ const BARS = Array.from({ length: 28 }, (_, i) => ({
   id: i, height: Math.sin(i * 0.8) * 12 + 8 + (i % 3) * 4,
 }));
 
-// Real playback — this used to be a decorative shell (a play icon and static
-// bars that only navigated away), so voice drops never actually played in the
-// feed despite saying "tap to play".
 const AudioPlayer = React.memo(({ audioUrl }) => {
   const player   = useAudioPlayer(null);
   const status   = useAudioPlayerStatus(player);
@@ -146,15 +141,10 @@ const AudioPlayer = React.memo(({ audioUrl }) => {
   const duration = status.duration || 0;
   const progress = duration > 0 ? (status.currentTime || 0) / duration : 0;
 
-  // Stop if the card unmounts (scrolled far away, navigated off the feed) —
-  // otherwise audio keeps playing over whatever the user opens next.
   useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
 
-  // Restart from the top once a clip ends, so tapping again replays it.
   useEffect(() => {
     if (status.didJustFinish) {
-      // seekTo is async — .catch here, since a rejected promise would escape
-      // a plain try/catch.
       try {
         player.pause();
         Promise.resolve(player.seekTo(0)).catch(() => {});
@@ -221,9 +211,6 @@ const AudioPlayer = React.memo(({ audioUrl }) => {
 });
 
 // ─── Video Player ─────────────────────────────────────────────
-// FIX: VideoView uses Android SurfaceView which renders above all RN views.
-// Solution: pointerEvents="none" on VideoView + transparent TouchableOpacity overlay
-// for navigation, with mute/slider rendered after (on top of) the overlay.
 const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) => {
   const { activeVideoId } = useActiveVideo() || {};
   const isActive = activeVideoId === postId;
@@ -237,10 +224,6 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
   const sourceLoaded  = useRef(false);
   const overlayOp     = useRef(new Animated.Value(1)).current;
 
-  // No source at creation — every video card in the list would otherwise
-  // open/prepare its media the instant it mounts, active or not. The real
-  // source is attached lazily, the first time this card actually becomes
-  // the active one (see the isActive effect below).
   const inlinePlayer = useVideoPlayer(null, (p) => { p.loop = true; p.muted = true; });
 
   useEffect(() => {
@@ -264,8 +247,6 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
     if (!isActive) { inlinePlayer.pause(); return; }
     if (!sourceLoaded.current) {
       sourceLoaded.current = true;
-      // replaceAsync (not replace) — loading the asset synchronously on
-      // iOS's main thread is deprecated and can freeze the UI.
       inlinePlayer.replaceAsync({ uri: videoUrl })
         .then(() => inlinePlayer.play())
         .catch(() => {});
@@ -279,7 +260,7 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
   }, [isPlaying]);
 
   useEffect(() => {
-    if (videoThumbnailCache.has(videoUrl)) return; // already have it from a prior mount
+    if (videoThumbnailCache.has(videoUrl)) return;
     let cancelled = false;
     const gen = async () => {
       try {
@@ -315,19 +296,16 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
 
   return (
     <View style={styles.videoWrap}>
-      {/* Loading indicator */}
       {thumbLoading && (
         <View style={styles.videoLoading}>
           <ActivityIndicator color={T.primary} />
         </View>
       )}
 
-      {/* Thumbnail — shown when not playing */}
       {thumbnail && !isPlaying && (
         <Image source={{ uri: thumbnail }} style={styles.videoFill} resizeMode="cover" />
       )}
 
-      {/* VideoView — pointerEvents="none" prevents native surface from stealing touches */}
       <VideoView
         player={inlinePlayer}
         style={[styles.videoFill, !isPlaying && styles.hidden]}
@@ -337,25 +315,20 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
         pointerEvents="none"
       />
 
-      {/* Non-interactive gradient overlay */}
       <View style={styles.videoGradient} pointerEvents="none" />
 
-      {/* Play ring — fades out when playing */}
       <Animated.View pointerEvents="none" style={[styles.videoCenter, { opacity: overlayOp }]}>
         <View style={styles.videoPlayRing}>
           <Play size={rs(22)} color="#fff" fill="#fff" />
         </View>
       </Animated.View>
 
-      {/* Transparent full-screen touch handler — navigates to MediaFeed.
-          Rendered BEFORE mute/slider so those controls sit on top. */}
       <TouchableOpacity
         style={StyleSheet.absoluteFill}
         onPress={handleVideoPress}
         activeOpacity={1}
       />
 
-      {/* Mute chip + views — rendered AFTER transparent overlay, so they win touches */}
       <View style={styles.videoBottom}>
         {isPlaying && (
           <View style={styles.videoLiveRow} pointerEvents="none">
@@ -383,7 +356,6 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
         </View>
       </View>
 
-      {/* Seekable progress bar — also rendered after overlay */}
       {duration > 0 && (
         <View style={styles.videoProgressWrap}>
           <Slider
@@ -463,8 +435,8 @@ const MenuItem = React.memo(({ item }) => (
 ));
 
 // ─── Main Card ────────────────────────────────────────────────
-function CalmPostCard({
-  post, onResponse, onSave, onViewThread, onPress, onMediaPress,
+function DropCard({
+  post, onSave, onPress, onMediaPress,
 }) {
   const navigation          = useNavigation();
   const { isAuthenticated } = useAuth();
@@ -481,6 +453,13 @@ function CalmPostCard({
   const [poll,                setPoll]                = useState(post.poll || null);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  // Drops only ever carry a single media item (media_url/media_type) — the
+  // carousel component still works fine fed a 1-item array.
+  const images = useMemo(
+    () => (post.media_type === 'image' && post.media_url ? [post.media_url] : []),
+    [post.media_type, post.media_url],
+  );
 
   useEffect(() => {
     setLiked(post.is_liked || false);
@@ -500,7 +479,7 @@ function CalmPostCard({
     ]).start(() => setAnimating(false));
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/like`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/like`, {
         method: newLiked ? 'POST' : 'DELETE',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
@@ -530,7 +509,7 @@ function CalmPostCard({
     ]).start();
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/like`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/like`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
@@ -554,7 +533,7 @@ function CalmPostCard({
     if (!isAuthenticated) { showToast({ type: 'info', message: 'Sign in to vote — your pick stays anonymous.' }); return; }
     try {
       const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/posts/${post.id}/vote`, {
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/vote`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ option_index: optionIndex }),
@@ -575,20 +554,11 @@ function CalmPostCard({
 
   const handleShare = useCallback(async () => {
     try {
-      const link     = `${BASE_URL}/api/v1/posts/${post.id}/open`;
       const preview  = post.content?.substring(0, 100) ?? '';
       const ellipsis = (post.content?.length ?? 0) > 100 ? '…' : '';
-      await Share.share({ message: `"${preview}${ellipsis}"\n\nRead on Anonixx 👇\n${link}`, url: link });
+      await Share.share({ message: `"${preview}${ellipsis}" — Anonixx` });
     } catch {}
-  }, [post.id, post.content]);
-
-  const handleCopyLink = useCallback(async () => {
-    setMenuVisible(false);
-    try {
-      await Clipboard.setStringAsync(`${BASE_URL}/api/v1/posts/${post.id}/open`);
-      showToast({ type: 'success', message: 'Link copied.' });
-    } catch { showToast({ type: 'error', message: 'Could not copy link.' }); }
-  }, [post.id, showToast]);
+  }, [post.content]);
 
   const handleReport    = useCallback(() => { setMenuVisible(false); showToast({ type: 'info', message: 'Report submitted. Thank you.' }); }, [showToast]);
   const handleBlockUser = useCallback(async () => {
@@ -619,10 +589,6 @@ function CalmPostCard({
     if (!isAuthenticated) { showToast({ type: 'warning', message: 'Sign in to link up.' }); return; }
     navigation.navigate('PostUnlock', { post });
   }, [isAuthenticated, navigation, post, showToast]);
-  const handleInspirationThreadPress = useCallback((e) => {
-    e.stopPropagation();
-    navigation.navigate('InspirationThread', { postId: post.id });
-  }, [navigation, post.id]);
   const handleReadMore      = useCallback((e) => { e.stopPropagation(); setShowFullContent(true); }, []);
   const handleShowLess      = useCallback((e) => { e.stopPropagation(); setShowFullContent(false); }, []);
   const handleMediaPress    = useCallback((time) => onMediaPress?.(post, time), [onMediaPress, post]);
@@ -630,11 +596,10 @@ function CalmPostCard({
   const menuItems = useMemo(() => [
     { icon: <Bookmark size={rs(18)} color={post.is_saved ? T.primary : T.textSecondary} fill={post.is_saved ? T.primary : 'none'} />, label: post.is_saved ? 'Unsave' : 'Save', onPress: () => { handleMenuClose(); onSave(post.id); } },
     { icon: <Share2 size={rs(18)} color={T.textSecondary} />, label: 'Share', onPress: () => { handleMenuClose(); handleShare(); } },
-    { icon: <Link size={rs(18)} color={T.textSecondary} />, label: 'Copy Link', onPress: handleCopyLink },
     { icon: <EyeOff size={rs(18)} color={T.textSecondary} />, label: 'Hide Drop', onPress: handleMenuClose },
     { icon: <Flag size={rs(18)} color={T.primary} />, label: 'Report', onPress: handleReport, danger: true },
     { icon: <UserX size={rs(18)} color={T.primary} />, label: 'Block User', onPress: handleBlockUser, danger: true },
-  ], [post.is_saved, post.id, onSave, handleShare, handleCopyLink, handleReport, handleBlockUser, handleMenuClose]);
+  ], [post.is_saved, post.id, onSave, handleShare, handleReport, handleBlockUser, handleMenuClose]);
 
   return (
     <View style={styles.cardWrapper}>
@@ -680,7 +645,7 @@ function CalmPostCard({
               </>
             ) : null}
 
-            {post.images?.length > 0 && <ImageCarousel images={post.images} />}
+            {images.length > 0 && <ImageCarousel images={images} />}
 
             {post.video_url && (
               <VideoPlayer
@@ -698,22 +663,6 @@ function CalmPostCard({
             )}
 
             <View style={styles.divider} />
-
-            {/* Drop count — tappable thread entry point */}
-            {post.inspired_drop_count > 0 && (
-              <TouchableOpacity
-                style={styles.dropCountBadge}
-                onPress={handleInspirationThreadPress}
-                hitSlop={HIT_SLOP}
-                activeOpacity={0.75}
-              >
-                <Feather size={rs(11)} color={T.textSecondary} strokeWidth={1.8} />
-                <Text style={styles.dropCountText}>
-                  {post.inspired_drop_count} {post.inspired_drop_count === 1 ? 'person' : 'people'} resonated with this
-                </Text>
-                <ChevronRight size={rs(13)} color={T.textSecondary} style={{ opacity: 0.5 }} />
-              </TouchableOpacity>
-            )}
 
             <View style={styles.actions}>
               <View style={styles.actionsLeft}>
@@ -739,17 +688,22 @@ function CalmPostCard({
               </View>
             </View>
 
-            {/* Link up — pay to open a chat with this post's author. Its own
+            {/* Link up — pay to open a chat with this drop's author. Its own
                 elevated row, not squeezed between icons, so the one action
-                that actually makes money reads as a decision, not a caption. */}
-            <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
-              <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
-              <Text style={styles.linkUpBtnText}>Link up</Text>
-              <View style={styles.linkUpCostPill}>
-                <Coins size={rs(11)} color="#fff" />
-                <Text style={styles.linkUpCostText}>{UNLOCK_COST}</Text>
-              </View>
-            </TouchableOpacity>
+                that actually makes money reads as a decision, not a caption.
+                Hidden on your own drops — the backend rejects self-unlocks
+                anyway, but there's no reason to show a button that can only
+                ever fail. */}
+            {!post.is_own_post && (
+              <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
+                <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
+                <Text style={styles.linkUpBtnText}>Link up</Text>
+                <View style={styles.linkUpCostPill}>
+                  <Coins size={rs(11)} color="#fff" />
+                  <Text style={styles.linkUpCostText}>{UNLOCK_COST}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
         </DoubleTapLike>
       </View>
@@ -844,9 +798,6 @@ const styles = StyleSheet.create({
   action:           { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   actionCount:      { fontSize: FONT.sm, fontWeight: '500', color: T.textSecondary },
 
-  // Link up — its own elevated row below the icon actions. This is the
-  // money action, so it should look like a decision, not blend in with
-  // the icons above it.
   linkUpBtn: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -879,22 +830,6 @@ const styles = StyleSheet.create({
   },
   linkUpCostText: { fontSize: rf(11), fontWeight: '700', color: '#fff' },
 
-  // "X people felt this" badge — sits above the action bar
-  dropCountBadge: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    alignSelf:         'flex-start',
-    gap:               rp(5),
-    backgroundColor:   'rgba(255,255,255,0.04)',
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       'rgba(255,255,255,0.07)',
-    paddingHorizontal: rp(10),
-    paddingVertical:   rp(4),
-    marginBottom:      rp(8),
-  },
-  dropCountText:  { fontSize: rf(11), fontWeight: '500', color: T.textSecondary },
-  dropCountArrow: { fontSize: rf(11), fontWeight: '500', color: T.textSecondary, opacity: 0.5 },
   menuOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   menuSheet:        { backgroundColor: T.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, paddingBottom: rp(24) },
   menuHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: rp(18), borderBottomWidth: 1, borderBottomColor: T.border },
@@ -924,8 +859,6 @@ const styles = StyleSheet.create({
   pollSignInHint:       { fontSize: FONT.xs, color: T.textSecondary, fontStyle: 'italic', marginTop: rp(8), textAlign: 'center' },
 });
 
-// activeVideoId is now consumed via VideoFeedContext directly inside VideoPlayer,
-// so it is NOT a prop of CalmPostCard and does not need to be compared here.
 const areEqual = (prev, next) =>
   prev.post.id                          === next.post.id                          &&
   prev.post.is_saved                    === next.post.is_saved                    &&
@@ -935,4 +868,4 @@ const areEqual = (prev, next) =>
   prev.post.poll?.total_votes           === next.post.poll?.total_votes           &&
   prev.post.poll?.voted_option          === next.post.poll?.voted_option;
 
-export default React.memo(CalmPostCard, areEqual);
+export default React.memo(DropCard, areEqual);

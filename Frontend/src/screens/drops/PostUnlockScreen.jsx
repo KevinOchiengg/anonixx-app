@@ -28,9 +28,9 @@ const UNLOCK_COST = 50;
 // Must match MAX_REQUEST_VIDEO_SECONDS in Backend/app/api/v1/unlock_requests.py
 const MAX_CLUE_VIDEO_SECONDS = 30;
 
-// Same signed-upload flow CreatePostScreen.jsx uses — kept as its own local
-// copy here rather than a shared util, matching how each screen in this app
-// already carries its own copy of this helper.
+// Same signed-upload flow used elsewhere for drop creation — kept as its
+// own local copy here rather than a shared util, matching how each screen
+// in this app already carries its own copy of this helper.
 const uploadToCloudinary = async (uri, resourceType, token) => {
   const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
     method:  'POST',
@@ -64,12 +64,13 @@ export default function PostUnlockScreen({ route, navigation }) {
   const { showToast } = useToast();
   const coinBalance = useSelector((state) => state.coins.balance);
 
-  // A post carries its own id/name/content; a linkupTarget (e.g. a Circle
-  // comment) is a lighter shape — { target_type, target_id, anonymous_name,
-  // preview_text } — since there's no full post object to hand over. Either
-  // way this screen just needs a target_type/target_id to send and a name/
-  // snippet to display.
-  const targetType    = post ? 'post' : (linkupTarget?.target_type || 'post');
+  // A post carries its own id/name/content (it's actually always a drop —
+  // DropCard is the only caller passing `post`); a linkupTarget (e.g. a
+  // Circle comment) is a lighter shape — { target_type, target_id,
+  // anonymous_name, preview_text } — since there's no full object to hand
+  // over. Either way this screen just needs a target_type/target_id to
+  // send and a name/snippet to display.
+  const targetType    = post ? 'drop' : (linkupTarget?.target_type || 'drop');
   const targetId      = post ? post.id : linkupTarget?.target_id;
   const displayName   = post ? post.anonymous_name : linkupTarget?.anonymous_name;
   const displayText   = post ? post.content : linkupTarget?.preview_text;

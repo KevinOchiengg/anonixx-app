@@ -24,18 +24,18 @@ async def get_sunday_prompt(
     # Get this week's stats
     week_ago = datetime.utcnow() - timedelta(days=7)
     
-    posts_viewed = await db["posts"].count_documents({
-        "user_id": {"$ne": current_user_id},
+    posts_viewed = await db["drops"].count_documents({
+        "sender_id": {"$ne": current_user_id},
         "views_count": {"$gt": 0}
     })
-    
+
     responses_given = await db["post_responses"].count_documents({
         "user_id": current_user_id,
         "created_at": {"$gte": week_ago}
     })
-    
-    posts_shared = await db["posts"].count_documents({
-        "user_id": current_user_id,
+
+    posts_shared = await db["drops"].count_documents({
+        "sender_id": current_user_id,
         "created_at": {"$gte": week_ago}
     })
     

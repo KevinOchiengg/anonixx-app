@@ -119,7 +119,7 @@ export default function AppNavigator() {
         <Stack.Screen name="EditProfile"    component={EditProfileScreen} />
         <Stack.Screen name="Dashboard"      component={DashboardScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-        <Stack.Screen name="SavedPosts"     component={SavedPostsScreen} />
+        <Stack.Screen name="SavedDrops"     component={SavedPostsScreen} />
         <Stack.Screen name="Coins"          component={CoinsScreen} />
         <Stack.Screen name="Referral"       component={ReferralScreen} />
         <Stack.Screen name="Legal"          component={LegalScreen} />

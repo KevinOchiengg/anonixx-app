@@ -762,17 +762,13 @@ class CircleAdCreate(BaseModel):
 
 
 async def format_circle_ad(db, ad: dict) -> dict:
-    # Drops and their feed-mirrored posts are different documents with
-    # different ids (see unlock_requests.py's docstring) — the ad stores the
-    # raw drops._id (same convention as Backend/app/api/v1/ads.py's main-feed
-    # ads), so the preview and the tap-through target both resolve via the
-    # mirrored posts doc (posts.source_drop_id), not the drop itself.
+    # The ad stores the raw drops._id (same convention as
+    # Backend/app/api/v1/ads.py's main-feed ads) — the preview and the
+    # tap-through target both resolve directly against the drop itself.
     drop = await db.drops.find_one({"_id": oid(ad["drop_id"])})
-    post = await db.posts.find_one({"source_drop_id": ad["drop_id"]}, {"_id": 1})
     return {
         "id":              fmt_id(ad),
         "drop_id":         ad["drop_id"],
-        "post_id":         str(post["_id"]) if post else None,
         "preview_caption": (drop.get("confession") or "")[:140] if drop else None,
         "preview_image":   drop.get("media_url") if drop and drop.get("media_type") == "image" else None,
         "status":          ad.get("status", AD_STATUS_APPROVED),

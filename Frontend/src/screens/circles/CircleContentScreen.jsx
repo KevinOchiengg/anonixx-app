@@ -741,23 +741,27 @@ export default function CircleContentScreen({ route, navigation }) {
     }
   }, [circleId, authHeaders, showToast]);
 
-  const handleAdPress = useCallback(async (ad) => {
-    if (!ad.post_id) {
+  const handleAdPress = useCallback((ad) => {
+    if (!ad.drop_id) {
       showToast({ type: 'info', message: 'This drop is no longer available.' });
       return;
     }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/posts/${ad.post_id}`, { headers: await authHeaders() });
-      if (res.ok) {
-        const post = await res.json();
-        navigation.navigate('Feed', { screen: 'PostDetail', params: { post } });
-      } else {
-        showToast({ type: 'error', message: 'Could not open this drop.' });
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Could not open this drop.' });
-    }
-  }, [authHeaders, navigation, showToast]);
+    // The ad payload already carries everything DropDetail needs for an
+    // initial render (preview_caption/preview_image) — no extra fetch
+    // required; engagement fields (likes/saves/comments) self-correct the
+    // moment the user interacts, same pattern SavedPostsScreen uses.
+    navigation.navigate('Feed', {
+      screen: 'DropDetail',
+      params: {
+        post: {
+          id:         ad.drop_id,
+          content:    ad.preview_caption,
+          media_url:  ad.preview_image,
+          media_type: ad.preview_image ? 'image' : null,
+        },
+      },
+    });
+  }, [navigation, showToast]);
 
   // ── Comments / profile ──────────────────────────────────────
   const handleOpenComments = useCallback((post) => setCommentsPost(post), []);

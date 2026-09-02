@@ -18,11 +18,9 @@ from app.api.v1 import deception_reports
 from app.api.v1 import (
     auth,
     coins,
-    posts,
     upload,
     users,
     impact,
-    connections,
     rituals,
     connect,
     circles,
@@ -40,16 +38,15 @@ async def _ensure_indexes():
     log = logging.getLogger(__name__)
     try:
         db = await get_database()
-        await db["posts"].create_index([("created_at", -1)],       background=True)
-        await db["posts"].create_index([("likes_count", -1)],      background=True)
-        await db["saved_posts"].create_index(
-            [("user_id", 1), ("post_id", 1)], unique=True, background=True
+        await db["drops"].create_index([("created_at", -1)],       background=True)
+        await db["drops"].create_index([("likes_count", -1)],      background=True)
+        await db["saved_drops"].create_index(
+            [("user_id", 1), ("drop_id", 1)], unique=True, background=True
         )
-        await db["poll_votes"].create_index(
-            [("post_id", 1), ("user_id", 1)], background=True
+        await db["drop_threads"].create_index([("drop_id", 1)],    background=True)
+        await db["drop_views"].create_index(
+            [("drop_id", 1), ("user_id", 1)], unique=True, background=True
         )
-        await db["post_threads"].create_index([("post_id", 1)],    background=True)
-        await db["threads"].create_index([("post_id", 1)],         background=True)
         await db["drop_messages"].create_index(
             [("connection_id", 1), ("created_at", -1)], background=True
         )
@@ -137,11 +134,9 @@ async def root():
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(coins.router, prefix=settings.API_V1_PREFIX)
 app.include_router(premium.router, prefix=settings.API_V1_PREFIX)
-app.include_router(posts.router, prefix=settings.API_V1_PREFIX)
 app.include_router(upload.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
 app.include_router(impact.router, prefix=settings.API_V1_PREFIX)
-app.include_router(connections.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connect.router, prefix=settings.API_V1_PREFIX)
 app.include_router(geo_pricing.router,   prefix=settings.API_V1_PREFIX)

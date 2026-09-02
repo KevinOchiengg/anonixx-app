@@ -829,7 +829,7 @@ export default function MediaFeedScreen({ route, navigation }) {
       }));
       try {
         const token = await AsyncStorage.getItem('token');
-        await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/like`, {
+        await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/like`, {
           method: newLiked ? 'POST' : 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -845,7 +845,7 @@ export default function MediaFeedScreen({ route, navigation }) {
     async (postId) => {
       try {
         const token = await AsyncStorage.getItem('token');
-        const res = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}`, {
+        const res = await fetch(`${API_BASE_URL}/api/v1/drops/${postId}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -866,7 +866,7 @@ export default function MediaFeedScreen({ route, navigation }) {
       setSaveMap((prev) => ({ ...prev, [postId]: !wasSaved }));
       try {
         const token = await AsyncStorage.getItem('token');
-        await fetch(`${API_BASE_URL}/api/v1/posts/${postId}/save`, {
+        await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/save`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         });

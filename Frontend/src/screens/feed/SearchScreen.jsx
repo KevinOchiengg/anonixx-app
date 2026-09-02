@@ -1,5 +1,5 @@
 /**
- * SearchScreen — full-text search across posts and confessions.
+ * SearchScreen — full-text search across drops and confessions.
  * Auto-focuses on open, persists history, supports All / Recent / Popular filters.
  */
 import React, {
@@ -13,9 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, Clock, Search, X, Users, MapPin } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import CalmPostCard from '../../components/feed/CalmPostCard';
+import DropCard from '../../components/feed/DropCard';
 import LocationField from '../../components/drops/LocationField';
-import { POST_TOPICS } from '../../config/postTopics';
 import { API_BASE_URL } from '../../config/api';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP,
@@ -26,11 +25,18 @@ const HISTORY_KEY   = '@anonixx_search_history';
 const MAX_HISTORY   = 10;
 const FILTERS       = ['all', 'recent', 'popular'];
 const SUGGESTIONS   = ['secrets', 'heartbreak', 'late night thoughts', 'desire', 'carrying it alone', 'family'];
-// A drop IS a post in Anonixx — there's deliberately no drops-vs-posts
-// split here, only Drops (the app's confessions) vs Circles.
+// Drops vs Circles — the app's only two searchable content types.
 const CONTENT_TYPES = [
-  { id: 'posts',   label: 'Drops' },
+  { id: 'drops',   label: 'Drops' },
   { id: 'circles', label: 'Circles' },
+];
+// Mirrors VALID_MOOD_TAGS in Backend/app/api/v1/drops.py — the confession-type
+// picker's mood_tag vocabulary, used here as a facet filter.
+const MOOD_TAGS = [
+  { id: 'longing',  label: 'Longing',  emoji: '🌙' },
+  { id: 'unsent',   label: 'Unsent',   emoji: '💌' },
+  { id: 'reckless', label: 'Reckless', emoji: '🔥' },
+  { id: 'quiet',    label: 'Quiet',    emoji: '🤫' },
 ];
 const LIVE_SEARCH_DEBOUNCE_MS = 400;
 const MIN_LIVE_QUERY_LEN = 2;
@@ -68,8 +74,8 @@ export default function SearchScreen({ navigation }) {
   const [searched,   setSearched]   = useState(false);
   const [total,      setTotal]      = useState(0);
   const [filter,     setFilter]     = useState('all');
-  const [contentType, setContentType] = useState('posts');
-  const [postTopic,   setPostTopic]   = useState(null);
+  const [contentType, setContentType] = useState('drops');
+  const [moodTag,     setMoodTag]     = useState(null);
   const [locationOpen,    setLocationOpen]    = useState(false);
   const [locCountry,      setLocCountry]      = useState('');
   const [locCounty,       setLocCounty]       = useState('');
@@ -107,15 +113,15 @@ export default function SearchScreen({ navigation }) {
   const doSearch = useCallback(async (
     q = query, f = filter, type = contentType,
     {
-      silent = false, topic = postTopic,
+      silent = false, mood = moodTag,
       country = locCountry, county = locCounty, subCounty = locSubCounty, estate = locEstate,
     } = {},
   ) => {
     const trimmed = q.trim();
     const hasLocation = !!(country || county || subCounty || estate);
-    // A facet alone (topic and/or location, no typed text) is a valid
+    // A facet alone (mood and/or location, no typed text) is a valid
     // "browse by…" search — only bail if there's truly nothing to go on.
-    if (!trimmed && !(type === 'posts' && (topic || hasLocation))) return;
+    if (!trimmed && !(type === 'drops' && (mood || hasLocation))) return;
 
     if (!silent) Keyboard.dismiss();
     setLoading(true);
@@ -139,12 +145,12 @@ export default function SearchScreen({ navigation }) {
       } else {
         const params = new URLSearchParams({ filter: f, limit: '30' });
         if (trimmed) params.set('q', trimmed);
-        if (topic) params.set('topic', topic);
+        if (mood) params.set('mood_tag', mood);
         if (country)   params.set('location_country', country);
         if (county)    params.set('location_county', county);
         if (subCounty) params.set('location_sub_county', subCounty);
         if (estate)    params.set('location_estate', estate);
-        const res = await fetch(`${API_BASE_URL}/api/v1/posts/search?${params}`, { headers });
+        const res = await fetch(`${API_BASE_URL}/api/v1/drops/search?${params}`, { headers });
         data = await res.json();
         if (!res.ok) throw new Error();
         list = data.results || [];
@@ -158,7 +164,7 @@ export default function SearchScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [query, filter, contentType, postTopic, locCountry, locCounty, locSubCounty, locEstate, saveHistory]);
+  }, [query, filter, contentType, moodTag, locCountry, locCounty, locSubCounty, locEstate, saveHistory]);
 
   const handleFilterChange = useCallback((f) => {
     setFilter(f);
@@ -167,24 +173,24 @@ export default function SearchScreen({ navigation }) {
 
   const handleContentTypeChange = useCallback((type) => {
     setContentType(type);
-    if (query.trim() || (type === 'posts' && (postTopic || hasLocationFilter))) {
+    if (query.trim() || (type === 'drops' && (moodTag || hasLocationFilter))) {
       doSearch(query, filter, type);
     }
-  }, [query, filter, postTopic, hasLocationFilter, doSearch]);
+  }, [query, filter, moodTag, hasLocationFilter, doSearch]);
 
   // Location fields update live as you pick them — same "browse by facet
-  // alone" behavior the topic chips already have.
+  // alone" behavior the mood chips already have.
   const handleLocationChange = useCallback((next) => {
-    const stillFiltered = query.trim() || postTopic
+    const stillFiltered = query.trim() || moodTag
       || next.country || next.county || next.subCounty || next.estate;
     if (!stillFiltered) {
       setResults([]); setSearched(false); setTotal(0);
       return;
     }
-    doSearch(query, filter, 'posts', {
+    doSearch(query, filter, 'drops', {
       country: next.country, county: next.county, subCounty: next.subCounty, estate: next.estate,
     });
-  }, [query, filter, postTopic, doSearch]);
+  }, [query, filter, moodTag, doSearch]);
 
   const updateLocation = useCallback((patch) => {
     const next = {
@@ -205,15 +211,15 @@ export default function SearchScreen({ navigation }) {
     handleLocationChange({ country: '', county: '', subCounty: '', estate: '' });
   }, [handleLocationChange]);
 
-  const handleTopicChange = useCallback((t) => {
-    const next = postTopic === t ? null : t;   // tap again to clear
-    setPostTopic(next);
+  const handleMoodChange = useCallback((m) => {
+    const next = moodTag === m ? null : m;   // tap again to clear
+    setMoodTag(next);
     if (!next && !query.trim() && !hasLocationFilter) {
       setResults([]); setSearched(false); setTotal(0);
       return;
     }
-    doSearch(query, filter, 'posts', { topic: next });
-  }, [query, filter, postTopic, hasLocationFilter, doSearch]);
+    doSearch(query, filter, 'drops', { mood: next });
+  }, [query, filter, moodTag, hasLocationFilter, doSearch]);
 
   // Live search-as-you-type — debounced, doesn't touch history (only an
   // explicit submit/history-tap/suggestion-tap does that).
@@ -241,27 +247,22 @@ export default function SearchScreen({ navigation }) {
     doSearch(q, filter, contentType);
   }, [filter, contentType, doSearch]);
 
-  const handlePostPress    = useCallback((post) => navigation.navigate('PostDetail', { post }), [navigation]);
-  const handleViewThread   = useCallback((postId) => navigation.navigate('ThreadView', { postId }), [navigation]);
+  const handlePostPress    = useCallback((post) => navigation.navigate('DropDetail', { post }), [navigation]);
   const handleCirclePress  = useCallback((circle) => navigation.navigate('Circles', {
     screen: 'CircleProfile', params: { circleId: circle.id },
   }), [navigation]);
-  const handleResponse     = useCallback(() => {}, []);
   const handleSave         = useCallback(() => {}, []);
 
   const renderResult = useCallback(({ item }) => {
     if (contentType === 'circles') return <CircleResultRow item={item} onPress={handleCirclePress} />;
     return (
-      <CalmPostCard
+      <DropCard
         post={item}
-        onResponse={handleResponse}
         onSave={handleSave}
-        onViewThread={handleViewThread}
         onPress={handlePostPress}
-        navigation={navigation}
       />
     );
-  }, [contentType, navigation, handleResponse, handleSave, handleViewThread, handlePostPress, handleCirclePress]);
+  }, [contentType, handleSave, handlePostPress, handleCirclePress]);
 
   const keyExtractor = useCallback((item, i) => item.id || String(i), []);
 
@@ -332,9 +333,9 @@ export default function SearchScreen({ navigation }) {
         <Text style={styles.resultCount}>
           {total} result{total !== 1 ? 's' : ''}
           {query.trim() && ` for "${query.trim()}"`}
-          {!query.trim() && contentType === 'posts' && postTopic &&
-            ` in ${POST_TOPICS.find(t => t.id === postTopic)?.label}`}
-          {contentType === 'posts' && hasLocationFilter &&
+          {!query.trim() && contentType === 'drops' && moodTag &&
+            ` in ${MOOD_TAGS.find(t => t.id === moodTag)?.label}`}
+          {contentType === 'drops' && hasLocationFilter &&
             ` near ${[locEstate, locSubCounty, locCounty, locCountry].filter(Boolean).join(', ')}`}
         </Text>
       }
@@ -370,7 +371,7 @@ export default function SearchScreen({ navigation }) {
             onChangeText={setQuery}
             placeholder={
               contentType === 'circles' ? 'search circles by name…'
-              : 'search secrets, topics, names…'
+              : 'search secrets, moods, names…'
             }
             placeholderTextColor={T.textMuted}
             returnKeyType="search"
@@ -386,7 +387,7 @@ export default function SearchScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Content type — Posts / Circles — primary nav, underline tabs */}
+      {/* Content type — Drops / Circles — primary nav, underline tabs */}
       <View style={styles.tabRow}>
         {CONTENT_TYPES.map(ct => (
           <TouchableOpacity
@@ -405,7 +406,7 @@ export default function SearchScreen({ navigation }) {
       </View>
 
       {/* Secondary filters — one cohesive zone, not stacked bordered panels */}
-      {contentType === 'posts' && (
+      {contentType === 'drops' && (
         <View style={styles.filtersZone}>
           {/* All / Recent / Popular — quiet inline toggle */}
           <View style={styles.sortRow}>
@@ -424,7 +425,7 @@ export default function SearchScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Topic — narrows results even with no typed query */}
+          {/* Mood — narrows results even with no typed query */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -443,16 +444,16 @@ export default function SearchScreen({ navigation }) {
                   : 'Location'}
               </Text>
             </TouchableOpacity>
-            {POST_TOPICS.map(t => (
+            {MOOD_TAGS.map(t => (
               <TouchableOpacity
                 key={t.id}
-                style={[styles.facetChip, postTopic === t.id && styles.facetChipActive]}
-                onPress={() => handleTopicChange(t.id)}
+                style={[styles.facetChip, moodTag === t.id && styles.facetChipActive]}
+                onPress={() => handleMoodChange(t.id)}
                 hitSlop={HIT_SLOP}
                 activeOpacity={0.8}
               >
                 <Text style={styles.facetEmoji}>{t.emoji}</Text>
-                <Text style={[styles.facetText, postTopic === t.id && styles.facetTextActive]}>
+                <Text style={[styles.facetText, moodTag === t.id && styles.facetTextActive]}>
                   {t.label}
                 </Text>
               </TouchableOpacity>
@@ -461,7 +462,7 @@ export default function SearchScreen({ navigation }) {
 
           {/* Location filter panel — collapsed by default, exact-match
               search (unlike the passive feed-location scope, this doesn't
-              fall back to including unplaced posts). */}
+              fall back to including unplaced drops). */}
           {locationOpen && (
             <View style={styles.locationPanel}>
               <LocationField
@@ -599,7 +600,7 @@ const styles = StyleSheet.create({
   },
   sortChipTextActive: { color: T.primary },
 
-  // Topic facet chips — horizontal scroll, tap again to clear
+  // Mood facet chips — horizontal scroll, tap again to clear
   facetRow: {
     flexDirection:     'row',
     paddingHorizontal: SPACING.md,

@@ -112,8 +112,7 @@ export default function AdminDashboardScreen({ navigation }) {
           <StatCard label="Admins" value={stats?.users?.admins ?? 0} />
           <StatCard label="Banned" value={stats?.users?.banned ?? 0} />
           <StatCard label="Verified" value={stats?.users?.verified ?? 0} />
-          <StatCard label="Total posts" value={stats?.content?.total_posts ?? 0} sub={`${stats?.content?.posts_today ?? 0} today`} />
-          <StatCard label="Total drops" value={stats?.content?.total_drops ?? 0} />
+          <StatCard label="Total drops" value={stats?.content?.total_drops ?? 0} sub={`${stats?.content?.drops_today ?? 0} today`} />
         </View>
 
         {/* Nav */}

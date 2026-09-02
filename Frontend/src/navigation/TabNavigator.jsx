@@ -14,13 +14,11 @@ import { useAuth } from '../context/AuthContext';
 import { rf } from '../utils/responsive';
 
 // Feed
-import CalmFeedScreen from '../screens/feed/CalmFeedScreen';
+import DropsFeedScreen from '../screens/feed/DropsFeedScreen';
 import MediaFeedScreen from '../screens/feed/MediaFeedScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SearchScreen from '../screens/feed/SearchScreen';
-import ThreadViewScreen from '../screens/feed/ThreadViewScreen';
-import PostDetailScreen from '../screens/posts/PostDetailScreen';
-import InspirationThreadScreen from '../screens/drops/InspirationThreadScreen';
+import DropDetailScreen from '../screens/feed/DropDetailScreen';
 
 // Drops — DropsCompose now lives at the root AppNavigator stack (reachable
 // from anywhere, incl. the Create tab button below); DropChat stays here
@@ -43,8 +41,6 @@ import MessagesScreen from '../screens/connect/MessagesScreen';
 // Profile
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
-// Create
-import CreatePostScreen from '../screens/posts/CreatePostScreen';
 import { THEME } from '../utils/theme';
 
 const Tab = createBottomTabNavigator();
@@ -102,15 +98,11 @@ const CustomTabBarButton = ({ children, onPress }) => (
 function FeedStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="FeedMain" component={CalmFeedScreen} />
+      <Stack.Screen name="FeedMain" component={DropsFeedScreen} />
       <Stack.Screen name="MediaFeed" component={MediaFeedScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
-      <Stack.Screen name="PostDetail" component={PostDetailScreen} />
-      <Stack.Screen name="CreatePost" component={CreatePostScreen} />
-      <Stack.Screen name="SavedPosts" component={SavedPostsScreen} />
-      <Stack.Screen name="ThreadView" component={ThreadViewScreen} />
-      {/* InspirationThread reachable from the feed drop-count badge */}
-      <Stack.Screen name="InspirationThread" component={InspirationThreadScreen} />
+      <Stack.Screen name="DropDetail" component={DropDetailScreen} />
+      <Stack.Screen name="SavedDrops" component={SavedPostsScreen} />
     </Stack.Navigator>
   );
 }

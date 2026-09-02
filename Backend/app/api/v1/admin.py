@@ -40,11 +40,9 @@ async def get_stats(
     premium_users  = await db["users"].count_documents({"is_premium": True})
     admin_count    = await db["users"].count_documents({"is_admin": True})
 
-    total_posts  = await db["posts"].count_documents({})
-    posts_today  = await db["posts"].count_documents({"created_at": {"$gte": today_start}})
-
     collections = await db.list_collection_names()
     total_drops = await db["drops"].count_documents({}) if "drops" in collections else 0
+    drops_today = await db["drops"].count_documents({"created_at": {"$gte": today_start}}) if "drops" in collections else 0
 
     total_revenue = 0.0
     if "payments" in collections:
@@ -63,9 +61,8 @@ async def get_stats(
             "admins":           admin_count,
         },
         "content": {
-            "total_posts": total_posts,
-            "posts_today": posts_today,
             "total_drops": total_drops,
+            "drops_today": drops_today,
         },
         "financials": {
             "total_revenue_usd":       round(total_revenue, 2),
@@ -130,7 +127,7 @@ async def get_user(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
     collections  = await db.list_collection_names()
-    post_count   = await db["posts"].count_documents({"user_id": user_id})
+    drop_count   = await db["drops"].count_documents({"sender_id": user_id})
     report_count = await db["reports"].count_documents({"reported_user_id": user_id}) if "reports" in collections else 0
 
     return {
@@ -149,7 +146,7 @@ async def get_user(
         "coin_balance":   user.get("coin_balance", 0),
         "created_at":     user["created_at"].isoformat() if user.get("created_at") else None,
         "last_login":     user["last_login"].isoformat() if user.get("last_login") else None,
-        "post_count":     post_count,
+        "drop_count":     drop_count,
         "report_count":   report_count,
     }
 
@@ -284,32 +281,6 @@ async def adjust_coins(
 
 # ─── Content Moderation ───────────────────────────────────────
 
-@router.get("/posts", summary="List all posts — newest first")
-async def list_posts(
-    skip:     int = Query(0,  ge=0),
-    limit:    int = Query(20, ge=1, le=100),
-    admin_id: str = Depends(require_admin),
-    db=Depends(get_database),
-):
-    total  = await db["posts"].count_documents({})
-    cursor = db["posts"].find({}).sort("created_at", -1).skip(skip).limit(limit)
-
-    posts = []
-    async for p in cursor:
-        posts.append({
-            "id":           str(p["_id"]),
-            "user_id":      p.get("user_id"),
-            "content":      (p.get("content") or "")[:200],
-            "is_anonymous": p.get("is_anonymous", True),
-            "media_urls":   p.get("media_urls", []),
-            "likes_count":  p.get("likes_count", 0),
-            "created_at":   p["created_at"].isoformat() if p.get("created_at") else None,
-            "edited_at":    p["edited_at"].isoformat() if p.get("edited_at") else None,
-        })
-
-    return {"total": total, "skip": skip, "limit": limit, "posts": posts}
-
-
 @router.get("/moderation-queue", summary="Drops flagged or hidden by user reports — awaiting review")
 async def get_moderation_queue(
     skip:     int = Query(0,  ge=0),
@@ -345,29 +316,6 @@ async def get_moderation_queue(
         })
 
     return {"total": total, "skip": skip, "limit": limit, "drops": drops}
-
-
-@router.delete("/posts/{post_id}", summary="Force-delete any post (admin override, cascades)")
-async def force_delete_post(
-    post_id:  str,
-    admin_id: str = Depends(require_admin),
-    db=Depends(get_database),
-):
-    try:
-        oid = ObjectId(post_id)
-    except Exception:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid post ID")
-
-    result = await db["posts"].delete_one({"_id": oid})
-    if result.deleted_count == 0:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post not found")
-
-    await db["post_threads"].delete_many({"post_id": post_id})
-    await db["threads"].delete_many({"post_id": oid})
-    await db["saved_posts"].delete_many({"post_id": post_id})
-    await db["post_views"].delete_many({"post_id": oid})
-
-    return {"deleted": post_id}
 
 
 @router.patch("/drops/{drop_id}/dismiss", summary="Clear a drop from the moderation queue without deleting it")

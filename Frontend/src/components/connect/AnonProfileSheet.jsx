@@ -17,9 +17,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, UserCheck, Crown, MapPin, Link2, Coins } from 'lucide-react-native';
 
-// Matches UNLOCK_COST in CalmPostCard.jsx / PostUnlockScreen.jsx — same
+// Matches UNLOCK_COST in DropCard.jsx / PostUnlockScreen.jsx — same
 // coin-gated Link Up flow, just entered from the profile sheet instead of
-// the post card directly.
+// the drop card directly.
 const UNLOCK_COST = 50;
 import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../ui/Toast';

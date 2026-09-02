@@ -2,13 +2,13 @@
 app/tasks/drop_cleanup.py
 
 Async background worker — deletes drops whose post-unlock grace window has
-passed, along with the feed post each one mirrors into.
+passed, along with their comments/saves/views.
 
 Lifecycle rules this enforces (see drops.py's UNLOCKED_GRACE_DAYS):
   • A drop with expires_at = None has never been unlocked. It never expires
     and this worker never touches it.
   • The first unlock sets expires_at = now + 7 days (14 for premium posters).
-    Once that passes, the drop and its mirrored post are removed.
+    Once that passes, the drop and its social-engagement records are removed.
 
 What deliberately survives: drop_connections and drop_messages. People paid
 to open those chats, and the connection copies the confession text and names
@@ -77,7 +77,7 @@ class DropCleanupWorker:
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     async def sweep(self) -> int:
-        """Delete drops past their grace window plus their mirrored posts.
+        """Delete drops past their grace window plus their comments/saves/views.
         Returns how many drops were removed."""
         db = await get_database()
 
@@ -104,38 +104,23 @@ class DropCleanupWorker:
         drop_ids = [d["_id"] for d in expired]
         drop_id_strs = [str(_id) for _id in drop_ids]
 
-        # Mirrored feed posts carry source_drop_id back to their drop.
-        mirrored = await db["posts"].find(
-            {"source_drop_id": {"$in": drop_id_strs}}, {"_id": 1},
-        ).to_list(None)
-        post_ids = [p["_id"] for p in mirrored]
-        post_id_strs = [str(_id) for _id in post_ids]
-
         await db["drops"].delete_many({"_id": {"$in": drop_ids}})
 
-        if post_ids:
-            # Same sub-collection cleanup DELETE /posts/{id} performs, so a
-            # swept post doesn't leave orphaned threads/saves/views behind.
-            await db["posts"].delete_many({"_id": {"$in": post_ids}})
-            await db["post_threads"].delete_many({"post_id": {"$in": post_id_strs}})
-            await db["threads"].delete_many({"post_id": {"$in": post_ids}})
-            await db["saved_posts"].delete_many({"post_id": {"$in": post_id_strs}})
-            await db["post_views"].delete_many({"post_id": {"$in": post_ids}})
+        # Same sub-collection cleanup DELETE /drops/{id} performs, so a
+        # swept drop doesn't leave orphaned threads/saves/views behind.
+        await db["drop_threads"].delete_many({"drop_id": {"$in": drop_id_strs}})
+        await db["saved_drops"].delete_many({"drop_id": {"$in": drop_id_strs}})
+        await db["drop_views"].delete_many({"drop_id": {"$in": drop_id_strs}})
 
         # Pending requests against a drop that no longer exists can never be
         # accepted — clear them so they stop showing in owners' inboxes.
         await db["drop_unlock_requests"].delete_many({
             "status": "pending",
-            "$or": [
-                {"target_type": "drop", "target_id": {"$in": drop_id_strs}},
-                {"target_type": "post", "target_id": {"$in": post_id_strs}},
-            ],
+            "target_type": "drop",
+            "target_id": {"$in": drop_id_strs},
         })
 
-        log.info(
-            "DropCleanupWorker: removed %d drop(s) and %d mirrored post(s)",
-            len(drop_ids), len(post_ids),
-        )
+        log.info("DropCleanupWorker: removed %d drop(s)", len(drop_ids))
         return len(drop_ids)
 
 
