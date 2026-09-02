@@ -78,7 +78,7 @@ pytest tests/ -k "test_login" -v
 
 **All routes** are in `app/api/v1/` as individual router files, registered in `app/main.py`.
 
-**Database:** MongoDB via Motor (async). Connection in `app/db/database.py`. Production DB name: `anonispill`, dev: `anonixx`.
+**Database:** MongoDB via Motor (async). Connection in `app/db/database.py`. Database name: `anonixx` (renamed from `anonispill`; the old database is still present on the cluster, untouched, as a rollback snapshot).
 
 **Auth:** JWT HS256 tokens. Access tokens: 30 min. Refresh tokens: 7 days. Auth dependency injected into protected routes.
 

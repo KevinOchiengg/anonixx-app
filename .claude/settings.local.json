@@ -51,7 +51,14 @@
       "Bash(\"./venv/Scripts/python.exe\" -c \"import ast; ast.parse\\(open\\('app/api/v1/upload.py', encoding='utf-8'\\).read\\(\\)\\)\")",
       "Bash(curl -s -o watermark_test2.jpg \"https://res.cloudinary.com/dojbdm2e1/image/upload/v1788300879/anonixx/_watermark_test2/i5c7rh5k1ti4tdzd7jey.jpg\")",
       "Bash(rm -f watermark_test2.jpg)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npx eas-cli *)",
+      "Bash(rm -rf /tmp/apk_check)",
+      "Bash(where adb *)",
+      "Bash(adb version *)",
+      "Bash(adb devices *)",
+      "Bash(grep -n \"^\\\\.env$\\\\|^\\\\.env\\\\b\\\\|Backend/.env\" Backend/.gitignore .gitignore)"
     ]
   }
 }
