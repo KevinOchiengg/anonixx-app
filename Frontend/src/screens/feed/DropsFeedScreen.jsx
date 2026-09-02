@@ -483,10 +483,10 @@ export default function DropsFeedScreen({ navigation, route }) {
       <View style={[styles.centeredView]}>
         <View style={styles.errorCard}>
           <Text style={styles.errorEmoji}>🌌</Text>
-          <Text style={styles.errorTitle}>Something went quiet.</Text>
+          <Text style={styles.errorTitle}>Everyone's gone quiet.</Text>
           <View style={styles.limitDivider} />
           <Text style={styles.errorBody}>
-            We couldn't reach the feed right now. It might be a brief hiccup — give it a moment and try again.
+            The confessions are still out there — we just can't reach them right now. Give it a moment.
           </Text>
           <TouchableOpacity
             onPress={refreshFeed}

@@ -111,7 +111,16 @@
       "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' -X POST http://127.0.0.1:8199/api/v1/unlock-requests/__TRACKED_VAR__/accept -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2YTk4MTQ3NjUzOGQ3YWVhM2I3N2VmMzMiLCJleHAiOjE3OTA5NDM2MDd9.ksk6ht1c1uV2CNFu_kDu4WbRtGeCQO6WmvbTf_5wp48' --max-time 20)",
       "Bash(echo \"=== exit code: $? ===\")",
       "Bash(curl -s -w \"\\\\nHTTP_CODE=%{http_code}\\\\n\" \"http://localhost:8321/node_modules/expo/AppEntry.bundle?platform=android&dev=true&minify=false\" -o /tmp/bundle_final_check.js --max-time 240)",
-      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name = 'node.exe' OR Name = 'cmd.exe'\" | Where-Object { $_.CommandLine -match '8321' } | ForEach-Object { Write-Output \"Killing PID $\\($_.ProcessId\\): $\\($_.CommandLine\\)\"; Stop-Process -Id $_.ProcessId -Force })"
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name = 'node.exe' OR Name = 'cmd.exe'\" | Where-Object { $_.CommandLine -match '8321' } | ForEach-Object { Write-Output \"Killing PID $\\($_.ProcessId\\): $\\($_.CommandLine\\)\"; Stop-Process -Id $_.ProcessId -Force })",
+      "Bash(grep -rn \"share.link\\\\|share_url\\\\|SHARE_URL\\\\|anonixx://\\\\|deep.link\\\\|APP_URL\\\\|WEB_URL\\\\|FRONTEND_URL\" app --include=*.py -i)",
+      "Bash(./venv/Scripts/python.exe -c \"import ast; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\), f\\) for f in ['app/main.py','app/services/facebook_publisher.py','app/services/caption_engine.py','app/tasks/publisher_worker.py']]; print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\), f\\) for f in ['app/main.py','app/services/facebook_publisher.py','app/services/caption_engine.py','app/tasks/publisher_worker.py']]; print\\('OK'\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 ./venv/Scripts/python.exe -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 ./venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8091)",
+      "Bash(curl -s http://127.0.0.1:8091/drop/6a97f2a0e41880827f7e6d67)",
+      "Bash(curl -s http://127.0.0.1:8091/drop/not-a-real-id)",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\" http://127.0.0.1:8091/drop/6a97f2a0e41880827f7e6d67)",
+      "Bash(taskkill //F //PID 59312)"
     ]
   }
 }

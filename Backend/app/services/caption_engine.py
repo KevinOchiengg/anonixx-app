@@ -268,6 +268,27 @@ def build_caption(confession: str, category: str, platform: Platform) -> str:
     return _tiktok_caption(confession, emoji, hook, category)
 
 
+def build_teaser_caption(category: str, link: str, seed: str) -> str:
+    """
+    Facebook-only caption to accompany a blurred teaser CARD (not the raw
+    drop content). The card image already carries the tease — repeating the
+    full confession in the caption text underneath it would spoil the exact
+    curiosity gap the card exists to create. `seed` should be the drop_id
+    (not the confession) so the hook rotates without ever touching the
+    actual text.
+    """
+    emoji   = _CATEGORY_EMOJI.get(category, "💬")
+    hook    = _hook(seed, category)
+    fb_hook = hook[0].upper() + hook[1:] if hook else hook
+    body = (
+        f"{fb_hook}\n\n"
+        f"{emoji} The rest of it is on the card above.\n\n"
+        f"See it → {link}\n\n"
+        f"#anonixx #confession #anonymousconfessions"
+    )
+    return body[:63206]
+
+
 # ── Platform formatters ───────────────────────────────────────────────────────
 
 def _tiktok_caption(confession: str, emoji: str, hook: str, category: str) -> str:

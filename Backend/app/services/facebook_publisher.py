@@ -20,11 +20,12 @@ Credentials
 """
 
 import logging
+from typing import Optional
 
 import httpx
 
 from app.config import settings
-from app.services.caption_engine import build_caption
+from app.services.caption_engine import build_caption, build_teaser_caption
 
 log = logging.getLogger(__name__)
 
@@ -87,12 +88,24 @@ class FacebookPublisher:
         image_url:  str,
         confession: str = "",
         category:   str = "love",
+        drop_link:  Optional[str] = None,
+        drop_id:    Optional[str] = None,
     ) -> dict:
         """
         Post an image drop to the Facebook Page.
         Facebook fetches the image from the Cloudinary URL.
+
+        When `drop_link` is given, this is a blurred teaser card (not the
+        drop's real photo) — the caption stays teaser-safe (no confession
+        text) and points at the real drop instead of the generic site.
         """
         self._require_configured()
+
+        caption = (
+            build_teaser_caption(category, drop_link, seed=drop_id or image_url)
+            if drop_link
+            else build_caption(confession, category, platform="facebook")
+        )
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             res = await client.post(
@@ -100,7 +113,7 @@ class FacebookPublisher:
                 params={"access_token": self._token},
                 json={
                     "url":     image_url,
-                    "caption": build_caption(confession, category, platform="facebook"),
+                    "caption": caption,
                 },
             )
 
