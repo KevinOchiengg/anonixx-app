@@ -41,6 +41,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 
+from app.config import settings
 from app.database import get_database
 from app.services.tiktok_publisher    import tiktok_publisher
 from app.services.facebook_publisher  import facebook_publisher
@@ -237,7 +238,10 @@ class PublisherWorker:
             coros["tiktok"] = self._call_tiktok(media_type, confession, category, media_url)
 
         if facebook_publisher.is_configured():
-            coros["facebook"] = self._call_facebook(media_type, confession, category, media_url, teaser_url)
+            coros["facebook"] = self._call_facebook(
+                media_type, confession, category, media_url, teaser_url,
+                drop_id=entry.get("drop_id"),
+            )
 
         if instagram_publisher.is_configured():
             coros["instagram"] = self._call_instagram(media_type, confession, category, media_url, teaser_url)
@@ -297,11 +301,14 @@ class PublisherWorker:
         return await tiktok_publisher.post_text(confession=confession, category=category)
 
     async def _call_facebook(
-        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None
+        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None,
+        drop_id: str | None = None,
     ):
         if teaser_url:
+            drop_link = f"{settings.BASE_URL}/drop/{drop_id}" if drop_id else None
             return await facebook_publisher.post_image(
                 image_url=teaser_url, confession=confession, category=category,
+                drop_link=drop_link, drop_id=drop_id,
             )
         if media_type == "video":
             if not media_url:
