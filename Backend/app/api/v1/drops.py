@@ -59,14 +59,6 @@ PREMIUM_UNLOCK_COST          = 25   # vs COINS_UNLOCK_COST (50)
 PREMIUM_UNLOCK_REWARD_COINS  = 10   # vs UNLOCK_REWARD_COINS (5)
 PREMIUM_UNLOCKED_GRACE_DAYS  = 14   # vs UNLOCKED_GRACE_DAYS (7)
 
-CATEGORIES = [
-    # Social
-    "love", "fun", "adventure", "friendship", "spicy",
-    # Emotional / situational
-    "carrying this alone", "starting over", "need stability",
-    "open to connection", "just need to be heard",
-]
-
 # ==================== REQUEST MODELS ====================
 
 # Confession type — the audience/nature a drop is written for. Chosen at
@@ -77,19 +69,19 @@ CATEGORIES = [
 # Listed in the same order the compose picker shows them, so the two files
 # read side by side. Order is cosmetic here — this is a membership check.
 VALID_INTENTS = [
-    "real-connection",    # "Relationship"          — wants something real
-    "general",            # "General"               — no specific audience, default
-    "no-strings",         # "No Strings"             — casual, no strings attached
-    "just-talk",          # "Generous Arrangement"   — paid/transactional arrangement
+    "real-connection",       # "Relationship"          — wants something real
+    "general",               # "General"               — no specific audience, default
+    "no-strings",            # "No Strings"             — casual, no strings attached
+    "generous-arrangement",  # "Generous Arrangement"   — paid/transactional arrangement
 ]
 
 # Display labels — mirrors CARD_INTENTS' `label` field in
 # DropCardRenderer.jsx exactly.
 INTENT_LABELS = {
-    "real-connection": "Relationship",
-    "general":         "General",
-    "no-strings":      "No Strings",
-    "just-talk":       "Generous Arrangement",
+    "real-connection":      "Relationship",
+    "general":              "General",
+    "no-strings":           "No Strings",
+    "generous-arrangement": "Generous Arrangement",
 }
 
 class DropPollInput(BaseModel):
@@ -103,7 +95,6 @@ class DropVoteRequest(BaseModel):
 
 class CreateDropRequest(BaseModel):
     confession: Optional[str] = None
-    category: str = "love"
     is_group: bool = False
     group_size: Optional[int] = None
     media_url: Optional[str] = None
@@ -475,9 +466,6 @@ async def create_drop(
     db = Depends(get_database)
 ):
     """Create a confession card. Authenticated users only."""
-    if data.category not in CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"Category must be one of: {', '.join(CATEGORIES)}")
-
     if not data.confession and not data.media_url:
         raise HTTPException(status_code=400, detail="Provide a confession text or attach an image/video")
 
@@ -580,7 +568,6 @@ async def create_drop(
         "confession": data.confession.strip() if data.confession else None,
         "media_url": data.media_url or None,
         "media_type": data.media_type or None,
-        "category": data.category,
         "is_group": data.is_group,
         "group_size": data.group_size if data.is_group else None,
         "price": price,
@@ -686,7 +673,6 @@ async def create_drop(
             "drop_id":           str(drop["_id"]),
             "sender_id":         current_user_id,
             "theme":             drop.get("theme"),
-            "category":          drop.get("category", "love"),
             "media_type":        drop.get("media_type"),
             "confession":        drop.get("confession"),
             "media_url":         drop.get("media_url"),
@@ -2242,6 +2228,39 @@ async def _create_drop_connection(drop_id: str, drop: dict, unlocker_id: str, db
 
 # ==================== DROP CHAT ====================
 
+async def get_unread_message_counts(db, user_id: str) -> dict:
+    """Unread message count per connection_id (str) for this user's own chats.
+
+    A connection's own *_last_read_at defaults to its created_at when unset
+    (nothing read yet), so a brand-new connection starts fully unread.
+    """
+    conns = await db["drop_connections"].find({
+        "$or": [{"sender_id": user_id}, {"unlocker_id": user_id}]
+    }).to_list(None)
+    if not conns:
+        return {}
+
+    thresholds = {}
+    for c in conns:
+        is_sender = c["sender_id"] == user_id
+        last_read = c.get("sender_last_read_at") if is_sender else c.get("unlocker_last_read_at")
+        thresholds[str(c["_id"])] = last_read or c["created_at"]
+
+    min_cutoff = min(thresholds.values())
+    unread_msgs = await db["drop_messages"].find({
+        "connection_id": {"$in": list(thresholds.keys())},
+        "sender_id": {"$ne": user_id},
+        "created_at": {"$gt": min_cutoff},
+    }).to_list(None)
+
+    counts = {cid: 0 for cid in thresholds}
+    for m in unread_msgs:
+        cid = m["connection_id"]
+        if m["created_at"] > thresholds[cid]:
+            counts[cid] += 1
+    return counts
+
+
 @router.get("/connections")
 async def get_drop_connections(
     current_user_id: str = Depends(get_current_user_id),
@@ -2255,6 +2274,7 @@ async def get_drop_connections(
         ]
     }
     raw_connections = await db["drop_connections"].find(query).sort("last_message_at", -1).to_list(None)
+    unread_counts = await get_unread_message_counts(db, current_user_id)
 
     # Batch-fetch the other participant's current avatar_url — read live
     # rather than relying on the connection's denormalised name snapshot,
@@ -2288,6 +2308,7 @@ async def get_drop_connections(
             "other_avatar_url": avatar_by_id.get(other_id),
             "is_sender": is_sender,
             "message_count": conn.get("message_count", 0),
+            "unread_count": unread_counts.get(str(conn["_id"]), 0),
             "last_message": last_msg["content"] if last_msg else None,
             "last_message_at": conn["last_message_at"].isoformat(),
             "is_revealed": conn["is_revealed_sender"] if is_sender else conn["is_revealed_unlocker"],
@@ -2331,6 +2352,14 @@ async def get_drop_messages(
         })
 
     is_sender = conn["sender_id"] == current_user_id
+
+    # Viewing the thread marks it read — this endpoint is polled every 8s
+    # while the chat screen is open, so this doubles as the read-receipt.
+    read_field = "sender_last_read_at" if is_sender else "unlocker_last_read_at"
+    await db["drop_connections"].update_one(
+        {"_id": ObjectId(connection_id)},
+        {"$set": {read_field: now_utc()}}
+    )
 
     # The poster's themed chat surface — always the drop's *sender*, since
     # a chat_profile is reused across every unlocker who chats with them.
@@ -2858,7 +2887,6 @@ async def publish_drop(
         "drop_id":           drop_id,
         "sender_id":         current_user_id,
         "theme":             drop.get("theme"),
-        "category":          drop.get("category", "love"),   # needed by TikTok caption builder
         "media_type":        drop.get("media_type"),         # text | image | video | None
         "confession":        drop.get("confession"),
         "media_url":         drop.get("media_url"),

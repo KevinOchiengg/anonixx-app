@@ -44,6 +44,7 @@ import { API_BASE_URL } from '../../config/api';
 import { WELCOME_SOUND_MAP } from '../../config/sounds';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
+import { useUnread } from '../../context/UnreadContext';
 
 const REVEAL_PRICE = 1.0;
 const POLL_INTERVAL_MS = 8000;
@@ -272,8 +273,9 @@ const EmptyChat = React.memo(() => (
 // ─── Main Screen ───────────────────────────────────────────────
 export default function DropChatScreen({ route, navigation }) {
   const { connectionId } = route.params;
-  const insets        = useSafeAreaInsets();
-  const { showToast } = useToast();
+  const insets          = useSafeAreaInsets();
+  const { showToast }   = useToast();
+  const { refreshUnread } = useUnread();
 
   const [messages, setMessages]     = useState([]);
   const [connection, setConnection] = useState(null);
@@ -389,6 +391,9 @@ export default function DropChatScreen({ route, navigation }) {
       Animated.timing(fadeAnim, {
         toValue: 1, duration: 320, useNativeDriver: true,
       }).start();
+      // Opening the chat marks it read server-side (see get_drop_messages) —
+      // nudge the tab badge now instead of waiting up to 30s for the next poll.
+      refreshUnread();
     })();
 
     pollRef.current = setInterval(() => loadMessages(true), POLL_INTERVAL_MS);

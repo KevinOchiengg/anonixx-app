@@ -311,7 +311,7 @@ export default function MessagesScreen({ navigation }) {
         other_user_id:        d.other_user_id || '',   // not in prod response — ok, used for typing only
         last_message:         d.last_message  || null,
         last_message_at:      d.last_message_at || null,
-        unread_count:         0,
+        unread_count:         d.unread_count || 0,
         is_unlocked:          true,
         messages_left:        null,
         reveal_status:        null,
@@ -446,7 +446,7 @@ export default function MessagesScreen({ navigation }) {
         >
           <Flame size={rs(16)} color={T.primary} />
           <Text style={styles.unlockBannerText}>
-            {pendingUnlockCount} {pendingUnlockCount === 1 ? 'person wants' : 'people want'} to unlock your confessions
+            {pendingUnlockCount} {pendingUnlockCount === 1 ? 'stranger is dying' : 'strangers are dying'} to know who you are
           </Text>
         </TouchableOpacity>
       )}

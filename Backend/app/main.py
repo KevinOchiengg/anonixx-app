@@ -17,6 +17,7 @@ from app.api.v1 import ads
 from app.api.v1 import drop_calls
 from app.api.v1 import unlock_requests
 from app.api.v1 import deception_reports
+from app.api.v1 import notifications
 from app.api.v1 import (
     auth,
     coins,
@@ -84,6 +85,9 @@ async def _ensure_indexes():
         )
         await db["drop_unlock_requests"].create_index(
             [("target_type", 1), ("target_id", 1), ("status", 1)], background=True
+        )
+        await db["circle_posts"].create_index(
+            [("circle_id", 1), ("created_at", -1)], background=True
         )
         log.info("MongoDB indexes verified.")
     except Exception as exc:
@@ -224,6 +228,7 @@ app.include_router(ads.router,          prefix=settings.API_V1_PREFIX)
 app.include_router(drop_calls.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(unlock_requests.router, prefix=settings.API_V1_PREFIX)
 app.include_router(deception_reports.router, prefix=settings.API_V1_PREFIX)
+app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

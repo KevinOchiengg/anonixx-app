@@ -21,6 +21,7 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import T from '../../utils/theme';
+import { CIRCLE_CATEGORIES } from '../../constants/circleCategories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -148,7 +149,7 @@ export default function CreateCircleScreen({ navigation }) {
     ]).start();
   }, []);
 
-  const canSubmit = name.trim() && bio.trim() && category.trim();
+  const canSubmit = name.trim() && bio.trim() && category;
 
   // ── Photo picker ──────────────────────────────────────────────────────────
   const handlePickAvatar = useCallback(async () => {
@@ -181,6 +182,7 @@ export default function CreateCircleScreen({ navigation }) {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleColorSelect = useCallback((c) => setColor(c), []);
+  const handleCategorySelect = useCallback((id) => setCategory(id), []);
 
   const handleCreate = useCallback(async () => {
     if (!name.trim()) {
@@ -191,7 +193,7 @@ export default function CreateCircleScreen({ navigation }) {
       showToast({ type: 'error', message: 'Tell people what your circle is about.' });
       return;
     }
-    if (!category.trim()) {
+    if (!category) {
       showToast({ type: 'error', message: 'Choose a category.' });
       return;
     }
@@ -216,7 +218,7 @@ export default function CreateCircleScreen({ navigation }) {
         body: JSON.stringify({
           name:       name.trim(),
           bio:        bio.trim(),
-          category:   category.trim().toLowerCase(),
+          category,
           aura_color: color,
           avatar_url: avatarUrl,
           banner_url: bannerUrl,
@@ -347,16 +349,28 @@ export default function CreateCircleScreen({ navigation }) {
             {/* ── Category ── */}
             <View style={styles.field}>
               <SectionLabel label="Category" required />
-              <TextInput
-                value={category}
-                onChangeText={setCategory}
-                placeholder="e.g. photos, videos, audio, confessions, music, comedy, art, spicy…"
-                placeholderTextColor={T.textMuted}
-                style={styles.input}
-                maxLength={30}
-                returnKeyType="next"
-                autoCapitalize="none"
-              />
+              <Text style={styles.fieldHint}>What will you mostly post here?</Text>
+              <View style={styles.categoryRow}>
+                {CIRCLE_CATEGORIES.map(cat => {
+                  const active = category === cat.id;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      onPress={() => handleCategorySelect(cat.id)}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.categoryChip,
+                        active && { backgroundColor: color + '22', borderColor: color },
+                      ]}
+                    >
+                      <Text style={styles.categoryChipEmoji}>{cat.emoji}</Text>
+                      <Text style={[styles.categoryChipText, active && { color, fontWeight: '700' }]}>
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
 
             {/* ── Aura Color ── */}
@@ -608,6 +622,29 @@ const styles = StyleSheet.create({
     fontSize:  FONT.xs,
     color:     T.textMuted,
     textAlign: 'right',
+  },
+
+  // Category chips
+  categoryRow: {
+    flexDirection: 'row',
+    flexWrap:      'wrap',
+    gap:           rp(8),
+  },
+  categoryChip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(6),
+    paddingHorizontal: SPACING.sm,
+    paddingVertical:   rp(8),
+    borderRadius:      RADIUS.full,
+    borderWidth:        1,
+    borderColor:        T.border,
+    backgroundColor:    T.inputBg,
+  },
+  categoryChipEmoji: { fontSize: FONT.sm },
+  categoryChipText: {
+    fontSize: FONT.xs,
+    color:    T.textSecondary,
   },
 
   // Color swatches

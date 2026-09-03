@@ -24,23 +24,17 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import T from '../../utils/theme';
+import { CIRCLE_CATEGORIES } from '../../constants/circleCategories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 // Content-type categories — Circles are curated feeds now, not live rooms,
 // so these describe what a circle mostly posts rather than a conversation
-// vibe. Keep in sync with CreateCircleScreen.jsx's category field hint.
+// vibe. Shared with CreateCircleScreen.jsx's category picker.
 const CATEGORIES = [
-  { id: 'all',         label: 'All',         emoji: '✨' },
-  { id: 'photos',      label: 'Photos',      emoji: '📸' },
-  { id: 'videos',      label: 'Videos',      emoji: '🎬' },
-  { id: 'audio',       label: 'Audio',       emoji: '🎙️' },
-  { id: 'confessions', label: 'Confessions', emoji: '🕯️' },
-  { id: 'music',       label: 'Music',       emoji: '🎵' },
-  { id: 'comedy',      label: 'Comedy',      emoji: '😂' },
-  { id: 'art',         label: 'Art',         emoji: '🎨' },
-  { id: 'spicy',       label: 'Spicy',       emoji: '🌶️' },
+  { id: 'all', label: 'All', emoji: '✨' },
+  ...CIRCLE_CATEGORIES,
 ];
 
 const TABS = ['Discover', 'My Circles'];
