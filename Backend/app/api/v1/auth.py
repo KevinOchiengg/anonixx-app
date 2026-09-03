@@ -144,7 +144,7 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
         if not _ANON_NAME_RE.match(chosen_name):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                detail="Username must be 3–30 characters — letters, numbers, dots, hyphens or underscores only",
+                detail="Username must be 3–30 characters — letters, numbers, dots, hyphens, underscores or emoji only",
             )
         if _contains_profanity(chosen_name):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
@@ -283,7 +283,17 @@ async def get_current_user(
 
 
 # ─── Anonymous name helpers ───────────────────────────────────
-_ANON_NAME_RE = re.compile(r'^[a-zA-Z0-9._-]{3,30}$')
+# Letters/numbers/./-/_ plus common emoji ranges (pictographs, misc symbols,
+# dingbats, flags) and the joiner/variation-selector code points that make
+# compound emoji (e.g. flags, skin tones) render as one glyph.
+_ANON_NAME_RE = re.compile(
+    r'^[a-zA-Z0-9._\-'
+    r'\U0001F300-\U0001FAFF'   # symbols & pictographs (incl. extended-A)
+    r'\U00002600-\U000027BF'   # misc symbols & dingbats
+    r'\U0001F1E6-\U0001F1FF'   # regional indicators (flag emoji)
+    r'\U0000FE0F\U0000200D'    # variation selector-16 + zero-width joiner
+    r']{3,30}$'
+)
 
 _PROFANITY_BLOCKLIST = {
     "nigger","nigga","faggot","chink","spic","kike","retard",
@@ -313,7 +323,7 @@ async def check_anonymous_name(
         return {
             "available": False,
             "reason":    "invalid",
-            "message":   "3–30 chars · letters, numbers, dots, hyphens only",
+            "message":   "3–30 chars · letters, numbers, dots, hyphens or emoji",
         }
 
     if _contains_profanity(name):
@@ -371,7 +381,7 @@ async def update_profile(
     if data.anonymous_name is not None:
         aname = data.anonymous_name.strip()
         if not _ANON_NAME_RE.match(aname):
-            raise HTTPException(400, detail="Name must be 3–30 chars. Letters, numbers, dots, hyphens only.")
+            raise HTTPException(400, detail="Name must be 3–30 chars. Letters, numbers, dots, hyphens or emoji.")
         if _contains_profanity(aname):
             raise HTTPException(400, detail="That name isn't allowed. Try something else.")
 

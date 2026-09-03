@@ -41,6 +41,7 @@ import T from '../../utils/theme';
 import GifPicker from '../../components/common/GifPicker';
 import VoiceNoteRecorder from '../../components/common/VoiceNoteRecorder';
 import AnonProfileSheet from '../../components/connect/AnonProfileSheet';
+import { useUnread } from '../../context/UnreadContext';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -418,6 +419,7 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
 export default function CircleContentScreen({ route, navigation }) {
   const { circleId, circle } = route.params ?? {};
   const { showToast } = useToast();
+  const { refreshUnread } = useUnread();
   const auraColor = circle?.aura_color || T.primary;
 
   const [posts, setPosts]         = useState([]);
@@ -475,7 +477,13 @@ export default function CircleContentScreen({ route, navigation }) {
         requests.push(fetch(`${API_BASE_URL}/api/v1/circles/${circleId}/ads/pending`, { headers }));
       }
       const [postsRes, adsRes, pendingRes] = await Promise.all(requests);
-      if (postsRes.ok) setPosts((await postsRes.json()).posts || []);
+      if (postsRes.ok) {
+        setPosts((await postsRes.json()).posts || []);
+        // Loading the feed marks this circle viewed server-side (see
+        // list_circle_posts) — nudge the tab badge instead of waiting for
+        // the next 30s poll.
+        refreshUnread();
+      }
       if (adsRes.ok) setAds((await adsRes.json()).ads || []);
       if (pendingRes?.ok) setPendingAds((await pendingRes.json()).ads || []);
     } catch {
@@ -483,7 +491,7 @@ export default function CircleContentScreen({ route, navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [circleId, canManage, authHeaders, showToast]);
+  }, [circleId, canManage, authHeaders, showToast, refreshUnread]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -25,6 +25,7 @@ import {
 import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift, Cake, ArrowLeft } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import { THEME } from '../../utils/theme';
+import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT } from '../../utils/anonymousName';
 
 const EMAIL_REGEX         = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_USERNAME_LENGTH = 30;
@@ -132,7 +133,7 @@ export default function SignUpScreen({ navigation }) {
 
     if (!username)                              e.username = 'Pick a name';
     else if (username.length < 3)               e.username = 'At least 3 characters';
-    else if (!/^[a-zA-Z0-9_]+$/.test(username)) e.username = 'Letters, numbers and _ only';
+    else if (!ANONYMOUS_NAME_RE.test(username)) e.username = 'Letters, numbers, dots, hyphens, underscores or emoji only';
 
     if (!email)                                 e.email = 'Email is required';
     else if (!EMAIL_REGEX.test(email))          e.email = 'Enter a valid email address';
@@ -209,16 +210,22 @@ export default function SignUpScreen({ navigation }) {
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       }, 600);
     } catch (err) {
-      const msg = err?.detail || err?.message || '';
-      if (msg.toLowerCase().includes('email') && (msg.toLowerCase().includes('exist') || msg.toLowerCase().includes('already registered'))) {
+      const msg   = err?.detail || err?.message || '';
+      const lower = msg.toLowerCase();
+      if (lower.includes('email') && (lower.includes('exist') || lower.includes('already registered'))) {
         showToast({ type: 'error', title: 'Email taken', message: 'An account with this email already exists.' });
         setErrors((prev) => ({ ...prev, email: 'Already in use' }));
-      } else if (msg.toLowerCase().includes('username')) {
+      } else if (lower.includes('already taken')) {
         showToast({ type: 'error', title: 'Username taken', message: 'Try a different username.' });
         setErrors((prev) => ({ ...prev, username: 'Already taken' }));
-      } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+      } else if (lower.includes('username')) {
+        // Format/profanity rejections also mention "username" — surface the
+        // backend's actual reason instead of always claiming it's taken.
+        showToast({ type: 'error', title: 'Invalid username', message: msg });
+        setErrors((prev) => ({ ...prev, username: msg }));
+      } else if (lower.includes('network') || lower.includes('fetch')) {
         showToast({ type: 'error', title: 'No Connection', message: 'Check your internet and try again.' });
-      } else if (msg.toLowerCase().includes('18+')) {
+      } else if (lower.includes('18+')) {
         showToast({ type: 'error', title: 'Adults only', message: 'Anonixx is for adults 18+.' });
         setErrors((prev) => ({ ...prev, dob: 'Anonixx is for adults 18+' }));
       } else {
@@ -297,7 +304,7 @@ export default function SignUpScreen({ navigation }) {
               </View>
               {errors.username
                 ? <Text style={styles.fieldError}>{errors.username}</Text>
-                : <Text style={styles.fieldHint}>This is what everyone sees you as — no real names. Letters, numbers, and underscores only, 3–30 characters.</Text>
+                : <Text style={styles.fieldHint}>This is what everyone sees you as — no real names. {ANONYMOUS_NAME_HINT}</Text>
               }
             </View>
 

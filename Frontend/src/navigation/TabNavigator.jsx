@@ -47,7 +47,7 @@ const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 // ─── TAB BAR ICON ─────────────────────────────────────────────
-const TabBarIcon = ({ route, focused, unreadCount }) => {
+const TabBarIcon = ({ route, focused, badgeCount }) => {
   const icons = {
     Feed:     Home,
     Circles:  Radio,
@@ -57,7 +57,7 @@ const TabBarIcon = ({ route, focused, unreadCount }) => {
   const IconComponent = icons[route.name];
   if (!IconComponent) return null;
 
-  const showBadge = route.name === 'Messages' && unreadCount > 0;
+  const showBadge = badgeCount > 0;
   const color = focused ? THEME.primary : THEME.inactive;
 
   return (
@@ -71,7 +71,7 @@ const TabBarIcon = ({ route, focused, unreadCount }) => {
       {showBadge && (
         <View style={styles.tabBadge}>
           <Text style={styles.tabBadgeText}>
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {badgeCount > 99 ? '99+' : badgeCount}
           </Text>
         </View>
       )}
@@ -144,7 +144,7 @@ function ProfileStack() {
 // ─── TAB NAVIGATOR ────────────────────────────────────────────
 export default function TabNavigator() {
   const insets      = useSafeAreaInsets();
-  const { unreadCount } = useUnread();
+  const { badgeCounts } = useUnread();
   const { isAuthenticated } = useAuth();
 
   return (
@@ -168,7 +168,7 @@ export default function TabNavigator() {
             <TabBarIcon
               route={route}
               focused={focused}
-              unreadCount={unreadCount}
+              badgeCount={badgeCounts[route.name]}
             />
           );
         },

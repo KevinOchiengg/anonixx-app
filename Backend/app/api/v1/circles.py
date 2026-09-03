@@ -38,6 +38,12 @@ router = APIRouter(prefix="/circles", tags=["circles"])
 ROLE_CREATOR = "creator"
 ROLE_ADMIN   = "admin"
 
+# Content-type categories — what a circle mostly posts. Keep in sync with
+# Frontend/src/constants/circleCategories.js.
+CIRCLE_CATEGORIES = {
+    "photos", "videos", "audio", "confessions", "music", "comedy", "art", "spicy",
+}
+
 MAX_VOICE_COMMENT_SECONDS = 30   # 30 seconds — hold-to-record, WhatsApp style
 
 
@@ -78,6 +84,42 @@ async def get_follow_doc(db, circle_id: str, user_id: str) -> Optional[dict]:
         "circle_id": circle_id,
         "user_id":   user_id,
     })
+
+
+async def count_circles_with_new_content(db, user_id: str) -> int:
+    """How many of this user's followed circles have a post since they last viewed it.
+
+    last_viewed_at defaults to followed_at when unset (never viewed yet).
+    """
+    follows = await db.circle_follows.find({"user_id": user_id}).to_list(None)
+    if not follows:
+        return 0
+
+    active_circle_ids = set()
+    async for c in db.circles.find(
+        {"_id": {"$in": [oid(f["circle_id"]) for f in follows]}, "is_active": True},
+        {"_id": 1},
+    ):
+        active_circle_ids.add(str(c["_id"]))
+
+    thresholds = {
+        f["circle_id"]: f.get("last_viewed_at", f["followed_at"])
+        for f in follows
+        if f["circle_id"] in active_circle_ids
+    }
+    if not thresholds:
+        return 0
+
+    min_cutoff = min(thresholds.values())
+    new_posts = await db.circle_posts.find({
+        "circle_id": {"$in": list(thresholds.keys())},
+        "created_at": {"$gt": min_cutoff},
+    }).to_list(None)
+
+    circles_with_new = {
+        p["circle_id"] for p in new_posts if p["created_at"] > thresholds[p["circle_id"]]
+    }
+    return len(circles_with_new)
 
 
 async def assert_creator(circle: dict, user_id: str):
@@ -169,6 +211,8 @@ async def create_circle(
         raise HTTPException(status_code=400, detail="Tell people what your circle is about.")
     if not data.category:
         raise HTTPException(status_code=400, detail="Choose a category.")
+    if data.category not in CIRCLE_CATEGORIES:
+        raise HTTPException(status_code=400, detail="That's not a valid category.")
 
     db  = await get_database()
     now = _now()
@@ -495,6 +539,15 @@ async def list_circle_posts(
 ):
     db     = await get_database()
     circle = await get_circle_or_404(db, circle_id)
+
+    # Viewing a circle's feed marks it seen — only for followers, since
+    # browsing isn't the same as following (see module docstring).
+    follow = await get_follow_doc(db, circle_id, str(current_user.id))
+    if follow:
+        await db.circle_follows.update_one(
+            {"_id": follow["_id"]},
+            {"$set": {"last_viewed_at": _now()}}
+        )
 
     cursor = db.circle_posts.find({"circle_id": circle_id}).sort("created_at", -1).skip(skip).limit(limit)
     posts  = [p async for p in cursor]

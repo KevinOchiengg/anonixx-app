@@ -19,6 +19,7 @@ import {
   BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
 import T from '../../utils/theme';
+import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT } from '../../utils/anonymousName';
 
 // ─── Module-level static data (Rule 5) ───────────────────────
 const GENDER_OPTIONS = [
@@ -129,9 +130,9 @@ export default function EditProfileScreen({ navigation }) {
     if (!text.trim() || text.trim() === user?.anonymous_name) {
       setNameStatus('idle'); setNameMessage(''); return;
     }
-    if (!/^[a-zA-Z0-9._-]{3,30}$/.test(text.trim())) {
+    if (!ANONYMOUS_NAME_RE.test(text.trim())) {
       setNameStatus('invalid');
-      setNameMessage('3–30 chars · letters, numbers, . - _ only');
+      setNameMessage(ANONYMOUS_NAME_HINT);
       return;
     }
     setNameStatus('checking');

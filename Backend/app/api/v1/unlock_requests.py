@@ -299,12 +299,18 @@ async def create_unlock_request(
     })
     await send_push_notification(
         owner_id,
-        "Someone wants to unlock your confession 🔓",
-        "Review their request to decide if you want to chat.",
+        "A stranger is dying to know who you are 🔥",
+        "They found your confession. Decide if they're worth it.",
         db,
     )
 
     return {"request_id": request_id, "status": "pending", "expires_at": expires_at.isoformat()}
+
+
+async def count_pending_incoming(db, user_id: str) -> int:
+    return await db["drop_unlock_requests"].count_documents({
+        "owner_id": user_id, "status": "pending",
+    })
 
 
 @router.get("/incoming")
