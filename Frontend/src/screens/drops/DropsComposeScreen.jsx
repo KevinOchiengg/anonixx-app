@@ -63,21 +63,6 @@ const FORMATS = [
   { id: 'voice', label: 'Voice', Icon: Mic       },
 ];
 
-// ─── Categories ────────────────────────────────────────────────
-// These map 1:1 to the backend `category` field on a Drop.
-const CATEGORIES = [
-  { id: 'love',                    label: 'Love',                  emoji: '❤️'  },
-  { id: 'fun',                     label: 'Fun',                   emoji: '✨'  },
-  { id: 'friendship',              label: 'Friendship',            emoji: '🤝' },
-  { id: 'adventure',               label: 'Adventure',             emoji: '🌍' },
-  { id: 'spicy',                   label: 'Spicy',                 emoji: '🌶️' },
-  { id: 'carrying this alone',     label: 'Carrying this alone',   emoji: '🌑' },
-  { id: 'starting over',           label: 'Starting over',         emoji: '🌱' },
-  { id: 'need stability',          label: 'Need stability',        emoji: '⚓' },
-  { id: 'open to connection',      label: 'Open to connection',    emoji: '🤲' },
-  { id: 'just need to be heard',   label: 'Just need to be heard', emoji: '🌙' },
-];
-
 const HINT_MAX = 16;
 
 // ─── Dangerous edge — words that indicate the drop is raw ───────
@@ -174,7 +159,6 @@ export default function DropsComposeScreen({ navigation, route }) {
   // each confession type has its own emotional register, so the tag should
   // shift with it instead of sitting on one word regardless of what's picked.
   const moodTag = CARD_INTENTS[cardIntent]?.moodTag || 'longing';
-  const [category, setCategory] = useState('love');
   const [mediaUri, setMediaUri] = useState(null);
   const [thumbUri, setThumbUri] = useState(null);
   const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
@@ -240,7 +224,6 @@ export default function DropsComposeScreen({ navigation, route }) {
               if (typeof d.text     === 'string') setText(d.text);
               if (typeof d.format   === 'string') setFormat(d.format);
               if (typeof d.cardIntent === 'string' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
-              if (typeof d.category === 'string' && CATEGORIES.some(c => c.id === d.category)) setCategory(d.category);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
               if (typeof d.hint     === 'string') setHint(d.hint);
               // Only surface the unsent banner if the restored draft has substance.
@@ -258,11 +241,11 @@ export default function DropsComposeScreen({ navigation, route }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
-        text, format, cardIntent, category, intensity, hint,
+        text, format, cardIntent, intensity, hint,
       })).catch(() => {});
     }, 400);
     return () => clearTimeout(saveTimer.current);
-  }, [text, format, cardIntent, category, intensity, hint]);
+  }, [text, format, cardIntent, intensity, hint]);
 
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
@@ -278,17 +261,17 @@ export default function DropsComposeScreen({ navigation, route }) {
     }
     if (f === 'voice') {
       navigation.navigate?.('DropsRecord', {
-        theme, cardIntent, moodTag, category, text,
+        theme, cardIntent, moodTag, text,
         target_user_id: taggedUser?.id || undefined,
       });
     }
     if (f === 'poll') {
       navigation.navigate?.('DropsPoll', {
-        theme, cardIntent, moodTag, category, text,
+        theme, cardIntent, moodTag, text,
         target_user_id: taggedUser?.id || undefined,
       });
     }
-  }, [navigation, theme, moodTag, category, text, taggedUser]);
+  }, [navigation, theme, moodTag, text, taggedUser]);
 
   // ── Media pick — one picker, either photos or videos ──────────
   const handlePickMedia = useCallback(async () => {
@@ -377,6 +360,48 @@ export default function DropsComposeScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
+      // Upload the picked photo/video to Cloudinary first — same signed
+      // direct-upload pattern DropsRecordScreen uses for voice drops.
+      // Without this, media_url never reaches the server and the drop
+      // silently posts as text-only.
+      let uploadedMediaUrl = null;
+      if (mediaKind && mediaUri) {
+        const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ resource_type: mediaKind, watermark: true }),
+        });
+        if (!signRes.ok) {
+          const err = await signRes.json().catch(() => ({}));
+          throw new Error(err?.detail || `Upload sign failed (${signRes.status})`);
+        }
+        const { signature, timestamp, api_key, cloud_name, folder, transformation } = await signRes.json();
+
+        const isVideo = mediaKind === 'video';
+        const ext  = isVideo ? (Platform.OS === 'ios' ? 'mov' : 'mp4') : 'jpg';
+        const mime = isVideo ? (Platform.OS === 'ios' ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
+        const form = new FormData();
+        form.append('file', { uri: mediaUri, name: `drop-media.${ext}`, type: mime });
+        form.append('api_key',   api_key);
+        form.append('timestamp', String(timestamp));
+        form.append('signature', signature);
+        form.append('folder',    folder);
+        // Must match exactly what the backend signed — omitting this when
+        // present makes Cloudinary reject the upload as a signature mismatch.
+        if (transformation) form.append('transformation', transformation);
+
+        const upRes = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloud_name}/${mediaKind}/upload`,
+          { method: 'POST', body: form },
+        );
+        const upData = await upRes.json();
+        if (!upRes.ok) throw new Error(upData?.error?.message || `Media upload failed (${upRes.status})`);
+        uploadedMediaUrl = upData.secure_url;
+      }
+
       // Single-word hint — strip spaces, keep lowercase, cap at HINT_MAX.
       const hintClean = (hint || '')
         .trim()
@@ -387,7 +412,6 @@ export default function DropsComposeScreen({ navigation, route }) {
       const confessionText = text.trim();
 
       const body = {
-        category,
         confession: confessionText || undefined,
         theme,
         intent:     cardIntent,
@@ -399,7 +423,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         ...(taggedUser ? { target_user_id: taggedUser.id } : {}),
         // Tri-state server-side: explicit false is the only way to opt out.
         publisher_opt_in: !!publisherOptIn,
-        ...(mediaKind && mediaUri ? { media_type: mediaKind } : {}),
+        ...(mediaKind && mediaUri ? { media_type: mediaKind, media_url: uploadedMediaUrl } : {}),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
         ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
@@ -468,7 +492,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    format, text, mediaUri, mediaKind, theme, cardIntent, moodTag, category,
+    format, text, mediaUri, mediaKind, theme, cardIntent, moodTag,
     intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
     dispatch, navigation, showToast,
@@ -1044,7 +1068,7 @@ const s = StyleSheet.create({
     textAlign:     'center',
     marginTop:     rp(6),
   },
-  // Customize accordion (theme/mood/category/intensity/location/font/poll)
+  // Customize accordion (theme/mood/intensity/location/font/poll)
   // Shared flat toggle-row pattern — used by the Customize trigger and
   // the Tag-someone trigger, so both collapsible rows read as one system.
   collapsibleTrigger: {
