@@ -51,8 +51,7 @@ export const DROP_THEMES = {
 // built straight off Object.entries), so reordering these reorders the UI.
 export const CARD_INTENTS = {
   'real-connection': {
-    label: 'Relationship',
-    emoji: '🌹',
+    label: 'something real',
     pattern: 'constellation',
     moodTag: 'longing',
     bgFrom: '#12070c', bgTo: '#2a121b',
@@ -61,8 +60,7 @@ export const CARD_INTENTS = {
     moodColor: '#C98A9B', identityColor: '#FF6B8A',
   },
   'general': {
-    label: 'General',
-    emoji: '🌑',
+    label: 'off my chest',
     pattern: 'none',
     moodTag: 'unsent',
     bgFrom: '#14060a', bgTo: '#2a0f18',
@@ -71,8 +69,11 @@ export const CARD_INTENTS = {
     moodColor: '#C48A98', identityColor: '#FF3B7A',
   },
   'no-strings': {
-    label: 'No Strings',
-    emoji: '🔥',
+    // Acronym carries the tile; the expansion rides underneath it in the
+    // picker (see IntentCard) so it stays legible to anyone who doesn't
+    // already know it. `sublabel` is picker-only — nothing else reads it.
+    label: 'NSA',
+    sublabel: 'no strings attached',
     pattern: 'streaks',
     moodTag: 'reckless',
     bgFrom: '#0a0000', bgTo: '#2b0505',
@@ -80,9 +81,8 @@ export const CARD_INTENTS = {
     textColor: '#FFE4E4', ghostColor: 'rgba(255,23,68,0.06)',
     moodColor: '#C97A7A', identityColor: '#FF1744',
   },
-  'just-talk': {
-    label: 'Generous Arrangement',
-    emoji: '🪙',
+  'generous-arrangement': {
+    label: 'spoiled',
     pattern: 'ripples',
     moodTag: 'quiet',
     bgFrom: '#050e14', bgTo: '#0e2432',
@@ -114,7 +114,10 @@ const mulberry32 = (seed) => {
 // fill) so it reads as texture, not decoration competing with the words.
 // This is the thing a screenshot needs to stop a thumb mid-scroll — every
 // pattern is intent-specific, not a generic wash.
-const CardPattern = React.memo(function CardPattern({ type, width, height, color, seed }) {
+// Exported so the compose screen's confession-type picker can render the
+// same texture in miniature — the tile previews the real card, rather than
+// standing in for it with an unrelated icon.
+export const CardPattern = React.memo(function CardPattern({ type, width, height, color, seed }) {
   if (!type || type === 'none') return null;
   const rand = mulberry32((seed >>> 0) || 1);
   const els = [];
@@ -263,7 +266,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   emotionalContext= null,         // "written at 2:14am" | "kept for 3 years"
   theme           = 'desire',
   // Confession type — "real-connection" | "general" | "no-strings" |
-  // "just-talk". When set and recognized, fully overrides theme's palette
+  // "generous-arrangement". When set and recognized, fully overrides theme's palette
   // and adds the intent's background pattern. `theme` is only the legacy
   // fallback for drops created before intents existed.
   intent          = null,

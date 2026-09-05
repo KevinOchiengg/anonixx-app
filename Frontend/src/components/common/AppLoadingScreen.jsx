@@ -81,7 +81,7 @@ export default function AppLoadingScreen() {
           <Text style={styles.wordmark}>nixx</Text>
         </View>
 
-        <Text style={styles.tagline}>anonymous. honest. yours.</Text>
+        <Text style={styles.tagline}>Ask and you shall be given</Text>
       </Animated.View>
     </View>
   );

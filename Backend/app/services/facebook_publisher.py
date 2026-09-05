@@ -39,7 +39,7 @@ class FacebookPublisher:
     Usage:
         from app.services.facebook_publisher import facebook_publisher
 
-        result = await facebook_publisher.post_text("I have a secret…", "love")
+        result = await facebook_publisher.post_text("I have a secret…")
         # → {"post_id": "123456789_987654321"}
     """
 
@@ -69,7 +69,7 @@ class FacebookPublisher:
             )
 
     # ── Text Post ─────────────────────────────────────────────────
-    async def post_text(self, confession: str, category: str = "love") -> dict:
+    async def post_text(self, confession: str) -> dict:
         """Post a text confession to the Facebook Page feed."""
         self._require_configured()
 
@@ -77,7 +77,7 @@ class FacebookPublisher:
             res = await client.post(
                 f"{GRAPH_API_BASE}/{self._page_id}/feed",
                 params={"access_token": self._token},
-                json={"message": build_caption(confession, category, platform="facebook")},
+                json={"message": build_caption(confession, platform="facebook")},
             )
 
         return self._parse(res, "text post")
@@ -87,7 +87,6 @@ class FacebookPublisher:
         self,
         image_url:  str,
         confession: str = "",
-        category:   str = "love",
         drop_link:  Optional[str] = None,
         drop_id:    Optional[str] = None,
     ) -> dict:
@@ -102,9 +101,9 @@ class FacebookPublisher:
         self._require_configured()
 
         caption = (
-            build_teaser_caption(category, drop_link, seed=drop_id or image_url)
+            build_teaser_caption(drop_link, seed=drop_id or image_url)
             if drop_link
-            else build_caption(confession, category, platform="facebook")
+            else build_caption(confession, platform="facebook")
         )
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -124,7 +123,6 @@ class FacebookPublisher:
         self,
         video_url:  str,
         confession: str = "",
-        category:   str = "love",
     ) -> dict:
         """
         Post a video drop to the Facebook Page.
@@ -138,7 +136,7 @@ class FacebookPublisher:
                 params={"access_token": self._token},
                 json={
                     "file_url":    video_url,
-                    "description": build_caption(confession, category, platform="facebook"),
+                    "description": build_caption(confession, platform="facebook"),
                 },
             )
 

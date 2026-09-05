@@ -36,7 +36,7 @@ class TelegramPublisher:
     Usage:
         from app.services.telegram_publisher import telegram_publisher
 
-        result = await telegram_publisher.post_text("I have a secret…", "love")
+        result = await telegram_publisher.post_text("I have a secret…")
         # → {"message_id": 42}
     """
 
@@ -68,7 +68,7 @@ class TelegramPublisher:
         return f"{API_BASE}/bot{self._token}/{method}"
 
     # ── Text Post ─────────────────────────────────────────────────
-    async def post_text(self, confession: str, category: str = "love") -> dict:
+    async def post_text(self, confession: str) -> dict:
         self._require_configured()
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -76,13 +76,13 @@ class TelegramPublisher:
                 self._url("sendMessage"),
                 json={
                     "chat_id": self._channel_id,
-                    "text":    build_caption(confession, category, platform="telegram"),
+                    "text":    build_caption(confession, platform="telegram"),
                 },
             )
         return self._parse(res, "text post")
 
     # ── Image Post ────────────────────────────────────────────────
-    async def post_image(self, image_url: str, confession: str = "", category: str = "love") -> dict:
+    async def post_image(self, image_url: str, confession: str = "") -> dict:
         self._require_configured()
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -91,13 +91,13 @@ class TelegramPublisher:
                 json={
                     "chat_id": self._channel_id,
                     "photo":   image_url,
-                    "caption": build_caption(confession, category, platform="telegram"),
+                    "caption": build_caption(confession, platform="telegram"),
                 },
             )
         return self._parse(res, "image post")
 
     # ── Video Post ────────────────────────────────────────────────
-    async def post_video(self, video_url: str, confession: str = "", category: str = "love") -> dict:
+    async def post_video(self, video_url: str, confession: str = "") -> dict:
         self._require_configured()
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -106,7 +106,7 @@ class TelegramPublisher:
                 json={
                     "chat_id": self._channel_id,
                     "video":   video_url,
-                    "caption": build_caption(confession, category, platform="telegram"),
+                    "caption": build_caption(confession, platform="telegram"),
                 },
             )
         return self._parse(res, "video post")

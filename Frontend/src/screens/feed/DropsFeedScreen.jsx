@@ -3,8 +3,8 @@ import React, {
 } from 'react';
 import {
   View, FlatList, ActivityIndicator, StyleSheet,
-  StatusBar, Text, TouchableOpacity, Animated, RefreshControl,
-  Easing, Linking,
+  StatusBar, Text, TouchableOpacity, RefreshControl,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,6 +29,7 @@ import {
   BUTTON_HEIGHT, SCREEN, HIT_SLOP, isSmallDevice,
 } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
+import AppLoadingScreen from '../../components/common/AppLoadingScreen';
 
 // Matches DEFAULT_FEED_AD_FREQUENCY in Backend/app/api/v1/ads.py
 const FEED_AD_FREQUENCY = 8;
@@ -60,61 +61,6 @@ const StarryBackground = React.memo(() => (
       }} />
     ))}
   </>
-));
-
-// ── Skeleton Feed (replaces blank ActivityIndicator) ─────────
-const SkeletonPulse = React.memo(({ style }) => {
-  const opacity = useRef(new Animated.Value(0.35)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.7, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.35, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-
-  return <Animated.View style={[style, { opacity }]} />;
-});
-
-const SkeletonCard = React.memo(({ hasMedia = false }) => (
-  <View style={styles.skeletonCard}>
-    {/* avatar + name row */}
-    <View style={styles.skeletonRow}>
-      <SkeletonPulse style={styles.skeletonAvatar} />
-      <View style={styles.skeletonNameGroup}>
-        <SkeletonPulse style={styles.skeletonNameLine} />
-        <SkeletonPulse style={styles.skeletonTimeLine} />
-      </View>
-    </View>
-    {/* content lines */}
-    <SkeletonPulse style={[styles.skeletonLine, { width: '100%' }]} />
-    <SkeletonPulse style={[styles.skeletonLine, { width: '85%' }]} />
-    <SkeletonPulse style={[styles.skeletonLine, { width: '60%', marginBottom: 0 }]} />
-    {/* optional media placeholder */}
-    {hasMedia && <SkeletonPulse style={styles.skeletonMedia} />}
-  </View>
-));
-
-const SkeletonFeed = React.memo(({ insetTop }) => (
-  <View style={[styles.container, { paddingTop: insetTop }]}>
-    <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-    {/* header skeleton */}
-    <View style={[styles.header, { paddingTop: rp(14) }]}>
-      <SkeletonPulse style={{ width: rs(90), height: rs(22), borderRadius: RADIUS.sm, backgroundColor: THEME.surface }} />
-      <View style={{ flexDirection: 'row', gap: rp(8) }}>
-        <SkeletonPulse style={{ width: rs(38), height: rs(38), borderRadius: rs(19), backgroundColor: THEME.surface }} />
-        <SkeletonPulse style={{ width: rs(38), height: rs(38), borderRadius: rs(19), backgroundColor: THEME.surface }} />
-      </View>
-    </View>
-    <SkeletonCard />
-    <SkeletonCard hasMedia />
-    <SkeletonCard />
-    <SkeletonCard hasMedia />
-  </View>
 ));
 
 // ── Session limit screen ───────────────────────────────────────
@@ -472,8 +418,10 @@ export default function DropsFeedScreen({ navigation, route }) {
   }, [loadFeed]);
 
 
-  // ── Initial loading — skeleton cards instead of blank spinner
-  if (loading && posts.length === 0) return <SkeletonFeed insetTop={insets.top} />;
+  // ── Initial loading — same loading screen as app boot, not a different
+  // skeleton flash, so the user only ever sees one loading treatment
+  // between opening the app and the feed actually having content.
+  if (loading && posts.length === 0) return <AppLoadingScreen />;
 
   // ── Error state (backend down / no connection) ─────────────
   if (fetchError && posts.length === 0) return (
@@ -724,53 +672,4 @@ const styles = StyleSheet.create({
     elevation:       6,
   },
   errorRetryText: { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
-
-  // Skeleton loader
-  skeletonCard: {
-    backgroundColor: THEME.surface,
-    borderRadius:    RADIUS.md,
-    padding:         SPACING.md,
-    marginHorizontal: SPACING.md,
-    marginBottom:    SPACING.sm,
-    borderWidth:     1,
-    borderColor:     THEME.border,
-    gap:             rp(10),
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           SPACING.sm,
-    marginBottom:  rp(4),
-  },
-  skeletonAvatar: {
-    width:           rs(40),
-    height:          rs(40),
-    borderRadius:    rs(20),
-    backgroundColor: THEME.surfaceAlt,
-  },
-  skeletonNameGroup: { gap: rp(6), flex: 1 },
-  skeletonNameLine: {
-    height:          rs(13),
-    width:           '45%',
-    borderRadius:    RADIUS.sm,
-    backgroundColor: THEME.surfaceAlt,
-  },
-  skeletonTimeLine: {
-    height:          rs(10),
-    width:           '25%',
-    borderRadius:    RADIUS.sm,
-    backgroundColor: THEME.surfaceAlt,
-  },
-  skeletonLine: {
-    height:          rs(13),
-    borderRadius:    RADIUS.sm,
-    backgroundColor: THEME.surfaceAlt,
-    marginBottom:    rp(6),
-  },
-  skeletonMedia: {
-    height:          rs(160),
-    borderRadius:    RADIUS.md,
-    backgroundColor: THEME.surfaceAlt,
-    marginTop:       rp(4),
-  },
 });

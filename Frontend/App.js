@@ -17,7 +17,6 @@ import { ToastProvider } from './src/components/ui/Toast';
 import { UnreadProvider } from './src/context/UnreadContext';
 import { STRIPE_PUBLISHABLE_KEY } from './src/config/api';
 import { FONT_MAP } from './src/config/fonts';
-import AppLoadingScreen from './src/components/common/AppLoadingScreen';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -56,14 +55,12 @@ const styles = StyleSheet.create({
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts(FONT_MAP);
+  const fontsReady = fontsLoaded || fontError;
 
-  // The native splash (app.json's `splash` config) hands off to this the
-  // instant JS takes over — custom fonts aren't ready yet, so this briefly
-  // renders in the system font before Fraunces/DM Sans finish loading.
-  if (!fontsLoaded && !fontError) {
-    return <AppLoadingScreen />;
-  }
-
+  // Providers mount immediately instead of waiting on fonts, so font-loading
+  // and the AuthContext token check (inside AppNavigator) run in parallel —
+  // one loading screen for however long the SLOWER of the two takes, not
+  // one screen per gate shown back-to-back.
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -76,7 +73,7 @@ export default function App() {
                     <ToastProvider>
                       <UnreadProvider>
                         <StatusBar style="light" />
-                        <AppNavigator />
+                        <AppNavigator fontsReady={fontsReady} />
                       </UnreadProvider>
                     </ToastProvider>
                   </SocketProvider>

@@ -222,7 +222,6 @@ class PublisherWorker:
         """
         media_type   = (entry.get("media_type") or "text").lower()
         confession   = entry.get("confession") or ""
-        category     = entry.get("category")   or "love"
         media_url    = entry.get("media_url")
         # Blurred teaser card (app/services/card_generator.py) — when present,
         # Facebook/Instagram/Telegram post this branded image instead of the
@@ -235,19 +234,19 @@ class PublisherWorker:
         coros: dict[str, object] = {}
 
         if tiktok_publisher.is_configured():
-            coros["tiktok"] = self._call_tiktok(media_type, confession, category, media_url)
+            coros["tiktok"] = self._call_tiktok(media_type, confession, media_url)
 
         if facebook_publisher.is_configured():
             coros["facebook"] = self._call_facebook(
-                media_type, confession, category, media_url, teaser_url,
+                media_type, confession, media_url, teaser_url,
                 drop_id=entry.get("drop_id"),
             )
 
         if instagram_publisher.is_configured():
-            coros["instagram"] = self._call_instagram(media_type, confession, category, media_url, teaser_url)
+            coros["instagram"] = self._call_instagram(media_type, confession, media_url, teaser_url)
 
         if telegram_publisher.is_configured():
-            coros["telegram"] = self._call_telegram(media_type, confession, category, media_url, teaser_url)
+            coros["telegram"] = self._call_telegram(media_type, confession, media_url, teaser_url)
 
         if not coros:
             raise RuntimeError(
@@ -281,98 +280,98 @@ class PublisherWorker:
 
     # ── Platform-specific dispatchers ────────────────────────────
     async def _call_tiktok(
-        self, media_type: str, confession: str, category: str, media_url: str | None
+        self, media_type: str, confession: str, media_url: str | None
     ):
         if media_type == "video":
             if not media_url:
                 raise ValueError("Video drop missing media_url.")
             return await tiktok_publisher.post_video(
-                video_url=media_url, confession=confession, category=category,
+                video_url=media_url, confession=confession,
             )
         if media_type == "image":
             if not media_url:
                 raise ValueError("Image drop missing media_url.")
             return await tiktok_publisher.post_image(
-                image_url=media_url, confession=confession, category=category,
+                image_url=media_url, confession=confession,
             )
         # text
         if not confession.strip():
             raise ValueError("Text drop has no confession content.")
-        return await tiktok_publisher.post_text(confession=confession, category=category)
+        return await tiktok_publisher.post_text(confession=confession)
 
     async def _call_facebook(
-        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None,
+        self, media_type: str, confession: str, media_url: str | None, teaser_url: str | None,
         drop_id: str | None = None,
     ):
         if teaser_url:
             drop_link = f"{settings.BASE_URL}/drop/{drop_id}" if drop_id else None
             return await facebook_publisher.post_image(
-                image_url=teaser_url, confession=confession, category=category,
+                image_url=teaser_url, confession=confession,
                 drop_link=drop_link, drop_id=drop_id,
             )
         if media_type == "video":
             if not media_url:
                 raise ValueError("Video drop missing media_url.")
             return await facebook_publisher.post_video(
-                video_url=media_url, confession=confession, category=category,
+                video_url=media_url, confession=confession,
             )
         if media_type == "image":
             if not media_url:
                 raise ValueError("Image drop missing media_url.")
             return await facebook_publisher.post_image(
-                image_url=media_url, confession=confession, category=category,
+                image_url=media_url, confession=confession,
             )
         # text
         if not confession.strip():
             raise ValueError("Text drop has no confession content.")
-        return await facebook_publisher.post_text(confession=confession, category=category)
+        return await facebook_publisher.post_text(confession=confession)
 
     async def _call_instagram(
-        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None
+        self, media_type: str, confession: str, media_url: str | None, teaser_url: str | None
     ):
         if teaser_url:
             # The teaser image also solves Instagram's "no text-only posts"
             # limitation — text drops now have something to post.
             return await instagram_publisher.post_image(
-                image_url=teaser_url, confession=confession, category=category,
+                image_url=teaser_url, confession=confession,
             )
         if media_type == "video":
             if not media_url:
                 raise ValueError("Video drop missing media_url.")
             return await instagram_publisher.post_video(
-                video_url=media_url, confession=confession, category=category,
+                video_url=media_url, confession=confession,
             )
         if media_type == "image":
             if not media_url:
                 raise ValueError("Image drop missing media_url.")
             return await instagram_publisher.post_image(
-                image_url=media_url, confession=confession, category=category,
+                image_url=media_url, confession=confession,
             )
         # text — Instagram does not support text-only posts
-        return await instagram_publisher.post_text(confession=confession, category=category)
+        return await instagram_publisher.post_text(confession=confession)
 
     async def _call_telegram(
-        self, media_type: str, confession: str, category: str, media_url: str | None, teaser_url: str | None
+        self, media_type: str, confession: str, media_url: str | None, teaser_url: str | None
     ):
         if teaser_url:
             return await telegram_publisher.post_image(
-                image_url=teaser_url, confession=confession, category=category,
+                image_url=teaser_url, confession=confession,
             )
         if media_type == "video":
             if not media_url:
                 raise ValueError("Video drop missing media_url.")
             return await telegram_publisher.post_video(
-                video_url=media_url, confession=confession, category=category,
+                video_url=media_url, confession=confession,
             )
         if media_type == "image":
             if not media_url:
                 raise ValueError("Image drop missing media_url.")
             return await telegram_publisher.post_image(
-                image_url=media_url, confession=confession, category=category,
+                image_url=media_url, confession=confession,
             )
         if not confession.strip():
             raise ValueError("Text drop has no confession content.")
-        return await telegram_publisher.post_text(confession=confession, category=category)
+        return await telegram_publisher.post_text(confession=confession)
 
 
 # ── Singleton ────────────────────────────────────────────────────

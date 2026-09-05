@@ -25,11 +25,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Audio } from 'expo-av';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, RecordingPresets,
+  requestRecordingPermissionsAsync, setAudioModeAsync,
+} from 'expo-audio';
 import {
   Send, Sparkles, CheckCircle, Eye, X, Video, Phone, MoreVertical,
   Mic, Play, Pause, RotateCcw, Settings, Flag, ShieldOff, Users, AlertTriangle,
+  Smile, Paperclip, Camera,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -50,6 +54,34 @@ const REVEAL_PRICE = 1.0;
 const POLL_INTERVAL_MS = 8000;
 const REVEAL_POLL_MS   = 5000;
 const MAX_REVEAL_ATTEMPTS = 24;
+
+// ─── Quick emoji strip — toggled from the input bar's Smile icon ──
+const QUICK_EMOJIS = ['🔥','😏','💋','🖤','😈','✨','🥵','👀','💦','🍒','😩','🤍'];
+
+// ─── "Today" / "Yesterday" / date separators between message groups ──
+function formatDateLabel(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+
+// Cloudinary serves a poster frame for any video delivery URL by swapping
+// the file extension to an image format — no separate thumbnail upload.
+function videoPosterUrl(url) {
+  return url ? url.replace(/\.\w+(\?.*)?$/, '.jpg$1') : url;
+}
+
+const DateSeparator = React.memo(({ label }) => (
+  <View style={s.dateSeparatorRow}>
+    <Text style={s.dateSeparatorText}>{label}</Text>
+  </View>
+));
 
 // ─── Mood board — 33 procedurally-styled cards shown while waiting for a
 // first reply. Intentionally abstract (gradient + symbol, no photos) so it
@@ -113,7 +145,7 @@ const VoiceBubble = React.memo(({ item, isOwn }) => {
 
   const handlePress = useCallback(async () => {
     try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       if (status.status === 'idle') {
         pendingPlay.current = true;
         player.replace({ uri: item.media_url });
@@ -158,7 +190,7 @@ const VoiceBubble = React.memo(({ item, isOwn }) => {
 });
 
 // ─── Message bubble ────────────────────────────────────────────
-const Bubble = React.memo(({ item, fontFamily }) => {
+const Bubble = React.memo(({ item, fontFamily, onMediaPress }) => {
   const isOwn = item.is_own;
   if (item.media_type === 'voice' && item.media_url) {
     return (
@@ -170,14 +202,38 @@ const Bubble = React.memo(({ item, fontFamily }) => {
       </View>
     );
   }
+  if ((item.media_type === 'image' || item.media_type === 'video') && item.media_url) {
+    const isVideo = item.media_type === 'video';
+    return (
+      <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => onMediaPress?.(item)}
+          style={s.mediaBubble}
+        >
+          <Image
+            source={{ uri: isVideo ? videoPosterUrl(item.media_url) : item.media_url }}
+            style={s.mediaImage}
+            resizeMode="cover"
+          />
+          {isVideo && (
+            <View style={s.videoPlayOverlay}>
+              <Play size={rs(22)} color="#fff" fill="#fff" strokeWidth={0} />
+            </View>
+          )}
+          <Text style={[s.mediaBubbleTime, isOwn && s.mediaBubbleTimeOwn]}>{item.time_ago}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
   return (
     <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
       <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
         <Text style={[s.bubbleText, fontFamily && { fontFamily }, isOwn && s.bubbleTextOwn]}>
           {item.content}
-        </Text>
-        <Text style={[s.bubbleTime, isOwn && s.bubbleTimeOwn]}>
-          {item.time_ago}
+          <Text style={[s.bubbleTimeInline, isOwn && s.bubbleTimeInlineOwn]}>
+            {'  '}{item.time_ago}
+          </Text>
         </Text>
       </View>
     </View>
@@ -259,6 +315,38 @@ const WelcomeGalleryOverlay = React.memo(({ gallery, onDismiss }) => {
   );
 });
 
+// ─── Full-screen viewer for a single tapped chat photo/video ───
+const ChatMediaViewer = React.memo(({ media, onClose }) => {
+  const isVideo = media?.media_type === 'video';
+  const player = useVideoPlayer(
+    isVideo && media?.media_url ? { uri: media.media_url } : null,
+    (p) => { p.play(); },
+  );
+
+  if (!media?.media_url) return null;
+
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <View style={s.welcomeOverlay}>
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={onClose}
+          style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {isVideo ? (
+            <VideoView player={player} style={s.welcomeMedia} contentFit="contain" nativeControls />
+          ) : (
+            <Image source={{ uri: media.media_url }} style={s.welcomeMedia} resizeMode="contain" />
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity style={s.welcomeClose} onPress={onClose} hitSlop={HIT_SLOP}>
+          <X size={rs(18)} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+});
+
 // ─── Empty chat ────────────────────────────────────────────────
 const EmptyChat = React.memo(() => (
   <View style={s.emptyChat}>
@@ -282,6 +370,9 @@ export default function DropChatScreen({ route, navigation }) {
   const [loading, setLoading]       = useState(true);
   const [text, setText]             = useState('');
   const [sending, setSending]       = useState(false);
+  const [showEmojiStrip, setShowEmojiStrip] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [viewerMedia, setViewerMedia]       = useState(null);
 
   // ── Poster's themed chat surface (per-user chat_profiles doc) ──
   const [chatProfile, setChatProfile]     = useState(null);
@@ -298,11 +389,11 @@ export default function DropChatScreen({ route, navigation }) {
   const [guestList, setGuestList]       = useState([]);
   const [guestsLoading, setGuestsLoading] = useState(false);
 
-  // ── Voice note recording — press-and-hold mic, mirrors ChatScreen.jsx ──
+  // ── Voice note recording — press-and-hold mic ──
   const [isRecording, setIsRecording]     = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const [voiceUploading, setVoiceUploading] = useState(false);
-  const recordingRef   = useRef(null);
+  const recorder        = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recordTimerRef = useRef(null);
   const pressStartRef  = useRef(0);
 
@@ -487,33 +578,118 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [connectionId, loadMessages, showToast]);
 
+  // ── Media (photo/video) — same signed-upload-to-Cloudinary pattern as
+  //    voice notes, just routed through the "image"/"video" resource type.
+  //    No watermark: that's only for publicly-shared drop posts, not
+  //    private messages between two people. ──
+  const uploadMedia = useCallback(async (uri, mediaType) => {
+    const token = await AsyncStorage.getItem('token');
+    const resourceType = mediaType === 'video' ? 'video' : 'image';
+    const sigRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body:    JSON.stringify({ resource_type: resourceType }),
+    });
+    if (!sigRes.ok) {
+      const err = await sigRes.json().catch(() => ({}));
+      throw new Error(err?.detail || `Signature failed (${sigRes.status})`);
+    }
+    const { signature, timestamp, api_key, cloud_name, folder } = await sigRes.json();
+
+    const ext = mediaType === 'video' ? 'mp4' : 'jpg';
+    const form = new FormData();
+    form.append('file', {
+      uri, name: `media_${Date.now()}.${ext}`,
+      type: mediaType === 'video' ? 'video/mp4' : 'image/jpeg',
+    });
+    form.append('signature', signature);
+    form.append('timestamp', String(timestamp));
+    form.append('api_key',   api_key);
+    form.append('folder',    folder);
+
+    const uploadRes  = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
+      { method: 'POST', body: form },
+    );
+    const uploadData = await uploadRes.json();
+    if (!uploadRes.ok) throw new Error(uploadData?.error?.message || `Cloudinary error (${uploadRes.status})`);
+    return uploadData.secure_url;
+  }, []);
+
+  const sendMediaMessage = useCallback(async (mediaUrl, mediaType) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      await fetch(
+        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
+        {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization:  `Bearer ${token}`,
+          },
+          body: JSON.stringify({ media_url: mediaUrl, media_type: mediaType }),
+        },
+      );
+      await loadMessages(true);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch {
+      showToast({ type: 'error', message: 'Media sent, but the chat failed to refresh.' });
+    }
+  }, [connectionId, loadMessages, showToast]);
+
+  const pickMedia = useCallback(async (from) => {
+    try {
+      let result;
+      if (from === 'camera') {
+        const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+        if (!granted) {
+          showToast({ type: 'warning', message: 'Camera permission is needed to take a photo.' });
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+      } else {
+        const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!granted) {
+          showToast({ type: 'warning', message: 'Photo library permission is needed to attach media.' });
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60,
+        });
+      }
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      const mediaType = asset.type === 'video' ? 'video' : 'image';
+      setMediaUploading(true);
+      const url = await uploadMedia(asset.uri, mediaType);
+      setMediaUploading(false);
+      if (url) await sendMediaMessage(url, mediaType);
+    } catch (e) {
+      setMediaUploading(false);
+      showToast({ type: 'error', message: e?.message || 'Could not send media.' });
+    }
+  }, [uploadMedia, sendMediaMessage, showToast]);
+
   const handleVoicePressIn = useCallback(async () => {
     if (isRecording) return;
 
-    if (recordingRef.current) {
-      try { await recordingRef.current.stopAndUnloadAsync(); } catch { /* already stopped */ }
-      recordingRef.current = null;
-    }
-
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
+      const { granted } = await requestRecordingPermissionsAsync();
+      if (!granted) {
         showToast({ type: 'warning', message: 'Microphone permission is needed to record.' });
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS:      true,
-        playsInSilentModeIOS:    true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid:       true,
+      await setAudioModeAsync({
+        allowsRecording:        true,
+        playsInSilentMode:      true,
+        shouldPlayInBackground: false,
       });
 
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
+      await recorder.prepareToRecordAsync();
+      recorder.record();
 
-      recordingRef.current  = recording;
       pressStartRef.current = Date.now();
       setIsRecording(true);
       setRecordDuration(0);
@@ -521,7 +697,6 @@ export default function DropChatScreen({ route, navigation }) {
         setRecordDuration((prev) => prev + 1);
       }, 1000);
     } catch (e) {
-      recordingRef.current = null;
       setIsRecording(false);
       clearInterval(recordTimerRef.current);
       const msg = e?.message || '';
@@ -531,24 +706,23 @@ export default function DropChatScreen({ route, navigation }) {
         showToast({ type: 'error', message: `Recording error: ${msg || 'Could not start.'}` });
       }
     }
-  }, [isRecording, showToast]);
+  }, [isRecording, showToast, recorder]);
 
   const handleVoicePressOut = useCallback(async () => {
-    if (!isRecording || !recordingRef.current) return;
+    if (!isRecording) return;
 
     clearInterval(recordTimerRef.current);
     recordTimerRef.current = null;
     const heldMs = Date.now() - pressStartRef.current;
 
     try {
-      const uri = recordingRef.current.getURI();
       const durationSeconds = recordDuration;
-      await recordingRef.current.stopAndUnloadAsync();
-      recordingRef.current = null;
+      await recorder.stop();
+      const uri = recorder.uri;
       setIsRecording(false);
       setRecordDuration(0);
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
 
       if (heldMs < 500) {
         showToast({ type: 'info', message: 'Hold to record, release to send.' });
@@ -565,7 +739,6 @@ export default function DropChatScreen({ route, navigation }) {
     } catch {
       clearInterval(recordTimerRef.current);
       recordTimerRef.current = null;
-      recordingRef.current   = null;
       setIsRecording(false);
       setRecordDuration(0);
       setVoiceUploading(false);
@@ -637,9 +810,31 @@ export default function DropChatScreen({ route, navigation }) {
   }, [revealPhone, connectionId, startRevealPolling, showToast]);
 
   // ── Helpers ───────────────────────────────────────────────
+  // Inject a "Today" / "Yesterday" / date separator row whenever the day
+  // changes between consecutive messages.
+  const messagesWithDates = useMemo(() => {
+    const out = [];
+    let lastLabel = null;
+    for (const m of messages) {
+      const label = formatDateLabel(m.created_at);
+      if (label && label !== lastLabel) {
+        out.push({ id: `sep-${m.id}`, kind: 'date_separator', label });
+        lastLabel = label;
+      }
+      out.push(m);
+    }
+    return out;
+  }, [messages]);
+
+  const handleMediaPress = useCallback((item) => {
+    setViewerMedia({ media_url: item.media_url, media_type: item.media_type });
+  }, []);
+
   const renderMessage = useCallback(
-    ({ item }) => <Bubble item={item} fontFamily={bubbleFontFamily} />,
-    [bubbleFontFamily],
+    ({ item }) => item.kind === 'date_separator'
+      ? <DateSeparator label={item.label} />
+      : <Bubble item={item} fontFamily={bubbleFontFamily} onMediaPress={handleMediaPress} />,
+    [bubbleFontFamily, handleMediaPress],
   );
   const keyExtractor  = useCallback((item) => item.id, []);
 
@@ -894,6 +1089,43 @@ export default function DropChatScreen({ route, navigation }) {
     return connection.other_anonymous_name || 'Anonymous';
   }, [connection, revealData]);
 
+  // Header centre — small avatar (tappable into the gallery, same as the
+  // old profile row) + name, with a truthful "online" line sourced from
+  // the server's live socket presence (connection.other_is_online) —
+  // never a fake "typing…" indicator, since Drops chats are polled, not
+  // socket-driven, and don't have a real typing signal.
+  const HeaderTitle = useMemo(() => (
+    <TouchableOpacity
+      style={s.headerTitleRow}
+      activeOpacity={chatProfile?.gallery?.length ? 0.75 : 1}
+      onPress={() => chatProfile?.gallery?.length && setGalleryViewerOpen(true)}
+    >
+      <View style={s.headerAvatarWrap}>
+        {chatProfile?.profile_picture_url ? (
+          <Image source={{ uri: chatProfile.profile_picture_url }} style={s.headerAvatar} />
+        ) : (
+          <View style={[s.headerAvatar, s.headerAvatarInitialWrap]}>
+            <Text style={s.headerAvatarInitialText}>{headerTitle?.[0]?.toUpperCase() || 'A'}</Text>
+          </View>
+        )}
+        {chatProfile?.gallery?.length > 0 && (
+          <View style={s.headerGalleryBadge}>
+            <Text style={s.headerGalleryBadgeText}>{chatProfile.gallery.length}</Text>
+          </View>
+        )}
+      </View>
+      <View style={s.headerTitleTextWrap}>
+        <Text style={s.headerTitleName} numberOfLines={1}>{headerTitle}</Text>
+        {connection?.other_is_online && (
+          <View style={s.headerOnlineRow}>
+            <View style={s.headerOnlineDot} />
+            <Text style={s.headerOnlineText}>online</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  ), [chatProfile, headerTitle, connection?.other_is_online]);
+
   // ── Loading ───────────────────────────────────────────────
   if (loading) {
     return (
@@ -906,7 +1138,7 @@ export default function DropChatScreen({ route, navigation }) {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       <DropScreenHeader
-        title={headerTitle}
+        titleNode={HeaderTitle}
         navigation={navigation}
         right={HeaderRight}
       />
@@ -915,40 +1147,6 @@ export default function DropChatScreen({ route, navigation }) {
         pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN}
         style={{ flex: 1 }}
       >
-
-      {/* Poster's profile picture — only ever visible post-unlock, since
-          this connection doc wouldn't exist otherwise. Falls back to their
-          account avatar_url (see chat_profile.py's _sanitize), then to a
-          first-initial circle if no photo exists anywhere. Tappable into
-          the gallery any time it has items, for either side of the chat —
-          not just the unlocker's one-time welcome takeover below. */}
-      {chatProfile && (
-        <TouchableOpacity
-          style={s.profileRow}
-          activeOpacity={chatProfile?.gallery?.length ? 0.8 : 1}
-          onPress={() => chatProfile?.gallery?.length && setGalleryViewerOpen(true)}
-        >
-          <View>
-            {chatProfile.profile_picture_url ? (
-              <Image source={{ uri: chatProfile.profile_picture_url }} style={s.profileAvatar} />
-            ) : (
-              <View style={[s.profileAvatar, s.profileAvatarInitialWrap]}>
-                <Text style={s.profileAvatarInitialText}>
-                  {headerTitle?.[0]?.toUpperCase() || 'A'}
-                </Text>
-              </View>
-            )}
-            {chatProfile?.gallery?.length > 0 && (
-              <View style={s.galleryBadge}>
-                <Text style={s.galleryBadgeText}>{chatProfile.gallery.length}</Text>
-              </View>
-            )}
-          </View>
-          {chatProfile?.gallery?.length > 0 && (
-            <Text style={s.galleryHint}>tap to view gallery</Text>
-          )}
-        </TouchableOpacity>
-      )}
 
       {/* Live-call status strip — the actual join/start controls now live
           in the header (Phone/Video icons); this just tells guests the
@@ -1001,7 +1199,7 @@ export default function DropChatScreen({ route, navigation }) {
           ) : (
             <FlatList
               ref={flatListRef}
-              data={messages}
+              data={messagesWithDates}
               keyExtractor={keyExtractor}
               renderItem={renderMessage}
               contentContainerStyle={s.messageList}
@@ -1018,8 +1216,39 @@ export default function DropChatScreen({ route, navigation }) {
           )}
         </Animated.View>
 
+        {/* Quick emoji strip — toggled by the Smile icon below */}
+        {showEmojiStrip && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.emojiStrip}
+            contentContainerStyle={s.emojiStripContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {QUICK_EMOJIS.map((e) => (
+              <TouchableOpacity
+                key={e}
+                style={s.emojiStripBtn}
+                onPress={() => setText((t) => t + e)}
+                hitSlop={HIT_SLOP}
+              >
+                <Text style={s.emojiStripEmoji}>{e}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
         {/* Input */}
         <View style={[s.inputBar, { paddingBottom: insets.bottom + rp(8) }]}>
+          <TouchableOpacity
+            style={s.emojiToggleBtn}
+            onPress={() => setShowEmojiStrip((v) => !v)}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.75}
+          >
+            <Smile size={rs(20)} color={showEmojiStrip ? T.primary : T.textMute} strokeWidth={1.8} />
+          </TouchableOpacity>
+
           <TextInput
             style={s.input}
             value={text}
@@ -1029,6 +1258,30 @@ export default function DropChatScreen({ route, navigation }) {
             multiline
             maxLength={500}
           />
+
+          {/* Attach — photo or video from the library */}
+          <TouchableOpacity
+            style={s.mediaBtn}
+            onPress={() => pickMedia('library')}
+            disabled={mediaUploading}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.75}
+          >
+            {mediaUploading
+              ? <ActivityIndicator size="small" color={T.primary} />
+              : <Paperclip size={rs(18)} color={T.textMute} strokeWidth={1.8} />}
+          </TouchableOpacity>
+
+          {/* Camera — take a photo directly */}
+          <TouchableOpacity
+            style={s.mediaBtn}
+            onPress={() => pickMedia('camera')}
+            disabled={mediaUploading}
+            hitSlop={HIT_SLOP}
+            activeOpacity={0.75}
+          >
+            <Camera size={rs(18)} color={T.textMute} strokeWidth={1.8} />
+          </TouchableOpacity>
 
           {/* Voice note — press and hold to record, release to send */}
           <Pressable
@@ -1269,6 +1522,10 @@ export default function DropChatScreen({ route, navigation }) {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {viewerMedia && (
+        <ChatMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />
+      )}
     </SafeAreaView>
   );
 }
@@ -1278,20 +1535,40 @@ const s = StyleSheet.create({
   safe:     { flex: 1, backgroundColor: T.background },
   centered: { justifyContent: 'center', alignItems: 'center' },
 
-  profileRow: {
-    alignItems:      'center',
-    paddingVertical: rp(8),
+  // Header title — small avatar + name + truthful online line, in place
+  // of the old full-width profile row.
+  headerTitleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(8), flexShrink: 1,
   },
-  galleryBadge: {
+  headerAvatarWrap: { position: 'relative', flexShrink: 0 },
+  headerAvatar: {
+    width: rs(34), height: rs(34), borderRadius: rs(17),
+    borderWidth: 1.5, borderColor: T.primaryBorder,
+  },
+  headerAvatarInitialWrap: {
+    backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center',
+  },
+  headerAvatarInitialText: { fontSize: rf(14), fontWeight: '700', color: T.primary },
+  headerGalleryBadge: {
     position: 'absolute', bottom: -rp(2), right: -rp(2),
-    backgroundColor: T.primary, borderRadius: rs(9),
-    minWidth: rs(18), height: rs(18), paddingHorizontal: rp(4),
+    backgroundColor: T.primary, borderRadius: rs(8),
+    minWidth: rs(15), height: rs(15), paddingHorizontal: rp(3),
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: T.background,
   },
-  galleryBadgeText: { fontSize: rf(9), fontWeight: '800', color: '#fff' },
-  galleryHint: {
-    marginTop: rp(4), fontSize: rf(10), color: T.textMute, fontFamily: 'DMSans-Italic',
+  headerGalleryBadgeText: { fontSize: rf(8), fontWeight: '800', color: '#fff' },
+  headerTitleTextWrap: { flexShrink: 1, alignItems: 'flex-start' },
+  headerTitleName: {
+    fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg, color: T.text, letterSpacing: 0.3,
+  },
+  headerOnlineRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(4), marginTop: rp(1),
+  },
+  headerOnlineDot: {
+    width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.online,
+  },
+  headerOnlineText: {
+    fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.online,
   },
   liveStrip: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(6),
@@ -1317,23 +1594,6 @@ const s = StyleSheet.create({
     position: 'absolute', top: rp(3), right: rp(3),
     width: rs(6), height: rs(6), borderRadius: rs(3),
     backgroundColor: T.online, borderWidth: 1, borderColor: T.background,
-  },
-  profileAvatar: {
-    width:        rs(56),
-    height:       rs(56),
-    borderRadius: rs(28),
-    borderWidth:  2,
-    borderColor:  T.primaryBorder,
-  },
-  profileAvatarInitialWrap: {
-    backgroundColor: T.surfaceAlt,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  profileAvatarInitialText: {
-    fontSize:   rf(22),
-    fontWeight: '700',
-    color:      T.primary,
   },
   welcomeOverlay: {
     flex:            1,
@@ -1425,13 +1685,41 @@ const s = StyleSheet.create({
     gap:           SPACING.xs,
     paddingBottom: SPACING.lg,
   },
-  msgRow:    { flexDirection: 'row', marginBottom: rp(6) },
+  dateSeparatorRow: {
+    alignItems: 'center', alignSelf: 'stretch', marginVertical: rp(6),
+  },
+  dateSeparatorText: {
+    fontFamily: 'DMSans-Bold', fontSize: rf(10), color: T.textMute,
+    letterSpacing: 1, textTransform: 'uppercase',
+    backgroundColor: T.surfaceAlt, borderRadius: RADIUS.full,
+    paddingHorizontal: rp(10), paddingVertical: rp(3),
+    overflow: 'hidden',
+  },
+  msgRow:    { flexDirection: 'row', marginBottom: rp(4) },
   msgRowOwn: { justifyContent: 'flex-end' },
+  // Photo/video message bubble
+  mediaBubble: {
+    maxWidth: '68%', borderRadius: RADIUS.lg, overflow: 'hidden',
+  },
+  mediaImage: {
+    width: rs(220), height: rs(220), backgroundColor: T.surfaceAlt,
+  },
+  videoPlayOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  mediaBubbleTime: {
+    position: 'absolute', bottom: rp(6), right: rp(8),
+    fontFamily: 'DMSans-Bold', fontSize: rf(10), color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3,
+  },
+  mediaBubbleTimeOwn: { color: '#fff' },
   bubble: {
     maxWidth:          '78%',
-    borderRadius:      RADIUS.xl,
-    paddingVertical:   rp(10),
-    paddingHorizontal: rp(14),
+    borderRadius:      RADIUS.lg,
+    paddingVertical:   rp(8),
+    paddingHorizontal: rp(12),
   },
   bubbleOwn: {
     backgroundColor:         T.primary,
@@ -1451,6 +1739,15 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
   },
   bubbleTextOwn: { color: '#fff' },
+  // Inline time — nested Text so it flows at the end of the message like a
+  // normal chat bubble instead of sitting on its own line below.
+  bubbleTimeInline: {
+    fontFamily: 'DMSans-Italic',
+    fontSize:   rf(10),
+    color:      T.textMute,
+  },
+  bubbleTimeInlineOwn: { color: 'rgba(255,255,255,0.65)' },
+  // Still used by the voice bubble below, which isn't a text flow.
   bubbleTime: {
     fontFamily:    'DMSans-Italic',
     fontSize:      rf(10),
@@ -1539,6 +1836,23 @@ const s = StyleSheet.create({
     borderTopColor:    T.border,
     backgroundColor:   T.background,
   },
+  emojiToggleBtn: {
+    width: rs(36), height: rs(40), alignItems: 'center', justifyContent: 'center',
+  },
+  mediaBtn: {
+    width: rs(32), height: rs(40), alignItems: 'center', justifyContent: 'center',
+  },
+  emojiStrip: {
+    borderTopWidth: 1, borderTopColor: T.border, backgroundColor: T.background,
+  },
+  emojiStripContent: {
+    paddingHorizontal: SPACING.md, paddingVertical: rp(8), gap: rp(4),
+  },
+  emojiStripBtn: {
+    width: rs(38), height: rs(38), alignItems: 'center', justifyContent: 'center',
+    borderRadius: rs(19), backgroundColor: T.surface,
+  },
+  emojiStripEmoji: { fontSize: rf(20) },
   input: {
     flex:              1,
     backgroundColor:   T.surface,

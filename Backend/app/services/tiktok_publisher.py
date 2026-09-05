@@ -39,7 +39,7 @@ class TikTokPublisher:
     Usage:
         from app.services.tiktok_publisher import tiktok_publisher
 
-        result = await tiktok_publisher.post_text("I have a secret…", "love")
+        result = await tiktok_publisher.post_text("I have a secret…")
         # → {"publish_id": "v_pub_url~...", "status": "PROCESSING_UPLOAD"}
     """
 
@@ -67,13 +67,13 @@ class TikTokPublisher:
             )
 
     # ── Text Post ─────────────────────────────────────────────────
-    async def post_text(self, confession: str, category: str = "love") -> dict:
+    async def post_text(self, confession: str) -> dict:
         """Post a text confession as a TikTok text post."""
         self._require_configured()
 
         payload = {
             "post_info": {
-                "title":           build_caption(confession, category, platform="tiktok"),
+                "title":           build_caption(confession, platform="tiktok"),
                 "privacy_level":   PRIVACY_LEVEL,
                 "disable_duet":    True,
                 "disable_comment": False,
@@ -97,7 +97,6 @@ class TikTokPublisher:
         self,
         video_url:  str,
         confession: str = "",
-        category:   str = "love",
     ) -> dict:
         """
         Post a video drop.
@@ -108,7 +107,7 @@ class TikTokPublisher:
 
         payload = {
             "post_info": {
-                "title":           build_caption(confession, category, platform="tiktok"),
+                "title":           build_caption(confession, platform="tiktok"),
                 "privacy_level":   PRIVACY_LEVEL,
                 "disable_duet":    True,
                 "disable_comment": False,
@@ -134,7 +133,6 @@ class TikTokPublisher:
         self,
         image_url:  str,
         confession: str = "",
-        category:   str = "love",
     ) -> dict:
         """
         Post an image drop as a TikTok photo post.
@@ -144,7 +142,7 @@ class TikTokPublisher:
 
         payload = {
             "post_info": {
-                "title":                build_caption(confession, category, platform="tiktok"),
+                "title":                build_caption(confession, platform="tiktok"),
                 "privacy_level":        PRIVACY_LEVEL,
                 "disable_duet":         True,
                 "disable_comment":      False,

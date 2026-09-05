@@ -106,8 +106,12 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
     # "Here for" — what they're actually here for, on-theme, computed from
     # their own drops rather than a self-reported label. Whichever intent
     # they've posted under most often (real-connection / no-strings /
-    # just-talk / general — same vocabulary as the drop compose picker).
+    # generous-arrangement / general — same vocabulary as the drop compose picker).
+    # Shipped as a pair: `here_for` is the display copy, `here_for_intent` is
+    # the stable id. Clients key off the id, never the label — otherwise
+    # renaming a label silently breaks every lookup downstream.
     here_for = None
+    here_for_intent = None
     intent_counts = {}
     async for d in db["drops"].find(
         {"sender_id": target_id, "intent": {"$ne": None}}, {"intent": 1},
@@ -116,8 +120,8 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         if intent:
             intent_counts[intent] = intent_counts.get(intent, 0) + 1
     if intent_counts:
-        top_intent = max(intent_counts, key=intent_counts.get)
-        here_for = INTENT_LABELS.get(top_intent)
+        here_for_intent = max(intent_counts, key=intent_counts.get)
+        here_for = INTENT_LABELS.get(here_for_intent)
 
     # Age, not date of birth — a number is standard profile info, an exact
     # birthday is identifying.
@@ -167,7 +171,8 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "avatar_url": user.get("avatar_url"),   # real photo if set — client falls back to initials
         "confession_count": confession_count,
         "connections_count": connections_count,
-        "here_for": here_for,               # "Relationship" | "No Strings" | "Generous Arrangement" | "General" | null
+        "here_for": here_for,               # display copy — "something real" | "NSA" | "spoiled" | "off my chest" | null
+        "here_for_intent": here_for_intent, # stable id — key off this, not the label above
         "reactions_received": reactions_received,
         "streak": streak_doc.get("streak", 0),
         "longest_streak": streak_doc.get("longest_streak", 0),

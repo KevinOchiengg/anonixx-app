@@ -9,7 +9,7 @@ export default function FeedDivider({ text }) {
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.line} />
-        <Text style={styles.text}>{text}</Text>
+        <Text style={styles.text} numberOfLines={1} ellipsizeMode="tail">{text}</Text>
         <View style={styles.line} />
       </View>
     </View>
@@ -29,6 +29,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     paddingHorizontal: 40,
+    width: '100%',
   },
   line: {
     flex: 1,
@@ -36,6 +37,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.border,
   },
   text: {
+    flexShrink: 1,
     fontSize: 13,
     fontStyle: 'italic',
     color: THEME.textSecondary,

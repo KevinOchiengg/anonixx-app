@@ -39,11 +39,14 @@ const GENDER_BADGE = {
 
 // Mirrors INTENT_LABELS in Backend/app/api/v1/drops.py / CARD_INTENTS in
 // DropCardRenderer.jsx — same vocabulary, just with an emoji for the pill.
+// Keyed by intent id (`here_for_intent`), not the display label — ids are
+// frozen (they're written onto every drop row), so renaming the copy in
+// INTENT_LABELS can't quietly break these lookups.
 const HERE_FOR_EMOJI = {
-  'Relationship':          '🌹',
-  'No Strings':            '🔥',
-  'Generous Arrangement':  '🪙',
-  'General':               '🌑',
+  'real-connection':      '🌹',
+  'no-strings':           '🔥',
+  'generous-arrangement': '🪙',
+  'general':              '🌑',
 };
 
 // ─── Stat Item ────────────────────────────────────────────────
@@ -304,7 +307,7 @@ export default function AnonProfileSheet({
 
                 {profile.here_for && (
                   <View style={[styles.tierPill, { borderColor: accentColor + '40' }]}>
-                    <Text style={styles.tierEmoji}>{HERE_FOR_EMOJI[profile.here_for] || '💫'}</Text>
+                    <Text style={styles.tierEmoji}>{HERE_FOR_EMOJI[profile.here_for_intent] || '💫'}</Text>
                     <Text style={[styles.tierName, { color: accentColor }]}>
                       {profile.here_for}
                     </Text>

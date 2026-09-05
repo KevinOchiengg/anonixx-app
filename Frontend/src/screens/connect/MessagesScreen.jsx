@@ -1,12 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, FlatList, RefreshControl,
-  StyleSheet, Text, TouchableOpacity, View, Image,
+  StyleSheet, Text, TextInput, TouchableOpacity, View, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Flame, Menu, Palette, Zap } from 'lucide-react-native';
+import { Flame, Menu, Palette, Search, X, Zap } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
@@ -279,6 +279,7 @@ export default function MessagesScreen({ navigation }) {
   const [onlineIds,   setOnlineIds]   = useState(new Set());
   const [typingIds,   setTypingIds]   = useState(new Set());
   const [pendingUnlockCount, setPendingUnlockCount] = useState(0);
+  const [search, setSearch] = useState('');
 
   // ── Load inbox — calls the live production endpoints in parallel ──
   // /drops/connections   → Link Up chats (the only chat surface there is)
@@ -404,6 +405,16 @@ export default function MessagesScreen({ navigation }) {
   // Total unread for header
   const totalUnread = items.reduce((acc, i) => acc + (i.unread_count || 0), 0);
 
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((i) => (
+      i.other_anonymous_name?.toLowerCase().includes(q)
+      || i.last_message?.toLowerCase().includes(q)
+      || i.confession?.toLowerCase().includes(q)
+    ));
+  }, [items, search]);
+
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -430,11 +441,34 @@ export default function MessagesScreen({ navigation }) {
         </View>
       </View>
 
+      {/* Search — filters the list below by anon name, last message, or
+          confession text. Purely client-side over the already-loaded inbox. */}
+      <View style={styles.searchWrap}>
+        <View style={styles.searchBar}>
+          <Search size={rs(16)} color={T.textMuted} strokeWidth={2} />
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search"
+            placeholderTextColor={T.textMuted}
+            returnKeyType="search"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={HIT_SLOP}>
+              <X size={rs(15)} color={T.textMuted} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       {/* Anonixx guide — always visible, so this tab is never a blank
           screen before someone's unlocked their first real conversation. */}
-      <View style={styles.demoWrap}>
-        <AnonixxDemoCard onPress={handleOpenDemo} />
-      </View>
+      {search.trim().length === 0 && (
+        <View style={styles.demoWrap}>
+          <AnonixxDemoCard onPress={handleOpenDemo} />
+        </View>
+      )}
 
       {/* Unlock requests banner — pending approvals never auto-charge, so
           this is the entry point into reviewing/accepting them. */}
@@ -456,9 +490,15 @@ export default function MessagesScreen({ navigation }) {
         <View style={styles.centered}>
           <ActivityIndicator color={T.primary} />
         </View>
-      ) : items.length === 0 ? null : (
+      ) : filteredItems.length === 0 ? (
+        search.trim().length > 0 ? (
+          <View style={styles.centered}>
+            <Text style={styles.noResultsText}>No chats match "{search.trim()}"</Text>
+          </View>
+        ) : null
+      ) : (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -518,6 +558,19 @@ const styles = StyleSheet.create({
   },
 
   // Anonixx demo row
+  // Search bar
+  searchWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(8),
+    backgroundColor: T.surface, borderRadius: RADIUS.md,
+    borderWidth: 1, borderColor: T.border,
+    paddingHorizontal: SPACING.md, paddingVertical: rp(10),
+  },
+  searchInput: {
+    flex: 1, fontSize: FONT.sm, color: T.text, padding: 0,
+  },
+  noResultsText: { fontSize: FONT.sm, color: T.textMuted },
+
   demoWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   demoCard: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
