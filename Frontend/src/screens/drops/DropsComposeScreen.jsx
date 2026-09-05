@@ -21,14 +21,15 @@ import {
   Platform, ScrollView, Image, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   ChevronLeft, ChevronDown, Images, BarChart2, Mic, Tag, Type,
-  AlertTriangle, Trash2, X,
+  AlertTriangle, Trash2, X, MapPin,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
@@ -39,10 +40,10 @@ import {
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
-import { awardMilestone } from '../../store/slices/coinsSlice';
+import { awardMilestone, fetchBalance } from '../../store/slices/coinsSlice';
 
 import DropCardRenderer, {
-  CARD_INTENTS, CARD_INTENT_LIST,
+  CARD_INTENTS, CARD_INTENT_LIST, CardPattern,
 } from '../../components/drops/DropCardRenderer';
 import T from '../../utils/theme';
 
@@ -98,8 +99,20 @@ const FormatChip = React.memo(function FormatChip({ id, label, Icon, active, onP
 // ─── Confession type picker ──────────────────────────────────────
 // The headline choice — this is what decides how the card looks (colors +
 // background pattern in DropCardRenderer), so it gets real visual weight
-// here, not a tiny swatch. Each tile previews its own palette so picking
-// one is a "does this look like me" decision, not a label lookup.
+// here, not a tiny swatch. Each tile renders the intent's *actual* gradient
+// and background texture in miniature, so picking one is a "does this look
+// like me" decision against the real thing — not an icon standing in for it.
+const INTENT_TILE = rs(64);
+
+// Stable per-intent seed — the card seeds its texture off the confession
+// text, but a tile has no text, so it hashes its own id instead. Keeps each
+// tile's pattern fixed rather than reshuffling on every render.
+const intentSeed = (id) => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return Math.abs(h) || 1;
+};
+
 const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
   return (
     <TouchableOpacity
@@ -108,16 +121,30 @@ const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
       hitSlop={HIT_SLOP}
       activeOpacity={0.85}
     >
-      <View style={[s.intentCardFill, {
-        backgroundColor: def.bgTo,
-        borderColor: active ? def.accent + '66' : 'transparent',
-      }]}>
-        <Text style={s.intentCardEmoji}>{def.emoji}</Text>
-        <View style={[s.intentCardAccent, { backgroundColor: def.accent }]} />
-      </View>
+      <LinearGradient
+        colors={[def.bgFrom, def.bgTo]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[s.intentCardFill, {
+          borderColor: active ? def.accent + '66' : 'transparent',
+        }]}
+      >
+        {/* Same texture the card draws, just small. Fixed seed per intent
+            so the tile never reshuffles between renders. */}
+        <CardPattern
+          type={def.pattern}
+          width={INTENT_TILE}
+          height={INTENT_TILE}
+          color={def.accent}
+          seed={intentSeed(def.id)}
+        />
+      </LinearGradient>
       <Text style={[s.intentCardLabel, active && { color: def.accent }]}>
         {def.label}
       </Text>
+      {!!def.sublabel && (
+        <Text style={s.intentCardSubLabel}>{def.sublabel}</Text>
+      )}
     </TouchableOpacity>
   );
 });
@@ -127,6 +154,13 @@ export default function DropsComposeScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
   const { isAuthenticated } = useAuth();
+  const coinBalance = useSelector((state) => state.coins.balance);
+
+  // Fresh balance so the cost line below isn't showing stale/zero numbers —
+  // same per-screen pattern used by PostUnlockScreen/MarketItemScreen.
+  useEffect(() => {
+    dispatch(fetchBalance());
+  }, [dispatch]);
 
   // Guests get sent straight to Login the moment they land here — composing
   // a drop is a deliberate action, not a passive browse, so this checks on
@@ -195,11 +229,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Progressive disclosure — collapsed by default so the compose
   // screen reads as "write + drop", not a settings form ────────────
   const [tagSectionOpen, setTagSectionOpen] = useState(false);
-
-  // ── Delivery tension (section 6) ──────────────────────────────
-  // Briefly pauses between "Drop it" and the actual POST so the
-  // moment of sending feels intentional rather than reflexive.
-  const [sending, setSending] = useState(false);
+  const [locationSectionOpen, setLocationSectionOpen] = useState(false);
 
   // ── Entrance animation ────────────────────────────────────────
   const fade = useRef(new Animated.Value(0)).current;
@@ -354,9 +384,6 @@ export default function DropsComposeScreen({ navigation, route }) {
     }
 
     setLoading(true);
-    // Delivery-tension pause (section 6) — a small intentional silence.
-    setSending(true);
-    await new Promise((r) => setTimeout(r, 1700));
     try {
       const token = await AsyncStorage.getItem('token');
 
@@ -488,7 +515,6 @@ export default function DropsComposeScreen({ navigation, route }) {
         message: err?.message || 'Could not drop it. Try again.',
       });
     } finally {
-      setSending(false);
       setLoading(false);
     }
   }, [
@@ -506,6 +532,8 @@ export default function DropsComposeScreen({ navigation, route }) {
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
   const hasDraft      = text.length > 0 || !!mediaUri;
+  const locationSummary = [locationEstate, locationSubCounty, locationCounty, locationCountry]
+    .map((v) => v.trim()).find(Boolean) || null;
 
   // ─────────────────────────────────────────────────────────────
   return (
@@ -522,6 +550,23 @@ export default function DropsComposeScreen({ navigation, route }) {
           <Text style={s.headerTitle}>Drop</Text>
           {/* Balances the back-chevron so the title stays centered */}
           <View style={{ width: rs(24) }} />
+        </View>
+
+        {/* Cost — shown up front, not just on the send button, so nobody
+            writes a whole confession before discovering they can't afford
+            to send it (that used to only surface as a 402 error on tap). */}
+        <View style={s.costStrip}>
+          <Text style={s.costStripText}>{POST_COST} coins to send</Text>
+          <View style={s.costStripRight}>
+            <Text style={[s.costStripBalance, coinBalance < POST_COST && s.costStripBalanceLow]}>
+              Balance: {coinBalance}
+            </Text>
+            {coinBalance < POST_COST && (
+              <TouchableOpacity onPress={() => navigation.navigate('Coins')} hitSlop={HIT_SLOP}>
+                <Text style={s.costStripLink}>Top up</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Unsent-draft strip — there's no posting cap, so this row only
@@ -764,48 +809,55 @@ export default function DropsComposeScreen({ navigation, route }) {
 
           {/* Location — structured (country → county → sub-county → estate),
               helps interested people know you're reachable and powers the
-              location filter in Search. Everything here is optional. */}
-          <Text style={s.sectionLabel}>Where are you? (optional)</Text>
-          <View style={{ marginBottom: SPACING.md }}>
-            <LocationField
-              country={locationCountry}
-              county={locationCounty}
-              subCounty={locationSubCounty}
-              estate={locationEstate}
-              onChangeCountry={setLocationCountry}
-              onChangeCounty={setLocationCounty}
-              onChangeSubCounty={setLocationSubCounty}
-              onChangeEstate={setLocationEstate}
-            />
-          </View>
+              location filter in Search. Optional, so it's collapsed by
+              default like Tag someone — this is a "where are you?" hint,
+              not a field every compose session should be forced to see. */}
+          <TouchableOpacity
+            style={s.collapsibleTrigger}
+            onPress={() => setLocationSectionOpen((v) => !v)}
+            activeOpacity={0.85}
+            hitSlop={HIT_SLOP}
+          >
+            <MapPin size={rs(13)} color={locationSummary ? T.primary : T.textMute} />
+            <Text style={[s.collapsibleTriggerLabel, locationSummary && { color: T.primary }]}>
+              {locationSummary || 'Add your location (optional)'}
+            </Text>
+            {!locationSummary && (
+              <ChevronDown
+                size={rs(15)}
+                color={T.textMute}
+                style={locationSectionOpen ? s.chevronOpen : null}
+              />
+            )}
+          </TouchableOpacity>
+          {(locationSectionOpen || locationSummary) && (
+            <View style={{ marginBottom: SPACING.md }}>
+              <LocationField
+                country={locationCountry}
+                county={locationCounty}
+                subCounty={locationSubCounty}
+                estate={locationEstate}
+                onChangeCountry={setLocationCountry}
+                onChangeCounty={setLocationCounty}
+                onChangeSubCounty={setLocationSubCounty}
+                onChangeEstate={setLocationEstate}
+              />
+            </View>
+          )}
 
           {/* Drop button */}
           <TouchableOpacity
-            style={[s.dropBtn, (!canDrop || loading || sending) && s.dropBtnDisabled]}
+            style={[s.dropBtn, (!canDrop || loading) && s.dropBtnDisabled]}
             onPress={handleDrop}
-            disabled={!canDrop || loading || sending}
+            disabled={!canDrop || loading}
             activeOpacity={0.85}
           >
-            {sending ? (
-              <View style={{ alignItems: 'center' }}>
-                <ActivityIndicator color="#fff" size="small" />
-                <Text style={s.dropBtnPauseText}>
-                  Your Drop is being prepared…
-                </Text>
-              </View>
-            ) : loading ? (
+            {loading ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <Text style={s.dropBtnText}>Send it — {POST_COST} coins  ↗</Text>
             )}
           </TouchableOpacity>
-
-          {/* Delivery-tension sublabel (section 6) */}
-          {sending && (
-            <Text style={s.deliveryTension}>
-              Anonixx is sending this straight to them.
-            </Text>
-          )}
 
           <Text style={s.footerNote}>
             Your identity stays hidden. Always.
@@ -847,6 +899,37 @@ const s = StyleSheet.create({
     borderBottomColor: T.border,
   },
   limitText:     { fontSize: rf(11), color: T.textSec, letterSpacing: 0.3, flex: 1 },
+
+  // Cost strip — persistent, not just on the send button
+  costStrip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical:   rp(8),
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  costStripText: {
+    fontFamily:    'DMSans-SemiBold',
+    fontSize:      rf(11),
+    color:         T.textSec,
+    letterSpacing: 0.3,
+  },
+  costStripRight: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
+  costStripBalance: {
+    fontFamily:    'DMSans-Regular',
+    fontSize:      rf(11),
+    color:         T.textMute,
+    letterSpacing: 0.2,
+  },
+  costStripBalanceLow: { color: T.warn, fontFamily: 'DMSans-Bold' },
+  costStripLink: {
+    fontFamily:    'DMSans-Bold',
+    fontSize:      rf(11),
+    color:         T.primary,
+    letterSpacing: 0.3,
+  },
 
   // Unsent restoration banner (section 5)
   unsentBanner: {
@@ -1042,8 +1125,8 @@ const s = StyleSheet.create({
     alignItems:  'center',
   },
   intentCardFill: {
-    width:              rs(64),
-    height:             rs(64),
+    width:              INTENT_TILE,
+    height:             INTENT_TILE,
     borderRadius:       RADIUS.md,
     borderWidth:        1.5,
     alignItems:        'center',
@@ -1051,15 +1134,13 @@ const s = StyleSheet.create({
     position:          'relative',
     overflow:          'hidden',
   },
-  intentCardEmoji: { fontSize: rf(20) },
-  intentCardAccent: {
-    position:     'absolute',
-    bottom:       rp(6),
-    left:         rp(6),
-    width:        rs(14),
-    height:       rs(3),
-    borderRadius: rs(2),
-    opacity:      0.9,
+  intentCardSubLabel: {
+    fontFamily:    'DMSans-Italic',
+    fontSize:      rf(8.5),
+    color:         T.textMute,
+    textAlign:     'center',
+    marginTop:     rp(2),
+    lineHeight:    rf(11),
   },
   intentCardLabel: {
     fontFamily:    'DMSans-Bold',
@@ -1184,23 +1265,6 @@ const s = StyleSheet.create({
     color:         '#fff',
     letterSpacing: 0.5,
   },
-  dropBtnPauseText: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         'rgba(255,255,255,0.9)',
-    letterSpacing: 1,
-    marginTop:     rp(6),
-  },
-  deliveryTension: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(12),
-    color:         T.primary,
-    textAlign:     'center',
-    marginTop:     SPACING.sm,
-    letterSpacing: 0.5,
-    opacity:       0.9,
-  },
-
   // Publisher opt-in (section 16)
   publisherBox: {
     backgroundColor:   'rgba(255,255,255,0.02)',

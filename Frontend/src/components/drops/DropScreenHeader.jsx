@@ -27,6 +27,7 @@ import {
 
 function DropScreenHeader({
   title,
+  titleNode    = null,   // custom node for the centre slot (takes precedence over title)
   navigation,
   onBack,
   hideBack     = false,
@@ -55,10 +56,12 @@ function DropScreenHeader({
         </TouchableOpacity>
       )}
 
-      {/* Centre — italic title */}
-      <Text style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
+      {/* Centre — custom node, or plain italic title */}
+      {titleNode || (
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+      )}
 
       {/* Right — custom node, label, or empty spacer */}
       <View style={styles.sideSlot}>

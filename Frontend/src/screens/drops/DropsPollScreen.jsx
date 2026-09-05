@@ -3,7 +3,7 @@
  *
  * Poll compose screen — hands off from DropsComposeScreen exactly like
  * DropsRecordScreen (Voice) does: tapping "Poll" in the format row
- * navigates here with { theme, moodTag, category, text, target_user_id }
+ * navigates here with { theme, moodTag, text, target_user_id }
  * carried over, and this screen owns the rest of the flow, including the
  * actual POST /drops.
  */
@@ -45,7 +45,6 @@ export default function DropsPollScreen({ navigation, route }) {
   const theme        = route?.params?.theme        || 'desire';
   const cardIntent    = route?.params?.cardIntent   || 'general';
   const moodTag       = route?.params?.moodTag      || 'longing';
-  const category      = route?.params?.category     || 'love';
   const confession    = route?.params?.text         || '';
   const targetUserId  = route?.params?.target_user_id || undefined;
 
@@ -82,7 +81,6 @@ export default function DropsPollScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
       const body = {
-        category,
         confession: confession.trim() || undefined,
         theme,
         intent:     cardIntent,   // drives the card's palette/pattern
@@ -133,7 +131,7 @@ export default function DropsPollScreen({ navigation, route }) {
       setSending(false);
     }
   }, [
-    canSend, category, confession, theme, moodTag, pollQuestion, pollOptions,
+    canSend, confession, theme, moodTag, pollQuestion, pollOptions,
     publisherOptIn, targetUserId, dispatch, navigation, showToast,
   ]);
 

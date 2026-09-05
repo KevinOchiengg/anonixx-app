@@ -7,9 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "anonixx",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "backgroundColor": "#0b0f18"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -20,8 +17,7 @@
         "UIBackgroundModes": [
           "audio"
         ],
-        "NSMicrophoneUsageDescription": "Anonixx needs your microphone for anonymous voice and video calls.",
-        "NSCameraUsageDescription": "Anonixx needs your camera for anonymous video calls."
+        "NSMicrophoneUsageDescription": "Anonixx needs your microphone for anonymous voice and video calls."
       },
       "usesAppleSignIn": false
     },
@@ -39,8 +35,6 @@
         "com.android.vending.BILLING"
       ],
       "package": "com.anonixx.app",
-      "navigationBarColor": "#151924",
-      "navigationBarStyle": "dark",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -73,7 +67,12 @@
     "plugins": [
       "expo-asset",
       "expo-video",
-      "expo-navigation-bar",
+      [
+        "expo-navigation-bar",
+        {
+          "style": "dark"
+        }
+      ],
       [
         "@stripe/stripe-react-native",
         {
@@ -81,7 +80,20 @@
           "enableGooglePay": true
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0b0f18"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Anonixx needs access to your photos to share images and videos in chat.",
+          "cameraPermission": "Anonixx needs your camera for anonymous video calls and to share photos in chat."
+        }
+      ]
     ],
     "extra": {
       "eas": {

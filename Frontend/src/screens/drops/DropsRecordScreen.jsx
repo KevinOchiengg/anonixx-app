@@ -116,7 +116,6 @@ export default function DropsRecordScreen({ navigation, route }) {
   const theme        = route?.params?.theme    || 'desire';
   const cardIntent   = route?.params?.cardIntent || 'general';
   const moodTag      = route?.params?.moodTag  || 'longing';
-  const category     = route?.params?.category || 'love';
   const targetUserId = route?.params?.target_user_id || undefined;
   // Confession type owns the palette (same as the compose preview and the
   // rendered card) — theme is the legacy fallback and is always 'desire' now.
@@ -335,7 +334,6 @@ export default function DropsRecordScreen({ navigation, route }) {
 
       // 3. Create drop
       const body = {
-        category,
         media_url:  upData.secure_url,
         media_type: 'voice',
         theme,
@@ -457,7 +455,9 @@ export default function DropsRecordScreen({ navigation, route }) {
         <View style={styles.contextStrip}>
           <View style={[styles.dot, { backgroundColor: accent }]} />
           <Text style={styles.contextText}>
-            {themeObj.label.toLowerCase()} · {moodTag}
+            {/* No .toLowerCase() — labels carry their own casing now, and
+                forcing it would render the NSA acronym as "nsa". */}
+            {themeObj.label} · {moodTag}
           </Text>
         </View>
 

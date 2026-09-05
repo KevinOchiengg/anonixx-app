@@ -52,7 +52,7 @@ class InstagramPublisher:
     Usage:
         from app.services.instagram_publisher import instagram_publisher
 
-        result = await instagram_publisher.post_image(image_url, "secret", "love")
+        result = await instagram_publisher.post_image(image_url, "secret")
         # → {"post_id": "17841400...", "status": "posted"}
 
         # Text drops are not supported — catch PlatformSkipped
@@ -85,7 +85,7 @@ class InstagramPublisher:
             )
 
     # ── Text Post — not supported ─────────────────────────────────
-    async def post_text(self, confession: str, category: str = "love") -> dict:
+    async def post_text(self, confession: str) -> dict:
         """
         Instagram does not support text-only posts.
         Raises PlatformSkipped so the worker records 'skipped' rather than 'failed'.
@@ -100,12 +100,11 @@ class InstagramPublisher:
         self,
         image_url:  str,
         confession: str = "",
-        category:   str = "love",
     ) -> dict:
         """Post an image drop as an Instagram photo."""
         self._require_configured()
 
-        creation_id = await self._create_image_container(image_url, confession, category)
+        creation_id = await self._create_image_container(image_url, confession)
         return await self._publish_container(creation_id)
 
     # ── Video / Reel Post ─────────────────────────────────────────
@@ -113,7 +112,6 @@ class InstagramPublisher:
         self,
         video_url:  str,
         confession: str = "",
-        category:   str = "love",
     ) -> dict:
         """
         Post a video drop as an Instagram Reel.
@@ -121,7 +119,7 @@ class InstagramPublisher:
         """
         self._require_configured()
 
-        creation_id = await self._create_video_container(video_url, confession, category)
+        creation_id = await self._create_video_container(video_url, confession)
         await self._wait_for_video_ready(creation_id)
         return await self._publish_container(creation_id)
 
@@ -130,7 +128,6 @@ class InstagramPublisher:
         self,
         image_url:  str,
         confession: str,
-        category:   str,
     ) -> str:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             res = await client.post(
@@ -138,7 +135,7 @@ class InstagramPublisher:
                 params={"access_token": self._token},
                 json={
                     "image_url": image_url,
-                    "caption":   build_caption(confession, category, platform="instagram"),
+                    "caption":   build_caption(confession, platform="instagram"),
                 },
             )
 
@@ -156,7 +153,6 @@ class InstagramPublisher:
         self,
         video_url:  str,
         confession: str,
-        category:   str,
     ) -> str:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             res = await client.post(
@@ -165,7 +161,7 @@ class InstagramPublisher:
                 json={
                     "video_url":  video_url,
                     "media_type": "REELS",
-                    "caption":    build_caption(confession, category, platform="instagram"),
+                    "caption":    build_caption(confession, platform="instagram"),
                 },
             )
 

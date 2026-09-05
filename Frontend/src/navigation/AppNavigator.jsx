@@ -6,10 +6,10 @@ import { useAuth } from '../context/AuthContext';
 import { detectLocation } from '../store/slices/locationSlice';
 import AppLoadingScreen from '../components/common/AppLoadingScreen';
 
-// One loading moment, not two: App.js already shows AppLoadingScreen for
-// the font-loading gap, so reusing it here for the brief AsyncStorage read
-// while AuthContext's `loading` flag resolves (usually well under 100ms)
-// means the two gaps read as one continuous beat, not a screen swap.
+// One loading moment, not two: fonts (App.js's useFonts) and the
+// AsyncStorage-backed auth check (AuthContext) both kick off on mount and
+// run in parallel — this screen stays up until whichever finishes last,
+// instead of showing the same screen twice back-to-back.
 function Loading() {
   return <AppLoadingScreen />;
 }
@@ -77,8 +77,9 @@ const linking = {
   },
 };
 
-export default function AppNavigator() {
-  const { loading } = useAuth();
+export default function AppNavigator({ fontsReady }) {
+  const { loading: authLoading } = useAuth();
+  const loading = authLoading || !fontsReady;
   const dispatch = useDispatch();
 
   // Detect payment region once on app boot (cached for 24h in AsyncStorage)

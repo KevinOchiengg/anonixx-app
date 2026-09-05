@@ -69,19 +69,23 @@ PREMIUM_UNLOCKED_GRACE_DAYS  = 14   # vs UNLOCKED_GRACE_DAYS (7)
 # Listed in the same order the compose picker shows them, so the two files
 # read side by side. Order is cosmetic here — this is a membership check.
 VALID_INTENTS = [
-    "real-connection",       # "Relationship"          — wants something real
-    "general",               # "General"               — no specific audience, default
-    "no-strings",            # "No Strings"             — casual, no strings attached
-    "generous-arrangement",  # "Generous Arrangement"   — paid/transactional arrangement
+    "real-connection",       # "something real" — wants something real
+    "general",               # "off my chest"   — no specific audience, default
+    "no-strings",            # "NSA"            — casual, no strings attached
+    "generous-arrangement",  # "spoiled"        — paid/transactional arrangement
 ]
 
 # Display labels — mirrors CARD_INTENTS' `label` field in
-# DropCardRenderer.jsx exactly.
+# DropCardRenderer.jsx exactly. Every label completes an implied "I want —",
+# which is the same ask the tagline makes. Ids stay frozen: they're written
+# onto every drop row, so renaming one is a migration, not a copy change.
+# These strings are display-only — nothing keys off them (see `here_for` /
+# `here_for_intent` in connect.py), so they're safe to reword freely.
 INTENT_LABELS = {
-    "real-connection":      "Relationship",
-    "general":              "General",
-    "no-strings":           "No Strings",
-    "generous-arrangement": "Generous Arrangement",
+    "real-connection":      "something real",
+    "general":              "off my chest",
+    "no-strings":           "NSA",
+    "generous-arrangement": "spoiled",
 }
 
 class DropPollInput(BaseModel):
@@ -1584,20 +1588,27 @@ async def get_drops_feed(
 
     final_feed = []
     # Same generic relationship/sex-ed divider beats posts.py used — not
-    # posts-specific copy, reused verbatim.
+    # posts-specific copy, reused verbatim. Kept short on purpose — this
+    # renders as a single centered line (FeedDivider.jsx, numberOfLines=1)
+    # between drop lines, so anything longer wraps or gets clipped.
     divider_texts = [
-        "consent isn't a mood killer. it's the whole point.",
-        "'not tonight' is a full sentence. no follow-up required.",
-        "get tested. it's not paranoia, it's respect.",
+        "consent isn't a mood killer.",
+        "'not tonight' is a full sentence.",
+        "get tested. that's respect.",
         "communication is the actual foreplay.",
-        "aftercare isn't extra. it's part of it.",
-        "a good partner asks. a great one keeps asking.",
-        "boundaries aren't walls. they're directions.",
-        "the orgasm gap is real — ask more questions, not less.",
-        "protection isn't romantic. until it's the reason there's a next time.",
-        "you're allowed to change your mind mid-anything.",
-        "flirting is a skill. reading 'no' is a requirement.",
-        "your worth was never measured in who replies first.",
+        "aftercare isn't extra.",
+        "a great partner keeps asking.",
+        "boundaries aren't walls.",
+        "the orgasm gap is real. ask more.",
+        "protection isn't romantic. it's smart.",
+        "you can change your mind mid-anything.",
+        "reading 'no' is a required skill.",
+        "your worth isn't who replies first.",
+        "ask and you shall be given.",
+        "you won't get what you don't ask for.",
+        "say it. someone wants to give it.",
+        "unposted drops make no connections.",
+        "clarity isn't clingy. ask again.",
     ]
 
     for i, drop in enumerate(formatted_drops):
@@ -2368,6 +2379,9 @@ async def get_drop_messages(
     from app.api.v1.drop_calls import get_active_call_for_host
     active_call = await get_active_call_for_host(conn["sender_id"], db)
 
+    from app.websockets.events import is_user_online
+    other_user_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
+
     # Show the welcome gallery (all of it, up to 3 items) + play the welcome
     # sound once per unlocker, the first time they open this connection —
     # never to the sender viewing their own chat.
@@ -2393,6 +2407,7 @@ async def get_drop_messages(
             "other_revealed": conn["is_revealed_unlocker"] if is_sender else conn["is_revealed_sender"],
             "is_sender": is_sender,
             "host_user_id": conn["sender_id"],
+            "other_is_online": is_user_online(other_user_id),
         },
         "chat_profile": {
             "background_pattern": chat_profile.get("background_pattern", "midnight-solid") if chat_profile else "midnight-solid",
@@ -2420,12 +2435,12 @@ async def send_drop_message(
 ):
     content    = (data.get("content") or "").strip()
     media_url  = data.get("media_url")
-    media_type = data.get("media_type")   # "voice" — only kind supported today
+    media_type = data.get("media_type")   # "voice" | "image" | "video"
 
     if not content and not media_url:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    if media_url and media_type not in ("voice",):
-        raise HTTPException(status_code=400, detail="media_type must be 'voice'")
+    if media_url and media_type not in ("voice", "image", "video"):
+        raise HTTPException(status_code=400, detail="media_type must be 'voice', 'image', or 'video'")
 
     try:
         conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
@@ -2458,7 +2473,14 @@ async def send_drop_message(
     other_id = conn["unlocker_id"] if current_user_id == conn["sender_id"] else conn["sender_id"]
     sender_name = conn["sender_anonymous_name"] if current_user_id == conn["sender_id"] else conn["unlocker_anonymous_name"]
 
-    notify_body = "🎙 Voice note" if media_type == "voice" else content[:60] + ("..." if len(content) > 60 else "")
+    if media_type == "voice":
+        notify_body = "🎙 Voice note"
+    elif media_type == "image":
+        notify_body = "📷 Photo"
+    elif media_type == "video":
+        notify_body = "🎥 Video"
+    else:
+        notify_body = content[:60] + ("..." if len(content) > 60 else "")
     await send_push_notification(
         other_id,
         f"{sender_name} sent a message 💬",

@@ -78,8 +78,6 @@ export default function DropsPublishScreen({ navigation, route }) {
   const handleConfirmPublish = useCallback(async () => {
     if (submitting) return;
     setSubmitting(true);
-    // Deliberate pause — matches the compose-screen delivery tension.
-    await new Promise((r) => setTimeout(r, 900));
     try { onConfirmed?.(true); } catch {}
     setSubmitting(false);
     navigation.goBack();
