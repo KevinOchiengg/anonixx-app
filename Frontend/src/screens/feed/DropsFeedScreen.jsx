@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, RefreshCw, Menu, MapPin } from 'lucide-react-native';
+import { Search, Menu, MapPin } from 'lucide-react-native';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import { useAuth } from '../../context/AuthContext';
@@ -109,6 +109,8 @@ export default function DropsFeedScreen({ navigation, route }) {
   const [nextVideo, setNextVideo]           = useState(null);
   const [menuVisible, setMenuVisible]       = useState(false);
   const [feedAds, setFeedAds]               = useState([]);
+  const [retryCount, setRetryCount]         = useState(0);
+  const [holdSecs, setHoldSecs]             = useState(0);
 
   const flatListRef   = useRef(null);
   const postsRef      = useRef([]);
@@ -223,7 +225,9 @@ export default function DropsFeedScreen({ navigation, route }) {
           // Token expired — clear and continue as guest
           await AsyncStorage.removeItem('token');
           showToast({ type: 'info', message: 'Session expired. Continuing as guest.' });
-        } else if (response.status >= 500) {
+        } else if (response.status >= 500 && posts.length > 0) {
+          // Silent on the first load — we're holding the loading screen and
+          // auto-retrying, so a toast every few seconds would just be noise.
           showToast({ type: 'error', title: 'Server error', message: 'Could not load feed. Try again shortly.' });
         }
         if (reset || posts.length === 0) setFetchError(true);
@@ -261,10 +265,13 @@ export default function DropsFeedScreen({ navigation, route }) {
         return;
       }
 
-      if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch') || isTimeout) {
-        showToast({ type: 'error', title: 'No Connection', message: 'Check your internet and try again.' });
-      } else {
-        showToast({ type: 'error', message: 'Could not load feed. Pull down to try again.' });
+      // Silent on the first load — see the 500 branch above.
+      if (posts.length > 0) {
+        if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch') || isTimeout) {
+          showToast({ type: 'error', title: 'No Connection', message: 'Check your internet and try again.' });
+        } else {
+          showToast({ type: 'error', message: 'Could not load feed. Pull down to try again.' });
+        }
       }
       if (reset || posts.length === 0) setFetchError(true);
     } finally {
@@ -279,6 +286,7 @@ export default function DropsFeedScreen({ navigation, route }) {
     setHasMore(true);
     setSessionLimitReached(false);
     setFetchError(false);
+    setRetryCount(0);   // manual retry restarts the backoff
     hasLoadedRef.current = false;
     loadFeed(true);
   }, [loadFeed]);
@@ -417,38 +425,57 @@ export default function DropsFeedScreen({ navigation, route }) {
     if (hasMoreRef.current && !loadingRef2.current) loadFeed(false);
   }, [loadFeed]);
 
+  // There's no error screen on the way in — we hold the loading screen
+  // instead. So a failed first fetch has to keep retrying on its own,
+  // otherwise the user sits on that screen forever with no way out.
+  // Backs off 4s → 30s so a long outage doesn't hammer someone's data.
+  useEffect(() => {
+    if (!fetchError || posts.length > 0) return;
+    const delay = Math.min(4000 * (retryCount + 1), 30000);
+    const t = setTimeout(() => {
+      setRetryCount((n) => n + 1);
+      setFetchError(false);
+      loadFeed(true);
+    }, delay);
+    return () => clearTimeout(t);
+  }, [fetchError, posts.length, retryCount, loadFeed]);
 
-  // ── Initial loading — same loading screen as app boot, not a different
-  // skeleton flash, so the user only ever sees one loading treatment
-  // between opening the app and the feed actually having content.
-  if (loading && posts.length === 0) return <AppLoadingScreen />;
+  // Seconds spent on the hold. Drives the staged copy below: silent for the
+  // first few seconds (most blips resolve there), then a quiet line, then a
+  // way out — so a real outage never reads as "the app froze".
+  const holding = posts.length === 0 && (loading || fetchError);
 
-  // ── Error state (backend down / no connection) ─────────────
-  if (fetchError && posts.length === 0) return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.background} />
-      <StarryBackground />
-      <View style={[styles.centeredView]}>
-        <View style={styles.errorCard}>
-          <Text style={styles.errorEmoji}>🌌</Text>
-          <Text style={styles.errorTitle}>Everyone's gone quiet.</Text>
-          <View style={styles.limitDivider} />
-          <Text style={styles.errorBody}>
-            The confessions are still out there — we just can't reach them right now. Give it a moment.
-          </Text>
-          <TouchableOpacity
-            onPress={refreshFeed}
-            style={styles.errorRetryBtn}
-            activeOpacity={0.85}
-            hitSlop={HIT_SLOP}
-          >
-            <RefreshCw size={rs(16)} color="#fff" strokeWidth={2} />
-            <Text style={styles.errorRetryText}>Try again</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
+  // Manual retry has to visibly do something — failure toasts are silenced
+  // during the hold, so without resetting the ladder the button would fail
+  // silently and read as broken. Clearing holdSecs drops the hint and the
+  // button, restarting at the silent phase.
+  const handleManualRetry = useCallback(() => {
+    setHoldSecs(0);
+    refreshFeed();
+  }, [refreshFeed]);
+  useEffect(() => {
+    if (!holding) { setHoldSecs(0); return; }
+    const t = setInterval(() => setHoldSecs((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [holding]);
+
+
+  // ── Nothing to show yet — hold the boot loading screen rather than
+  // swapping in a skeleton or an error card. There's no failure state on
+  // the way in: if the fetch failed we keep retrying (see the effect above)
+  // and stay here until the first page actually lands.
+  if (holding) {
+    return (
+      <AppLoadingScreen
+        hint={
+          holdSecs >= 14 ? "Can't reach Anonixx. Check your connection — we're still trying."
+            : holdSecs >= 6 ? 'Still trying…'
+              : null
+        }
+        onRetry={holdSecs >= 14 ? handleManualRetry : null}
+      />
+    );
+  }
 
   // ── Session limit state ────────────────────────────────────
   if (sessionLimitReached) {
@@ -631,45 +658,4 @@ const styles = StyleSheet.create({
   limitBtnSecondaryText:{ fontSize: FONT.md, fontWeight: '600', color: THEME.text },
   limitBtnPrimary:      { flex: 1, height: BUTTON_HEIGHT, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.primary, shadowColor: THEME.primary, shadowOffset: { width: 0, height: rh(4) }, shadowOpacity: 0.4, shadowRadius: rs(12), elevation: 6 },
   limitBtnPrimaryText:  { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
-
-  // Error card
-  errorCard: {
-    width:           '100%',
-    backgroundColor: THEME.surface,
-    borderRadius:    RADIUS.xl,
-    padding:         rp(28),
-    alignItems:      'center',
-    borderWidth:     1,
-    borderColor:     THEME.border,
-  },
-  errorEmoji: { fontSize: rf(40), marginBottom: SPACING.md },
-  errorTitle: {
-    fontSize:     FONT.xl,
-    fontWeight:   '700',
-    color:        THEME.text,
-    textAlign:    'center',
-    marginBottom: SPACING.lg,
-  },
-  errorBody: {
-    fontSize:     FONT.md,
-    color:        THEME.textSecondary,
-    textAlign:    'center',
-    lineHeight:   FONT.md * 1.6,
-    marginBottom: SPACING.xl,
-  },
-  errorRetryBtn: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             SPACING.sm,
-    height:          BUTTON_HEIGHT,
-    paddingHorizontal: rp(28),
-    borderRadius:    RADIUS.md,
-    backgroundColor: THEME.primary,
-    shadowColor:     THEME.primary,
-    shadowOffset:    { width: 0, height: rh(4) },
-    shadowOpacity:   0.4,
-    shadowRadius:    rs(12),
-    elevation:       6,
-  },
-  errorRetryText: { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
 });

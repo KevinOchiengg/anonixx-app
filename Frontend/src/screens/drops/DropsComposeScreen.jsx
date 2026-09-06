@@ -819,9 +819,12 @@ export default function DropsComposeScreen({ navigation, route }) {
             hitSlop={HIT_SLOP}
           >
             <MapPin size={rs(13)} color={locationSummary ? T.primary : T.textMute} />
-            <Text style={[s.collapsibleTriggerLabel, locationSummary && { color: T.primary }]}>
-              {locationSummary || 'Add your location (optional)'}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.collapsibleTriggerLabel, { flex: 0 }, locationSummary && { color: T.primary }]}>
+                {locationSummary || 'Add your location (optional)'}
+              </Text>
+              <Text style={s.toggleRowSub}>Nearby people find your drop faster</Text>
+            </View>
             {!locationSummary && (
               <ChevronDown
                 size={rs(15)}
@@ -855,7 +858,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             {loading ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={s.dropBtnText}>Send it — {POST_COST} coins  ↗</Text>
+              <Text style={s.dropBtnText}>Drop it — {POST_COST} coins  ↗</Text>
             )}
           </TouchableOpacity>
 
