@@ -7,9 +7,7 @@
  *   Zone 1 — Background (diagonal gradient, grain, ghost quote mark)
  *   Zone 2 — Confession text (Playfair Italic, auto-scaling, accent line)
  *   Zone 3 — Mood tag + optional emotional context
- *   Zone 4 — Identity bar (anonixx + "scan to read") + a corner QR stamp
- *            that actually deep-links to the drop — the one part of a
- *            screenshot that still works once it's off-platform.
+ *   Zone 4 — Identity bar (anonixx wordmark)
  *
  * Renders at card aspect (1:1 square) — scales to parent width.
  * Use <DropCardRenderer confession=... theme=... /> anywhere a card is needed.
@@ -18,7 +16,6 @@ import React, { useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Line } from 'react-native-svg';
-import QRCode from 'react-native-qrcode-svg';
 import { rf, rp, rs } from '../../utils/responsive';
 
 // ─── Themes ───────────────────────────────────────────────────
@@ -272,7 +269,6 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   intent          = null,
   mediaUrl        = null,         // image/video background (overlay mode)
   layoutMode      = 'split',      // 'split' | 'overlay' (for image/video drops)
-  confessionId    = null,         // deep-link slug
   seed            = null,         // for variation — defaults to confession text
   cardWidth       = 360,          // scales everything proportionally
   showIdentityBar = true,
@@ -324,7 +320,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
             {/* Confession */}
             <View style={[styles.overlayTextWrap, {
               paddingBottom: showIdentityBar
-                ? identityBarHeight + (confessionId ? rp(30) : rp(16))
+                ? identityBarHeight + rp(16)
                 : rp(24),
             }]}>
               <View style={[styles.accentLine, {
@@ -352,10 +348,8 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
             <IdentityBar
               theme={t}
               height={identityBarHeight}
-              confessionId={confessionId}
               overlay
             />
-            <QrStamp theme={t} confessionId={confessionId} cardWidth={cardWidth} />
           </>
         )}
       </View>
@@ -446,7 +440,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
         <View style={[styles.textCardContent, {
           transform: [{ translateY: variation.textShiftY }],
           paddingBottom: showIdentityBar
-            ? identityBarHeight + (confessionId ? rp(30) : rp(16))
+            ? identityBarHeight + rp(16)
             : rp(24),
         }]}>
           <ConfessionBlock
@@ -474,9 +468,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
           <IdentityBar
             theme={t}
             height={identityBarHeight}
-            confessionId={confessionId}
           />
-          <QrStamp theme={t} confessionId={confessionId} cardWidth={cardWidth} />
         </>
       )}
     </LinearGradient>
@@ -556,7 +548,7 @@ const MoodBlock = React.memo(function MoodBlock({
   );
 });
 
-const IdentityBar = React.memo(function IdentityBar({ theme, height, confessionId, overlay }) {
+const IdentityBar = React.memo(function IdentityBar({ theme, height, overlay }) {
   return (
     <View style={[styles.identityBar, {
       height,
@@ -571,47 +563,6 @@ const IdentityBar = React.memo(function IdentityBar({ theme, height, confessionI
       }}>
         anonixx
       </Text>
-      {confessionId ? (
-        <Text style={{
-          fontFamily:    'DMSans-Italic',
-          fontSize:      rf(10),
-          color:         '#9A9AA3',
-          letterSpacing: 0.2,
-        }}>
-          scan to read →
-        </Text>
-      ) : (
-        <Text style={{
-          fontFamily: 'DMSans-Regular',
-          fontSize:   rf(10),
-          color:      '#5a5f70',
-        }}>
-          not dropped yet
-        </Text>
-      )}
-    </View>
-  );
-});
-
-// ─── QR stamp ──────────────────────────────────────────────────
-// A corner "wax seal" that's actually functional: scan it and it opens
-// this exact drop (https://anonixx.app/drop/:id — the app's real deep-link
-// route, see AppNavigator's linking config). The one part of a screenshot
-// that still works once it's off Anonixx and living on someone's feed.
-// No confessionId yet (compose preview, before the drop is saved) → no
-// working link to encode, so nothing renders.
-const QrStamp = React.memo(function QrStamp({ theme, confessionId, cardWidth }) {
-  if (!confessionId) return null;
-  const size = Math.round(cardWidth * 0.16);
-  const qrSize = size - rp(12);
-  const url = `https://anonixx.app/drop/${confessionId}`;
-  return (
-    <View style={[styles.qrStamp, {
-      width: size,
-      height: size,
-      borderColor: theme.accent + '55',
-    }]}>
-      <QRCode value={url} size={qrSize} color="#0b0f18" backgroundColor="#ffffff" />
     </View>
   );
 });
@@ -685,26 +636,6 @@ const styles = StyleSheet.create({
     justifyContent:    'space-between',
     paddingHorizontal: rp(20),
     borderTopWidth:    1,
-  },
-
-  // QR stamp — a corner "wax seal", overlapping the identity bar so it
-  // reads big enough to actually scan.
-  qrStamp: {
-    position:        'absolute',
-    right:           rp(14),
-    bottom:          rp(10),
-    backgroundColor: '#ffffff',
-    borderRadius:    rs(10),
-    borderWidth:     2,
-    alignItems:      'center',
-    justifyContent:  'center',
-    padding:         rp(5),
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: rs(3) },
-    shadowOpacity:   0.35,
-    shadowRadius:    rs(6),
-    elevation:       6,
-    zIndex:          5,
   },
 
   // Overlay mode

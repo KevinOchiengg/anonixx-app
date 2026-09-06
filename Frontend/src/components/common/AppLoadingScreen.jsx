@@ -12,7 +12,9 @@
  * system font for the brief moment before Fraunces/DM Sans finish loading.
  */
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, Dimensions, Easing } from 'react-native';
+import {
+  View, Text, Animated, StyleSheet, Dimensions, Easing, TouchableOpacity,
+} from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 const BG    = '#0b0f18';
@@ -26,7 +28,10 @@ const STARS = Array.from({ length: 32 }, (_, i) => ({
   opacity: Math.random() * 0.5 + 0.08,
 }));
 
-export default function AppLoadingScreen() {
+// `hint` and `onRetry` let a long hold degrade in place instead of the app
+// looking frozen: silence first, then a quiet line, then a way out. Both are
+// optional — the boot-time callers pass neither.
+export default function AppLoadingScreen({ hint = null, onRetry = null }) {
   const fade     = useRef(new Animated.Value(0)).current;
   const glow     = useRef(new Animated.Value(0)).current;
   const dotPulse = useRef(new Animated.Value(1)).current;
@@ -82,6 +87,14 @@ export default function AppLoadingScreen() {
         </View>
 
         <Text style={styles.tagline}>Ask and you shall be given</Text>
+
+        {!!hint && <Text style={styles.hint}>{hint}</Text>}
+
+        {!!onRetry && (
+          <TouchableOpacity onPress={onRetry} style={styles.retryBtn} activeOpacity={0.85}>
+            <Text style={styles.retryText}>Try again</Text>
+          </TouchableOpacity>
+        )}
       </Animated.View>
     </View>
   );
@@ -136,5 +149,28 @@ const styles = StyleSheet.create({
     fontFamily:    'DMSans-Regular',
     color:         '#9A9AA3',
     letterSpacing: 1.4,
+  },
+  hint: {
+    marginTop:     22,
+    fontSize:      11,
+    fontFamily:    'DMSans-Italic',
+    color:         '#5A5F70',
+    letterSpacing: 0.4,
+    textAlign:     'center',
+    paddingHorizontal: 32,
+  },
+  retryBtn: {
+    marginTop:         14,
+    paddingHorizontal: 20,
+    paddingVertical:   8,
+    borderRadius:      999,
+    borderWidth:       1,
+    borderColor:       'rgba(255,99,74,0.4)',
+  },
+  retryText: {
+    fontSize:      12,
+    fontFamily:    'DMSans-Bold',
+    color:         CORAL,
+    letterSpacing: 0.5,
   },
 });
