@@ -49,9 +49,13 @@ import { WELCOME_SOUND_MAP } from '../../config/sounds';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
+import { useSocket } from '../../context/SocketContext';
 
 const REVEAL_PRICE = 1.0;
-const POLL_INTERVAL_MS = 8000;
+// Real-time delivery (see new_message socket handling below) covers the
+// common case now — this is just a safety net for missed/dropped socket
+// events, so it can be far less frequent than the old 8s-only polling.
+const POLL_INTERVAL_MS = 25000;
 const REVEAL_POLL_MS   = 5000;
 const MAX_REVEAL_ATTEMPTS = 24;
 
@@ -192,12 +196,19 @@ const VoiceBubble = React.memo(({ item, isOwn }) => {
 // ─── Message bubble ────────────────────────────────────────────
 const Bubble = React.memo(({ item, fontFamily, onMediaPress }) => {
   const isOwn = item.is_own;
+  // WhatsApp-style ticks — single = sent, double (accent-colored) = seen.
+  // Only ever shown on my own messages; nothing rendered on received ones.
+  const tick = isOwn ? (item.seen ? '✓✓' : '✓') : null;
+
   if (item.media_type === 'voice' && item.media_url) {
     return (
       <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
         <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
           <VoiceBubble item={item} isOwn={isOwn} />
-          <Text style={[s.bubbleTime, isOwn && s.bubbleTimeOwn]}>{item.time_ago}</Text>
+          <Text style={[s.bubbleTime, isOwn && s.bubbleTimeOwn]}>
+            {item.time_ago}
+            {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
+          </Text>
         </View>
       </View>
     );
@@ -221,7 +232,10 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress }) => {
               <Play size={rs(22)} color="#fff" fill="#fff" strokeWidth={0} />
             </View>
           )}
-          <Text style={[s.mediaBubbleTime, isOwn && s.mediaBubbleTimeOwn]}>{item.time_ago}</Text>
+          <Text style={[s.mediaBubbleTime, isOwn && s.mediaBubbleTimeOwn]}>
+            {item.time_ago}
+            {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -234,6 +248,7 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress }) => {
           <Text style={[s.bubbleTimeInline, isOwn && s.bubbleTimeInlineOwn]}>
             {'  '}{item.time_ago}
           </Text>
+          {tick && <Text style={[s.bubbleTimeInline, item.seen ? s.tickSeen : s.bubbleTimeInlineOwn]}> {tick}</Text>}
         </Text>
       </View>
     </View>
@@ -364,6 +379,7 @@ export default function DropChatScreen({ route, navigation }) {
   const insets          = useSafeAreaInsets();
   const { showToast }   = useToast();
   const { refreshUnread } = useUnread();
+  const { socketService } = useSocket();
 
   const [messages, setMessages]     = useState([]);
   const [connection, setConnection] = useState(null);
@@ -373,6 +389,9 @@ export default function DropChatScreen({ route, navigation }) {
   const [showEmojiStrip, setShowEmojiStrip] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [viewerMedia, setViewerMedia]       = useState(null);
+  const [isOtherTyping, setIsOtherTyping]   = useState(false);
+  const typingTimeoutRef = useRef(null);
+  const lastTypingEmitRef = useRef(0);
 
   // ── Poster's themed chat surface (per-user chat_profiles doc) ──
   const [chatProfile, setChatProfile]     = useState(null);
@@ -495,6 +514,65 @@ export default function DropChatScreen({ route, navigation }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Live delivery — the other party's message arrives over the socket
+  // the instant they send it (see emit_new_message in drops.py), instead
+  // of waiting for the next poll. Appended, not replaced, since a poll
+  // firing moments later re-fetches the full canonical list anyway and
+  // naturally reconciles — duplicate-by-id guard just covers the gap
+  // between the two. ─────────────────────────────────────────────────
+  useEffect(() => {
+    const handleNewMessage = ({ connectionId: incomingId, message }) => {
+      if (incomingId !== connectionId) return;
+      setMessages(prev => (
+        prev.some(m => m.id === message.id) ? prev : [...prev, message]
+      ));
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    };
+    socketService.on('new_message', handleNewMessage);
+    return () => socketService.off('new_message', handleNewMessage);
+  }, [connectionId, socketService]);
+
+  // ── Typing indicator — mirrors MessagesScreen's list-level handling
+  // (same user_typing event, 3s auto-clear), filtered to this connection.
+  useEffect(() => {
+    const handleUserTyping = ({ connectionId: incomingId }) => {
+      if (incomingId !== connectionId) return;
+      setIsOtherTyping(true);
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 3000);
+    };
+    socketService.on('user_typing', handleUserTyping);
+    return () => {
+      socketService.off('user_typing', handleUserTyping);
+      clearTimeout(typingTimeoutRef.current);
+    };
+  }, [connectionId, socketService]);
+
+  // ── Seen ticks going live — the other party just read up to seenAt, so
+  // every one of my own messages sent before that instant flips to seen.
+  useEffect(() => {
+    const handleMessagesSeen = ({ connectionId: incomingId, seenAt }) => {
+      if (incomingId !== connectionId) return;
+      setMessages(prev => prev.map(m => (
+        m.is_own && m.created_at <= seenAt ? { ...m, seen: true } : m
+      )));
+    };
+    socketService.on('messages_seen', handleMessagesSeen);
+    return () => socketService.off('messages_seen', handleMessagesSeen);
+  }, [connectionId, socketService]);
+
+  // Throttled — the server relays this to the other party as user_typing
+  // (see the `typing` handler in events.py); at most once every 2s so
+  // every keystroke doesn't turn into a socket emit.
+  const handleTextChange = useCallback((value) => {
+    setText(value);
+    const now = Date.now();
+    if (now - lastTypingEmitRef.current > 2000) {
+      lastTypingEmitRef.current = now;
+      socketService.emit('typing', { connectionId });
+    }
+  }, [connectionId, socketService]);
 
   // ── Send ──────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
@@ -1090,10 +1168,9 @@ export default function DropChatScreen({ route, navigation }) {
   }, [connection, revealData]);
 
   // Header centre — small avatar (tappable into the gallery, same as the
-  // old profile row) + name, with a truthful "online" line sourced from
-  // the server's live socket presence (connection.other_is_online) —
-  // never a fake "typing…" indicator, since Drops chats are polled, not
-  // socket-driven, and don't have a real typing signal.
+  // old profile row) + name, with "typing…" (live, socket-driven — see
+  // the user_typing handler above) taking over from the "online" line
+  // (connection.other_is_online) whenever the other party is composing.
   const HeaderTitle = useMemo(() => (
     <TouchableOpacity
       style={s.headerTitleRow}
@@ -1116,7 +1193,9 @@ export default function DropChatScreen({ route, navigation }) {
       </View>
       <View style={s.headerTitleTextWrap}>
         <Text style={s.headerTitleName} numberOfLines={1}>{headerTitle}</Text>
-        {connection?.other_is_online && (
+        {isOtherTyping ? (
+          <Text style={s.headerTypingText}>typing…</Text>
+        ) : connection?.other_is_online && (
           <View style={s.headerOnlineRow}>
             <View style={s.headerOnlineDot} />
             <Text style={s.headerOnlineText}>online</Text>
@@ -1124,7 +1203,7 @@ export default function DropChatScreen({ route, navigation }) {
         )}
       </View>
     </TouchableOpacity>
-  ), [chatProfile, headerTitle, connection?.other_is_online]);
+  ), [chatProfile, headerTitle, connection?.other_is_online, isOtherTyping]);
 
   // ── Loading ───────────────────────────────────────────────
   if (loading) {
@@ -1252,7 +1331,7 @@ export default function DropChatScreen({ route, navigation }) {
           <TextInput
             style={s.input}
             value={text}
-            onChangeText={setText}
+            onChangeText={handleTextChange}
             placeholder="say what you came here for…"
             placeholderTextColor={T.textMute}
             multiline
@@ -1570,6 +1649,9 @@ const s = StyleSheet.create({
   headerOnlineText: {
     fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.online,
   },
+  headerTypingText: {
+    fontFamily: 'DMSans-Italic', fontSize: rf(11), color: T.primary,
+  },
   liveStrip: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(6),
     alignSelf: 'center', marginBottom: rp(10),
@@ -1757,6 +1839,9 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
   },
   bubbleTimeOwn: { color: 'rgba(255,255,255,0.65)' },
+  // Seen tick — the one place a sent message's status turns accent-colored
+  // instead of staying muted, same "seen" signal WhatsApp's blue ticks give.
+  tickSeen: { color: T.primary, fontFamily: 'DMSans-Bold' },
 
   // Voice note bubble
   voiceRow: {

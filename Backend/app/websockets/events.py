@@ -1,9 +1,15 @@
 """
-Socket.IO event handlers — presence (connect/disconnect) only. The old
-chat-room events (join_chat/leave_chat/messages_read/user_typing) were
-tied to the now-removed connect_messages system and have been deleted;
-Link Up's DropChatScreen doesn't use realtime sockets for messaging.
+Socket.IO event handlers. Presence (connect/disconnect) plus room join/
+leave for drop comment threads. The old chat-room events (join_chat/
+leave_chat/messages_read/user_typing) tied to the now-removed
+connect_messages system were deleted long ago — Link Up's DropChatScreen
+now gets live messages a different way: emit_new_message
+(app/websockets/chat.py) targets the recipient's personal user_{id} room
+directly, since a DM only ever has two known participants and doesn't
+need a per-conversation room the way comment threads do.
 """
+
+from bson import ObjectId
 
 from app.sio import sio
 from app.database import db as _db_holder
@@ -96,5 +102,32 @@ async def leave_drop_thread(sid: str, data: dict):
     drop_id = (data or {}).get("dropId")
     if drop_id:
         await sio.leave_room(sid, f"drop_{drop_id}")
+
+
+# ─── Link Up DM typing ──────────────────────────────────────────────────────
+# Client -> server: "I'm typing in this chat." Relayed as user_typing to the
+# other party's personal room. MessagesScreen (chat list) has listened for
+# user_typing since before this handler existed — this is what actually
+# starts firing it; DropChatScreen (the open conversation) also listens,
+# filtering by connectionId since a user can have more than one open chat.
+
+@sio.event
+async def typing(sid: str, data: dict):
+    connection_id = (data or {}).get("connectionId")
+    sender_id = _sid_to_user.get(sid)
+    if not connection_id or not sender_id:
+        return
+    try:
+        conn = await _db()["drop_connections"].find_one({"_id": ObjectId(connection_id)})
+    except Exception:
+        return
+    if not conn:
+        return
+    other_id = conn["unlocker_id"] if sender_id == conn["sender_id"] else conn["sender_id"]
+    await sio.emit(
+        "user_typing",
+        {"userId": sender_id, "connectionId": connection_id},
+        room=f"user_{other_id}",
+    )
 
 
