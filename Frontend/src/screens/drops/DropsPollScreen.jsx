@@ -10,13 +10,14 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Switch,
-  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDispatch } from 'react-redux';
-import { X } from 'lucide-react-native';
+import { X, Images } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -43,7 +44,7 @@ export default function DropsPollScreen({ navigation, route }) {
   );
 
   const theme        = route?.params?.theme        || 'desire';
-  const cardIntent    = route?.params?.cardIntent   || 'general';
+  const cardIntent    = route?.params?.cardIntent   || 'skeleton-in-the-closet';
   const moodTag       = route?.params?.moodTag      || 'longing';
   const confession    = route?.params?.text         || '';
   const targetUserId  = route?.params?.target_user_id || undefined;
@@ -56,6 +57,31 @@ export default function DropsPollScreen({ navigation, route }) {
   const [pollOptions,  setPollOptions]  = useState(['', '']);
   const [publisherOptIn, setPublisherOptIn] = useState(true);
   const [sending, setSending] = useState(false);
+
+  // Supporting photo — optional, supplements the question+options the same
+  // way DropsComposeScreen's attach button supplements the confession text.
+  const [imageUri, setImageUri] = useState(null);
+
+  const handlePickImage = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'warning', message: 'Gallery access is needed.' });
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (result.canceled) return;
+      setImageUri(result.assets[0].uri);
+    } catch {
+      showToast({ type: 'error', message: 'Could not open gallery.' });
+    }
+  }, [showToast]);
+
+  const handleClearImage = useCallback(() => setImageUri(null), []);
 
   const updateOption = useCallback((idx, value) => {
     setPollOptions((prev) => {
@@ -80,6 +106,40 @@ export default function DropsPollScreen({ navigation, route }) {
     setSending(true);
     try {
       const token = await AsyncStorage.getItem('token');
+
+      // Supporting photo — same signed direct-upload pattern the compose
+      // screen uses for its attached media.
+      let uploadedImageUrl = null;
+      if (imageUri) {
+        const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ resource_type: 'image', watermark: true }),
+        });
+        if (!signRes.ok) {
+          const err = await signRes.json().catch(() => ({}));
+          throw new Error(err?.detail || `Photo upload sign failed (${signRes.status})`);
+        }
+        const { signature, timestamp, api_key, cloud_name, folder, transformation } = await signRes.json();
+        const form = new FormData();
+        form.append('file', { uri: imageUri, name: 'poll-photo.jpg', type: 'image/jpeg' });
+        form.append('api_key',   api_key);
+        form.append('timestamp', String(timestamp));
+        form.append('signature', signature);
+        form.append('folder',    folder);
+        if (transformation) form.append('transformation', transformation);
+        const upRes = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+          { method: 'POST', body: form },
+        );
+        const upData = await upRes.json();
+        if (!upRes.ok) throw new Error(upData?.error?.message || `Photo upload failed (${upRes.status})`);
+        uploadedImageUrl = upData.secure_url;
+      }
+
       const body = {
         confession: confession.trim() || undefined,
         theme,
@@ -91,6 +151,7 @@ export default function DropsPollScreen({ navigation, route }) {
         },
         publisher_opt_in: !!publisherOptIn,
         ...(targetUserId ? { target_user_id: targetUserId } : {}),
+        ...(uploadedImageUrl ? { image_url: uploadedImageUrl } : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
@@ -132,7 +193,7 @@ export default function DropsPollScreen({ navigation, route }) {
     }
   }, [
     canSend, confession, theme, moodTag, pollQuestion, pollOptions,
-    publisherOptIn, targetUserId, dispatch, navigation, showToast,
+    publisherOptIn, targetUserId, imageUri, dispatch, navigation, showToast,
   ]);
 
   return (
@@ -191,6 +252,21 @@ export default function DropsPollScreen({ navigation, route }) {
             >
               <Text style={s.addOptionText}>+ Add option</Text>
             </TouchableOpacity>
+          )}
+
+          {!imageUri ? (
+            <TouchableOpacity style={s.attachRow} onPress={handlePickImage} activeOpacity={0.85}>
+              <Images size={rs(14)} color={T.textMute} />
+              <Text style={s.attachRowText}>Add a photo (optional)</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={s.attachedRow}>
+              <Image source={{ uri: imageUri }} style={s.attachedThumb} />
+              <Text style={s.attachedLabel}>Photo attached</Text>
+              <TouchableOpacity onPress={handleClearImage} hitSlop={HIT_SLOP} style={s.attachedRemove}>
+                <X size={rs(14)} color={T.textMute} />
+              </TouchableOpacity>
+            </View>
           )}
 
           <View style={s.toggleRow}>
@@ -276,6 +352,37 @@ const s = StyleSheet.create({
 
   addOptionBtn: { marginBottom: SPACING.md },
   addOptionText: { color: T.primary, fontSize: rf(12), fontWeight: '600' },
+
+  // Supporting photo attach — mirrors DropsComposeScreen's media pattern,
+  // just as a compact row instead of a corner button (this screen has no
+  // live card to overlay it on).
+  attachRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    paddingVertical:   rp(10),
+    paddingHorizontal: rp(12),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderStyle:       'dashed',
+    borderColor:       T.border,
+    marginBottom:      SPACING.md,
+  },
+  attachRowText: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textMute },
+  attachedRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(10),
+    paddingVertical:   rp(8),
+    paddingHorizontal: rp(10),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+    marginBottom:      SPACING.md,
+  },
+  attachedThumb:  { width: rs(40), height: rs(40), borderRadius: RADIUS.sm },
+  attachedLabel:  { flex: 1, fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.text },
+  attachedRemove: { padding: rp(4) },
 
   toggleRow: {
     flexDirection:     'row',

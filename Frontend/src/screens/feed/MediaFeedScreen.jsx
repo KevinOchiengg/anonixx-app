@@ -779,6 +779,7 @@ export default function MediaFeedScreen({ route, navigation }) {
   const [commentSheet, setCommentSheet] = useState({
     visible: false,
     postId: null,
+    isOwner: false,
   });
 
   const flatListRef = useRef(null);
@@ -900,7 +901,7 @@ export default function MediaFeedScreen({ route, navigation }) {
         commentCount: commentCounts[item.id] || 0,
         onLike: () => handleLike(item.id),
         onSave: () => handleSave(item.id),
-        onComment: () => setCommentSheet({ visible: true, postId: item.id }),
+        onComment: () => setCommentSheet({ visible: true, postId: item.id, isOwner: item.is_own_post }),
         isOwnPost: item.is_own_post || false,
         onDelete: () => handleDelete(item.id),
         navigation,
@@ -982,7 +983,8 @@ export default function MediaFeedScreen({ route, navigation }) {
         postId={commentSheet.postId}
         isAuthenticated={isAuthenticated}
         navigation={navigation}
-        onClose={() => setCommentSheet({ visible: false, postId: null })}
+        isOwner={commentSheet.isOwner}
+        onClose={() => setCommentSheet({ visible: false, postId: null, isOwner: false })}
         onCountChange={(count) => {
           if (commentSheet.postId) {
             setCommentCounts((prev) => ({

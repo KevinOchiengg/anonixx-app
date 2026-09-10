@@ -2,9 +2,11 @@
  * DropsComposeScreen.jsx
  *
  * The new compose surface for Anonixx Drops.
- * Three formats (Text / Media / Voice) + an independent Poll toggle,
- * live card preview, confession-type picker, unsent draft layer,
- * dangerous-edge warning. Posting is unlimited — there's no daily cap.
+ * Text is typed directly on the live card, with an inline attach button
+ * on the card itself for optional photo/video — no separate media mode.
+ * Voice and Poll remain their own hand-off flows. Live card preview,
+ * confession-type picker, unsent draft layer, dangerous-edge warning.
+ * Posting is unlimited — there's no daily cap.
  *
  * Drops are rendered via <DropCardRenderer /> — this screen is only state,
  * composition and gating. All visual identity lives in the renderer.
@@ -18,7 +20,7 @@ import React, {
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Switch,
   ActivityIndicator, Dimensions, Keyboard, KeyboardAvoidingView,
-  Platform, ScrollView, Image, Animated,
+  Platform, ScrollView, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,8 +30,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-  ChevronLeft, ChevronDown, Images, BarChart2, Mic, Tag, Type,
-  AlertTriangle, Trash2, X, MapPin,
+  ChevronLeft, ChevronDown, Images, BarChart2, Mic, Type,
+  AlertTriangle, Trash2, X, SlidersHorizontal, MapPin,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
@@ -57,9 +59,11 @@ const DRAFT_KEY = 'anonixx.drops.draft.v1';
 const POST_COST = 10;
 
 // ─── Formats ───────────────────────────────────────────────────
+// Media is no longer its own format — it's an optional attachment on the
+// text card itself (see the attach button on cardWrap below). Poll and
+// Voice still hand off to their own compose screens.
 const FORMATS = [
   { id: 'text',  label: 'Text',  Icon: Type      },
-  { id: 'media', label: 'Media', Icon: Images    },
   { id: 'poll',  label: 'Poll',  Icon: BarChart2 },
   { id: 'voice', label: 'Voice', Icon: Mic       },
 ];
@@ -184,7 +188,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Core state ────────────────────────────────────────────────
   const [format,   setFormat]   = useState('text');    // text | image | video | voice
   const [text,     setText]     = useState(initialText);
-  const [cardIntent, setCardIntent] = useState('general');
+  const [cardIntent, setCardIntent] = useState('skeleton-in-the-closet');
   // After Dark / Tier-2 themes have been removed — every drop uses the
   // single remaining theme. External social publishing is gated purely by
   // the "Share to Anonixx socials" toggle below, not by confession type.
@@ -227,9 +231,14 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [showUnsentBanner, setShowUnsentBanner] = useState(false);
 
   // ── Progressive disclosure — collapsed by default so the compose
-  // screen reads as "write + drop", not a settings form ────────────
-  const [tagSectionOpen, setTagSectionOpen] = useState(false);
-  const [locationSectionOpen, setLocationSectionOpen] = useState(false);
+  // screen reads as "theme, card, Drop", not a settings form. Tag/
+  // location/publisher share one "Details" section instead of three
+  // separate triggers — everything else stays always-visible. ──────
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Location gets its own always-visible chip instead of living inside
+  // Details — unlike tag/publisher it directly powers discovery, so
+  // burying it behind a toggle meant most people would never set it.
+  const [locationOpen, setLocationOpen] = useState(false);
 
   // ── Entrance animation ────────────────────────────────────────
   const fade = useRef(new Animated.Value(0)).current;
@@ -280,15 +289,11 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
 
-  // ── Format change — clear media if switching away. Voice and Poll
-  // both hand off to their own dedicated screen, same pattern for both ─
+  // ── Format change — media is independent of format now, so it's never
+  // cleared here. Voice and Poll both hand off to their own dedicated
+  // screen, same pattern for both ─
   const handleFormatChange = useCallback((f) => {
     setFormat(f);
-    if (f !== 'media') {
-      setMediaUri(null);
-      setThumbUri(null);
-      setMediaKind(null);
-    }
     if (f === 'voice') {
       navigation.navigate?.('DropsRecord', {
         theme, cardIntent, moodTag, text,
@@ -374,12 +379,8 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Submit drop (client-side stub — posts to /drops) ───────────
   const handleDrop = useCallback(async () => {
-    if (format === 'text' && !text.trim()) {
-      showToast({ type: 'warning', message: 'Write your confession first.' });
-      return;
-    }
-    if (format === 'media' && !mediaUri) {
-      showToast({ type: 'warning', message: 'Pick a photo or video first.' });
+    if (!text.trim() && !mediaUri) {
+      showToast({ type: 'warning', message: 'Write something or add a photo first.' });
       return;
     }
 
@@ -525,15 +526,22 @@ export default function DropsComposeScreen({ navigation, route }) {
   ]);
 
   // ── Derived ───────────────────────────────────────────────────
-  const canDrop       = format === 'text' ? !!text.trim() : !!mediaUri;
+  const canDrop       = !!text.trim() || !!mediaUri;
   const layoutMode    = 'split';
-  const cardMediaUri  = format === 'media' ? (thumbUri || mediaUri) : null;
+  const cardMediaUri  = thumbUri || mediaUri || null;
   const remaining     = MAX_CHARS - text.length;
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
   const hasDraft      = text.length > 0 || !!mediaUri;
   const locationSummary = [locationEstate, locationSubCounty, locationCounty, locationCountry]
     .map((v) => v.trim()).find(Boolean) || null;
+  // What's tucked inside the collapsed Details section — shown on its
+  // trigger row so nothing active gets buried out of sight. Location has
+  // its own always-visible chip now, so it's not part of this.
+  const detailsSummary = [
+    taggedUser && `Tagged ${taggedUser.username || taggedUser.anonymous_name}`,
+    !publisherOptIn && 'Not sharing to socials',
+  ].filter(Boolean).join(' · ');
 
   // ─────────────────────────────────────────────────────────────
   return (
@@ -616,9 +624,10 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Format selector — Text / Media / Poll / Voice. Poll hands off
-              to its own screen exactly like Voice does — building a poll
-              isn't a quick inline toggle, it's its own compose step. */}
+          {/* Format selector — Text / Poll / Voice. Poll hands off to its
+              own screen exactly like Voice does — building a poll isn't a
+              quick inline toggle, it's its own compose step. Media isn't
+              a format here — it attaches directly to the card below. */}
           <Animated.View style={[s.formatRow, { opacity: fade }]}>
             {FORMATS.map(({ id, label, Icon }) => (
               <FormatChip
@@ -632,12 +641,14 @@ export default function DropsComposeScreen({ navigation, route }) {
             ))}
           </Animated.View>
 
-          {/* Confession type — the headline choice. Picked before the card
-              preview so the preview below always reflects it live: pick
-              your audience, then watch the card become yours as you type. */}
+          {/* Confession type — the headline choice. Doesn't touch the card
+              below (that stays constant while you write, see intent={null}
+              on DropCardRenderer) or the feed (DropCard.jsx doesn't key off
+              intent either) — it's purely what the drop gets filed under,
+              so the right people can actually search for it. */}
           <Text style={s.sectionLabel}>Confession Type</Text>
           <Text style={s.sectionSubLabel}>
-            Who is this for? It shapes how your card looks — colors, pattern, everything.
+            You want it. They want it. Drop it, get found.
           </Text>
           <ScrollView
             horizontal
@@ -655,26 +666,42 @@ export default function DropsComposeScreen({ navigation, route }) {
             ))}
           </ScrollView>
 
-          {/* Live card preview — type directly into the card itself,
-              no separate input box duplicating what it shows. */}
+          {/* Live card preview — type directly into the card itself, no
+              separate input box duplicating what it shows. Media attaches
+              right on the card via the corner button, no separate picker
+              mode to switch into. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
             <DropCardRenderer
               confession={text}
               moodTag={moodTag}
               theme={theme}
-              intent={cardIntent}
+              // Compose card intentionally ignores cardIntent for its own
+              // look — picking a theme tags the drop (colors/search) but
+              // shouldn't make the typing surface jump palettes underneath
+              // you. `theme` above ('desire') is the one constant look;
+              // the feed still renders each posted drop in its real
+              // intent colors via DropCard/DropCardRenderer elsewhere.
+              intent={null}
               mediaUrl={cardMediaUri}
               layoutMode={layoutMode}
               cardWidth={CARD_W}
               seed={text || format}
               editable
               onChangeText={setText}
-              placeholder={format === 'text'
-                ? "say exactly what you want them to know…"
-                : "say what this doesn't show…"}
+              placeholder="Ask and you shall be given"
               maxLength={MAX_CHARS}
               fontStyle={fontStyle}
             />
+            <TouchableOpacity
+              style={s.mediaAttachBtn}
+              onPress={mediaUri ? handleClearMedia : handlePickMedia}
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.85}
+            >
+              {mediaUri
+                ? <X size={rs(16)} color="#fff" />
+                : <Images size={rs(16)} color="#fff" />}
+            </TouchableOpacity>
           </Animated.View>
 
           {/* Character count, text format only */}
@@ -683,31 +710,6 @@ export default function DropsComposeScreen({ navigation, route }) {
               <Text style={[s.remaining, { color: remColor }]}>{remaining}</Text>
             </View>
           )}
-
-          {/* Media picker — one picker, photo or video, caption is typed
-              on the card above */}
-          {format === 'media' && (
-            <View style={s.mediaSection}>
-              {!mediaUri ? (
-                <TouchableOpacity
-                  style={s.pickBtn}
-                  onPress={handlePickMedia}
-                  activeOpacity={0.85}
-                >
-                  <Images size={rs(28)} color={T.primary} />
-                  <Text style={s.pickBtnText}>Tap to pick a photo or video</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={s.previewWrap}>
-                  <Image source={{ uri: thumbUri || mediaUri }} style={s.preview} resizeMode="cover" />
-                  <TouchableOpacity style={s.clearBtn} onPress={handleClearMedia} hitSlop={HIT_SLOP}>
-                    <X size={rs(14)} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
-
 
           {/* Dangerous edge warning — spec section 10 */}
           {edge && (
@@ -732,108 +734,111 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Tag someone — optional, drop still hits marketplace too.
-              Collapsed by default: tagging a specific person is the
-              exception, not the rule — most drops just go to the
-              marketplace, so the search widget shouldn't be forced on
-              every single compose session. */}
+          {/* Details — tag someone, location, publisher sharing. All three
+              are optional/occasional, not part of the core "write + drop"
+              path, so they share one collapsed trigger instead of three
+              separate ones stacking up the screen. Its subtitle surfaces
+              whatever's already set, so nothing active gets buried. */}
           <TouchableOpacity
             style={s.collapsibleTrigger}
-            onPress={() => setTagSectionOpen((v) => !v)}
+            onPress={() => setDetailsOpen((v) => !v)}
             activeOpacity={0.85}
             hitSlop={HIT_SLOP}
           >
-            <Tag size={rs(13)} color={taggedUser ? T.primary : T.textMute} />
-            <Text style={[s.collapsibleTriggerLabel, taggedUser && { color: T.primary }]}>
-              {taggedUser
-                ? `Tagged ${taggedUser.username || taggedUser.anonymous_name}`
-                : 'Tag someone (optional)'}
-            </Text>
-            {!taggedUser && (
-              <ChevronDown
-                size={rs(15)}
-                color={T.textMute}
-                style={tagSectionOpen ? s.chevronOpen : null}
-              />
-            )}
-          </TouchableOpacity>
-          {(tagSectionOpen || taggedUser) && (
-            <TagUserSection
-              taggedUser={taggedUser}
-              onTag={setTaggedUser}
-              onClear={() => setTaggedUser(null)}
-            />
-          )}
-
-          {/* One-word hint — only when someone is tagged */}
-          {!!taggedUser && (
-            <View style={s.hintBox}>
-              <Text style={s.hintTitle}>
-                One word only they'd catch.
-              </Text>
-              <Text style={s.hintSub}>
-                They might pick up on it. Or not. That's the fun of it.
-              </Text>
-              <TextInput
-                style={s.hintInput}
-                value={hint}
-                onChangeText={(v) => setHint(v.split(/\s+/)[0].slice(0, HINT_MAX))}
-                placeholder="e.g. rain, august, friday…"
-                placeholderTextColor={T.textMute}
-                maxLength={HINT_MAX}
-                autoCorrect={false}
-                autoCapitalize="none"
-                returnKeyType="done"
-              />
-              <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
-            </View>
-          )}
-
-          {/* Anonixx Publisher opt-in (section 16) — the only gate on
-              external social publishing. Compact single toggle row instead
-              of a paragraph + two buttons — it's a binary decision, doesn't
-              need a full explainer every time. */}
-          <View style={s.toggleRow}>
+            <SlidersHorizontal size={rs(13)} color={detailsSummary ? T.primary : T.textMute} />
             <View style={{ flex: 1 }}>
-              <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
-              <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
+              <Text style={[s.collapsibleTriggerLabel, { flex: 0 }, detailsSummary && { color: T.primary }]}>
+                Details
+              </Text>
+              {!!detailsSummary && (
+                <Text style={s.toggleRowSub} numberOfLines={1}>{detailsSummary}</Text>
+              )}
             </View>
-            <Switch
-              value={publisherOptIn}
-              onValueChange={(v) => (v ? handlePublisherYes() : setPublisherOptIn(false))}
-              trackColor={{ false: T.surfaceAlt, true: T.primary }}
-              thumbColor={publisherOptIn ? '#fff' : T.textMute}
-              ios_backgroundColor={T.surfaceAlt}
+            <ChevronDown
+              size={rs(15)}
+              color={T.textMute}
+              style={detailsOpen ? s.chevronOpen : null}
             />
-          </View>
+          </TouchableOpacity>
 
-          {/* Location — structured (country → county → sub-county → estate),
-              helps interested people know you're reachable and powers the
-              location filter in Search. Optional, so it's collapsed by
-              default like Tag someone — this is a "where are you?" hint,
-              not a field every compose session should be forced to see. */}
+          {detailsOpen && (
+            <View style={s.detailsSection}>
+              {/* Tag someone — still hits marketplace too */}
+              <TagUserSection
+                taggedUser={taggedUser}
+                onTag={setTaggedUser}
+                onClear={() => setTaggedUser(null)}
+              />
+
+              {/* One-word hint — only when someone is tagged */}
+              {!!taggedUser && (
+                <View style={s.hintBox}>
+                  <Text style={s.hintTitle}>
+                    One word only they'd catch.
+                  </Text>
+                  <Text style={s.hintSub}>
+                    They might pick up on it. Or not. That's the fun of it.
+                  </Text>
+                  <TextInput
+                    style={s.hintInput}
+                    value={hint}
+                    onChangeText={(v) => setHint(v.split(/\s+/)[0].slice(0, HINT_MAX))}
+                    placeholder="e.g. rain, august, friday…"
+                    placeholderTextColor={T.textMute}
+                    maxLength={HINT_MAX}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                  />
+                  <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
+                </View>
+              )}
+
+              {/* Anonixx Publisher opt-in (section 16) — the only gate on
+                  external social publishing. Compact single toggle row
+                  instead of a paragraph + two buttons — it's a binary
+                  decision, doesn't need a full explainer every time. */}
+              <View style={s.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
+                  <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
+                </View>
+                <Switch
+                  value={publisherOptIn}
+                  onValueChange={(v) => (v ? handlePublisherYes() : setPublisherOptIn(false))}
+                  trackColor={{ false: T.surfaceAlt, true: T.primary }}
+                  thumbColor={publisherOptIn ? '#fff' : T.textMute}
+                  ios_backgroundColor={T.surfaceAlt}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Location — its own always-visible chip, not folded into
+              Details. Unlike tag/publisher this directly powers discovery
+              ("nearby people find your drop faster"), so it needs to stay
+              in view rather than depend on someone opening a settings
+              drawer to notice it exists. */}
           <TouchableOpacity
-            style={s.collapsibleTrigger}
-            onPress={() => setLocationSectionOpen((v) => !v)}
+            style={s.locationChip}
+            onPress={() => setLocationOpen((v) => !v)}
             activeOpacity={0.85}
             hitSlop={HIT_SLOP}
           >
             <MapPin size={rs(13)} color={locationSummary ? T.primary : T.textMute} />
-            <View style={{ flex: 1 }}>
-              <Text style={[s.collapsibleTriggerLabel, { flex: 0 }, locationSummary && { color: T.primary }]}>
-                {locationSummary || 'Add your location (optional)'}
-              </Text>
-              <Text style={s.toggleRowSub}>Nearby people find your drop faster</Text>
-            </View>
-            {!locationSummary && (
-              <ChevronDown
-                size={rs(15)}
-                color={T.textMute}
-                style={locationSectionOpen ? s.chevronOpen : null}
-              />
-            )}
+            <Text
+              style={[s.locationChipText, locationSummary && { color: T.primary }]}
+              numberOfLines={1}
+            >
+              {locationSummary || 'Add your location — nearby people find it faster'}
+            </Text>
+            <ChevronDown
+              size={rs(14)}
+              color={T.textMute}
+              style={locationOpen ? s.chevronOpen : null}
+            />
           </TouchableOpacity>
-          {(locationSectionOpen || locationSummary) && (
+          {(locationOpen || locationSummary) && (
             <View style={{ marginBottom: SPACING.md }}>
               <LocationField
                 country={locationCountry}
@@ -1035,36 +1040,32 @@ const s = StyleSheet.create({
   },
   remaining: { fontSize: rf(12), fontWeight: '600' },
 
-  // Media picker
-  mediaSection: { gap: SPACING.sm, marginBottom: SPACING.md },
-  pickBtn: {
-    height:          rs(160),
-    borderRadius:    RADIUS.lg,
-    borderWidth:     1.5,
-    borderStyle:     'dashed',
-    borderColor:     'rgba(255,99,74,0.25)',
-    backgroundColor: 'rgba(255,99,74,0.04)',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap:             SPACING.xs,
-  },
-  pickBtnText: { fontSize: FONT.sm, color: T.text, fontWeight: '600' },
-
-  previewWrap: {
-    position:     'relative',
-    borderRadius: RADIUS.lg,
-    overflow:     'hidden',
-    height:       rs(180),
-  },
-  preview: { width: '100%', height: '100%' },
-  clearBtn: {
+  // Media attach button — overlaid on the card itself (top-right corner)
+  // instead of a separate picker section below. Doubles as the clear
+  // button once media's attached. Top-right, not bottom-right: the
+  // confession text is vertically centered in the card and its position
+  // shifts per-drop, so a bottom corner can end up sitting under the text
+  // zone and stealing taps meant for typing. The top corner is clear of
+  // both the text zone and the identity bar at all times. Solid accent
+  // fill (not a translucent dark circle) so it reads clearly against
+  // every card color, not just the darkest ones.
+  mediaAttachBtn: {
     position:        'absolute',
-    top:             rp(8), right: rp(8),
-    width:           rs(26), height: rs(26),
-    borderRadius:    rs(13),
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    right:           rp(12),
+    top:             rp(12),
+    width:           rs(42),
+    height:          rs(42),
+    borderRadius:    rs(21),
+    backgroundColor: T.primary,
+    borderWidth:     2,
+    borderColor:     'rgba(255,255,255,0.85)',
     alignItems:      'center',
     justifyContent:  'center',
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: rs(3) },
+    shadowOpacity:   0.45,
+    shadowRadius:    rs(6),
+    elevation:       6,
   },
   // Edge warning
   edgeWarn: {
@@ -1171,6 +1172,31 @@ const s = StyleSheet.create({
     letterSpacing: 0.3,
   },
   chevronOpen: { transform: [{ rotate: '180deg' }] },
+  detailsSection: {
+    gap:          SPACING.md,
+    marginBottom: SPACING.md,
+  },
+
+  // Location chip — compact, always visible (unlike Details, which stays
+  // collapsed until tapped)
+  locationChip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    paddingHorizontal: rp(14),
+    paddingVertical:   rp(11),
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    borderColor:       T.border,
+    marginBottom:      SPACING.sm,
+  },
+  locationChipText: {
+    flex:          1,
+    fontFamily:    'DMSans-SemiBold',
+    fontSize:      FONT.sm,
+    color:         T.textSec,
+    letterSpacing: 0.2,
+  },
 
   // One-word hint (section 11)
   hintBox: {

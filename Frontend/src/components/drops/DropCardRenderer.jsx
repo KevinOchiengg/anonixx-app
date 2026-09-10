@@ -46,9 +46,15 @@ export const DROP_THEMES = {
 // Kept in sync with VALID_INTENTS in Backend/app/api/v1/drops.py — same ids.
 // Key order here IS the picker's display order (CARD_INTENT_LIST below is
 // built straight off Object.entries), so reordering these reorders the UI.
+// Renamed 2026-09-10 from real-connection / general / no-strings /
+// generous-arrangement. Old ids may still exist on drops written before
+// this migration ran — see scripts/migrate_intent_ids.py.
 export const CARD_INTENTS = {
-  'real-connection': {
-    label: 'something real',
+  'meet-me': {
+    // Dating / serious relationship — actually looking for something
+    // that lasts, not just tonight.
+    label: 'Meet Me',
+    sublabel: 'looking for something real',
     pattern: 'constellation',
     moodTag: 'longing',
     bgFrom: '#12070c', bgTo: '#2a121b',
@@ -56,32 +62,36 @@ export const CARD_INTENTS = {
     textColor: '#FBE8ED', ghostColor: 'rgba(255,107,138,0.06)',
     moodColor: '#C98A9B', identityColor: '#FF6B8A',
   },
-  'general': {
-    label: 'off my chest',
+  'skeleton-in-the-closet': {
+    // Catch-all confessions — the things that are hard to say to anyone
+    // you actually know.
+    label: 'Skeleton In The Closet',
+    sublabel: "secrets don't stay buried",
     pattern: 'none',
-    moodTag: 'unsent',
+    moodTag: 'untold',
     bgFrom: '#14060a', bgTo: '#2a0f18',
     accent: '#FF3B7A', accentGlow: 'rgba(255,59,122,0.14)',
     textColor: '#F6E6EC', ghostColor: 'rgba(255,59,122,0.05)',
     moodColor: '#C48A98', identityColor: '#FF3B7A',
   },
-  'no-strings': {
-    // Acronym carries the tile; the expansion rides underneath it in the
-    // picker (see IntentCard) so it stays legible to anyone who doesn't
-    // already know it. `sublabel` is picker-only — nothing else reads it.
-    label: 'NSA',
-    sublabel: 'no strings attached',
+  'just-tonight': {
+    // Casual, no strings attached — the tagline carries the meaning now,
+    // no acronym to decode.
+    label: 'Just Tonight',
+    sublabel: 'no strings attached affair',
     pattern: 'streaks',
-    moodTag: 'reckless',
+    moodTag: 'horny',
     bgFrom: '#0a0000', bgTo: '#2b0505',
     accent: '#FF1744', accentGlow: 'rgba(255,23,68,0.18)',
     textColor: '#FFE4E4', ghostColor: 'rgba(255,23,68,0.06)',
     moodColor: '#C97A7A', identityColor: '#FF1744',
   },
-  'generous-arrangement': {
-    label: 'spoiled',
+  'the-exchange': {
+    // Paid arrangement — services for a token, 18+.
+    label: 'The Exchange',
+    sublabel: 'services for a token',
     pattern: 'ripples',
-    moodTag: 'quiet',
+    moodTag: 'discreet',
     bgFrom: '#050e14', bgTo: '#0e2432',
     accent: '#4FC3E8', accentGlow: 'rgba(79,195,232,0.16)',
     textColor: '#E3F6FC', ghostColor: 'rgba(79,195,232,0.06)',
@@ -175,8 +185,7 @@ export const CardPattern = React.memo(function CardPattern({ type, width, height
 
   return (
     <Svg
-      pointerEvents="none"
-      style={StyleSheet.absoluteFillObject}
+      style={[StyleSheet.absoluteFillObject, { pointerEvents: 'none' }]}
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
@@ -262,8 +271,8 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   moodTag         = 'longing',
   emotionalContext= null,         // "written at 2:14am" | "kept for 3 years"
   theme           = 'desire',
-  // Confession type — "real-connection" | "general" | "no-strings" |
-  // "generous-arrangement". When set and recognized, fully overrides theme's palette
+  // Confession type — "meet-me" | "skeleton-in-the-closet" | "just-tonight" |
+  // "the-exchange". When set and recognized, fully overrides theme's palette
   // and adds the intent's background pattern. `theme` is only the legacy
   // fallback for drops created before intents existed.
   intent          = null,
@@ -306,12 +315,12 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
           >
             {/* Ghost quote */}
             <Text
-              pointerEvents="none"
               style={[styles.ghostQuote, {
                 color: t.ghostColor,
                 fontSize: Math.round(cardWidth * 0.6),
                 top: variation.quoteTop,
                 left: variation.quoteLeft,
+                pointerEvents: 'none',
               }]}
             >
               "
@@ -364,38 +373,44 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
       end={{ x: 1, y: 1 }}
       style={[styles.card, { width: cardWidth, height: cardWidth }]}
     >
-      {/* Faint grain / glow overlay — rare variant gets stronger */}
-      <View
-        pointerEvents="none"
-        style={[styles.glow, {
-          backgroundColor: t.accentGlow,
-          opacity: variation.rare ? 0.18 : 0.10,
-        }]}
-      />
+      {/* Decorative layer — glow, background pattern, ghost quote. Wrapped
+          in one pointerEvents="none" View rather than relying on each
+          native child (esp. the SVG pattern) to forward touch-passthrough
+          itself — that's what was silently eating taps meant for the
+          TextInput on every intent except "Skeleton In The Closet" (the only
+          one with pattern: 'none', so it had no SVG in the way). */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+        {/* Faint grain / glow overlay — rare variant gets stronger */}
+        <View
+          style={[styles.glow, {
+            backgroundColor: t.accentGlow,
+            opacity: variation.rare ? 0.18 : 0.10,
+          }]}
+        />
 
-      {/* Confession-type background pattern — the thing that makes a
-          screenshot of this card instantly read as "this is about X"
-          before a single word is read. */}
-      <CardPattern
-        type={t.pattern}
-        width={cardWidth}
-        height={cardWidth}
-        color={t.accent}
-        seed={patternSeed}
-      />
+        {/* Confession-type background pattern — the thing that makes a
+            screenshot of this card instantly read as "this is about X"
+            before a single word is read. */}
+        <CardPattern
+          type={t.pattern}
+          width={cardWidth}
+          height={cardWidth}
+          color={t.accent}
+          seed={patternSeed}
+        />
 
-      {/* Ghost quote mark — Playfair, partially cropped */}
-      <Text
-        pointerEvents="none"
-        style={[styles.ghostQuote, {
-          color: t.ghostColor,
-          fontSize: Math.round(cardWidth * 0.6),
-          top: variation.quoteTop,
-          left: variation.quoteLeft,
-        }]}
-      >
-        "
-      </Text>
+        {/* Ghost quote mark — Playfair, partially cropped */}
+        <Text
+          style={[styles.ghostQuote, {
+            color: t.ghostColor,
+            fontSize: Math.round(cardWidth * 0.6),
+            top: variation.quoteTop,
+            left: variation.quoteLeft,
+          }]}
+        >
+          "
+        </Text>
+      </View>
 
       {/* Media zone for split-layout image/video drops */}
       {layoutMode === 'split' && mediaUrl ? (
@@ -499,19 +514,39 @@ const ConfessionBlock = React.memo(function ConfessionBlock({
       }]} />
       <View style={styles.confessionTextWrap}>
         {editable ? (
-          <TextInput
-            style={[textStyle, styles.confessionInput]}
-            value={text}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor={theme.textColor + '55'}
-            multiline
-            scrollEnabled={false}
-            textAlignVertical="top"
-            maxLength={maxLength || undefined}
-            autoCapitalize="sentences"
-            autoCorrect
-          />
+          <>
+            {/* Custom placeholder — deliberately its own style, not the
+                chosen fontStyle (which can be an extra-bold display face).
+                Playfair italic, regular weight, wide tracking: reads like
+                a quiet, quoted line rather than shouted card copy. */}
+            {!text && !!placeholder && (
+              <Text
+                pointerEvents="none"
+                style={[styles.confessionInput, styles.placeholderOverlay, {
+                  fontFamily:    'PlayfairDisplay-Italic',
+                  fontStyle:     'italic',
+                  fontWeight:    '400',
+                  fontSize:      Math.round(fontSize * 0.72),
+                  lineHeight:    Math.round(fontSize * 0.72 * 1.6),
+                  letterSpacing: 0.4,
+                  color:         theme.textColor + '66',
+                }]}
+              >
+                {placeholder}
+              </Text>
+            )}
+            <TextInput
+              style={[textStyle, styles.confessionInput, { minHeight: Math.round(fontSize * 1.6 * 3) }]}
+              value={text}
+              onChangeText={onChangeText}
+              multiline
+              scrollEnabled={false}
+              textAlignVertical="top"
+              maxLength={maxLength || undefined}
+              autoCapitalize="sentences"
+              autoCorrect
+            />
+          </>
         ) : (
           <Text style={textStyle}>{text}</Text>
         )}
@@ -619,6 +654,12 @@ const styles = StyleSheet.create({
     padding:        0,
     margin:         0,
     textAlignVertical: 'top',
+  },
+  placeholderOverlay: {
+    position: 'absolute',
+    top:      0,
+    left:     0,
+    right:    0,
   },
   // Mood block
   moodWrap: {

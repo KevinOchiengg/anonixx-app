@@ -43,6 +43,12 @@ class SocketService {
   off(event, cb) {
     this.socket?.off(event, cb);
   }
+
+  // Client → server events (e.g. join_drop_thread/leave_drop_thread for
+  // live comments). No-op while disconnected — callers don't need to guard.
+  emit(event, payload) {
+    this.socket?.emit(event, payload);
+  }
 }
 
 export default new SocketService();

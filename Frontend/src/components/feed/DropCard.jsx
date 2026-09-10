@@ -454,12 +454,16 @@ function DropCard({
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  // Drops only ever carry a single media item (media_url/media_type) — the
-  // carousel component still works fine fed a 1-item array.
-  const images = useMemo(
-    () => (post.media_type === 'image' && post.media_url ? [post.media_url] : []),
-    [post.media_type, post.media_url],
-  );
+  // media_url/media_type is the drop's PRIMARY content slot (an image drop's
+  // photo, or a voice drop's audio). image_url is a separate, optional
+  // supplement a poll or voice drop can carry alongside its primary content
+  // — so both can be present and both render here.
+  const images = useMemo(() => {
+    const arr = [];
+    if (post.media_type === 'image' && post.media_url) arr.push(post.media_url);
+    if (post.image_url && post.image_url !== post.media_url) arr.push(post.image_url);
+    return arr;
+  }, [post.media_type, post.media_url, post.image_url]);
 
   useEffect(() => {
     setLiked(post.is_liked || false);
@@ -574,7 +578,13 @@ function DropCard({
     } catch {}
   }, [post.user_id, showToast]);
 
-  const handleProfilePress  = useCallback(() => setProfileSheetVisible(true), []);
+  // Admin drops carry the real admin account's user_id/anonymous_name
+  // underneath the "Anonixx" display name — never open the profile sheet
+  // for them, or it'd deanonymize the account behind official content.
+  const handleProfilePress  = useCallback(() => {
+    if (post.is_admin_drop) return;
+    setProfileSheetVisible(true);
+  }, [post.is_admin_drop]);
   const handleMenuOpen      = useCallback(() => setMenuVisible(true), []);
   const handleMenuClose     = useCallback(() => setMenuVisible(false), []);
   const handleCommentsOpen  = useCallback(() => setShowComments(true), []);
@@ -693,8 +703,9 @@ function DropCard({
                 that actually makes money reads as a decision, not a caption.
                 Hidden on your own drops — the backend rejects self-unlocks
                 anyway, but there's no reason to show a button that can only
-                ever fail. */}
-            {!post.is_own_post && (
+                ever fail. Also hidden on Anonixx's own official drops — no
+                real person behind them to link up with. */}
+            {!post.is_own_post && !post.is_admin_drop && (
               <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
                 <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
                 <Text style={styles.linkUpBtnText}>Link up</Text>
@@ -714,6 +725,7 @@ function DropCard({
         isAuthenticated={isAuthenticated}
         navigation={navigation}
         onClose={handleCommentsClose}
+        isOwner={post.is_own_post}
       />
 
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={handleMenuClose}>

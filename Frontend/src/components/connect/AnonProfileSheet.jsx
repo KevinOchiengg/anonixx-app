@@ -43,10 +43,10 @@ const GENDER_BADGE = {
 // frozen (they're written onto every drop row), so renaming the copy in
 // INTENT_LABELS can't quietly break these lookups.
 const HERE_FOR_EMOJI = {
-  'real-connection':      '🌹',
-  'no-strings':           '🔥',
-  'generous-arrangement': '🪙',
-  'general':              '🌑',
+  'meet-me':                '🌹',
+  'just-tonight':           '🔥',
+  'the-exchange':           '🪙',
+  'skeleton-in-the-closet': '🌑',
 };
 
 // ─── Stat Item ────────────────────────────────────────────────

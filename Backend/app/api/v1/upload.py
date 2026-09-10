@@ -160,10 +160,15 @@ async def upload_audio(
     try:
         result = await asyncio.get_event_loop().run_in_executor(
             None,
+            # "auto" mis-detects the .m4a/.mp4 voice-note containers the
+            # recorder sends (Cloudinary has no true "audio" resource type —
+            # audio-only files go through the "video" pipeline). This is
+            # the same resource_type the known-working drop voice upload
+            # (/upload/sign, see DropsRecordScreen.jsx) already uses.
             lambda: cloudinary.uploader.upload(
                 contents,
                 folder="anonixx/audio",
-                resource_type="auto",
+                resource_type="video",
             ),
         )
         return {

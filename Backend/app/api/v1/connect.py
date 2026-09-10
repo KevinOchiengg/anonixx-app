@@ -105,8 +105,8 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
 
     # "Here for" — what they're actually here for, on-theme, computed from
     # their own drops rather than a self-reported label. Whichever intent
-    # they've posted under most often (real-connection / no-strings /
-    # generous-arrangement / general — same vocabulary as the drop compose picker).
+    # they've posted under most often (meet-me / just-tonight /
+    # the-exchange / skeleton-in-the-closet — same vocabulary as the drop compose picker).
     # Shipped as a pair: `here_for` is the display copy, `here_for_intent` is
     # the stable id. Clients key off the id, never the label — otherwise
     # renaming a label silently breaks every lookup downstream.
@@ -171,7 +171,7 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "avatar_url": user.get("avatar_url"),   # real photo if set — client falls back to initials
         "confession_count": confession_count,
         "connections_count": connections_count,
-        "here_for": here_for,               # display copy — "something real" | "NSA" | "spoiled" | "off my chest" | null
+        "here_for": here_for,               # display copy — "Meet Me" | "Just Tonight" | "The Exchange" | "Skeleton In The Closet" | null
         "here_for_intent": here_for_intent, # stable id — key off this, not the label above
         "reactions_received": reactions_received,
         "streak": streak_doc.get("streak", 0),

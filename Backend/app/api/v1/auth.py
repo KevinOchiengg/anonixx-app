@@ -148,6 +148,8 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
             )
         if _contains_profanity(chosen_name):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
+        if chosen_name.lower() in RESERVED_ANON_NAMES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
         name_clash = await db["users"].find_one({
             "$or": [
                 {"username":       {"$regex": f"^{re.escape(chosen_name)}$", "$options": "i"}},
@@ -295,6 +297,10 @@ _ANON_NAME_RE = re.compile(
     r']{3,30}$'
 )
 
+# Reserved for official Anonixx-posted drops (see drops.py's ADMIN_DROP_NAME)
+# — no regular user may claim it as their anonymous_name.
+RESERVED_ANON_NAMES = {"anonixx"}
+
 _PROFANITY_BLOCKLIST = {
     "nigger","nigga","faggot","chink","spic","kike","retard",
     "cunt","whore","bitch","slut","rape","penis","vagina","porn",
@@ -328,6 +334,9 @@ async def check_anonymous_name(
 
     if _contains_profanity(name):
         return {"available": False, "reason": "profanity", "message": "That name isn't allowed"}
+
+    if name.lower() in RESERVED_ANON_NAMES:
+        return {"available": False, "reason": "reserved", "message": "That name isn't allowed"}
 
     existing = await db["users"].find_one(
         {
@@ -383,6 +392,8 @@ async def update_profile(
         if not _ANON_NAME_RE.match(aname):
             raise HTTPException(400, detail="Name must be 3–30 chars. Letters, numbers, dots, hyphens or emoji.")
         if _contains_profanity(aname):
+            raise HTTPException(400, detail="That name isn't allowed. Try something else.")
+        if aname.lower() in RESERVED_ANON_NAMES:
             raise HTTPException(400, detail="That name isn't allowed. Try something else.")
 
         # 30-day cooldown (skip on first-time set)

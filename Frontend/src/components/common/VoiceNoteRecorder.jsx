@@ -43,7 +43,7 @@ const formatTime = (seconds) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export default function VoiceNoteRecorder({ onSend, disabled }) {
+export default function VoiceNoteRecorder({ onSend, disabled, compact }) {
   const { showToast } = useToast();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recState = useAudioRecorderState(recorder, 100);
@@ -210,14 +210,14 @@ export default function VoiceNoteRecorder({ onSend, disabled }) {
       <View
         {...pan.panHandlers}
         style={[
-          styles.micBtn,
-          recording && styles.micBtnActive,
+          compact ? styles.micBtnCompact : styles.micBtn,
+          recording && (compact ? styles.micBtnCompactActive : styles.micBtnActive),
           willCancel && styles.micBtnCancel,
         ]}
       >
         {uploading
           ? <ActivityIndicator size="small" color={T.primary} />
-          : <Mic size={rs(17)} color={recording ? '#fff' : T.textMuted} />}
+          : <Mic size={rs(compact ? 20 : 17)} color={recording ? '#fff' : (compact ? T.primary : T.textMuted)} />}
       </View>
     </View>
   );
@@ -233,6 +233,15 @@ const styles = StyleSheet.create({
   },
   micBtnActive: { backgroundColor: T.primary, borderColor: T.primary },
   micBtnCancel: { backgroundColor: T.danger, borderColor: T.danger },
+  // Icon-only variant for sitting inline among other plain icon buttons
+  // (e.g. next to the emoji/photo icons inside a text input) — no filled
+  // circle at rest so it doesn't compete with the button chrome around it,
+  // coral instead of muted gray so it still reads clearly on its own.
+  micBtnCompact: {
+    width: rs(38), height: rs(38), borderRadius: rs(19),
+    alignItems: 'center', justifyContent: 'center',
+  },
+  micBtnCompactActive: { backgroundColor: T.primary },
 
   // Floats above the mic button while recording.
   pill: {
