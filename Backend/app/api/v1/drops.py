@@ -19,12 +19,30 @@ from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.notifications import send_push_notification as _notify
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
+from app.websockets.comments import (
+    emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
+)
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
+
+# @mentions in comments — plain-text markup (no structured offsets stored),
+# parsed the same way both here (for notifying the mentioned user) and on
+# the client (for rendering them as tappable coral text). Matches the
+# character set actual usernames use in practice; doesn't need to be a
+# hard validation rule since a near-miss just means no notification fires.
+MENTION_RE = re.compile(r'@([A-Za-z0-9_.]{2,30})')
 
 DROP_PRICE_USD = 2.00
 REVEAL_PRICE_USD = 1.00
 GROUP_DROP_PRICE_USD = 3.00
+
+# Official drops — posted by an admin account (see admin.py's toggle_admin_role)
+# through the same compose screen everyone else uses. They fill the feed
+# before organic drops exist, carry the reserved "Anonixx" name (see
+# auth.py's RESERVED_ANON_NAMES) instead of the poster's real anonymous_name,
+# cost no coins to post, and can never be unlocked — there's no real person
+# behind them to Link Up with.
+ADMIN_DROP_NAME = "Anonixx"
 # Drop lifecycle — drops do NOT expire on a timer. A drop stays live
 # indefinitely until someone unlocks it; the first unlock starts a grace
 # window, and once that passes tasks/drop_cleanup.py deletes the drop and
@@ -69,11 +87,15 @@ PREMIUM_UNLOCKED_GRACE_DAYS  = 14   # vs UNLOCKED_GRACE_DAYS (7)
 # Listed in the same order the compose picker shows them, so the two files
 # read side by side. Order is cosmetic here — this is a membership check.
 VALID_INTENTS = [
-    "real-connection",       # "something real" — wants something real
-    "general",               # "off my chest"   — no specific audience, default
-    "no-strings",            # "NSA"            — casual, no strings attached
-    "generous-arrangement",  # "spoiled"        — paid/transactional arrangement
+    "meet-me",                # "Meet Me"                — dating, real relationship
+    "skeleton-in-the-closet", # "Skeleton In The Closet" — confessions, no specific audience, default
+    "just-tonight",           # "Just Tonight"           — casual, no strings attached
+    "the-exchange",           # "The Exchange"           — paid/transactional arrangement, 18+
 ]
+
+# Renamed 2026-09-10 from real-connection / general / no-strings /
+# generous-arrangement. Old ids may still exist on drops written before
+# this migration ran — see scripts/migrate_intent_ids.py.
 
 # Display labels — mirrors CARD_INTENTS' `label` field in
 # DropCardRenderer.jsx exactly. Every label completes an implied "I want —",
@@ -82,10 +104,10 @@ VALID_INTENTS = [
 # These strings are display-only — nothing keys off them (see `here_for` /
 # `here_for_intent` in connect.py), so they're safe to reword freely.
 INTENT_LABELS = {
-    "real-connection":      "something real",
-    "general":              "off my chest",
-    "no-strings":           "NSA",
-    "generous-arrangement": "spoiled",
+    "meet-me":                "Meet Me",
+    "skeleton-in-the-closet": "Skeleton In The Closet",
+    "just-tonight":           "Just Tonight",
+    "the-exchange":           "The Exchange",
 }
 
 class DropPollInput(BaseModel):
@@ -103,6 +125,11 @@ class CreateDropRequest(BaseModel):
     group_size: Optional[int] = None
     media_url: Optional[str] = None
     media_type: Optional[str] = None  # "image" | "video" | "voice"
+    # Supplemental photo — separate from media_url because media_url is
+    # already the PRIMARY content slot (the voice recording itself for
+    # voice drops). A poll or voice drop can carry this alongside its
+    # primary content; a text drop's photo still goes through media_url.
+    image_url: Optional[str] = None
     target_user_id: Optional[str] = None  # private targeted drop
     intent: Optional[str] = None  # what the sender is open to
 
@@ -564,14 +591,17 @@ async def create_drop(
 
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD
+    is_admin_drop = bool(user.get("is_admin"))
 
     drop = {
         "_id": ObjectId(),
         "sender_id": current_user_id,
-        "sender_anonymous_name": user.get("anonymous_name", "Anonymous"),
+        "sender_anonymous_name": ADMIN_DROP_NAME if is_admin_drop else user.get("anonymous_name", "Anonymous"),
+        "is_admin_drop": is_admin_drop,
         "confession": data.confession.strip() if data.confession else None,
         "media_url": data.media_url or None,
         "media_type": data.media_type or None,
+        "image_url": data.image_url or None,
         "is_group": data.is_group,
         "group_size": data.group_size if data.is_group else None,
         "price": price,
@@ -623,19 +653,21 @@ async def create_drop(
     # Posting costs coins — charged after all validation above, so a rejected
     # drop never takes someone's balance. Mirrored in posts.py's create_post;
     # charging only one route would leave the other a free bypass.
-    try:
-        await debit_coins(
-            db=db, user_id=current_user_id, amount=DROP_POST_COST,
-            reason="drop_post", description="Posted a drop",
-            meta={"drop_id": str(drop["_id"])},
-        )
-    except ValueError as e:
-        if "Insufficient" in str(e):
-            raise HTTPException(
-                status_code=402,
-                detail=f"Not enough coins. Posting a drop costs {DROP_POST_COST} coins.",
+    # Admin drops are official filler content, not paid for by the admin.
+    if not is_admin_drop:
+        try:
+            await debit_coins(
+                db=db, user_id=current_user_id, amount=DROP_POST_COST,
+                reason="drop_post", description="Posted a drop",
+                meta={"drop_id": str(drop["_id"])},
             )
-        raise HTTPException(status_code=404, detail="User not found.")
+        except ValueError as e:
+            if "Insufficient" in str(e):
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Not enough coins. Posting a drop costs {DROP_POST_COST} coins.",
+                )
+            raise HTTPException(status_code=404, detail="User not found.")
 
     await db["drops"].insert_one(drop)
     drop_id_str = str(drop["_id"])
@@ -707,7 +739,7 @@ async def create_drop(
         "time_left": None,
         "is_night_mode": night,
         "price": price,
-        "coins_spent": DROP_POST_COST,
+        "coins_spent": 0 if is_admin_drop else DROP_POST_COST,
         "message": "Your card is live. Share it anywhere. 🔥",
     }
 
@@ -1160,6 +1192,26 @@ async def add_to_drop_thread(
             db,
         )
 
+    # @mentions — notify anyone tagged in the comment text. Case-insensitive
+    # single query covers every mention at once rather than one lookup per
+    # name. Self-mentions are silently skipped (no point notifying yourself).
+    mentioned_usernames = set(MENTION_RE.findall(content)) if content else set()
+    if mentioned_usernames:
+        pattern = "|".join(re.escape(n) for n in mentioned_usernames)
+        async for mentioned in db["users"].find(
+            {"username": {"$regex": f"^({pattern})$", "$options": "i"}},
+            {"_id": 1},
+        ):
+            mentioned_id = str(mentioned["_id"])
+            if mentioned_id == current_user_id:
+                continue
+            await send_push_notification(
+                mentioned_id,
+                "Someone mentioned you 💬",
+                f"{user.get('anonymous_name', 'Someone')} tagged you in a comment.",
+                db,
+            )
+
     response = {
         "id":             str(result.inserted_id),
         "content":        content,
@@ -1177,6 +1229,17 @@ async def add_to_drop_thread(
     if voice_url:
         response["voice_url"] = voice_url
         response["voice_duration"] = voice_duration
+
+    # Broadcast to everyone else with this drop's comment sheet open right
+    # now — same shape as the HTTP response minus the request-local
+    # "message" field, plus user_id/parent_id so receiving clients can
+    # tell it apart from their own optimistic entry and nest replies.
+    broadcast = {k: v for k, v in response.items() if k != "message"}
+    broadcast["user_id"] = current_user_id
+    if parent_id:
+        broadcast["parent_id"] = parent_id
+    await emit_new_comment(drop_id, broadcast)
+
     return response
 
 
@@ -1207,6 +1270,7 @@ async def get_drop_thread(
             "likes_count":    t.get("likes_count", 0),
             "liked_by_me":    current_user_id in t.get("liked_by", []) if current_user_id else False,
             "is_own_reply":   t.get("user_id") == current_user_id if current_user_id else False,
+            "pinned":         bool(t.get("pinned")),
             "replies":        [],
         }
         if t.get("gif_url"):
@@ -1229,6 +1293,12 @@ async def get_drop_thread(
             top.append(by_id[tid])
 
     top.sort(key=lambda x: x["created_at"], reverse=True)
+    # Pinned comment (owner-only, top-level only — see pin_drop_comment)
+    # always floats to the very top, ahead of whatever sort the client
+    # applies on top of this.
+    pinned = [c for c in top if c["pinned"]]
+    if pinned:
+        top = pinned + [c for c in top if not c["pinned"]]
 
     return {"threads": top, "thread_count": len(top)}
 
@@ -1256,7 +1326,9 @@ async def like_drop_comment(
         {"$addToSet": {"liked_by": current_user_id}, "$inc": {"likes_count": 1}},
         return_document=ReturnDocument.AFTER,
     )
-    return {"liked": True, "likes_count": updated.get("likes_count", 0)}
+    likes_count = updated.get("likes_count", 0)
+    await emit_comment_liked(drop_id, comment_id, likes_count)
+    return {"liked": True, "likes_count": likes_count}
 
 
 @router.delete("/{drop_id}/thread/{comment_id}/like")
@@ -1282,7 +1354,70 @@ async def unlike_drop_comment(
         {"$pull": {"liked_by": current_user_id}, "$inc": {"likes_count": -1}},
         return_document=ReturnDocument.AFTER,
     )
-    return {"liked": False, "likes_count": max(0, updated.get("likes_count", 0))}
+    likes_count = max(0, updated.get("likes_count", 0))
+    await emit_comment_liked(drop_id, comment_id, likes_count)
+    return {"liked": False, "likes_count": likes_count}
+
+
+@router.post("/{drop_id}/thread/{comment_id}/pin")
+async def pin_drop_comment(
+    drop_id: str,
+    comment_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Drop owner only, top-level comments only — one pinned comment per
+    drop, mirrors TikTok. Pinning a new one silently replaces whichever
+    was pinned before."""
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if drop.get("sender_id") != current_user_id:
+        raise HTTPException(status_code=403, detail="Only the drop's author can pin a comment")
+
+    try:
+        comment = await db["drop_threads"].find_one({"_id": ObjectId(comment_id), "drop_id": drop_id})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.get("parent_id"):
+        raise HTTPException(status_code=400, detail="Only top-level comments can be pinned")
+
+    await db["drop_threads"].update_many(
+        {"drop_id": drop_id, "pinned": True}, {"$set": {"pinned": False}},
+    )
+    await db["drop_threads"].update_one(
+        {"_id": ObjectId(comment_id)}, {"$set": {"pinned": True}},
+    )
+    await emit_comment_pinned(drop_id, comment_id)
+    return {"pinned": True, "comment_id": comment_id}
+
+
+@router.delete("/{drop_id}/thread/{comment_id}/pin")
+async def unpin_drop_comment(
+    drop_id: str,
+    comment_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    try:
+        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    if drop.get("sender_id") != current_user_id:
+        raise HTTPException(status_code=403, detail="Only the drop's author can unpin a comment")
+
+    await db["drop_threads"].update_one(
+        {"_id": ObjectId(comment_id), "drop_id": drop_id}, {"$set": {"pinned": False}},
+    )
+    await emit_comment_unpinned(drop_id, comment_id)
+    return {"pinned": False, "comment_id": comment_id}
 
 
 @router.post("/{drop_id}/view")
@@ -1315,7 +1450,7 @@ async def view_drop(
 # (grief, spiraling, etc.), and none of drops' four mood tags map onto it
 # without inventing a fake mapping, so it's intentionally not ported.
 
-VALID_MOOD_TAGS = {"longing", "unsent", "reckless", "quiet"}
+VALID_MOOD_TAGS = {"longing", "untold", "horny", "discreet"}
 
 _drop_count_cache: dict = {"value": 0, "ts": 0.0}
 _DROP_COUNT_TTL = 120   # refresh every 2 minutes
@@ -1476,9 +1611,13 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
         created_at_iso = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
         formatted.append({
             "id":               did,
-            "user_id":          drop.get("sender_id"),
+            # Never leak the real admin account id behind an official drop —
+            # the whole point of ADMIN_DROP_NAME is that it's not traceable
+            # to a person, and there's no unlock path to justify exposing it.
+            "user_id":          None if drop.get("is_admin_drop") else drop.get("sender_id"),
             "content":          confession,
             "anonymous_name":   drop.get("sender_anonymous_name"),
+            "is_admin_drop":    drop.get("is_admin_drop", False),
             "mood_tag":         drop.get("mood_tag"),
             "theme":            drop.get("theme"),
             "intensity":        drop.get("intensity"),
@@ -1486,6 +1625,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "media_type":       drop.get("media_type"),
             "video_url":        drop.get("media_url") if drop.get("media_type") == "video" else None,
             "audio_url":        drop.get("media_url") if drop.get("media_type") == "voice" else None,
+            "image_url":        drop.get("image_url"),
             "card_image_url":   drop.get("card_image_url"),
             "poll":             poll_out,
             "thread_count":     thread_counts.get(did, 0),
@@ -1636,6 +1776,7 @@ async def get_drops_feed(
 async def search_drops(
     q:                   Optional[str] = Query(None),
     mood_tag:            Optional[str] = Query(None),
+    intent:              Optional[str] = Query(None),
     filter:              str = Query("recent"),
     location_country:    Optional[str] = Query(None),
     location_county:     Optional[str] = Query(None),
@@ -1648,11 +1789,12 @@ async def search_drops(
 ):
     """Full-text search across drop confessions + sender name. Case-insensitive."""
     query = (q or "").strip()
-    valid_mood = mood_tag if mood_tag in VALID_MOOD_TAGS else None
+    valid_mood   = mood_tag if mood_tag in VALID_MOOD_TAGS else None
+    valid_intent = intent if intent in VALID_INTENTS else None
     loc_filter = build_location_search_filter(
         location_country, location_county, location_sub_county, location_estate,
     )
-    if not query and not valid_mood and not loc_filter:
+    if not query and not valid_mood and not valid_intent and not loc_filter:
         return {"results": [], "total": 0, "query": query}
 
     base_filter: dict = {}
@@ -1666,6 +1808,9 @@ async def search_drops(
 
     if valid_mood:
         base_filter["mood_tag"] = valid_mood
+
+    if valid_intent:
+        base_filter["intent"] = valid_intent
 
     if filter == "recent":
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
@@ -1811,6 +1956,8 @@ async def unlock_drop_coins(
         raise HTTPException(status_code=404, detail="Drop not found.")
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop.")
+    if drop.get("is_admin_drop"):
+        raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
     if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired.")
 
@@ -1900,6 +2047,9 @@ async def unlock_drop_mpesa(
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
 
+    if drop.get("is_admin_drop"):
+        raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
+
     if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired")
 
@@ -1974,6 +2124,9 @@ async def unlock_drop_stripe(
 
     if drop["sender_id"] == current_user_id:
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
+
+    if drop.get("is_admin_drop"):
+        raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
 
     if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired")

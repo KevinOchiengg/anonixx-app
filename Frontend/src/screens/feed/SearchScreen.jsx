@@ -15,6 +15,7 @@ import { ArrowLeft, Clock, Search, X, Users, MapPin } from 'lucide-react-native'
 import { useAuth } from '../../context/AuthContext';
 import DropCard from '../../components/feed/DropCard';
 import LocationField from '../../components/drops/LocationField';
+import { CARD_INTENT_LIST } from '../../components/drops/DropCardRenderer';
 import { API_BASE_URL } from '../../config/api';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP,
@@ -30,14 +31,11 @@ const CONTENT_TYPES = [
   { id: 'drops',   label: 'Drops' },
   { id: 'circles', label: 'Circles' },
 ];
-// Mirrors VALID_MOOD_TAGS in Backend/app/api/v1/drops.py — the confession-type
-// picker's mood_tag vocabulary, used here as a facet filter.
-const MOOD_TAGS = [
-  { id: 'longing',  label: 'Longing',  emoji: '🌙' },
-  { id: 'unsent',   label: 'Unsent',   emoji: '💌' },
-  { id: 'reckless', label: 'Reckless', emoji: '🔥' },
-  { id: 'quiet',    label: 'Quiet',    emoji: '🤫' },
-];
+// Same confession-type picker as compose (DropsComposeScreen), used here as
+// a facet filter — mirrors VALID_INTENTS in Backend/app/api/v1/drops.py.
+// Pulled straight from DropCardRenderer so the label + accent color a user
+// picked at compose time is exactly what they tap to find it again.
+const THEMES = CARD_INTENT_LIST.map(({ id, label, accent }) => ({ id, label, accent }));
 const LIVE_SEARCH_DEBOUNCE_MS = 400;
 const MIN_LIVE_QUERY_LEN = 2;
 
@@ -75,7 +73,7 @@ export default function SearchScreen({ navigation }) {
   const [total,      setTotal]      = useState(0);
   const [filter,     setFilter]     = useState('all');
   const [contentType, setContentType] = useState('drops');
-  const [moodTag,     setMoodTag]     = useState(null);
+  const [intent,      setIntent]      = useState(null);
   const [locationOpen,    setLocationOpen]    = useState(false);
   const [locCountry,      setLocCountry]      = useState('');
   const [locCounty,       setLocCounty]       = useState('');
@@ -113,15 +111,15 @@ export default function SearchScreen({ navigation }) {
   const doSearch = useCallback(async (
     q = query, f = filter, type = contentType,
     {
-      silent = false, mood = moodTag,
+      silent = false, theme = intent,
       country = locCountry, county = locCounty, subCounty = locSubCounty, estate = locEstate,
     } = {},
   ) => {
     const trimmed = q.trim();
     const hasLocation = !!(country || county || subCounty || estate);
-    // A facet alone (mood and/or location, no typed text) is a valid
+    // A facet alone (theme and/or location, no typed text) is a valid
     // "browse by…" search — only bail if there's truly nothing to go on.
-    if (!trimmed && !(type === 'drops' && (mood || hasLocation))) return;
+    if (!trimmed && !(type === 'drops' && (theme || hasLocation))) return;
 
     if (!silent) Keyboard.dismiss();
     setLoading(true);
@@ -145,7 +143,7 @@ export default function SearchScreen({ navigation }) {
       } else {
         const params = new URLSearchParams({ filter: f, limit: '30' });
         if (trimmed) params.set('q', trimmed);
-        if (mood) params.set('mood_tag', mood);
+        if (theme) params.set('intent', theme);
         if (country)   params.set('location_country', country);
         if (county)    params.set('location_county', county);
         if (subCounty) params.set('location_sub_county', subCounty);
@@ -164,7 +162,7 @@ export default function SearchScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [query, filter, contentType, moodTag, locCountry, locCounty, locSubCounty, locEstate, saveHistory]);
+  }, [query, filter, contentType, intent, locCountry, locCounty, locSubCounty, locEstate, saveHistory]);
 
   const handleFilterChange = useCallback((f) => {
     setFilter(f);
@@ -173,15 +171,15 @@ export default function SearchScreen({ navigation }) {
 
   const handleContentTypeChange = useCallback((type) => {
     setContentType(type);
-    if (query.trim() || (type === 'drops' && (moodTag || hasLocationFilter))) {
+    if (query.trim() || (type === 'drops' && (intent || hasLocationFilter))) {
       doSearch(query, filter, type);
     }
-  }, [query, filter, moodTag, hasLocationFilter, doSearch]);
+  }, [query, filter, intent, hasLocationFilter, doSearch]);
 
   // Location fields update live as you pick them — same "browse by facet
-  // alone" behavior the mood chips already have.
+  // alone" behavior the theme chips already have.
   const handleLocationChange = useCallback((next) => {
-    const stillFiltered = query.trim() || moodTag
+    const stillFiltered = query.trim() || intent
       || next.country || next.county || next.subCounty || next.estate;
     if (!stillFiltered) {
       setResults([]); setSearched(false); setTotal(0);
@@ -190,7 +188,7 @@ export default function SearchScreen({ navigation }) {
     doSearch(query, filter, 'drops', {
       country: next.country, county: next.county, subCounty: next.subCounty, estate: next.estate,
     });
-  }, [query, filter, moodTag, doSearch]);
+  }, [query, filter, intent, doSearch]);
 
   const updateLocation = useCallback((patch) => {
     const next = {
@@ -211,15 +209,15 @@ export default function SearchScreen({ navigation }) {
     handleLocationChange({ country: '', county: '', subCounty: '', estate: '' });
   }, [handleLocationChange]);
 
-  const handleMoodChange = useCallback((m) => {
-    const next = moodTag === m ? null : m;   // tap again to clear
-    setMoodTag(next);
+  const handleThemeChange = useCallback((id) => {
+    const next = intent === id ? null : id;   // tap again to clear
+    setIntent(next);
     if (!next && !query.trim() && !hasLocationFilter) {
       setResults([]); setSearched(false); setTotal(0);
       return;
     }
-    doSearch(query, filter, 'drops', { mood: next });
-  }, [query, filter, moodTag, hasLocationFilter, doSearch]);
+    doSearch(query, filter, 'drops', { theme: next });
+  }, [query, filter, intent, hasLocationFilter, doSearch]);
 
   // Live search-as-you-type — debounced, doesn't touch history (only an
   // explicit submit/history-tap/suggestion-tap does that).
@@ -333,8 +331,8 @@ export default function SearchScreen({ navigation }) {
         <Text style={styles.resultCount}>
           {total} result{total !== 1 ? 's' : ''}
           {query.trim() && ` for "${query.trim()}"`}
-          {!query.trim() && contentType === 'drops' && moodTag &&
-            ` in ${MOOD_TAGS.find(t => t.id === moodTag)?.label}`}
+          {!query.trim() && contentType === 'drops' && intent &&
+            ` in ${THEMES.find(t => t.id === intent)?.label}`}
           {contentType === 'drops' && hasLocationFilter &&
             ` near ${[locEstate, locSubCounty, locCounty, locCountry].filter(Boolean).join(', ')}`}
         </Text>
@@ -425,7 +423,8 @@ export default function SearchScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Mood — narrows results even with no typed query */}
+          {/* Theme — same confession types as compose, narrows results
+              even with no typed query */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -444,16 +443,16 @@ export default function SearchScreen({ navigation }) {
                   : 'Location'}
               </Text>
             </TouchableOpacity>
-            {MOOD_TAGS.map(t => (
+            {THEMES.map(t => (
               <TouchableOpacity
                 key={t.id}
-                style={[styles.facetChip, moodTag === t.id && styles.facetChipActive]}
-                onPress={() => handleMoodChange(t.id)}
+                style={[styles.facetChip, intent === t.id && styles.facetChipActive]}
+                onPress={() => handleThemeChange(t.id)}
                 hitSlop={HIT_SLOP}
                 activeOpacity={0.8}
               >
-                <Text style={styles.facetEmoji}>{t.emoji}</Text>
-                <Text style={[styles.facetText, moodTag === t.id && styles.facetTextActive]}>
+                <View style={[styles.facetDot, { backgroundColor: t.accent }]} />
+                <Text style={[styles.facetText, intent === t.id && styles.facetTextActive]}>
                   {t.label}
                 </Text>
               </TouchableOpacity>
@@ -622,7 +621,7 @@ const styles = StyleSheet.create({
     backgroundColor: T.primaryDim,
     borderColor:     T.primaryBorder,
   },
-  facetEmoji: { fontSize: rf(12) },
+  facetDot: { width: rs(8), height: rs(8), borderRadius: rs(4) },
   facetText: {
     fontFamily: 'DMSans-Bold',
     fontSize:   rf(12),

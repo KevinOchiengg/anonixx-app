@@ -434,6 +434,7 @@ export default function DropDetailScreen({ route, navigation }) {
         navigation={navigation}
         onClose={() => setShowComments(false)}
         onCountChange={setThreadCount}
+        isOwner={post.is_own_post}
       />
 
       {images.length > 0 && (

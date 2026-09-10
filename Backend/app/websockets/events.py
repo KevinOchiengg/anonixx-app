@@ -79,3 +79,22 @@ def is_user_online(user_id: str) -> bool:
     return user_id in _online_users
 
 
+# ─── Drop comment threads ──────────────────────────────────────────────────
+# Room-per-drop, joined only while a client has that drop's comment sheet
+# open — keeps new_comment/comment_liked broadcasts (app/websockets/
+# comments.py) scoped to people actually looking at the thread right now.
+
+@sio.event
+async def join_drop_thread(sid: str, data: dict):
+    drop_id = (data or {}).get("dropId")
+    if drop_id:
+        await sio.enter_room(sid, f"drop_{drop_id}")
+
+
+@sio.event
+async def leave_drop_thread(sid: str, data: dict):
+    drop_id = (data or {}).get("dropId")
+    if drop_id:
+        await sio.leave_room(sid, f"drop_{drop_id}")
+
+

@@ -27,7 +27,7 @@ import React, {
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Dimensions, Animated, Platform,
-  KeyboardAvoidingView, ScrollView,
+  KeyboardAvoidingView, ScrollView, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -37,10 +37,11 @@ import {
   useAudioPlayer,   useAudioPlayerStatus,
   AudioModule, RecordingPresets,
 } from 'expo-audio';
+import * as ImagePicker from 'expo-image-picker';
 import { useDispatch } from 'react-redux';
 import {
-  Globe, Lock, Mic, Pause, Play, RotateCcw, Send, Square,
-  Type as TypeIcon,
+  Globe, Images, Lock, Mic, Pause, Play, RotateCcw, Send, Square,
+  Type as TypeIcon, X,
 } from 'lucide-react-native';
 
 import {
@@ -114,7 +115,7 @@ export default function DropsRecordScreen({ navigation, route }) {
   );
 
   const theme        = route?.params?.theme    || 'desire';
-  const cardIntent   = route?.params?.cardIntent || 'general';
+  const cardIntent   = route?.params?.cardIntent || 'skeleton-in-the-closet';
   const moodTag      = route?.params?.moodTag  || 'longing';
   const targetUserId = route?.params?.target_user_id || undefined;
   // Confession type owns the palette (same as the compose preview and the
@@ -139,6 +140,31 @@ export default function DropsRecordScreen({ navigation, route }) {
   // Anonixx Publisher opt-in (section 16). Voice drops route through
   // DropsPublishScreen for the extra "they'll hear your voice" consent.
   const [publisherOptIn, setPublisherOptIn] = useState(false);
+
+  // Supporting photo — optional, supplements the voice note the same way
+  // DropsComposeScreen's attach button supplements the confession text.
+  const [imageUri, setImageUri] = useState(null);
+
+  const handlePickImage = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'warning', message: 'Gallery access is needed.' });
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (result.canceled) return;
+      setImageUri(result.assets[0].uri);
+    } catch {
+      showToast({ type: 'error', message: 'Could not open gallery.' });
+    }
+  }, [showToast]);
+
+  const handleClearImage = useCallback(() => setImageUri(null), []);
 
   // ── Animations ────────────────────────────────────────────────
   const redPulse    = useRef(new Animated.Value(0)).current;
@@ -332,10 +358,45 @@ export default function DropsRecordScreen({ navigation, route }) {
       const upData = await upRes.json();
       if (!upRes.ok) throw new Error(upData?.error?.message || `Upload failed (${upRes.status})`);
 
+      // 2b. Optional supporting photo — same signed direct-upload pattern,
+      // separate Cloudinary image upload since media_url above is already
+      // taken by the voice recording itself.
+      let uploadedImageUrl = null;
+      if (imageUri) {
+        const imgSignRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ resource_type: 'image', watermark: true }),
+        });
+        if (!imgSignRes.ok) {
+          const err = await imgSignRes.json().catch(() => ({}));
+          throw new Error(err?.detail || `Photo upload sign failed (${imgSignRes.status})`);
+        }
+        const imgSign = await imgSignRes.json();
+        const imgForm = new FormData();
+        imgForm.append('file', { uri: imageUri, name: 'voice-drop-photo.jpg', type: 'image/jpeg' });
+        imgForm.append('api_key',   imgSign.api_key);
+        imgForm.append('timestamp', String(imgSign.timestamp));
+        imgForm.append('signature', imgSign.signature);
+        imgForm.append('folder',    imgSign.folder);
+        if (imgSign.transformation) imgForm.append('transformation', imgSign.transformation);
+        const imgUpRes = await fetch(
+          `https://api.cloudinary.com/v1_1/${imgSign.cloud_name}/image/upload`,
+          { method: 'POST', body: imgForm },
+        );
+        const imgUpData = await imgUpRes.json();
+        if (!imgUpRes.ok) throw new Error(imgUpData?.error?.message || `Photo upload failed (${imgUpRes.status})`);
+        uploadedImageUrl = imgUpData.secure_url;
+      }
+
       // 3. Create drop
       const body = {
         media_url:  upData.secure_url,
         media_type: 'voice',
+        ...(uploadedImageUrl ? { image_url: uploadedImageUrl } : {}),
         theme,
         intent:     cardIntent,   // drives the card's palette/pattern
         mood_tag:   moodTag,
@@ -419,7 +480,7 @@ export default function DropsRecordScreen({ navigation, route }) {
   }, [
     recordedUri, theme, moodTag, caption, elapsed,
     capturedLevels, levels, playerStatus.duration,
-    publisherOptIn,
+    publisherOptIn, imageUri,
     dispatch, navigation, showToast,
   ]);
 
@@ -455,8 +516,9 @@ export default function DropsRecordScreen({ navigation, route }) {
         <View style={styles.contextStrip}>
           <View style={[styles.dot, { backgroundColor: accent }]} />
           <Text style={styles.contextText}>
-            {/* No .toLowerCase() — labels carry their own casing now, and
-                forcing it would render the NSA acronym as "nsa". */}
+            {/* No .toLowerCase() — labels carry their own title-case
+                styling now (e.g. "Just Tonight"), forcing it would flatten
+                that. */}
             {themeObj.label} · {moodTag}
           </Text>
         </View>
@@ -631,6 +693,25 @@ export default function DropsRecordScreen({ navigation, route }) {
                 ? 'Listen. If it\'s honest, send it.'
                 : 'Tap to start. Up to 3:00.'}
           </Text>
+
+          {/* Supporting photo — optional, supplements the voice note the
+              same way the compose screen's attach button supplements text. */}
+          {hasRecording && (
+            !imageUri ? (
+              <TouchableOpacity style={styles.attachRow} onPress={handlePickImage} activeOpacity={0.85}>
+                <Images size={rs(14)} color={T.textMute} />
+                <Text style={styles.attachRowText}>Add a photo (optional)</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.attachedRow}>
+                <Image source={{ uri: imageUri }} style={styles.attachedThumb} />
+                <Text style={styles.attachedLabel}>Photo attached</Text>
+                <TouchableOpacity onPress={handleClearImage} hitSlop={HIT_SLOP} style={styles.attachedRemove}>
+                  <X size={rs(14)} color={T.textMute} />
+                </TouchableOpacity>
+              </View>
+            )
+          )}
 
           {/* Anonixx Publisher opt-in (section 16) — voice only, after preview */}
           {hasRecording && (
@@ -898,6 +979,39 @@ const styles = StyleSheet.create({
     marginTop:     SPACING.sm,
     letterSpacing: 0.3,
   },
+
+  // Supporting photo attach — mirrors DropsPollScreen's compact row pattern
+  // (this screen's layout is centered controls, not a live card, so no
+  // corner-overlay button here either).
+  attachRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(8),
+    width:             SCREEN_W - SPACING.md * 2,
+    paddingVertical:   rp(10),
+    paddingHorizontal: rp(12),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderStyle:       'dashed',
+    borderColor:       T.border,
+    marginTop:         SPACING.md,
+  },
+  attachRowText: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textMute },
+  attachedRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               rp(10),
+    width:             SCREEN_W - SPACING.md * 2,
+    paddingVertical:   rp(8),
+    paddingHorizontal: rp(10),
+    borderRadius:      RADIUS.md,
+    borderWidth:       1,
+    borderColor:       T.border,
+    marginTop:         SPACING.md,
+  },
+  attachedThumb:  { width: rs(40), height: rs(40), borderRadius: RADIUS.sm },
+  attachedLabel:  { flex: 1, fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.text },
+  attachedRemove: { padding: rp(4) },
 
   // Publisher opt-in (section 16)
   publisherBox: {

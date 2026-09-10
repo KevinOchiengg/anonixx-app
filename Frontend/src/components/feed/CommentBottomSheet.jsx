@@ -12,11 +12,42 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  ChevronDown, CornerDownRight, Heart, ImageIcon, MessageCircle, Pause, Play, Send, X,
+  ChevronDown, CornerDownRight, Heart, ImageIcon, Pause, Pin, Play, X,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
+import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
+import AnonProfileSheet from '../connect/AnonProfileSheet';
+
+// @mentions — plain-text markup, mirrors MENTION_RE in
+// Backend/app/api/v1/drops.py. Parsed here purely for rendering (coral,
+// tappable spans); nothing structural is stored for it.
+const MENTION_RE = /@([A-Za-z0-9_.]{2,30})/g;
+
+// Splits comment text into plain strings + tappable @mention spans. Nested
+// Text children inherit the parent <Text>'s style, so only the mention
+// spans need their own style passed in.
+function renderMentionText(content, mentionStyle, onMentionPress) {
+  if (!content) return null;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  MENTION_RE.lastIndex = 0;
+  while ((match = MENTION_RE.exec(content)) !== null) {
+    if (match.index > lastIndex) parts.push(content.slice(lastIndex, match.index));
+    const username = match[1];
+    parts.push(
+      <Text key={`${match.index}-${username}`} style={mentionStyle} onPress={() => onMentionPress?.(username)}>
+        @{username}
+      </Text>,
+    );
+    lastIndex = MENTION_RE.lastIndex;
+  }
+  if (lastIndex < content.length) parts.push(content.slice(lastIndex));
+  return parts;
+}
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -112,6 +143,7 @@ const EmojiPicker = React.memo(({ onSelect }) => {
 // ─── Comment row ──────────────────────────────────────────────
 const CommentItem = React.memo(({
   item, isFirst, isHot, onReply, replyingTo, onLike, onOpenImage, depth = 0,
+  isOwner, onPin, onMentionPress,
 }) => {
   const isReplying = replyingTo === item.id;
   const replies    = item.replies ?? [];
@@ -134,17 +166,24 @@ const CommentItem = React.memo(({
   const mediaUri = item.image_url || item.gif_url;
 
   return (
-    <View style={[st.commentItem, depth > 0 && st.commentItemReply, isOwn && st.commentItemOwn]}>
-      <View style={[st.commentAvatar, isOwn && st.commentAvatarOwn]}>
+    <View style={[st.commentItem, depth > 0 && st.commentItemReply]}>
+      <View style={st.commentAvatar}>
         <Text style={st.commentAvatarText}>
           {item.anonymous_name?.[0]?.toUpperCase() || 'A'}
         </Text>
       </View>
-      <View style={[st.commentBody, isOwn && st.commentBodyOwn]}>
-        <View style={[st.commentMetaRow, isOwn && st.commentMetaRowOwn]}>
+
+      <View style={st.commentBody}>
+        <View style={st.commentMetaRow}>
           <Text style={st.commentAuthor} numberOfLines={1}>
             {isOwn ? 'You' : (item.anonymous_name || 'Anonymous')}
           </Text>
+          {item.pinned && (
+            <View style={st.pinnedBadge}>
+              <Pin size={9} color={T.primary} fill={T.primary} />
+              <Text style={st.pinnedBadgeText}>pinned</Text>
+            </View>
+          )}
           {isFirst && !isHot && (
             <View style={st.firstBadge}>
               <Text style={st.firstBadgeText}>first 🎯</Text>
@@ -157,65 +196,59 @@ const CommentItem = React.memo(({
           )}
         </View>
 
-        <View style={[st.bubble, isOwn && st.bubbleOwn]}>
-          {item.content ? (
-            <Text style={[st.commentText, isOwn && st.commentTextOwn]}>{item.content}</Text>
-          ) : null}
-          {mediaUri ? (
-            <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenImage(mediaUri)}>
-              <Image source={{ uri: mediaUri }} style={st.commentImage} resizeMode="cover" />
+        {item.content ? (
+          <Text style={st.commentText}>
+            {renderMentionText(item.content, st.mentionText, onMentionPress)}
+          </Text>
+        ) : null}
+        {mediaUri ? (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => onOpenImage(mediaUri)}
+            style={{ marginTop: item.content ? 6 : 0 }}
+          >
+            <Image source={{ uri: mediaUri }} style={st.commentImage} resizeMode="cover" />
+          </TouchableOpacity>
+        ) : null}
+        {item.voice_url ? <View style={{ marginTop: item.content ? 6 : 0 }}><AudioPlayer uri={item.voice_url} /></View> : null}
+
+        <View style={st.commentFooterRow}>
+          <Text style={st.commentTime}>{item.time_ago || 'just now'}</Text>
+          {depth === 0 && (
+            <TouchableOpacity
+              onPress={() => onReply(isReplying ? null : item.id)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={[st.commentFooterAction, isReplying && { color: T.primary }]}>
+                {isReplying ? 'Cancel' : 'Reply'}
+              </Text>
             </TouchableOpacity>
-          ) : null}
-          {item.voice_url ? <View style={{ marginTop: item.content ? 6 : 0 }}><AudioPlayer uri={item.voice_url} /></View> : null}
-          <Text style={[st.bubbleTime, isOwn && st.bubbleTimeOwn]}>{item.time_ago || 'just now'}</Text>
+          )}
+          {depth === 0 && isOwner && (
+            <TouchableOpacity
+              onPress={() => onPin(item.id, !item.pinned)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={[st.commentFooterAction, item.pinned && { color: T.primary }]}>
+                {item.pinned ? 'Unpin' : 'Pin'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <View style={[st.commentActions, isOwn && st.commentActionsOwn]}>
-          <View style={st.commentActionsLeft}>
-            {depth === 0 && (
-              <TouchableOpacity
-                onPress={() => onReply(isReplying ? null : item.id)}
-                style={st.commentActionBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <CornerDownRight size={13} color={isReplying ? T.primary : 'rgba(255,255,255,0.3)'} />
-                <Text style={[st.commentActionText, isReplying && { color: T.primary }]}>
-                  {isReplying ? 'cancel' : 'reply'}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {depth === 0 && replies.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setExpanded(v => !v)}
-                style={st.commentActionBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <MessageCircle size={12} color={T.primary} />
-                <Text style={st.repliesCountText}>
-                  {expanded ? 'hide' : `${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        {depth === 0 && replies.length > 0 && (
           <TouchableOpacity
-            onPress={handleLike}
-            style={st.commentLikeBtn}
+            onPress={() => setExpanded(v => !v)}
+            style={st.viewRepliesBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            {(item.likes_count || 0) > 0 && (
-              <Text style={[st.commentActionCount, item.liked_by_me && { color: T.primary }]}>
-                {likesDisplay}
-              </Text>
-            )}
-            <Animated.View style={{ transform: [{ scale: likeScale }] }}>
-              <Heart
-                size={15}
-                color={item.liked_by_me ? T.primary : 'rgba(255,255,255,0.35)'}
-                fill={item.liked_by_me ? T.primary : 'none'}
-              />
-            </Animated.View>
+            <View style={st.viewRepliesLine} />
+            <Text style={st.viewRepliesText}>
+              {expanded ? 'Hide replies' : `View ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
+            </Text>
           </TouchableOpacity>
-        </View>
+        )}
+
         {depth === 0 && expanded && replies.length > 0 && (
           <View style={st.repliesWrap}>
             {replies.map(r => (
@@ -228,21 +261,43 @@ const CommentItem = React.memo(({
                 replyingTo={replyingTo}
                 onLike={onLike}
                 onOpenImage={onOpenImage}
+                onMentionPress={onMentionPress}
                 depth={1}
               />
             ))}
           </View>
         )}
       </View>
+
+      <TouchableOpacity
+        onPress={handleLike}
+        style={st.likeColumn}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+          <Heart
+            size={16}
+            color={item.liked_by_me ? T.primary : 'rgba(255,255,255,0.4)'}
+            fill={item.liked_by_me ? T.primary : 'none'}
+          />
+        </Animated.View>
+        {(item.likes_count || 0) > 0 && (
+          <Text style={[st.likeCount, item.liked_by_me && { color: T.primary }]}>
+            {likesDisplay}
+          </Text>
+        )}
+      </TouchableOpacity>
     </View>
   );
 });
 
 // ─── Main sheet ───────────────────────────────────────────────
 export const CommentBottomSheet = React.memo(({
-  visible, postId, isAuthenticated, navigation, onClose, onCountChange,
+  visible, postId, isAuthenticated, navigation, onClose, onCountChange, isOwner,
 }) => {
   const insets = useSafeAreaInsets();
+  const { socketService } = useSocket();
+  const { user } = useAuth();
 
   const [comments,       setComments]       = useState([]);
   const [loading,        setLoading]        = useState(false);
@@ -254,8 +309,18 @@ export const CommentBottomSheet = React.memo(({
   const [imageUploading, setImageUploading] = useState(false);
   const [viewerUri,      setViewerUri]      = useState(null);
 
-  const slideAnim = useRef(new Animated.Value(H)).current;
-  const inputRef  = useRef(null);
+  // @mention autocomplete — null when not actively typing a mention,
+  // '' or more once an "@" with no trailing space is in progress.
+  const [mentionQuery,   setMentionQuery]   = useState(null);
+  const [mentionResults, setMentionResults] = useState([]);
+  // Tapping an @mention in a posted comment resolves the username to a
+  // user id (comments only store plain text, no structured mention data)
+  // and opens the same profile sheet the rest of the feed uses.
+  const [mentionProfile, setMentionProfile] = useState({ visible: false, userId: null, anonymousName: '' });
+
+  const slideAnim    = useRef(new Animated.Value(H)).current;
+  const inputRef     = useRef(null);
+  const mentionTimer = useRef(null);
 
   useEffect(() => {
     if (visible) {
@@ -273,6 +338,79 @@ export const CommentBottomSheet = React.memo(({
       }).start();
     }
   }, [visible]);
+
+  // ── Live thread — join this drop's comment room while the sheet is open,
+  // so new_comment/comment_liked broadcasts (see Backend/app/websockets/
+  // comments.py) reach everyone currently looking at it, not just whoever
+  // sent the request. ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!visible || !postId) return;
+    socketService.emit('join_drop_thread', { dropId: postId });
+    return () => socketService.emit('leave_drop_thread', { dropId: postId });
+  }, [visible, postId, socketService]);
+
+  useEffect(() => {
+    if (!visible || !postId) return;
+
+    const handleNewComment = ({ dropId, comment }) => {
+      if (dropId !== postId) return;
+      // We already have our own comment from the HTTP response in `submit`
+      // — the broadcast is an echo of it, not a new one.
+      if (comment.user_id && comment.user_id === user?.id) return;
+
+      const incoming = { ...comment, replies: comment.replies || [] };
+      if (comment.parent_id) {
+        setComments(prev => prev.map(c =>
+          c.id === comment.parent_id
+            ? { ...c, replies: [...(c.replies ?? []), incoming] }
+            : c,
+        ));
+      } else {
+        setComments(prev => {
+          const next = [incoming, ...prev];
+          onCountChange?.(next.length);
+          return next;
+        });
+      }
+    };
+
+    const handleCommentLiked = ({ dropId, commentId, likesCount }) => {
+      if (dropId !== postId) return;
+      setComments(prev => prev.map(c => {
+        if (c.id === commentId) return { ...c, likes_count: likesCount };
+        if (c.replies?.some(r => r.id === commentId)) {
+          return {
+            ...c,
+            replies: c.replies.map(r => r.id === commentId ? { ...r, likes_count: likesCount } : r),
+          };
+        }
+        return c;
+      }));
+    };
+
+    // Only one pinned comment per drop (enforced server-side) — pinning
+    // sets it on the target and clears it everywhere else in one pass.
+    const handleCommentPinned = ({ dropId, commentId }) => {
+      if (dropId !== postId) return;
+      setComments(prev => prev.map(c => ({ ...c, pinned: c.id === commentId })));
+    };
+
+    const handleCommentUnpinned = ({ dropId, commentId }) => {
+      if (dropId !== postId) return;
+      setComments(prev => prev.map(c => c.id === commentId ? { ...c, pinned: false } : c));
+    };
+
+    socketService.on('new_comment',      handleNewComment);
+    socketService.on('comment_liked',    handleCommentLiked);
+    socketService.on('comment_pinned',   handleCommentPinned);
+    socketService.on('comment_unpinned', handleCommentUnpinned);
+    return () => {
+      socketService.off('new_comment',      handleNewComment);
+      socketService.off('comment_liked',    handleCommentLiked);
+      socketService.off('comment_pinned',   handleCommentPinned);
+      socketService.off('comment_unpinned', handleCommentUnpinned);
+    };
+  }, [visible, postId, user?.id, socketService]);
 
   useEffect(() => {
     if (replyingTo) {
@@ -423,6 +561,85 @@ export const CommentBottomSheet = React.memo(({
     } catch {}
   }, [postId]);
 
+  // Owner-only, top-level only (enforced server-side too) — one pinned
+  // comment per drop, so pinning a new one locally unpins whichever was
+  // pinned before.
+  const handlePin = useCallback(async (commentId, toPin) => {
+    setComments(prev => prev.map(c => ({
+      ...c,
+      pinned: c.id === commentId ? toPin : (toPin ? false : c.pinned),
+    })));
+    try {
+      const token = await AsyncStorage.getItem('token');
+      await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/thread/${commentId}/pin`, {
+        method:  toPin ? 'POST' : 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {}
+  }, [postId]);
+
+  // ── @mention autocomplete ───────────────────────────────────────
+  // Simple heuristic (no cursor tracking): an active mention is whatever
+  // trails the last "@" in the text, as long as nothing after it is a
+  // space — same trigger Twitter/Instagram's compose boxes use.
+  const handleTextChange = useCallback((value) => {
+    setText(value);
+    const match = value.match(/(?:^|\s)@([A-Za-z0-9_.]{0,30})$/);
+    setMentionQuery(match ? match[1] : null);
+  }, []);
+
+  useEffect(() => {
+    clearTimeout(mentionTimer.current);
+    if (mentionQuery === null || !mentionQuery.trim()) {
+      setMentionResults([]);
+      return;
+    }
+    mentionTimer.current = setTimeout(async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res = await fetch(
+          `${API_BASE_URL}/api/v1/users/search?q=${encodeURIComponent(mentionQuery.trim())}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setMentionResults(data.users || []);
+        }
+      } catch {}
+    }, 200);
+    return () => clearTimeout(mentionTimer.current);
+  }, [mentionQuery]);
+
+  const handleSelectMention = useCallback((username) => {
+    setText(prev => prev.replace(
+      /(?:^|\s)@([A-Za-z0-9_.]{0,30})$/,
+      (m) => `${m.startsWith(' ') ? ' ' : ''}@${username} `,
+    ));
+    setMentionQuery(null);
+    setMentionResults([]);
+    inputRef.current?.focus();
+  }, []);
+
+  // Comments only store the mention as plain "@username" text, so tapping
+  // one resolves it to a user id on demand via the same search endpoint
+  // the autocomplete above uses, then opens the standard profile sheet.
+  const handleMentionPress = useCallback(async (username) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/users/search?q=${encodeURIComponent(username)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const match = (data.users || []).find(
+        u => u.username?.toLowerCase() === username.toLowerCase(),
+      );
+      if (match) {
+        setMentionProfile({ visible: true, userId: match.id, anonymousName: match.anonymous_name });
+      }
+    } catch {}
+  }, []);
+
   const pickImage = useCallback(async () => {
     if (!isAuthenticated) {
       navigation?.navigate?.('AuthNav', { screen: 'Login' });
@@ -489,10 +706,14 @@ export const CommentBottomSheet = React.memo(({
   })).current;
 
   const sortedComments = useMemo(() => {
-    if (sortBy === 'top') {
-      return [...comments].sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0));
-    }
-    return comments;
+    const base = sortBy === 'top'
+      ? [...comments].sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0))
+      : comments;
+    // Pinned comment always floats to the very top, ahead of whatever
+    // sort is applied — matches the backend's initial-load ordering.
+    const pinned = base.filter(c => c.pinned);
+    if (!pinned.length) return base;
+    return [...pinned, ...base.filter(c => !c.pinned)];
   }, [comments, sortBy]);
 
   const hotCommentId = useMemo(() => {
@@ -523,8 +744,11 @@ export const CommentBottomSheet = React.memo(({
       replyingTo={replyingTo}
       onLike={handleLike}
       onOpenImage={setViewerUri}
+      isOwner={isOwner}
+      onPin={handlePin}
+      onMentionPress={handleMentionPress}
     />
-  ), [firstCommentId, hotCommentId, replyingTo, handleLike]);
+  ), [firstCommentId, hotCommentId, replyingTo, handleLike, isOwner, handlePin, handleMentionPress]);
 
   const keyExtractor = useCallback((item, i) => item.id || String(i), []);
 
@@ -549,35 +773,32 @@ export const CommentBottomSheet = React.memo(({
           <View style={st.handleBar} />
         </View>
 
-        {/* Header */}
+        {/* Header — centered count, plain-text sort toggle, close on the
+            right. No divider under it — TikTok's header blends straight
+            into the list instead of boxing itself off. */}
         <View style={st.header}>
-          <Text style={st.headerTitle}>
-            {comments.length}{' '}
-            <Text style={st.headerSub}>{comments.length === 1 ? 'thought' : 'thoughts'}</Text>
+          <View style={st.headerSide} />
+          <Text style={st.headerTitle} numberOfLines={1}>
+            {comments.length} {comments.length === 1 ? 'drop' : 'drops'}
           </Text>
-          <View style={st.sortPill}>
-            <TouchableOpacity
-              onPress={() => setSortBy('new')}
-              style={[st.sortBtn, sortBy === 'new' && st.sortBtnActive]}
-            >
-              <Text style={[st.sortBtnText, sortBy === 'new' && st.sortBtnTextActive]}>New</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setSortBy('top')}
-              style={[st.sortBtn, sortBy === 'top' && st.sortBtnActive]}
-            >
-              <Text style={[st.sortBtnText, sortBy === 'top' && st.sortBtnTextActive]}>🔥 Top</Text>
-            </TouchableOpacity>
-          </View>
           <TouchableOpacity
+            style={st.headerSide}
             onPress={handleClose}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <ChevronDown size={20} color={T.textSecondary} />
           </TouchableOpacity>
         </View>
+        <View style={st.sortRow}>
+          <TouchableOpacity onPress={() => setSortBy('new')} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+            <Text style={[st.sortText, sortBy === 'new' && st.sortTextActive]}>Newest</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setSortBy('top')} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+            <Text style={[st.sortText, sortBy === 'top' && st.sortTextActive]}>Top</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Reply banner */}
+        {/* Reply banner — plain text row, no filled block */}
         {replyingTo && replyingComment && (
           <View style={st.replyBanner}>
             <CornerDownRight size={13} color={T.primary} />
@@ -635,34 +856,47 @@ export const CommentBottomSheet = React.memo(({
           />
         )}
 
+        {/* @mention autocomplete — floats right above the input, same spot
+            the emoji picker takes over */}
+        {mentionQuery !== null && mentionResults.length > 0 && (
+          <View style={st.mentionDropdown}>
+            {mentionResults.map(u => (
+              <TouchableOpacity
+                key={u.id}
+                style={st.mentionRow}
+                onPress={() => handleSelectMention(u.username)}
+                activeOpacity={0.7}
+              >
+                <View style={st.mentionAvatar}>
+                  <Text style={st.mentionAvatarText}>
+                    {(u.anonymous_name || u.username)?.[0]?.toUpperCase() || '?'}
+                  </Text>
+                </View>
+                <Text style={st.mentionUsername} numberOfLines={1}>@{u.username}</Text>
+                {!!u.anonymous_name && (
+                  <Text style={st.mentionAnon} numberOfLines={1}>{u.anonymous_name}</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* Input — paddingBottom respects phone nav bar */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={[st.inputRow, { paddingBottom: 12 + insets.bottom }]}>
-            {/* Hold to record, release to send */}
-            <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} />
-            <TouchableOpacity
-              onPress={() => setPicker(p => (p === 'emoji' ? null : 'emoji'))}
-              style={[st.emojiToggle, picker === 'emoji' && st.emojiToggleActive]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={st.emojiToggleText}>
-                {picker === 'emoji' ? '✕' : '😊'}
-              </Text>
-            </TouchableOpacity>
-
             <View style={st.inputContainer}>
               <TextInput
                 ref={inputRef}
                 style={st.input}
                 value={text}
-                onChangeText={setText}
+                onChangeText={handleTextChange}
                 onFocus={() => setPicker(null)}
                 placeholder={
                   !isAuthenticated
                     ? "sign in. no one will know it's you."
                     : replyingTo
                     ? 'say whats really weighs you down'
-                    : "No one knows it's you. Be you"
+                    : "No one knows it's you"
                 }
                 placeholderTextColor={T.textMuted}
                 multiline
@@ -670,6 +904,18 @@ export const CommentBottomSheet = React.memo(({
                 editable={!!isAuthenticated}
                 returnKeyType="default"
               />
+              {/* Emoji, photo, mic — mic goes last, closest to the send
+                  button, and stays coral (compact) so it's clearly its
+                  own thing rather than blending into the pill. */}
+              <TouchableOpacity
+                onPress={() => setPicker(p => (p === 'emoji' ? null : 'emoji'))}
+                style={st.emojiToggle}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={st.emojiToggleText}>
+                  {picker === 'emoji' ? '✕' : '😊'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 onPress={pickImage}
                 style={st.imageInInput}
@@ -678,18 +924,25 @@ export const CommentBottomSheet = React.memo(({
               >
                 {imageUploading
                   ? <ActivityIndicator size="small" color={T.primary} />
-                  : <ImageIcon size={17} color={T.textMuted} />}
+                  : <ImageIcon size={20} color={T.textMuted} />}
               </TouchableOpacity>
+              {/* Hold to record, release to send */}
+              <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} compact />
             </View>
 
             <TouchableOpacity
-              style={[st.sendBtn, (!text.trim() || submitting) && st.sendBtnDisabled]}
+              style={st.sendBtn}
               onPress={() => submit()}
               disabled={!text.trim() || submitting}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
             >
               {submitting
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Send size={15} color="#fff" />}
+                ? <ActivityIndicator size="small" color={T.primary} />
+                : (
+                  <Text style={[st.sendBtnText, !text.trim() && st.sendBtnTextDisabled]}>
+                    Drop
+                  </Text>
+                )}
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -705,6 +958,13 @@ export const CommentBottomSheet = React.memo(({
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <AnonProfileSheet
+        visible={mentionProfile.visible}
+        onClose={() => setMentionProfile(p => ({ ...p, visible: false }))}
+        userId={mentionProfile.userId}
+        anonymousName={mentionProfile.anonymousName}
+      />
     </Modal>
   );
 });
@@ -721,37 +981,31 @@ const st = StyleSheet.create({
     height: H * 0.80,
     backgroundColor: T.surface,
     borderTopLeftRadius: 22, borderTopRightRadius: 22,
-    borderTopWidth: 1, borderTopColor: T.borderStrong,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.6, shadowRadius: 28, elevation: 24,
   },
   handleRow: { alignItems: 'center', paddingTop: 12, paddingBottom: 6 },
   handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: T.borderStrong },
+  // ── Header — centered count, no divider, blends into the list ──────
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 18, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: T.border,
+    paddingHorizontal: 16, paddingTop: 4, paddingBottom: 2,
   },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: T.text, fontFamily: 'PlayfairDisplay-Bold' },
-  headerSub:   { fontWeight: '500', color: T.textSecondary, fontFamily: 'PlayfairDisplay-Italic' },
-  sortPill: {
-    flexDirection: 'row',
-    backgroundColor: T.surfaceAlt,
-    borderRadius: 20, overflow: 'hidden',
-    borderWidth: 1, borderColor: T.borderStrong,
+  headerSide:  { width: 24 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '700', color: T.text, fontFamily: 'DMSans-Bold' },
+  // Plain-text sort toggle — no pill, no border, just weight/color for state
+  sortRow: {
+    flexDirection: 'row', gap: 18,
+    paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10,
   },
-  sortBtn:           { paddingHorizontal: 14, paddingVertical: 6 },
-  sortBtnActive:     { backgroundColor: T.primaryDim },
-  sortBtnText:       { fontSize: 12, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
-  sortBtnTextActive: { color: T.primary },
+  sortText:       { fontSize: 12.5, fontWeight: '600', color: T.textMuted, fontFamily: 'DMSans-SemiBold' },
+  sortTextActive: { color: T.text, fontWeight: '800', fontFamily: 'DMSans-Bold' },
   replyBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 9,
-    backgroundColor: T.primaryDim,
-    borderBottomWidth: 1, borderBottomColor: T.primaryBorder,
+    paddingHorizontal: 16, paddingVertical: 8,
   },
-  replyBannerText: { flex: 1, fontSize: 12, color: T.primary, fontFamily: 'DMSans-Regular' },
+  replyBannerText: { flex: 1, fontSize: 12, color: T.textMuted, fontFamily: 'DMSans-Regular' },
   center:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 44, gap: 10 },
   emptyEmoji:{ fontSize: 42 },
@@ -759,26 +1013,23 @@ const st = StyleSheet.create({
   emptyBody: { fontSize: 14, color: T.textMuted, textAlign: 'center', lineHeight: 21, fontFamily: 'PlayfairDisplay-Italic' },
   list:        { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 },
-  commentItem:      { flexDirection: 'row', gap: 11, marginBottom: 18 },
-  commentItemReply: { marginTop: 10, marginLeft: 2, marginBottom: 10 },
-  commentItemOwn:   { flexDirection: 'row-reverse' },
+  // ── TikTok-style flat comment row — no bubble, no border, coral is the
+  // only color difference from TikTok's own layout. ──────────────────
+  commentItem:      { flexDirection: 'row', gap: 12, marginBottom: 22, alignItems: 'flex-start' },
+  commentItemReply: { marginTop: 16, marginBottom: 0 },
   commentAvatar: {
     width: 34, height: 34, borderRadius: 17,
     backgroundColor: AVATAR_BG,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)',
     flexShrink: 0,
   },
-  commentAvatarOwn:  { borderColor: T.primary },
   commentAvatarText: { fontSize: 13, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
   commentBody:       { flex: 1 },
-  commentBodyOwn:    { alignItems: 'flex-end' },
   commentMetaRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginBottom: 4, flexWrap: 'wrap',
+    marginBottom: 3, flexWrap: 'wrap',
   },
-  commentMetaRowOwn: { flexDirection: 'row-reverse' },
-  commentAuthor: { fontSize: 13, fontWeight: '700', color: T.text, fontFamily: 'DMSans-Bold' },
+  commentAuthor: { fontSize: 12.5, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
   firstBadge: {
     paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
     backgroundColor: T.goldDim,
@@ -791,28 +1042,22 @@ const st = StyleSheet.create({
     borderWidth: 1, borderColor: T.primaryBorder,
   },
   hotBadgeText:   { fontSize: 10, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
-  // ── WhatsApp-style chat bubble ──────────────────────────────
-  bubble: {
-    backgroundColor: T.surfaceAlt,
-    borderRadius: 16,
-    borderTopLeftRadius: 4,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderWidth: 1, borderColor: T.borderStrong,
-    maxWidth: '92%',
-    alignSelf: 'flex-start',
-  },
-  bubbleOwn: {
+  pinnedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
     backgroundColor: T.primaryDim,
-    borderColor: T.primaryBorder,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 4,
-    alignSelf: 'flex-end',
+    borderWidth: 1, borderColor: T.primaryBorder,
   },
-  commentText:    { fontSize: 14, color: T.textSecondary, lineHeight: 21, fontFamily: 'DMSans-Regular' },
-  commentTextOwn: { color: T.text },
-  commentImage:   { width: 160, height: 120, borderRadius: 10, borderWidth: 1, borderColor: T.borderStrong },
-  bubbleTime:     { fontSize: 10, color: T.textMuted, marginTop: 4, alignSelf: 'flex-end', fontFamily: 'DMSans-Regular' },
-  bubbleTimeOwn:  { color: T.textMuted },
+  pinnedBadgeText: { fontSize: 10, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
+  commentText:  { fontSize: 14.5, color: T.text, lineHeight: 20, fontFamily: 'DMSans-Regular' },
+  mentionText:  { color: T.primary, fontFamily: 'DMSans-Bold' },
+  commentImage: { width: 160, height: 120, borderRadius: 10 },
+  commentFooterRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 6 },
+  commentTime:         { fontSize: 12, color: T.textMuted, fontFamily: 'DMSans-Regular' },
+  commentFooterAction: { fontSize: 12, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
+  viewRepliesBtn:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  viewRepliesLine: { width: 24, height: 1, backgroundColor: T.borderStrong },
+  viewRepliesText: { fontSize: 12.5, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
   audioWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: T.surfaceAlt, borderRadius: 20,
@@ -823,23 +1068,15 @@ const st = StyleSheet.create({
     backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
   },
   audioTimeText: { fontSize: 11, color: T.textSecondary, fontWeight: '600', fontFamily: 'DMSans-SemiBold' },
-  commentActions:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-  commentActionsOwn:  { flexDirection: 'row-reverse' },
-  commentActionsLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  commentActionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  commentLikeBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 8 },
-  commentActionCount: { fontSize: 12, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
-  commentActionText:  { fontSize: 12, fontWeight: '600', color: T.textMuted, fontFamily: 'DMSans-SemiBold' },
-  repliesCountText:   { fontSize: 12, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
-  repliesWrap:        { marginTop: 10, paddingLeft: 4 },
+  likeColumn: { alignItems: 'center', gap: 3, paddingTop: 2, flexShrink: 0 },
+  likeCount:  { fontSize: 11, color: T.textMuted, fontFamily: 'DMSans-Regular' },
+  repliesWrap: { marginTop: 2 },
   pickerPanel: {
     backgroundColor: T.surfaceAlt,
-    borderTopWidth: 1, borderTopColor: T.border,
     maxHeight: 220,
   },
   emojiTabsRow: {
     flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8,
-    borderBottomWidth: 1, borderBottomColor: T.border,
   },
   emojiTab:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginRight: 4 },
   emojiTabActive: { backgroundColor: T.primaryDim },
@@ -847,42 +1084,53 @@ const st = StyleSheet.create({
   emojiGrid:      { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8, paddingVertical: 8 },
   emojiBtn:       { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   emojiText:      { fontSize: 24 },
-  // ── Input row — paddingBottom set inline using insets ──────
+  // ── @mention autocomplete dropdown ──────────────────────────
+  mentionDropdown: {
+    maxHeight: 180,
+    backgroundColor: T.surface,
+  },
+  mentionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10,
+  },
+  mentionAvatar: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: T.primaryDim,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  mentionAvatarText: { fontSize: 13, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
+  mentionUsername:   { fontSize: 13, fontWeight: '700', color: T.text, fontFamily: 'DMSans-Bold' },
+  mentionAnon:        { fontSize: 12, color: T.textMuted, fontFamily: 'DMSans-Regular', flex: 1 },
+  // ── Input row — borderless, filled pill, "Drop" text button. TikTok's
+  // compose bar has no divider above it and no circular send button —
+  // paddingBottom set inline using insets. ───────────────────────────
   inputRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 14, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: T.border,
   },
   emojiToggle: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: T.surfaceAlt,
+    width: 38, height: 38,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: T.borderStrong,
   },
-  emojiToggleActive: { backgroundColor: T.primaryDim, borderColor: T.primaryBorder },
-  emojiToggleText:   { fontSize: 18 },
+  emojiToggleText: { fontSize: 23 },
   inputContainer: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: T.surfaceAlt,
-    borderRadius: 22,
-    borderWidth: 1, borderColor: T.borderStrong,
-    paddingLeft: 16, paddingRight: 8, paddingVertical: 8,
-    maxHeight: 90,
+    borderRadius: 24,
+    paddingLeft: 18, paddingRight: 8, paddingVertical: 10,
+    maxHeight: 100,
   },
-  input: { flex: 1, fontSize: 14, color: T.text, lineHeight: 20, paddingVertical: 2, fontFamily: 'DMSans-Regular' },
+  input: { flex: 1, fontSize: 16, color: T.text, lineHeight: 22, paddingVertical: 2, fontFamily: 'DMSans-Regular' },
   imageInInput: {
-    width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center', marginLeft: 4,
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
   },
   sendBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: T.primary,
+    paddingHorizontal: 10, paddingVertical: 8,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: T.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
-  sendBtnDisabled: { opacity: 0.4 },
+  sendBtnText:         { fontSize: 16, fontWeight: '800', color: T.primary, fontFamily: 'DMSans-Bold' },
+  sendBtnTextDisabled: { color: T.textMuted },
   viewerBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.95)',
     alignItems: 'center', justifyContent: 'center',
