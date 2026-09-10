@@ -22,6 +22,7 @@ from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
+from app.websockets.chat import emit_new_message, emit_messages_seen
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
@@ -2499,10 +2500,18 @@ async def get_drop_messages(
     if current_user_id not in [conn["sender_id"], conn["unlocker_id"]]:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    is_sender = conn["sender_id"] == current_user_id
+    other_user_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
+    # The *other* party's last-read timestamp — what decides whether one of
+    # MY OWN messages has been seen (WhatsApp-style tick). Their own read
+    # field, not mine.
+    other_last_read_at = conn.get("unlocker_last_read_at" if is_sender else "sender_last_read_at")
+
     messages = []
     async for msg in db["drop_messages"].find(
         {"connection_id": connection_id}
     ).sort("created_at", 1):
+        is_own = msg["sender_id"] == current_user_id
         messages.append({
             "id": str(msg["_id"]),
             "content": msg["content"],
@@ -2510,20 +2519,25 @@ async def get_drop_messages(
             "media_type": msg.get("media_type"),
             "duration_seconds": msg.get("duration_seconds"),
             "sender_id": msg["sender_id"],
-            "is_own": msg["sender_id"] == current_user_id,
+            "is_own": is_own,
+            # Only meaningful on my own sent messages — ticks aren't shown
+            # on messages I received.
+            "seen": bool(is_own and other_last_read_at and msg["created_at"] <= other_last_read_at),
             "time_ago": get_time_ago(msg["created_at"]),
             "created_at": msg["created_at"].isoformat(),
         })
 
-    is_sender = conn["sender_id"] == current_user_id
-
-    # Viewing the thread marks it read — this endpoint is polled every 8s
-    # while the chat screen is open, so this doubles as the read-receipt.
+    # Viewing the thread marks it read — this endpoint is polled every 25s
+    # (plus on open) while the chat screen is open, so this doubles as the
+    # read-receipt. Also pushed live to the other party so their sent-
+    # message ticks update immediately instead of waiting on their own poll.
     read_field = "sender_last_read_at" if is_sender else "unlocker_last_read_at"
+    seen_at = now_utc()
     await db["drop_connections"].update_one(
         {"_id": ObjectId(connection_id)},
-        {"$set": {read_field: now_utc()}}
+        {"$set": {read_field: seen_at}}
     )
+    await emit_messages_seen(other_user_id, connection_id, seen_at.isoformat())
 
     # The poster's themed chat surface — always the drop's *sender*, since
     # a chat_profile is reused across every unlocker who chats with them.
@@ -2533,7 +2547,6 @@ async def get_drop_messages(
     active_call = await get_active_call_for_host(conn["sender_id"], db)
 
     from app.websockets.events import is_user_online
-    other_user_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
 
     # Show the welcome gallery (all of it, up to 3 items) + play the welcome
     # sound once per unlocker, the first time they open this connection —
@@ -2625,6 +2638,21 @@ async def send_drop_message(
     # Notify other party
     other_id = conn["unlocker_id"] if current_user_id == conn["sender_id"] else conn["sender_id"]
     sender_name = conn["sender_anonymous_name"] if current_user_id == conn["sender_id"] else conn["unlocker_anonymous_name"]
+
+    # Live push — same shape get_drop_messages returns per message, so the
+    # chat screen can append this straight into its list. is_own is always
+    # False here since this only ever reaches the *other* party.
+    await emit_new_message(other_id, connection_id, {
+        "id":               str(msg["_id"]),
+        "content":          content,
+        "media_url":        media_url,
+        "media_type":       media_type,
+        "duration_seconds": msg["duration_seconds"],
+        "sender_id":        current_user_id,
+        "is_own":           False,
+        "time_ago":         "just now",
+        "created_at":       msg["created_at"].isoformat(),
+    })
 
     if media_type == "voice":
         notify_body = "🎙 Voice note"
