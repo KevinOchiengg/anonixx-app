@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from app.database import get_database
 from app.config import settings
 from app.dependencies import get_current_user_id
+from typing import Optional
 import asyncio
 import logging
 import time
@@ -63,6 +64,12 @@ class _SignRequest(_BaseModel):
     # content (drop posts, circle posts). Must be part of the signed params
     # since the client uploads directly to Cloudinary from here on.
     watermark: bool = False
+    # Video trim — seconds into the source clip to start/end at. Cloudinary
+    # does the actual cutting server-side at upload time (so_/eo_ params),
+    # so the file that lands in Cloudinary IS the trimmed clip, not the full
+    # original with a trim hint attached. Video only; ignored otherwise.
+    trim_start: Optional[float] = None
+    trim_end:   Optional[float] = None
 
 _SIGN_FOLDERS = {
     "image": "anonixx/images",
@@ -87,8 +94,31 @@ async def get_upload_signature(
         timestamp = int(time.time())
         params    = {"folder": folder, "timestamp": timestamp}
         watermark = data.watermark and data.resource_type in ("image", "video")
+
+        # Trim first, then watermark — Cloudinary applies chained transform
+        # steps in order, and burning the watermark in after the cut (not
+        # before) keeps it anchored to the trimmed clip's own corner rather
+        # than wherever it happened to sit in the untrimmed source.
+        trim_valid = (
+            data.resource_type == "video"
+            and data.trim_start is not None
+            and data.trim_end is not None
+            and 0 <= data.trim_start < data.trim_end
+            and (data.trim_end - data.trim_start) <= MAX_VIDEO_DURATION_SECONDS
+        )
+        transformation_steps = []
+        if trim_valid:
+            transformation_steps.append({"start_offset": data.trim_start, "end_offset": data.trim_end})
         if watermark:
-            params["transformation"] = WATERMARK_TRANSFORMATION_STRING
+            transformation_steps.extend(WATERMARK_TRANSFORMATION)
+
+        transformation_string = None
+        if transformation_steps:
+            transformation_string, _ = cloudinary.utils.generate_transformation_string(
+                transformation=transformation_steps
+            )
+            params["transformation"] = transformation_string
+
         signature = cloudinary.utils.api_sign_request(params, settings.CLOUDINARY_API_SECRET)
         response = {
             "signature":   signature,
@@ -97,8 +127,8 @@ async def get_upload_signature(
             "cloud_name":  settings.CLOUDINARY_CLOUD_NAME,
             "folder":      folder,
         }
-        if watermark:
-            response["transformation"] = WATERMARK_TRANSFORMATION_STRING
+        if transformation_string:
+            response["transformation"] = transformation_string
         return response
     except Exception as e:
         logger.error(f"Upload signature generation failed: {e}", exc_info=True)

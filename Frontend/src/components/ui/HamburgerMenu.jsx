@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Bell, BookOpen, ChevronRight, Coins, Eye,
-  FileText, Globe, Heart, HelpCircle, Lock,
+  FileText, Globe, Heart, HelpCircle, Lock, MapPin,
   LogIn, LogOut, Megaphone, Palette, ShieldAlert, Smartphone,
   User, Users, Volume2, X, Zap,
 } from 'lucide-react-native';
@@ -122,6 +122,14 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
     });
   }, [showToast]);
 
+  // A handful of rows here don't have a real setting behind them yet (no
+  // backend field, no screen) — tapping used to silently do nothing, which
+  // reads as broken. Saying so honestly beats either a dead button or
+  // quietly removing the row before there's a decision to build it out.
+  const comingSoon = useCallback((label) => {
+    showToast({ type: 'info', message: `${label} isn't available yet.` });
+  }, [showToast]);
+
   return (
     <Modal
       visible={visible}
@@ -199,13 +207,13 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           {/* ── Privacy & Safety ── */}
           <SectionHeader title="Privacy & Safety" />
           <View style={sec.card}>
-            <NavRow icon={ShieldAlert} label="Block List"           onPress={() => {}} />
+            <NavRow icon={ShieldAlert} label="Block List" onPress={() => go('BlockList')} />
             <View style={sec.div} />
             <ToggleRow icon={Eye} label="Screenshot Detection" value={screenshotDetect} onToggle={handleScreenshotToggle} />
             <View style={sec.div} />
-            <NavRow icon={User} label="Who Can Connect" value="Everyone" onPress={() => {}} />
+            <NavRow icon={User} label="Who Can Connect" value="Everyone" onPress={() => comingSoon('Who Can Connect')} />
             <View style={sec.div} />
-            <NavRow icon={FileText} label="Report History" onPress={() => {}} />
+            <NavRow icon={FileText} label="Report History" onPress={() => go('ModerationHistory')} />
           </View>
 
           {/* ── Notifications ── */}
@@ -221,7 +229,9 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           {/* ── Feed ── */}
           <SectionHeader title="Feed" />
           <View style={sec.card}>
-            <NavRow    icon={Zap}      label="Video Autoplay"   value="Wi-Fi Only" onPress={() => {}} />
+            <NavRow icon={MapPin} label="Feed Location" onPress={() => go('FeedLocation')} />
+            <View style={sec.div} />
+            <NavRow icon={Zap} label="Video Autoplay" value="Wi-Fi Only" onPress={() => comingSoon('Video Autoplay')} />
           </View>
 
           {/* ── Sound & Haptics ── */}
@@ -235,7 +245,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           {/* ── Language ── */}
           <SectionHeader title="Language" />
           <View style={sec.card}>
-            <NavRow icon={Globe} label="App Language" value="English" onPress={() => {}} />
+            <NavRow icon={Globe} label="App Language" value="English" onPress={() => comingSoon('App Language')} />
           </View>
 
           {/* ── About ── */}

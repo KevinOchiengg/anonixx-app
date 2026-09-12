@@ -30,20 +30,20 @@
  * of reshuffling on every render, without needing to decode the audio file.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-// Gesture-handler's TouchableOpacity, not React Native's — this component
-// gets nested inside a Swipeable (DropChatScreen's swipe-to-reply) in some
-// call sites, and RN's own Touchable* components use the legacy JS responder
-// system, which can silently lose taps to a wrapping Swipeable's native pan
-// handler. Gesture-handler's re-export shares its gesture system, so taps
-// register reliably whether or not a Swipeable is anywhere above it.
-import { TouchableOpacity } from 'react-native-gesture-handler';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Play, Pause } from 'lucide-react-native';
 import T from '../../utils/theme';
 import { rs, rf, rp } from '../../utils/responsive';
+import { useToast } from '../ui/Toast';
 
 const BAR_COUNT = 28;
+
+// Module-level, not component state — every VoiceWaveform mounted anywhere
+// in the app (a whole message list's worth) shares this one slot, so
+// starting a second clip always pauses whichever one was already playing,
+// instead of letting two voice notes run over each other.
+let activePlayer = null;
 
 // Several coral-family tones instead of one flat hue — base coral, a
 // deeper rust, a lighter peach, gold-leaning amber, a darker burnt coral.
@@ -78,6 +78,7 @@ function fmt(secs) {
  *                                    (comments) — shorter bars, smaller button.
  */
 export default function VoiceWaveform({ uri, durationSeconds = 0, compact = false }) {
+  const { showToast } = useToast();
   const player = useAudioPlayer(null);
   const status = useAudioPlayerStatus(player);
   // expo-audio's AudioStatus has no `status` field (confirmed the hard way
@@ -89,6 +90,17 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
 
   const heights = useMemo(() => barHeightsFor(uri), [uri]);
 
+  // Prime the clip as soon as it's on screen instead of waiting for the
+  // tap — buffering starts in the background while it sits in the list, so
+  // by the time someone actually presses play there's no visible load
+  // delay. This only loads the source; nothing is audible until play() is
+  // called from a real tap.
+  useEffect(() => {
+    if (!uri || loaded.current) return;
+    loaded.current = true;
+    try { player.replace({ uri }); } catch {}
+  }, [uri, player]);
+
   useEffect(() => {
     if (!status.didJustFinish) return;
     setIsFinished(true);
@@ -98,22 +110,55 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
     } catch {}
   }, [status.didJustFinish, player]);
 
-  useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
+  useEffect(() => () => {
+    try { player.pause(); } catch {}
+    if (activePlayer === player) activePlayer = null;
+  }, [player]);
+
+  // Exclusive playback — whenever this instance actually starts playing
+  // (whether the user tapped it, or it resumed after a seek), claim the
+  // shared slot and pause whoever held it before. Keyed off `status.playing`
+  // rather than the tap handler so it works no matter what triggered play.
+  useEffect(() => {
+    if (status.playing) {
+      if (activePlayer && activePlayer !== player) {
+        try { activePlayer.pause(); } catch {}
+      }
+      activePlayer = player;
+    } else if (activePlayer === player) {
+      activePlayer = null;
+    }
+  }, [status.playing, player]);
+
+  // `replace()`/`play()` don't reject on a native load/playback failure —
+  // the failure only shows up here, asynchronously, on the status event.
+  // Without watching this, a broken/unreachable clip just sits frozen on
+  // the Play icon forever with zero indication anything went wrong, which
+  // is indistinguishable from the tap not registering at all. Reset
+  // `loaded` too, so the next tap actually retries `replace()` instead of
+  // trying to play/pause a player that never successfully loaded anything.
+  useEffect(() => {
+    if (!status.error) return;
+    console.error('[VoiceWaveform] native playback error:', status.error, 'uri:', uri);
+    loaded.current = false;
+    showToast({ type: 'error', message: 'Could not play this voice note.' });
+  }, [status.error, uri, showToast]);
 
   const toggle = useCallback(async () => {
     if (!uri) return;
     try {
+      // Normally already true by now — the mount-time effect above starts
+      // loading the clip well before any tap. Fallback only for the rare
+      // case a tap somehow beats that effect to the punch.
+      if (!loaded.current) {
+        loaded.current = true;
+        player.replace({ uri });
+      }
       // Undo any recorder elsewhere in the app that left the session in
       // recording mode — see the file header for why this matters. Key is
       // `playsInSilentMode` (expo-audio), not expo-av's `playsInSilentModeIOS`.
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
 
-      if (!loaded.current) {
-        loaded.current = true;
-        player.replace({ uri });
-        player.play();
-        return;
-      }
       if (isFinished) {
         setIsFinished(false);
         player.seekTo(0);
@@ -122,8 +167,14 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
       }
       if (status.playing) player.pause();
       else player.play();
-    } catch { /* a failed clip shouldn't break whatever it's embedded in */ }
-  }, [uri, status.playing, isFinished, player]);
+    } catch (e) {
+      // Surfaced instead of swallowed — a silently-failing tap here is
+      // exactly what makes "it doesn't play" reports impossible to
+      // diagnose without this, since nothing else in the UI changes.
+      console.error('[VoiceWaveform] playback failed:', e);
+      showToast({ type: 'error', message: e?.message || 'Could not play this voice note.' });
+    }
+  }, [uri, status.playing, isFinished, player, showToast]);
 
   const duration   = status.duration || durationSeconds || 0;
   const playing    = !!status.playing && !isFinished;
@@ -135,6 +186,12 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
 
   const barBoxHeight = compact ? rs(18) : rs(26);
   const btnSize = compact ? rs(26) : rs(32);
+  // Thin lines, not filled blocks — flex:1 bars stretched to fill equal
+  // slots read as thick, blocky columns (especially in the compact/comment
+  // variant, where there's less width to divide 28 ways). A fixed narrow
+  // width spread out with `justifyContent: 'space-between'` instead gives
+  // the slim vertical-line look real waveform UIs use.
+  const barWidth = compact ? rs(1.5) : rs(2);
 
   return (
     <TouchableOpacity
@@ -161,6 +218,7 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
               style={[
                 styles.bar,
                 {
+                  width: barWidth,
                   height: `${h * 100}%`,
                   backgroundColor: isLit ? litColor : dimColor,
                 },
@@ -199,9 +257,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: T.primary,
   },
   bars: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: rs(2),
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  bar: { flex: 1, minHeight: 2, borderRadius: rs(1) },
+  bar: { minHeight: 2, borderRadius: rs(1) },
   time: {
     fontSize: rf(10.5), fontWeight: '700', minWidth: rs(30), textAlign: 'right',
     color: T.textMuted,
