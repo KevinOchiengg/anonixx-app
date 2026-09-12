@@ -27,10 +27,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
   ArrowLeft, Lock, Plus, Megaphone, X, Film, Check, ShieldCheck, Clock,
-  RotateCcw, MessageCircle, Play, Pause, FileText, Image as ImageIcon,
+  RotateCcw, MessageCircle, FileText, Image as ImageIcon,
   Video as VideoIcon, Music, Paperclip, Send, Smile,
 } from 'lucide-react-native';
 
@@ -40,67 +39,16 @@ import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 import GifPicker from '../../components/common/GifPicker';
 import VoiceNoteRecorder from '../../components/common/VoiceNoteRecorder';
+import VoiceWaveform from '../../components/common/VoiceWaveform';
 import AnonProfileSheet from '../../components/connect/AnonProfileSheet';
 import { useUnread } from '../../context/UnreadContext';
 
 const { width: W, height: H } = Dimensions.get('window');
 
-// ─── Inline audio player — post audio_url or a comment's voice_url ───
-const AudioPlayer = React.memo(({ uri, compact }) => {
-  const player = useAudioPlayer(null);
-  const status = useAudioPlayerStatus(player);
-  const loaded = useRef(false);
-
-  const playing  = !!status.playing;
-  const duration = status.duration || 0;
-
-  useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
-
-  useEffect(() => {
-    if (status.didJustFinish) {
-      try {
-        player.pause();
-        Promise.resolve(player.seekTo(0)).catch(() => {});
-      } catch {}
-    }
-  }, [status.didJustFinish, player]);
-
-  const toggle = useCallback(async () => {
-    if (!uri) return;
-    try {
-      if (!loaded.current) {
-        await setAudioModeAsync({ playsInSilentModeIOS: true });
-        player.replace({ uri });
-        loaded.current = true;
-        player.play();
-        return;
-      }
-      if (playing) player.pause();
-      else player.play();
-    } catch {}
-  }, [uri, playing, player]);
-
-  const fmt = (secs) => {
-    const s = Math.max(0, Math.floor(secs || 0));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-
-  return (
-    <TouchableOpacity
-      style={[s.audioWrap, compact && s.audioWrapCompact]}
-      onPress={toggle}
-      activeOpacity={0.85}
-      hitSlop={HIT_SLOP}
-    >
-      <View style={s.audioPlayBtn}>
-        {playing ? <Pause size={rs(14)} color="#fff" fill="#fff" /> : <Play size={rs(14)} color="#fff" fill="#fff" />}
-      </View>
-      <Text style={s.audioTimeText}>
-        {playing || status.currentTime > 0 ? fmt(status.currentTime) : fmt(duration)}
-      </Text>
-    </TouchableOpacity>
-  );
-});
+// Inline audio player — post audio_url or a comment's voice_url. Shared
+// implementation, see VoiceWaveform.jsx — this screen also mounts
+// VoiceNoteRecorder for voice comments, which is exactly the pairing that
+// needs the audio-session reset VoiceWaveform does before playing.
 
 // ─── Post card ──────────────────────────────────────────────────
 const PostCard = React.memo(({ post, auraColor, onUnlock, unlocking, onOpenComments }) => (
@@ -123,7 +71,7 @@ const PostCard = React.memo(({ post, auraColor, onUnlock, unlocking, onOpenComme
     )}
     {!post.locked && post.audio_url && (
       <View style={s.postAudioBlock}>
-        <AudioPlayer uri={post.audio_url} />
+        <VoiceWaveform uri={post.audio_url} />
       </View>
     )}
     {!post.locked && post.file_url && (
@@ -196,7 +144,7 @@ const CommentItem = React.memo(({ comment, onPressAuthor, onOpenImage }) => {
           )}
           {!!comment.voice_url && (
             <View style={{ marginTop: comment.content ? rp(6) : 0 }}>
-              <AudioPlayer uri={comment.voice_url} compact />
+              <VoiceWaveform uri={comment.voice_url} durationSeconds={comment.voice_duration} compact />
             </View>
           )}
         </View>
@@ -1200,6 +1148,8 @@ const s = StyleSheet.create({
   postMediaVideo: { alignItems: 'center', justifyContent: 'center' },
   postImageRow: { width: '100%' },
   postImageMulti: { width: rs(180), height: rs(220), marginRight: rp(2), backgroundColor: T.surfaceAlt },
+  // No card/background here — voice notes float bare like any other inline
+  // media. Only actual chat/comment text bubbles get a background.
   postAudioBlock: { padding: rp(14) },
   fileChip: { flexDirection: 'row', alignItems: 'center', gap: rp(8), padding: rp(14) },
   fileChipText: { flex: 1, fontSize: FONT.sm, color: T.text },
@@ -1211,11 +1161,6 @@ const s = StyleSheet.create({
   commentsBtn: { flexDirection: 'row', alignItems: 'center', gap: rp(6), paddingHorizontal: rp(14), paddingVertical: rp(10) },
   commentsBtnText: { fontSize: rf(12), color: T.textMuted, fontWeight: '600' },
 
-  // Audio player
-  audioWrap: { flexDirection: 'row', alignItems: 'center', gap: rp(10), backgroundColor: T.surfaceAlt, borderRadius: RADIUS.full, paddingHorizontal: rp(10), paddingVertical: rp(6), alignSelf: 'flex-start' },
-  audioWrapCompact: { paddingHorizontal: rp(8), paddingVertical: rp(4) },
-  audioPlayBtn: { width: rs(26), height: rs(26), borderRadius: rs(13), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
-  audioTimeText: { fontSize: rf(11), color: T.textSecondary, fontWeight: '600' },
 
   // FAB
   fab: {
@@ -1345,16 +1290,16 @@ const s = StyleSheet.create({
   commentBody: { flex: 1, gap: rp(3) },
   commentBodyOwn: { alignItems: 'flex-end' },
   commentAuthor: { fontSize: rf(12), fontWeight: '700', color: T.text },
-  // WhatsApp-style chat bubble
+  // Sharp bottom-right corner, same rule as every other message container
+  // in the app — voice notes are the one exception (no container at all).
   commentBubble: {
-    backgroundColor: T.surfaceAlt, borderRadius: rs(16), borderTopLeftRadius: rs(4),
+    backgroundColor: T.surfaceAlt, borderRadius: rs(16), borderBottomRightRadius: rs(4),
     borderWidth: 1, borderColor: T.border,
     paddingHorizontal: rp(12), paddingVertical: rp(8),
     maxWidth: '92%', alignSelf: 'flex-start',
   },
   commentBubbleOwn: {
     backgroundColor: T.primaryDim, borderColor: T.primaryBorder,
-    borderTopLeftRadius: rs(16), borderTopRightRadius: rs(4),
     alignSelf: 'flex-end',
   },
   commentText: { fontSize: FONT.sm, color: T.textSecondary, lineHeight: rf(19) },

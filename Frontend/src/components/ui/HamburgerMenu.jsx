@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Bell, BookOpen, ChevronRight, Coins, Eye,
   FileText, Globe, Heart, HelpCircle, Lock,
-  LogIn, LogOut, Megaphone, ShieldAlert, Smartphone,
+  LogIn, LogOut, Megaphone, Palette, ShieldAlert, Smartphone,
   User, Users, Volume2, X, Zap,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -177,6 +177,15 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
             <NavRow icon={Coins} label="My Wallet"    onPress={() => go('Coins')} />
             <View style={sec.div} />
             <NavRow icon={Users} label="Refer & Earn" onPress={() => go('Referral')} />
+          </View>
+
+          {/* ── Chat ── */}
+          <SectionHeader title="Chat" />
+          <View style={sec.card}>
+            {/* This menu also mounts from the Feed tab, where ChatProfileSetup
+                isn't a sibling route — jump tabs explicitly rather than a
+                bare navigate() that only resolves within Messages' own stack. */}
+            <NavRow icon={Palette} label="Chat Appearance" onPress={() => go('Messages', { screen: 'ChatProfileSetup' })} />
           </View>
 
           {/* ── Content ── */}

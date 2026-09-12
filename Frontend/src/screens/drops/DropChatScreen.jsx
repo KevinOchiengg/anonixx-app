@@ -1,14 +1,14 @@
 /**
  * DropChatScreen
  *
- * Anonymous chat for Drops connections. Includes reveal ceremony flow.
+ * Anonymous chat for Drops connections.
  *
  * Rebuilt to match DropsComposeScreen design language:
  *   • shared `T` palette
- *   • DropScreenHeader with anonymous name + reveal right-action
+ *   • DropScreenHeader with anonymous name
  *   • useToast (replaces Alert.alert)
  *   • responsive tokens (no hardcoded pixels)
- *   • PlayfairDisplay-Italic for anon names, reveal ceremony, confession banner
+ *   • PlayfairDisplay-Italic for anon names, confession banner
  *   • DMSans for chrome + message bodies
  *   • 320 ms entrance fade
  */
@@ -22,18 +22,19 @@ import {
   Animated, Modal, Image, ScrollView, Pressable, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Swipeable, Pressable as GHPressable, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, RecordingPresets,
+  useAudioRecorder, RecordingPresets,
   requestRecordingPermissionsAsync, setAudioModeAsync,
 } from 'expo-audio';
 import {
-  Send, Sparkles, CheckCircle, Eye, X, Video, Phone, MoreVertical,
-  Mic, Play, Pause, RotateCcw, Settings, Flag, ShieldOff, Users, AlertTriangle,
-  Smile, Paperclip, Camera,
+  Send, X, Video, Phone, MoreVertical,
+  Mic, Play, Settings, Flag, ShieldOff, Users, AlertTriangle,
+  Smile, Paperclip, Reply, Trash2,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -42,6 +43,7 @@ import {
 } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import PulseLoader from '../../components/common/PulseLoader';
+import VoiceWaveform from '../../components/common/VoiceWaveform';
 import ChatBackground from '../../components/chat/ChatBackground';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
@@ -51,13 +53,10 @@ import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
 
-const REVEAL_PRICE = 1.0;
 // Real-time delivery (see new_message socket handling below) covers the
 // common case now — this is just a safety net for missed/dropped socket
 // events, so it can be far less frequent than the old 8s-only polling.
 const POLL_INTERVAL_MS = 25000;
-const REVEAL_POLL_MS   = 5000;
-const MAX_REVEAL_ATTEMPTS = 24;
 
 // ─── Quick emoji strip — toggled from the input bar's Smile icon ──
 const QUICK_EMOJIS = ['🔥','😏','💋','🖤','😈','✨','🥵','👀','💦','🍒','😩','🤍'];
@@ -81,11 +80,71 @@ function videoPosterUrl(url) {
   return url ? url.replace(/\.\w+(\?.*)?$/, '.jpg$1') : url;
 }
 
+// Short label for the reply banner (the draft, client-side, before the
+// server computes its own copy of this same thing) — mirrors
+// _message_preview_text in Backend/app/api/v1/drops.py.
+function messagePreviewLabel(item) {
+  if (!item) return '';
+  if (item.deleted) return 'This message was deleted';
+  if (item.media_type === 'voice') return '🎙 Voice note';
+  if (item.media_type === 'image') return '📷 Photo';
+  if (item.media_type === 'video') return '🎥 Video';
+  return item.content || '';
+}
+
+// Same dedicated avatar palette as MessagesScreen's chat list — deliberately
+// not coral (the action color) or gold/violet (already mean coins/premium
+// and drop-type chats elsewhere) — kept as its own local copy rather than a
+// shared util, matching how each screen in this app already carries its own
+// copy of small helpers like this.
+const AVATAR_COLORS = ['#C96F53', '#C97B84', '#D98E4A', '#B56576', '#A8674F'];
+function avatarColorFor(seed) {
+  if (!seed) return AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
 const DateSeparator = React.memo(({ label }) => (
   <View style={s.dateSeparatorRow}>
     <Text style={s.dateSeparatorText}>{label}</Text>
   </View>
 ));
+
+// ─── Typing indicator — an actual bubble in the thread (received-bubble
+// shape/shadow), not just the header's "typing…" subtitle — matches the
+// mockup, which shows three dots as its own message rather than plain text.
+const TypingBubble = React.memo(() => {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const animate = (dot, delay) => Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(dot, { toValue: 1,   duration: 300, useNativeDriver: true }),
+        Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+        Animated.delay(600),
+      ]),
+    ).start();
+    animate(dot1, 0);
+    animate(dot2, 200);
+    animate(dot3, 400);
+  }, [dot1, dot2, dot3]);
+
+  return (
+    <View style={s.msgRow}>
+      <View style={[s.bubble, s.bubbleTheir, s.typingBubble]}>
+        {[dot1, dot2, dot3].map((dot, i) => (
+          <Animated.View key={i} style={[s.typingBubbleDot, { opacity: dot }]} />
+        ))}
+      </View>
+    </View>
+  );
+});
 
 // ─── Mood board — 33 procedurally-styled cards shown while waiting for a
 // first reply. Intentionally abstract (gradient + symbol, no photos) so it
@@ -127,101 +186,95 @@ const MoodBoard = React.memo(() => (
 ));
 
 // ─── Voice note bubble — play/pause + duration, no autoplay ────
-const VoiceBubble = React.memo(({ item, isOwn }) => {
-  const player = useAudioPlayer(null);
-  const status = useAudioPlayerStatus(player);
-  const [isFinished, setIsFinished] = useState(false);
-  const pendingPlay = useRef(false);
+// Shared implementation, see VoiceWaveform.jsx.
+const VoiceBubble = React.memo(({ item }) => (
+  <VoiceWaveform uri={item.media_url} durationSeconds={item.duration_seconds} />
+));
 
-  useEffect(() => {
-    if (status.status === 'readyToPlay' && pendingPlay.current) {
-      pendingPlay.current = false;
-      player.play();
-    }
-  }, [status.status]);
-
-  useEffect(() => {
-    if (status.didJustFinish) {
-      setIsFinished(true);
-      player.seekTo(0);
-    }
-  }, [status.didJustFinish]);
-
-  const handlePress = useCallback(async () => {
-    try {
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      if (status.status === 'idle') {
-        pendingPlay.current = true;
-        player.replace({ uri: item.media_url });
-      } else if (isFinished) {
-        setIsFinished(false);
-        player.seekTo(0);
-        player.play();
-      } else if (status.playing) {
-        player.pause();
-      } else {
-        player.play();
-      }
-    } catch { /* silent */ }
-  }, [status.status, status.playing, isFinished, player]);
-
-  const progress = isFinished ? 0 : (status.duration > 0 ? (status.currentTime || 0) / status.duration : 0);
-  const displaySecs = (status.playing || (!isFinished && status.status === 'readyToPlay'))
-    ? Math.floor(status.currentTime || 0)
-    : Math.floor(status.duration || item.duration_seconds || 0);
-  const timeLabel = `${Math.floor(displaySecs / 60)}:${String(displaySecs % 60).padStart(2, '0')}`;
-  const isLoading = status.status === 'loading';
-  const PlayIcon = isFinished ? RotateCcw : status.playing ? Pause : Play;
-
-  return (
-    <View style={s.voiceRow}>
-      <TouchableOpacity
-        onPress={handlePress}
-        hitSlop={HIT_SLOP}
-        activeOpacity={0.8}
-        style={[s.voicePlayBtn, isOwn ? s.voicePlayBtnOwn : s.voicePlayBtnTheir]}
-      >
-        {isLoading
-          ? <ActivityIndicator size="small" color={isOwn ? T.primary : '#fff'} />
-          : <PlayIcon size={rs(15)} color={isOwn ? T.primary : '#fff'} strokeWidth={2.4} fill={status.playing ? (isOwn ? T.primary : '#fff') : 'none'} />}
-      </TouchableOpacity>
-      <View style={s.voiceTrack}>
-        <View style={[s.voiceTrackFill, isOwn && s.voiceTrackFillOwn, { width: `${Math.max(progress * 100, 3)}%` }]} />
-      </View>
-      <Text style={[s.voiceTimeLabel, isOwn && s.voiceTimeLabelOwn]}>{timeLabel}</Text>
+// ─── Quoted reply block — sits above the real content, inside whichever
+// container that content itself uses (bubble, media, or the bare voice
+// wrap). Not shown at all for messages that aren't replies. ────────────
+const ReplyQuote = React.memo(({ replyTo, isOwn, otherName }) => (
+  <View style={[s.replyQuote, isOwn && s.replyQuoteOwn]}>
+    <View style={[s.replyQuoteBar, isOwn && s.replyQuoteBarOwn]} />
+    <View style={{ flex: 1 }}>
+      <Text style={[s.replyQuoteName, isOwn && s.replyQuoteNameOwn]} numberOfLines={1}>
+        {replyTo.is_own ? 'You' : (otherName || 'them')}
+      </Text>
+      <Text style={[s.replyQuotePreview, isOwn && s.replyQuotePreviewOwn]} numberOfLines={1}>
+        {replyTo.preview}
+      </Text>
     </View>
-  );
-});
+  </View>
+));
 
 // ─── Message bubble ────────────────────────────────────────────
-const Bubble = React.memo(({ item, fontFamily, onMediaPress }) => {
+// Swipe right (WhatsApp's own direction, regardless of which side the
+// bubble is on) to reply; long-press for reply/delete. Both call back up
+// to the screen rather than owning any state themselves, since replying
+// affects the input bar and deleting affects the whole message list.
+const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply, onLongPressMessage }) => {
   const isOwn = item.is_own;
+  const swipeableRef = useRef(null);
   // WhatsApp-style ticks — single = sent, double (accent-colored) = seen.
   // Only ever shown on my own messages; nothing rendered on received ones.
   const tick = isOwn ? (item.seen ? '✓✓' : '✓') : null;
 
-  if (item.media_type === 'voice' && item.media_url) {
-    return (
-      <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
-        <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
-          <VoiceBubble item={item} isOwn={isOwn} />
-          <Text style={[s.bubbleTime, isOwn && s.bubbleTimeOwn]}>
-            {item.time_ago}
-            {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
-          </Text>
-        </View>
+  const handleSwipeableOpen = useCallback(() => {
+    swipeableRef.current?.close();
+    onReply?.(item);
+  }, [item, onReply]);
+
+  const renderLeftActions = useCallback((progress) => (
+    <Animated.View style={[
+      s.replyActionWrap,
+      { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) },
+    ]}>
+      <Reply size={rs(18)} color={T.primary} strokeWidth={2.2} />
+    </Animated.View>
+  ), []);
+
+  const handleLongPress = useCallback(() => {
+    if (item.deleted) return;
+    onLongPressMessage?.(item);
+  }, [item, onLongPressMessage]);
+
+  let content;
+
+  if (item.deleted) {
+    // Same container as a normal text bubble (own/received alike) — just
+    // the content replaced, not the shape.
+    content = (
+      <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
+        <Text style={[s.deletedText, isOwn && s.deletedTextOwn]}>
+          This message was deleted
+        </Text>
       </View>
     );
-  }
-  if ((item.media_type === 'image' || item.media_type === 'video') && item.media_url) {
+  } else if (item.media_type === 'voice' && item.media_url) {
+    // No bubble background here on purpose — voice notes float bare, the
+    // same way an image/video attachment does below (see mediaBubble).
+    // Only actual text messages get a background container.
+    content = (
+      <View style={s.voiceMessageWrap}>
+        <VoiceBubble item={item} />
+        {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
+        <Text style={s.bubbleTime}>
+          {item.time_ago}
+          {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
+        </Text>
+      </View>
+    );
+  } else if ((item.media_type === 'image' || item.media_type === 'video') && item.media_url) {
     const isVideo = item.media_type === 'video';
-    return (
-      <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => onMediaPress?.(item)}
-          style={s.mediaBubble}
-        >
+    content = (
+      <GHTouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => onMediaPress?.(item)}
+        onLongPress={handleLongPress}
+        style={s.mediaBubble}
+      >
+        <View style={s.mediaImageWrap}>
           <Image
             source={{ uri: isVideo ? videoPosterUrl(item.media_url) : item.media_url }}
             style={s.mediaImage}
@@ -236,22 +289,58 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress }) => {
             {item.time_ago}
             {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
           </Text>
-        </TouchableOpacity>
+        </View>
+        {item.reply_to && (
+          <View style={s.replyQuoteOnMedia}>
+            <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />
+          </View>
+        )}
+      </GHTouchableOpacity>
+    );
+  } else {
+    // Own messages keep the time trailing inline with the text (matches the
+    // mockup's sent bubbles); received messages drop it onto its own
+    // right-aligned line below instead — matches the mockup's received
+    // bubbles, which never run time into the message itself.
+    content = (
+      <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
+        {isOwn ? (
+          <>
+            <Text style={[s.bubbleText, fontFamily && { fontFamily }, s.bubbleTextOwn]}>
+              {item.content}
+              <Text style={s.bubbleTimeInlineOwn}>
+                {'  '}{item.time_ago}
+              </Text>
+              {tick && <Text style={item.seen ? s.tickSeen : s.bubbleTimeInlineOwn}> {tick}</Text>}
+            </Text>
+            {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
+          </>
+        ) : (
+          <>
+            <Text style={[s.bubbleText, fontFamily && { fontFamily }]}>{item.content}</Text>
+            {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
+            <Text style={s.bubbleTime}>{item.time_ago}</Text>
+          </>
+        )}
       </View>
     );
   }
+
   return (
-    <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
-      <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
-        <Text style={[s.bubbleText, fontFamily && { fontFamily }, isOwn && s.bubbleTextOwn]}>
-          {item.content}
-          <Text style={[s.bubbleTimeInline, isOwn && s.bubbleTimeInlineOwn]}>
-            {'  '}{item.time_ago}
-          </Text>
-          {tick && <Text style={[s.bubbleTimeInline, item.seen ? s.tickSeen : s.bubbleTimeInlineOwn]}> {tick}</Text>}
-        </Text>
-      </View>
-    </View>
+    <Swipeable
+      ref={swipeableRef}
+      renderLeftActions={renderLeftActions}
+      onSwipeableOpen={handleSwipeableOpen}
+      overshootLeft={false}
+      leftThreshold={44}
+      enabled={!item.deleted}
+    >
+      <GHPressable onLongPress={handleLongPress} delayLongPress={350}>
+        <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
+          {content}
+        </View>
+      </GHPressable>
+    </Swipeable>
   );
 });
 
@@ -393,6 +482,11 @@ export default function DropChatScreen({ route, navigation }) {
   const typingTimeoutRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
 
+  // ── Reply / delete — WhatsApp-style message actions ──────────
+  const [replyingTo, setReplyingTo]     = useState(null); // full message being replied to, or null
+  const [actionSheetItem, setActionSheetItem] = useState(null); // message long-pressed, for the reply/delete sheet
+  const inputRef = useRef(null);
+
   // ── Poster's themed chat surface (per-user chat_profiles doc) ──
   const [chatProfile, setChatProfile]     = useState(null);
   const [welcomeGallery, setWelcomeGallery] = useState([]);
@@ -415,22 +509,28 @@ export default function DropChatScreen({ route, navigation }) {
   const recorder        = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recordTimerRef = useRef(null);
   const pressStartRef  = useRef(0);
+  const recordPulse    = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!isRecording) { recordPulse.setValue(1); return; }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(recordPulse, { toValue: 0.3, duration: 550, useNativeDriver: true }),
+        Animated.timing(recordPulse, { toValue: 1,   duration: 550, useNativeDriver: true }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [isRecording, recordPulse]);
 
   const bubbleFontFamily = useMemo(
     () => CHAT_FONT_MAP[chatProfile?.font_style] || CHAT_FONT_MAP[DEFAULT_CHAT_FONT],
     [chatProfile?.font_style]
   );
 
-  const [showRevealModal, setShowRevealModal] = useState(false);
-  const [revealStep, setRevealStep]           = useState('idle'); // idle | phone | waiting | polling | done
-  const [revealPhone, setRevealPhone]         = useState('');
-  const [revealData, setRevealData]           = useState(null);
-
   const flatListRef  = useRef(null);
-  const revealScale  = useRef(new Animated.Value(0)).current;
   const fadeAnim     = useRef(new Animated.Value(0)).current;
   const pollRef      = useRef(null);
-  const revealPollRef = useRef(null);
 
   // Fires once, the first time an unlocker opens this chat — see
   // Frontend/src/config/sounds.js for what welcome_sound ids resolve to.
@@ -447,20 +547,6 @@ export default function DropChatScreen({ route, navigation }) {
   }, []);
 
   // ── Fetchers ──────────────────────────────────────────────
-  const checkRevealStatus = useCallback(async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/reveal/status`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.revealed) setRevealData(data);
-      }
-    } catch { /* silent */ }
-  }, [connectionId]);
-
   const loadMessages = useCallback(async (silent = false) => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -479,9 +565,6 @@ export default function DropChatScreen({ route, navigation }) {
           setShowWelcome(true);
           playWelcomeSound(data.welcome_sound);
         }
-        if (data.connection?.is_revealed && !revealData) {
-          checkRevealStatus();
-        }
       } else if (!silent) {
         showToast({ type: 'error', message: "Couldn't load messages." });
       }
@@ -490,7 +573,7 @@ export default function DropChatScreen({ route, navigation }) {
         showToast({ type: 'error', message: 'Network error.' });
       }
     }
-  }, [connectionId, revealData, checkRevealStatus, showToast, welcomeGallery.length, showWelcome, playWelcomeSound]);
+  }, [connectionId, showToast, welcomeGallery.length, showWelcome, playWelcomeSound]);
 
   // ── Initial load + polling ────────────────────────────────
   useEffect(() => {
@@ -509,7 +592,6 @@ export default function DropChatScreen({ route, navigation }) {
     pollRef.current = setInterval(() => loadMessages(true), POLL_INTERVAL_MS);
     return () => {
       clearInterval(pollRef.current);
-      clearInterval(revealPollRef.current);
       clearInterval(recordTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -562,6 +644,22 @@ export default function DropChatScreen({ route, navigation }) {
     return () => socketService.off('messages_seen', handleMessagesSeen);
   }, [connectionId, socketService]);
 
+  // ── Delete-for-everyone going live — the other party just masked a
+  // message, so swap it for the placeholder now instead of waiting for
+  // the next poll (see emit_message_deleted in drops.py).
+  useEffect(() => {
+    const handleMessageDeleted = ({ connectionId: incomingId, messageId }) => {
+      if (incomingId !== connectionId) return;
+      setMessages(prev => prev.map(m => (
+        m.id === messageId
+          ? { ...m, deleted: true, content: '', media_url: null, media_type: null }
+          : m
+      )));
+    };
+    socketService.on('message_deleted', handleMessageDeleted);
+    return () => socketService.off('message_deleted', handleMessageDeleted);
+  }, [connectionId, socketService]);
+
   // Throttled — the server relays this to the other party as user_typing
   // (see the `typing` handler in events.py); at most once every 2s so
   // every keystroke doesn't turn into a socket emit.
@@ -578,7 +676,9 @@ export default function DropChatScreen({ route, navigation }) {
   const handleSend = useCallback(async () => {
     const content = text.trim();
     if (!content) return;
+    const replyToId = replyingTo?.id;
     setText('');
+    setReplyingTo(null);
     setSending(true);
     try {
       const token = await AsyncStorage.getItem('token');
@@ -590,7 +690,7 @@ export default function DropChatScreen({ route, navigation }) {
             'Content-Type': 'application/json',
             Authorization:  `Bearer ${token}`,
           },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, ...(replyToId && { reply_to_id: replyToId }) }),
         },
       );
       await loadMessages(true);
@@ -600,7 +700,7 @@ export default function DropChatScreen({ route, navigation }) {
     } finally {
       setSending(false);
     }
-  }, [text, connectionId, loadMessages, showToast]);
+  }, [text, connectionId, loadMessages, showToast, replyingTo]);
 
   // ── Voice note — upload direct to Cloudinary (signed), then send as
   //    a media message. Mirrors ChatScreen.jsx's uploadVoice exactly. ──
@@ -634,6 +734,8 @@ export default function DropChatScreen({ route, navigation }) {
   }, []);
 
   const sendVoiceMessage = useCallback(async (mediaUrl, durationSeconds) => {
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
     try {
       const token = await AsyncStorage.getItem('token');
       await fetch(
@@ -646,6 +748,7 @@ export default function DropChatScreen({ route, navigation }) {
           },
           body: JSON.stringify({
             media_url: mediaUrl, media_type: 'voice', duration_seconds: durationSeconds,
+            ...(replyToId && { reply_to_id: replyToId }),
           }),
         },
       );
@@ -654,7 +757,7 @@ export default function DropChatScreen({ route, navigation }) {
     } catch {
       showToast({ type: 'error', message: 'Voice note sent, but the chat failed to refresh.' });
     }
-  }, [connectionId, loadMessages, showToast]);
+  }, [connectionId, loadMessages, showToast, replyingTo]);
 
   // ── Media (photo/video) — same signed-upload-to-Cloudinary pattern as
   //    voice notes, just routed through the "image"/"video" resource type.
@@ -695,6 +798,8 @@ export default function DropChatScreen({ route, navigation }) {
   }, []);
 
   const sendMediaMessage = useCallback(async (mediaUrl, mediaType) => {
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
     try {
       const token = await AsyncStorage.getItem('token');
       await fetch(
@@ -705,7 +810,10 @@ export default function DropChatScreen({ route, navigation }) {
             'Content-Type': 'application/json',
             Authorization:  `Bearer ${token}`,
           },
-          body: JSON.stringify({ media_url: mediaUrl, media_type: mediaType }),
+          body: JSON.stringify({
+            media_url: mediaUrl, media_type: mediaType,
+            ...(replyToId && { reply_to_id: replyToId }),
+          }),
         },
       );
       await loadMessages(true);
@@ -713,28 +821,18 @@ export default function DropChatScreen({ route, navigation }) {
     } catch {
       showToast({ type: 'error', message: 'Media sent, but the chat failed to refresh.' });
     }
-  }, [connectionId, loadMessages, showToast]);
+  }, [connectionId, loadMessages, showToast, replyingTo]);
 
-  const pickMedia = useCallback(async (from) => {
+  const pickMedia = useCallback(async () => {
     try {
-      let result;
-      if (from === 'camera') {
-        const { granted } = await ImagePicker.requestCameraPermissionsAsync();
-        if (!granted) {
-          showToast({ type: 'warning', message: 'Camera permission is needed to take a photo.' });
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
-      } else {
-        const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!granted) {
-          showToast({ type: 'warning', message: 'Photo library permission is needed to attach media.' });
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60,
-        });
+      const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!granted) {
+        showToast({ type: 'warning', message: 'Photo library permission is needed to attach media.' });
+        return;
       }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60,
+      });
       if (result.canceled || !result.assets?.length) return;
 
       const asset = result.assets[0];
@@ -824,69 +922,6 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [isRecording, recordDuration, uploadVoice, sendVoiceMessage, showToast]);
 
-  // ── Reveal flow ───────────────────────────────────────────
-  const startRevealPolling = useCallback(() => {
-    let attempts = 0;
-    revealPollRef.current = setInterval(async () => {
-      attempts++;
-      if (attempts > MAX_REVEAL_ATTEMPTS) {
-        clearInterval(revealPollRef.current);
-        setRevealStep('idle');
-        showToast({ type: 'warning', message: 'Payment timed out. Try again.' });
-        return;
-      }
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const res   = await fetch(
-          `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/reveal/status`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        const data = await res.json();
-        if (data.revealed) {
-          clearInterval(revealPollRef.current);
-          setRevealData(data);
-          setRevealStep('done');
-          Animated.spring(revealScale, {
-            toValue: 1, friction: 5, useNativeDriver: true,
-          }).start();
-        }
-      } catch { /* keep polling */ }
-    }, REVEAL_POLL_MS);
-  }, [connectionId, revealScale, showToast]);
-
-  const handleRevealMpesa = useCallback(async () => {
-    if (!revealPhone.trim()) return;
-    setRevealStep('waiting');
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/reveal/mpesa`,
-        {
-          method:  'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization:  `Bearer ${token}`,
-          },
-          body: JSON.stringify({ phone_number: revealPhone.trim() }),
-        },
-      );
-      const data = await res.json();
-      if (res.ok) {
-        setRevealStep('polling');
-        startRevealPolling();
-      } else {
-        showToast({
-          type:    'error',
-          message: data.detail || 'Payment failed. Try again.',
-        });
-        setRevealStep('phone');
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Something went wrong.' });
-      setRevealStep('phone');
-    }
-  }, [revealPhone, connectionId, startRevealPolling, showToast]);
-
   // ── Helpers ───────────────────────────────────────────────
   // Inject a "Today" / "Yesterday" / date separator row whenever the day
   // changes between consecutive messages.
@@ -908,11 +943,76 @@ export default function DropChatScreen({ route, navigation }) {
     setViewerMedia({ media_url: item.media_url, media_type: item.media_type });
   }, []);
 
+  // ── Reply ─────────────────────────────────────────────────
+  const handleReply = useCallback((item) => {
+    setReplyingTo(item);
+    setActionSheetItem(null);
+    setTimeout(() => inputRef.current?.focus(), 150);
+  }, []);
+
+  const handleCancelReply = useCallback(() => setReplyingTo(null), []);
+
+  const handleLongPressMessage = useCallback((item) => {
+    setActionSheetItem(item);
+  }, []);
+
+  // ── Delete — "for me" just hides it from my own view (server-side
+  // filter, see get_drop_messages); "for everyone" masks the real content
+  // for both sides and replaces it with a placeholder, live for the other
+  // party via the message_deleted socket event below. ─────────────────
+  const handleDeleteMessage = useCallback(async (item, forEveryone) => {
+    setActionSheetItem(null);
+    setMessages(prev => (
+      forEveryone
+        ? prev.map(m => (m.id === item.id
+            ? { ...m, deleted: true, content: '', media_url: null, media_type: null }
+            : m))
+        : prev.filter(m => m.id !== item.id)
+    ));
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(
+        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages/${item.id}/delete`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body:    JSON.stringify({ for_everyone: forEveryone }),
+        },
+      );
+      if (!res.ok) throw new Error();
+    } catch {
+      showToast({ type: 'error', message: 'Could not delete. Try again.' });
+      loadMessages(true); // resync — the optimistic update above may be wrong
+    }
+  }, [connectionId, showToast, loadMessages]);
+
+  const confirmDeleteForEveryone = useCallback((item) => {
+    Alert.alert(
+      'Delete for everyone?',
+      "They'll see \"This message was deleted\" instead. This can't be undone.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => handleDeleteMessage(item, true) },
+      ],
+    );
+  }, [handleDeleteMessage]);
+
+  const otherName = connection?.other_anonymous_name;
+
   const renderMessage = useCallback(
     ({ item }) => item.kind === 'date_separator'
       ? <DateSeparator label={item.label} />
-      : <Bubble item={item} fontFamily={bubbleFontFamily} onMediaPress={handleMediaPress} />,
-    [bubbleFontFamily, handleMediaPress],
+      : (
+        <Bubble
+          item={item}
+          fontFamily={bubbleFontFamily}
+          onMediaPress={handleMediaPress}
+          otherName={otherName}
+          onReply={handleReply}
+          onLongPressMessage={handleLongPressMessage}
+        />
+      ),
+    [bubbleFontFamily, handleMediaPress, otherName, handleReply, handleLongPressMessage],
   );
   const keyExtractor  = useCallback((item) => item.id, []);
 
@@ -975,11 +1075,6 @@ export default function DropChatScreen({ route, navigation }) {
     if (activeCall) return handleJoinCall(false);
     showToast({ type: 'info', message: 'No live call right now.' });
   }, [connection, activeCall, handleStartCall, handleJoinCall, showToast]);
-
-  const handleOpenReveal = useCallback(() => {
-    setRevealStep('idle');
-    setShowRevealModal(true);
-  }, []);
 
   // ── 3-dot menu — roster behind the room, host/guest specific actions ──
   useEffect(() => {
@@ -1103,8 +1198,8 @@ export default function DropChatScreen({ route, navigation }) {
     );
   }, [connectionId, showToast]);
 
-  // Header right: audio / video call icons + reveal pill/tag + 3-dot menu —
-  // the room's controls live in the header now, not a full-width bar.
+  // Header right: audio / video call icons + 3-dot menu — the room's
+  // controls live in the header now, not a full-width bar.
   const HeaderRight = useMemo(() => {
     if (!connection) return null;
     const callLive = !!activeCall;
@@ -1117,7 +1212,7 @@ export default function DropChatScreen({ route, navigation }) {
           hitSlop={HIT_SLOP}
           activeOpacity={0.75}
         >
-          <Phone size={rs(15)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
+          <Phone size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
           {callLive && <View style={s.liveDot} />}
         </TouchableOpacity>
 
@@ -1128,24 +1223,9 @@ export default function DropChatScreen({ route, navigation }) {
           hitSlop={HIT_SLOP}
           activeOpacity={0.75}
         >
-          <Video size={rs(15)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
+          <Video size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
           {callLive && <View style={s.liveDot} />}
         </TouchableOpacity>
-
-        {connection.is_revealed ? (
-          <View style={s.revealedTag}>
-            <CheckCircle size={rs(13)} color={T.success} strokeWidth={2} />
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={s.revealBtn}
-            onPress={handleOpenReveal}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.85}
-          >
-            <Sparkles size={rs(14)} color={T.primary} strokeWidth={2} />
-          </TouchableOpacity>
-        )}
 
         <TouchableOpacity
           style={s.headerActionBtn}
@@ -1153,19 +1233,16 @@ export default function DropChatScreen({ route, navigation }) {
           hitSlop={HIT_SLOP}
           activeOpacity={0.75}
         >
-          <MoreVertical size={rs(15)} color={T.textMute} strokeWidth={1.8} />
+          <MoreVertical size={rs(19)} color={T.textMute} strokeWidth={1.8} />
         </TouchableOpacity>
       </View>
     );
-  }, [connection, activeCall, callLoading, handlePressAudio, handlePressVideo, handleOpenReveal]);
+  }, [connection, activeCall, callLoading, handlePressAudio, handlePressVideo]);
 
   const headerTitle = useMemo(() => {
     if (!connection) return 'Anonymous';
-    if (revealData?.revealed_name) {
-      return `${revealData.revealed_name}`;
-    }
     return connection.other_anonymous_name || 'Anonymous';
-  }, [connection, revealData]);
+  }, [connection]);
 
   // Header centre — small avatar (tappable into the gallery, same as the
   // old profile row) + name, with "typing…" (live, socket-driven — see
@@ -1181,7 +1258,7 @@ export default function DropChatScreen({ route, navigation }) {
         {chatProfile?.profile_picture_url ? (
           <Image source={{ uri: chatProfile.profile_picture_url }} style={s.headerAvatar} />
         ) : (
-          <View style={[s.headerAvatar, s.headerAvatarInitialWrap]}>
+          <View style={[s.headerAvatar, s.headerAvatarInitialWrap, { backgroundColor: avatarColorFor(headerTitle) }]}>
             <Text style={s.headerAvatarInitialText}>{headerTitle?.[0]?.toUpperCase() || 'A'}</Text>
           </View>
         )}
@@ -1250,13 +1327,6 @@ export default function DropChatScreen({ route, navigation }) {
         />
       )}
 
-      {/* Was-anonymous-as subtitle when revealed */}
-      {revealData?.revealed_name && connection?.other_anonymous_name ? (
-        <Text style={s.wasAnon}>
-          was <Text style={{ color: T.primary }}>{connection.other_anonymous_name}</Text>
-        </Text>
-      ) : null}
-
       {/* Confession banner */}
       {connection?.confession ? (
         <View style={s.confessionBanner}>
@@ -1288,6 +1358,7 @@ export default function DropChatScreen({ route, navigation }) {
               initialNumToRender={14}
               maxToRenderPerBatch={10}
               windowSize={10}
+              ListFooterComponent={isOtherTyping ? <TypingBubble /> : null}
               onContentSizeChange={() =>
                 flatListRef.current?.scrollToEnd({ animated: false })
               }
@@ -1317,214 +1388,117 @@ export default function DropChatScreen({ route, navigation }) {
           </ScrollView>
         )}
 
-        {/* Input */}
+        {/* Reply banner — shows above the composer while replying to a
+            message; tapping X clears it without sending anything. */}
+        {replyingTo && (
+          <View style={s.replyBanner}>
+            <View style={s.replyBannerBar} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.replyBannerName} numberOfLines={1}>
+                {replyingTo.is_own ? 'You' : (otherName || 'them')}
+              </Text>
+              <Text style={s.replyBannerPreview} numberOfLines={1}>
+                {messagePreviewLabel(replyingTo)}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={handleCancelReply} hitSlop={HIT_SLOP}>
+              <X size={rs(16)} color={T.textMute} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input — one pill holds everything about composing (emoji, text,
+            attach, voice); Send is the one thing that leaves the pill,
+            since it's a different kind of action (commit, not compose).
+            Camera was dropped earlier: the library picker already covers
+            photos and video, so it was a second button for the same
+            outcome. */}
         <View style={[s.inputBar, { paddingBottom: insets.bottom + rp(8) }]}>
-          <TouchableOpacity
-            style={s.emojiToggleBtn}
-            onPress={() => setShowEmojiStrip((v) => !v)}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.75}
-          >
-            <Smile size={rs(20)} color={showEmojiStrip ? T.primary : T.textMute} strokeWidth={1.8} />
-          </TouchableOpacity>
+          <View style={s.inputWrap}>
+            {!isRecording && (
+              <TextInput
+                ref={inputRef}
+                style={s.input}
+                value={text}
+                onChangeText={handleTextChange}
+                placeholder="Drop your desires"
+                placeholderTextColor={T.textMute}
+                multiline
+                maxLength={500}
+              />
+            )}
 
-          <TextInput
-            style={s.input}
-            value={text}
-            onChangeText={handleTextChange}
-            placeholder="say what you came here for…"
-            placeholderTextColor={T.textMute}
-            multiline
-            maxLength={500}
-          />
-
-          {/* Attach — photo or video from the library */}
-          <TouchableOpacity
-            style={s.mediaBtn}
-            onPress={() => pickMedia('library')}
-            disabled={mediaUploading}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.75}
-          >
-            {mediaUploading
-              ? <ActivityIndicator size="small" color={T.primary} />
-              : <Paperclip size={rs(18)} color={T.textMute} strokeWidth={1.8} />}
-          </TouchableOpacity>
-
-          {/* Camera — take a photo directly */}
-          <TouchableOpacity
-            style={s.mediaBtn}
-            onPress={() => pickMedia('camera')}
-            disabled={mediaUploading}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.75}
-          >
-            <Camera size={rs(18)} color={T.textMute} strokeWidth={1.8} />
-          </TouchableOpacity>
-
-          {/* Voice note — press and hold to record, release to send */}
-          <Pressable
-            onPressIn={handleVoicePressIn}
-            onPressOut={handleVoicePressOut}
-            style={({ pressed }) => [
-              s.micBtn,
-              isRecording && s.micBtnRecording,
-              pressed && !isRecording && { opacity: 0.7 },
-            ]}
-            hitSlop={HIT_SLOP}
-          >
-            {isRecording ? (
-              <>
-                <Mic size={rs(16)} color="#fff" strokeWidth={2} />
+            {/* Recording takes over the field itself — nothing to type
+                while a voice note is being recorded, so the timer gets
+                the space instead of squeezing in next to a dead input. */}
+            {isRecording && (
+              <View style={s.recordingRow}>
+                <Animated.View style={[s.recordDot, { opacity: recordPulse }]} />
                 <Text style={s.recordDurationLabel}>
                   {Math.floor(recordDuration / 60)}:{String(recordDuration % 60).padStart(2, '0')}
                 </Text>
-              </>
-            ) : voiceUploading ? (
-              <ActivityIndicator size="small" color={T.primary} />
+                <Text style={s.recordHint}>release to send</Text>
+              </View>
+            )}
+
+            {/* Attach — photo or video from the library */}
+            {!isRecording && (
+              <TouchableOpacity
+                style={s.mediaBtn}
+                onPress={pickMedia}
+                disabled={mediaUploading}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.75}
+              >
+                {mediaUploading
+                  ? <ActivityIndicator size="small" color={T.primary} />
+                  : <Paperclip size={rs(21)} color={T.textMute} strokeWidth={1.8} />}
+              </TouchableOpacity>
+            )}
+
+            {/* Emoji — trailing edge of the pill, right next to the mic/send
+                button rather than leading it */}
+            {!isRecording && (
+              <TouchableOpacity
+                style={s.emojiToggleBtn}
+                onPress={() => setShowEmojiStrip((v) => !v)}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.75}
+              >
+                <Smile size={rs(23)} color={showEmojiStrip ? T.primary : T.textMute} strokeWidth={1.8} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* One button, two jobs — empty field: press and hold to record a
+              voice note (mic); typed field: tap to send (send). Matches
+              WhatsApp/Telegram's morph instead of two buttons competing for
+              the same slot. */}
+          <Pressable
+            onPressIn={!text.trim() ? handleVoicePressIn : undefined}
+            onPressOut={!text.trim() ? handleVoicePressOut : undefined}
+            onPress={text.trim() ? handleSend : undefined}
+            disabled={text.trim() ? sending : false}
+            hitSlop={HIT_SLOP}
+            style={({ pressed }) => [
+              s.sendBtn,
+              text.trim() && sending && { opacity: 0.4 },
+              pressed && !isRecording && { opacity: 0.85 },
+            ]}
+          >
+            {text.trim() ? (
+              sending
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />
             ) : (
-              <Mic size={rs(16)} color={T.textMute} strokeWidth={1.6} />
+              voiceUploading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Mic size={rs(22)} color="#fff" strokeWidth={2} />
             )}
           </Pressable>
-
-          <TouchableOpacity
-            style={[s.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}
-            onPress={handleSend}
-            disabled={!text.trim() || sending}
-            hitSlop={HIT_SLOP}
-            activeOpacity={0.85}
-          >
-            {sending
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Send size={rs(18)} color="#fff" strokeWidth={2.2} />}
-          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
       </ChatBackground>
-
-      {/* ── Reveal modal ── */}
-      <Modal
-        visible={showRevealModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowRevealModal(false)}
-      >
-        <View style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            {revealStep === 'done' ? (
-              <Animated.View style={[s.revealSuccess, { transform: [{ scale: revealScale }] }]}>
-                <Text style={s.revealSuccessEmoji}>🎭</Text>
-                <Text style={s.revealSuccessKicker}>MYSTERY SOLVED</Text>
-                <Text style={s.revealSuccessName}>{revealData?.revealed_name}</Text>
-                <Text style={s.revealSuccessSub}>
-                  <Text style={{ fontFamily: 'PlayfairDisplay-Italic' }}>
-                    {connection?.other_anonymous_name}
-                  </Text>
-                  {' was '}
-                  <Text style={{ color: T.primary, fontFamily: 'DMSans-Bold' }}>
-                    {revealData?.revealed_name}
-                  </Text>
-                  {' all along.'}
-                </Text>
-                <TouchableOpacity
-                  style={s.revealDoneBtn}
-                  onPress={() => setShowRevealModal(false)}
-                  hitSlop={HIT_SLOP}
-                  activeOpacity={0.9}
-                >
-                  <Text style={s.revealDoneBtnText}>Close</Text>
-                </TouchableOpacity>
-              </Animated.View>
-
-            ) : revealStep === 'polling' || revealStep === 'waiting' ? (
-              <View style={s.revealWaiting}>
-                <PulseLoader size={48} color={T.primary} />
-                <Text style={s.revealWaitTitle}>
-                  {revealStep === 'waiting'
-                    ? 'Sending STK push…'
-                    : 'Waiting for payment…'}
-                </Text>
-                <Text style={s.revealWaitSub}>
-                  Enter your M-Pesa PIN on your phone
-                </Text>
-              </View>
-
-            ) : (
-              <>
-                <View style={s.modalHandle} />
-                <Text style={s.modalTitle}>Reveal Identity</Text>
-                <Text style={s.modalSub}>
-                  Pay ${REVEAL_PRICE.toFixed(2)} to find out who{' '}
-                  <Text style={{ color: T.primary, fontFamily: 'PlayfairDisplay-Italic' }}>
-                    {connection?.other_anonymous_name}
-                  </Text>
-                  {' '}really is. Only their first name is revealed.
-                </Text>
-
-                <View style={s.revealPreviewCard}>
-                  <Eye size={rs(22)} color={T.primary} strokeWidth={1.8} />
-                  <Text style={s.revealPreviewTitle}>What you'll get</Text>
-                  <Text style={s.revealPreviewText}>
-                    Their real first name — the mystery becomes a person.
-                  </Text>
-                </View>
-
-                {revealStep === 'phone' ? (
-                  <>
-                    <Text style={s.phoneLabel}>M-Pesa number</Text>
-                    <View style={s.phoneRow}>
-                      <TextInput
-                        style={s.phoneInput}
-                        value={revealPhone}
-                        onChangeText={setRevealPhone}
-                        placeholder="2547XXXXXXXX"
-                        placeholderTextColor={T.textMute}
-                        keyboardType="phone-pad"
-                        maxLength={12}
-                      />
-                      <TouchableOpacity
-                        style={[s.payBtn, !revealPhone.trim() && { opacity: 0.4 }]}
-                        onPress={handleRevealMpesa}
-                        disabled={!revealPhone.trim()}
-                        hitSlop={HIT_SLOP}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={s.payBtnText}>Pay $1</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => setRevealStep('idle')}
-                      hitSlop={HIT_SLOP}
-                      style={s.cancelBtn}
-                    >
-                      <Text style={s.cancelBtnText}>Back</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={s.mpesaBtn}
-                      onPress={() => setRevealStep('phone')}
-                      hitSlop={HIT_SLOP}
-                      activeOpacity={0.9}
-                    >
-                      <Text style={s.mpesaIcon}>📱</Text>
-                      <Text style={s.mpesaBtnText}>Pay with M-Pesa</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => setShowRevealModal(false)}
-                      hitSlop={HIT_SLOP}
-                      style={s.cancelBtn}
-                    >
-                      <Text style={s.cancelBtnText}>Maybe later</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
 
       {/* ── 3-dot menu — room roster + host/guest actions ── */}
       <Modal
@@ -1602,6 +1576,58 @@ export default function DropChatScreen({ route, navigation }) {
         </TouchableOpacity>
       </Modal>
 
+      {/* Long-press action sheet — reply / delete for a single message */}
+      <Modal
+        visible={!!actionSheetItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionSheetItem(null)}
+      >
+        <TouchableOpacity
+          style={s.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setActionSheetItem(null)}
+        >
+          <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <TouchableOpacity
+              style={s.menuAction}
+              onPress={() => handleReply(actionSheetItem)}
+              hitSlop={HIT_SLOP}
+            >
+              <Reply size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Text style={s.menuActionText}>Reply</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.menuAction}
+              onPress={() => handleDeleteMessage(actionSheetItem, false)}
+              hitSlop={HIT_SLOP}
+            >
+              <Trash2 size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Text style={s.menuActionText}>Delete for me</Text>
+            </TouchableOpacity>
+            {actionSheetItem?.is_own && (
+              <TouchableOpacity
+                style={s.menuAction}
+                onPress={() => confirmDeleteForEveryone(actionSheetItem)}
+                hitSlop={HIT_SLOP}
+              >
+                <Trash2 size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Delete for everyone</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              onPress={() => setActionSheetItem(null)}
+              hitSlop={HIT_SLOP}
+              style={s.cancelBtn}
+            >
+              <Text style={s.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {viewerMedia && (
         <ChatMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />
       )}
@@ -1616,8 +1642,17 @@ const s = StyleSheet.create({
 
   // Header title — small avatar + name + truthful online line, in place
   // of the old full-width profile row.
+  //
+  // `flex: 1` is load-bearing: DropScreenHeader lays this out with
+  // justifyContent:'space-between' against the back button (~32px, fixed)
+  // and the right-side icon cluster (width varies with icon count). Without
+  // flex, this block's position comes from space-between's equal-gap math,
+  // which pulls it off-center by half the width difference between those
+  // two sides — and shifts again every time the icon count on the right
+  // changes. Flex anchors it flush after the back button instead, which is
+  // also how WhatsApp/Telegram/Messenger actually lay out a chat header.
   headerTitleRow: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(8), flexShrink: 1,
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8),
   },
   headerAvatarWrap: { position: 'relative', flexShrink: 0 },
   headerAvatar: {
@@ -1625,9 +1660,9 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: T.primaryBorder,
   },
   headerAvatarInitialWrap: {
-    backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  headerAvatarInitialText: { fontSize: rf(14), fontWeight: '700', color: T.primary },
+  headerAvatarInitialText: { fontSize: rf(14), fontWeight: '800', color: '#fff' },
   headerGalleryBadge: {
     position: 'absolute', bottom: -rp(2), right: -rp(2),
     backgroundColor: T.primary, borderRadius: rs(8),
@@ -1664,14 +1699,18 @@ const s = StyleSheet.create({
   },
   liveStripText: { fontSize: rf(11), fontWeight: '700', color: T.primary },
 
-  // Header call/menu icons
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
+  // Header call/menu icons — plain, unboxed icon buttons like the mockup;
+  // only an active call gets a highlighted pill, since that's real state
+  // worth calling out, not just decoration.
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(14) },
   headerActionBtn: {
-    width: rs(30), height: rs(30), borderRadius: rs(15),
-    backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: T.border, position: 'relative',
+    width: rs(32), height: rs(32), alignItems: 'center', justifyContent: 'center',
+    position: 'relative',
   },
-  headerActionBtnLive: { borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
+  headerActionBtnLive: {
+    borderRadius: rs(16), borderWidth: 1,
+    borderColor: T.primaryBorder, backgroundColor: T.primaryDim,
+  },
   liveDot: {
     position: 'absolute', top: rp(3), right: rp(3),
     width: rs(6), height: rs(6), borderRadius: rs(3),
@@ -1711,32 +1750,6 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  // Header right
-  revealBtn: {
-    width: rs(30), height: rs(30), borderRadius: rs(15),
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor:   T.primaryDim,
-    borderWidth:       1,
-    borderColor:       T.primaryBorder,
-  },
-  revealedTag: {
-    width: rs(30), height: rs(30), borderRadius: rs(15),
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor:   T.successDim,
-    borderWidth:       1,
-    borderColor:       'rgba(34,197,94,0.4)',
-  },
-
-  // "was AnonXXX" pill below header after reveal
-  wasAnon: {
-    fontFamily:        'DMSans-Italic',
-    fontSize:          rf(11),
-    color:             T.textMute,
-    textAlign:         'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(4),
-    letterSpacing:     0.4,
-  },
 
   // Confession banner
   confessionBanner: {
@@ -1779,10 +1792,17 @@ const s = StyleSheet.create({
   },
   msgRow:    { flexDirection: 'row', marginBottom: rp(4) },
   msgRowOwn: { justifyContent: 'flex-end' },
-  // Photo/video message bubble
+  // Photo/video message bubble — sharp bottom-right corner, same as every
+  // other message container in this chat (voice notes are the one
+  // exception — they have no container at all, see voiceMessageWrap).
   mediaBubble: {
-    maxWidth: '68%', borderRadius: RADIUS.lg, overflow: 'hidden',
+    maxWidth: '68%', borderRadius: RADIUS.lg, borderBottomRightRadius: rs(4),
+    overflow: 'hidden',
   },
+  // Wraps the image + its overlay + its overlaid timestamp, so the
+  // bottom-right time stays pinned to the photo itself even once a reply
+  // quote is added as a sibling below it.
+  mediaImageWrap: { position: 'relative' },
   mediaImage: {
     width: rs(220), height: rs(220), backgroundColor: T.surfaceAlt,
   },
@@ -1797,22 +1817,32 @@ const s = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3,
   },
   mediaBubbleTimeOwn: { color: '#fff' },
+  // Sharp bottom-right corner instead of uniform rounding — every message
+  // container in this chat gets this (text bubbles, media, the typing
+  // bubble below), except voice notes, which have no container at all.
   bubble: {
-    maxWidth:          '78%',
-    borderRadius:      RADIUS.lg,
-    paddingVertical:   rp(8),
-    paddingHorizontal: rp(12),
+    maxWidth:               '78%',
+    borderRadius:           RADIUS.lg,
+    borderBottomRightRadius: rs(4),
+    paddingVertical:        rp(8),
+    paddingHorizontal:      rp(12),
+    shadowColor:            '#000',
+    shadowOffset:           { width: 0, height: 2 },
+    shadowOpacity:          0.18,
+    shadowRadius:           6,
+    elevation:              2,
   },
   bubbleOwn: {
-    backgroundColor:         T.primary,
-    borderBottomRightRadius: rs(4),
+    backgroundColor: T.primary,
   },
   bubbleTheir: {
-    backgroundColor:        T.surface,
-    borderBottomLeftRadius: rs(4),
-    borderWidth:            1,
-    borderColor:            T.border,
+    backgroundColor: T.surface,
+    borderWidth:     1,
+    borderColor:     T.border,
   },
+  // No background/border here — voice notes render bare, same convention
+  // as mediaBubble below. maxWidth just keeps it from stretching full width.
+  voiceMessageWrap: { maxWidth: '78%' },
   bubbleText: {
     fontFamily:    'DMSans-Regular',
     fontSize:      FONT.md,
@@ -1821,15 +1851,13 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
   },
   bubbleTextOwn: { color: '#fff' },
-  // Inline time — nested Text so it flows at the end of the message like a
-  // normal chat bubble instead of sitting on its own line below.
-  bubbleTimeInline: {
+  // Own messages: time flows inline at the end of the text. Received
+  // messages use `bubbleTime` below instead — its own right-aligned line.
+  bubbleTimeInlineOwn: {
     fontFamily: 'DMSans-Italic',
     fontSize:   rf(10),
-    color:      T.textMute,
+    color:      'rgba(255,255,255,0.65)',
   },
-  bubbleTimeInlineOwn: { color: 'rgba(255,255,255,0.65)' },
-  // Still used by the voice bubble below, which isn't a text flow.
   bubbleTime: {
     fontFamily:    'DMSans-Italic',
     fontSize:      rf(10),
@@ -1843,29 +1871,79 @@ const s = StyleSheet.create({
   // instead of staying muted, same "seen" signal WhatsApp's blue ticks give.
   tickSeen: { color: T.primary, fontFamily: 'DMSans-Bold' },
 
-  // Voice note bubble
-  voiceRow: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(9), minWidth: rs(160),
+  // Swipe-to-reply — the icon revealed behind a bubble as it's dragged right.
+  replyActionWrap: {
+    width: rs(56), alignItems: 'center', justifyContent: 'center',
   },
-  voicePlayBtn: {
-    width: rs(30), height: rs(30), borderRadius: rs(15),
-    alignItems: 'center', justifyContent: 'center',
+
+  // Quoted reply block sitting inside a bubble, above its own content.
+  // Own bubbles are solid coral, so the quote reads as a translucent white
+  // strip; received bubbles are dark/surface, so it reads as a coral tint —
+  // same accent-bar language WhatsApp/Telegram use for "this replies to X".
+  replyQuote: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: rp(6),
+    backgroundColor: T.primaryDim,
+    borderRadius: rs(8),
+    paddingVertical: rp(5), paddingHorizontal: rp(7),
+    marginTop: rp(6),
   },
-  voicePlayBtnOwn:   { backgroundColor: 'rgba(255,255,255,0.95)' },
-  voicePlayBtnTheir: { backgroundColor: T.primary },
-  voiceTrack: {
-    flex: 1, height: rs(3), borderRadius: rs(2),
-    backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden',
+  replyQuoteOwn: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  replyQuoteBar: {
+    width: rs(3), alignSelf: 'stretch', borderRadius: rs(2),
+    backgroundColor: T.primary, minHeight: rs(24),
   },
-  voiceTrackFill: {
-    height: '100%', borderRadius: rs(2), backgroundColor: 'rgba(255,255,255,0.95)',
+  replyQuoteBarOwn: { backgroundColor: '#fff' },
+  replyQuoteName: {
+    fontFamily: 'DMSans-Bold', fontSize: rf(11), color: T.primary,
   },
-  voiceTrackFillOwn: { backgroundColor: 'rgba(255,255,255,0.95)' },
-  voiceTimeLabel: {
-    fontFamily: 'DMSans-Bold', fontSize: rf(10), color: 'rgba(255,255,255,0.7)',
-    minWidth: rs(26),
+  replyQuoteNameOwn: { color: '#fff' },
+  replyQuotePreview: {
+    fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.textMute,
+    marginTop: rp(1),
   },
-  voiceTimeLabelOwn: { color: 'rgba(255,255,255,0.85)' },
+  replyQuotePreviewOwn: { color: 'rgba(255,255,255,0.85)' },
+  // Same reply quote, but sitting on top of an image/video bubble instead
+  // of inside a text bubble — needs its own opaque backing so it stays
+  // readable over the photo underneath.
+  // Sits below the photo now (not layered on top of it), so it no longer
+  // needs an opaque backing of its own — ReplyQuote already carries one.
+  replyQuoteOnMedia: { padding: rp(6) },
+
+  // "This message was deleted" placeholder — same bubble shape, muted
+  // italic text instead of real content.
+  deletedText: {
+    fontFamily: 'DMSans-Italic', fontSize: FONT.md, color: T.textMute,
+  },
+  deletedTextOwn: { color: 'rgba(255,255,255,0.75)' },
+
+  // Reply banner — shown above the composer while replying to a message.
+  replyBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(8),
+    paddingHorizontal: rp(16), paddingVertical: rp(8),
+    backgroundColor: T.surfaceAlt,
+    borderTopWidth: 1, borderTopColor: T.border,
+  },
+  replyBannerBar: {
+    width: rs(3), alignSelf: 'stretch', borderRadius: rs(2),
+    backgroundColor: T.primary, minHeight: rs(28),
+  },
+  replyBannerName: {
+    fontFamily: 'DMSans-Bold', fontSize: rf(12.5), color: T.primary,
+  },
+  replyBannerPreview: {
+    fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute,
+    marginTop: rp(1),
+  },
+
+  // Typing indicator bubble
+  typingBubble: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(4),
+    paddingVertical: rp(12),
+  },
+  typingBubbleDot: {
+    width: rs(6), height: rs(6), borderRadius: rs(3),
+    backgroundColor: T.textMute,
+  },
 
   // Empty
   emptyChat: {
@@ -1910,22 +1988,40 @@ const s = StyleSheet.create({
   },
   moodCardSymbol: { fontSize: rf(22) },
 
-  // Input bar
+  // Input bar — floating rounded-top card, not a flat bordered strip
   inputBar: {
+    flexDirection:        'row',
+    alignItems:           'flex-end',
+    gap:                  rp(10),
+    paddingHorizontal:    SPACING.md,
+    paddingTop:           rp(12),
+    backgroundColor:      T.surface,
+    borderTopLeftRadius:  RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    shadowColor:          '#000',
+    shadowOffset:         { width: 0, height: -4 },
+    shadowOpacity:        0.25,
+    shadowRadius:         12,
+    elevation:            12,
+  },
+  // The pill holds everything about composing a message — emoji, the text
+  // itself, attach, and voice — as flex siblings in one row. Send is the
+  // only thing that lives outside it (see sendBtn below).
+  inputWrap: {
+    flex:              1,
     flexDirection:     'row',
     alignItems:        'flex-end',
-    gap:               rp(10),
-    paddingHorizontal: SPACING.md,
-    paddingTop:        rp(10),
-    borderTopWidth:    1,
-    borderTopColor:    T.border,
-    backgroundColor:   T.background,
+    backgroundColor:   T.surfaceDark,
+    borderRadius:      RADIUS.xl,
+    borderWidth:       1,
+    borderColor:       T.border,
+    paddingHorizontal: rp(4),
   },
   emojiToggleBtn: {
-    width: rs(36), height: rs(40), alignItems: 'center', justifyContent: 'center',
+    width: rs(36), height: rs(42), alignItems: 'center', justifyContent: 'center',
   },
   mediaBtn: {
-    width: rs(32), height: rs(40), alignItems: 'center', justifyContent: 'center',
+    width: rs(34), height: rs(42), alignItems: 'center', justifyContent: 'center',
   },
   emojiStrip: {
     borderTopWidth: 1, borderTopColor: T.border, backgroundColor: T.background,
@@ -1940,38 +2036,36 @@ const s = StyleSheet.create({
   emojiStripEmoji: { fontSize: rf(20) },
   input: {
     flex:              1,
-    backgroundColor:   T.surface,
-    borderRadius:      RADIUS.xl,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: rp(4),
     paddingVertical:   rp(10),
     paddingTop:        rp(10),
     fontFamily:        'DMSans-Regular',
     fontSize:          FONT.md,
     color:             T.text,
     maxHeight:         rs(100),
-    borderWidth:       1,
-    borderColor:       T.border,
   },
-  micBtn: {
-    width: rs(40), height: rs(40), borderRadius: rs(20),
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: rp(2),
+  // Replaces the text input while recording — nothing to type, so the
+  // timer/hint get the space instead of squeezing in beside a dead field.
+  recordingRow: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8),
+    paddingVertical: rp(10), paddingLeft: rp(4),
   },
-  micBtnRecording: {
-    backgroundColor: T.primary,
-    borderRadius:    rs(20),
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             rp(4),
-    paddingHorizontal: rp(10),
-    width: 'auto',
+  recordDot: {
+    width: rs(9), height: rs(9), borderRadius: rs(5),
+    backgroundColor: T.danger,
   },
   recordDurationLabel: {
     fontFamily:    'DMSans-Bold',
-    fontSize:      rf(11),
-    color:         '#fff',
+    fontSize:      rf(13),
+    color:         T.text,
     letterSpacing: 0.5,
-    minWidth:      rs(26),
+    minWidth:      rs(32),
+  },
+  recordHint: {
+    flex: 1,
+    fontFamily: 'DMSans-Italic',
+    fontSize:   rf(12),
+    color:      T.textMute,
   },
   sendBtn: {
     width:           rs(44),
@@ -1987,7 +2081,7 @@ const s = StyleSheet.create({
     elevation:       4,
   },
 
-  // ── Reveal modal ──
+  // ── Shared modal chrome (more-options menu) ──
   modalOverlay: {
     flex:            1,
     backgroundColor: 'rgba(0,0,0,0.72)',
@@ -2009,109 +2103,6 @@ const s = StyleSheet.create({
     borderRadius:    rs(2),
     alignSelf:       'center',
     marginBottom:    SPACING.md,
-  },
-  modalTitle: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(24),
-    color:         T.text,
-    marginBottom:  rp(8),
-    textAlign:     'center',
-    letterSpacing: 0.3,
-  },
-  modalSub: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      FONT.sm,
-    color:         T.textSec,
-    textAlign:     'center',
-    lineHeight:    rf(20),
-    marginBottom:  SPACING.md,
-    letterSpacing: 0.3,
-  },
-
-  revealPreviewCard: {
-    backgroundColor: T.surfaceAlt,
-    borderRadius:    RADIUS.lg,
-    padding:         SPACING.md,
-    alignItems:      'center',
-    gap:             rp(6),
-    marginBottom:    SPACING.lg,
-    borderWidth:     1,
-    borderColor:     T.border,
-  },
-  revealPreviewTitle: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
-    color:         T.text,
-    letterSpacing: 0.3,
-  },
-  revealPreviewText: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(12),
-    color:         T.textSec,
-    textAlign:     'center',
-    letterSpacing: 0.2,
-  },
-
-  mpesaBtn: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap:             rp(10),
-    backgroundColor: T.primary,
-    borderRadius:    RADIUS.lg,
-    paddingVertical: rp(15),
-    marginBottom:    SPACING.sm,
-    shadowColor:     T.primary,
-    shadowOpacity:   0.35,
-    shadowRadius:    12,
-    shadowOffset:    { width: 0, height: 4 },
-    elevation:       4,
-  },
-  mpesaIcon: { fontSize: rf(20) },
-  mpesaBtnText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.md,
-    color:         '#fff',
-    letterSpacing: 0.4,
-  },
-
-  phoneLabel: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
-    color:         T.textSec,
-    marginBottom:  SPACING.xs,
-    letterSpacing: 0.4,
-  },
-  phoneRow: {
-    flexDirection: 'row',
-    gap:           rp(10),
-    marginBottom:  SPACING.sm,
-  },
-  phoneInput: {
-    flex:              1,
-    backgroundColor:   T.surfaceAlt,
-    borderRadius:      RADIUS.md,
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(12),
-    fontFamily:        'DMSans-Regular',
-    fontSize:          FONT.md,
-    color:             T.text,
-    borderWidth:       1,
-    borderColor:       T.border,
-  },
-  payBtn: {
-    paddingHorizontal: rp(18),
-    paddingVertical:   rp(12),
-    borderRadius:      RADIUS.md,
-    backgroundColor:   T.primary,
-    alignItems:        'center',
-    justifyContent:    'center',
-  },
-  payBtnText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
-    color:         '#fff',
-    letterSpacing: 0.4,
   },
   cancelBtn: { alignItems: 'center', paddingVertical: rp(10) },
   cancelBtnText: {
@@ -2156,64 +2147,4 @@ const s = StyleSheet.create({
     fontFamily: 'DMSans-Bold', fontSize: FONT.sm, color: T.text, letterSpacing: 0.2,
   },
 
-  // Reveal success
-  revealSuccess: { alignItems: 'center', paddingVertical: SPACING.sm },
-  revealSuccessEmoji: {
-    fontSize:     rf(56),
-    marginBottom: SPACING.sm,
-  },
-  revealSuccessKicker: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(11),
-    color:         T.textMute,
-    letterSpacing: 2.2,
-    marginBottom:  rp(6),
-  },
-  revealSuccessName: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      rf(40),
-    color:         T.primary,
-    marginBottom:  SPACING.sm,
-    letterSpacing: 0.3,
-  },
-  revealSuccessSub: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      FONT.md,
-    color:         T.textSec,
-    textAlign:     'center',
-    marginBottom:  SPACING.lg,
-    lineHeight:    rf(22),
-    letterSpacing: 0.2,
-  },
-  revealDoneBtn: {
-    backgroundColor:   T.primary,
-    borderRadius:      RADIUS.lg,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical:   rp(14),
-    shadowColor:       T.primary,
-    shadowOpacity:     0.35,
-    shadowRadius:      12,
-    shadowOffset:      { width: 0, height: 4 },
-    elevation:         4,
-  },
-  revealDoneBtnText: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.md,
-    color:         '#fff',
-    letterSpacing: 0.4,
-  },
-
-  revealWaiting: { alignItems: 'center', padding: SPACING.md, gap: SPACING.sm },
-  revealWaitTitle: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      FONT.lg,
-    color:         T.text,
-    letterSpacing: 0.3,
-  },
-  revealWaitSub: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      FONT.sm,
-    color:         T.textSec,
-    letterSpacing: 0.2,
-  },
 });

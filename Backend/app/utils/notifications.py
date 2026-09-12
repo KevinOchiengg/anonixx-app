@@ -33,23 +33,6 @@ TEMPLATES = {
         "data": {"type": "new_message"},
     },
 
-    # Reveal
-    "reveal_request": {
-        "title": "They want to reveal 👁",
-        "body": "Someone in your chat wants to show you who they are.",
-        "data": {"type": "reveal_request"},
-    },
-    "reveal_accepted": {
-        "title": "Identity revealed ✨",
-        "body": "They accepted your reveal request.",
-        "data": {"type": "reveal_accepted"},
-    },
-    "reveal_declined": {
-        "title": "They chose to stay anonymous",
-        "body": "Your reveal request was declined. The chat continues.",
-        "data": {"type": "reveal_declined"},
-    },
-
     # Posts
     "post_response": {
         "title": "Someone responded to your confession",

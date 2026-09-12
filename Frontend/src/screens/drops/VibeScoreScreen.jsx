@@ -46,7 +46,6 @@ const EVENT_LABELS = {
   card_created:      { label: 'Cards created',      icon: Flame,    pts: '+2 pts each' },
   card_unlocked:     { label: 'Cards unlocked',     icon: Zap,      pts: '+5 pts each' },
   reaction_received: { label: 'Reactions received', icon: Heart,    pts: '+1 pt each'  },
-  reveal_completed:  { label: 'Reveals completed',  icon: Eye,      pts: '+3 pts each' },
   streak_day:        { label: 'Streak days',        icon: Calendar, pts: '+2 pts each' },
 };
 

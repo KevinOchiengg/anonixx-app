@@ -735,8 +735,6 @@ async def _create_circle_comment_connection(comment_id: str, comment: dict, unlo
         "unlocker_anonymous_name": unlocker_name,
         "confession":              comment.get("content", ""),
         "message_count":           0,
-        "is_revealed_sender":      False,
-        "is_revealed_unlocker":    False,
         "created_at":              _now(),
         "last_message_at":         _now(),
     }
