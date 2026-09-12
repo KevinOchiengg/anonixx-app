@@ -74,11 +74,21 @@ export default React.memo(function DailyRewardBanner() {
 
   useEffect(() => {
     dispatch(fetchStreak());
+  }, []);
+
+  // Runs the entrance animation whenever the banner actually becomes
+  // visible (see the canClaimToday guard below) rather than once on mount —
+  // it starts out unmounted while fetchStreak is still in flight, so a
+  // mount-only effect would finish silently off-screen and never be seen.
+  useEffect(() => {
+    if (!canClaimToday) return;
+    slideY.setValue(-24);
+    opacity.setValue(0);
     Animated.parallel([
       Animated.spring(slideY,  { toValue: 0, useNativeDriver: true, tension: 70, friction: 12 }),
       Animated.timing(opacity, { toValue: 1, duration: 350, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [canClaimToday]);
 
   // Danger flicker animation
   useEffect(() => {
@@ -123,6 +133,10 @@ export default React.memo(function DailyRewardBanner() {
     if (canClaimToday)  return ['#1a2e1a', '#0f1a0f'];
     return [THEME.surface, THEME.surfaceAlt];
   }, [streakInDanger, canClaimToday]);
+
+  // Nothing to claim right now (still aging in, on cooldown, or capped for
+  // the month) — no locked/"come back in Xh" state, just don't show up.
+  if (!canClaimToday) return null;
 
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ translateY: slideY }], opacity }]}>

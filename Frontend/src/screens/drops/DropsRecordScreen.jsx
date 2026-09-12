@@ -248,6 +248,10 @@ export default function DropsRecordScreen({ navigation, route }) {
       setCapturedLevels(null);
       setElapsed(0);
       setRecordedUri(null);
+      // Previewing a take (togglePlay above) flips this back to false, so
+      // re-arm it before every recording — mirrors the mount effect above,
+      // which only ever runs once and isn't enough for a re-record.
+      await AudioModule.setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
     } catch {
@@ -304,16 +308,25 @@ export default function DropsRecordScreen({ navigation, route }) {
     try { player.setPlaybackRate?.(speed); } catch {}
   }, [player, speed, recordedUri]);
 
-  const togglePlay = useCallback(() => {
+  const togglePlay = useCallback(async () => {
     if (!recordedUri) return;
     if (playerStatus.playing) {
       player.pause();
-    } else {
-      if (playerStatus.currentTime >= (playerStatus.duration || 0) - 0.1) {
-        player.seekTo(0);
-      }
-      player.play();
+      return;
     }
+    try {
+      // Recording just happened on this same screen, which leaves the
+      // session's allowsRecording stuck true — previewing the clip you just
+      // recorded plays into that same recording-mode session otherwise,
+      // which routes to the earpiece on iOS and often fails outright on
+      // Android. Nothing here resets it after recording stops, so do it
+      // right before playback instead.
+      await AudioModule.setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+    } catch {}
+    if (playerStatus.currentTime >= (playerStatus.duration || 0) - 0.1) {
+      player.seekTo(0);
+    }
+    player.play();
   }, [recordedUri, player, playerStatus.playing, playerStatus.currentTime, playerStatus.duration]);
 
   // ── Upload + create drop ──────────────────────────────────────

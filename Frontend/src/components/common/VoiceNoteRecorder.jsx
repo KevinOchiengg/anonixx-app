@@ -61,15 +61,15 @@ export default function VoiceNoteRecorder({ onSend, disabled, compact }) {
   const startRef     = useRef(null);
   const finishRef    = useRef(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const perm = await AudioModule.requestRecordingPermissionsAsync();
-        if (!perm.granted) return;
-        await AudioModule.setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      } catch {}
-    })();
-  }, []);
+  // No mount-time permission request or audio-mode change here on purpose —
+  // this component can be mounted just by opening a comment sheet, without
+  // the user ever touching the mic. Doing either at mount time used to (a)
+  // ask for microphone access before there was any user intent to record,
+  // and (b) flip the *global* audio session to allowsRecording:true, which
+  // silently breaks playback everywhere else in the app (any AudioPlayer
+  // that doesn't explicitly reset it back to false) for as long as this
+  // component stays mounted. `start()` below already re-arms recording mode
+  // right before it's actually needed — that's the only place it belongs.
 
   useEffect(() => {
     if (recording) {
@@ -96,6 +96,9 @@ export default function VoiceNoteRecorder({ onSend, disabled, compact }) {
       setElapsed(0);
       recordingRef.current = true;
       setRecording(true);
+      // Playback (e.g. this same sheet's comment AudioPlayer) flips this back
+      // to false before playing, so re-arm it before every recording.
+      await AudioModule.setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
     } catch {

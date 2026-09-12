@@ -1,11 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
   BarChart2, Bookmark, Coins, EyeOff, Flag, Heart, Link2,
-  MessageCircle, MoreHorizontal, Pause, Play, Share2, UserX, VolumeX, X,
+  MessageCircle, MoreHorizontal, Play, Share2, UserX, VolumeX, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,6 +19,7 @@ import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/respons
 import T from '../../utils/theme';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
 import { useToast } from '../ui/Toast';
+import VoiceWaveform from '../common/VoiceWaveform';
 import { CommentBottomSheet } from './CommentBottomSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -128,87 +128,14 @@ const ImageCarousel = React.memo(({ images }) => {
 });
 
 // ─── Audio Player ─────────────────────────────────────────────
-const BARS = Array.from({ length: 28 }, (_, i) => ({
-  id: i, height: Math.sin(i * 0.8) * 12 + 8 + (i % 3) * 4,
-}));
-
-const AudioPlayer = React.memo(({ audioUrl }) => {
-  const player   = useAudioPlayer(null);
-  const status   = useAudioPlayerStatus(player);
-  const loaded   = useRef(false);
-
-  const playing  = !!status.playing;
-  const duration = status.duration || 0;
-  const progress = duration > 0 ? (status.currentTime || 0) / duration : 0;
-
-  useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
-
-  useEffect(() => {
-    if (status.didJustFinish) {
-      try {
-        player.pause();
-        Promise.resolve(player.seekTo(0)).catch(() => {});
-      } catch {}
-    }
-  }, [status.didJustFinish, player]);
-
-  const toggle = useCallback(async () => {
-    if (!audioUrl) return;
-    try {
-      if (!loaded.current) {
-        await setAudioModeAsync({ playsInSilentModeIOS: true });
-        player.replace({ uri: audioUrl });
-        loaded.current = true;
-        player.play();
-        return;
-      }
-      if (playing) player.pause();
-      else player.play();
-    } catch { /* silent — a failed clip shouldn't break the card */ }
-  }, [audioUrl, playing, player]);
-
-  const fmt = (secs) => {
-    const s = Math.max(0, Math.floor(secs || 0));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-
-  return (
-    <View style={styles.audioWrap}>
-      <TouchableOpacity
-        style={styles.audioPlayBtn}
-        onPress={toggle}
-        activeOpacity={0.85}
-        hitSlop={HIT_SLOP}
-      >
-        {playing
-          ? <Pause size={rs(18)} color="#fff" fill="#fff" />
-          : <Play  size={rs(18)} color="#fff" fill="#fff" />}
-      </TouchableOpacity>
-      <View style={styles.audioRight}>
-        <View style={styles.waveform}>
-          {BARS.map((b, i) => (
-            <View
-              key={b.id}
-              style={[
-                styles.waveBar,
-                { height: b.height },
-                progress > 0 && i / BARS.length <= progress && styles.waveBarPlayed,
-              ]}
-            />
-          ))}
-        </View>
-        <View style={styles.audioMeta}>
-          <Text style={styles.audioMetaText}>
-            {playing || progress > 0
-              ? `${fmt(status.currentTime)} / ${fmt(duration)}`
-              : 'tap to play'}
-          </Text>
-          <Text style={styles.audioMetaText}>audio confession</Text>
-        </View>
-      </View>
-    </View>
-  );
-});
+// Shared implementation (see VoiceWaveform.jsx) — this card just wraps it
+// with its own pill background and an "audio confession" caption.
+const AudioPlayer = React.memo(({ audioUrl }) => (
+  <View style={styles.audioWrap}>
+    <VoiceWaveform uri={audioUrl} />
+    <Text style={styles.audioMetaText}>audio confession</Text>
+  </View>
+));
 
 // ─── Video Player ─────────────────────────────────────────────
 const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) => {
@@ -796,13 +723,10 @@ const styles = StyleSheet.create({
   videoViewsText:   { fontSize: rf(10), color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
   videoProgressWrap:   { position: 'absolute', bottom: 0, left: 0, right: 0, height: rs(22) },
   videoProgressSlider: { width: '100%', height: rs(22) },
-  audioWrap:        { flexDirection: 'row', alignItems: 'center', gap: rp(12), backgroundColor: T.primaryDim, borderWidth: 1, borderColor: T.primaryBorder, padding: rp(14), borderRadius: RADIUS.md, marginBottom: rp(14) },
-  audioPlayBtn:     { width: rs(44), height: rs(44), borderRadius: rs(22), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center', shadowColor: T.primary, shadowOffset: { width: 0, height: rs(4) }, shadowOpacity: 0.5, shadowRadius: rs(8) },
-  audioRight:       { flex: 1 },
-  waveform:         { flexDirection: 'row', alignItems: 'center', gap: rp(2), height: rs(36) },
-  waveBar:          { width: rp(3), borderRadius: rp(2), backgroundColor: 'rgba(255,255,255,0.12)' },
-  waveBarPlayed:    { backgroundColor: T.primary },
-  audioMeta:        { flexDirection: 'row', justifyContent: 'space-between', marginTop: rp(4) },
+  // No card/background here on purpose — voice notes float bare like any
+  // other inline media, same as an image or video attachment does. Only
+  // actual chat text bubbles get a background container.
+  audioWrap:        { gap: rp(8), marginBottom: rp(14) },
   audioMetaText:    { fontSize: FONT.xs, color: T.textSecondary },
   actions:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: rp(2) },
   actionsLeft:      { flexDirection: 'row', alignItems: 'center', gap: rp(16) },

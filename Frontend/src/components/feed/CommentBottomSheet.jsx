@@ -10,13 +10,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  ChevronDown, CornerDownRight, Heart, ImageIcon, Pause, Pin, Play, X,
+  ChevronDown, CornerDownRight, Heart, ImageIcon, Pin, X,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
+import VoiceWaveform from '../common/VoiceWaveform';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
@@ -53,57 +53,9 @@ const { width: W, height: H } = Dimensions.get('window');
 
 const AVATAR_BG = '#1e2330';
 
-// ─── Voice note playback ────────────────────────────────────────
-const AudioPlayer = React.memo(({ uri }) => {
-  const player = useAudioPlayer(null);
-  const status = useAudioPlayerStatus(player);
-  const loaded = useRef(false);
-
-  const playing  = !!status.playing;
-  const duration = status.duration || 0;
-
-  useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
-
-  useEffect(() => {
-    if (status.didJustFinish) {
-      try {
-        player.pause();
-        Promise.resolve(player.seekTo(0)).catch(() => {});
-      } catch {}
-    }
-  }, [status.didJustFinish, player]);
-
-  const toggle = useCallback(async () => {
-    if (!uri) return;
-    try {
-      if (!loaded.current) {
-        await setAudioModeAsync({ playsInSilentModeIOS: true });
-        player.replace({ uri });
-        loaded.current = true;
-        player.play();
-        return;
-      }
-      if (playing) player.pause();
-      else player.play();
-    } catch {}
-  }, [uri, playing, player]);
-
-  const fmt = (secs) => {
-    const s = Math.max(0, Math.floor(secs || 0));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-
-  return (
-    <TouchableOpacity style={st.audioWrap} onPress={toggle} activeOpacity={0.85} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-      <View style={st.audioPlayBtn}>
-        {playing ? <Pause size={14} color="#fff" fill="#fff" /> : <Play size={14} color="#fff" fill="#fff" />}
-      </View>
-      <Text style={st.audioTimeText}>
-        {playing || status.currentTime > 0 ? fmt(status.currentTime) : fmt(duration)}
-      </Text>
-    </TouchableOpacity>
-  );
-});
+// Voice note playback — shared implementation, see VoiceWaveform.jsx for
+// why it resets the audio session before playing (this sheet also mounts
+// VoiceNoteRecorder just below).
 
 // ─── Emoji picker ─────────────────────────────────────────────
 const EMOJI_CATS = [
@@ -210,7 +162,11 @@ const CommentItem = React.memo(({
             <Image source={{ uri: mediaUri }} style={st.commentImage} resizeMode="cover" />
           </TouchableOpacity>
         ) : null}
-        {item.voice_url ? <View style={{ marginTop: item.content ? 6 : 0 }}><AudioPlayer uri={item.voice_url} /></View> : null}
+        {item.voice_url ? (
+          <View style={{ marginTop: item.content ? 6 : 0 }}>
+            <VoiceWaveform uri={item.voice_url} durationSeconds={item.voice_duration} compact />
+          </View>
+        ) : null}
 
         <View style={st.commentFooterRow}>
           <Text style={st.commentTime}>{item.time_ago || 'just now'}</Text>
@@ -1058,16 +1014,6 @@ const st = StyleSheet.create({
   viewRepliesBtn:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   viewRepliesLine: { width: 24, height: 1, backgroundColor: T.borderStrong },
   viewRepliesText: { fontSize: 12.5, fontWeight: '700', color: T.textMuted, fontFamily: 'DMSans-Bold' },
-  audioWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: T.surfaceAlt, borderRadius: 20,
-    paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start',
-  },
-  audioPlayBtn: {
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
-  },
-  audioTimeText: { fontSize: 11, color: T.textSecondary, fontWeight: '600', fontFamily: 'DMSans-SemiBold' },
   likeColumn: { alignItems: 'center', gap: 3, paddingTop: 2, flexShrink: 0 },
   likeCount:  { fontSize: 11, color: T.textMuted, fontFamily: 'DMSans-Regular' },
   repliesWrap: { marginTop: 2 },

@@ -22,7 +22,7 @@ from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
-from app.websockets.chat import emit_new_message, emit_messages_seen
+from app.websockets.chat import emit_new_message, emit_messages_seen, emit_message_deleted
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
@@ -34,7 +34,6 @@ router = APIRouter(prefix="/drops", tags=["Drops"])
 MENTION_RE = re.compile(r'@([A-Za-z0-9_.]{2,30})')
 
 DROP_PRICE_USD = 2.00
-REVEAL_PRICE_USD = 1.00
 GROUP_DROP_PRICE_USD = 3.00
 
 # Official drops — posted by an admin account (see admin.py's toggle_admin_role)
@@ -167,14 +166,6 @@ class MpesaUnlockRequest(BaseModel):
 
 
 class StripeUnlockRequest(BaseModel):
-    payment_method_id: str
-
-
-class MpesaRevealRequest(BaseModel):
-    phone_number: str
-
-
-class StripeRevealRequest(BaseModel):
     payment_method_id: str
 
 
@@ -340,14 +331,12 @@ async def update_vibe_score(user_id: str, action: str, db):
     - card_created: +2
     - card_unlocked: +5 (someone paid to connect with you)
     - reaction_received: +1
-    - reveal_completed: +3
     - streak_day: +2
     """
     weights = {
         "card_created": 2,
         "card_unlocked": 5,
         "reaction_received": 1,
-        "reveal_completed": 3,
         "streak_day": 2,
     }
     points = weights.get(action, 0)
@@ -391,7 +380,7 @@ async def trigger_mpesa_stk(
     Trigger M-Pesa STK Push. Returns { success, checkout_request_id, error }
 
     `amount` is USD, converted to KES via a flat approximate FX rate below —
-    kept for callers (e.g. reveal_mpesa) that don't yet have a real geo price.
+    kept for callers that don't yet have a real geo price.
     Pass `amount_kes` instead to charge an exact, already-geo-priced KES
     figure (see get_drop_unlock_price in geo_pricing.py) and skip that
     approximation.
@@ -2374,8 +2363,6 @@ async def _create_drop_connection(drop_id: str, drop: dict, unlocker_id: str, db
         "unlocker_anonymous_name": unlocker_name,
         "confession": drop["confession"],
         "message_count": 0,
-        "is_revealed_sender": False,
-        "is_revealed_unlocker": False,
         "created_at": now_utc(),
         "last_message_at": now_utc(),
     }
@@ -2454,6 +2441,8 @@ async def get_drop_connections(
         async for u in db["users"].find({"_id": {"$in": valid_ids}}, {"avatar_url": 1}):
             avatar_by_id[str(u["_id"])] = u.get("avatar_url")
 
+    from app.websockets.events import is_user_online
+
     connections = []
     for conn in raw_connections:
         is_sender = conn["sender_id"] == current_user_id
@@ -2465,19 +2454,30 @@ async def get_drop_connections(
             sort=[("created_at", -1)]
         )
 
+        # Same WhatsApp-style tick logic as get_drop_messages — only
+        # meaningful when the last message was mine to send.
+        other_last_read_at = conn.get("unlocker_last_read_at" if is_sender else "sender_last_read_at")
+        last_message_is_own = bool(last_msg and last_msg["sender_id"] == current_user_id)
+        last_message_seen = bool(
+            last_message_is_own and other_last_read_at
+            and last_msg["created_at"] <= other_last_read_at
+        )
+
         connections.append({
             "id": str(conn["_id"]),
             "drop_id": conn["drop_id"],
             "confession": conn["confession"],
+            "other_user_id": other_id,
             "other_anonymous_name": other_name,
             "other_avatar_url": avatar_by_id.get(other_id),
+            "other_is_online": is_user_online(other_id),
             "is_sender": is_sender,
             "message_count": conn.get("message_count", 0),
             "unread_count": unread_counts.get(str(conn["_id"]), 0),
             "last_message": last_msg["content"] if last_msg else None,
             "last_message_at": conn["last_message_at"].isoformat(),
-            "is_revealed": conn["is_revealed_sender"] if is_sender else conn["is_revealed_unlocker"],
-            "other_revealed": conn["is_revealed_unlocker"] if is_sender else conn["is_revealed_sender"],
+            "last_message_is_own": last_message_is_own,
+            "last_message_seen": last_message_seen,
         })
 
     return {"connections": connections}
@@ -2509,15 +2509,26 @@ async def get_drop_messages(
 
     messages = []
     async for msg in db["drop_messages"].find(
-        {"connection_id": connection_id}
+        # "Delete for me" hides it from just this viewer — everyone else in
+        # the conversation still sees it normally, so this is a query
+        # filter, not a flag the frontend has to interpret.
+        {"connection_id": connection_id, "deleted_for": {"$ne": current_user_id}}
     ).sort("created_at", 1):
         is_own = msg["sender_id"] == current_user_id
+        deleted_for_everyone = bool(msg.get("deleted_for_everyone"))
+
+        reply_payload = _reply_payload_for(msg.get("reply_to"), current_user_id)
+
         messages.append({
             "id": str(msg["_id"]),
-            "content": msg["content"],
-            "media_url": msg.get("media_url"),
-            "media_type": msg.get("media_type"),
-            "duration_seconds": msg.get("duration_seconds"),
+            # A deleted-for-everyone message keeps its row (so the thread
+            # doesn't jump around) but never leaks its real content again.
+            "content":         "" if deleted_for_everyone else msg["content"],
+            "media_url":       None if deleted_for_everyone else msg.get("media_url"),
+            "media_type":      None if deleted_for_everyone else msg.get("media_type"),
+            "duration_seconds": None if deleted_for_everyone else msg.get("duration_seconds"),
+            "deleted":         deleted_for_everyone,
+            "reply_to":        reply_payload,
             "sender_id": msg["sender_id"],
             "is_own": is_own,
             # Only meaningful on my own sent messages — ticks aren't shown
@@ -2569,8 +2580,6 @@ async def get_drop_messages(
             "id": connection_id,
             "confession": conn["confession"],
             "other_anonymous_name": conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"],
-            "is_revealed": conn["is_revealed_sender"] if is_sender else conn["is_revealed_unlocker"],
-            "other_revealed": conn["is_revealed_unlocker"] if is_sender else conn["is_revealed_sender"],
             "is_sender": is_sender,
             "host_user_id": conn["sender_id"],
             "other_is_online": is_user_online(other_user_id),
@@ -2592,6 +2601,33 @@ async def get_drop_messages(
     }
 
 
+def _message_preview_text(content: str, media_type: Optional[str]) -> str:
+    """Short label for a message — used both for push notification bodies
+    and for the quoted snippet shown when another message replies to it."""
+    if media_type == "voice":
+        return "🎙 Voice note"
+    if media_type == "image":
+        return "📷 Photo"
+    if media_type == "video":
+        return "🎥 Video"
+    content = content or ""
+    return content[:60] + ("..." if len(content) > 60 else "")
+
+
+def _reply_payload_for(reply_to: Optional[dict], viewer_id: str) -> Optional[dict]:
+    """Shapes a stored reply-to snapshot for one specific viewer — `is_own`
+    depends on who's looking, so it can't be baked into the stored snapshot
+    itself."""
+    if not reply_to:
+        return None
+    return {
+        "id":         reply_to["id"],
+        "preview":    reply_to["preview"],
+        "media_type": reply_to.get("media_type"),
+        "is_own":     reply_to["sender_id"] == viewer_id,
+    }
+
+
 @router.post("/connections/{connection_id}/message")
 async def send_drop_message(
     connection_id: str,
@@ -2602,6 +2638,7 @@ async def send_drop_message(
     content    = (data.get("content") or "").strip()
     media_url  = data.get("media_url")
     media_type = data.get("media_type")   # "voice" | "image" | "video"
+    reply_to_id = data.get("reply_to_id")
 
     if not content and not media_url:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -2619,6 +2656,30 @@ async def send_drop_message(
     if current_user_id not in [conn["sender_id"], conn["unlocker_id"]]:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # Reply — denormalise a small snapshot onto the new message rather than
+    # joining at read time, so the quote still renders even if the original
+    # later gets deleted-for-me by one side (it's just hidden from *their*
+    # view, not actually gone) or, if deleted-for-everyone, is masked the
+    # same way the original row itself is.
+    reply_to = None
+    if reply_to_id:
+        try:
+            replied = await db["drop_messages"].find_one({
+                "_id": ObjectId(reply_to_id), "connection_id": connection_id,
+            })
+        except Exception:
+            replied = None
+        if replied:
+            reply_to = {
+                "id":         str(replied["_id"]),
+                "sender_id":  replied["sender_id"],
+                "preview":    (
+                    "This message was deleted" if replied.get("deleted_for_everyone")
+                    else _message_preview_text(replied.get("content", ""), replied.get("media_type"))
+                ),
+                "media_type": None if replied.get("deleted_for_everyone") else replied.get("media_type"),
+            }
+
     msg = {
         "_id": ObjectId(),
         "connection_id": connection_id,
@@ -2627,6 +2688,7 @@ async def send_drop_message(
         "media_url": media_url,
         "media_type": media_type,
         "duration_seconds": data.get("duration_seconds"),
+        "reply_to": reply_to,
         "created_at": now_utc()
     }
     await db["drop_messages"].insert_one(msg)
@@ -2650,18 +2712,13 @@ async def send_drop_message(
         "duration_seconds": msg["duration_seconds"],
         "sender_id":        current_user_id,
         "is_own":           False,
+        "deleted":          False,
+        "reply_to":         _reply_payload_for(reply_to, other_id),
         "time_ago":         "just now",
         "created_at":       msg["created_at"].isoformat(),
     })
 
-    if media_type == "voice":
-        notify_body = "🎙 Voice note"
-    elif media_type == "image":
-        notify_body = "📷 Photo"
-    elif media_type == "video":
-        notify_body = "🎥 Video"
-    else:
-        notify_body = content[:60] + ("..." if len(content) > 60 else "")
+    notify_body = _message_preview_text(content, media_type)
     await send_push_notification(
         other_id,
         f"{sender_name} sent a message 💬",
@@ -2675,9 +2732,63 @@ async def send_drop_message(
         "media_url": media_url,
         "media_type": media_type,
         "duration_seconds": msg["duration_seconds"],
+        "deleted": False,
+        "reply_to": _reply_payload_for(reply_to, current_user_id),
         "time_ago": "just now",
         "created_at": msg["created_at"].isoformat(),
     }
+
+
+@router.post("/connections/{connection_id}/messages/{message_id}/delete")
+async def delete_drop_message(
+    connection_id: str,
+    message_id: str,
+    data: dict,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """
+    Two different things WhatsApp calls "delete", both supported:
+      - for_everyone=False (default): hides it from just this viewer —
+        `deleted_for` is a per-user set, so the other party's view is
+        untouched.
+      - for_everyone=True: only the original sender may do this. Content is
+        masked (not removed) for both sides and replaced with a "This
+        message was deleted" placeholder, mirroring WhatsApp's own
+        behaviour and pushed live so the other party doesn't have to wait
+        for their next poll to see it disappear.
+    """
+    for_everyone = bool(data.get("for_everyone"))
+
+    try:
+        conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
+        msg  = await db["drop_messages"].find_one({
+            "_id": ObjectId(message_id), "connection_id": connection_id,
+        })
+    except Exception:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if not conn or not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if current_user_id not in [conn["sender_id"], conn["unlocker_id"]]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if for_everyone:
+        if msg["sender_id"] != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only delete your own messages for everyone.")
+        await db["drop_messages"].update_one(
+            {"_id": ObjectId(message_id)},
+            {"$set": {"deleted_for_everyone": True}},
+        )
+        other_id = conn["unlocker_id"] if current_user_id == conn["sender_id"] else conn["sender_id"]
+        await emit_message_deleted(other_id, connection_id, message_id)
+    else:
+        await db["drop_messages"].update_one(
+            {"_id": ObjectId(message_id)},
+            {"$addToSet": {"deleted_for": current_user_id}},
+        )
+
+    return {"deleted": True, "for_everyone": for_everyone}
 
 
 @router.get("/room/{host_user_id}/guests")
@@ -2708,205 +2819,6 @@ async def list_room_guests(
 
     guests.sort(key=lambda g: g["is_online"], reverse=True)
     return {"guests": guests, "is_host": is_host}
-
-
-# ==================== REVEAL ====================
-
-@router.post("/connections/{connection_id}/reveal/mpesa")
-async def reveal_mpesa(
-    connection_id: str,
-    data: MpesaRevealRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    try:
-        conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
-    except:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
-    if not conn:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
-    if current_user_id not in [conn["sender_id"], conn["unlocker_id"]]:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    result = await trigger_mpesa_stk(
-        phone=data.phone_number,
-        amount=REVEAL_PRICE_USD,
-        account_ref=f"REVEAL_{connection_id[:8].upper()}",
-        description="Anonixx Identity Reveal"
-    )
-
-    if not result["success"]:
-        raise HTTPException(status_code=402, detail=result.get("error", "Payment failed"))
-
-    await db["drop_reveal_pending"].update_one(
-        {"connection_id": connection_id, "requester_id": current_user_id},
-        {"$set": {
-            "connection_id": connection_id,
-            "requester_id": current_user_id,
-            "checkout_request_id": result["checkout_request_id"],
-            "created_at": now_utc()
-        }},
-        upsert=True
-    )
-
-    return {
-        "message": "STK push sent. Enter your M-Pesa PIN to reveal.",
-        "checkout_request_id": result["checkout_request_id"],
-    }
-
-
-@router.post("/connections/{connection_id}/reveal/stripe")
-async def reveal_stripe(
-    connection_id: str,
-    data: StripeRevealRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    try:
-        conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
-    except:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
-    if not conn:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
-    if current_user_id not in [conn["sender_id"], conn["unlocker_id"]]:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    try:
-        import stripe
-        stripe.api_key = settings.STRIPE_SECRET_KEY
-
-        intent = stripe.PaymentIntent.create(
-            amount=int(REVEAL_PRICE_USD * 100),
-            currency="usd",
-            payment_method=data.payment_method_id,
-            confirm=True,
-            metadata={"connection_id": connection_id, "requester_id": current_user_id},
-            automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
-        )
-
-        if intent.status == "succeeded":
-            reveal_data = await _complete_reveal(connection_id, current_user_id, conn, db)
-            return reveal_data
-        else:
-            raise HTTPException(status_code=402, detail="Payment not completed")
-
-    except Exception as e:
-        raise HTTPException(status_code=402, detail=str(e))
-
-
-@router.post("/mpesa/reveal/callback")
-async def mpesa_reveal_callback(payload: dict, db = Depends(get_database)):
-    try:
-        stk = payload.get("Body", {}).get("stkCallback", {})
-        result_code = stk.get("ResultCode")
-        checkout_request_id = stk.get("CheckoutRequestID")
-
-        if result_code != 0:
-            return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-        pending = await db["drop_reveal_pending"].find_one({
-            "checkout_request_id": checkout_request_id
-        })
-        if not pending:
-            return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-        connection_id = pending["connection_id"]
-        requester_id = pending["requester_id"]
-
-        conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
-        if conn:
-            reveal_data = await _complete_reveal(connection_id, requester_id, conn, db)
-            await send_push_notification(
-                requester_id,
-                "Identity revealed 🎭",
-                f"You now know who {reveal_data.get('revealed_name', 'they')} is.",
-                db
-            )
-
-        await db["drop_reveal_pending"].delete_one({"checkout_request_id": checkout_request_id})
-
-    except Exception as e:
-        print(f"⚠️ Reveal callback error: {e}")
-
-    return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-
-async def _complete_reveal(connection_id: str, requester_id: str, conn: dict, db) -> dict:
-    """Complete a reveal — returns the other person's anonymous name and real first name."""
-    is_sender = conn["sender_id"] == requester_id
-    other_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
-
-    other_user = await db["users"].find_one({"_id": ObjectId(other_id)})
-    anonymous_name = conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"]
-    real_name = other_user.get("name", "").split()[0] if other_user else "Unknown"
-
-    # Mark revealed
-    field = "is_revealed_sender" if is_sender else "is_revealed_unlocker"
-    await db["drop_connections"].update_one(
-        {"_id": ObjectId(connection_id)},
-        {"$set": {field: True}}
-    )
-
-    await db["drop_reveals"].insert_one({
-        "_id": ObjectId(),
-        "connection_id": connection_id,
-        "requester_id": requester_id,
-        "revealed_user_id": other_id,
-        "created_at": now_utc()
-    })
-
-    await update_vibe_score(other_id, "reveal_completed", db)
-
-    # Notify the person being revealed
-    await send_push_notification(
-        other_id,
-        "Someone revealed your identity 🎭",
-        "They now know your name. The mystery is gone — or just beginning.",
-        db
-    )
-
-    return {
-        "revealed": True,
-        "anonymous_name": anonymous_name,
-        "revealed_name": real_name,
-        "message": f"Mystery solved. They are {real_name}.",
-    }
-
-
-@router.get("/connections/{connection_id}/reveal/status")
-async def poll_reveal_status(
-    connection_id: str,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    try:
-        conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
-    except:
-        raise HTTPException(status_code=404, detail="Not found")
-
-    if not conn:
-        raise HTTPException(status_code=404, detail="Not found")
-
-    is_sender = conn["sender_id"] == current_user_id
-    is_revealed = conn["is_revealed_sender"] if is_sender else conn["is_revealed_unlocker"]
-
-    if not is_revealed:
-        return {"revealed": False}
-
-    other_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
-    other_user = await db["users"].find_one({"_id": ObjectId(other_id)})
-    real_name = other_user.get("name", "").split()[0] if other_user else "Unknown"
-    anonymous_name = conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"]
-
-    return {
-        "revealed": True,
-        "anonymous_name": anonymous_name,
-        "revealed_name": real_name,
-    }
 
 
 # ==================== RENEW DROP ====================

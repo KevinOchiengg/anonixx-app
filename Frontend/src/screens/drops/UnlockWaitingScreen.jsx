@@ -4,9 +4,7 @@
  * Landing spot right after sending an unlock request — the owner hasn't
  * approved yet, so nothing's been charged. Socket-first for the accept/
  * decline hand-off (see Backend/app/websockets/unlock_requests.py), with a
- * polling fallback against GET /unlock-requests/{id}/status matching the
- * REVEAL_POLL_MS/MAX_REVEAL_ATTEMPTS pattern already used for the M-Pesa
- * reveal flow in DropChatScreen.jsx.
+ * polling fallback against GET /unlock-requests/{id}/status.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -26,7 +24,7 @@ import { API_BASE_URL } from '../../config/api';
 import { fetchBalance } from '../../store/slices/coinsSlice';
 
 const POLL_MS = 5000;
-const MAX_POLL_ATTEMPTS = 24; // ~2 minutes, matching DropChatScreen's reveal poll
+const MAX_POLL_ATTEMPTS = 24; // ~2 minutes
 
 export default function UnlockWaitingScreen({ route, navigation }) {
   const {

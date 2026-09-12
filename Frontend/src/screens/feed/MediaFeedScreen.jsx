@@ -467,7 +467,7 @@ const AudioSlide = ({
     }
     (async () => {
       try {
-        await setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true, shouldPlayInBackground: true });
         if (cancelled) return;
         if (!audioLoaded.current && post.audio_url) {
           audioPlayer.replace({ uri: post.audio_url });
@@ -485,7 +485,7 @@ const AudioSlide = ({
       // AudioStatus has no `status` field — that comparison was always false,
       // so replace() never ran and nothing ever loaded. Use isLoaded instead.
       if (!audioLoaded.current) {
-        await setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true, shouldPlayInBackground: true });
         audioPlayer.replace({ uri: post.audio_url });
         audioLoaded.current = true;
         audioPlayer.play();
@@ -502,9 +502,14 @@ const AudioSlide = ({
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
 
+  // `current` marks the single bar right at the playhead — gets a coral
+  // glow (see the waveform rendering below), echoing the reference at
+  // https://pin.it/4GZoLgC6p without copying its literal red/blue duotone.
+  const activeBar = Math.floor(progress * 48);
   const bars = Array.from({ length: 48 }, (_, i) => ({
     h: Math.sin(i * 0.55) * 20 + Math.cos(i * 0.3) * 10 + 28,
     played: progress > 0 && i / 48 <= progress,
+    current: progress > 0 && i === activeBar,
   }));
 
   const shouldTruncate = (post.content?.length || 0) > 120;
@@ -606,6 +611,7 @@ const AudioSlide = ({
                 as.bar,
                 { height: bar.h },
                 bar.played ? as.barPlayed : as.barUnplayed,
+                bar.current && as.barGlow,
               ]}
             />
           ))}
@@ -1281,6 +1287,10 @@ const as = StyleSheet.create({
   bar: { width: 4, borderRadius: 3 },
   barPlayed: { backgroundColor: THEME.primary },
   barUnplayed: { backgroundColor: 'rgba(255,255,255,0.15)' },
+  barGlow: {
+    shadowColor: THEME.primary, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9, shadowRadius: 6, elevation: 6,
+  },
 
   progressTrack: {
     height: 3,

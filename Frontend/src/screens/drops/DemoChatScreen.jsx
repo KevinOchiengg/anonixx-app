@@ -105,11 +105,11 @@ export default function DemoChatScreen({ navigation }) {
               {b.type === 'voice' ? (
                 <TouchableOpacity style={s.voiceBubble} onPress={nudge} activeOpacity={0.85}>
                   <View style={s.voicePlayBtn}>
-                    <Play size={rs(13)} color="#fff" strokeWidth={2.2} fill="#fff" />
+                    <Play size={rs(13)} color={T.primary} strokeWidth={2.2} fill={T.primary} />
                   </View>
                   <View style={s.voiceBars}>
                     {DEMO_WAVE.map((h, j) => (
-                      <View key={j} style={[s.voiceBar, { height: rs(h), backgroundColor: j < 3 ? '#fff' : 'rgba(255,255,255,0.35)' }]} />
+                      <View key={j} style={[s.voiceBar, { height: rs(h), backgroundColor: j < 3 ? T.primary : 'rgba(255,255,255,0.14)' }]} />
                     ))}
                   </View>
                   <Text style={s.voiceTime}>{b.duration}</Text>
@@ -254,26 +254,29 @@ const s = StyleSheet.create({
   content: { padding: SPACING.md, paddingBottom: rs(24), gap: rp(10) },
 
   bubbleRow: { alignItems: 'flex-start' },
+  // Sharp bottom-right corner — matches the real DropChatScreen, since this
+  // whole screen exists to preview what a real chat looks like.
   bubble: {
     maxWidth: '84%',
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: RADIUS.lg,
-    borderBottomLeftRadius: rp(4),
+    borderBottomRightRadius: rp(4),
     paddingHorizontal: rp(14),
     paddingVertical: rp(11),
   },
   bubbleText: { fontSize: FONT.sm, color: T.text, lineHeight: rf(20) },
 
+  // No background here, same as the real voice notes it's previewing —
+  // just layout, no container.
   voiceBubble: {
     flexDirection: 'row', alignItems: 'center', gap: rp(9),
     minWidth: rs(180), maxWidth: '84%',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: RADIUS.lg, borderBottomLeftRadius: rp(4),
-    paddingHorizontal: rp(13), paddingVertical: rp(10),
+    paddingVertical: rp(10),
   },
   voicePlayBtn: {
     width: rs(28), height: rs(28), borderRadius: rs(14),
-    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: T.primaryDim, borderWidth: 1.5, borderColor: T.primary,
+    alignItems: 'center', justifyContent: 'center',
   },
   voiceBars: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: rp(2), height: rs(18) },
   voiceBar: { width: rs(2.5), borderRadius: rs(1.5) },
