@@ -27,14 +27,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   ChevronLeft, ChevronDown, Images, BarChart2, Mic, Type,
-  AlertTriangle, Trash2, X, SlidersHorizontal, MapPin,
+  AlertTriangle, Trash2, X, SlidersHorizontal, MapPin, Scissors,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
+import VideoTrimModal from '../../components/drops/VideoTrimModal';
 
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -198,8 +198,13 @@ export default function DropsComposeScreen({ navigation, route }) {
   // shift with it instead of sitting on one word regardless of what's picked.
   const moodTag = CARD_INTENTS[cardIntent]?.moodTag || 'longing';
   const [mediaUri, setMediaUri] = useState(null);
-  const [thumbUri, setThumbUri] = useState(null);
   const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
+  // Trim window, seconds into the picked video — null/null means "post the
+  // whole clip." Only the server-side upload actually cuts the file (see
+  // handlePost's /upload/sign call); these just record where to cut.
+  const [trimStart, setTrimStart] = useState(null);
+  const [trimEnd,   setTrimEnd]   = useState(null);
+  const [showTrimModal, setShowTrimModal] = useState(false);
   const [loading,  setLoading]  = useState(false);
 
   // ── Tag a specific user (optional — drop still hits marketplace) ─
@@ -326,14 +331,10 @@ export default function DropsComposeScreen({ navigation, route }) {
       const kind = asset.type === 'video' ? 'video' : 'image';
       setMediaUri(asset.uri);
       setMediaKind(kind);
-      if (kind === 'video') {
-        try {
-          const { uri } = await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 1000 });
-          setThumbUri(uri);
-        } catch { setThumbUri(null); }
-      } else {
-        setThumbUri(null);
-      }
+      // A freshly-picked clip starts untrimmed — any window left over from
+      // a previous video would silently apply to the wrong clip otherwise.
+      setTrimStart(null);
+      setTrimEnd(null);
     } catch {
       showToast({ type: 'error', message: 'Could not open gallery.' });
     }
@@ -341,15 +342,21 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   const handleClearMedia = useCallback(() => {
     setMediaUri(null);
-    setThumbUri(null);
     setMediaKind(null);
+    setTrimStart(null);
+    setTrimEnd(null);
+  }, []);
+
+  const handleTrimConfirm = useCallback((start, end) => {
+    setTrimStart(start);
+    setTrimEnd(end);
+    setShowTrimModal(false);
   }, []);
 
   // ── Discard draft ─────────────────────────────────────────────
   const handleDiscardDraft = useCallback(async () => {
     setText('');
     setMediaUri(null);
-    setThumbUri(null);
     setShowUnsentBanner(false);
     try { await AsyncStorage.removeItem(DRAFT_KEY); } catch {}
     showToast({ type: 'info', message: 'Unsent layer cleared.' });
@@ -400,7 +407,14 @@ export default function DropsComposeScreen({ navigation, route }) {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ resource_type: mediaKind, watermark: true }),
+          body: JSON.stringify({
+            resource_type: mediaKind, watermark: true,
+            // Only meaningful for video — the backend ignores these
+            // otherwise. Cloudinary does the actual cut at upload time.
+            ...(mediaKind === 'video' && trimStart != null && trimEnd != null
+              ? { trim_start: trimStart, trim_end: trimEnd }
+              : {}),
+          }),
         });
         if (!signRes.ok) {
           const err = await signRes.json().catch(() => ({}));
@@ -519,7 +533,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    format, text, mediaUri, mediaKind, theme, cardIntent, moodTag,
+    format, text, mediaUri, mediaKind, trimStart, trimEnd, theme, cardIntent, moodTag,
     intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
     dispatch, navigation, showToast,
@@ -528,7 +542,6 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Derived ───────────────────────────────────────────────────
   const canDrop       = !!text.trim() || !!mediaUri;
   const layoutMode    = 'split';
-  const cardMediaUri  = thumbUri || mediaUri || null;
   const remaining     = MAX_CHARS - text.length;
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
@@ -682,7 +695,10 @@ export default function DropsComposeScreen({ navigation, route }) {
               // the feed still renders each posted drop in its real
               // intent colors via DropCard/DropCardRenderer elsewhere.
               intent={null}
-              mediaUrl={cardMediaUri}
+              mediaUrl={mediaUri}
+              mediaType={mediaKind || 'image'}
+              trimStart={trimStart}
+              trimEnd={trimEnd}
               layoutMode={layoutMode}
               cardWidth={CARD_W}
               seed={text || format}
@@ -692,6 +708,16 @@ export default function DropsComposeScreen({ navigation, route }) {
               maxLength={MAX_CHARS}
               fontStyle={fontStyle}
             />
+            {mediaKind === 'video' && (
+              <TouchableOpacity
+                style={s.trimBtn}
+                onPress={() => setShowTrimModal(true)}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.85}
+              >
+                <Scissors size={rs(15)} color="#fff" />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={s.mediaAttachBtn}
               onPress={mediaUri ? handleClearMedia : handlePickMedia}
@@ -703,6 +729,15 @@ export default function DropsComposeScreen({ navigation, route }) {
                 : <Images size={rs(16)} color="#fff" />}
             </TouchableOpacity>
           </Animated.View>
+
+          <VideoTrimModal
+            visible={showTrimModal}
+            uri={mediaKind === 'video' ? mediaUri : null}
+            initialStart={trimStart || 0}
+            initialEnd={trimEnd}
+            onCancel={() => setShowTrimModal(false)}
+            onConfirm={handleTrimConfirm}
+          />
 
           {/* Character count, text format only */}
           {format === 'text' && (
@@ -1049,6 +1084,27 @@ const s = StyleSheet.create({
   // both the text zone and the identity bar at all times. Solid accent
   // fill (not a translucent dark circle) so it reads clearly against
   // every card color, not just the darkest ones.
+  // Trim button — sits just left of the attach/clear button, only shown for
+  // a picked video. Dark instead of coral so the coral stays reserved for
+  // the one "primary" action in that corner (attach/clear).
+  trimBtn: {
+    position:        'absolute',
+    right:           rp(12) + rs(42) + rp(10),
+    top:             rp(12),
+    width:           rs(42),
+    height:          rs(42),
+    borderRadius:    rs(21),
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth:     2,
+    borderColor:     'rgba(255,255,255,0.85)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: rs(3) },
+    shadowOpacity:   0.45,
+    shadowRadius:    rs(6),
+    elevation:       4,
+  },
   mediaAttachBtn: {
     position:        'absolute',
     right:           rp(12),

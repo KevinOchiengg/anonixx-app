@@ -18,7 +18,7 @@ import React, {
 } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
   Animated, Modal, Image, ScrollView, Pressable, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,7 +34,7 @@ import {
 import {
   Send, X, Video, Phone, MoreVertical,
   Mic, Play, Settings, Flag, ShieldOff, Users, AlertTriangle,
-  Smile, Paperclip, Reply, Trash2,
+  Reply, Trash2,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -44,6 +44,7 @@ import {
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import PulseLoader from '../../components/common/PulseLoader';
 import VoiceWaveform from '../../components/common/VoiceWaveform';
+import ChatInputBar from '../../components/common/ChatInputBar';
 import ChatBackground from '../../components/chat/ChatBackground';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
@@ -682,7 +683,7 @@ export default function DropChatScreen({ route, navigation }) {
     setSending(true);
     try {
       const token = await AsyncStorage.getItem('token');
-      await fetch(
+      const res = await fetch(
         `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
         {
           method:  'POST',
@@ -693,14 +694,19 @@ export default function DropChatScreen({ route, navigation }) {
           body: JSON.stringify({ content, ...(replyToId && { reply_to_id: replyToId }) }),
         },
       );
-      await loadMessages(true);
+      if (!res.ok) throw new Error();
+      const sent = await res.json();
+      // Append straight from the POST response instead of refetching the
+      // whole thread — the message appears the instant this resolves,
+      // not after a second round-trip that reloads everything else too.
+      setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch {
       showToast({ type: 'error', message: 'Failed to send. Try again.' });
     } finally {
       setSending(false);
     }
-  }, [text, connectionId, loadMessages, showToast, replyingTo]);
+  }, [text, connectionId, showToast, replyingTo]);
 
   // ── Voice note — upload direct to Cloudinary (signed), then send as
   //    a media message. Mirrors ChatScreen.jsx's uploadVoice exactly. ──
@@ -738,7 +744,7 @@ export default function DropChatScreen({ route, navigation }) {
     setReplyingTo(null);
     try {
       const token = await AsyncStorage.getItem('token');
-      await fetch(
+      const res = await fetch(
         `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
         {
           method:  'POST',
@@ -752,12 +758,14 @@ export default function DropChatScreen({ route, navigation }) {
           }),
         },
       );
-      await loadMessages(true);
+      if (!res.ok) throw new Error();
+      const sent = await res.json();
+      setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch {
-      showToast({ type: 'error', message: 'Voice note sent, but the chat failed to refresh.' });
+      showToast({ type: 'error', message: 'Could not send the voice note. Try again.' });
     }
-  }, [connectionId, loadMessages, showToast, replyingTo]);
+  }, [connectionId, showToast, replyingTo]);
 
   // ── Media (photo/video) — same signed-upload-to-Cloudinary pattern as
   //    voice notes, just routed through the "image"/"video" resource type.
@@ -802,7 +810,7 @@ export default function DropChatScreen({ route, navigation }) {
     setReplyingTo(null);
     try {
       const token = await AsyncStorage.getItem('token');
-      await fetch(
+      const res = await fetch(
         `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
         {
           method:  'POST',
@@ -816,12 +824,14 @@ export default function DropChatScreen({ route, navigation }) {
           }),
         },
       );
-      await loadMessages(true);
+      if (!res.ok) throw new Error();
+      const sent = await res.json();
+      setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch {
-      showToast({ type: 'error', message: 'Media sent, but the chat failed to refresh.' });
+      showToast({ type: 'error', message: 'Could not send. Try again.' });
     }
-  }, [connectionId, loadMessages, showToast, replyingTo]);
+  }, [connectionId, showToast, replyingTo]);
 
   const pickMedia = useCallback(async () => {
     try {
@@ -1407,96 +1417,63 @@ export default function DropChatScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Input — one pill holds everything about composing (emoji, text,
-            attach, voice); Send is the one thing that leaves the pill,
-            since it's a different kind of action (commit, not compose).
-            Camera was dropped earlier: the library picker already covers
-            photos and video, so it was a second button for the same
-            outcome. */}
-        <View style={[s.inputBar, { paddingBottom: insets.bottom + rp(8) }]}>
-          <View style={s.inputWrap}>
-            {!isRecording && (
-              <TextInput
-                ref={inputRef}
-                style={s.input}
-                value={text}
-                onChangeText={handleTextChange}
-                placeholder="Drop your desires"
-                placeholderTextColor={T.textMute}
-                multiline
-                maxLength={500}
-              />
-            )}
-
-            {/* Recording takes over the field itself — nothing to type
-                while a voice note is being recorded, so the timer gets
-                the space instead of squeezing in next to a dead input. */}
-            {isRecording && (
-              <View style={s.recordingRow}>
-                <Animated.View style={[s.recordDot, { opacity: recordPulse }]} />
-                <Text style={s.recordDurationLabel}>
-                  {Math.floor(recordDuration / 60)}:{String(recordDuration % 60).padStart(2, '0')}
-                </Text>
-                <Text style={s.recordHint}>release to send</Text>
-              </View>
-            )}
-
-            {/* Attach — photo or video from the library */}
-            {!isRecording && (
-              <TouchableOpacity
-                style={s.mediaBtn}
-                onPress={pickMedia}
-                disabled={mediaUploading}
-                hitSlop={HIT_SLOP}
-                activeOpacity={0.75}
-              >
-                {mediaUploading
-                  ? <ActivityIndicator size="small" color={T.primary} />
-                  : <Paperclip size={rs(21)} color={T.textMute} strokeWidth={1.8} />}
-              </TouchableOpacity>
-            )}
-
-            {/* Emoji — trailing edge of the pill, right next to the mic/send
-                button rather than leading it */}
-            {!isRecording && (
-              <TouchableOpacity
-                style={s.emojiToggleBtn}
-                onPress={() => setShowEmojiStrip((v) => !v)}
-                hitSlop={HIT_SLOP}
-                activeOpacity={0.75}
-              >
-                <Smile size={rs(23)} color={showEmojiStrip ? T.primary : T.textMute} strokeWidth={1.8} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* One button, two jobs — empty field: press and hold to record a
-              voice note (mic); typed field: tap to send (send). Matches
-              WhatsApp/Telegram's morph instead of two buttons competing for
-              the same slot. */}
-          <Pressable
-            onPressIn={!text.trim() ? handleVoicePressIn : undefined}
-            onPressOut={!text.trim() ? handleVoicePressOut : undefined}
-            onPress={text.trim() ? handleSend : undefined}
-            disabled={text.trim() ? sending : false}
-            hitSlop={HIT_SLOP}
-            style={({ pressed }) => [
-              s.sendBtn,
-              text.trim() && sending && { opacity: 0.4 },
-              pressed && !isRecording && { opacity: 0.85 },
-            ]}
-          >
-            {text.trim() ? (
-              sending
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />
-            ) : (
-              voiceUploading
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Mic size={rs(22)} color="#fff" strokeWidth={2} />
-            )}
-          </Pressable>
-        </View>
+        {/* Input — shared ChatInputBar shell (same one the comment sheet
+            uses). The trailing button stays screen-specific: it presses
+            and holds to record here (vs. comments' tap-only VoiceNoteRecorder
+            with slide-to-cancel), so it's built here and passed in rather
+            than owned by the shared component. */}
+        <ChatInputBar
+          inputRef={inputRef}
+          value={text}
+          onChangeText={handleTextChange}
+          placeholder="Drop your desires"
+          maxLength={500}
+          onAttachPress={!isRecording ? pickMedia : undefined}
+          attachUploading={mediaUploading}
+          onEmojiPress={!isRecording ? () => setShowEmojiStrip((v) => !v) : undefined}
+          emojiActive={showEmojiStrip}
+          paddingBottom={insets.bottom + rp(8)}
+          recordingContent={isRecording ? (
+            // Recording takes over the field itself — nothing to type while
+            // a voice note is being recorded, so the timer gets the space
+            // instead of squeezing in next to a dead input.
+            <View style={s.recordingRow}>
+              <Animated.View style={[s.recordDot, { opacity: recordPulse }]} />
+              <Text style={s.recordDurationLabel}>
+                {Math.floor(recordDuration / 60)}:{String(recordDuration % 60).padStart(2, '0')}
+              </Text>
+              <Text style={s.recordHint}>release to send</Text>
+            </View>
+          ) : null}
+          trailing={
+            // One button, two jobs — empty field: press and hold to record
+            // a voice note (mic); typed field: tap to send. Matches
+            // WhatsApp/Telegram's morph instead of two buttons competing
+            // for the same slot.
+            <Pressable
+              onPressIn={!text.trim() ? handleVoicePressIn : undefined}
+              onPressOut={!text.trim() ? handleVoicePressOut : undefined}
+              onPress={text.trim() ? handleSend : undefined}
+              disabled={text.trim() ? sending : false}
+              hitSlop={HIT_SLOP}
+              style={({ pressed }) => [
+                s.sendBtn,
+                text.trim() && sending && { opacity: 0.4 },
+                pressed && !isRecording && { opacity: 0.85 },
+              ]}
+            >
+              {text.trim() ? (
+                sending
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />
+              ) : (
+                voiceUploading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Mic size={rs(22)} color="#fff" strokeWidth={2} />
+              )}
+            </Pressable>
+          }
+        />
       </KeyboardAvoidingView>
       </ChatBackground>
 
@@ -1988,41 +1965,9 @@ const s = StyleSheet.create({
   },
   moodCardSymbol: { fontSize: rf(22) },
 
-  // Input bar — floating rounded-top card, not a flat bordered strip
-  inputBar: {
-    flexDirection:        'row',
-    alignItems:           'flex-end',
-    gap:                  rp(10),
-    paddingHorizontal:    SPACING.md,
-    paddingTop:           rp(12),
-    backgroundColor:      T.surface,
-    borderTopLeftRadius:  RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    shadowColor:          '#000',
-    shadowOffset:         { width: 0, height: -4 },
-    shadowOpacity:        0.25,
-    shadowRadius:         12,
-    elevation:            12,
-  },
-  // The pill holds everything about composing a message — emoji, the text
-  // itself, attach, and voice — as flex siblings in one row. Send is the
-  // only thing that lives outside it (see sendBtn below).
-  inputWrap: {
-    flex:              1,
-    flexDirection:     'row',
-    alignItems:        'flex-end',
-    backgroundColor:   T.surfaceDark,
-    borderRadius:      RADIUS.xl,
-    borderWidth:       1,
-    borderColor:       T.border,
-    paddingHorizontal: rp(4),
-  },
-  emojiToggleBtn: {
-    width: rs(36), height: rs(42), alignItems: 'center', justifyContent: 'center',
-  },
-  mediaBtn: {
-    width: rs(34), height: rs(42), alignItems: 'center', justifyContent: 'center',
-  },
+  // Input bar itself now lives in the shared <ChatInputBar> component —
+  // see components/common/ChatInputBar.jsx. What's left here is the quick
+  // emoji strip and the recording-row content passed into it.
   emojiStrip: {
     borderTopWidth: 1, borderTopColor: T.border, backgroundColor: T.background,
   },
@@ -2034,16 +1979,6 @@ const s = StyleSheet.create({
     borderRadius: rs(19), backgroundColor: T.surface,
   },
   emojiStripEmoji: { fontSize: rf(20) },
-  input: {
-    flex:              1,
-    paddingHorizontal: rp(4),
-    paddingVertical:   rp(10),
-    paddingTop:        rp(10),
-    fontFamily:        'DMSans-Regular',
-    fontSize:          FONT.md,
-    color:             T.text,
-    maxHeight:         rs(100),
-  },
   // Replaces the text input while recording — nothing to type, so the
   // timer/hint get the space instead of squeezing in beside a dead field.
   recordingRow: {

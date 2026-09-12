@@ -4,19 +4,20 @@ import React, {
 import {
   ActivityIndicator, Animated, Dimensions, FlatList, Image,
   KeyboardAvoidingView, Modal, PanResponder, Platform, StyleSheet,
-  Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View,
+  Text, TouchableOpacity, TouchableWithoutFeedback, View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ChevronDown, CornerDownRight, Heart, ImageIcon, Pin, X,
+  ChevronDown, CornerDownRight, Heart, Pin, X,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
 import VoiceWaveform from '../common/VoiceWaveform';
+import ChatInputBar, { SendButton } from '../common/ChatInputBar';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
@@ -837,70 +838,35 @@ export const CommentBottomSheet = React.memo(({
           </View>
         )}
 
-        {/* Input — paddingBottom respects phone nav bar */}
+        {/* Input — shared ChatInputBar, same shell Link Up chat uses, so
+            composing a comment looks and behaves identically to composing
+            a message. paddingBottom respects the phone nav bar. */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={[st.inputRow, { paddingBottom: 12 + insets.bottom }]}>
-            <View style={st.inputContainer}>
-              <TextInput
-                ref={inputRef}
-                style={st.input}
-                value={text}
-                onChangeText={handleTextChange}
-                onFocus={() => setPicker(null)}
-                placeholder={
-                  !isAuthenticated
-                    ? "sign in. no one will know it's you."
-                    : replyingTo
-                    ? 'say whats really weighs you down'
-                    : "No one knows it's you"
-                }
-                placeholderTextColor={T.textMuted}
-                multiline
-                maxLength={500}
-                editable={!!isAuthenticated}
-                returnKeyType="default"
-              />
-              {/* Emoji, photo, mic — mic goes last, closest to the send
-                  button, and stays coral (compact) so it's clearly its
-                  own thing rather than blending into the pill. */}
-              <TouchableOpacity
-                onPress={() => setPicker(p => (p === 'emoji' ? null : 'emoji'))}
-                style={st.emojiToggle}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={st.emojiToggleText}>
-                  {picker === 'emoji' ? '✕' : '😊'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={pickImage}
-                style={st.imageInInput}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                disabled={imageUploading}
-              >
-                {imageUploading
-                  ? <ActivityIndicator size="small" color={T.primary} />
-                  : <ImageIcon size={20} color={T.textMuted} />}
-              </TouchableOpacity>
-              {/* Hold to record, release to send */}
-              <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} compact />
-            </View>
-
-            <TouchableOpacity
-              style={st.sendBtn}
-              onPress={() => submit()}
-              disabled={!text.trim() || submitting}
-              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-            >
-              {submitting
-                ? <ActivityIndicator size="small" color={T.primary} />
-                : (
-                  <Text style={[st.sendBtnText, !text.trim() && st.sendBtnTextDisabled]}>
-                    Drop
-                  </Text>
-                )}
-            </TouchableOpacity>
-          </View>
+          <ChatInputBar
+            inputRef={inputRef}
+            value={text}
+            onChangeText={handleTextChange}
+            onFocus={() => setPicker(null)}
+            placeholder={
+              !isAuthenticated
+                ? "sign in. no one will know it's you."
+                : replyingTo
+                ? 'say whats really weighs you down'
+                : "No one knows it's you"
+            }
+            editable={!!isAuthenticated}
+            maxLength={500}
+            onAttachPress={pickImage}
+            attachUploading={imageUploading}
+            onEmojiPress={() => setPicker(p => (p === 'emoji' ? null : 'emoji'))}
+            emojiActive={picker === 'emoji'}
+            paddingBottom={12 + insets.bottom}
+            trailing={
+              text.trim()
+                ? <SendButton onPress={() => submit()} sending={submitting} />
+                : <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} filled />
+            }
+          />
         </KeyboardAvoidingView>
       </Animated.View>
 
@@ -1047,36 +1013,8 @@ const st = StyleSheet.create({
   mentionAvatarText: { fontSize: 13, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
   mentionUsername:   { fontSize: 13, fontWeight: '700', color: T.text, fontFamily: 'DMSans-Bold' },
   mentionAnon:        { fontSize: 12, color: T.textMuted, fontFamily: 'DMSans-Regular', flex: 1 },
-  // ── Input row — borderless, filled pill, "Drop" text button. TikTok's
-  // compose bar has no divider above it and no circular send button —
-  // paddingBottom set inline using insets. ───────────────────────────
-  inputRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 14, paddingTop: 12,
-  },
-  emojiToggle: {
-    width: 38, height: 38,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  emojiToggleText: { fontSize: 23 },
-  inputContainer: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: T.surfaceAlt,
-    borderRadius: 24,
-    paddingLeft: 18, paddingRight: 8, paddingVertical: 10,
-    maxHeight: 100,
-  },
-  input: { flex: 1, fontSize: 16, color: T.text, lineHeight: 22, paddingVertical: 2, fontFamily: 'DMSans-Regular' },
-  imageInInput: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sendBtn: {
-    paddingHorizontal: 10, paddingVertical: 8,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sendBtnText:         { fontSize: 16, fontWeight: '800', color: T.primary, fontFamily: 'DMSans-Bold' },
-  sendBtnTextDisabled: { color: T.textMuted },
+  // Input row itself now lives in the shared <ChatInputBar> component —
+  // see components/common/ChatInputBar.jsx.
   viewerBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.95)',
     alignItems: 'center', justifyContent: 'center',

@@ -43,7 +43,7 @@ const formatTime = (seconds) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export default function VoiceNoteRecorder({ onSend, disabled, compact }) {
+export default function VoiceNoteRecorder({ onSend, disabled, compact, filled }) {
   const { showToast } = useToast();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recState = useAudioRecorderState(recorder, 100);
@@ -213,14 +213,20 @@ export default function VoiceNoteRecorder({ onSend, disabled, compact }) {
       <View
         {...pan.panHandlers}
         style={[
-          compact ? styles.micBtnCompact : styles.micBtn,
-          recording && (compact ? styles.micBtnCompactActive : styles.micBtnActive),
+          filled ? styles.micBtnFilled : (compact ? styles.micBtnCompact : styles.micBtn),
+          !filled && recording && (compact ? styles.micBtnCompactActive : styles.micBtnActive),
           willCancel && styles.micBtnCancel,
         ]}
       >
         {uploading
-          ? <ActivityIndicator size="small" color={T.primary} />
-          : <Mic size={rs(compact ? 20 : 17)} color={recording ? '#fff' : (compact ? T.primary : T.textMuted)} />}
+          ? <ActivityIndicator size="small" color={filled ? '#fff' : T.primary} />
+          : (
+            <Mic
+              size={rs(filled ? 22 : (compact ? 20 : 17))}
+              color={filled || recording ? '#fff' : (compact ? T.primary : T.textMuted)}
+              strokeWidth={filled ? 2 : undefined}
+            />
+          )}
       </View>
     </View>
   );
@@ -236,6 +242,16 @@ const styles = StyleSheet.create({
   },
   micBtnActive: { backgroundColor: T.primary, borderColor: T.primary },
   micBtnCancel: { backgroundColor: T.danger, borderColor: T.danger },
+  // Solid coral circle, always — the same look Link Up chat's send button
+  // uses for both its mic and send states, so this reads as one button
+  // that swaps icons rather than a separate, quieter control next to it.
+  micBtnFilled: {
+    width: rs(44), height: rs(44), borderRadius: rs(22),
+    backgroundColor: T.primary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 }, elevation: 4,
+  },
   // Icon-only variant for sitting inline among other plain icon buttons
   // (e.g. next to the emoji/photo icons inside a text input) — no filled
   // circle at rest so it doesn't compete with the button chrome around it,

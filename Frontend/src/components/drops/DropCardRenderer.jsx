@@ -12,9 +12,11 @@
  * Renders at card aspect (1:1 square) — scales to parent width.
  * Use <DropCardRenderer confession=... theme=... /> anywhere a card is needed.
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEventListener } from 'expo';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { rf, rp, rs } from '../../utils/responsive';
 
@@ -265,6 +267,40 @@ const getVariation = (seed) => {
   };
 };
 
+// Muted, looping, autoplaying — a silent live preview instead of a single
+// freeze-frame, so a video drop's media zone actually shows what was picked
+// instead of one thumbnail moment. No controls: this is a card preview, not
+// a player, so there's nothing to seek or unmute.
+//
+// trimStart/trimEnd (seconds) are optional — when set, the loop stays
+// inside that window instead of the whole file, so the compose-time
+// preview matches what the trim modal actually posts.
+const VideoPreviewBackground = React.memo(function VideoPreviewBackground({
+  uri, style, trimStart = null, trimEnd = null,
+}) {
+  const player = useVideoPlayer(uri ? { uri } : null, (p) => {
+    p.loop = trimEnd == null;
+    p.muted = true;
+    if (trimStart) p.currentTime = trimStart;
+    p.play();
+  });
+
+  // Refs, not the timeUpdate listener's dependency — avoids re-subscribing
+  // the native listener every time the trim window changes.
+  const trimRef = useRef({ start: trimStart || 0, end: trimEnd });
+  trimRef.current = { start: trimStart || 0, end: trimEnd };
+
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    const { start, end } = trimRef.current;
+    if (end != null && (currentTime >= end || currentTime < start)) {
+      player.currentTime = start;
+    }
+  });
+
+  if (!uri) return null;
+  return <VideoView player={player} style={style} contentFit="cover" nativeControls={false} />;
+});
+
 // ─── Main component ──────────────────────────────────────────
 const DropCardRenderer = React.memo(function DropCardRenderer({
   confession      = '',
@@ -277,6 +313,11 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   // fallback for drops created before intents existed.
   intent          = null,
   mediaUrl        = null,         // image/video background (overlay mode)
+  mediaType       = 'image',      // 'image' | 'video' — how to render mediaUrl
+  // Optional trim window (seconds) for video previews — keeps the
+  // compose-time loop matching what will actually get posted once trimmed.
+  trimStart       = null,
+  trimEnd         = null,
   layoutMode      = 'split',      // 'split' | 'overlay' (for image/video drops)
   seed            = null,         // for variation — defaults to confession text
   cardWidth       = 360,          // scales everything proportionally
@@ -305,52 +346,63 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
 
   // Overlay mode — media fills the card, text sits on gradient
   if (layoutMode === 'overlay' && mediaUrl) {
+    const overlayGradientContent = (
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.85)']}
+        locations={[0.3, 0.7, 1]}
+        style={styles.overlayGradient}
+      >
+        {/* Ghost quote */}
+        <Text
+          style={[styles.ghostQuote, {
+            color: t.ghostColor,
+            fontSize: Math.round(cardWidth * 0.6),
+            top: variation.quoteTop,
+            left: variation.quoteLeft,
+            pointerEvents: 'none',
+          }]}
+        >
+          "
+        </Text>
+
+        {/* Confession */}
+        <View style={[styles.overlayTextWrap, {
+          paddingBottom: showIdentityBar
+            ? identityBarHeight + rp(16)
+            : rp(24),
+        }]}>
+          <View style={[styles.accentLine, {
+            backgroundColor: t.accent,
+            opacity: 0.7,
+            height: Math.round(fontSize * 2.4 * variation.accentHeight),
+          }]} />
+          <Text
+            style={[styles.overlayText, {
+              color: t.textColor,
+              fontSize,
+              textShadowColor: 'rgba(0,0,0,0.8)',
+              textShadowRadius: 12,
+              textShadowOffset: { width: 0, height: 2 },
+            }]}
+          >
+            {confession}
+          </Text>
+        </View>
+      </LinearGradient>
+    );
+
     return (
       <View style={[styles.card, { width: cardWidth, height: cardWidth, backgroundColor: t.bgFrom }]}>
-        <ImageBackground source={{ uri: mediaUrl }} style={styles.overlayMedia} resizeMode="cover">
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.85)']}
-            locations={[0.3, 0.7, 1]}
-            style={styles.overlayGradient}
-          >
-            {/* Ghost quote */}
-            <Text
-              style={[styles.ghostQuote, {
-                color: t.ghostColor,
-                fontSize: Math.round(cardWidth * 0.6),
-                top: variation.quoteTop,
-                left: variation.quoteLeft,
-                pointerEvents: 'none',
-              }]}
-            >
-              "
-            </Text>
-
-            {/* Confession */}
-            <View style={[styles.overlayTextWrap, {
-              paddingBottom: showIdentityBar
-                ? identityBarHeight + rp(16)
-                : rp(24),
-            }]}>
-              <View style={[styles.accentLine, {
-                backgroundColor: t.accent,
-                opacity: 0.7,
-                height: Math.round(fontSize * 2.4 * variation.accentHeight),
-              }]} />
-              <Text
-                style={[styles.overlayText, {
-                  color: t.textColor,
-                  fontSize,
-                  textShadowColor: 'rgba(0,0,0,0.8)',
-                  textShadowRadius: 12,
-                  textShadowOffset: { width: 0, height: 2 },
-                }]}
-              >
-                {confession}
-              </Text>
-            </View>
-          </LinearGradient>
-        </ImageBackground>
+        {mediaType === 'video' ? (
+          <View style={styles.overlayMedia}>
+            <VideoPreviewBackground uri={mediaUrl} style={StyleSheet.absoluteFill} trimStart={trimStart} trimEnd={trimEnd} />
+            {overlayGradientContent}
+          </View>
+        ) : (
+          <ImageBackground source={{ uri: mediaUrl }} style={styles.overlayMedia} resizeMode="cover">
+            {overlayGradientContent}
+          </ImageBackground>
+        )}
 
         {showIdentityBar && (
           <>
@@ -438,16 +490,20 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
               align={variation.moodAlign}
             />
           </View>
-          {/* Bottom 40% — image */}
+          {/* Bottom 40% — image or video */}
           <View style={[styles.splitMediaZone, {
             height: Math.round(cardWidth * 0.40),
             borderTopColor: t.accent + '66',
           }]}>
-            <ImageBackground
-              source={{ uri: mediaUrl }}
-              style={{ flex: 1 }}
-              resizeMode="cover"
-            />
+            {mediaType === 'video' ? (
+              <VideoPreviewBackground uri={mediaUrl} style={{ flex: 1 }} trimStart={trimStart} trimEnd={trimEnd} />
+            ) : (
+              <ImageBackground
+                source={{ uri: mediaUrl }}
+                style={{ flex: 1 }}
+                resizeMode="cover"
+              />
+            )}
           </View>
         </>
       ) : (
