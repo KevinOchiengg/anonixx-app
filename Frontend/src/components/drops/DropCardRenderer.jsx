@@ -12,11 +12,10 @@
  * Renders at card aspect (1:1 square) — scales to parent width.
  * Use <DropCardRenderer confession=... theme=... /> anywhere a card is needed.
  */
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEventListener } from 'expo';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { rf, rp, rs } from '../../utils/responsive';
 
@@ -271,30 +270,11 @@ const getVariation = (seed) => {
 // freeze-frame, so a video drop's media zone actually shows what was picked
 // instead of one thumbnail moment. No controls: this is a card preview, not
 // a player, so there's nothing to seek or unmute.
-//
-// trimStart/trimEnd (seconds) are optional — when set, the loop stays
-// inside that window instead of the whole file, so the compose-time
-// preview matches what the trim modal actually posts.
-const VideoPreviewBackground = React.memo(function VideoPreviewBackground({
-  uri, style, trimStart = null, trimEnd = null,
-}) {
+const VideoPreviewBackground = React.memo(function VideoPreviewBackground({ uri, style }) {
   const player = useVideoPlayer(uri ? { uri } : null, (p) => {
-    p.loop = trimEnd == null;
+    p.loop = true;
     p.muted = true;
-    if (trimStart) p.currentTime = trimStart;
     p.play();
-  });
-
-  // Refs, not the timeUpdate listener's dependency — avoids re-subscribing
-  // the native listener every time the trim window changes.
-  const trimRef = useRef({ start: trimStart || 0, end: trimEnd });
-  trimRef.current = { start: trimStart || 0, end: trimEnd };
-
-  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
-    const { start, end } = trimRef.current;
-    if (end != null && (currentTime >= end || currentTime < start)) {
-      player.currentTime = start;
-    }
   });
 
   if (!uri) return null;
@@ -314,10 +294,6 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   intent          = null,
   mediaUrl        = null,         // image/video background (overlay mode)
   mediaType       = 'image',      // 'image' | 'video' — how to render mediaUrl
-  // Optional trim window (seconds) for video previews — keeps the
-  // compose-time loop matching what will actually get posted once trimmed.
-  trimStart       = null,
-  trimEnd         = null,
   layoutMode      = 'split',      // 'split' | 'overlay' (for image/video drops)
   seed            = null,         // for variation — defaults to confession text
   cardWidth       = 360,          // scales everything proportionally
@@ -395,7 +371,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
       <View style={[styles.card, { width: cardWidth, height: cardWidth, backgroundColor: t.bgFrom }]}>
         {mediaType === 'video' ? (
           <View style={styles.overlayMedia}>
-            <VideoPreviewBackground uri={mediaUrl} style={StyleSheet.absoluteFill} trimStart={trimStart} trimEnd={trimEnd} />
+            <VideoPreviewBackground uri={mediaUrl} style={StyleSheet.absoluteFill} />
             {overlayGradientContent}
           </View>
         ) : (
@@ -496,7 +472,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
             borderTopColor: t.accent + '66',
           }]}>
             {mediaType === 'video' ? (
-              <VideoPreviewBackground uri={mediaUrl} style={{ flex: 1 }} trimStart={trimStart} trimEnd={trimEnd} />
+              <VideoPreviewBackground uri={mediaUrl} style={{ flex: 1 }} />
             ) : (
               <ImageBackground
                 source={{ uri: mediaUrl }}
