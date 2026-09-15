@@ -36,6 +36,7 @@ import {
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { uploadToR2, uploadViaBackend } from '../../utils/upload';
 import T from '../../utils/theme';
 import GifPicker from '../../components/common/GifPicker';
 import VoiceNoteRecorder from '../../components/common/VoiceNoteRecorder';
@@ -247,14 +248,7 @@ const CommentsSheet = React.memo(({ visible, circleId, post, onClose, onCountCha
     try {
       let imageUrl = null;
       if (pickedImage) {
-        const form = new FormData();
-        form.append('file', { uri: pickedImage, name: 'comment.jpg', type: 'image/jpeg' });
-        form.append('watermark', 'true');
-        const upRes = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
-          method: 'POST', headers: await authHeaders(), body: form,
-        });
-        if (!upRes.ok) throw new Error('Upload failed');
-        imageUrl = (await upRes.json()).url;
+        imageUrl = await uploadViaBackend(pickedImage, 'image', 'image/jpeg');
       }
 
       const res = await fetch(
@@ -515,23 +509,9 @@ export default function CircleContentScreen({ route, navigation }) {
     setIsPaid(false); setUnlockPrice('');
   }, []);
 
-  const uploadRaw = useCallback(async (uri, name) => {
-    const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-      method: 'POST', headers: await authHeaders(true), body: JSON.stringify({ resource_type: 'raw' }),
-    });
-    if (!signRes.ok) throw new Error('Upload sign failed');
-    const { signature, timestamp, api_key, cloud_name, folder } = await signRes.json();
-    const form = new FormData();
-    form.append('file', { uri, name: name || 'file', type: 'application/octet-stream' });
-    form.append('api_key', api_key);
-    form.append('timestamp', String(timestamp));
-    form.append('signature', signature);
-    form.append('folder', folder);
-    const upRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/raw/upload`, { method: 'POST', body: form });
-    const data = await upRes.json();
-    if (!upRes.ok) throw new Error(data?.error?.message || 'Upload failed');
-    return data.secure_url;
-  }, [authHeaders]);
+  const uploadRaw = useCallback(async (uri) => {
+    return uploadToR2(uri, 'raw', 'application/octet-stream');
+  }, []);
 
   const handleSubmitPost = useCallback(async () => {
     const hasMedia = images.length > 0 || videoUri || audioUri || fileUri;
@@ -543,39 +523,27 @@ export default function CircleContentScreen({ route, navigation }) {
     try {
       const uploadedImages = [];
       for (const uri of images) {
-        const form = new FormData();
-        form.append('file', { uri, name: 'circle_image.jpg', type: 'image/jpeg' });
-        form.append('watermark', 'true');
-        const res = await fetch(`${API_BASE_URL}/api/v1/upload/image`, { method: 'POST', headers: await authHeaders(), body: form });
-        if (!res.ok) throw new Error('Image upload failed');
-        uploadedImages.push((await res.json()).url);
+        uploadedImages.push(await uploadViaBackend(uri, 'image', 'image/jpeg'));
       }
 
       let videoUrl = null;
       if (videoUri) {
-        const form = new FormData();
-        form.append('file', { uri: videoUri, name: 'circle_video.mp4', type: 'video/mp4' });
-        form.append('watermark', 'true');
-        const res = await fetch(`${API_BASE_URL}/api/v1/upload/video`, { method: 'POST', headers: await authHeaders(), body: form });
-        if (!res.ok) throw new Error('Video upload failed');
-        videoUrl = (await res.json()).url;
+        videoUrl = await uploadViaBackend(videoUri, 'video', 'video/mp4');
       }
 
-      let audioUrl = null, audioDuration = null;
+      // No server-reported duration once uploads go through R2 (dumb
+      // storage, no processing) — this screen doesn't track its own
+      // recording time the way VoiceNoteRecorder does, so it's left
+      // unknown (0) same as it already fell back to before.
+      let audioUrl = null, audioDuration = 0;
       if (audioUri) {
         const ext = audioName?.split('.').pop()?.toLowerCase() || 'm4a';
-        const form = new FormData();
-        form.append('file', { uri: audioUri, name: audioName || `circle_audio.${ext}`, type: `audio/${ext}` });
-        const res = await fetch(`${API_BASE_URL}/api/v1/upload/audio`, { method: 'POST', headers: await authHeaders(), body: form });
-        if (!res.ok) throw new Error('Audio upload failed');
-        const data = await res.json();
-        audioUrl = data.url;
-        audioDuration = Math.round(data.duration || 0);
+        audioUrl = await uploadViaBackend(audioUri, 'audio', `audio/${ext}`);
       }
 
       let fileUrl = null;
       if (fileUri) {
-        fileUrl = await uploadRaw(fileUri, fileName);
+        fileUrl = await uploadRaw(fileUri);
       }
 
       const res = await fetch(`${API_BASE_URL}/api/v1/circles/${circleId}/posts`, {

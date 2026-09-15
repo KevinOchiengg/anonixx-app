@@ -22,26 +22,11 @@ import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import T from '../../utils/theme';
 import { CIRCLE_CATEGORIES } from '../../constants/circleCategories';
+import { uploadToR2 } from '../../utils/upload';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ─── Cloudinary ───────────────────────────────────────────────────────────────
-const CLOUDINARY_CLOUD_NAME    = 'dojbdm2e1';
-const CLOUDINARY_UPLOAD_PRESET = 'anonix';
-
-const uploadToCloudinary = async (uri, nameHint = 'circle_avatar') => {
-  const ext      = uri.split('.').pop() || 'jpg';
-  const formData = new FormData();
-  formData.append('file', { uri, type: `image/${ext}`, name: `${nameHint}.${ext}` });
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  const res  = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-    { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' } },
-  );
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
-  return data.secure_url;
-};
+const uploadImage = async (uri) => uploadToR2(uri, 'image', 'image/jpeg');
 
 // ─── Static data (module level) ───────────────────────────────────────────────
 const AURA_COLORS = [
@@ -207,8 +192,8 @@ export default function CreateCircleScreen({ navigation }) {
       if (avatarUri || bannerUri) {
         showToast({ type: 'info', message: 'Uploading images…' });
         [avatarUrl, bannerUrl] = await Promise.all([
-          avatarUri ? uploadToCloudinary(avatarUri, 'circle_avatar') : Promise.resolve(null),
-          bannerUri ? uploadToCloudinary(bannerUri, 'circle_banner') : Promise.resolve(null),
+          avatarUri ? uploadImage(avatarUri) : Promise.resolve(null),
+          bannerUri ? uploadImage(bannerUri) : Promise.resolve(null),
         ]);
       }
 

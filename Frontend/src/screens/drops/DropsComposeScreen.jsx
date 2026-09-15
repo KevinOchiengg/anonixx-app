@@ -42,6 +42,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone, fetchBalance } from '../../store/slices/coinsSlice';
+import { uploadToR2 } from '../../utils/upload';
 
 import DropCardRenderer, {
   CARD_INTENTS, CARD_INTENT_LIST, CardPattern,
@@ -389,46 +390,14 @@ export default function DropsComposeScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // Upload the picked photo/video to Cloudinary first — same signed
-      // direct-upload pattern DropsRecordScreen uses for voice drops.
-      // Without this, media_url never reaches the server and the drop
-      // silently posts as text-only.
+      // Upload the picked photo/video to R2 first — without this,
+      // media_url never reaches the server and the drop silently posts
+      // as text-only.
       let uploadedMediaUrl = null;
       if (mediaKind && mediaUri) {
-        const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-          method:  'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ resource_type: mediaKind, watermark: true }),
-        });
-        if (!signRes.ok) {
-          const err = await signRes.json().catch(() => ({}));
-          throw new Error(err?.detail || `Upload sign failed (${signRes.status})`);
-        }
-        const { signature, timestamp, api_key, cloud_name, folder, transformation } = await signRes.json();
-
         const isVideo = mediaKind === 'video';
-        const ext  = isVideo ? (Platform.OS === 'ios' ? 'mov' : 'mp4') : 'jpg';
         const mime = isVideo ? (Platform.OS === 'ios' ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
-        const form = new FormData();
-        form.append('file', { uri: mediaUri, name: `drop-media.${ext}`, type: mime });
-        form.append('api_key',   api_key);
-        form.append('timestamp', String(timestamp));
-        form.append('signature', signature);
-        form.append('folder',    folder);
-        // Must match exactly what the backend signed — omitting this when
-        // present makes Cloudinary reject the upload as a signature mismatch.
-        if (transformation) form.append('transformation', transformation);
-
-        const upRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${cloud_name}/${mediaKind}/upload`,
-          { method: 'POST', body: form },
-        );
-        const upData = await upRes.json();
-        if (!upRes.ok) throw new Error(upData?.error?.message || `Media upload failed (${upRes.status})`);
-        uploadedMediaUrl = upData.secure_url;
+        uploadedMediaUrl = await uploadToR2(mediaUri, mediaKind, mime);
       }
 
       // Single-word hint — strip spaces, keep lowercase, cap at HINT_MAX.

@@ -10,6 +10,7 @@ python-multipart==0.0.20
 python-dotenv==1.0.0
 email-validator==2.1.0
 cloudinary==1.44.1
+boto3==1.43.93
 stripe==7.11.0
 httpx==0.26.0
 argon2-cffi==23.1.0
