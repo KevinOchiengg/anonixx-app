@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { signup } from '../../store/slices/authSlice';
+import { setBalance } from '../../store/slices/coinsSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import {
@@ -181,6 +182,14 @@ export default function SignUpScreen({ navigation }) {
       })).unwrap();
 
       await authContextLogin(result.token, result.user);
+      // The register response already carries the welcome-bonus balance —
+      // seed it into Redux immediately instead of leaving coins.balance at
+      // its initial 0 until some other screen happens to call
+      // fetchBalance(). Without this, the very first thing a new user
+      // sees is "0 coins" right after being told they got 1000.
+      if (result.user?.coin_balance != null) {
+        dispatch(setBalance(result.user.coin_balance));
+      }
 
       const code = formData.referralCode.trim().toUpperCase();
       if (code) {
@@ -440,7 +449,7 @@ export default function SignUpScreen({ navigation }) {
                   onChangeText={(v) => updateField('dobDay', v.replace(/[^0-9]/g, ''), 2)}
                   onFocus={() => setFocused('dob')}
                   onBlur={() => setFocused('')}
-                  placeholder="DD"
+                  placeholder="dd"
                   placeholderTextColor={THEME.textSecondary}
                   keyboardType="number-pad"
                   maxLength={2}
@@ -452,7 +461,7 @@ export default function SignUpScreen({ navigation }) {
                   onChangeText={(v) => updateField('dobMonth', v.replace(/[^0-9]/g, ''), 2)}
                   onFocus={() => setFocused('dob')}
                   onBlur={() => setFocused('')}
-                  placeholder="MM"
+                  placeholder="mm"
                   placeholderTextColor={THEME.textSecondary}
                   keyboardType="number-pad"
                   maxLength={2}
@@ -465,7 +474,7 @@ export default function SignUpScreen({ navigation }) {
                   onFocus={() => setFocused('dob')}
                   onBlur={() => setFocused('')}
                   onSubmitEditing={() => referralRef.current?.focus()}
-                  placeholder="YYYY"
+                  placeholder="yyyy"
                   placeholderTextColor={THEME.textSecondary}
                   keyboardType="number-pad"
                   maxLength={4}
@@ -473,7 +482,10 @@ export default function SignUpScreen({ navigation }) {
                   style={styles.dobInputYear}
                 />
               </View>
-              {errors.dob ? <Text style={styles.fieldError}>{errors.dob}</Text> : null}
+              {errors.dob
+                ? <Text style={styles.fieldError}>{errors.dob}</Text>
+                : <Text style={styles.fieldHint}>just for age checks — anonixx is 18+ only. never shown to anyone.</Text>
+              }
             </View>
 
             {/* Referral Code (optional) */}
@@ -574,8 +586,10 @@ const styles = StyleSheet.create({
   fieldHint:       { color: THEME.textMuted, fontSize: rf(11), fontFamily: 'DMSans-Regular', marginTop: SPACING.xs, marginLeft: rp(4), lineHeight: rf(15) },
 
   // Date of birth — DD / MM / YYYY
-  dobInput:        { fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, width: rs(36), textAlign: 'center' },
-  dobInputYear:     { flex: 1, fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, textAlign: 'center' },
+  // rs(36) used to clip "dd"/"mm" — two characters at FONT.md barely fit
+  // that width before any input padding even eats into it.
+  dobInput:        { fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, width: rs(44), padding: 0, textAlign: 'center' },
+  dobInputYear:     { flex: 1, fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, padding: 0, textAlign: 'center' },
   dobSlash:        { color: THEME.textSecondary, fontSize: FONT.md, fontFamily: 'DMSans-Regular', marginHorizontal: rp(4) },
 
   // Password strength
