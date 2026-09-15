@@ -89,6 +89,13 @@ async def _ensure_indexes():
         await db["circle_posts"].create_index(
             [("circle_id", 1), ("created_at", -1)], background=True
         )
+        await db["signup_fingerprints"].create_index([("device_hash", 1), ("created_at", 1)], background=True)
+        await db["signup_fingerprints"].create_index([("ip_hash", 1), ("created_at", 1)], background=True)
+        # Auto-expire after 90 days — matches auth.py's DEVICE_LOOKBACK_DAYS,
+        # the longest window anything here is ever queried against.
+        await db["signup_fingerprints"].create_index(
+            [("created_at", 1)], expireAfterSeconds=90 * 24 * 3600, background=True
+        )
         log.info("MongoDB indexes verified.")
     except Exception as exc:
         log.warning("Index creation skipped: %s", exc)

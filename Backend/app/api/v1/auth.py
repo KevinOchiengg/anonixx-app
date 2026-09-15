@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -36,11 +36,52 @@ def _is_adult(dob: date) -> bool:
 
 # ─── Models ───────────────────────────────────────────────────
 # Free-tier coins every new user starts with, to learn how Anonixx works
-# before paying anything: ~100 drops (10 each) or 20 unlocks (50 each), or
-# any mix. Once it's spent, topping up via M-Pesa/Stripe/PayPal is the only
-# way to keep going. NOT withdrawable — see WITHDRAWABLE_REASONS in
-# utils/coin_service.py; only earned reward coins can be cashed out.
-WELCOME_BONUS = 1000
+# before paying anything: 6 drops (10 each), or one identity unlock (50)
+# with a bit left over. Deliberately close to what the cheapest paid
+# package (Starter, 55 coins) buys, so the first top-up feels like a
+# top-up and not a second windfall. NOT withdrawable — see
+# WITHDRAWABLE_REASONS in utils/coin_service.py; only earned reward
+# coins can be cashed out.
+WELCOME_BONUS = 60
+
+# A "burner account" is only worth making if it gets another full welcome
+# bonus. We don't block extra signups (that's friction on real users who
+# share a device/network) — we just quietly stop paying out for repeats.
+# Same device seen before -> long memory (people rarely wipe app storage).
+# Same IP seen a lot in a short window -> catches a burst of accounts from
+# one place without penalizing normal device/network sharing (family wifi,
+# an office, a cyber café all stay under the burst threshold).
+REPEAT_SIGNUP_BONUS   = 5
+DEVICE_LOOKBACK_DAYS  = 90
+IP_BURST_WINDOW_HRS   = 24
+IP_BURST_THRESHOLD    = 3
+
+def _fingerprint_hash(value: str) -> str:
+    """Salted hash so raw device IDs/IPs are never stored at rest."""
+    return hashlib.sha256(f"{settings.SECRET_KEY}:{value}".encode()).hexdigest()
+
+async def _welcome_bonus_for_signup(db, device_id: Optional[str], client_ip: Optional[str]) -> int:
+    """Full bonus for a device/IP's first signup; a token amount for repeats."""
+    device_hash = _fingerprint_hash(device_id) if device_id else None
+    ip_hash      = _fingerprint_hash(client_ip) if client_ip else None
+
+    is_repeat = False
+    if device_hash:
+        since = _now() - timedelta(days=DEVICE_LOOKBACK_DAYS)
+        if await db["signup_fingerprints"].find_one({"device_hash": device_hash, "created_at": {"$gte": since}}):
+            is_repeat = True
+    if not is_repeat and ip_hash:
+        since = _now() - timedelta(hours=IP_BURST_WINDOW_HRS)
+        count = await db["signup_fingerprints"].count_documents({"ip_hash": ip_hash, "created_at": {"$gte": since}})
+        if count >= IP_BURST_THRESHOLD:
+            is_repeat = True
+
+    await db["signup_fingerprints"].insert_one({
+        "device_hash": device_hash,
+        "ip_hash":     ip_hash,
+        "created_at":  _now(),
+    })
+    return REPEAT_SIGNUP_BONUS if is_repeat else WELCOME_BONUS
 
 class RegisterRequest(BaseModel):
     email:         EmailStr
@@ -127,7 +168,7 @@ async def generate_unique_anonymous_name(db, attempts: int = 12) -> str:
 
 # ─── Endpoints ────────────────────────────────────────────────
 @router.post("/register", response_model=TokenResponse)
-async def register(data: RegisterRequest, db=Depends(get_database)):
+async def register(data: RegisterRequest, request: Request, db=Depends(get_database)):
     if await db["users"].find_one({"email": data.email}):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
@@ -190,11 +231,16 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
 
     await db["users"].insert_one(user)
 
-    # Credit welcome bonus as a proper transaction
+    # Full bonus on a device/IP's first signup; a token amount on repeats —
+    # see _welcome_bonus_for_signup for why this beats blocking signup outright.
+    device_id = request.headers.get("x-device-id")
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else None)
+    bonus = await _welcome_bonus_for_signup(db, device_id, client_ip)
+
     await credit_coins(
         db          = db,
         user_id     = str(user_id),
-        amount      = WELCOME_BONUS,
+        amount      = bonus,
         reason      = "welcome_bonus",
         description = "Welcome to Anonixx 🎉",
     )
@@ -210,7 +256,7 @@ async def register(data: RegisterRequest, db=Depends(get_database)):
             "anonymous_name": user["anonymous_name"],
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
-            "coin_balance":   WELCOME_BONUS,
+            "coin_balance":   bonus,
             "age_verified":            user.get("age_verified", False),
         },
     }
@@ -233,6 +279,7 @@ async def login(data: LoginRequest, db=Depends(get_database)):
             "anonymous_name": user.get("anonymous_name"),
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
+            "coin_balance":   user.get("coin_balance", 0),
             "age_verified":            user.get("age_verified", False),
         },
     }
@@ -261,6 +308,7 @@ async def login_for_access_token(
             "anonymous_name": user.get("anonymous_name"),
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
+            "coin_balance":   user.get("coin_balance", 0),
             "age_verified":            user.get("age_verified", False),
         },
     }

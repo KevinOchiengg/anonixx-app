@@ -1,6 +1,7 @@
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { API_BASE_URL } from '../config/api'
+import { getDeviceId } from '../utils/deviceId'
 
 const API_URL = `${API_BASE_URL}/api/v1`
 
@@ -17,6 +18,10 @@ api.interceptors.request.use(
     const token = await AsyncStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    const deviceId = await getDeviceId()
+    if (deviceId) {
+      config.headers['X-Device-Id'] = deviceId
     }
     console.log('🔵 API Request:', config.method.toUpperCase(), config.url)
     return config

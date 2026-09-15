@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { login } from '../../store/slices/authSlice';
+import { setBalance } from '../../store/slices/coinsSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import {
@@ -119,6 +120,12 @@ export default function LoginScreen({ navigation }) {
       }
 
       await authContextLogin(result.access_token, result.user);
+      // Seed the balance immediately from the login response instead of
+      // leaving coins.balance at Redux's initial 0 until some other
+      // screen happens to call fetchBalance() first.
+      if (result.user?.coin_balance != null) {
+        dispatch(setBalance(result.user.coin_balance));
+      }
       showToast({ type: 'success', message: 'Welcome back 👋' });
 
       setTimeout(() => {
