@@ -23,6 +23,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../.
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
+import { uploadToR2 } from '../../utils/upload';
 import { DROP_THEMES, CARD_INTENTS } from '../../components/drops/DropCardRenderer';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import T from '../../utils/theme';
@@ -107,37 +108,11 @@ export default function DropsPollScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // Supporting photo — same signed direct-upload pattern the compose
+      // Supporting photo — direct-to-R2 upload, same helper the compose
       // screen uses for its attached media.
       let uploadedImageUrl = null;
       if (imageUri) {
-        const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-          method:  'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ resource_type: 'image', watermark: true }),
-        });
-        if (!signRes.ok) {
-          const err = await signRes.json().catch(() => ({}));
-          throw new Error(err?.detail || `Photo upload sign failed (${signRes.status})`);
-        }
-        const { signature, timestamp, api_key, cloud_name, folder, transformation } = await signRes.json();
-        const form = new FormData();
-        form.append('file', { uri: imageUri, name: 'poll-photo.jpg', type: 'image/jpeg' });
-        form.append('api_key',   api_key);
-        form.append('timestamp', String(timestamp));
-        form.append('signature', signature);
-        form.append('folder',    folder);
-        if (transformation) form.append('transformation', transformation);
-        const upRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
-          { method: 'POST', body: form },
-        );
-        const upData = await upRes.json();
-        if (!upRes.ok) throw new Error(upData?.error?.message || `Photo upload failed (${upRes.status})`);
-        uploadedImageUrl = upData.secure_url;
+        uploadedImageUrl = await uploadToR2(imageUri, 'image', 'image/jpeg');
       }
 
       const body = {

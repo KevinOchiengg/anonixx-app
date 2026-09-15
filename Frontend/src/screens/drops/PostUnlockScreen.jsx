@@ -22,41 +22,12 @@ import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { fetchBalance } from '../../store/slices/coinsSlice';
+import { uploadToR2 } from '../../utils/upload';
 
 // Must match COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
 const UNLOCK_COST = 50;
 // Must match MAX_REQUEST_VIDEO_SECONDS in Backend/app/api/v1/unlock_requests.py
 const MAX_CLUE_VIDEO_SECONDS = 30;
-
-// Same signed-upload flow used elsewhere for drop creation — kept as its
-// own local copy here rather than a shared util, matching how each screen
-// in this app already carries its own copy of this helper.
-const uploadToCloudinary = async (uri, resourceType, token) => {
-  const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body:    JSON.stringify({ resource_type: resourceType === 'video' ? 'video' : 'image' }),
-  });
-  if (!signRes.ok) throw new Error('Could not get upload signature.');
-  const { signature, timestamp, api_key, cloud_name, folder } = await signRes.json();
-
-  const ext      = uri.split('?')[0].split('.').pop()?.toLowerCase() || '';
-  const mimeType = resourceType === 'video' ? `video/${ext || 'mp4'}` : `image/${ext || 'jpeg'}`;
-  const formData = new FormData();
-  formData.append('file',      { uri, type: mimeType, name: `upload.${ext}` });
-  formData.append('api_key',   api_key);
-  formData.append('timestamp', String(timestamp));
-  formData.append('signature', signature);
-  formData.append('folder',    folder);
-
-  const res  = await fetch(
-    `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
-    { method: 'POST', body: formData },
-  );
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
-  return data.secure_url;
-};
 
 export default function PostUnlockScreen({ route, navigation }) {
   const { post, linkupTarget } = route.params ?? {};
@@ -142,7 +113,9 @@ export default function PostUnlockScreen({ route, navigation }) {
       const body = { target_type: targetType, target_id: targetId, payment_method: 'coins' };
       if (mediaUri && mediaType) {
         try {
-          body.media_url = await uploadToCloudinary(mediaUri, mediaType, token);
+          const ext = mediaUri.split('?')[0].split('.').pop()?.toLowerCase() || '';
+          const mimeType = mediaType === 'video' ? `video/${ext || 'mp4'}` : `image/${ext || 'jpeg'}`;
+          body.media_url = await uploadToR2(mediaUri, mediaType, mimeType);
           body.media_type = mediaType;
           if (mediaType === 'video') body.media_duration = mediaDuration;
         } catch {

@@ -26,6 +26,7 @@ import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import ChatBackground from '../../components/chat/ChatBackground';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { uploadViaBackend } from '../../utils/upload';
 import { WELCOME_SOUND_OPTIONS, WELCOME_SOUND_MAP } from '../../config/sounds';
 import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
@@ -103,21 +104,10 @@ export default function ChatProfileSetupScreen({ navigation }) {
     setUploading(true);
     try {
       const asset = result.assets[0];
-      const form = new FormData();
       const ext = extOf(asset.uri) || 'jpg';
       const mimeType = ext === 'gif' ? 'image/gif' : 'image/jpeg';
-      form.append('file', { uri: asset.uri, name: `profile_${Date.now()}.${ext}`, type: mimeType });
-      const res = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
-        method: 'POST',
-        headers: await authHeaders(),
-        body: form,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.detail || `Upload failed (${res.status})`);
-      }
-      const data = await res.json();
-      setProfilePictureUrl(data.url);
+      const url = await uploadViaBackend(asset.uri, 'image', mimeType);
+      setProfilePictureUrl(url);
     } catch (e) {
       showToast({ type: 'error', message: e?.message || 'Could not upload picture. Check your connection.' });
     } finally {
@@ -147,28 +137,14 @@ export default function ChatProfileSetupScreen({ navigation }) {
       const ext = extOf(asset.uri) || (isVideo ? 'mp4' : 'jpg');
       const isGif = !isVideo && ext === 'gif';
       const mediaType = isVideo ? 'video' : isGif ? 'gif' : 'image';
-      const form = new FormData();
-      form.append('file', {
-        uri: asset.uri,
-        name: `gallery_${mediaType}_${Date.now()}.${ext}`,
-        type: isVideo ? 'video/mp4' : isGif ? 'image/gif' : 'image/jpeg',
-      });
-      const res = await fetch(`${API_BASE_URL}/api/v1/upload/${isVideo ? 'video' : 'image'}`, {
-        method: 'POST',
-        headers: await authHeaders(),
-        body: form,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.detail || `Upload failed (${res.status})`);
-      }
-      const uploadData = await res.json();
+      const mimeType = isVideo ? 'video/mp4' : isGif ? 'image/gif' : 'image/jpeg';
+      const mediaUrl = await uploadViaBackend(asset.uri, isVideo ? 'video' : 'image', mimeType);
 
       const addRes = await fetch(`${API_BASE_URL}/api/v1/chat-profile/media`, {
         method: 'POST',
         headers: await authHeaders(true),
         body: JSON.stringify({
-          media_url: uploadData.url,
+          media_url: mediaUrl,
           media_type: mediaType,
           duration_seconds: asset.duration ? asset.duration / 1000 : undefined,
         }),

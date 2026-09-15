@@ -14,6 +14,7 @@ import { fetchBalance } from '../../store/slices/coinsSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { uploadToR2 } from '../../utils/upload';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS, SCREEN,
   BUTTON_HEIGHT, HIT_SLOP,
@@ -37,10 +38,6 @@ const STARS = Array.from({ length: 30 }, (_, i) => ({
   size:    Math.random() * rs(2.5) + rs(0.5),
   opacity: Math.random() * 0.35 + 0.08,
 }));
-
-// ─── Cloudinary config (module-level, Rule 5) ─────────────────
-const CLOUDINARY_CLOUD_NAME   = 'dojbdm2e1';
-const CLOUDINARY_UPLOAD_PRESET = 'anonix';
 
 // ─── StarryBackground (Rule 6 — React.memo) ───────────────────
 const StarryBackground = React.memo(() => (
@@ -104,23 +101,9 @@ export default function EditProfileScreen({ navigation }) {
     dispatch(fetchBalance());
   }, []);
 
-  // ── Cloudinary upload (Rule 7 — useCallback, Rule 11 — try/catch) ──
-  const uploadToCloudinary = useCallback(async (uri) => {
-    const uriParts = uri.split('.');
-    const fileType = uriParts[uriParts.length - 1];
-
-    const formData = new FormData();
-    formData.append('file', { uri, type: `image/${fileType}`, name: `avatar.${fileType}` });
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    formData.append('folder', 'avatars');
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: 'POST', body: formData }
-    );
-    const data = await response.json();
-    if (!response.ok) throw new Error('upload_failed');
-    return data.secure_url;
+  // ── Avatar upload (Rule 7 — useCallback, Rule 11 — try/catch) ──
+  const uploadAvatar = useCallback(async (uri) => {
+    return uploadToR2(uri, 'image', 'image/jpeg');
   }, []);
 
   // ── Anonymous name live check ──────────────────────────────────
@@ -177,7 +160,7 @@ export default function EditProfileScreen({ navigation }) {
 
       setUploadingAvatar(true);
       try {
-        const cloudUrl = await uploadToCloudinary(result.assets[0].uri);
+        const cloudUrl = await uploadAvatar(result.assets[0].uri);
         setAvatarUri(cloudUrl);
         showToast({ type: 'success', message: 'Avatar ready. Hit save to lock it in.' });
       } catch {
@@ -191,7 +174,7 @@ export default function EditProfileScreen({ navigation }) {
       setUploadingAvatar(false);
       showToast({ type: 'error', message: 'Something went wrong. Try again.' });
     }
-  }, [uploadToCloudinary, showToast]);
+  }, [uploadAvatar, showToast]);
 
   // ── Save profile (Rule 7, Rule 2, Rule 3, Rule 10, Rule 11) ───
   const handleSave = useCallback(async () => {

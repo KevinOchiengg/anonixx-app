@@ -18,6 +18,7 @@ import T from '../../utils/theme';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
 import VoiceWaveform from '../common/VoiceWaveform';
 import ChatInputBar, { SendButton } from '../common/ChatInputBar';
+import { uploadViaBackend } from '../../utils/upload';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
@@ -614,7 +615,6 @@ export const CommentBottomSheet = React.memo(({
     const asset = result.assets[0];
     setImageUploading(true);
     try {
-      const token = await AsyncStorage.getItem('token');
       // Resize to max 800px wide, 70% quality so comment images stay compact
       let uploadUri = asset.uri;
       try {
@@ -625,22 +625,8 @@ export const CommentBottomSheet = React.memo(({
         );
         uploadUri = manipResult.uri;
       } catch { /* use original if resize fails */ }
-      const form  = new FormData();
-      form.append('file', {
-        uri:  uploadUri,
-        name: 'comment_photo.jpg',
-        type: 'image/jpeg',
-      });
-      form.append('watermark', 'true');
-      const uploadRes  = await fetch(`${API_BASE_URL}/api/v1/upload/image`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body:    form,
-      });
-      const uploadData = await uploadRes.json();
-      if (uploadRes.ok && uploadData.url) {
-        await submit(null, uploadData.url);
-      }
+      const url = await uploadViaBackend(uploadUri, 'image', 'image/jpeg');
+      await submit(null, url);
     } catch {}
     finally { setImageUploading(false); }
   }, [isAuthenticated, navigation, submit]);

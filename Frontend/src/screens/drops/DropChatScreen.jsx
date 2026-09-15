@@ -45,6 +45,7 @@ import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import PulseLoader from '../../components/common/PulseLoader';
 import VoiceWaveform from '../../components/common/VoiceWaveform';
 import ChatInputBar from '../../components/common/ChatInputBar';
+import { uploadToR2 } from '../../utils/upload';
 import ChatBackground from '../../components/chat/ChatBackground';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
@@ -708,35 +709,9 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [text, connectionId, showToast, replyingTo]);
 
-  // ── Voice note — upload direct to Cloudinary (signed), then send as
-  //    a media message. Mirrors ChatScreen.jsx's uploadVoice exactly. ──
+  // ── Voice note — upload direct to R2, then send as a media message. ──
   const uploadVoice = useCallback(async (uri) => {
-    const token = await AsyncStorage.getItem('token');
-    const sigRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body:    JSON.stringify({ resource_type: 'video' }), // Cloudinary uses "video" for audio
-    });
-    if (!sigRes.ok) {
-      const err = await sigRes.json().catch(() => ({}));
-      throw new Error(err?.detail || `Signature failed (${sigRes.status})`);
-    }
-    const { signature, timestamp, api_key, cloud_name, folder } = await sigRes.json();
-
-    const form = new FormData();
-    form.append('file',      { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' });
-    form.append('signature', signature);
-    form.append('timestamp', String(timestamp));
-    form.append('api_key',   api_key);
-    form.append('folder',    folder);
-
-    const uploadRes  = await fetch(
-      `https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`,
-      { method: 'POST', body: form },
-    );
-    const uploadData = await uploadRes.json();
-    if (!uploadRes.ok) throw new Error(uploadData?.error?.message || `Cloudinary error (${uploadRes.status})`);
-    return uploadData.secure_url;
+    return uploadToR2(uri, 'audio', 'audio/m4a');
   }, []);
 
   const sendVoiceMessage = useCallback(async (mediaUrl, durationSeconds) => {
@@ -767,42 +742,14 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [connectionId, showToast, replyingTo]);
 
-  // ── Media (photo/video) — same signed-upload-to-Cloudinary pattern as
-  //    voice notes, just routed through the "image"/"video" resource type.
-  //    No watermark: that's only for publicly-shared drop posts, not
-  //    private messages between two people. ──
+  // ── Media (photo/video) — same direct-to-R2 upload as voice notes,
+  //    just routed to the "image"/"video" folder. No watermark: that's
+  //    only for publicly-shared drop posts, not private messages
+  //    between two people (and R2 does no processing anyway). ──
   const uploadMedia = useCallback(async (uri, mediaType) => {
-    const token = await AsyncStorage.getItem('token');
     const resourceType = mediaType === 'video' ? 'video' : 'image';
-    const sigRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body:    JSON.stringify({ resource_type: resourceType }),
-    });
-    if (!sigRes.ok) {
-      const err = await sigRes.json().catch(() => ({}));
-      throw new Error(err?.detail || `Signature failed (${sigRes.status})`);
-    }
-    const { signature, timestamp, api_key, cloud_name, folder } = await sigRes.json();
-
-    const ext = mediaType === 'video' ? 'mp4' : 'jpg';
-    const form = new FormData();
-    form.append('file', {
-      uri, name: `media_${Date.now()}.${ext}`,
-      type: mediaType === 'video' ? 'video/mp4' : 'image/jpeg',
-    });
-    form.append('signature', signature);
-    form.append('timestamp', String(timestamp));
-    form.append('api_key',   api_key);
-    form.append('folder',    folder);
-
-    const uploadRes  = await fetch(
-      `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
-      { method: 'POST', body: form },
-    );
-    const uploadData = await uploadRes.json();
-    if (!uploadRes.ok) throw new Error(uploadData?.error?.message || `Cloudinary error (${uploadRes.status})`);
-    return uploadData.secure_url;
+    const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+    return uploadToR2(uri, resourceType, mimeType);
   }, []);
 
   const sendMediaMessage = useCallback(async (mediaUrl, mediaType) => {

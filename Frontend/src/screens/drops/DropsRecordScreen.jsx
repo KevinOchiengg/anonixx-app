@@ -50,6 +50,7 @@ import {
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
+import { uploadToR2 } from '../../utils/upload';
 import { DROP_THEMES, CARD_INTENTS } from '../../components/drops/DropCardRenderer';
 import { T } from '../../utils/colorTokens';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
@@ -337,77 +338,20 @@ export default function DropsRecordScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // 1. Sign
-      const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ resource_type: 'video' }),
-      });
-      if (!signRes.ok) {
-        const err = await signRes.json().catch(() => ({}));
-        throw new Error(err?.detail || `Upload sign failed (${signRes.status})`);
-      }
-      const { signature, timestamp, api_key, cloud_name, folder } = await signRes.json();
+      // 1. Upload the recording to R2
+      const voiceMime = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
+      const voiceUrl = await uploadToR2(recordedUri, 'audio', voiceMime);
 
-      // 2. Upload
-      const form = new FormData();
-      form.append('file', {
-        uri:  recordedUri,
-        name: `voice-drop.${Platform.OS === 'ios' ? 'm4a' : 'mp4'}`,
-        type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
-      });
-      form.append('api_key',   api_key);
-      form.append('timestamp', String(timestamp));
-      form.append('signature', signature);
-      form.append('folder',    folder);
-
-      const upRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`,
-        { method: 'POST', body: form },
-      );
-      const upData = await upRes.json();
-      if (!upRes.ok) throw new Error(upData?.error?.message || `Upload failed (${upRes.status})`);
-
-      // 2b. Optional supporting photo — same signed direct-upload pattern,
-      // separate Cloudinary image upload since media_url above is already
-      // taken by the voice recording itself.
+      // 2. Optional supporting photo — separate upload since media_url
+      // above is already taken by the voice recording itself.
       let uploadedImageUrl = null;
       if (imageUri) {
-        const imgSignRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
-          method:  'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ resource_type: 'image', watermark: true }),
-        });
-        if (!imgSignRes.ok) {
-          const err = await imgSignRes.json().catch(() => ({}));
-          throw new Error(err?.detail || `Photo upload sign failed (${imgSignRes.status})`);
-        }
-        const imgSign = await imgSignRes.json();
-        const imgForm = new FormData();
-        imgForm.append('file', { uri: imageUri, name: 'voice-drop-photo.jpg', type: 'image/jpeg' });
-        imgForm.append('api_key',   imgSign.api_key);
-        imgForm.append('timestamp', String(imgSign.timestamp));
-        imgForm.append('signature', imgSign.signature);
-        imgForm.append('folder',    imgSign.folder);
-        if (imgSign.transformation) imgForm.append('transformation', imgSign.transformation);
-        const imgUpRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${imgSign.cloud_name}/image/upload`,
-          { method: 'POST', body: imgForm },
-        );
-        const imgUpData = await imgUpRes.json();
-        if (!imgUpRes.ok) throw new Error(imgUpData?.error?.message || `Photo upload failed (${imgUpRes.status})`);
-        uploadedImageUrl = imgUpData.secure_url;
+        uploadedImageUrl = await uploadToR2(imageUri, 'image', 'image/jpeg');
       }
 
       // 3. Create drop
       const body = {
-        media_url:  upData.secure_url,
+        media_url:  voiceUrl,
         media_type: 'voice',
         ...(uploadedImageUrl ? { image_url: uploadedImageUrl } : {}),
         theme,

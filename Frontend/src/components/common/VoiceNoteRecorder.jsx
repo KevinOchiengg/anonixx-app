@@ -23,14 +23,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, Animated, Platform, PanResponder,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useAudioRecorder, useAudioRecorderState, AudioModule, RecordingPresets,
 } from 'expo-audio';
 import { Mic, Trash2 } from 'lucide-react-native';
 import { rs, rp, FONT, RADIUS } from '../../utils/responsive';
 import { useToast } from '../ui/Toast';
-import { API_BASE_URL } from '../../config/api';
+import { uploadViaBackend } from '../../utils/upload';
 import T from '../../utils/theme';
 
 export const MAX_VOICE_NOTE_SECONDS = 30;
@@ -136,21 +135,11 @@ export default function VoiceNoteRecorder({ onSend, disabled, compact, filled })
 
     setUploading(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const form  = new FormData();
-      form.append('file', {
-        uri,
-        name: `voice-note.${Platform.OS === 'ios' ? 'm4a' : 'mp4'}`,
-        type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
-      });
-      const res = await fetch(`${API_BASE_URL}/api/v1/upload/audio`, {
-        method:  'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body:    form,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      onSend({ url: data.url, duration: Math.round(data.duration || elapsed) });
+      const mimeType = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
+      const url = await uploadViaBackend(uri, 'audio', mimeType);
+      // No server-reported duration once uploads go through R2 (dumb
+      // storage, no processing) — the recorder already tracked it live.
+      onSend({ url, duration: Math.round(elapsed) });
     } catch {
       showToast({ type: 'error', message: 'Could not send voice note. Try again.' });
     } finally {
