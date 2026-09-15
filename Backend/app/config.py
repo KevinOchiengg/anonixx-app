@@ -15,10 +15,18 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
 
-    # CLOUDINARY
+    # CLOUDINARY — being replaced by Cloudflare R2 below.
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
+
+    # CLOUDFLARE R2 — S3-compatible object storage, no content-policy scanning.
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = ""
+    R2_ENDPOINT: str = ""
+    R2_PUBLIC_URL: str = ""
 
     # AUTH
     SECRET_KEY: str = (
