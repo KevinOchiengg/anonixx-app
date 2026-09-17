@@ -1,12 +1,14 @@
 /**
  * DropsComposeScreen.jsx
  *
- * The new compose surface for Anonixx Drops.
- * Text is typed directly on the live card, with an inline attach button
- * on the card itself for optional photo/video — no separate media mode.
- * Voice and Poll remain their own hand-off flows. Live card preview,
- * confession-type picker, unsent draft layer, dangerous-edge warning.
- * Posting is unlimited — there's no daily cap.
+ * The compose surface for Anonixx Drops.
+ * Text is typed directly on the live card. Everything else — confession
+ * type, media, tagging, location, voice, poll, publisher sharing — lives
+ * behind a single row of icons under the card. Tapping one opens a small
+ * bottom sheet for that one thing, then gets out of the way; nothing sits
+ * permanently expanded on the page. The goal is that the screen always
+ * reads as "write, then Drop" — every option is one tap away, but none
+ * of them are in the way until asked for.
  *
  * Drops are rendered via <DropCardRenderer /> — this screen is only state,
  * composition and gating. All visual identity lives in the renderer.
@@ -20,17 +22,17 @@ import React, {
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Switch,
   ActivityIndicator, Dimensions, Keyboard, KeyboardAvoidingView,
-  Platform, ScrollView, Animated,
+  Platform, ScrollView, Animated, Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-  ChevronLeft, ChevronDown, Images, BarChart2, Mic, Type,
-  AlertTriangle, Trash2, X, SlidersHorizontal, MapPin,
+  ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
+  MapPin, UserPlus, Sparkles, Share2,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
@@ -45,11 +47,18 @@ import { awardMilestone, fetchBalance } from '../../store/slices/coinsSlice';
 import { uploadToR2 } from '../../utils/upload';
 
 import DropCardRenderer, {
-  CARD_INTENTS, CARD_INTENT_LIST, CardPattern,
+  CARD_INTENTS, CARD_INTENT_LIST, CardPattern, DROP_THEMES,
 } from '../../components/drops/DropCardRenderer';
 import T from '../../utils/theme';
 
 const SCREEN_W = Dimensions.get('window').width;
+
+// The compose card always renders in the 'desire' theme (see `theme`
+// below) — the toolbar merged onto its bottom edge uses that same theme's
+// darker gradient stop as its own background instead of the generic app
+// surface color, so it reads as the card's own footer rather than a
+// mismatched panel bolted underneath it.
+const TOOLBAR_BG = DROP_THEMES['desire'].bgTo;
 const CARD_W   = SCREEN_W - SPACING.md * 2;
 const MAX_CHARS = 500;
 
@@ -59,20 +68,12 @@ const MAX_CHARS = 500;
 const MAX_VIDEO_SECONDS = 60;
 
 const DRAFT_KEY = 'anonixx.drops.draft.v1';
+const TOOLBAR_HINT_KEY = 'anonixx.drops.toolbarHint.seen';
 
 // Must match DROP_POST_COST in Backend/app/api/v1/drops.py
 const POST_COST = 10;
 
-// ─── Formats ───────────────────────────────────────────────────
-// Media is no longer its own format — it's an optional attachment on the
-// text card itself (see the attach button on cardWrap below). Poll and
-// Voice still hand off to their own compose screens.
-const FORMATS = [
-  { id: 'text',  label: 'Text',  Icon: Type      },
-  { id: 'poll',  label: 'Poll',  Icon: BarChart2 },
-  { id: 'voice', label: 'Voice', Icon: Mic       },
-];
-
+const DEFAULT_INTENT = 'skeleton-in-the-closet';
 const HINT_MAX = 16;
 
 // ─── Dangerous edge — words that indicate the drop is raw ───────
@@ -90,27 +91,10 @@ const detectEdge = (text) => {
   return null;
 };
 
-// ─── Format chips ──────────────────────────────────────────────
-const FormatChip = React.memo(function FormatChip({ id, label, Icon, active, onPress }) {
-  return (
-    <TouchableOpacity
-      style={[s.formatChip, active && s.formatChipActive]}
-      onPress={onPress}
-      hitSlop={HIT_SLOP}
-      activeOpacity={0.85}
-    >
-      <Icon size={rs(14)} color={active ? T.primary : T.textMute} />
-      <Text style={[s.formatChipText, active && s.formatChipTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-});
-
-// ─── Confession type picker ──────────────────────────────────────
-// The headline choice — this is what decides how the card looks (colors +
-// background pattern in DropCardRenderer), so it gets real visual weight
-// here, not a tiny swatch. Each tile renders the intent's *actual* gradient
-// and background texture in miniature, so picking one is a "does this look
-// like me" decision against the real thing — not an icon standing in for it.
+// ─── Confession type tile — used inside the "Confession Type" sheet.
+// Each tile renders the intent's *actual* gradient and background texture
+// in miniature, so picking one is a "does this look like me" decision
+// against the real thing — not an icon standing in for it. ─────────
 const INTENT_TILE = rs(64);
 
 // Stable per-intent seed — the card seeds its texture off the confession
@@ -138,8 +122,6 @@ const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
           borderColor: active ? def.accent + '66' : 'transparent',
         }]}
       >
-        {/* Same texture the card draws, just small. Fixed seed per intent
-            so the tile never reshuffles between renders. */}
         <CardPattern
           type={def.pattern}
           width={INTENT_TILE}
@@ -157,6 +139,53 @@ const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
     </TouchableOpacity>
   );
 });
+
+// ─── Toolbar icon — the row under the card. A small dot marks anything
+// that's actually set, so state never gets silently buried behind an icon. ─
+// A bare icon reads fine to someone who already knows the app — it reads
+// like a guess to everyone else. The label under each one is what makes
+// the row understandable on first look, no trial-and-error required.
+const ToolIcon = React.memo(function ToolIcon({ children, active, onPress, label, a11yLabel }) {
+  return (
+    <TouchableOpacity
+      style={s.toolIcon}
+      onPress={onPress}
+      hitSlop={HIT_SLOP}
+      activeOpacity={0.7}
+      accessibilityLabel={a11yLabel || label}
+    >
+      <View style={s.toolIconGlyph}>
+        {children}
+        {active && <View style={s.toolIconDot} />}
+      </View>
+      <Text style={s.toolIconLabel} numberOfLines={1}>{label}</Text>
+    </TouchableOpacity>
+  );
+});
+
+// ─── One shared bottom sheet — swaps its content by `sheet` id instead of
+// mounting four separate modals. Slides up, taps outside close it. ────────
+function OptionSheet({ visible, title, onClose, children }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity style={s.sheetBackdrop} activeOpacity={1} onPress={onClose} />
+        <View style={[s.sheetContainer, { paddingBottom: insets.bottom + SPACING.md }]}>
+          <View style={s.sheetHeader}>
+            <Text style={s.sheetTitle}>{title}</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={HIT_SLOP}>
+              <X size={rs(20)} color={T.textMute} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {children}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 // ─── Main screen ───────────────────────────────────────────────
 export default function DropsComposeScreen({ navigation, route }) {
@@ -193,7 +222,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Core state ────────────────────────────────────────────────
   const [format,   setFormat]   = useState('text');    // text | image | video | voice
   const [text,     setText]     = useState(initialText);
-  const [cardIntent, setCardIntent] = useState('skeleton-in-the-closet');
+  const [cardIntent, setCardIntent] = useState(DEFAULT_INTENT);
   // After Dark / Tier-2 themes have been removed — every drop uses the
   // single remaining theme. External social publishing is gated purely by
   // the "Share to Anonixx socials" toggle below, not by confession type.
@@ -234,15 +263,26 @@ export default function DropsComposeScreen({ navigation, route }) {
   // surface it so the user chooses to continue or discard.
   const [showUnsentBanner, setShowUnsentBanner] = useState(false);
 
-  // ── Progressive disclosure — collapsed by default so the compose
-  // screen reads as "theme, card, Drop", not a settings form. Tag/
-  // location/publisher share one "Details" section instead of three
-  // separate triggers — everything else stays always-visible. ──────
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  // Location gets its own always-visible chip instead of living inside
-  // Details — unlike tag/publisher it directly powers discovery, so
-  // burying it behind a toggle meant most people would never set it.
-  const [locationOpen, setLocationOpen] = useState(false);
+  // ── Which bottom sheet is open — null | 'intent' | 'tag' | 'location' | 'more' ──
+  const [activeSheet, setActiveSheet] = useState(null);
+  const closeSheet = useCallback(() => setActiveSheet(null), []);
+
+  // ── One-time toolbar hint — the icon row has no explainer text on the
+  // page itself, so first-time visitors get a single dismissible line
+  // pointing at it instead. Shown once ever, then never again. ─────────
+  const [showToolbarHint, setShowToolbarHint] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(TOOLBAR_HINT_KEY);
+        if (!seen) setShowToolbarHint(true);
+      } catch { /* storage unavailable — just skip the hint */ }
+    })();
+  }, []);
+  const dismissToolbarHint = useCallback(() => {
+    setShowToolbarHint(false);
+    AsyncStorage.setItem(TOOLBAR_HINT_KEY, '1').catch(() => {});
+  }, []);
 
   // ── Entrance animation ────────────────────────────────────────
   const fade = useRef(new Animated.Value(0)).current;
@@ -501,16 +541,8 @@ export default function DropsComposeScreen({ navigation, route }) {
   const remaining     = MAX_CHARS - text.length;
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
-  const hasDraft      = text.length > 0 || !!mediaUri;
   const locationSummary = [locationEstate, locationSubCounty, locationCounty, locationCountry]
     .map((v) => v.trim()).find(Boolean) || null;
-  // What's tucked inside the collapsed Details section — shown on its
-  // trigger row so nothing active gets buried out of sight. Location has
-  // its own always-visible chip now, so it's not part of this.
-  const detailsSummary = [
-    taggedUser && `Tagged ${taggedUser.username || taggedUser.anonymous_name}`,
-    !publisherOptIn && 'Not sharing to socials',
-  ].filter(Boolean).join(' · ');
 
   // ─────────────────────────────────────────────────────────────
   return (
@@ -545,17 +577,6 @@ export default function DropsComposeScreen({ navigation, route }) {
             )}
           </View>
         </View>
-
-        {/* Unsent-draft strip — there's no posting cap, so this row only
-            exists to offer discarding a restored draft. */}
-        {hasDraft && (
-          <View style={s.limitStrip}>
-            <Text style={s.limitText}>Unsent draft restored.</Text>
-            <TouchableOpacity onPress={handleDiscardDraft} hitSlop={HIT_SLOP}>
-              <Trash2 size={rs(14)} color={T.textMute} />
-            </TouchableOpacity>
-          </View>
-        )}
 
         <ScrollView
           style={{ flex: 1 }}
@@ -593,52 +614,35 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Format selector — Text / Poll / Voice. Poll hands off to its
-              own screen exactly like Voice does — building a poll isn't a
-              quick inline toggle, it's its own compose step. Media isn't
-              a format here — it attaches directly to the card below. */}
-          <Animated.View style={[s.formatRow, { opacity: fade }]}>
-            {FORMATS.map(({ id, label, Icon }) => (
-              <FormatChip
-                key={id}
-                id={id}
-                label={label}
-                Icon={Icon}
-                active={format === id}
-                onPress={() => handleFormatChange(id)}
-              />
-            ))}
-          </Animated.View>
+          {/* Guiding line above the card — tells a first-time (or just
+              blank-page-staring) user what's expected before they start
+              typing. Fades out once they've actually started writing, so
+              it doesn't linger as clutter once the card speaks for itself. */}
+          {!text && (
+            <Text style={s.composeGuide}>
+              Say what you can't say out loud — nobody will know it's you.
+            </Text>
+          )}
 
-          {/* Confession type — the headline choice. Doesn't touch the card
-              below (that stays constant while you write, see intent={null}
-              on DropCardRenderer) or the feed (DropCard.jsx doesn't key off
-              intent either) — it's purely what the drop gets filed under,
-              so the right people can actually search for it. */}
-          <Text style={s.sectionLabel}>Confession Type</Text>
-          <Text style={s.sectionSubLabel}>
-            You want it. They want it. Drop it, get found.
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={s.intentScroll}
-            contentContainerStyle={s.intentRow}
-          >
-            {CARD_INTENT_LIST.map((def) => (
-              <IntentCard
-                key={def.id}
-                def={def}
-                active={cardIntent === def.id}
-                onPress={() => setCardIntent(def.id)}
-              />
-            ))}
-          </ScrollView>
+          {/* One-time hint — the icon row is part of the card itself now,
+              with no explainer text of its own, so first-time visitors get
+              pointed at it once. Taps anywhere on it (or on any icon below)
+              dismiss it for good. */}
+          {showToolbarHint && (
+            <TouchableOpacity style={s.hintBubble} onPress={dismissToolbarHint} activeOpacity={0.85}>
+              <Text style={s.hintBubbleText}>
+                Tap an icon on the card below to add a photo, set your mood, tag someone & more.
+              </Text>
+              <X size={rs(12)} color={T.textMute} />
+            </TouchableOpacity>
+          )}
 
           {/* Live card preview — type directly into the card itself, no
-              separate input box duplicating what it shows. Media attaches
-              right on the card via the corner button, no separate picker
-              mode to switch into. */}
+              separate input box duplicating what it shows. The toolbar
+              is attached flush to the bottom, inside the same rounded,
+              clipped container, so the whole thing reads as one card —
+              confession zone on top, controls zone on the bottom — not a
+              card with a separate floating button-bar underneath it. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
             <DropCardRenderer
               confession={text}
@@ -661,17 +665,80 @@ export default function DropsComposeScreen({ navigation, route }) {
               placeholder="Ask and you shall be given"
               maxLength={MAX_CHARS}
               fontStyle={fontStyle}
+              // The toolbar sits flush against this card's bottom edge
+              // inside the same clipped container — square its bottom
+              // corners so there's no gap/seam between the two.
+              flushBottom
             />
-            <TouchableOpacity
-              style={s.mediaAttachBtn}
-              onPress={mediaUri ? handleClearMedia : handlePickMedia}
-              hitSlop={HIT_SLOP}
-              activeOpacity={0.85}
+
+            {/* Toolbar — every optional extra lives here as one labeled
+                icon each. A dot marks anything already set. This replaces
+                the old always-open Format row, Confession Type section,
+                Details accordion and Location chip — same features, one
+                row, now built into the card instead of floating below it. */}
+            <View style={s.toolbar}>
+            <ToolIcon
+              active={!!mediaUri}
+              onPress={() => { dismissToolbarHint(); mediaUri ? handleClearMedia() : handlePickMedia(); }}
+              label={mediaUri ? 'Remove' : 'Photo'}
+              a11yLabel={mediaUri ? 'Remove media' : 'Add photo or video'}
             >
               {mediaUri
-                ? <X size={rs(16)} color="#fff" />
-                : <Images size={rs(16)} color="#fff" />}
-            </TouchableOpacity>
+                ? <X size={rs(18)} color={T.primary} />
+                : <Images size={rs(18)} color={T.textMute} />}
+            </ToolIcon>
+
+            <ToolIcon
+              onPress={() => { dismissToolbarHint(); setActiveSheet('intent'); }}
+              label="Mood"
+              a11yLabel="Confession type — sets the card's color and category"
+            >
+              <Sparkles size={rs(18)} color={CARD_INTENTS[cardIntent]?.accent || T.primary} />
+            </ToolIcon>
+
+            <ToolIcon
+              active={!!taggedUser}
+              onPress={() => { dismissToolbarHint(); setActiveSheet('tag'); }}
+              label="Tag"
+              a11yLabel="Tag someone — they get it anonymously too"
+            >
+              <UserPlus size={rs(18)} color={taggedUser ? T.primary : T.textMute} />
+            </ToolIcon>
+
+            <ToolIcon
+              active={!!locationSummary}
+              onPress={() => { dismissToolbarHint(); setActiveSheet('location'); }}
+              label="Place"
+              a11yLabel="Location — nearby people find it faster"
+            >
+              <MapPin size={rs(18)} color={locationSummary ? T.primary : T.textMute} />
+            </ToolIcon>
+
+            <ToolIcon
+              onPress={() => { dismissToolbarHint(); handleFormatChange('voice'); }}
+              label="Voice"
+              a11yLabel="Record a voice drop instead"
+            >
+              <Mic size={rs(18)} color={T.textMute} />
+            </ToolIcon>
+
+            <ToolIcon
+              onPress={() => { dismissToolbarHint(); handleFormatChange('poll'); }}
+              label="Poll"
+              a11yLabel="Make this a poll instead"
+            >
+              <BarChart2 size={rs(18)} color={T.textMute} />
+            </ToolIcon>
+
+            <ToolIcon
+              active={!publisherOptIn}
+              onPress={() => { dismissToolbarHint(); setActiveSheet('more'); }}
+              label="Share"
+              a11yLabel="Share to Anonixx socials — on by default, anonymous"
+            >
+              <Share2 size={rs(18)} color={T.textMute} />
+            </ToolIcon>
+            </View>
           </Animated.View>
 
           {/* Character count, text format only */}
@@ -704,125 +771,6 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Details — tag someone, location, publisher sharing. All three
-              are optional/occasional, not part of the core "write + drop"
-              path, so they share one collapsed trigger instead of three
-              separate ones stacking up the screen. Its subtitle surfaces
-              whatever's already set, so nothing active gets buried. */}
-          <TouchableOpacity
-            style={s.collapsibleTrigger}
-            onPress={() => setDetailsOpen((v) => !v)}
-            activeOpacity={0.85}
-            hitSlop={HIT_SLOP}
-          >
-            <SlidersHorizontal size={rs(13)} color={detailsSummary ? T.primary : T.textMute} />
-            <View style={{ flex: 1 }}>
-              <Text style={[s.collapsibleTriggerLabel, { flex: 0 }, detailsSummary && { color: T.primary }]}>
-                Details
-              </Text>
-              {!!detailsSummary && (
-                <Text style={s.toggleRowSub} numberOfLines={1}>{detailsSummary}</Text>
-              )}
-            </View>
-            <ChevronDown
-              size={rs(15)}
-              color={T.textMute}
-              style={detailsOpen ? s.chevronOpen : null}
-            />
-          </TouchableOpacity>
-
-          {detailsOpen && (
-            <View style={s.detailsSection}>
-              {/* Tag someone — still hits marketplace too */}
-              <TagUserSection
-                taggedUser={taggedUser}
-                onTag={setTaggedUser}
-                onClear={() => setTaggedUser(null)}
-              />
-
-              {/* One-word hint — only when someone is tagged */}
-              {!!taggedUser && (
-                <View style={s.hintBox}>
-                  <Text style={s.hintTitle}>
-                    One word only they'd catch.
-                  </Text>
-                  <Text style={s.hintSub}>
-                    They might pick up on it. Or not. That's the fun of it.
-                  </Text>
-                  <TextInput
-                    style={s.hintInput}
-                    value={hint}
-                    onChangeText={(v) => setHint(v.split(/\s+/)[0].slice(0, HINT_MAX))}
-                    placeholder="e.g. rain, august, friday…"
-                    placeholderTextColor={T.textMute}
-                    maxLength={HINT_MAX}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    returnKeyType="done"
-                  />
-                  <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
-                </View>
-              )}
-
-              {/* Anonixx Publisher opt-in (section 16) — the only gate on
-                  external social publishing. Compact single toggle row
-                  instead of a paragraph + two buttons — it's a binary
-                  decision, doesn't need a full explainer every time. */}
-              <View style={s.toggleRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
-                  <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
-                </View>
-                <Switch
-                  value={publisherOptIn}
-                  onValueChange={(v) => (v ? handlePublisherYes() : setPublisherOptIn(false))}
-                  trackColor={{ false: T.surfaceAlt, true: T.primary }}
-                  thumbColor={publisherOptIn ? '#fff' : T.textMute}
-                  ios_backgroundColor={T.surfaceAlt}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Location — its own always-visible chip, not folded into
-              Details. Unlike tag/publisher this directly powers discovery
-              ("nearby people find your drop faster"), so it needs to stay
-              in view rather than depend on someone opening a settings
-              drawer to notice it exists. */}
-          <TouchableOpacity
-            style={s.locationChip}
-            onPress={() => setLocationOpen((v) => !v)}
-            activeOpacity={0.85}
-            hitSlop={HIT_SLOP}
-          >
-            <MapPin size={rs(13)} color={locationSummary ? T.primary : T.textMute} />
-            <Text
-              style={[s.locationChipText, locationSummary && { color: T.primary }]}
-              numberOfLines={1}
-            >
-              {locationSummary || 'Add your location — nearby people find it faster'}
-            </Text>
-            <ChevronDown
-              size={rs(14)}
-              color={T.textMute}
-              style={locationOpen ? s.chevronOpen : null}
-            />
-          </TouchableOpacity>
-          {(locationOpen || locationSummary) && (
-            <View style={{ marginBottom: SPACING.md }}>
-              <LocationField
-                country={locationCountry}
-                county={locationCounty}
-                subCounty={locationSubCounty}
-                estate={locationEstate}
-                onChangeCountry={setLocationCountry}
-                onChangeCounty={setLocationCounty}
-                onChangeSubCounty={setLocationSubCounty}
-                onChangeEstate={setLocationEstate}
-              />
-            </View>
-          )}
-
           {/* Drop button */}
           <TouchableOpacity
             style={[s.dropBtn, (!canDrop || loading) && s.dropBtnDisabled]}
@@ -841,6 +789,88 @@ export default function DropsComposeScreen({ navigation, route }) {
             Your identity stays hidden. Always.
           </Text>
         </ScrollView>
+
+        {/* ── Confession Type sheet ── */}
+        <OptionSheet visible={activeSheet === 'intent'} title="Confession Type" onClose={closeSheet}>
+          <Text style={s.sectionSubLabel}>
+            You want it. They want it. Drop it, get found.
+          </Text>
+          <View style={s.intentGrid}>
+            {CARD_INTENT_LIST.map((def) => (
+              <IntentCard
+                key={def.id}
+                def={def}
+                active={cardIntent === def.id}
+                onPress={() => { setCardIntent(def.id); closeSheet(); }}
+              />
+            ))}
+          </View>
+        </OptionSheet>
+
+        {/* ── Tag someone sheet ── */}
+        <OptionSheet visible={activeSheet === 'tag'} title="Tag Someone" onClose={closeSheet}>
+          <TagUserSection
+            taggedUser={taggedUser}
+            onTag={setTaggedUser}
+            onClear={() => setTaggedUser(null)}
+          />
+          {!!taggedUser && (
+            <View style={s.hintBox}>
+              <Text style={s.hintTitle}>
+                One word only they'd catch.
+              </Text>
+              <Text style={s.hintSub}>
+                They might pick up on it. Or not. That's the fun of it.
+              </Text>
+              <TextInput
+                style={s.hintInput}
+                value={hint}
+                onChangeText={(v) => setHint(v.split(/\s+/)[0].slice(0, HINT_MAX))}
+                placeholder="e.g. rain, august, friday…"
+                placeholderTextColor={T.textMute}
+                maxLength={HINT_MAX}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="done"
+              />
+              <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
+            </View>
+          )}
+        </OptionSheet>
+
+        {/* ── Location sheet ── */}
+        <OptionSheet visible={activeSheet === 'location'} title="Location" onClose={closeSheet}>
+          <Text style={s.sectionSubLabel}>
+            Nearby people find your drop faster. Totally optional.
+          </Text>
+          <LocationField
+            country={locationCountry}
+            county={locationCounty}
+            subCounty={locationSubCounty}
+            estate={locationEstate}
+            onChangeCountry={setLocationCountry}
+            onChangeCounty={setLocationCounty}
+            onChangeSubCounty={setLocationSubCounty}
+            onChangeEstate={setLocationEstate}
+          />
+        </OptionSheet>
+
+        {/* ── Share sheet — publisher opt-in only, for now ── */}
+        <OptionSheet visible={activeSheet === 'more'} title="Share to Socials" onClose={closeSheet}>
+          <View style={s.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.toggleRowLabel}>Share to Anonixx socials</Text>
+              <Text style={s.toggleRowSub}>Anonymous — your identity never leaves Anonixx</Text>
+            </View>
+            <Switch
+              value={publisherOptIn}
+              onValueChange={(v) => (v ? handlePublisherYes() : setPublisherOptIn(false))}
+              trackColor={{ false: T.surfaceAlt, true: T.primary }}
+              thumbColor={publisherOptIn ? '#fff' : T.textMute}
+              ios_backgroundColor={T.surfaceAlt}
+            />
+          </View>
+        </OptionSheet>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -865,18 +895,6 @@ const s = StyleSheet.create({
     color:         T.text,
     letterSpacing: 0.5,
   },
-
-  limitStrip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(8),
-    backgroundColor:   'rgba(255,255,255,0.02)',
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  limitText:     { fontSize: rf(11), color: T.textSec, letterSpacing: 0.3, flex: 1 },
 
   // Cost strip — persistent, not just on the send button
   costStrip: {
@@ -968,31 +986,24 @@ const s = StyleSheet.create({
     paddingBottom:     SPACING.xl,
   },
 
-  // Format selector
-  formatRow: {
-    flexDirection: 'row',
-    gap:           SPACING.sm,
-    marginBottom:  SPACING.md,
+  // Guiding line above the card
+  composeGuide: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      rf(14),
+    color:         T.textSec,
+    lineHeight:    rf(20),
+    letterSpacing: 0.2,
+    marginBottom:  SPACING.sm,
   },
-  formatChip: {
-    flex:              1,
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'center',
-    gap:               rp(5),
-    paddingVertical:   rp(9),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       T.border,
-    backgroundColor:   'transparent',
-  },
-  formatChipActive:     { borderColor: T.primary, backgroundColor: 'rgba(255,99,74,0.08)' },
-  formatChipText:       { fontSize: FONT.sm, color: T.textMute, fontWeight: '500' },
-  formatChipTextActive: { color: T.primary, fontWeight: '700' },
 
-  // Card preview
+  // Card preview — the toolbar renders as its second child (see JSX), and
+  // this container's own rounded corners + overflow:hidden are what make
+  // the icon row read as the card's own footer instead of a separate box
+  // floating under it. No alignItems override: default 'stretch' means
+  // the toolbar fills the exact same width as the card above it.
   cardWrap: {
-    alignItems:   'center',
+    borderRadius: rs(16),
+    overflow:     'hidden',
     marginBottom: SPACING.md,
     shadowColor:  '#000',
     shadowOffset: { width: 0, height: rs(12) },
@@ -1006,37 +1017,10 @@ const s = StyleSheet.create({
     flexDirection:  'row',
     justifyContent: 'flex-end',
     alignItems:     'center',
-    marginBottom:   SPACING.md,
+    marginBottom:   SPACING.sm,
   },
   remaining: { fontSize: rf(12), fontWeight: '600' },
 
-  // Media attach button — overlaid on the card itself (top-right corner)
-  // instead of a separate picker section below. Doubles as the clear
-  // button once media's attached. Top-right, not bottom-right: the
-  // confession text is vertically centered in the card and its position
-  // shifts per-drop, so a bottom corner can end up sitting under the text
-  // zone and stealing taps meant for typing. The top corner is clear of
-  // both the text zone and the identity bar at all times. Solid accent
-  // fill (not a translucent dark circle) so it reads clearly against
-  // every card color, not just the darkest ones.
-  mediaAttachBtn: {
-    position:        'absolute',
-    right:           rp(12),
-    top:             rp(12),
-    width:           rs(42),
-    height:          rs(42),
-    borderRadius:    rs(21),
-    backgroundColor: T.primary,
-    borderWidth:     2,
-    borderColor:     'rgba(255,255,255,0.85)',
-    alignItems:      'center',
-    justifyContent:  'center',
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: rs(3) },
-    shadowOpacity:   0.45,
-    shadowRadius:    rs(6),
-    elevation:       6,
-  },
   // Edge warning
   edgeWarn: {
     flexDirection:     'row',
@@ -1066,36 +1050,89 @@ const s = StyleSheet.create({
     marginTop:  rp(2),
   },
 
-  // Section label
-  sectionLabel: {
-    fontFamily:    'DMSans-Bold',
+  // One-time toolbar hint bubble
+  hintBubble: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    gap:               rp(8),
+    backgroundColor:   'rgba(255,99,74,0.06)',
+    borderColor:       'rgba(255,99,74,0.2)',
+    borderWidth:       1,
+    borderRadius:      RADIUS.md,
+    paddingHorizontal: rp(12),
+    paddingVertical:   rp(9),
+    marginBottom:      rp(8),
+  },
+  hintBubbleText: {
+    flex:          1,
+    fontFamily:    'DMSans-Italic',
     fontSize:      rf(11),
     color:         T.textSec,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom:  rp(6),
-    marginTop:     SPACING.md,
+    lineHeight:    rf(16),
   },
+
+  // Toolbar — one labeled icon per optional extra
+  // No border/radius of its own — cardWrap's overflow:hidden + shared
+  // radius does the clipping, so this reads as the card's own footer.
+  toolbar: {
+    flexDirection:     'row',
+    alignItems:        'flex-start',
+    justifyContent:    'space-between',
+    paddingHorizontal: rp(4),
+    paddingVertical:   rp(8),
+    backgroundColor:   TOOLBAR_BG,
+  },
+  toolIcon: {
+    width:          rs(46),
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            rp(3),
+    paddingVertical: rp(2),
+  },
+  toolIconGlyph: {
+    width:          rs(36),
+    height:         rs(36),
+    borderRadius:   rs(18),
+    alignItems:     'center',
+    justifyContent: 'center',
+  },
+  toolIconDot: {
+    position:        'absolute',
+    top:              rs(1),
+    right:            rs(3),
+    width:            rs(7),
+    height:           rs(7),
+    borderRadius:     rs(3.5),
+    backgroundColor:  T.primary,
+    borderWidth:      1.5,
+    borderColor:      TOOLBAR_BG,
+  },
+  toolIconLabel: {
+    fontFamily:    'DMSans-Regular',
+    fontSize:      rf(9.5),
+    color:         T.textMute,
+    letterSpacing: 0.2,
+  },
+
+  // Section sub-label (used inside sheets)
   sectionSubLabel: {
     fontFamily:   'DMSans-Italic',
     fontSize:     rf(12),
     color:        T.textMute,
-    marginTop:    rp(2),
     marginBottom: SPACING.md,
     lineHeight:   rf(17),
   },
 
-  // Confession type picker — small swatch + its label below it, same shape
-  // as the old theme-swatch picker (no card border boxing the text in —
-  // just the little color/pattern square, then the label).
-  intentScroll: { marginHorizontal: -SPACING.md, marginBottom: SPACING.lg },
-  intentRow: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   rp(4),
-    gap:               SPACING.sm,
+  // Confession type grid — inside the sheet, wraps instead of scrolling
+  intentGrid: {
+    flexDirection: 'row',
+    flexWrap:      'wrap',
+    gap:           SPACING.sm,
+    paddingBottom: SPACING.md,
   },
   intentCard: {
-    width:       rs(96),
+    width:       rs(90),
     alignItems:  'center',
   },
   intentCardFill: {
@@ -1123,50 +1160,6 @@ const s = StyleSheet.create({
     textAlign:     'center',
     marginTop:     rp(6),
   },
-  // Customize accordion (theme/mood/intensity/location/font/poll)
-  // Shared flat toggle-row pattern — used by the Customize trigger and
-  // the Tag-someone trigger, so both collapsible rows read as one system.
-  collapsibleTrigger: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(8),
-    paddingVertical:   rp(12),
-    paddingHorizontal: rp(2),
-    marginBottom:      SPACING.sm,
-  },
-  collapsibleTriggerLabel: {
-    flex:          1,
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
-    color:         T.text,
-    letterSpacing: 0.3,
-  },
-  chevronOpen: { transform: [{ rotate: '180deg' }] },
-  detailsSection: {
-    gap:          SPACING.md,
-    marginBottom: SPACING.md,
-  },
-
-  // Location chip — compact, always visible (unlike Details, which stays
-  // collapsed until tapped)
-  locationChip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(8),
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(11),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       T.border,
-    marginBottom:      SPACING.sm,
-  },
-  locationChipText: {
-    flex:          1,
-    fontFamily:    'DMSans-SemiBold',
-    fontSize:      FONT.sm,
-    color:         T.textSec,
-    letterSpacing: 0.2,
-  },
 
   // One-word hint (section 11)
   hintBox: {
@@ -1176,7 +1169,7 @@ const s = StyleSheet.create({
     borderRadius:      RADIUS.md,
     paddingHorizontal: rp(14),
     paddingVertical:   rp(12),
-    marginBottom:      SPACING.md,
+    marginTop:         SPACING.md,
   },
   hintTitle: {
     fontFamily:    'PlayfairDisplay-Italic',
@@ -1214,36 +1207,6 @@ const s = StyleSheet.create({
     textAlign:     'right',
   },
 
-  // Audience
-  audienceRow: { gap: SPACING.sm, marginBottom: SPACING.lg },
-  audienceBtn: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(10),
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(12),
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       T.border,
-    backgroundColor:   'transparent',
-  },
-  audienceBtnActive: {
-    borderColor:     'rgba(255,99,74,0.4)',
-    backgroundColor: 'rgba(255,99,74,0.06)',
-  },
-  audienceLabel: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      FONT.sm,
-    color:         T.textSec,
-    marginBottom:  rp(2),
-  },
-  audienceLabelActive: { color: T.primary },
-  audienceDesc: {
-    fontFamily: 'DMSans-Italic',
-    fontSize:   rf(11),
-    color:      T.textMute,
-  },
-
   // Drop button
   dropBtn: {
     height:          BUTTON_HEIGHT,
@@ -1264,75 +1227,13 @@ const s = StyleSheet.create({
     color:         '#fff',
     letterSpacing: 0.5,
   },
-  // Publisher opt-in (section 16)
-  publisherBox: {
-    backgroundColor:   'rgba(255,255,255,0.02)',
-    borderColor:       T.border,
-    borderWidth:       1,
-    borderRadius:      RADIUS.md,
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(12),
-    marginBottom:      SPACING.md,
-  },
-  publisherQ: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(12),
-    color:         T.text,
-    letterSpacing: 0.3,
-    lineHeight:    rf(18),
-    marginBottom:  rp(10),
-  },
-  publisherRow: {
-    flexDirection: 'row',
-    gap:           SPACING.sm,
-    flexWrap:      'wrap',
-  },
-  publisherBtn: {
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(8),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    borderColor:       T.border,
-    backgroundColor:   'transparent',
-  },
-  publisherBtnYesActive: {
-    borderColor:     T.primary,
-    backgroundColor: 'rgba(255,99,74,0.12)',
-  },
-  publisherBtnNoActive: {
-    borderColor:     'rgba(255,255,255,0.25)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  publisherBtnText: {
-    fontFamily:    'DMSans-Regular',
-    fontSize:      rf(11),
-    color:         T.textMute,
-    letterSpacing: 0.5,
-  },
-  publisherBtnYesActiveText: { color: T.primary, fontFamily: 'DMSans-Bold' },
-  publisherBtnNoActiveText:  { color: T.text,    fontFamily: 'DMSans-Bold' },
-  publisherNote: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(10),
-    color:         T.textMute,
-    letterSpacing: 0.3,
-    marginTop:     rp(8),
-  },
-  publisherLocked: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         T.textSec,
-    letterSpacing: 0.3,
-    lineHeight:    rf(18),
-  },
 
-  // Compact toggle row — publisher opt-in
+  // Compact toggle row — publisher opt-in (inside the "More" sheet)
   toggleRow: {
     flexDirection:     'row',
     alignItems:        'center',
     paddingVertical:   rp(10),
     paddingHorizontal: rp(2),
-    marginBottom:      SPACING.sm,
     gap:               SPACING.sm,
   },
   toggleRowLabel: {
@@ -1358,105 +1259,34 @@ const s = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // ─── Section optional label ────────────────────────────────────
-  sectionOptional: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(10),
-    color:         T.textMute,
-    letterSpacing: 0.8,
-    textTransform: 'none',
+  // ── Bottom sheet chrome ──────────────────────────────────────
+  sheetBackdrop: {
+    position:        'absolute',
+    top:             0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  tagSub: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(11),
-    color:         T.textMute,
+  sheetContainer: {
+    marginTop:            'auto',
+    backgroundColor:      T.background,
+    borderTopLeftRadius:  RADIUS.lg,
+    borderTopRightRadius: RADIUS.lg,
+    paddingHorizontal:    SPACING.md,
+    paddingTop:           SPACING.md,
+    maxHeight:            '85%',
+    borderWidth:          1,
+    borderColor:          T.border,
+    borderBottomWidth:    0,
+  },
+  sheetHeader: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    marginBottom:      SPACING.md,
+  },
+  sheetTitle: {
+    fontFamily:    'PlayfairDisplay-Italic',
+    fontSize:      FONT.lg,
+    color:         T.text,
     letterSpacing: 0.3,
-    lineHeight:    rf(17),
-    marginBottom:  rp(10),
   },
-
-  // ─── Tag someone / user search ─────────────────────────────────
-  userSearchWrap: {
-    marginBottom: SPACING.md,
-    zIndex:       50,
-  },
-  userSearchRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(8),
-    backgroundColor:   T.surface,
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       T.border,
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(10),
-  },
-  userSearchInput: {
-    flex:            1,
-    fontFamily:      'DMSans-Regular',
-    fontSize:        FONT.md,
-    color:           T.text,
-    paddingVertical: 0,
-  },
-  userResultsList: {
-    backgroundColor: T.surface,
-    borderRadius:    RADIUS.md,
-    borderWidth:     1,
-    borderColor:     T.border,
-    marginTop:       rp(4),
-    overflow:        'hidden',
-    maxHeight:       rs(220),
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: rs(4) },
-    shadowOpacity:   0.3,
-    shadowRadius:    rs(10),
-    elevation:       10,
-  },
-  userResultItem: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(10),
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(12),
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  userResultAvatar: {
-    width:           rs(34),
-    height:          rs(34),
-    borderRadius:    rs(17),
-    backgroundColor: 'rgba(255,99,74,0.12)',
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  userResultInitial: { fontFamily: 'DMSans-Bold', fontSize: rf(14), color: T.primary },
-  userResultName:    { fontFamily: 'DMSans-Bold',    fontSize: FONT.sm, color: T.text },
-  userResultAnon:    { fontFamily: 'DMSans-Italic',  fontSize: rf(11), color: T.textMute, marginTop: rp(1) },
-  userNoResults: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      FONT.sm,
-    color:         T.textMute,
-    paddingVertical: rp(8),
-    paddingHorizontal: rp(2),
-  },
-  tagConfirm: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(8),
-    marginTop:         rp(8),
-    backgroundColor:   'rgba(255,99,74,0.06)',
-    borderRadius:      RADIUS.md,
-    borderWidth:       1,
-    borderColor:       'rgba(255,99,74,0.2)',
-    paddingHorizontal: rp(12),
-    paddingVertical:   rp(10),
-  },
-  tagConfirmText: {
-    flex:       1,
-    fontFamily: 'DMSans-Regular',
-    fontSize:   rf(12),
-    color:      T.textSec,
-    lineHeight: rf(18),
-  },
-
 });
