@@ -221,7 +221,12 @@ const VideoSlide = ({
             <VideoView
               player={player}
               style={StyleSheet.absoluteFill}
-              contentFit="cover"
+              // "cover" crops whatever doesn't fit a full-screen portrait
+              // frame — since videos come from an arbitrary gallery pick,
+              // not a fixed vertical recording, that cuts off real content
+              // at the edges. "contain" always shows the full frame,
+              // letterboxed on the slide's black background instead.
+              contentFit="contain"
               nativeControls={false}
               allowsPictureInPicture={false}
               pointerEvents="none"
