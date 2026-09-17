@@ -7,7 +7,6 @@
  *   Zone 1 — Background (diagonal gradient, grain, ghost quote mark)
  *   Zone 2 — Confession text (Playfair Italic, auto-scaling, accent line)
  *   Zone 3 — Mood tag + optional emotional context
- *   Zone 4 — Identity bar (anonixx wordmark)
  *
  * Renders at card aspect (1:1 square) — scales to parent width.
  * Use <DropCardRenderer confession=... theme=... /> anywhere a card is needed.
@@ -297,7 +296,6 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   layoutMode      = 'split',      // 'split' | 'overlay' (for image/video drops)
   seed            = null,         // for variation — defaults to confession text
   cardWidth       = 360,          // scales everything proportionally
-  showIdentityBar = true,
   // Compose-mode: type directly into the rendered card instead of a
   // separate input box.
   editable        = false,
@@ -309,6 +307,12 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   // this app yet — see CARD_FONT_STYLES comment); the italic/weight/
   // letter-spacing values are what actually render the difference today.
   fontStyle       = 'classic',
+  // When the caller renders something flush against the card's bottom
+  // edge (DropsComposeScreen's toolbar, merged into the same rounded
+  // container), the card's own bottom corners need to be square — two
+  // independently-rounded corners stacked on top of each other leaves a
+  // sliver of the screen background showing through the gap between them.
+  flushBottom     = false,
 }) {
   const t = CARD_INTENTS[intent] || DROP_THEMES[theme] || DROP_THEMES['desire'];
   const patternSeed = useMemo(
@@ -318,7 +322,16 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   const variation = useMemo(() => getVariation(seed || confession), [seed, confession]);
 
   const fontSize = getConfessionFontSize(confession, cardWidth);
-  const identityBarHeight = Math.round(cardWidth * 0.08); // 8% of card
+
+  // Compose, no media attached — the card can be a plain growing text
+  // field instead of a fixed square. It starts smaller than a full square
+  // (a couple of lines' worth) and grows taller as the confession does,
+  // same as any auto-expanding text box. A posted/finalized card (not
+  // editable) and any card with media both keep the fixed square — that
+  // shape only matters as a stable badge once there's an actual image or
+  // video to frame, or once the text is done changing.
+  const isGrowingTextField = editable && !(layoutMode === 'split' && mediaUrl);
+  const minTextFieldHeight = Math.round(cardWidth * 0.55);
 
   // Overlay mode — media fills the card, text sits on gradient
   if (layoutMode === 'overlay' && mediaUrl) {
@@ -342,11 +355,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
         </Text>
 
         {/* Confession */}
-        <View style={[styles.overlayTextWrap, {
-          paddingBottom: showIdentityBar
-            ? identityBarHeight + rp(16)
-            : rp(24),
-        }]}>
+        <View style={[styles.overlayTextWrap, { paddingBottom: rp(24) }]}>
           <View style={[styles.accentLine, {
             backgroundColor: t.accent,
             opacity: 0.7,
@@ -368,7 +377,11 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
     );
 
     return (
-      <View style={[styles.card, { width: cardWidth, height: cardWidth, backgroundColor: t.bgFrom }]}>
+      <View style={[
+        styles.card,
+        { width: cardWidth, height: cardWidth, backgroundColor: t.bgFrom },
+        flushBottom && styles.flushBottom,
+      ]}>
         {mediaType === 'video' ? (
           <View style={styles.overlayMedia}>
             <VideoPreviewBackground uri={mediaUrl} style={StyleSheet.absoluteFill} />
@@ -378,16 +391,6 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
           <ImageBackground source={{ uri: mediaUrl }} style={styles.overlayMedia} resizeMode="cover">
             {overlayGradientContent}
           </ImageBackground>
-        )}
-
-        {showIdentityBar && (
-          <>
-            <IdentityBar
-              theme={t}
-              height={identityBarHeight}
-              overlay
-            />
-          </>
         )}
       </View>
     );
@@ -399,7 +402,13 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
       colors={[t.bgFrom, t.bgTo]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[styles.card, { width: cardWidth, height: cardWidth }]}
+      style={[
+        styles.card,
+        isGrowingTextField
+          ? { width: cardWidth, minHeight: minTextFieldHeight }
+          : { width: cardWidth, height: cardWidth },
+        flushBottom && styles.flushBottom,
+      ]}
     >
       {/* Decorative layer — glow, background pattern, ghost quote. Wrapped
           in one pointerEvents="none" View rather than relying on each
@@ -486,9 +495,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
         // Text-only card
         <View style={[styles.textCardContent, {
           transform: [{ translateY: variation.textShiftY }],
-          paddingBottom: showIdentityBar
-            ? identityBarHeight + rp(16)
-            : rp(24),
+          paddingBottom: rp(24),
         }]}>
           <ConfessionBlock
             theme={t}
@@ -508,15 +515,6 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
             align={variation.moodAlign}
           />
         </View>
-      )}
-
-      {showIdentityBar && (
-        <>
-          <IdentityBar
-            theme={t}
-            height={identityBarHeight}
-          />
-        </>
       )}
     </LinearGradient>
   );
@@ -615,31 +613,16 @@ const MoodBlock = React.memo(function MoodBlock({
   );
 });
 
-const IdentityBar = React.memo(function IdentityBar({ theme, height, overlay }) {
-  return (
-    <View style={[styles.identityBar, {
-      height,
-      backgroundColor: overlay ? 'rgba(21,25,36,0.85)' : '#151924',
-      borderTopColor:  'rgba(255,255,255,0.06)',
-    }]}>
-      <Text style={{
-        fontFamily:    'DMSans-Bold',
-        fontSize:      rf(13),
-        color:         theme.identityColor,
-        letterSpacing: -0.3,
-      }}>
-        anonixx
-      </Text>
-    </View>
-  );
-});
-
 // ─── Styles ──────────────────────────────────────────────────
 const styles = StyleSheet.create({
   card: {
     borderRadius: rs(16),
     overflow:     'hidden',
     position:     'relative',
+  },
+  flushBottom: {
+    borderBottomLeftRadius:  0,
+    borderBottomRightRadius: 0,
   },
   glow: {
     ...StyleSheet.absoluteFillObject,
@@ -696,19 +679,6 @@ const styles = StyleSheet.create({
   // Mood block
   moodWrap: {
     marginTop: rp(20),
-  },
-
-  // Identity bar
-  identityBar: {
-    position:          'absolute',
-    bottom:            0,
-    left:              0,
-    right:             0,
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: rp(20),
-    borderTopWidth:    1,
   },
 
   // Overlay mode
