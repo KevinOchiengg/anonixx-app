@@ -24,6 +24,7 @@ import AuthPromptModal from '../../components/modals/AuthPromptModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 import { API_BASE_URL } from '../../config/api';
+import { getDeviceId } from '../../utils/deviceId';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   BUTTON_HEIGHT, SCREEN, HIT_SLOP, isSmallDevice,
@@ -296,13 +297,46 @@ export default function DropsFeedScreen({ navigation, route }) {
     setAuthModalVisible(true);
   }, []);
 
+  // Fires the view-tracking call and syncs the card's displayed count to
+  // whatever the server actually recorded — never assumes locally that
+  // its own tap counted, since a repeat viewer's tap is correctly
+  // deduped server-side and shouldn't visibly increment the eye icon.
+  const trackView = useCallback(async (postId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const deviceId = await getDeviceId();
+      const res = await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/view`, {
+        method:  'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
+        },
+      });
+      const data = await res.json().catch(() => null);
+      if (typeof data?.views_count === 'number') {
+        setPosts((prev) =>
+          prev.map((item) =>
+            item.type === 'drop' && item.id === postId
+              ? { ...item, views_count: data.views_count }
+              : item
+          )
+        );
+      }
+    } catch { /* view tracking is best-effort — never block the UI on it */ }
+  }, []);
+
   const handleMediaPress = useCallback((post, startTime = 0) => {
+    // Tapping the video itself is how most people actually watch a video
+    // drop — previously only tapping elsewhere on the card (handlePostPress,
+    // which opens DropDetail) fired view tracking, so a video's eye-icon
+    // count never moved no matter how many times it was watched this way.
+    trackView(post.id);
     const mediaPosts = postsRef.current.filter(
       (p) => p.type === 'drop' && (p.video_url || p.audio_url)
     );
     const startIndex = mediaPosts.findIndex((p) => p.id === post.id);
     navigation.navigate('MediaFeed', { posts: mediaPosts, startIndex: Math.max(0, startIndex), startTime });
-  }, [navigation]);
+  }, [navigation, trackView]);
 
   const handleSave = useCallback(async (postId) => {
     if (!isAuthenticated) { showAuthPrompt('save'); return; }
@@ -343,16 +377,11 @@ export default function DropsFeedScreen({ navigation, route }) {
   }, [isAuthenticated, showAuthPrompt, showToast]);
 
   const handlePostPress = useCallback((post) => {
-    // Fire-and-forget view tracking — don't block navigation on this
-    (async () => {
-      const token = await AsyncStorage.getItem('token');
-      fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/view`, {
-        method:  'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }).catch(() => {});
-    })();
+    // Fire-and-forget — don't block navigation on it, but still syncs
+    // the card's displayed count via trackView's own setPosts update.
+    trackView(post.id);
     navigation.navigate('DropDetail', { post });
-  }, [navigation]);
+  }, [navigation, trackView]);
 
   const handleVideoChange = useCallback((newPostId) => {
     setActiveVideoId(newPostId);

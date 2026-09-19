@@ -32,7 +32,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
-  MapPin, UserPlus, Sparkles, Share2,
+  MapPin, UserPlus, Sparkles, Share2, Shuffle,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
@@ -75,6 +75,44 @@ const POST_COST = 10;
 
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
 const HINT_MAX = 16;
+
+// ─── Per-intent opening lines ────────────────────────────────────
+// These only ever appear as the card's placeholder — the same mechanism
+// "Ask and you shall be given" already used, just written to match each
+// intent's own register instead of one generic line. Never inserted into
+// the text itself: they vanish the instant someone types, nothing about
+// a finished drop shows it started from a prompt, and the dangerous-edge
+// detector / coin-cost check / everything else runs on whatever the user
+// actually wrote, same as always. A shuffle button (top-right of the
+// card, visible only while the field is empty) cycles to another line
+// for the current intent so repeat visits don't always see the same one.
+const INTENT_PROMPTS = {
+  'meet-me': [
+    'I keep hoping the right person reads this—',
+    "If you're out there and tired of games too—",
+    'I want someone who actually stays. Here\'s why—',
+    'Nobody\'s asked what I really want in a long time—',
+  ],
+  'skeleton-in-the-closet': [
+    'I\'ve never told anyone this—',
+    'Something I\'ve been carrying alone—',
+    'If you knew this about me—',
+    'The thing I think about at 3am—',
+  ],
+  'just-tonight': [
+    'Tonight I don\'t want to think, I just want—',
+    'No names, no promises, just—',
+    'I\'m free tonight and I want—',
+    'Something impulsive I can\'t stop thinking about—',
+  ],
+  'the-exchange': [
+    'Looking for someone discreet who\'s open to—',
+    'I can make it worth your while—',
+    'What I\'m offering, and what I need in return—',
+    'Discreet arrangement, no complications—',
+  ],
+};
+const FALLBACK_PLACEHOLDER = 'Ask and you shall be given';
 
 // ─── Dangerous edge — words that indicate the drop is raw ───────
 // When a confession hits one of these, we prompt the user — not to stop them,
@@ -231,6 +269,10 @@ export default function DropsComposeScreen({ navigation, route }) {
   // each confession type has its own emotional register, so the tag should
   // shift with it instead of sitting on one word regardless of what's picked.
   const moodTag = CARD_INTENTS[cardIntent]?.moodTag || 'longing';
+  // Which opening line from INTENT_PROMPTS[cardIntent] is showing —
+  // starts random per intent so two people opening compose don't see the
+  // exact same line every time, and cycles forward on shuffle-tap.
+  const [promptIndex, setPromptIndex] = useState(() => Math.floor(Math.random() * 4));
   const [mediaUri, setMediaUri] = useState(null);
   const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
   const [loading,  setLoading]  = useState(false);
@@ -282,6 +324,17 @@ export default function DropsComposeScreen({ navigation, route }) {
   const dismissToolbarHint = useCallback(() => {
     setShowToolbarHint(false);
     AsyncStorage.setItem(TOOLBAR_HINT_KEY, '1').catch(() => {});
+  }, []);
+
+  // Fresh opening line whenever the confession type changes, so switching
+  // intents doesn't leave an index pointing at a line from a differently-
+  // toned prompt list.
+  useEffect(() => {
+    setPromptIndex(Math.floor(Math.random() * 4));
+  }, [cardIntent]);
+
+  const handleShufflePrompt = useCallback(() => {
+    setPromptIndex((i) => i + 1);
   }, []);
 
   // ── Entrance animation ────────────────────────────────────────
@@ -543,6 +596,8 @@ export default function DropsComposeScreen({ navigation, route }) {
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
   const locationSummary = [locationEstate, locationSubCounty, locationCounty, locationCountry]
     .map((v) => v.trim()).find(Boolean) || null;
+  const intentPrompts = INTENT_PROMPTS[cardIntent] || null;
+  const placeholder = intentPrompts ? intentPrompts[promptIndex % intentPrompts.length] : FALLBACK_PLACEHOLDER;
 
   // ─────────────────────────────────────────────────────────────
   return (
@@ -662,7 +717,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               seed={text || format}
               editable
               onChangeText={setText}
-              placeholder="Ask and you shall be given"
+              placeholder={placeholder}
               maxLength={MAX_CHARS}
               fontStyle={fontStyle}
               // The toolbar sits flush against this card's bottom edge
@@ -670,6 +725,23 @@ export default function DropsComposeScreen({ navigation, route }) {
               // corners so there's no gap/seam between the two.
               flushBottom
             />
+
+            {/* Shuffle to another opening line — only while the card is
+                still showing its placeholder (matches the same !text
+                condition the placeholder itself renders under), so it
+                disappears the moment someone starts writing their own
+                words instead of sitting there as leftover chrome. */}
+            {!text && !!intentPrompts && (
+              <TouchableOpacity
+                style={s.shuffleBtn}
+                onPress={handleShufflePrompt}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.75}
+                accessibilityLabel="Try another opening line"
+              >
+                <Shuffle size={rs(14)} color="rgba(255,255,255,0.85)" />
+              </TouchableOpacity>
+            )}
 
             {/* Toolbar — every optional extra lives here as one labeled
                 icon each. A dot marks anything already set. This replaces
@@ -1010,6 +1082,17 @@ const s = StyleSheet.create({
     shadowOpacity:0.4,
     shadowRadius: rs(28),
     elevation:    10,
+  },
+  shuffleBtn: {
+    position:        'absolute',
+    top:             rp(12),
+    right:           rp(12),
+    width:           rs(32),
+    height:          rs(32),
+    borderRadius:    rs(16),
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
 
   // Text meta row — sits under the card now that typing happens on it directly
