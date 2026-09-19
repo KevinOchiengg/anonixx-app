@@ -19,6 +19,7 @@ from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.notifications import send_push_notification as _notify
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
+from app.utils.fingerprint import fingerprint_hash
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
@@ -1414,16 +1415,40 @@ async def unpin_drop_comment(
 async def view_drop(
     drop_id: str,
     current_user_id: Optional[str] = Depends(get_optional_user_id),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     db = Depends(get_database),
 ):
     try:
-        await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}})
+        # A "viewer" is either a signed-in user or, for guests, the app's
+        # per-install device ID (already sent on every request — see
+        # deviceId.js on the frontend — for the signup-bonus fingerprint
+        # cap). Hashing the device ID keeps this collection consistent
+        # with what drop_views already stores for real users (an opaque
+        # key, never a directly-identifying value at rest). Whichever key
+        # we land on, `drop_views`' unique (drop_id, user_id) index means
+        # a repeat visit just updates viewed_at without inserting a new
+        # document — upserted_id tells us whether this was genuinely a
+        # new viewer, so views_count only grows for those. Previously it
+        # incremented on every call regardless, so re-opening the same
+        # drop repeatedly inflated it as if each open were a different
+        # person; guests with no identity at all still don't get deduped,
+        # since there's no header to key off in that case.
+        viewer_key = None
         if current_user_id:
-            await db["drop_views"].update_one(
-                {"drop_id": drop_id, "user_id": current_user_id},
-                {"$set": {"drop_id": drop_id, "user_id": current_user_id, "viewed_at": now_utc()}},
+            viewer_key = current_user_id
+        elif x_device_id:
+            viewer_key = f"device:{fingerprint_hash(x_device_id)}"
+
+        if viewer_key:
+            result = await db["drop_views"].update_one(
+                {"drop_id": drop_id, "user_id": viewer_key},
+                {"$set": {"drop_id": drop_id, "user_id": viewer_key, "viewed_at": now_utc()}},
                 upsert=True,
             )
+            if result.upserted_id is not None:
+                await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}})
+        else:
+            await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}})
     except Exception as e:
         print(f"⚠️ View tracking skipped: {e}")
     return {"status": "success"}
