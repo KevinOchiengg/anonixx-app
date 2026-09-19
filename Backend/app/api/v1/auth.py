@@ -16,6 +16,7 @@ from app.config import settings
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins
 from app.utils.email import send_password_reset_otp
+from app.utils.fingerprint import fingerprint_hash
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -56,14 +57,10 @@ DEVICE_LOOKBACK_DAYS  = 90
 IP_BURST_WINDOW_HRS   = 24
 IP_BURST_THRESHOLD    = 3
 
-def _fingerprint_hash(value: str) -> str:
-    """Salted hash so raw device IDs/IPs are never stored at rest."""
-    return hashlib.sha256(f"{settings.SECRET_KEY}:{value}".encode()).hexdigest()
-
 async def _welcome_bonus_for_signup(db, device_id: Optional[str], client_ip: Optional[str]) -> int:
     """Full bonus for a device/IP's first signup; a token amount for repeats."""
-    device_hash = _fingerprint_hash(device_id) if device_id else None
-    ip_hash      = _fingerprint_hash(client_ip) if client_ip else None
+    device_hash = fingerprint_hash(device_id) if device_id else None
+    ip_hash      = fingerprint_hash(client_ip) if client_ip else None
 
     is_repeat = False
     if device_hash:
