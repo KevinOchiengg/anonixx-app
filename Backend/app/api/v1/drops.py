@@ -1439,6 +1439,7 @@ async def view_drop(
         elif x_device_id:
             viewer_key = f"device:{fingerprint_hash(x_device_id)}"
 
+        drop = None
         if viewer_key:
             result = await db["drop_views"].update_one(
                 {"drop_id": drop_id, "user_id": viewer_key},
@@ -1446,11 +1447,24 @@ async def view_drop(
                 upsert=True,
             )
             if result.upserted_id is not None:
-                await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}})
+                drop = await db["drops"].find_one_and_update(
+                    {"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}},
+                    return_document=ReturnDocument.AFTER,
+                )
         else:
-            await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}})
+            drop = await db["drops"].find_one_and_update(
+                {"_id": ObjectId(drop_id)}, {"$inc": {"views_count": 1}},
+                return_document=ReturnDocument.AFTER,
+            )
+
+        # Report the current count back either way — including on a
+        # deduped repeat view — so the client can sync its display to
+        # the real number instead of assuming its own increment happened.
+        if drop is None:
+            drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+        return {"status": "success", "views_count": drop.get("views_count", 0) if drop else 0}
     except Exception as e:
-        print(f"⚠️ View tracking skipped: {e}")
+        print(f"View tracking skipped: {e}")
     return {"status": "success"}
 
 
