@@ -10,12 +10,11 @@ someone is Link Up (coins → unlock_requests.py / drops.py → drop_connections
 """
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
 from bson import ObjectId
 
 from app.database import get_database
 from app.dependencies import get_current_user_id
-from app.api.v1.drops import INTENT_LABELS
 
 router = APIRouter(prefix="/connect", tags=["Connect"])
 
@@ -103,41 +102,6 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
     vibe_doc = await db["vibe_scores"].find_one({"user_id": target_id}, {"events": 1})
     reactions_received = ((vibe_doc or {}).get("events", {}) or {}).get("reaction_received", 0)
 
-    # "Here for" — what they're actually here for, on-theme, computed from
-    # their own drops rather than a self-reported label. Whichever intent
-    # they've posted under most often (meet-me / just-tonight /
-    # the-exchange / skeleton-in-the-closet — same vocabulary as the drop compose picker).
-    # Shipped as a pair: `here_for` is the display copy, `here_for_intent` is
-    # the stable id. Clients key off the id, never the label — otherwise
-    # renaming a label silently breaks every lookup downstream.
-    here_for = None
-    here_for_intent = None
-    intent_counts = {}
-    async for d in db["drops"].find(
-        {"sender_id": target_id, "intent": {"$ne": None}}, {"intent": 1},
-    ):
-        intent = d.get("intent")
-        if intent:
-            intent_counts[intent] = intent_counts.get(intent, 0) + 1
-    if intent_counts:
-        here_for_intent = max(intent_counts, key=intent_counts.get)
-        here_for = INTENT_LABELS.get(here_for_intent)
-
-    # Age, not date of birth — a number is standard profile info, an exact
-    # birthday is identifying.
-    age = None
-    dob = user.get("date_of_birth")
-    if dob:
-        try:
-            if isinstance(dob, str):
-                dob = date.fromisoformat(dob)
-            elif isinstance(dob, datetime):
-                dob = dob.date()
-            today = datetime.now(timezone.utc).date()
-            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-        except Exception:
-            age = None
-
     # Location is deliberately coarse — county + country only. Anonixx users
     # set sub-county and estate for feed scoping, but showing that on a public
     # profile would narrow an "anonymous" poster down to a neighbourhood.
@@ -171,13 +135,10 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "avatar_url": user.get("avatar_url"),   # real photo if set — client falls back to initials
         "confession_count": confession_count,
         "connections_count": connections_count,
-        "here_for": here_for,               # display copy — "Meet Me" | "Just Tonight" | "The Exchange" | "Skeleton In The Closet" | null
-        "here_for_intent": here_for_intent, # stable id — key off this, not the label above
         "reactions_received": reactions_received,
         "streak": streak_doc.get("streak", 0),
         "longest_streak": streak_doc.get("longest_streak", 0),
         "join_date": join_date,
-        "age": age,
         "location": location,
         "is_premium": bool(user.get("is_premium")),
         "is_online": is_online,

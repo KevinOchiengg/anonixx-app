@@ -74,11 +74,7 @@ const DoubleTapLike = React.memo(({ children, onDoubleTap }) => {
 });
 
 // ─── Image Carousel ───────────────────────────────────────────
-// Shared by both the image carousel and the video player below — caps how
-// tall an unusually narrow/portrait clip or photo can grow the feed card,
-// while still letting the container match the media's real shape instead
-// of a fixed box that crops it.
-const MAX_MEDIA_HEIGHT = rs(420);
+const MAX_IMG_HEIGHT = rs(420);
 
 const ImageCarousel = React.memo(({ images }) => {
   const [activeIndex,    setActiveIndex]    = useState(0);
@@ -97,7 +93,7 @@ const ImageCarousel = React.memo(({ images }) => {
       if (imgHeights[i] !== undefined) return;
       Image.getSize(url, (w, h) => {
         const ratio = h / w;
-        setImgHeights(prev => ({ ...prev, [i]: Math.min(containerWidth * ratio, MAX_MEDIA_HEIGHT) }));
+        setImgHeights(prev => ({ ...prev, [i]: Math.min(containerWidth * ratio, MAX_IMG_HEIGHT) }));
       }, () => {
         setImgHeights(prev => ({ ...prev, [i]: rs(240) }));
       });
@@ -145,14 +141,8 @@ const AudioPlayer = React.memo(({ audioUrl }) => (
 const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) => {
   const { activeVideoId } = useActiveVideo() || {};
   const isActive = activeVideoId === postId;
-  const cached = videoThumbnailCache.get(videoUrl);
-  const [thumbnail,   setThumbnail]   = useState(() => cached?.uri || null);
-  const [thumbLoading,setThumbLoading]= useState(!cached);
-  // Height-to-width ratio of the video's actual frame, from the thumbnail
-  // grab's own dimensions — used below to size the card to the video's
-  // real shape instead of a fixed box that crops whatever doesn't fit it.
-  const [videoRatio,  setVideoRatio]  = useState(() => cached?.ratio || null);
-  const [containerWidth, setContainerWidth] = useState(0);
+  const [thumbnail,   setThumbnail]   = useState(() => videoThumbnailCache.get(videoUrl) || null);
+  const [thumbLoading,setThumbLoading]= useState(!videoThumbnailCache.has(videoUrl));
   const [isPlaying,   setIsPlaying]   = useState(false);
   const [isMuted,     setIsMuted]     = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -160,8 +150,6 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
   const isSeekingRef  = useRef(false);
   const sourceLoaded  = useRef(false);
   const overlayOp     = useRef(new Animated.Value(1)).current;
-
-  const handleLayout = useCallback((e) => setContainerWidth(e.nativeEvent.layout.width), []);
 
   const inlinePlayer = useVideoPlayer(null, (p) => { p.loop = true; p.muted = true; });
 
@@ -203,14 +191,10 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
     let cancelled = false;
     const gen = async () => {
       try {
-        // The thumbnail grab reports the video's actual frame dimensions
-        // for free — no separate probe needed to learn its real shape.
-        const { uri, width, height } = await VideoThumbnails.getThumbnailAsync(videoUrl, { time: 1000, quality: 0.7 });
-        const ratio = width > 0 ? height / width : null;
+        const { uri } = await VideoThumbnails.getThumbnailAsync(videoUrl, { time: 1000, quality: 0.7 });
         if (!cancelled) {
-          videoThumbnailCache.set(videoUrl, { uri, ratio });
+          videoThumbnailCache.set(videoUrl, uri);
           setThumbnail(uri);
-          setVideoRatio(ratio);
         }
       } catch {} finally { if (!cancelled) setThumbLoading(false); }
     };
@@ -237,16 +221,8 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
 
   const views = viewCount >= 1000 ? `${(viewCount / 1000).toFixed(1)}k` : String(viewCount || 0);
 
-  // Height that matches the video's own shape, capped so an unusually tall
-  // portrait clip doesn't take over the feed — same cap the image carousel
-  // uses. Falls back to the old fixed height until the thumbnail grab
-  // reports real dimensions, so there's no layout jump once it does.
-  const videoHeight = containerWidth > 0 && videoRatio
-    ? Math.min(containerWidth * videoRatio, MAX_MEDIA_HEIGHT)
-    : rs(240);
-
   return (
-    <View style={[styles.videoWrap, { height: videoHeight }]} onLayout={handleLayout}>
+    <View style={styles.videoWrap}>
       {thumbLoading && (
         <View style={styles.videoLoading}>
           <ActivityIndicator color={T.primary} />
@@ -254,16 +230,13 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
       )}
 
       {thumbnail && !isPlaying && (
-        <Image source={{ uri: thumbnail }} style={styles.videoFill} resizeMode="contain" />
+        <Image source={{ uri: thumbnail }} style={styles.videoFill} resizeMode="cover" />
       )}
 
       <VideoView
         player={inlinePlayer}
         style={[styles.videoFill, !isPlaying && styles.hidden]}
-        // The container above is now sized to the video's own aspect
-        // ratio, so "contain" fills it edge-to-edge without cropping —
-        // "cover" used to crop whatever didn't fit the old fixed 240px box.
-        contentFit="contain"
+        contentFit="cover"
         nativeControls={false}
         allowsPictureInPicture={false}
         pointerEvents="none"
@@ -331,7 +304,10 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
 });
 
 // ─── Poll Card ────────────────────────────────────────────────
-const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) => {
+// Exported — DropsSwipeScreen's full-screen poll slide reuses this exact
+// voting UI instead of duplicating it, so there's one voting
+// implementation, not two that can quietly drift apart.
+export const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) => {
   const barAnims = useRef(poll.options.map(() => new Animated.Value(0))).current;
   const hasVoted  = poll.voted_option !== null && poll.voted_option !== undefined;
   const isExpired = poll.expired;
@@ -570,9 +546,13 @@ function DropCard({
       <View style={styles.card}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerLeft} onPress={handleProfilePress} activeOpacity={0.7} hitSlop={HIT_SLOP}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
-            </View>
+            {post.avatar_url ? (
+              <Image source={{ uri: post.avatar_url }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
+              </View>
+            )}
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
               <Text style={styles.timestamp}>{post.time_ago}</Text>

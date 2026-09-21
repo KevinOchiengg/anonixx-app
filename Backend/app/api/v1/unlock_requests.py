@@ -328,8 +328,21 @@ async def list_incoming_requests(
         query["target_type"] = target_type
         query["target_id"] = target_id
 
+    rows = await db["drop_unlock_requests"].find(query).sort([("target_id", 1), ("created_at", 1)]).to_list(length=None)
+
+    # Same "resume before you accept" logic as the feed avatar — the owner
+    # deciding whether to accept should see who's asking, not just a name,
+    # same as the requester already sees the drop's own avatar before
+    # sending the request. One batch lookup for the whole inbox.
+    requester_ids = {r["requester_id"] for r in rows if r.get("requester_id")}
+    requester_avatars: dict[str, Optional[str]] = {}
+    if requester_ids:
+        valid_oids = [ObjectId(rid) for rid in requester_ids if ObjectId.is_valid(rid)]
+        async for u in db["users"].find({"_id": {"$in": valid_oids}}, {"avatar_url": 1}):
+            requester_avatars[str(u["_id"])] = u.get("avatar_url")
+
     requests = []
-    async for r in db["drop_unlock_requests"].find(query).sort([("target_id", 1), ("created_at", 1)]):
+    for r in rows:
         requests.append({
             "id": str(r["_id"]),
             "target_type": r["target_type"],
@@ -337,6 +350,7 @@ async def list_incoming_requests(
             "confession_snippet": r.get("confession_snippet", ""),
             "requester_id": r["requester_id"],
             "requester_anonymous_name": r.get("requester_anonymous_name", "Anonymous"),
+            "requester_avatar_url": requester_avatars.get(r.get("requester_id")),
             "media_url": r.get("media_url"),
             "media_type": r.get("media_type"),
             "media_duration": r.get("media_duration"),

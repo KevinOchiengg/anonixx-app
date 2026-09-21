@@ -27,7 +27,7 @@ import {
 } from '../../utils/responsive';
 
 export default function ChatInputBar({
-  inputRef, value, onChangeText, onFocus, placeholder,
+  inputRef, value, onChangeText, onFocus, onBlur, placeholder,
   editable = true, maxLength = 500,
   onAttachPress, attachUploading = false, attachDisabled = false,
   onEmojiPress, emojiActive = false,
@@ -48,6 +48,7 @@ export default function ChatInputBar({
               value={value}
               onChangeText={onChangeText}
               onFocus={onFocus}
+              onBlur={onBlur}
               placeholder={placeholder}
               placeholderTextColor={T.textMute}
               multiline

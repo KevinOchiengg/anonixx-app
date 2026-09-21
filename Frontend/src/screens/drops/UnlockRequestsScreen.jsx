@@ -217,6 +217,19 @@ export default function UnlockRequestsScreen({ route, navigation }) {
       <View style={s.row}>
         <View style={s.rowInfo}>
           <RequestMediaThumb mediaUrl={item.media_url} mediaType={item.media_type} />
+          {/* Who's asking — the same "resume before you decide" the
+              requester already gets when they see a drop's avatar before
+              sending the request. Falls back to an initial-letter circle
+              for requesters without a photo set, same as the feed. */}
+          {item.requester_avatar_url ? (
+            <Image source={{ uri: item.requester_avatar_url }} style={s.rowAvatar} />
+          ) : (
+            <View style={s.rowAvatar}>
+              <Text style={s.rowAvatarText}>
+                {item.requester_anonymous_name?.[0]?.toUpperCase() || 'A'}
+              </Text>
+            </View>
+          )}
           <Text style={s.rowName}>{item.requester_anonymous_name}</Text>
         </View>
         {isBusy ? (
@@ -289,6 +302,12 @@ const s = StyleSheet.create({
     marginBottom: rp(8),
   },
   rowInfo: { flexDirection: 'row', alignItems: 'center', gap: rp(10), flexShrink: 1 },
+  rowAvatar: {
+    width: rs(30), height: rs(30), borderRadius: rs(15),
+    backgroundColor: T.avatarBg, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)',
+  },
+  rowAvatarText: { fontSize: FONT.xs, fontWeight: '700', color: T.primary },
   rowName: { fontSize: FONT.sm, fontWeight: '600', color: T.text },
   thumbWrap: {
     width: rs(40), height: rs(40), borderRadius: RADIUS.sm, overflow: 'hidden',

@@ -59,6 +59,23 @@ const AVATAR_BG = '#1e2330';
 // why it resets the audio session before playing (this sheet also mounts
 // VoiceNoteRecorder just below).
 
+// ─── Quick reaction row ───────────────────────────────────────
+// TikTok's own comment composer shows a thin row of one-tap reactions
+// directly above the keyboard the whole time you're typing — not behind
+// an extra button tap like the fuller EmojiPicker grid below. Tapping one
+// inserts it and keeps the keyboard up, exactly like TikTok's own.
+const QUICK_REACTIONS = ['🔥', '❤️', '😂', '😍', '😭', '👏', '💯', '😮'];
+
+const QuickReactionRow = React.memo(({ onSelect }) => (
+  <View style={st.quickReactionRow}>
+    {QUICK_REACTIONS.map((e) => (
+      <TouchableOpacity key={e} onPress={() => onSelect(e)} style={st.quickReactionBtn} activeOpacity={0.6}>
+        <Text style={st.quickReactionEmoji}>{e}</Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+));
+
 // ─── Emoji picker ─────────────────────────────────────────────
 const EMOJI_CATS = [
   { tab: '🔥', emojis: ['🔥','💯','⚡','✨','💫','🌙','🌚','🌝','👀','💀','👻','🤡','🫠','🥶','🥵'] },
@@ -266,6 +283,7 @@ export const CommentBottomSheet = React.memo(({
   const [picker,         setPicker]         = useState(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [viewerUri,      setViewerUri]      = useState(null);
+  const [inputFocused,   setInputFocused]   = useState(false);
 
   // @mention autocomplete — null when not actively typing a mention,
   // '' or more once an "@" with no trailing space is in progress.
@@ -711,6 +729,14 @@ export const CommentBottomSheet = React.memo(({
         style={[st.sheet, { transform: [{ translateY: slideAnim }] }]}
         {...pan.panHandlers}
       >
+        {/* Wraps the WHOLE sheet, not just the input bar — the sheet
+            itself is a fixed-height, bottom-anchored container (see
+            `sheet` style), so nothing shrinks it when the keyboard rises
+            unless something up here does. With this wrapping everything,
+            the list below (already flex: 1) shrinks to make room and the
+            input stays pinned above the keyboard instead of the keyboard
+            just covering whatever sits in that fixed bottom zone. */}
+        <KeyboardAvoidingView style={st.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {/* Handle */}
         <View style={st.handleRow}>
           <View style={st.handleBar} />
@@ -824,35 +850,45 @@ export const CommentBottomSheet = React.memo(({
           </View>
         )}
 
+        {/* Quick reactions — TikTok's own one-tap row above the keyboard,
+            there the whole time you're typing rather than behind an extra
+            button tap. Hidden while the fuller emoji grid or the mention
+            dropdown is showing so nothing fights for the same space. */}
+        {inputFocused && picker !== 'emoji' && !(mentionQuery !== null && mentionResults.length > 0) && (
+          <QuickReactionRow
+            onSelect={(e) => { setText((prev) => prev + e); inputRef.current?.focus(); }}
+          />
+        )}
+
         {/* Input — shared ChatInputBar, same shell Link Up chat uses, so
             composing a comment looks and behaves identically to composing
             a message. paddingBottom respects the phone nav bar. */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ChatInputBar
-            inputRef={inputRef}
-            value={text}
-            onChangeText={handleTextChange}
-            onFocus={() => setPicker(null)}
-            placeholder={
-              !isAuthenticated
-                ? "sign in. no one will know it's you."
-                : replyingTo
-                ? 'say whats really weighs you down'
-                : "No one knows it's you"
-            }
-            editable={!!isAuthenticated}
-            maxLength={500}
-            onAttachPress={pickImage}
-            attachUploading={imageUploading}
-            onEmojiPress={() => setPicker(p => (p === 'emoji' ? null : 'emoji'))}
-            emojiActive={picker === 'emoji'}
-            paddingBottom={12 + insets.bottom}
-            trailing={
-              text.trim()
-                ? <SendButton onPress={() => submit()} sending={submitting} />
-                : <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} filled />
-            }
-          />
+        <ChatInputBar
+          inputRef={inputRef}
+          value={text}
+          onChangeText={handleTextChange}
+          onFocus={() => { setPicker(null); setInputFocused(true); }}
+          onBlur={() => setInputFocused(false)}
+          placeholder={
+            !isAuthenticated
+              ? "sign in. no one will know it's you."
+              : replyingTo
+              ? 'say whats really weighs you down'
+              : "No one knows it's you"
+          }
+          editable={!!isAuthenticated}
+          maxLength={500}
+          onAttachPress={pickImage}
+          attachUploading={imageUploading}
+          onEmojiPress={() => setPicker(p => (p === 'emoji' ? null : 'emoji'))}
+          emojiActive={picker === 'emoji'}
+          paddingBottom={12 + insets.bottom}
+          trailing={
+            text.trim()
+              ? <SendButton onPress={() => submit()} sending={submitting} />
+              : <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} filled />
+          }
+        />
         </KeyboardAvoidingView>
       </Animated.View>
 
@@ -893,6 +929,9 @@ const st = StyleSheet.create({
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.6, shadowRadius: 28, elevation: 24,
   },
+  // Wraps the sheet's full content so the list (flex: 1) can shrink when
+  // the keyboard appears — see the comment where this is used.
+  keyboardWrap: { flex: 1 },
   handleRow: { alignItems: 'center', paddingTop: 12, paddingBottom: 6 },
   handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: T.borderStrong },
   // ── Header — centered count, no divider, blends into the list ──────
@@ -987,6 +1026,14 @@ const st = StyleSheet.create({
     maxHeight: 180,
     backgroundColor: T.surface,
   },
+  quickReactionRow: {
+    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 8,
+    backgroundColor: T.surface,
+    borderTopWidth: 1, borderTopColor: T.border,
+  },
+  quickReactionBtn: { padding: 4 },
+  quickReactionEmoji: { fontSize: 24 },
   mentionRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 14, paddingVertical: 10,

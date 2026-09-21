@@ -14,8 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { rf } from '../utils/responsive';
 
 // Feed
-import DropsFeedScreen from '../screens/feed/DropsFeedScreen';
-import MediaFeedScreen from '../screens/feed/MediaFeedScreen';
+import DropsSwipeScreen from '../screens/feed/DropsSwipeScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SearchScreen from '../screens/feed/SearchScreen';
 import DropDetailScreen from '../screens/feed/DropDetailScreen';
@@ -95,11 +94,18 @@ const CustomTabBarButton = ({ children, onPress }) => (
 );
 
 // ─── FEED STACK ───────────────────────────────────────────────
+// FeedSwipe (DropsSwipeScreen) is the only feed screen now — a
+// full-screen, TikTok-style vertical swipe through every confession,
+// market promo, and ad. The old scrollable card list (DropsFeedScreen /
+// "FeedMain") and its own full-screen video/audio destination
+// (MediaFeedScreen / "MediaFeed") have both been retired and deleted —
+// DropsSwipeScreen absorbed everything they did. DropDetailScreen and
+// FeedLocationScreen, the two screens that used to navigate to "FeedMain"
+// by name, were both updated to target "FeedSwipe" instead.
 function FeedStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="FeedMain" component={DropsFeedScreen} />
-      <Stack.Screen name="MediaFeed" component={MediaFeedScreen} />
+    <Stack.Navigator initialRouteName="FeedSwipe" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="FeedSwipe" component={DropsSwipeScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="DropDetail" component={DropDetailScreen} />
       <Stack.Screen name="SavedDrops" component={SavedPostsScreen} />
