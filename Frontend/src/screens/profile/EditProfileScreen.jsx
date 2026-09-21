@@ -11,6 +11,7 @@ import {
 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchBalance } from '../../store/slices/coinsSlice';
+import { updateUser as updateReduxUser } from '../../store/slices/authSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
@@ -231,13 +232,20 @@ export default function EditProfileScreen({ navigation }) {
         });
       }
 
-      updateUserProfile?.({
+      const freshFields = {
         username:       data.username,
         email:          data.email,
         avatar_url:     data.avatar_url,
         anonymous_name: data.anonymous_name,
         gender,
-      });
+      };
+      // AuthContext and Redux's auth slice both hold their own copy of
+      // "the current user" (a known dual pattern in this app) — screens
+      // reading from one never saw updates made only to the other. Update
+      // both here so a saved avatar/name change shows up everywhere,
+      // e.g. ProfileScreen reads from Redux, other screens from AuthContext.
+      updateUserProfile?.(freshFields);
+      dispatch(updateReduxUser(freshFields));
       showToast({ type: 'success', message: "That's more like you." });
       navigation.goBack();
     } catch {
@@ -245,7 +253,7 @@ export default function EditProfileScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [username, email, anonymousName, avatarUri, user, updateUserProfile, showToast, navigation]);
+  }, [username, email, anonymousName, avatarUri, user, updateUserProfile, dispatch, showToast, navigation]);
 
   const isBusy = loading || uploadingAvatar;
 

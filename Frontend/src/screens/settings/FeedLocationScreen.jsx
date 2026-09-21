@@ -124,7 +124,7 @@ export default function FeedLocationScreen({ navigation }) {
       // until the user manually pulls to refresh.
       navigation.navigate('Main', {
         screen: 'Feed',
-        params: { screen: 'FeedMain', params: { refresh: Date.now() } },
+        params: { screen: 'FeedSwipe', params: { refresh: Date.now() } },
       });
     } catch {
       showToast({ type: 'error', message: 'Could not save. Try again.' });

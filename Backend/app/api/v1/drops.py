@@ -1597,6 +1597,21 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
     liked_set = set()
     voted_map: dict[str, int] = {}
 
+    # Sender avatars — one batch lookup for the whole page, not one query
+    # per drop. Admin drops are excluded on purpose: is_admin_drop's whole
+    # point is that the real account behind it stays untraceable, and that
+    # guarantee is separate from (and stricter than) the regular per-drop
+    # identity reveal.
+    sender_ids = {
+        d.get("sender_id") for d in drops
+        if d.get("sender_id") and not d.get("is_admin_drop")
+    }
+    sender_avatars: dict[str, Optional[str]] = {}
+    if sender_ids:
+        valid_oids = [ObjectId(sid) for sid in sender_ids if ObjectId.is_valid(sid)]
+        async for u in db["users"].find({"_id": {"$in": valid_oids}}, {"avatar_url": 1}):
+            sender_avatars[str(u["_id"])] = u.get("avatar_url")
+
     if current_user_id:
         async for s in db["saved_drops"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}):
             saved_set.add(s["drop_id"])
@@ -1646,9 +1661,11 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "user_id":          None if drop.get("is_admin_drop") else drop.get("sender_id"),
             "content":          confession,
             "anonymous_name":   drop.get("sender_anonymous_name"),
+            "avatar_url":       sender_avatars.get(drop.get("sender_id")),
             "is_admin_drop":    drop.get("is_admin_drop", False),
             "mood_tag":         drop.get("mood_tag"),
             "theme":            drop.get("theme"),
+            "intent":           drop.get("intent"),
             "intensity":        drop.get("intensity"),
             "media_url":        drop.get("media_url"),
             "media_type":       drop.get("media_type"),

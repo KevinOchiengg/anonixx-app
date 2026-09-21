@@ -82,9 +82,9 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
   const player = useAudioPlayer(null);
   const status = useAudioPlayerStatus(player);
   // expo-audio's AudioStatus has no `status` field (confirmed the hard way
-  // elsewhere in this codebase — see MediaFeedScreen.jsx's AudioSlide) — so
-  // `status.status === 'idle'` is always false and never actually detects
-  // whether a source has been loaded yet. Track it manually instead.
+  // elsewhere in this codebase — see DropsSwipeScreen.jsx's AudioSlide) —
+  // so `status.status === 'idle'` is always false and never actually
+  // detects whether a source has been loaded yet. Track it manually instead.
   const loaded = useRef(false);
   const [isFinished, setIsFinished] = useState(false);
 

@@ -37,18 +37,6 @@ const GENDER_BADGE = {
   nonbinary: { symbol: '⚧', label: 'Non-binary' },
 };
 
-// Mirrors INTENT_LABELS in Backend/app/api/v1/drops.py / CARD_INTENTS in
-// DropCardRenderer.jsx — same vocabulary, just with an emoji for the pill.
-// Keyed by intent id (`here_for_intent`), not the display label — ids are
-// frozen (they're written onto every drop row), so renaming the copy in
-// INTENT_LABELS can't quietly break these lookups.
-const HERE_FOR_EMOJI = {
-  'meet-me':                '🌹',
-  'just-tonight':           '🔥',
-  'the-exchange':           '🪙',
-  'skeleton-in-the-closet': '🌑',
-};
-
 // ─── Stat Item ────────────────────────────────────────────────
 const StatItem = React.memo(({ value, label }) => (
   <View style={styles.statItem}>
@@ -279,19 +267,17 @@ export default function AnonProfileSheet({
                   </View>
                 )}
 
-                {/* gender / age / location */}
+                {/* gender / location — age and "here for" (per-post mood,
+                    not a fixed trait) were dropped: age directly contradicted
+                    the signup DOB field's own promise ("never shown to
+                    anyone"), and the intent pill read as a personal identity
+                    label when it was really just whichever drop category
+                    they'd posted under most. */}
                 <View style={styles.chipRow}>
                   {profile.gender && GENDER_BADGE[profile.gender] && (
                     <View style={[styles.chip, { borderColor: accentColor + '40' }]}>
                       <Text style={[styles.chipText, { color: accentColor }]}>
                         {GENDER_BADGE[profile.gender].symbol} {GENDER_BADGE[profile.gender].label}
-                      </Text>
-                    </View>
-                  )}
-                  {profile.age != null && (
-                    <View style={[styles.chip, { borderColor: accentColor + '40' }]}>
-                      <Text style={[styles.chipText, { color: accentColor }]}>
-                        {profile.age}
                       </Text>
                     </View>
                   )}
@@ -304,15 +290,6 @@ export default function AnonProfileSheet({
                     </View>
                   )}
                 </View>
-
-                {profile.here_for && (
-                  <View style={[styles.tierPill, { borderColor: accentColor + '40' }]}>
-                    <Text style={styles.tierEmoji}>{HERE_FOR_EMOJI[profile.here_for_intent] || '💫'}</Text>
-                    <Text style={[styles.tierName, { color: accentColor }]}>
-                      {profile.here_for}
-                    </Text>
-                  </View>
-                )}
               </View>
 
               {/* Stats card — one bounded surface so the numbers read as a
@@ -585,20 +562,6 @@ const styles = StyleSheet.create({
     fontStyle:     'italic',
     letterSpacing: 0.2,
   },
-
-  // Vibe tier pill
-  tierPill: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(7),
-    paddingHorizontal: rp(14),
-    paddingVertical:   rp(7),
-    borderRadius:      RADIUS.full,
-    borderWidth:       1,
-    backgroundColor:   'rgba(255,255,255,0.04)',
-  },
-  tierEmoji: { fontSize: rf(14) },
-  tierName:  { fontSize: FONT.sm, fontWeight: '700', letterSpacing: 0.3 },
 
   // Stats
   // The card owns the surface; the row inside is just layout. Stats share

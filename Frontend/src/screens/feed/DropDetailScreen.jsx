@@ -287,10 +287,14 @@ export default function DropDetailScreen({ route, navigation }) {
     }
   }, [post.id, navigation, showToast]);
 
-  // ── Related → navigate to Feed tab, scroll to that drop ───
+  // ── Related → back to the Feed tab's swipe screen ──────────
+  // scrollToPostId was never actually consumed by the old feed screen
+  // either (grepped — no matching read anywhere in it), so this preserves
+  // exactly the same behavior as before: lands on the feed, doesn't
+  // actually scroll to the post.
   const handleRelatedPress = useCallback((relPost) => {
     navigation.navigate('Feed', {
-      screen: 'FeedMain',
+      screen: 'FeedSwipe',
       params: { scrollToPostId: relPost.id },
     });
   }, [navigation]);
