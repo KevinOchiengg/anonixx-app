@@ -12,21 +12,24 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
-import { signup } from '../../store/slices/authSlice';
+import { signup, updateUser as updateReduxUser } from '../../store/slices/authSlice';
 import { setBalance } from '../../store/slices/coinsSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import { uploadToR2 } from '../../utils/upload';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
-import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift, Cake, ArrowLeft } from 'lucide-react-native';
+import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift, Cake, ArrowLeft, Camera } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import { THEME } from '../../utils/theme';
-import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT } from '../../utils/anonymousName';
+import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT, normalizeNameSpaces } from '../../utils/anonymousName';
 
 const EMAIL_REGEX         = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_USERNAME_LENGTH = 30;
@@ -91,7 +94,7 @@ function getPasswordStrength(password) {
 
 export default function SignUpScreen({ navigation }) {
   const dispatch                    = useDispatch();
-  const { login: authContextLogin } = useAuth();
+  const { login: authContextLogin, updateUserProfile } = useAuth();
   const { showToast }               = useToast();
   const { loading }                 = useSelector((state) => state.auth);
 
@@ -100,6 +103,11 @@ export default function SignUpScreen({ navigation }) {
   const [focused, setFocused]     = useState('');
   const [showPass, setShowPass]   = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [gender, setGender] = useState(null);
+
+  // Profile picture — optional; most users stay faceless on Anonixx
+  const [avatarUri, setAvatarUri]       = useState(null);
+  const [showPhotoDisclaimer, setShowPhotoDisclaimer] = useState(false);
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(rh(24))).current;
@@ -127,6 +135,29 @@ export default function SignUpScreen({ navigation }) {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   }, [errors]);
 
+  // Picking happens locally — there's no auth token yet to upload with, so
+  // the file is only sent to R2 once signup succeeds and we have one (see
+  // handleSignUp).
+  const pickAvatar = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'warning', message: 'Allow photo access to add a picture.' });
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes:    'images',
+        allowsEditing: true,
+        aspect:        [1, 1],
+        quality:       0.8,
+      });
+      if (result.canceled) return;
+      setAvatarUri(result.assets[0].uri);
+    } catch {
+      showToast({ type: 'error', message: 'Could not open your photos. Try again.' });
+    }
+  }, [showToast]);
+
   const validate = useCallback(() => {
     const e = {};
     const username = formData.username.trim();
@@ -134,7 +165,7 @@ export default function SignUpScreen({ navigation }) {
 
     if (!username)                              e.username = 'Pick a name';
     else if (username.length < 3)               e.username = 'At least 3 characters';
-    else if (!ANONYMOUS_NAME_RE.test(username)) e.username = 'Letters, numbers, dots, hyphens, underscores or emoji only';
+    else if (!ANONYMOUS_NAME_RE.test(username)) e.username = 'Letters, numbers, spaces, dots, hyphens, underscores or emoji only';
 
     if (!email)                                 e.email = 'Email is required';
     else if (!EMAIL_REGEX.test(email))          e.email = 'Enter a valid email address';
@@ -179,6 +210,7 @@ export default function SignUpScreen({ navigation }) {
         email:         formData.email.trim().toLowerCase(),
         password:      formData.password,
         date_of_birth: dob,
+        ...(gender ? { gender } : {}),
       })).unwrap();
 
       await authContextLogin(result.token, result.user);
@@ -189,6 +221,24 @@ export default function SignUpScreen({ navigation }) {
       // sees is "0 coins" right after being told they got 1000.
       if (result.user?.coin_balance != null) {
         dispatch(setBalance(result.user.coin_balance));
+      }
+
+      // Optional picture — upload now that we actually have a token. Not
+      // blocking: a failure here shouldn't stop account creation, since
+      // the photo can always be added later from Edit Profile.
+      if (avatarUri) {
+        try {
+          const cloudUrl = await uploadToR2(avatarUri, 'image', 'image/jpeg');
+          await fetch(`${API_BASE_URL}/api/v1/auth/update-profile`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${result.token}` },
+            body:    JSON.stringify({ avatar_url: cloudUrl }),
+          });
+          updateUserProfile?.({ avatar_url: cloudUrl });
+          dispatch(updateReduxUser({ avatar_url: cloudUrl }));
+        } catch {
+          showToast({ type: 'warning', message: 'Account created, but the photo upload failed. Add it later from your profile.' });
+        }
       }
 
       const code = formData.referralCode.trim().toUpperCase();
@@ -241,7 +291,7 @@ export default function SignUpScreen({ navigation }) {
         showToast({ type: 'error', title: 'Signup Failed', message: 'Something went wrong. Please try again.' });
       }
     }
-  }, [formData, validate, dispatch, authContextLogin, showToast, navigation]);
+  }, [formData, avatarUri, validate, dispatch, authContextLogin, updateUserProfile, showToast, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -284,6 +334,53 @@ export default function SignUpScreen({ navigation }) {
               <Text style={styles.subtitle}>No names. No judgment. Just what's real.</Text>
             </View>
 
+            {/* Profile picture (optional) — most users stay faceless */}
+            <View style={styles.avatarSection}>
+              <View style={styles.avatarWrap}>
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={styles.avatarImage} resizeMode="cover" />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <User size={rs(28)} color={THEME.textSecondary} strokeWidth={1.8} />
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.avatarCameraBtn}
+                  onPress={() => (avatarUri ? pickAvatar() : setShowPhotoDisclaimer((d) => !d))}
+                  hitSlop={HIT_SLOP}
+                  activeOpacity={0.85}
+                >
+                  <Camera size={rs(13)} color="#fff" strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.avatarHint}>
+                {avatarUri ? 'tap to change' : 'add a profile picture (optional)'}
+              </Text>
+
+              {showPhotoDisclaimer && !avatarUri && (
+                <View style={styles.photoDisclaimer}>
+                  <Text style={styles.photoDisclaimerTitle}>⚠️  Before you upload</Text>
+                  <Text style={styles.photoDisclaimerBody}>
+                    A real photo makes you identifiable. Anonixx is built for anonymous
+                    expression — most people stay faceless. You can always skip this and
+                    add one later.
+                  </Text>
+                  <View style={styles.photoDisclaimerActions}>
+                    <TouchableOpacity
+                      style={styles.photoDisclaimerConfirm}
+                      onPress={() => { setShowPhotoDisclaimer(false); pickAvatar(); }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.photoDisclaimerConfirmText}>I understand, pick a photo</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setShowPhotoDisclaimer(false)} hitSlop={HIT_SLOP}>
+                      <Text style={styles.photoDisclaimerCancel}>Skip</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+
             {/* Anonymous name (stored as "username" — this is what shows on your posts/comments) */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Anonymous name</Text>
@@ -295,7 +392,7 @@ export default function SignUpScreen({ navigation }) {
                 <User size={ICON.md} color={THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
                 <TextInput
                   value={formData.username}
-                  onChangeText={(v) => updateField('username', v, MAX_USERNAME_LENGTH)}
+                  onChangeText={(v) => updateField('username', normalizeNameSpaces(v), MAX_USERNAME_LENGTH)}
                   onFocus={() => setFocused('username')}
                   onBlur={() => setFocused('')}
                   onSubmitEditing={() => emailRef.current?.focus()}
@@ -488,6 +585,29 @@ export default function SignUpScreen({ navigation }) {
               }
             </View>
 
+            {/* Gender (optional) */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Gender <Text style={styles.labelOptional}>(optional)</Text></Text>
+              <View style={styles.genderRow}>
+                {GENDER_OPTIONS.map((opt) => {
+                  const isSelected = gender === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      onPress={() => setGender(isSelected ? null : opt.id)}
+                      style={[styles.genderChip, isSelected && styles.genderChipSelected]}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.genderChipText, isSelected && styles.genderChipTextSelected]}>
+                        {opt.symbol}{'  '}{opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.fieldHint}>only visible on your anonymous connect profile.</Text>
+            </View>
+
             {/* Referral Code (optional) */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Referral Code <Text style={styles.labelOptional}>(optional)</Text></Text>
@@ -547,7 +667,22 @@ export default function SignUpScreen({ navigation }) {
   );
 }
 
+const GENDER_OPTIONS = [
+  { id: 'male',              label: 'Male',              symbol: '♂' },
+  { id: 'female',            label: 'Female',            symbol: '♀' },
+  { id: 'nonbinary',         label: 'Non-binary',        symbol: '⚧' },
+  { id: 'prefer_not_to_say', label: 'Prefer not to say', symbol: '—' },
+];
+
 const styles = StyleSheet.create({
+  genderRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
+  genderChip: {
+    paddingHorizontal: rp(14), paddingVertical: rp(8), borderRadius: RADIUS.full,
+    backgroundColor: THEME.inputBg, borderWidth: 1, borderColor: THEME.border,
+  },
+  genderChipSelected: { backgroundColor: 'rgba(255,99,74,0.12)', borderColor: 'rgba(255,99,74,0.45)' },
+  genderChipText: { fontSize: rf(13), color: THEME.textSecondary, fontWeight: '500' },
+  genderChipTextSelected: { color: THEME.primary, fontWeight: '700' },
   container:    { flex: 1, backgroundColor: THEME.background },
   glowOrb: {
     position: 'absolute', width: rs(300), height: rs(300),
@@ -566,6 +701,35 @@ const styles = StyleSheet.create({
   header:       { marginBottom: SPACING.xl },
   title:        { fontSize: FONT.hero, fontWeight: '800', fontFamily: 'PlayfairDisplay-Bold', color: THEME.text, letterSpacing: rs(-1), marginBottom: SPACING.sm, lineHeight: FONT.hero * 1.15 },
   subtitle:     { fontSize: FONT.md, fontFamily: 'PlayfairDisplay-Italic', color: THEME.textSecondary, lineHeight: FONT.md * 1.6 },
+
+  // Profile picture (optional)
+  avatarSection:   { alignItems: 'center', marginBottom: SPACING.lg },
+  avatarWrap:      { position: 'relative', width: rs(78), height: rs(78), marginBottom: rp(8) },
+  avatarImage:     { width: '100%', height: '100%', borderRadius: rs(39), borderWidth: rs(1.5), borderColor: THEME.border },
+  avatarPlaceholder: {
+    width: '100%', height: '100%', borderRadius: rs(39),
+    backgroundColor: THEME.inputBg, alignItems: 'center', justifyContent: 'center',
+    borderWidth: rs(1.5), borderColor: THEME.border,
+  },
+  avatarCameraBtn: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: rs(26), height: rs(26), borderRadius: rs(13),
+    backgroundColor: THEME.primary, alignItems: 'center', justifyContent: 'center',
+    borderWidth: rs(2), borderColor: THEME.background,
+  },
+  avatarHint:      { fontSize: rf(11), fontFamily: 'DMSans-Regular', color: THEME.textMuted, fontStyle: 'italic' },
+
+  photoDisclaimer: {
+    marginTop: SPACING.sm, padding: SPACING.md, width: '100%',
+    backgroundColor: 'rgba(251,191,36,0.07)', borderRadius: RADIUS.lg,
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.25)', gap: rp(8),
+  },
+  photoDisclaimerTitle: { fontSize: rf(12), fontWeight: '700', fontFamily: 'DMSans-Bold', color: THEME.text },
+  photoDisclaimerBody:  { fontSize: rf(11), fontFamily: 'DMSans-Regular', color: THEME.textSecondary, lineHeight: rf(16) },
+  photoDisclaimerActions: { gap: rp(8), marginTop: rp(4) },
+  photoDisclaimerConfirm: { backgroundColor: THEME.primary, borderRadius: RADIUS.md, paddingVertical: rp(10), alignItems: 'center' },
+  photoDisclaimerConfirmText: { color: '#fff', fontWeight: '700', fontFamily: 'DMSans-Bold', fontSize: rf(12) },
+  photoDisclaimerCancel: { color: THEME.textSecondary, fontSize: rf(12), fontFamily: 'DMSans-Regular', textAlign: 'center', paddingVertical: rp(4) },
 
   fieldGroup:   { marginBottom: SPACING.md },
   label:        { fontSize: rf(11), fontWeight: '700', fontFamily: 'DMSans-Bold', color: THEME.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase', letterSpacing: rs(1) },

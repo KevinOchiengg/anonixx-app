@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  ArrowLeft, AtSign, Camera, Mail, Save, User,
+  ArrowLeft, AtSign, Camera, Mail, RotateCw, Save, User,
 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchBalance } from '../../store/slices/coinsSlice';
@@ -21,7 +21,7 @@ import {
   BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
 import T from '../../utils/theme';
-import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT } from '../../utils/anonymousName';
+import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT, normalizeNameSpaces } from '../../utils/anonymousName';
 
 // ─── Module-level static data (Rule 5) ───────────────────────
 const GENDER_OPTIONS = [
@@ -108,7 +108,8 @@ export default function EditProfileScreen({ navigation }) {
   }, []);
 
   // ── Anonymous name live check ──────────────────────────────────
-  const handleNameChange = useCallback((text) => {
+  const handleNameChange = useCallback((raw) => {
+    const text = normalizeNameSpaces(raw);
     setAnonymousName(text);
     clearTimeout(nameTimer.current);
     if (!text.trim() || text.trim() === user?.anonymous_name) {
@@ -122,7 +123,18 @@ export default function EditProfileScreen({ navigation }) {
     setNameStatus('checking');
     nameTimer.current = setTimeout(async () => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
+      // The production backend is a free-tier Render service that cold-
+      // starts after being idle — confirmed elsewhere to take 30-45s to
+      // wake up, not the few seconds this used to allow for. 6s meant
+      // anyone hitting a cold backend got aborted before it even
+      // responded, and — the real bug — the failure silently became
+      // nameStatus 'idle', which handleSave treats as "nothing to
+      // block on," not "the check never actually happened." So a failed
+      // check let Save through unchecked instead of stopping it, and the
+      // UI never told the user anything went wrong — it just looked
+      // permanently stuck on "Checking…" until they gave up or retried
+      // and (if the backend had woken up by then) it suddenly resolved.
+      const timeout = setTimeout(() => controller.abort(), 45000);
       try {
         const token = await AsyncStorage.getItem('token');
         const res   = await fetch(
@@ -135,11 +147,24 @@ export default function EditProfileScreen({ navigation }) {
           setNameStatus(data.available ? 'available' : 'taken');
           setNameMessage(data.available ? '' : (data.message || 'Name already taken'));
         } else {
-          setNameStatus('idle');
+          setNameStatus('error');
+          setNameMessage('Could not check — tap to retry');
         }
-      } catch { clearTimeout(timeout); setNameStatus('idle'); }
+      } catch {
+        clearTimeout(timeout);
+        setNameStatus('error');
+        setNameMessage('Could not check — tap to retry');
+      }
     }, 400);
   }, [user?.anonymous_name]);
+
+  // Re-runs the same debounced check without the user needing to edit the
+  // text first — the only way to recover from an 'error' state before now
+  // was to retype something, which isn't obvious when the field already
+  // shows exactly the name you want.
+  const retryNameCheck = useCallback(() => {
+    if (anonymousName) handleNameChange(anonymousName);
+  }, [anonymousName, handleNameChange]);
 
   // ── Pick avatar (Rule 7, Rule 2, Rule 3, Rule 10) ─────────────
   const pickAvatar = useCallback(async () => {
@@ -198,6 +223,13 @@ export default function EditProfileScreen({ navigation }) {
     }
     if (nameStatus === 'checking') {
       showToast({ type: 'info', message: 'Still checking name availability…' });
+      return;
+    }
+    // A failed/timed-out check used to silently fall back to 'idle',
+    // which this function treats as "nothing to block on" — letting Save
+    // through without the name ever actually being confirmed available.
+    if (nameStatus === 'error') {
+      showToast({ type: 'warning', message: 'Could not confirm that name is available. Try again.' });
       return;
     }
 
@@ -374,6 +406,7 @@ export default function EditProfileScreen({ navigation }) {
               nameStatus === 'available' ? '✓ Available' :
               nameStatus === 'taken'     ? '✗ ' + nameMessage :
               nameStatus === 'invalid'   ? '✗ ' + nameMessage :
+              nameStatus === 'error'     ? '⚠ ' + nameMessage :
               nameStatus === 'checking'  ? 'Checking…' :
               'how the void knows you — changeable every 30 days'
             }
@@ -382,6 +415,7 @@ export default function EditProfileScreen({ navigation }) {
               styles.inputRow,
               nameStatus === 'available' && { borderColor: '#10B981' },
               (nameStatus === 'taken' || nameStatus === 'invalid') && { borderColor: '#EF4444' },
+              nameStatus === 'error' && { borderColor: '#F59E0B' },
             ]}>
               <User size={rs(16)} color={T.textSecondary} strokeWidth={1.8} />
               <TextInput
@@ -396,6 +430,11 @@ export default function EditProfileScreen({ navigation }) {
               {nameStatus === 'checking'  && <ActivityIndicator size="small" color={T.primary} />}
               {nameStatus === 'available' && <Text style={{ color: '#10B981', fontWeight: '800', fontSize: rf(16) }}>✓</Text>}
               {(nameStatus === 'taken' || nameStatus === 'invalid') && <Text style={{ color: '#EF4444', fontWeight: '800', fontSize: rf(16) }}>✗</Text>}
+              {nameStatus === 'error' && (
+                <TouchableOpacity onPress={retryNameCheck} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <RotateCw size={rs(16)} color="#F59E0B" strokeWidth={2} />
+                </TouchableOpacity>
+              )}
             </View>
           </FieldCard>
 

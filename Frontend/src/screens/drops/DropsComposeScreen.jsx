@@ -22,7 +22,7 @@ import React, {
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Switch,
   ActivityIndicator, Dimensions, Keyboard, KeyboardAvoidingView,
-  Platform, ScrollView, Animated, Modal,
+  Platform, ScrollView, Animated, Modal, Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,7 +32,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
-  MapPin, UserPlus, Sparkles, Share2, Shuffle,
+  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send,
 } from 'lucide-react-native';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
@@ -71,7 +71,7 @@ const DRAFT_KEY = 'anonixx.drops.draft.v1';
 const TOOLBAR_HINT_KEY = 'anonixx.drops.toolbarHint.seen';
 
 // Must match DROP_POST_COST in Backend/app/api/v1/drops.py
-const POST_COST = 10;
+const POST_COST = 3;
 
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
 const HINT_MAX = 16;
@@ -229,7 +229,8 @@ function OptionSheet({ visible, title, onClose, children }) {
 export default function DropsComposeScreen({ navigation, route }) {
   const { showToast } = useToast();
   const dispatch = useDispatch();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const isAdmin = !!user?.is_admin;
   const coinBalance = useSelector((state) => state.coins.balance);
 
   // Fresh balance so the cost line below isn't showing stale/zero numbers —
@@ -275,6 +276,11 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [promptIndex, setPromptIndex] = useState(() => Math.floor(Math.random() * 4));
   const [mediaUri, setMediaUri] = useState(null);
   const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
+  // Additional photos beyond mediaUri when the user picks more than one —
+  // together [mediaUri, ...extraImageUris] become the drop's `images`
+  // array, rendered as swipeable slides in the feed. Stays empty for the
+  // ordinary single photo/video/text drop.
+  const [extraImageUris, setExtraImageUris] = useState([]);
   const [loading,  setLoading]  = useState(false);
 
   // ── Tag a specific user (optional — drop still hits marketplace) ─
@@ -405,7 +411,10 @@ export default function DropsComposeScreen({ navigation, route }) {
     }
   }, [navigation, theme, moodTag, text, taggedUser]);
 
-  // ── Media pick — one picker, either photos or videos ──────────
+  // ── Media pick — one picker, photos (one or several) or a single video.
+  // Picking more than one asset only makes sense for photos — a multi-
+  // image drop renders as swipeable slides in the feed (see `images` on
+  // CreateDropRequest, Backend/app/api/v1/drops.py); videos stay single. ─
   const handlePickMedia = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -414,23 +423,42 @@ export default function DropsComposeScreen({ navigation, route }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:    ['images', 'videos'],
-        quality:       0.85,
-        allowsEditing: false,
+        mediaTypes:           ['images', 'videos'],
+        quality:              0.85,
+        allowsEditing:        false,
+        allowsMultipleSelection: true,
+        selectionLimit:       10,
       });
       if (result.canceled) return;
-      const asset = result.assets[0];
-      const kind = asset.type === 'video' ? 'video' : 'image';
-      // Library picks aren't length-limited by the OS the way camera
-      // recording is (ImagePicker's videoMaxDuration only constrains
-      // launchCameraAsync) — so an existing long video has to be rejected
-      // here, after the fact, instead of prevented at pick time.
-      if (kind === 'video' && (asset.duration || 0) / 1000 > MAX_VIDEO_SECONDS) {
-        showToast({ type: 'warning', message: `Videos must be ${MAX_VIDEO_SECONDS}s or shorter.` });
+
+      if (result.assets.length === 1) {
+        const asset = result.assets[0];
+        const kind = asset.type === 'video' ? 'video' : 'image';
+        // Library picks aren't length-limited by the OS the way camera
+        // recording is (ImagePicker's videoMaxDuration only constrains
+        // launchCameraAsync) — so an existing long video has to be
+        // rejected here, after the fact, instead of prevented at pick time.
+        if (kind === 'video' && (asset.duration || 0) / 1000 > MAX_VIDEO_SECONDS) {
+          showToast({ type: 'warning', message: `Videos must be ${MAX_VIDEO_SECONDS}s or shorter.` });
+          return;
+        }
+        setMediaUri(asset.uri);
+        setMediaKind(kind);
+        setExtraImageUris([]);
         return;
       }
-      setMediaUri(asset.uri);
-      setMediaKind(kind);
+
+      // Multiple selected — a mixed photo/video multi-select doesn't map
+      // to anything postable, so videos are silently dropped from the
+      // selection rather than blocking the whole pick.
+      const photoUris = result.assets.filter((a) => a.type !== 'video').map((a) => a.uri).slice(0, 10);
+      if (photoUris.length < 2) {
+        showToast({ type: 'warning', message: 'Pick at least 2 photos for a multi-photo drop.' });
+        return;
+      }
+      setMediaUri(photoUris[0]);
+      setMediaKind('image');
+      setExtraImageUris(photoUris.slice(1));
     } catch {
       showToast({ type: 'error', message: 'Could not open gallery.' });
     }
@@ -439,6 +467,11 @@ export default function DropsComposeScreen({ navigation, route }) {
   const handleClearMedia = useCallback(() => {
     setMediaUri(null);
     setMediaKind(null);
+    setExtraImageUris([]);
+  }, []);
+
+  const handleRemoveExtraImage = useCallback((uri) => {
+    setExtraImageUris((prev) => prev.filter((u) => u !== uri));
   }, []);
 
   // ── Discard draft ─────────────────────────────────────────────
@@ -487,10 +520,18 @@ export default function DropsComposeScreen({ navigation, route }) {
       // media_url never reaches the server and the drop silently posts
       // as text-only.
       let uploadedMediaUrl = null;
+      let uploadedImageUrls = null;
       if (mediaKind && mediaUri) {
         const isVideo = mediaKind === 'video';
         const mime = isVideo ? (Platform.OS === 'ios' ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
         uploadedMediaUrl = await uploadToR2(mediaUri, mediaKind, mime);
+
+        if (!isVideo && extraImageUris.length) {
+          const rest = await Promise.all(
+            extraImageUris.map((uri) => uploadToR2(uri, 'image', 'image/jpeg'))
+          );
+          uploadedImageUrls = [uploadedMediaUrl, ...rest];
+        }
       }
 
       // Single-word hint — strip spaces, keep lowercase, cap at HINT_MAX.
@@ -514,7 +555,9 @@ export default function DropsComposeScreen({ navigation, route }) {
         ...(taggedUser ? { target_user_id: taggedUser.id } : {}),
         // Tri-state server-side: explicit false is the only way to opt out.
         publisher_opt_in: !!publisherOptIn,
-        ...(mediaKind && mediaUri ? { media_type: mediaKind, media_url: uploadedMediaUrl } : {}),
+        ...(uploadedImageUrls
+          ? { images: uploadedImageUrls }
+          : (mediaKind && mediaUri ? { media_type: mediaKind, media_url: uploadedMediaUrl } : {})),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
         ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
@@ -582,7 +625,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    format, text, mediaUri, mediaKind, theme, cardIntent, moodTag,
+    format, text, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
     dispatch, navigation, showToast,
@@ -612,8 +655,12 @@ export default function DropsComposeScreen({ navigation, route }) {
             <ChevronLeft size={rs(24)} color={T.text} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Drop</Text>
-          {/* Balances the back-chevron so the title stays centered */}
-          <View style={{ width: rs(24) }} />
+          <TouchableOpacity
+            onPress={() => navigation.navigate('WhatsAppSend', { text })}
+            hitSlop={HIT_SLOP}
+          >
+            <Send size={rs(20)} color={T.text} />
+          </TouchableOpacity>
         </View>
 
         {/* Cost — shown up front, not just on the send button, so nobody
@@ -749,6 +796,7 @@ export default function DropsComposeScreen({ navigation, route }) {
                 Details accordion and Location chip — same features, one
                 row, now built into the card instead of floating below it. */}
             <View style={s.toolbar}>
+            {isAdmin && (
             <ToolIcon
               active={!!mediaUri}
               onPress={() => { dismissToolbarHint(); mediaUri ? handleClearMedia() : handlePickMedia(); }}
@@ -759,6 +807,7 @@ export default function DropsComposeScreen({ navigation, route }) {
                 ? <X size={rs(18)} color={T.primary} />
                 : <Images size={rs(18)} color={T.textMute} />}
             </ToolIcon>
+            )}
 
             <ToolIcon
               onPress={() => { dismissToolbarHint(); setActiveSheet('intent'); }}
@@ -786,6 +835,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               <MapPin size={rs(18)} color={locationSummary ? T.primary : T.textMute} />
             </ToolIcon>
 
+            {isAdmin && (
             <ToolIcon
               onPress={() => { dismissToolbarHint(); handleFormatChange('voice'); }}
               label="Voice"
@@ -793,14 +843,21 @@ export default function DropsComposeScreen({ navigation, route }) {
             >
               <Mic size={rs(18)} color={T.textMute} />
             </ToolIcon>
+            )}
 
-            <ToolIcon
-              onPress={() => { dismissToolbarHint(); handleFormatChange('poll'); }}
-              label="Poll"
-              a11yLabel="Make this a poll instead"
-            >
-              <BarChart2 size={rs(18)} color={T.textMute} />
-            </ToolIcon>
+            {/* Polls are an official Anonixx feature, not a regular-user
+                confession format — kept scarce/credible in the feed
+                instead of every drop becoming a poll (enforced server-
+                side too; see create_drop in Backend/app/api/v1/drops.py). */}
+            {isAdmin && (
+              <ToolIcon
+                onPress={() => { dismissToolbarHint(); handleFormatChange('poll'); }}
+                label="Poll"
+                a11yLabel="Make this a poll instead"
+              >
+                <BarChart2 size={rs(18)} color={T.textMute} />
+              </ToolIcon>
+            )}
 
             <ToolIcon
               active={!publisherOptIn}
@@ -812,6 +869,34 @@ export default function DropsComposeScreen({ navigation, route }) {
             </ToolIcon>
             </View>
           </Animated.View>
+
+          {/* Extra photos strip — shown once a multi-photo pick adds more
+              than the one already previewed on the card above. Each tile
+              removable on its own; removing all of them collapses back to
+              the ordinary single-photo drop. */}
+          {extraImageUris.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={s.extraImagesStrip}
+              contentContainerStyle={s.extraImagesStripContent}
+            >
+              {extraImageUris.map((uri) => (
+                <View key={uri} style={s.extraImageTile}>
+                  <Image source={{ uri }} style={s.extraImageThumb} />
+                  <TouchableOpacity
+                    style={s.extraImageRemove}
+                    onPress={() => handleRemoveExtraImage(uri)}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.85}
+                  >
+                    <X size={rs(10)} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <Text style={s.extraImagesCount}>{extraImageUris.length + 1} photos</Text>
+            </ScrollView>
+          )}
 
           {/* Character count, text format only */}
           {format === 'text' && (
@@ -1093,6 +1178,20 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems:      'center',
     justifyContent:  'center',
+  },
+
+  // Extra photos strip (multi-photo pick)
+  extraImagesStrip: { marginBottom: SPACING.sm },
+  extraImagesStripContent: { gap: rp(8), alignItems: 'center', paddingVertical: rp(2) },
+  extraImageTile: { position: 'relative', width: rs(52), height: rs(52) },
+  extraImageThumb: { width: '100%', height: '100%', borderRadius: RADIUS.sm },
+  extraImageRemove: {
+    position: 'absolute', top: rp(-5), right: rp(-5),
+    width: rs(18), height: rs(18), borderRadius: rs(9),
+    backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center',
+  },
+  extraImagesCount: {
+    fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.textMute, marginLeft: rp(4),
   },
 
   // Text meta row — sits under the card now that typing happens on it directly

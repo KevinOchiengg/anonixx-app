@@ -77,7 +77,7 @@ const PRIVACY = {
     },
     {
       heading: '5. Coins & Payments',
-      body: 'Payment processing is handled by Stripe, M-Pesa, or PayPal. We receive confirmation of payment but do not store full card or mobile money details on our servers.',
+      body: 'On Android, purchases are processed by Google Play. Elsewhere, payment is handled by Stripe, M-Pesa, or PayPal. We receive confirmation of payment but do not store full card or mobile money details on our servers.',
     },
     {
       heading: '6. Third-Party Services',
@@ -121,10 +121,6 @@ const GUIDELINES = {
     {
       heading: 'Drops',
       body: 'Revealing someone\'s identity in Drops uses real coins. Do not use that context to harm, expose, or target the person outside Anonixx.',
-    },
-    {
-      heading: 'Circles: Audio Rooms',
-      body: 'In live audio sessions, speak as you would in a group therapy setting — honestly, but without using air time to center or attack specific people.',
     },
     {
       heading: 'Spam and Inauthenticity',

@@ -13,11 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useStripe } from '@stripe/stripe-react-native'
 
-import { ArrowLeft, Check, Crown, EyeOff, Coins, TrendingUp, Clock3 } from 'lucide-react-native'
+import { ArrowLeft, Check, Crown, EyeOff, Coins, Clock3 } from 'lucide-react-native'
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive'
 import { useToast } from '../../components/ui/Toast'
 import { API_BASE_URL } from '../../config/api'
 import T from '../../utils/theme'
+import { USE_PLAY_BILLING, buyPremium, fetchPremiumPrice, syncPremium, isCancelled } from '../../utils/playBilling'
 
 // Mirrors the real perk math in Backend/app/api/v1/drops.py (unlock_cost_for
 // / unlock_reward_for / grace_days_for) and the ad-free check in ads.py's
@@ -33,13 +34,8 @@ const FEATURES = [
   },
   {
     icon: Coins,
-    title: 'Cheaper to link up',
-    body: '25 coins instead of 50 to unlock and connect with someone.',
-  },
-  {
-    icon: TrendingUp,
-    title: 'You earn more, too',
-    body: '10 coins (not 5) every time someone unlocks one of your drops.',
+    title: 'Unlock and post for free',
+    body: 'No coins spent on unlocks or confessions for the whole month.',
   },
   {
     icon: Clock3,
@@ -52,9 +48,7 @@ const FEATURES = [
 // picker instantly; /premium/plans (fetched on mount) is the source of truth
 // for what actually gets charged.
 const FALLBACK_PLANS = [
-  { id: 'monthly',   label: '1 Month',  usd_display: '$9.99',  save: null },
-  { id: 'quarterly', label: '3 Months', usd_display: '$24.99', save: '17%' },
-  { id: 'yearly',    label: '1 Year',   usd_display: '$79.99', save: '33%' },
+  { id: 'monthly', label: '1 Month', kes: 999, usd_display: '$9.99', save: null },
 ]
 
 const PAYMENT_METHODS = [
@@ -219,6 +213,38 @@ const StripeForm = React.memo(({ planId, onSuccess, onError }) => {
   )
 })
 
+// ─── Google Play subscription ───────────────────────────────────────────────
+const PlayForm = React.memo(({ price, onSuccess, onError }) => {
+  const [loading, setLoading] = useState(false)
+
+  const handlePay = useCallback(async () => {
+    setLoading(true)
+    try {
+      await buyPremium()
+      onSuccess()
+    } catch (err) {
+      if (!isCancelled(err)) onError(err.message || 'Purchase failed. Try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [onSuccess, onError])
+
+  return (
+    <View style={styles.formGap}>
+      <TouchableOpacity
+        onPress={handlePay}
+        style={[styles.payBtn, { backgroundColor: T.primary }]}
+        disabled={loading}
+        activeOpacity={0.85}
+      >
+        {loading
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={styles.payBtnText}>{price ? `Subscribe · ${price}/month` : 'Subscribe'}</Text>}
+      </TouchableOpacity>
+    </View>
+  )
+})
+
 // ─── Success overlay ────────────────────────────────────────────────────────
 const SuccessOverlay = React.memo(({ onContinue }) => {
   const scale = useRef(new Animated.Value(0.5)).current
@@ -248,9 +274,16 @@ const SuccessOverlay = React.memo(({ onContinue }) => {
 export default function PremiumScreen({ navigation }) {
   const { showToast } = useToast()
   const [plans, setPlans] = useState(FALLBACK_PLANS)
-  const [selectedPlan, setSelectedPlan] = useState('quarterly')
+  const [selectedPlan, setSelectedPlan] = useState('monthly')
   const [method, setMethod] = useState('mpesa')
   const [success, setSuccess] = useState(false)
+  const [playPrice, setPlayPrice] = useState(null)
+
+  useEffect(() => {
+    if (!USE_PLAY_BILLING) return
+    fetchPremiumPrice().then(setPlayPrice).catch(() => {})
+    syncPremium().catch(() => {})
+  }, [])
 
   useEffect(() => {
     (async () => {
@@ -321,7 +354,7 @@ export default function PremiumScreen({ navigation }) {
             )}
             <View style={styles.planInfo}>
               <Text style={styles.planName}>{plan.label}</Text>
-              <Text style={styles.planPrice}>{plan.usd_display}</Text>
+              <Text style={styles.planPrice}>{USE_PLAY_BILLING && playPrice ? playPrice : plan.usd_display}</Text>
             </View>
             {selectedPlan === plan.id && (
               <View style={styles.selectedIndicator}>
@@ -331,8 +364,8 @@ export default function PremiumScreen({ navigation }) {
           </TouchableOpacity>
         ))}
 
-        <Text style={styles.sectionLabel}>Pay with</Text>
-        <View style={styles.methodRow}>
+        {!USE_PLAY_BILLING && <Text style={styles.sectionLabel}>Pay with</Text>}
+        {!USE_PLAY_BILLING && <View style={styles.methodRow}>
           {PAYMENT_METHODS.map((m) => (
             <TouchableOpacity
               key={m.id}
@@ -344,17 +377,21 @@ export default function PremiumScreen({ navigation }) {
               <Text style={[styles.methodLabel, method === m.id && { color: T.text }]}>{m.label}</Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </View>}
 
         <View style={styles.formContainer}>
-          {method === 'mpesa'
-            ? <MpesaForm planId={selectedPlan} onSuccess={handleSuccess} onError={handleError} />
-            : <StripeForm planId={selectedPlan} onSuccess={handleSuccess} onError={handleError} />
+          {USE_PLAY_BILLING
+            ? <PlayForm price={playPrice} onSuccess={handleSuccess} onError={handleError} />
+            : method === 'mpesa'
+              ? <MpesaForm planId={selectedPlan} onSuccess={handleSuccess} onError={handleError} />
+              : <StripeForm planId={selectedPlan} onSuccess={handleSuccess} onError={handleError} />
           }
         </View>
 
         <Text style={styles.disclaimer}>
-          Cancel anytime. Subscription will auto-renew.
+          {USE_PLAY_BILLING
+            ? 'Renews monthly until cancelled. Manage or cancel anytime in Google Play > Payments & subscriptions > Subscriptions.'
+            : 'Cancel anytime. Subscription will auto-renew.'}
         </Text>
       </ScrollView>
     </SafeAreaView>

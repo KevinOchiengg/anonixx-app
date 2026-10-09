@@ -1,8 +1,7 @@
 /**
  * FeedAdCard.jsx
- * Sponsored/house ad injected between posts in the main feed.
- * Mirrors the AdCard used inside a Circle's feed (CircleContentScreen.jsx),
- * restyled to match the main feed's card language (see MarketCard.jsx).
+ * Sponsored/house ad injected between posts in the main feed,
+ * styled to match the main feed's card language (see MarketCard.jsx).
  *
  * Renders whichever media type the creator picked (image/gif/video/audio —
  * see CreateAdScreen.jsx). Video autoplays muted+looped as a preview, same

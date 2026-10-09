@@ -22,10 +22,16 @@ const EMOJI_RANGES = [
 // (flags, skin-tone modifiers, family emoji) to render as one glyph.
 const JOINERS = String.fromCodePoint(0xfe0f) + String.fromCodePoint(0x200d);
 
+const CHARS = `[a-zA-Z0-9._\\-${EMOJI_RANGES}${JOINERS}]`;
+
+// Single spaces allowed between parts ("Sweet Spot"); total length 3-30.
 export const ANONYMOUS_NAME_RE = new RegExp(
-  `^[a-zA-Z0-9._\\-${EMOJI_RANGES}${JOINERS}]{3,30}$`,
+  `^(?=.{3,30}$)${CHARS}+(?: ${CHARS}+)*$`,
   'u'
 );
 
+// Collapse runs of spaces so "Sweet   Spot" becomes "Sweet Spot" while typing.
+export const normalizeNameSpaces = (v) => v.replace(/ {2,}/g, ' ');
+
 export const ANONYMOUS_NAME_HINT =
-  'Letters, numbers, dots, hyphens, underscores or emoji, 3–30 characters.';
+  'Letters, numbers, spaces, dots, hyphens, underscores or emoji, 3–30 characters.';

@@ -8,8 +8,8 @@
  * flow is simpler — sign, then PUT the raw file — so this consolidates it
  * into one place instead of the half-dozen near-identical copies that had
  * drifted apart across DropsComposeScreen, DropChatScreen,
- * CommentBottomSheet, DropsRecordScreen, DropsPollScreen, PostUnlockScreen,
- * and CircleContentScreen.
+ * CommentBottomSheet, DropsRecordScreen, DropsPollScreen, and
+ * PostUnlockScreen.
  *
  * Direct-to-storage only (matches the old /upload/sign path) — the file
  * goes straight from the device to R2, never through our server. For the

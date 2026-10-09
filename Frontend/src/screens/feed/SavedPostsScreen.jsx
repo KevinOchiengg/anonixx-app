@@ -147,26 +147,9 @@ export default function SavedPostsScreen({ navigation }) {
     loadSavedPosts();
   }, [loadSavedPosts]);
 
-  const handlePostPress = useCallback((post) => {
-    // Saved-drop entries are a minimal shape (id/confession/media/mood_tag) —
-    // DropDetailScreen expects the fuller feed-item shape, so map field
-    // names across; missing engagement fields (likes/thread count etc.)
-    // default in and self-correct the moment the user interacts, same as
-    // the old SavedPostsScreen → PostDetailScreen gap this mirrors.
-    navigation.navigate('DropDetail', {
-      post: {
-        id:        post.id,
-        content:   post.confession,
-        media_url: post.media_url,
-        media_type: post.media_type,
-        mood_tag:  post.mood_tag,
-      },
-    });
-  }, [navigation]);
-
   const renderItem = useCallback(({ item }) => (
-    <PostCard post={item} onPress={() => handlePostPress(item)} />
-  ), [handlePostPress]);
+    <PostCard post={item} />
+  ), []);
 
   const keyExtractor = useCallback((item) => String(item.id ?? item._id), []);
 

@@ -15,6 +15,7 @@ function Loading() {
 }
 
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
+import DeleteAccountScreen from '../screens/settings/DeleteAccountScreen';
 import CoinsScreen from '../screens/profile/CoinsScreen';
 import ReferralScreen from '../screens/profile/ReferralScreen';
 import LegalScreen from '../screens/settings/LegalScreen';
@@ -38,11 +39,16 @@ import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminModerationScreen from '../screens/admin/AdminModerationScreen';
 import AdminDeceptionReportsScreen from '../screens/admin/AdminDeceptionReportsScreen';
 import AdminAdsScreen from '../screens/admin/AdminAdsScreen';
+import AdminPostsScreen from '../screens/admin/AdminPostsScreen';
+import AdminRefundsScreen from '../screens/admin/AdminRefundsScreen';
+import AdminSupportScreen from '../screens/admin/AdminSupportScreen';
+import SupportChatScreen from '../screens/support/SupportChatScreen';
 import CreateAdScreen from '../screens/feed/CreateAdScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
 import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
 import DropsPollScreen from '../screens/drops/DropsPollScreen';
+import WhatsAppSendScreen from '../screens/drops/WhatsAppSendScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
 
@@ -62,6 +68,7 @@ const linking = {
   ],
   config: {
     screens: {
+      Main: { screens: { Feed: { screens: { FeedSwipe: 'drop/:dropId' } } } },
       DropChat:              'drop-chat/:connectionId',
       UnlockRequestsScreen:  'unlock-requests',
       VibeScore:             'vibe',
@@ -105,6 +112,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
         <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />
         <Stack.Screen name="DropsPoll" component={DropsPollScreen} />
+        <Stack.Screen name="WhatsAppSend" component={WhatsAppSendScreen} />
         <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
         <Stack.Screen name="PostUnlock" component={PostUnlockScreen} />
         <Stack.Screen name="UnlockWaitingScreen" component={UnlockWaitingScreen} />
@@ -114,12 +122,17 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
         <Stack.Screen name="AdminDeceptionReports" component={AdminDeceptionReportsScreen} />
         <Stack.Screen name="AdminAds"        component={AdminAdsScreen} />
+        <Stack.Screen name="AdminPosts"      component={AdminPostsScreen} />
+        <Stack.Screen name="AdminRefunds"    component={AdminRefundsScreen} />
+        <Stack.Screen name="AdminSupport"    component={AdminSupportScreen} />
+        <Stack.Screen name="SupportChat"     component={SupportChatScreen} />
         <Stack.Screen name="CreateAd"        component={CreateAdScreen} />
         {/* Accessible from HamburgerMenu across all tabs */}
         <Stack.Screen name="Settings"       component={SettingsScreen} />
         <Stack.Screen name="EditProfile"    component={EditProfileScreen} />
         <Stack.Screen name="Dashboard"      component={DashboardScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+        <Stack.Screen name="DeleteAccount"  component={DeleteAccountScreen} />
         <Stack.Screen name="SavedDrops"     component={SavedPostsScreen} />
         <Stack.Screen name="Coins"          component={CoinsScreen} />
         <Stack.Screen name="Referral"       component={ReferralScreen} />

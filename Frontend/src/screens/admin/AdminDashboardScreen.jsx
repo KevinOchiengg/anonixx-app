@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Users, Flag, DollarSign, TrendingUp, Megaphone, AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, Users, Flag, TrendingUp, Megaphone, AlertTriangle, FileText, MessageCircle, RotateCcw } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -33,6 +33,7 @@ export default function AdminDashboardScreen({ navigation }) {
   const { showToast } = useToast();
   const [stats, setStats]     = useState(null);
   const [revenue, setRevenue] = useState(null);
+  const [role, setRole]       = useState({ is_super_admin: false });
   const [loading, setLoading] = useState(true);
   const pollRef = useRef(null);
 
@@ -44,9 +45,10 @@ export default function AdminDashboardScreen({ navigation }) {
   const loadStats = useCallback(async (silent = false) => {
     try {
       const headers = await authHeaders();
-      const [statsRes, revRes] = await Promise.all([
+      const [statsRes, revRes, meRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v1/admin/stats`, { headers }),
         fetch(`${API_BASE_URL}/api/v1/admin/revenue`, { headers }),
+        fetch(`${API_BASE_URL}/api/v1/admin/me`, { headers }),
       ]);
       if (statsRes.status === 403) {
         showToast({ type: 'error', message: 'Admin access required.' });
@@ -55,6 +57,7 @@ export default function AdminDashboardScreen({ navigation }) {
       }
       if (statsRes.ok) setStats(await statsRes.json());
       if (revRes.ok) setRevenue(await revRes.json());
+      if (meRes.ok) setRole(await meRes.json());
     } catch {
       if (!silent) showToast({ type: 'error', message: 'Could not load dashboard.' });
     } finally {
@@ -82,7 +85,7 @@ export default function AdminDashboardScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} style={s.headerBtn}>
           <ArrowLeft size={rs(20)} color={T.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Admin</Text>
+        <Text style={s.headerTitle}>{role.is_super_admin ? 'Super admin' : 'Admin'}</Text>
         <View style={s.headerBtn} />
       </View>
 
@@ -113,14 +116,46 @@ export default function AdminDashboardScreen({ navigation }) {
           <StatCard label="Banned" value={stats?.users?.banned ?? 0} />
           <StatCard label="Verified" value={stats?.users?.verified ?? 0} />
           <StatCard label="Total drops" value={stats?.content?.total_drops ?? 0} sub={`${stats?.content?.drops_today ?? 0} today`} />
+          <StatCard label="Open chats" value={stats?.support?.open_conversations ?? 0} />
+          <StatCard label="Refunds" value={stats?.support?.pending_refunds ?? 0} sub="pending" />
         </View>
 
         {/* Nav */}
-        <TouchableOpacity style={s.navCard} onPress={() => navigation.navigate('AdminUsers')} activeOpacity={0.85}>
+        <TouchableOpacity style={s.navCard} onPress={() => navigation.navigate('AdminUsers', { isSuper: !!role.is_super_admin })} activeOpacity={0.85}>
           <Users size={rs(20)} color={T.primary} />
           <View style={{ flex: 1 }}>
             <Text style={s.navCardTitle}>Users</Text>
-            <Text style={s.navCardDesc}>Search, ban, verify, grant admin, adjust coins</Text>
+            <Text style={s.navCardDesc}>
+              {role.is_super_admin ? 'Search, ban, delete, verify, grant admin, adjust coins' : 'Search, ban, verify'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={s.navCard} onPress={() => navigation.navigate('AdminPosts')} activeOpacity={0.85}>
+          <FileText size={rs(20)} color={T.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.navCardTitle}>Posts</Text>
+            <Text style={s.navCardDesc}>Browse, search and delete any post</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={s.navCard} onPress={() => navigation.navigate('AdminSupport')} activeOpacity={0.85}>
+          <MessageCircle size={rs(20)} color={T.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.navCardTitle}>Customer support</Text>
+            <Text style={s.navCardDesc}>Chat with users who wrote in</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={s.navCard}
+          onPress={() => navigation.navigate('AdminRefunds', { isSuper: !!role.is_super_admin })}
+          activeOpacity={0.85}
+        >
+          <RotateCcw size={rs(20)} color={T.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.navCardTitle}>Refund requests</Text>
+            <Text style={s.navCardDesc}>{role.is_super_admin ? 'Accept or reject coin refunds' : 'View — a super admin decides'}</Text>
           </View>
         </TouchableOpacity>
 

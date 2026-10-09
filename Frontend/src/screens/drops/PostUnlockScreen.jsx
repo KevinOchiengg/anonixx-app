@@ -25,7 +25,7 @@ import { fetchBalance } from '../../store/slices/coinsSlice';
 import { uploadToR2 } from '../../utils/upload';
 
 // Must match COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
-const UNLOCK_COST = 50;
+const UNLOCK_COST = 6;
 // Must match MAX_REQUEST_VIDEO_SECONDS in Backend/app/api/v1/unlock_requests.py
 const MAX_CLUE_VIDEO_SECONDS = 30;
 
@@ -144,13 +144,13 @@ export default function PostUnlockScreen({ route, navigation }) {
 
       const requestId = res.ok ? data.request_id : data?.detail?.request_id;
       if (requestId) {
-        navigation.replace('UnlockWaitingScreen', {
-          requestId,
-          targetType,
-          targetId,
-          ownerAnonymousName: displayName,
-          confessionSnippet: displayText,
+        showToast({
+          type: 'success',
+          title: 'Unlock sent.',
+          message: `We'll notify you when ${displayName || 'they'} responds.`,
         });
+        dispatch(fetchBalance());
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         return;
       }
 
@@ -165,7 +165,7 @@ export default function PostUnlockScreen({ route, navigation }) {
     } finally {
       setUnlocking(false);
     }
-  }, [unlocking, targetType, targetId, displayName, displayText, mediaUri, mediaType, mediaDuration, navigation, showToast]);
+  }, [unlocking, targetType, targetId, displayName, displayText, mediaUri, mediaType, mediaDuration, navigation, showToast, dispatch]);
 
   const canAfford = coinBalance >= UNLOCK_COST;
 

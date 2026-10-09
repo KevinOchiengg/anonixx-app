@@ -8,46 +8,56 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, Modal,
+  ActivityIndicator, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Search, ShieldCheck, ShieldOff, BadgeCheck, Coins, X } from 'lucide-react-native';
+import { ArrowLeft, Search, ShieldCheck, ShieldOff, BadgeCheck, Coins, Trash2, X } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 
-const UserRow = React.memo(({ item, onBan, onVerify, onAdmin, onAdjustCoins }) => (
+const UserRow = React.memo(({ item, isSuper, onBan, onVerify, onAdmin, onAdjustCoins, onDelete }) => (
   <View style={s.userCard}>
     <View style={{ flex: 1 }}>
       <Text style={s.userName}>{item.anonymous_name || item.username || item.email}</Text>
       <Text style={s.userMeta}>
         {item.email} · {item.coin_balance} coins
-        {item.is_admin ? ' · admin' : ''}
+        {item.is_super_admin ? ' · super admin' : item.is_admin ? ' · admin' : ''}
         {item.is_verified ? ' · verified' : ''}
         {!item.is_active ? ' · BANNED' : ''}
       </Text>
     </View>
     <View style={s.userActions}>
-      <TouchableOpacity onPress={() => onAdjustCoins(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
-        <Coins size={rs(15)} color={T.textSecondary} />
-      </TouchableOpacity>
+      {isSuper && (
+        <TouchableOpacity onPress={() => onAdjustCoins(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
+          <Coins size={rs(15)} color={T.textSecondary} />
+        </TouchableOpacity>
+      )}
       <TouchableOpacity onPress={() => onVerify(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
         <BadgeCheck size={rs(15)} color={item.is_verified ? T.primary : T.textSecondary} />
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => onAdmin(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
-        <ShieldCheck size={rs(15)} color={item.is_admin ? T.primary : T.textSecondary} />
-      </TouchableOpacity>
+      {isSuper && (
+        <TouchableOpacity onPress={() => onAdmin(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
+          <ShieldCheck size={rs(15)} color={item.is_admin ? T.primary : T.textSecondary} />
+        </TouchableOpacity>
+      )}
       <TouchableOpacity onPress={() => onBan(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
         <ShieldOff size={rs(15)} color={item.is_active ? T.textSecondary : '#EF4444'} />
       </TouchableOpacity>
+      {isSuper && (
+        <TouchableOpacity onPress={() => onDelete(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
+          <Trash2 size={rs(15)} color="#EF4444" />
+        </TouchableOpacity>
+      )}
     </View>
   </View>
 ));
 
-export default function AdminUsersScreen({ navigation }) {
+export default function AdminUsersScreen({ navigation, route }) {
+  const isSuper = !!route.params?.isSuper;
   const { showToast } = useToast();
   const [users, setUsers]     = useState([]);
   const [query, setQuery]     = useState('');
@@ -106,6 +116,32 @@ export default function AdminUsersScreen({ navigation }) {
   const handleBan = useCallback((user) => patchUser(user.id, 'ban'), [patchUser]);
   const handleVerify = useCallback((user) => patchUser(user.id, 'verify'), [patchUser]);
   const handleAdmin = useCallback((user) => patchUser(user.id, 'admin'), [patchUser]);
+
+  const doDelete = useCallback(async (user) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users/${user.id}`, {
+        method: 'DELETE',
+        headers: await authHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== user.id));
+        showToast({ type: 'success', message: `Deleted. ${data.drops_deleted} posts removed.` });
+      } else {
+        showToast({ type: 'error', message: data.detail || 'Could not delete user.' });
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Could not delete user. Try again.' });
+    }
+  }, [authHeaders, showToast]);
+
+  const handleDelete = useCallback((user) => {
+    Alert.alert(
+      'Delete this user?',
+      `${user.anonymous_name || user.email} and all their posts are removed permanently.`,
+      [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => doDelete(user) }],
+    );
+  }, [doDelete]);
 
   const handleSubmitCoins = useCallback(async () => {
     const amount = parseInt(coinAmount, 10);
@@ -166,6 +202,8 @@ export default function AdminUsersScreen({ navigation }) {
           renderItem={({ item }) => (
             <UserRow
               item={item}
+              isSuper={isSuper}
+              onDelete={handleDelete}
               onBan={handleBan}
               onVerify={handleVerify}
               onAdmin={handleAdmin}

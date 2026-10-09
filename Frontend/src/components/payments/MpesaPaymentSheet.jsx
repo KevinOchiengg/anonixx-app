@@ -50,10 +50,8 @@ import { THEME } from '../../utils/theme';
 
 // ─── Static fallback data (used if geo config hasn't loaded yet) ──────────────
 const FALLBACK_PACKAGES = [
-  { id: 'starter', kes: 50,  coins: 55,  display_price: 'KES 50',  label: 'Starter', tag: null,          tagColor: null },
-  { id: 'popular', kes: 100, coins: 120, display_price: 'KES 100', label: 'Popular', tag: 'Best Value',  tagColor: '#a855f7' },
-  { id: 'value',   kes: 250, coins: 350, display_price: 'KES 250', label: 'Value',   tag: '+40% bonus',  tagColor: '#22c55e' },
-  { id: 'power',   kes: 500, coins: 800, display_price: 'KES 500', label: 'Power',   tag: '+60% bonus',  tagColor: '#FF634A' },
+  { id: 'starter', kes: 49, coins: 3, display_price: 'KES 49', label: 'Starter', tag: null,         tagColor: null },
+  { id: 'popular', kes: 99, coins: 6, display_price: 'KES 99', label: 'Popular', tag: 'Best Value', tagColor: '#a855f7' },
 ];
 
 const POLL_INTERVAL_MS  = 3000;

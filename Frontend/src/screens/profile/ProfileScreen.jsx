@@ -55,14 +55,26 @@ export default function ProfileScreen({ navigation }) {
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.profileHeader}>
-          <Avatar
-            uri={user?.avatar_url}
-            size={100}
-            name={user?.username || user?.anonymous_name}
-          />
-          <Text style={styles.username}>
-            {user?.username || user?.anonymous_name}
-          </Text>
+          <TouchableOpacity
+            activeOpacity={user?.is_admin ? 0.75 : 1}
+            disabled={!user?.is_admin}
+            onPress={() => navigation.navigate('AdminDashboard')}
+            style={{ alignItems: 'center' }}
+          >
+            <Avatar
+              uri={user?.avatar_url}
+              size={100}
+              name={user?.username || user?.anonymous_name}
+            />
+            <Text style={styles.username}>
+              {user?.username || user?.anonymous_name}
+            </Text>
+            {user?.is_admin && (
+              <Text style={{ color: THEME.primary, fontSize: 12, fontWeight: '600', marginTop: 4 }}>
+                Admin dashboard ›
+              </Text>
+            )}
+          </TouchableOpacity>
           {user?.bio && <Text style={styles.bio}>{user.bio}</Text>}
         </View>
 

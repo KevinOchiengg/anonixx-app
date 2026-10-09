@@ -13,11 +13,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image,
-  SectionList, RefreshControl,
+  SectionList, RefreshControl, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { X } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
 import { rs, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
@@ -28,8 +29,10 @@ import { API_BASE_URL } from '../../config/api';
 
 // Its own component so useVideoPlayer is only ever called once per row, not
 // conditionally inside renderItem — same pattern as DropChatScreen's
-// WelcomeGalleryPage.
-function RequestMediaThumb({ mediaUrl, mediaType }) {
+// WelcomeGalleryPage. Tappable — a 40px muted loop is only enough to notice
+// *something* is there, not to actually judge who's asking; tapping opens
+// MediaPreviewModal below for the real look.
+function RequestMediaThumb({ mediaUrl, mediaType, onPress }) {
   const isVideo = mediaType === 'video';
   const player = useVideoPlayer(
     isVideo ? { uri: mediaUrl } : null,
@@ -39,13 +42,44 @@ function RequestMediaThumb({ mediaUrl, mediaType }) {
   if (!mediaUrl) return null;
 
   return (
-    <View style={s.thumbWrap}>
+    <TouchableOpacity style={s.thumbWrap} onPress={onPress} activeOpacity={0.8}>
       {isVideo ? (
         <VideoView player={player} style={s.thumb} contentFit="cover" />
       ) : (
         <Image source={{ uri: mediaUrl }} style={s.thumb} />
       )}
-    </View>
+    </TouchableOpacity>
+  );
+}
+
+// Full-size look at a request's attached clue — its own component (not
+// inline in the main screen) so its useVideoPlayer only ever exists while
+// actually open, instead of a second player idling per row alongside each
+// RequestMediaThumb's. Only mounted while previewMedia is set (see below),
+// so the source loads fresh on open and the player is torn down on close.
+function MediaPreviewModal({ media, onClose }) {
+  const isVideo = media.type === 'video';
+  const player = useVideoPlayer(
+    isVideo ? { uri: media.url } : null,
+    (p) => { p.loop = true; p.play(); },
+  );
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <SafeAreaView style={s.previewBackdrop}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        <View style={s.previewMediaWrap} pointerEvents="box-none">
+          {isVideo ? (
+            <VideoView player={player} style={s.previewMedia} contentFit="contain" nativeControls />
+          ) : (
+            <Image source={{ uri: media.url }} style={s.previewMedia} resizeMode="contain" />
+          )}
+        </View>
+        <TouchableOpacity style={s.previewCloseBtn} onPress={onClose} hitSlop={HIT_SLOP}>
+          <X size={rs(20)} color="#fff" />
+        </TouchableOpacity>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -58,6 +92,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyIds, setBusyIds] = useState(new Set());
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -216,7 +251,11 @@ export default function UnlockRequestsScreen({ route, navigation }) {
     return (
       <View style={s.row}>
         <View style={s.rowInfo}>
-          <RequestMediaThumb mediaUrl={item.media_url} mediaType={item.media_type} />
+          <RequestMediaThumb
+            mediaUrl={item.media_url}
+            mediaType={item.media_type}
+            onPress={() => setPreviewMedia({ url: item.media_url, type: item.media_type })}
+          />
           {/* Who's asking — the same "resume before you decide" the
               requester already gets when they see a drop's avatar before
               sending the request. Falls back to an initial-letter circle
@@ -270,6 +309,10 @@ export default function UnlockRequestsScreen({ route, navigation }) {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />
           }
         />
+      )}
+
+      {previewMedia && (
+        <MediaPreviewModal media={previewMedia} onClose={() => setPreviewMedia(null)} />
       )}
     </SafeAreaView>
   );
@@ -325,4 +368,17 @@ const s = StyleSheet.create({
     backgroundColor: T.primary,
   },
   acceptBtnText: { color: '#fff', fontSize: FONT.xs, fontWeight: '700' },
+
+  previewBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.94)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  previewMediaWrap: { width: '100%', height: '70%' },
+  previewMedia: { width: '100%', height: '100%' },
+  previewCloseBtn: {
+    position: 'absolute', top: rp(16), right: rp(16),
+    width: rs(38), height: rs(38), borderRadius: rs(19),
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

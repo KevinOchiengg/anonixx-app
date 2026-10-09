@@ -1,8 +1,9 @@
 /**
- * UnreadContext — bottom-nav badge counts (Messages, Circles, Profile).
+ * UnreadContext — bottom-nav badge counts (Messages, Requests).
  * Polls every 30 s while app is active; can be manually refreshed, and
  * refreshes immediately on unlock-request socket events for a snappier
- * Profile badge (messages/circles have no sockets — see socket.js).
+ * Requests badge (Messages has no socket-driven refresh here — see
+ * socket.js).
  */
 import React, {
   createContext, useContext, useState, useEffect, useCallback, useRef,
@@ -12,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { useSocket } from './SocketContext';
 
-const EMPTY_COUNTS = { Messages: 0, Circles: 0, Profile: 0 };
+const EMPTY_COUNTS = { Messages: 0, Requests: 0 };
 
 const UnreadContext = createContext({ badgeCounts: EMPTY_COUNTS, refreshUnread: () => {} });
 
@@ -34,8 +35,7 @@ export function UnreadProvider({ children }) {
       const data = await res.json();
       setBadgeCounts({
         Messages: data.messages ?? 0,
-        Circles:  data.circles ?? 0,
-        Profile:  data.unlock_requests ?? 0,
+        Requests: data.unlock_requests ?? 0,
       });
     } catch {
       // silent — badges just stay at their last known value
@@ -63,7 +63,7 @@ export function UnreadProvider({ children }) {
   }, [fetchUnread]);
 
   // Unlock requests already push socket events — piggyback them for an
-  // instant Profile-badge refresh instead of waiting for the next poll.
+  // instant Requests-badge refresh instead of waiting for the next poll.
   useEffect(() => {
     const handleChange = () => fetchUnread();
 

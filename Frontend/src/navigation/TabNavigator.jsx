@@ -1,10 +1,11 @@
+import { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import {
   Home,
   MessageCircle,
   Plus,
-  Radio,
+  UserCheck,
   User,
 } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -17,7 +18,6 @@ import { rf } from '../utils/responsive';
 import DropsSwipeScreen from '../screens/feed/DropsSwipeScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SearchScreen from '../screens/feed/SearchScreen';
-import DropDetailScreen from '../screens/feed/DropDetailScreen';
 
 // Drops — DropsCompose now lives at the root AppNavigator stack (reachable
 // from anywhere, incl. the Create tab button below); DropChat stays here
@@ -27,12 +27,6 @@ import DropCallScreen from '../screens/drops/DropCallScreen';
 import DemoChatScreen from '../screens/drops/DemoChatScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
-
-// Circles
-import CirclesScreen from '../screens/circles/CirclesScreen';
-import CircleProfileScreen from '../screens/circles/CircleProfileScreen';
-import CreateCircleScreen from '../screens/circles/CreateCircleScreen';
-import CircleContentScreen from '../screens/circles/CircleContentScreen';
 
 // Messages
 import MessagesScreen from '../screens/connect/MessagesScreen';
@@ -45,11 +39,26 @@ import { THEME } from '../utils/theme';
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
+// ─── REQUESTS TAB ─────────────────────────────────────────────
+// Not an embedded stack like the other tabs — Link Up requests already has
+// a real home at the root AppNavigator level (UnlockRequestsScreen, with
+// its own back button and deep link). The tabPress listener below always
+// intercepts the press and pushes that screen instead of switching tabs,
+// same pattern as Create's guest redirect. This placeholder only exists as
+// a safety net for the rare case the tab becomes focused some other way
+// (e.g. a restored navigation state).
+function RequestsTabPlaceholder({ navigation }) {
+  useEffect(() => {
+    navigation.navigate('UnlockRequestsScreen');
+  }, [navigation]);
+  return null;
+}
+
 // ─── TAB BAR ICON ─────────────────────────────────────────────
 const TabBarIcon = ({ route, focused, badgeCount }) => {
   const icons = {
     Feed:     Home,
-    Circles:  Radio,
+    Requests: UserCheck,
     Messages: MessageCircle,
     Profile:  User,
   };
@@ -99,28 +108,13 @@ const CustomTabBarButton = ({ children, onPress }) => (
 // market promo, and ad. The old scrollable card list (DropsFeedScreen /
 // "FeedMain") and its own full-screen video/audio destination
 // (MediaFeedScreen / "MediaFeed") have both been retired and deleted —
-// DropsSwipeScreen absorbed everything they did. DropDetailScreen and
-// FeedLocationScreen, the two screens that used to navigate to "FeedMain"
-// by name, were both updated to target "FeedSwipe" instead.
+// DropsSwipeScreen absorbed everything they did.
 function FeedStack() {
   return (
     <Stack.Navigator initialRouteName="FeedSwipe" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="FeedSwipe" component={DropsSwipeScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
-      <Stack.Screen name="DropDetail" component={DropDetailScreen} />
       <Stack.Screen name="SavedDrops" component={SavedPostsScreen} />
-    </Stack.Navigator>
-  );
-}
-
-// ─── CIRCLES STACK ────────────────────────────────────────────
-function CirclesStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="CirclesMain" component={CirclesScreen} />
-      <Stack.Screen name="CircleProfile" component={CircleProfileScreen} />
-      <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
-      <Stack.Screen name="CircleContent" component={CircleContentScreen} />
     </Stack.Navigator>
   );
 }
@@ -210,9 +204,15 @@ export default function TabNavigator() {
         })}
       />
       <Tab.Screen
-        name="Circles"
-        component={CirclesStack}
-        options={{ tabBarLabel: 'Circles' }}
+        name="Requests"
+        component={RequestsTabPlaceholder}
+        options={{ tabBarLabel: 'Requests' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('UnlockRequestsScreen');
+          },
+        })}
       />
       <Tab.Screen
         name="Profile"
