@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
 from app.database import get_database
-from app.dependencies import require_admin
+from app.dependencies import require_admin, require_super_admin, is_super_admin_user
 from app.utils.coin_service import credit_coins
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -20,6 +20,35 @@ def _now() -> datetime:
 class CoinAdjustRequest(BaseModel):
     amount: int   # positive = credit, negative = debit
     reason: str
+
+
+async def _guard_target(db, admin_id: str, target_id: str, action: str) -> ObjectId:
+    """Validate a target user for a destructive action: valid id, exists,
+    not yourself, never a super admin, and only a super admin may act on
+    another admin."""
+    if target_id == admin_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Cannot {action} yourself")
+    try:
+        oid = ObjectId(target_id)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid user ID")
+    target = await db["users"].find_one({"_id": oid}, {"is_admin": 1, "email": 1})
+    if not target:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if is_super_admin_user(target):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Super admins cannot be modified")
+    if target.get("is_admin"):
+        actor = await db["users"].find_one({"_id": ObjectId(admin_id)}, {"is_admin": 1, "email": 1})
+        if not is_super_admin_user(actor or {}):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a super admin can do this to an admin")
+    return oid
+
+
+@router.get("/me", summary="Caller's admin role")
+async def admin_me(admin_id: str = Depends(require_admin), db=Depends(get_database)):
+    user = await db["users"].find_one({"_id": ObjectId(admin_id)}, {"email": 1, "is_admin": 1})
+    sup = is_super_admin_user(user or {})
+    return {"is_admin": True, "is_super_admin": sup, "role": "super_admin" if sup else "admin"}
 
 
 # ─── Stats ────────────────────────────────────────────────────
@@ -49,6 +78,11 @@ async def get_stats(
         async for p in db["payments"].find({"status": "completed"}, {"amount": 1}):
             total_revenue += float(p.get("amount", 0))
 
+    open_support = len(await db["support_messages"].distinct(
+        "user_id", {"sender": "user", "read_by_admin": False}
+    )) if "support_messages" in collections else 0
+    pending_refunds = await db["refund_requests"].count_documents({"status": "pending"}) if "refund_requests" in collections else 0
+
     total_coin_txns = await db["coin_transactions"].count_documents({}) if "coin_transactions" in collections else 0
 
     return {
@@ -63,6 +97,10 @@ async def get_stats(
         "content": {
             "total_drops": total_drops,
             "drops_today": drops_today,
+        },
+        "support": {
+            "open_conversations": open_support,
+            "pending_refunds":    pending_refunds,
         },
         "financials": {
             "total_revenue_usd":       round(total_revenue, 2),
@@ -101,6 +139,7 @@ async def list_users(
             "anonymous_name": u.get("anonymous_name"),
             "is_active":      u.get("is_active", True),
             "is_admin":       u.get("is_admin", False),
+            "is_super_admin": is_super_admin_user(u),
             "is_verified":    u.get("is_verified", False),
             "is_premium":     u.get("is_premium", False),
             "coin_balance":   u.get("coin_balance", 0),
@@ -157,13 +196,7 @@ async def toggle_ban(
     admin_id: str = Depends(require_admin),
     db=Depends(get_database),
 ):
-    if user_id == admin_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot ban yourself")
-
-    try:
-        oid = ObjectId(user_id)
-    except Exception:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid user ID")
+    oid = await _guard_target(db, admin_id, user_id, "ban")
 
     user = await db["users"].find_one({"_id": oid}, {"is_active": 1})
     if not user:
@@ -207,16 +240,10 @@ async def toggle_verify(
 @router.patch("/users/{user_id}/admin", summary="Grant or revoke admin role")
 async def toggle_admin_role(
     user_id:  str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_super_admin),
     db=Depends(get_database),
 ):
-    if user_id == admin_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot modify your own admin status")
-
-    try:
-        oid = ObjectId(user_id)
-    except Exception:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid user ID")
+    oid = await _guard_target(db, admin_id, user_id, "change the admin role of")
 
     user = await db["users"].find_one({"_id": oid}, {"is_admin": 1})
     if not user:
@@ -230,11 +257,29 @@ async def toggle_admin_role(
     return {"user_id": user_id, "is_admin": new_status}
 
 
+@router.delete("/users/{user_id}", summary="Permanently delete a user and their content (super admin)")
+async def delete_user(
+    user_id:  str,
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    oid = await _guard_target(db, admin_id, user_id, "delete")
+
+    drops = await db["drops"].delete_many({"sender_id": user_id})
+    await db["drop_unlocks"].delete_many({"$or": [{"user_id": user_id}, {"unlocker_id": user_id}]})
+    await db["drop_connections"].delete_many({"$or": [{"user_id": user_id}, {"sender_id": user_id}]})
+    await db["support_messages"].delete_many({"user_id": user_id})
+    await db["refund_requests"].delete_many({"user_id": user_id})
+    await db["users"].delete_one({"_id": oid})
+
+    return {"deleted": user_id, "drops_deleted": drops.deleted_count}
+
+
 @router.post("/users/{user_id}/coins", summary="Manually credit or debit coins (positive = credit, negative = debit)")
 async def adjust_coins(
     user_id:  str,
     data:     CoinAdjustRequest,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_super_admin),
     db=Depends(get_database),
 ):
     if data.amount == 0:
@@ -312,6 +357,38 @@ async def get_moderation_queue(
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
             "flagged_at":        d["flagged_at"].isoformat() if d.get("flagged_at") else None,
+            "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
+        })
+
+    return {"total": total, "skip": skip, "limit": limit, "drops": drops}
+
+
+@router.get("/drops", summary="Browse all posts — paginated, searchable")
+async def list_drops(
+    skip:   int           = Query(0,  ge=0),
+    limit:  int           = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None, description="Filter by confession text"),
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    query = {}
+    if search:
+        query["confession"] = {"$regex": search, "$options": "i"}
+
+    total  = await db["drops"].count_documents(query)
+    cursor = db["drops"].find(query).sort("created_at", -1).skip(skip).limit(limit)
+
+    drops = []
+    async for d in cursor:
+        drops.append({
+            "id":                str(d["_id"]),
+            "sender_id":         d.get("sender_id"),
+            "author":            d.get("sender_anonymous_name"),
+            "is_admin_drop":     d.get("is_admin_drop", False),
+            "confession":        (d.get("confession") or "")[:200],
+            "media_type":        d.get("media_type"),
+            "report_count":      d.get("report_count", 0),
+            "moderation_status": d.get("moderation_status"),
             "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
         })
 

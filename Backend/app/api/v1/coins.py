@@ -22,10 +22,8 @@ from app.config import settings
 router = APIRouter(prefix="/coins", tags=["coins"])
 
 COIN_PACKAGES: List[dict] = [
-    {"id": "starter", "kes": 50,  "coins": 55,  "label": "Starter",  "tag": None},
-    {"id": "popular", "kes": 100, "coins": 120, "label": "Popular",  "tag": "Best Value"},
-    {"id": "value",   "kes": 250, "coins": 350, "label": "Value",    "tag": "+40% bonus"},
-    {"id": "power",   "kes": 500, "coins": 800, "label": "Power",    "tag": "+60% bonus"},
+    {"id": "starter", "kes": 49, "coins": 3, "label": "Starter", "tag": None},
+    {"id": "popular", "kes": 99, "coins": 6, "label": "Popular", "tag": "Best Value"},
 ]
 _PACKAGE_MAP = {p["id"]: p for p in COIN_PACKAGES}
 
@@ -34,8 +32,6 @@ _PACKAGE_MAP = {p["id"]: p for p in COIN_PACKAGES}
 IAP_PRODUCT_IDS = {
     "starter": "com.anonixx.coins.starter",
     "popular": "com.anonixx.coins.popular",
-    "value":   "com.anonixx.coins.value",
-    "power":   "com.anonixx.coins.power",
 }
 IAP_PRODUCT_TO_PACKAGE = {v: k for k, v in IAP_PRODUCT_IDS.items()}
 

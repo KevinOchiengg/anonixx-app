@@ -16,7 +16,6 @@ from app.config import settings
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins
 from app.utils.email import send_password_reset_otp
-from app.utils.fingerprint import fingerprint_hash
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -36,49 +35,11 @@ def _is_adult(dob: date) -> bool:
 
 
 # ─── Models ───────────────────────────────────────────────────
-# Free-tier coins every new user starts with, to learn how Anonixx works
-# before paying anything: 6 drops (10 each), or one identity unlock (50)
-# with a bit left over. Deliberately close to what the cheapest paid
-# package (Starter, 55 coins) buys, so the first top-up feels like a
-# top-up and not a second windfall. NOT withdrawable — see
-# WITHDRAWABLE_REASONS in utils/coin_service.py; only earned reward
-# coins can be cashed out.
-WELCOME_BONUS = 60
+# Free coins every new user starts with, to learn how Anonixx works before
+# paying. NOT withdrawable — see WITHDRAWABLE_REASONS in utils/coin_service.py.
+WELCOME_BONUS = 33
 
-# A "burner account" is only worth making if it gets another full welcome
-# bonus. We don't block extra signups (that's friction on real users who
-# share a device/network) — we just quietly stop paying out for repeats.
-# Same device seen before -> long memory (people rarely wipe app storage).
-# Same IP seen a lot in a short window -> catches a burst of accounts from
-# one place without penalizing normal device/network sharing (family wifi,
-# an office, a cyber café all stay under the burst threshold).
-REPEAT_SIGNUP_BONUS   = 5
-DEVICE_LOOKBACK_DAYS  = 90
-IP_BURST_WINDOW_HRS   = 24
-IP_BURST_THRESHOLD    = 3
-
-async def _welcome_bonus_for_signup(db, device_id: Optional[str], client_ip: Optional[str]) -> int:
-    """Full bonus for a device/IP's first signup; a token amount for repeats."""
-    device_hash = fingerprint_hash(device_id) if device_id else None
-    ip_hash      = fingerprint_hash(client_ip) if client_ip else None
-
-    is_repeat = False
-    if device_hash:
-        since = _now() - timedelta(days=DEVICE_LOOKBACK_DAYS)
-        if await db["signup_fingerprints"].find_one({"device_hash": device_hash, "created_at": {"$gte": since}}):
-            is_repeat = True
-    if not is_repeat and ip_hash:
-        since = _now() - timedelta(hours=IP_BURST_WINDOW_HRS)
-        count = await db["signup_fingerprints"].count_documents({"ip_hash": ip_hash, "created_at": {"$gte": since}})
-        if count >= IP_BURST_THRESHOLD:
-            is_repeat = True
-
-    await db["signup_fingerprints"].insert_one({
-        "device_hash": device_hash,
-        "ip_hash":     ip_hash,
-        "created_at":  _now(),
-    })
-    return REPEAT_SIGNUP_BONUS if is_repeat else WELCOME_BONUS
+VALID_GENDERS = {'male', 'female', 'nonbinary', 'prefer_not_to_say'}
 
 class RegisterRequest(BaseModel):
     email:         EmailStr
@@ -86,6 +47,7 @@ class RegisterRequest(BaseModel):
     username:      Optional[str] = None
     referral_code: Optional[str] = None   # Optional referral code during signup
     date_of_birth: date                   # Anonixx is 18+ only — enforced at registration
+    gender:        Optional[str] = None   # Optional: male | female | nonbinary | prefer_not_to_say
 
 class LoginRequest(BaseModel):
     email:    EmailStr
@@ -182,7 +144,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
         if not _ANON_NAME_RE.match(chosen_name):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                detail="Username must be 3–30 characters — letters, numbers, dots, hyphens, underscores or emoji only",
+                detail="Username must be 3–30 characters — letters, numbers, spaces, dots, hyphens, underscores or emoji only",
             )
         if _contains_profanity(chosen_name):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
@@ -213,6 +175,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
         "coin_balance":   0,          # Start at 0; welcome bonus credited below
         "streak_count":   0,
         "date_of_birth":  data.date_of_birth.isoformat(),
+        "gender":         data.gender if data.gender in VALID_GENDERS else None,
         "age_verified":   True,       # DOB above already proves 18+ at this point
         "blocked_user_ids": [],
         "created_at":     _now(),
@@ -228,16 +191,10 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
 
     await db["users"].insert_one(user)
 
-    # Full bonus on a device/IP's first signup; a token amount on repeats —
-    # see _welcome_bonus_for_signup for why this beats blocking signup outright.
-    device_id = request.headers.get("x-device-id")
-    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else None)
-    bonus = await _welcome_bonus_for_signup(db, device_id, client_ip)
-
     await credit_coins(
         db          = db,
         user_id     = str(user_id),
-        amount      = bonus,
+        amount      = WELCOME_BONUS,
         reason      = "welcome_bonus",
         description = "Welcome to Anonixx 🎉",
     )
@@ -253,7 +210,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
             "anonymous_name": user["anonymous_name"],
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
-            "coin_balance":   bonus,
+            "coin_balance":   WELCOME_BONUS,
             "age_verified":            user.get("age_verified", False),
         },
     }
@@ -333,14 +290,16 @@ async def get_current_user(
 # Letters/numbers/./-/_ plus common emoji ranges (pictographs, misc symbols,
 # dingbats, flags) and the joiner/variation-selector code points that make
 # compound emoji (e.g. flags, skin tones) render as one glyph.
-_ANON_NAME_RE = re.compile(
-    r'^[a-zA-Z0-9._\-'
+_ANON_CHARS = (
+    r'[a-zA-Z0-9._\-'
     r'\U0001F300-\U0001FAFF'   # symbols & pictographs (incl. extended-A)
     r'\U00002600-\U000027BF'   # misc symbols & dingbats
     r'\U0001F1E6-\U0001F1FF'   # regional indicators (flag emoji)
     r'\U0000FE0F\U0000200D'    # variation selector-16 + zero-width joiner
-    r']{3,30}$'
+    r']'
 )
+# Single spaces allowed between parts ("Sweet Spot"); total length 3-30.
+_ANON_NAME_RE = re.compile(rf'^(?=.{{3,30}}$){_ANON_CHARS}+(?: {_ANON_CHARS}+)*$')
 
 # Reserved for official Anonixx-posted drops (see drops.py's ADMIN_DROP_NAME)
 # — no regular user may claim it as their anonymous_name.
@@ -374,7 +333,7 @@ async def check_anonymous_name(
         return {
             "available": False,
             "reason":    "invalid",
-            "message":   "3–30 chars · letters, numbers, dots, hyphens or emoji",
+            "message":   "3–30 chars · letters, numbers, spaces, dots, hyphens or emoji",
         }
 
     if _contains_profanity(name):
@@ -435,7 +394,7 @@ async def update_profile(
     if data.anonymous_name is not None:
         aname = data.anonymous_name.strip()
         if not _ANON_NAME_RE.match(aname):
-            raise HTTPException(400, detail="Name must be 3–30 chars. Letters, numbers, dots, hyphens or emoji.")
+            raise HTTPException(400, detail="Name must be 3–30 chars. Letters, numbers, spaces, dots, hyphens or emoji.")
         if _contains_profanity(aname):
             raise HTTPException(400, detail="That name isn't allowed. Try something else.")
         if aname.lower() in RESERVED_ANON_NAMES:
@@ -495,8 +454,7 @@ async def update_gender(
     current_user_id: str = Depends(get_current_user_id),
     db=Depends(get_database),
 ):
-    VALID = {'male', 'female', 'nonbinary', 'prefer_not_to_say'}
-    if data.gender not in VALID:
+    if data.gender not in VALID_GENDERS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid gender value")
 
     result = await db["users"].update_one(

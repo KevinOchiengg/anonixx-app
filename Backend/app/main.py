@@ -17,6 +17,9 @@ from app.api.v1 import ads
 from app.api.v1 import drop_calls
 from app.api.v1 import unlock_requests
 from app.api.v1 import deception_reports
+from app.api.v1 import support
+from app.api.v1 import whatsapp
+from app.api.v1 import public
 from app.api.v1 import notifications
 from app.api.v1 import (
     auth,
@@ -26,11 +29,9 @@ from app.api.v1 import (
     impact,
     rituals,
     connect,
-    circles,
     premium,
 )
 from app.tasks.publisher_worker import publisher_worker
-from app.tasks.circle_ad_cleanup import circle_ad_cleanup_worker
 from app.tasks.drop_cleanup import drop_cleanup_worker
 
 
@@ -86,9 +87,6 @@ async def _ensure_indexes():
         await db["drop_unlock_requests"].create_index(
             [("target_type", 1), ("target_id", 1), ("status", 1)], background=True
         )
-        await db["circle_posts"].create_index(
-            [("circle_id", 1), ("created_at", -1)], background=True
-        )
         await db["signup_fingerprints"].create_index([("device_hash", 1), ("created_at", 1)], background=True)
         await db["signup_fingerprints"].create_index([("ip_hash", 1), ("created_at", 1)], background=True)
         # Auto-expire after 90 days — matches auth.py's DEVICE_LOOKBACK_DAYS,
@@ -106,11 +104,9 @@ async def lifespan(app: FastAPI):
     await connect_to_mongo()
     await _ensure_indexes()
     await publisher_worker.start()          # start social publishing worker
-    await circle_ad_cleanup_worker.start()  # start circle ad expiry sweeper
     await drop_cleanup_worker.start()       # delete drops past their post-unlock grace
     yield
     await drop_cleanup_worker.stop()        # clean shutdown
-    await circle_ad_cleanup_worker.stop()
     await publisher_worker.stop()
     await close_mongo_connection()
 
@@ -166,7 +162,7 @@ async def drop_landing(drop_id: str):
     try:
         db = await get_database()
         drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-        if drop and drop.get("moderation_status") == "visible":
+        if drop and drop.get("moderation_status") == "visible" and drop.get("sensitivity") != "mature":
             title  = "Someone confessed something on Anonixx"
             teaser = _tease(drop.get("confession") or "") or teaser
             image  = drop.get("card_image_url")
@@ -187,6 +183,7 @@ async def drop_landing(drop_id: str):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
   <title>{title}</title>
   <meta property="og:title" content="{title}">
   <meta property="og:description" content="{teaser}">
@@ -227,7 +224,6 @@ app.include_router(market.router,        prefix=settings.API_V1_PREFIX)
 app.include_router(drops.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rewards.router, prefix=settings.API_V1_PREFIX)
 app.include_router(referrals.router, prefix=settings.API_V1_PREFIX)
-app.include_router(circles.router,    prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(publisher.router,  prefix=settings.API_V1_PREFIX)
 app.include_router(chat_profile.router, prefix=settings.API_V1_PREFIX)
@@ -235,6 +231,9 @@ app.include_router(ads.router,          prefix=settings.API_V1_PREFIX)
 app.include_router(drop_calls.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(unlock_requests.router, prefix=settings.API_V1_PREFIX)
 app.include_router(deception_reports.router, prefix=settings.API_V1_PREFIX)
+app.include_router(support.router, prefix=settings.API_V1_PREFIX)
+app.include_router(whatsapp.router, prefix=settings.API_V1_PREFIX)
+app.include_router(public.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.

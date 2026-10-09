@@ -60,21 +60,19 @@ TIER_MAP: dict[str, int] = {
 # ─── Package definitions ──────────────────────────────────────────────────────
 
 _PACKAGES_BASE = [
-    {"id": "starter", "coins": 55,  "label": "Starter", "tag": None},
-    {"id": "popular", "coins": 120, "label": "Popular", "tag": "Best Value"},
-    {"id": "value",   "coins": 350, "label": "Value",   "tag": "+40% bonus"},
-    {"id": "power",   "coins": 800, "label": "Power",   "tag": "+60% bonus"},
+    {"id": "starter", "coins": 3, "label": "Starter", "tag": None},
+    {"id": "popular", "coins": 6, "label": "Popular", "tag": "Best Value"},
 ]
 
 # All Stripe prices in USD cents. Tier 3 uses Tier 2 prices.
 STRIPE_PRICES: dict[int, dict[str, int]] = {
-    1: {"starter": 99,  "popular": 199, "value": 399, "power": 699},
-    2: {"starter": 49,  "popular": 99,  "value": 199, "power": 349},
+    1: {"starter": 99,  "popular": 199},
+    2: {"starter": 49,  "popular": 99},
 }
 
 # M-Pesa prices in KES (whole numbers, matching coins.py COIN_PACKAGES)
 MPESA_PRICES: dict[str, int] = {
-    "starter": 50, "popular": 100, "value": 250, "power": 500,
+    "starter": 49, "popular": 99,
 }
 
 # ─── Drop-unlock pricing ───────────────────────────────────────────────────

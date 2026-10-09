@@ -367,3 +367,37 @@ async def get_public_profile(
         "anonymous_name": user.get("anonymous_name"),
         "interests":      user.get("interests", []),
     }
+
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+
+@router.delete("/me")
+async def delete_my_account(
+    data: DeleteAccountRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Permanently erase the caller's account and everything they posted."""
+    from app.api.v1.auth import verify_password
+
+    try:
+        oid = ObjectId(current_user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user.")
+    user = await db["users"].find_one({"_id": oid}, {"password": 1, "is_admin": 1})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(data.password, user.get("password", "")):
+        raise HTTPException(status_code=400, detail="Wrong password.")
+
+    uid = current_user_id
+    await db["drops"].delete_many({"sender_id": uid})
+    await db["drop_threads"].delete_many({"user_id": uid})
+    await db["saved_drops"].delete_many({"user_id": uid})
+    await db["drop_unlocks"].delete_many({"$or": [{"user_id": uid}, {"unlocker_id": uid}]})
+    await db["drop_connections"].delete_many({"$or": [{"user_id": uid}, {"sender_id": uid}]})
+    await db["support_messages"].delete_many({"user_id": uid})
+    await db["refund_requests"].delete_many({"user_id": uid})
+    await db["users"].delete_one({"_id": oid})
+    return {"deleted": True}

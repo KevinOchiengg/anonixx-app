@@ -17,8 +17,7 @@ drop_unlocks rows also stay, as the payment receipt.
 
 Lifecycle
   Started during FastAPI app startup (lifespan) as an asyncio background
-  task, same pattern as app/tasks/circle_ad_cleanup.py. Shuts down cleanly
-  on app teardown.
+  task. Shuts down cleanly on app teardown.
 """
 
 import asyncio

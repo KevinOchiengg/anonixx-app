@@ -3,8 +3,7 @@ api/v1/premium.py — Anonixx Premium subscription purchase.
 
 Perks (all defined and enforced in drops.py — see the PREMIUM_* constants
 and the unlock_cost_for / unlock_reward_for / grace_days_for helpers):
-  • Unlocks cost 25 coins instead of 50      (keyed on the UNLOCKER)
-  • Unlock reward is 10 coins instead of 5   (keyed on the DROP OWNER)
+  • Unlocks and posting are free             (keyed on the UNLOCKER / POSTER)
   • Unlocked drops survive 14 days instead
     of 7 before cleanup deletes them         (keyed on the POSTER)
   • Ad-free feed                             (GET /ads/active returns [])
@@ -43,9 +42,7 @@ def _now() -> datetime:
 
 
 PREMIUM_PLANS: List[dict] = [
-    {"id": "monthly",   "label": "1 Month",  "days": 30,  "kes": 1300,  "usd_cents": 999,  "usd_display": "$9.99",  "save": None},
-    {"id": "quarterly", "label": "3 Months", "days": 90,  "kes": 3250,  "usd_cents": 2499, "usd_display": "$24.99", "save": "17%"},
-    {"id": "yearly",    "label": "1 Year",   "days": 365, "kes": 10400, "usd_cents": 7999, "usd_display": "$79.99", "save": "33%"},
+    {"id": "monthly", "label": "1 Month", "days": 30, "kes": 999, "usd_cents": 999, "usd_display": "$9.99", "save": None},
 ]
 _PLAN_MAP = {p["id"]: p for p in PREMIUM_PLANS}
 
@@ -59,6 +56,12 @@ class StripePremiumRequest(BaseModel):
 
 class MpesaCallbackBody(BaseModel):
     Body: dict
+
+class IAPPremiumRequest(BaseModel):
+    product_id:     str
+    purchase_token: str
+
+PREMIUM_IAP_PRODUCT_ID = "com.anonixx.premium.monthly"
 
 
 async def _grant_premium(user_id: str, plan_id: str, db) -> datetime:
@@ -299,3 +302,47 @@ async def premium_stripe_webhook(
         pass
 
     return {"received": True}
+
+
+@router.post("/iap/verify")
+async def verify_premium_iap(
+    data:            IAPPremiumRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db                  = Depends(get_database),
+):
+    """
+    Google Play subscription check. Safe to call repeatedly (on purchase and on
+    app start): premium_until is set to the store's expiry, never shortened.
+    """
+    from app.utils.iap_validator import verify_google_subscription
+
+    if data.product_id != PREMIUM_IAP_PRODUCT_ID:
+        raise HTTPException(status_code=400, detail="Unknown subscription product.")
+
+    result = await verify_google_subscription(
+        package_name=settings.GOOGLE_PLAY_PACKAGE_NAME,
+        purchase_token=data.purchase_token,
+    )
+    if not result.get("valid") or not result.get("expiry"):
+        raise HTTPException(status_code=402, detail=f"Subscription invalid: {result.get('error', 'unknown')}")
+
+    # A token already bound to another account can't be replayed onto this one.
+    bound = await db.premium_iap_tokens.find_one({"token": data.purchase_token})
+    if bound and bound["user_id"] != current_user_id:
+        raise HTTPException(status_code=409, detail="This subscription belongs to another account.")
+    if not bound:
+        await db.premium_iap_tokens.insert_one(
+            {"token": data.purchase_token, "user_id": current_user_id, "created_at": _now()}
+        )
+
+    user = await db.users.find_one({"_id": ObjectId(current_user_id)}, {"premium_until": 1})
+    current_until = (user or {}).get("premium_until")
+    if current_until and current_until.tzinfo is None:
+        current_until = current_until.replace(tzinfo=timezone.utc)
+    new_until = max(result["expiry"], current_until) if current_until else result["expiry"]
+
+    await db.users.update_one(
+        {"_id": ObjectId(current_user_id)},
+        {"$set": {"is_premium": True, "premium_plan": "monthly", "premium_until": new_until}},
+    )
+    return {"premium_until": new_until.isoformat(), "is_premium": True}
