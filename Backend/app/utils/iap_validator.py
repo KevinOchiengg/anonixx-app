@@ -222,3 +222,53 @@ async def verify_google_purchase(
         "raw":            data,
         "error":          None,
     }
+
+
+async def verify_google_subscription(package_name: str, purchase_token: str) -> dict:
+    """
+    Verifies a Play subscription via purchases.subscriptionsv2. Returns
+    { valid, product_id, transaction_id, expiry (aware datetime|None), raw, error }.
+    Active and in-grace-period subscriptions count as valid.
+    """
+    from datetime import datetime
+
+    creds = _get_google_credentials()
+    if not creds:
+        return {"valid": False, "error": "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not configured."}
+    access_token = await _get_google_access_token(creds)
+    if not access_token:
+        return {"valid": False, "error": "Could not obtain Google access token."}
+
+    url = (
+        f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+        f"{package_name}/purchases/subscriptionsv2/tokens/{purchase_token}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(url, headers={"Authorization": f"Bearer {access_token}"})
+            data = r.json() if r.content else {}
+    except Exception as exc:
+        log.exception("Google subscription API call failed: %s", exc)
+        return {"valid": False, "error": f"Google API error: {exc}"}
+
+    state = data.get("subscriptionState")
+    if state not in ("SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD"):
+        return {"valid": False, "error": f"subscriptionState={state}", "raw": data}
+
+    items = data.get("lineItems") or []
+    expiry = None
+    product_id = None
+    if items:
+        product_id = items[0].get("productId")
+        raw_exp = items[0].get("expiryTime")
+        if raw_exp:
+            expiry = datetime.fromisoformat(raw_exp.replace("Z", "+00:00"))
+
+    return {
+        "valid":          True,
+        "product_id":     product_id,
+        "transaction_id": data.get("latestOrderId") or purchase_token[:32],
+        "expiry":         expiry,
+        "raw":            data,
+        "error":          None,
+    }

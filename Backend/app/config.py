@@ -40,9 +40,20 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Comma-separated emails of super admins (must also have is_admin=True).
+    SUPER_ADMIN_EMAILS: str = ""
+
     # DATABASE
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "anonixx"
+
+    # WHATSAPP CLOUD API — anonymous "send a drop to someone" relay
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
+    WHATSAPP_ACCESS_TOKEN: str = ""
+    WHATSAPP_VERIFY_TOKEN: str = ""
+    WHATSAPP_APP_SECRET: str = ""
+    WHATSAPP_TEMPLATE_NAME: str = "anonixx_message_request"
+    WHATSAPP_TEMPLATE_LANG: str = "en"
 
     # STRIPE
     STRIPE_SECRET_KEY: str = ""

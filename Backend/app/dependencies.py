@@ -4,6 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.jwt import decode_token
 from app.database import get_database
 from bson import ObjectId
+from app.config import settings
 
 
 # Required authentication
@@ -87,6 +88,23 @@ async def require_admin(
         raise
     except Exception:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication failed")
+
+
+def is_super_admin_user(user: dict) -> bool:
+    emails = {e.strip().lower() for e in settings.SUPER_ADMIN_EMAILS.split(",") if e.strip()}
+    return bool(user.get("is_admin")) and (user.get("email") or "").lower() in emails
+
+
+async def require_super_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db = Depends(get_database),
+) -> str:
+    """Authenticate + verify super admin (is_admin and email in SUPER_ADMIN_EMAILS)."""
+    user_id = await require_admin(credentials, db)
+    user = await db["users"].find_one({"_id": ObjectId(user_id)}, {"email": 1, "is_admin": 1})
+    if not user or not is_super_admin_user(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Super admin access required")
+    return user_id
 
 
 async def get_optional_user_id(

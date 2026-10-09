@@ -19,6 +19,8 @@ from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.notifications import send_push_notification as _notify
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
+from app.utils.moderation import violates_policy, MODERATION_ERROR
+from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode
 from app.utils.fingerprint import fingerprint_hash
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
@@ -60,13 +62,12 @@ NIGHT_MODE_END = 3     # 3am
 # that's spendable in-app or withdrawable (see coins.py's /withdraw) —
 # NOT a cut of what the unlocker paid.
 #
-#   post   10 coins   → paid by the poster
-#   unlock 50 coins   → paid by the unlocker
-#   reward  5 coins   → credited to the poster per unlock
-#                       Anonixx nets 45; poster breaks even after 2 unlocks.
-DROP_POST_COST         = 10   # charged on BOTH /drops and /posts creation —
+#   post    3 coins   → paid by the poster (free for premium)
+#   unlock  6 coins   → paid by the unlocker (free for premium)
+#   reward  none (disabled — see UNLOCK_REWARD_COINS)
+DROP_POST_COST         = 3    # charged on BOTH /drops and /posts creation —
                               # charging only one leaves the other a free bypass
-UNLOCK_REWARD_COINS    = 5    # flat, replaces the old percentage share
+UNLOCK_REWARD_COINS    = 0    # poster reward disabled for now; raise to re-enable. flat, replaces the old percentage share
 
 # ── Premium perks ────────────────────────────────────────────────
 # Premium's entire value proposition lives here (see api/v1/premium.py).
@@ -74,8 +75,8 @@ UNLOCK_REWARD_COINS    = 5    # flat, replaces the old percentage share
 #   • unlock cost → the UNLOCKER's premium status
 #   • reward      → the DROP OWNER's premium status
 #   • grace       → the POSTER's premium status, applied at first unlock
-PREMIUM_UNLOCK_COST          = 25   # vs COINS_UNLOCK_COST (50)
-PREMIUM_UNLOCK_REWARD_COINS  = 10   # vs UNLOCK_REWARD_COINS (5)
+PREMIUM_UNLOCK_COST          = 0    # vs COINS_UNLOCK_COST — premium unlocks are free
+PREMIUM_UNLOCK_REWARD_COINS  = 0    # vs UNLOCK_REWARD_COINS
 PREMIUM_UNLOCKED_GRACE_DAYS  = 14   # vs UNLOCKED_GRACE_DAYS (7)
 
 # ==================== REQUEST MODELS ====================
@@ -131,8 +132,15 @@ class CreateDropRequest(BaseModel):
     # voice drops). A poll or voice drop can carry this alongside its
     # primary content; a text drop's photo still goes through media_url.
     image_url: Optional[str] = None
+    # Multi-image post — 2–10 already-uploaded R2 URLs, rendered client-side
+    # as swipeable slides (one post, several photos — e.g. an Instagram/
+    # TikTok-style carousel). media_url/media_type still get backfilled from
+    # images[0] below so every older consumer (notifications, OG preview,
+    # card_image_url) that only knows about a single image keeps working.
+    images: Optional[List[str]] = None
     target_user_id: Optional[str] = None  # private targeted drop
     intent: Optional[str] = None  # what the sender is open to
+    sensitivity: Optional[str] = None  # "mature" if the author marks it; the server may also upgrade it
 
     # Drop spec upgrade fields
     theme: Optional[str] = None                  # "desire" — only theme left
@@ -488,7 +496,7 @@ async def create_drop(
     db = Depends(get_database)
 ):
     """Create a confession card. Authenticated users only."""
-    if not data.confession and not data.media_url:
+    if not data.confession and not data.media_url and not data.images:
         raise HTTPException(status_code=400, detail="Provide a confession text or attach an image/video")
 
     if data.confession and len(data.confession.strip()) == 0:
@@ -499,9 +507,19 @@ async def create_drop(
 
     if contains_contact_info(data.confession):
         raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+    if violates_policy(data.confession, data.poll.question if data.poll else None,
+                       *(data.poll.options if data.poll else [])):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
 
     if data.media_url and data.media_type not in ("image", "video", "voice"):
         raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'voice'")
+
+    images_data = None
+    if data.images:
+        cleaned_images = [u.strip() for u in data.images if u and u.strip()]
+        if len(cleaned_images) < 2 or len(cleaned_images) > 10:
+            raise HTTPException(status_code=400, detail="A multi-image post needs 2–10 photos.")
+        images_data = cleaned_images
 
     location_detail, location_display = build_location(
         data.location_country, data.location_county, data.location_sub_county, data.location_estate,
@@ -544,6 +562,17 @@ async def create_drop(
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Polls are an official Anonixx feature, not a regular-user confession
+    # format — keeps them scarce/credible in the feed instead of every
+    # drop becoming a poll.
+    if data.poll and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Polls can only be posted by Anonixx.")
+
+    # Regular users post text-only confessions. Photos/video/voice are
+    # shared only after an unlock; media content in the feed is Anonixx's.
+    if (data.media_url or data.images) and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Confessions are text only.")
 
     suspended_until = user.get("posting_suspended_until")
     if suspended_until:
@@ -590,9 +619,14 @@ async def create_drop(
         "sender_anonymous_name": ADMIN_DROP_NAME if is_admin_drop else user.get("anonymous_name", "Anonymous"),
         "is_admin_drop": is_admin_drop,
         "confession": data.confession.strip() if data.confession else None,
-        "media_url": data.media_url or None,
-        "media_type": data.media_type or None,
+        # A multi-image post backfills the single-media fields from its
+        # first photo so every older consumer that only knows media_url/
+        # media_type (notifications, OG preview, card_image_url below)
+        # still has something to show.
+        "media_url": (images_data[0] if images_data else data.media_url) or None,
+        "media_type": ("image" if images_data else data.media_type) or None,
         "image_url": data.image_url or None,
+        "images": images_data,
         "is_group": data.is_group,
         "group_size": data.group_size if data.is_group else None,
         "price": price,
@@ -605,7 +639,10 @@ async def create_drop(
         "unlock_count": 0,
         "admirer_count": 0,
         "reactions": [],
-        "card_image_url": _media_preview_url(data.media_url, data.media_type),
+        "card_image_url": _media_preview_url(
+            images_data[0] if images_data else data.media_url,
+            "image" if images_data else data.media_type,
+        ),
         "target_user_id": data.target_user_id or None,
         "intent": data.intent if data.intent in VALID_INTENTS else None,
         "created_at": now_utc(),
@@ -623,6 +660,10 @@ async def create_drop(
         "reaction_counts": {r: 0 for r in VALID_REACTIONS},
         "report_count": 0,
         "moderation_status": "visible",   # "visible" | "flagged" | "hidden"
+        "sensitivity": classify_sensitivity(
+            data.confession, data.poll.question if data.poll else None,
+            marked_mature=data.sensitivity == "mature",
+        ),
         # All drops are always public in the marketplace.
         # target_user_id means "also deliver to this inbox" — not "private only".
         "is_marketplace": True,
@@ -645,7 +686,7 @@ async def create_drop(
     # drop never takes someone's balance. Mirrored in posts.py's create_post;
     # charging only one route would leave the other a free bypass.
     # Admin drops are official filler content, not paid for by the admin.
-    if not is_admin_drop:
+    if not is_admin_drop and not await is_premium_user_id(current_user_id, db):
         try:
             await debit_coins(
                 db=db, user_id=current_user_id, amount=DROP_POST_COST,
@@ -1139,6 +1180,8 @@ async def add_to_drop_thread(
 
     if contains_contact_info(content):
         raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+    if violates_policy(content):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
 
     try:
         drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
@@ -1666,12 +1709,17 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "mood_tag":         drop.get("mood_tag"),
             "theme":            drop.get("theme"),
             "intent":           drop.get("intent"),
+            "sensitivity":      drop.get("sensitivity", "general"),
             "intensity":        drop.get("intensity"),
             "media_url":        drop.get("media_url"),
             "media_type":       drop.get("media_type"),
             "video_url":        drop.get("media_url") if drop.get("media_type") == "video" else None,
             "audio_url":        drop.get("media_url") if drop.get("media_type") == "voice" else None,
             "image_url":        drop.get("image_url"),
+            # Multi-image posts — ordered list the client renders as swipeable
+            # slides. None/empty for every other drop, where media_url alone
+            # (or no media at all) remains the whole story.
+            "images":           drop.get("images") or None,
             "card_image_url":   drop.get("card_image_url"),
             "poll":             poll_out,
             "thread_count":     thread_counts.get(did, 0),
@@ -1692,7 +1740,9 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
 @router.get("/feed")
 async def get_drops_feed(
     session_posts: int = Query(0, ge=0),
+    cursor: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None, alias="Authorization"),
+    x_content_mode: Optional[str] = Header(None, alias="X-Content-Mode"),
     db = Depends(get_database),
 ):
     current_user_id = None
@@ -1728,7 +1778,7 @@ async def get_drops_feed(
                     "blocked_user_ids": 1,
                     "location_country": 1, "location_county": 1,
                     "location_sub_county": 1, "location_estate": 1,
-                    "feed_location_scope": 1,
+                    "feed_location_scope": 1, "age_verified": 1,
                 },
             )
 
@@ -1740,14 +1790,8 @@ async def get_drops_feed(
 
     blocked_ids = user_doc.get("blocked_user_ids", []) if user_doc else []
 
-    now_ts = time.monotonic()
-    if now_ts - _drop_count_cache["ts"] > _DROP_COUNT_TTL:
-        _drop_count_cache["value"] = await db["drops"].count_documents({})
-        _drop_count_cache["ts"]    = now_ts
-    total_drops = _drop_count_cache["value"]
-
-    POOL_SIZE = max(30, drops_to_load * 3)
     pool_query = {"sender_id": {"$nin": blocked_ids}} if blocked_ids else {}
+    pool_query = apply_content_mode(pool_query, mature_allowed(x_content_mode, user_doc))
 
     loc_filter = build_feed_location_filter(
         {
@@ -1761,15 +1805,36 @@ async def get_drops_feed(
     if loc_filter:
         pool_query = {"$and": [pool_query, loc_filter]} if pool_query else loc_filter
 
-    pool = await db["drops"].find(pool_query) \
-        .sort("created_at", -1) \
-        .skip(session_posts) \
-        .limit(POOL_SIZE) \
-        .to_list(None)
-    pool_exhausted = len(pool) < POOL_SIZE
+    # Cursor pagination (newest first). Each page is the next `drops_to_load`
+    # drops after the cursor — none skipped, none repeated — then ordered by
+    # affinity within the page only. (The old approach shuffled a bigger pool
+    # and kept a random slice, so unseen drops were silently dropped and
+    # others came back twice, while has_more flipped false early.)
+    if cursor:
+        try:
+            cur_ts, cur_id = cursor.rsplit("|", 1)
+            cur_dt = datetime.fromisoformat(cur_ts)
+            after = {"$or": [
+                {"created_at": {"$lt": cur_dt}},
+                {"created_at": cur_dt, "_id": {"$lt": ObjectId(cur_id)}},
+            ]}
+            pool_query = {"$and": [pool_query, after]} if pool_query else after
+        except Exception:
+            raise HTTPException(status_code=400, detail="Bad cursor.")
 
-    shuffled = _weighted_shuffle_drops(pool, user_affinities)
-    drops = shuffled[:drops_to_load]
+    # One extra row tells us whether another page exists.
+    rows = await db["drops"].find(pool_query) \
+        .sort([("created_at", -1), ("_id", -1)]) \
+        .limit(drops_to_load + 1) \
+        .to_list(None)
+    page = rows[:drops_to_load]
+    page_has_more = len(rows) > drops_to_load
+    next_cursor = (
+        f"{page[-1]['created_at'].isoformat()}|{page[-1]['_id']}"
+        if page and page_has_more else None
+    )
+
+    drops = _weighted_shuffle_drops(page, user_affinities)
     formatted_drops = await batch_format_drops(drops, current_user_id, db)
 
     final_feed = []
@@ -1803,19 +1868,38 @@ async def get_drops_feed(
             final_feed.append({"type": "divider", "text": random.choice(divider_texts)})
 
     new_session_posts = session_posts + len(drops)
-    has_more = (
-        not pool_exhausted
-        and new_session_posts < total_drops
-        and new_session_posts < SESSION_LIMIT
-    )
+    has_more = page_has_more and new_session_posts < SESSION_LIMIT
 
     return {
         "posts":         final_feed,
         "has_more":      has_more,
         "session_posts": new_session_posts,
+        "next_cursor":   next_cursor,
         "is_guest":      current_user_id is None,
         "streak":        streak_info,
     }
+
+
+@router.get("/single/{drop_id}")
+async def get_single_drop(
+    drop_id: str,
+    x_content_mode: Optional[str] = Header(None, alias="X-Content-Mode"),
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    db = Depends(get_database),
+):
+    """One drop in feed shape — target of shared links (anonixx.app/drop/<id>)."""
+    if not ObjectId.is_valid(drop_id):
+        raise HTTPException(status_code=404, detail="Drop not found")
+    user_doc = None
+    if current_user_id and ObjectId.is_valid(current_user_id):
+        user_doc = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"age_verified": 1})
+    drop = await db["drops"].find_one(apply_content_mode({
+        "_id": ObjectId(drop_id), "is_active": True, "moderation_status": "visible",
+    }, mature_allowed(x_content_mode, user_doc)))
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    formatted = await batch_format_drops([drop], current_user_id, db)
+    return {"post": formatted[0]}
 
 
 @router.get("/search")
@@ -1830,6 +1914,7 @@ async def search_drops(
     location_estate:     Optional[str] = Query(None),
     limit: int = Query(20, le=50, ge=1),
     skip:  int = Query(0, ge=0),
+    x_content_mode: Optional[str] = Header(None, alias="X-Content-Mode"),
     current_user_id: Optional[str] = Depends(get_optional_user_id),
     db = Depends(get_database),
 ):
@@ -1864,6 +1949,11 @@ async def search_drops(
 
     if loc_filter:
         base_filter = {"$and": [base_filter, loc_filter]} if base_filter else loc_filter
+
+    user_doc = None
+    if current_user_id and ObjectId.is_valid(current_user_id):
+        user_doc = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"age_verified": 1})
+    base_filter = apply_content_mode(base_filter, mature_allowed(x_content_mode, user_doc))
 
     sort_key = "likes_count" if filter == "popular" else "created_at"
 
@@ -1904,6 +1994,7 @@ async def get_my_drops(
             "content":      drop.get("confession") or "",
             "media_url":    drop.get("media_url"),
             "media_type":   drop.get("media_type"),
+            "images":       drop.get("images") or None,
             "views_count":  views,
             "likes_count":  likes,
             "saves_count":  drop.get("saves_count", 0),
@@ -1980,8 +2071,8 @@ async def delete_drop(
 
 # ==================== UNLOCK — COINS ====================
 
-COINS_UNLOCK_COST         = 50   # coins required to unlock a drop
-ORIGIN_AUTHOR_UNLOCK_COST = 10   # discounted rate for the author of the inspiring post
+COINS_UNLOCK_COST         = 6    # coins required to unlock a drop
+ORIGIN_AUTHOR_UNLOCK_COST = 3    # discounted rate for the author of the inspiring post
 
 @router.post("/{drop_id}/unlock/coins")
 async def unlock_drop_coins(
@@ -2036,20 +2127,21 @@ async def unlock_drop_coins(
         else await unlock_cost_for(current_user_id, db)
     )
 
-    # Debit coins (raises ValueError on insufficient balance)
+    # Debit coins (raises ValueError on insufficient balance). Premium: free.
     try:
-        await debit_coins(
-            db          = db,
-            user_id     = current_user_id,
-            amount      = cost,
-            reason      = "drop_reveal",
-            description = (
-                "Unlocked a drop inspired by your confession"
-                if is_origin_author else
-                "Unlocked a drop confession"
-            ),
-            meta        = {"drop_id": drop_id, "origin_author": is_origin_author},
-        )
+        if cost > 0:
+            await debit_coins(
+                db          = db,
+                user_id     = current_user_id,
+                amount      = cost,
+                reason      = "drop_reveal",
+                description = (
+                    "Unlocked a drop inspired by your confession"
+                    if is_origin_author else
+                    "Unlocked a drop confession"
+                ),
+                meta        = {"drop_id": drop_id, "origin_author": is_origin_author},
+            )
     except ValueError as e:
         if "Insufficient" in str(e):
             needed = cost
@@ -2311,17 +2403,19 @@ async def poll_unlock_status(
     return {"unlocked": False}
 
 
-# Approximate coins-per-dollar rate (from the Tier-1 "starter" package: 55
+# Approximate coins-per-dollar rate (from the Tier-1 "starter" package: 3
 # coins / $0.99). Only used to record a cash unlock's coin-equivalent on the
 # unlock row — the poster's reward is flat and no longer derived from it.
-CASH_TO_COIN_RATE = 55 / 0.99
+CASH_TO_COIN_RATE = 3 / 0.99
 
 
 async def _credit_reward(drop: dict, coin_equivalent: int, db):
     """Credit the drop owner their flat reward for someone unlocking them.
-    Fixed (5, or 10 for premium) regardless of what the unlocker paid —
+    Fixed regardless of what the unlocker paid —
     a hook, not a revenue split."""
     reward = await unlock_reward_for(drop["sender_id"], db)
+    if reward <= 0:
+        return
     try:
         await credit_coins(
             db=db,
@@ -2638,6 +2732,7 @@ async def get_drop_messages(
             "other_anonymous_name": conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"],
             "is_sender": is_sender,
             "host_user_id": conn["sender_id"],
+            "other_user_id": other_user_id,
             "other_is_online": is_user_online(other_user_id),
         },
         "chat_profile": {
@@ -2698,6 +2793,8 @@ async def send_drop_message(
 
     if not content and not media_url:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if violates_policy(content):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
     if media_url and media_type not in ("voice", "image", "video"):
         raise HTTPException(status_code=400, detail="media_type must be 'voice', 'image', or 'video'")
 
