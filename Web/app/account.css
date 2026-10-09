@@ -1,0 +1,41 @@
+.acct-avatar { display: flex; align-items: center; gap: 16px; margin: 4px 0 8px; }
+.acct-avatar img, .acct-avatar .ph {
+  width: 76px; height: 76px; border-radius: 50%; object-fit: cover;
+  background: var(--card); border: 1px solid var(--line);
+  display: grid; place-items: center; font-size: 26px; font-weight: 700; color: var(--muted);
+}
+.acct-hint { font-size: 12px; font-weight: 500; margin-top: 2px; }
+.acct-hint.good { color: var(--ok); }
+.acct-hint.bad { color: #fb7185; }
+.acct-scope { display: grid; gap: 8px; margin: 8px 0 16px; }
+.acct-scope button {
+  text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg); font: inherit; cursor: pointer; display: grid; gap: 2px;
+}
+.acct-scope button small { color: var(--muted); }
+.acct-scope button.on { border-color: var(--rose); }
+.acct-scope button:disabled { opacity: 0.45; cursor: default; }
+.acct-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+.acct-chips button {
+  padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--card);
+  color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+}
+.acct-chips button.on { color: var(--fg); border-color: var(--rose); }
+.acct-code {
+  font-size: 30px; font-weight: 800; letter-spacing: 0.14em; text-align: center; padding: 18px;
+  border: 1px dashed var(--line); border-radius: 16px; margin: 14px 0;
+}
+.acct-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 18px; }
+.acct-stats div { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-align: center; }
+.acct-stats b { display: block; font-size: 24px; }
+.acct-stats small { color: var(--muted); }
+.acct-flag { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
+.acct-flag.hidden { color: #fb7185; }
+.acct-flag.flagged { color: #fbbf24; }
+.acct-search { display: flex; gap: 8px; padding: 14px 20px 0; }
+.acct-search input {
+  flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg); font: inherit; outline: none;
+}
+.acct-search input:focus { border-color: var(--rose); }
+.acct-pad { padding: 0 20px; }

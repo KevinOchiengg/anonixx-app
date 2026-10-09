@@ -1,0 +1,29 @@
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+.stat { padding: 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); display: grid; gap: 2px; }
+.stat strong { font-size: 24px; }
+.stat span { color: var(--muted); font-size: 12px; }
+.tx { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.tx b.plus { color: var(--ok); }
+.tx b.minus { color: #fb7185; }
+.badge { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.badge.paid { color: var(--ok); }
+.badge.rejected { color: #fb7185; }
+.mrow { display: block; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.mrow h3 { margin: 4px 0; font-size: 16px; }
+.mrow p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.4; }
+.mrow .meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.mrow img, .mfull img, .mfull video { width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
+.mfull video { max-height: 360px; object-fit: contain; background: #000; }
+.mfull .body { white-space: pre-wrap; line-height: 1.55; overflow-wrap: anywhere; }
+.lock { padding: 16px; border-radius: 14px; border: 1px dashed var(--line); text-align: center; margin: 16px 0; }
+.tiers { display: flex; justify-content: space-between; gap: 4px; margin: 12px 0 20px; }
+.tier { flex: 1; text-align: center; font-size: 11px; color: var(--muted); opacity: 0.45; }
+.tier.on { opacity: 1; color: var(--fg); }
+.tier i { display: block; font-style: normal; font-size: 22px; }
+.bar { height: 8px; border-radius: 999px; background: var(--card); overflow: hidden; margin: 8px 0; }
+.bar > div { height: 100%; background: var(--rose); border-radius: 999px; }
+.vibe-hero { text-align: center; padding: 26px 16px; border-radius: 18px; background: linear-gradient(135deg, #4a0f26, #1a0610); border: 1px solid var(--line); }
+.vibe-hero b { display: block; font-size: 56px; line-height: 1; }
+.vibe-hero span { font-size: 18px; font-weight: 800; }
+.plan-save { font-size: 11px; font-weight: 800; color: var(--ok); }
+.preview { max-width: 100%; max-height: 200px; border-radius: 12px; }

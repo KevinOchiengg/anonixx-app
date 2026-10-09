@@ -1,0 +1,12 @@
+.bubble { position: relative; }
+.reply-quote { font-size: 12px; opacity: 0.8; border-left: 3px solid var(--rose); padding: 2px 8px; background: rgba(0, 0, 0, 0.18); border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.msg-actions button { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); color: #fff; }
+.reply-bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 16px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); }
+.reply-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reply-bar button { font-size: 20px; line-height: 1; }
+.icon-btn { flex: none; font-size: 20px; padding: 6px; line-height: 1; }
+.icon-btn:disabled { opacity: 0.45; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; animation: recpulse 1s infinite; }
+@keyframes recpulse { 50% { opacity: 0.3; } }
+.bubble audio { max-width: 100%; }
