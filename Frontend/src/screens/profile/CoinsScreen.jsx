@@ -14,6 +14,7 @@ import React, {
   useState,
 } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   Platform,
@@ -47,6 +48,10 @@ import {
 import DailyRewardBanner       from '../../components/rewards/DailyRewardBanner';
 import MpesaPaymentSheet       from '../../components/payments/MpesaPaymentSheet';
 import StripePaymentSheet      from '../../components/payments/StripePaymentSheet';
+import { useToast } from '../../components/ui/Toast';
+import {
+  USE_PLAY_BILLING, COIN_PACKS, buyCoins, fetchCoinPrices, recoverCoinPurchases, isCancelled,
+} from '../../utils/playBilling';
 import { HIT_SLOP, rf, rp, rs } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 
@@ -57,6 +62,7 @@ const REASON_META = {
   streak_milestone: { icon: TrendingUp,  color: '#22c55e', label: 'Streak milestone' },
   referral_bonus:   { icon: Users,       color: '#3b82f6', label: 'Referral'         },
   milestone:        { icon: Zap,         color: '#FF634A', label: 'Achievement'      },
+  iap_purchase:     { icon: ShoppingBag, color: '#22c55e', label: 'Top up'           },
   mpesa_purchase:   { icon: ShoppingBag, color: '#22c55e', label: 'Top up'           },
   stripe_purchase:  { icon: CreditCard,  color: '#635BFF', label: 'Top up'           },
   connect_unlock:   { icon: Zap,         color: '#ef4444', label: 'Connect unlock'   },
@@ -160,7 +166,7 @@ const WalletHeader = React.memo(({ balance, streak, geoConfig, onMpesa, onStripe
         )}
 
         {/* M-Pesa button — only for M-Pesa countries */}
-        {showMpesa && (
+        {!USE_PLAY_BILLING && showMpesa && (
           <TouchableOpacity
             onPress={onMpesa}
             activeOpacity={0.88}
@@ -179,8 +185,8 @@ const WalletHeader = React.memo(({ balance, streak, geoConfig, onMpesa, onStripe
           </TouchableOpacity>
         )}
 
-        {/* Stripe / card button — always visible */}
-        <TouchableOpacity
+        {/* Stripe / card button — off on Android, where Google Play Billing is required */}
+        {!USE_PLAY_BILLING && <TouchableOpacity
           onPress={onStripe}
           activeOpacity={0.88}
           hitSlop={HIT_SLOP}
@@ -197,7 +203,7 @@ const WalletHeader = React.memo(({ balance, streak, geoConfig, onMpesa, onStripe
               {showMpesa ? 'Pay by Card' : 'Add Coins'}
             </Text>
           </LinearGradient>
-        </TouchableOpacity>
+        </TouchableOpacity>}
       </LinearGradient>
     </Animated.View>
   );
@@ -272,6 +278,64 @@ const hStyles = StyleSheet.create({
   topUpText: { color: '#fff', fontSize: rf(14), fontWeight: '700' },
 });
 
+// ─── Google Play coin packs ───────────────────────────────────────────────────
+const PlayCoinPacks = React.memo(({ onBought }) => {
+  const { showToast } = useToast();
+  const [prices, setPrices] = useState({});
+  const [busy, setBusy] = useState(null);
+
+  useEffect(() => {
+    fetchCoinPrices().then(setPrices).catch(() => {});
+    recoverCoinPurchases().then((n) => { if (n) onBought(); }).catch(() => {});
+  }, [onBought]);
+
+  const buy = useCallback(async (pack) => {
+    setBusy(pack.id);
+    try {
+      await buyCoins(pack.sku);
+      showToast({ type: 'success', message: `${pack.coins} coins added.` });
+      onBought();
+    } catch (e) {
+      if (!isCancelled(e)) showToast({ type: 'error', message: e.message || 'Purchase failed. Try again.' });
+    } finally {
+      setBusy(null);
+    }
+  }, [onBought, showToast]);
+
+  return (
+    <View style={packStyles.wrap}>
+      <Text style={packStyles.title}>Get coins</Text>
+      {COIN_PACKS.map((pack) => (
+        <TouchableOpacity
+          key={pack.id}
+          style={packStyles.row}
+          onPress={() => buy(pack)}
+          disabled={!!busy}
+          activeOpacity={0.85}
+        >
+          <Coins size={rs(20)} color={THEME.gold} />
+          <Text style={packStyles.coins}>{pack.coins} coins</Text>
+          {busy === pack.id
+            ? <ActivityIndicator color={THEME.primary} />
+            : <Text style={packStyles.price}>{prices[pack.sku] || 'Buy'}</Text>}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+});
+
+const packStyles = StyleSheet.create({
+  wrap:  { marginHorizontal: rp(16), marginTop: rp(16), gap: rp(8) },
+  title: { color: THEME.text, fontSize: rf(15), fontWeight: '700', marginBottom: rp(2) },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: rs(10),
+    padding: rp(14), borderRadius: rs(14), borderWidth: 1, borderColor: THEME.border,
+    backgroundColor: THEME.surface,
+  },
+  coins: { flex: 1, color: THEME.text, fontSize: rf(15), fontWeight: '700' },
+  price: { color: THEME.primary, fontSize: rf(15), fontWeight: '800' },
+});
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function CoinsScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -287,6 +351,11 @@ export default function CoinsScreen({ navigation }) {
     dispatch(fetchStreak());
     dispatch(fetchGeoConfig());
   }, []);
+
+  const refreshWallet = useCallback(() => {
+    dispatch(fetchBalance());
+    dispatch(fetchTransactions());
+  }, [dispatch]);
 
   const handleMpesa  = useCallback(() => setMpesaVisible(true),  []);
   const handleStripe = useCallback(() => setStripeVisible(true), []);
@@ -306,13 +375,14 @@ export default function CoinsScreen({ navigation }) {
         onMpesa={handleMpesa}
         onStripe={handleStripe}
       />
+      {USE_PLAY_BILLING && <PlayCoinPacks onBought={refreshWallet} />}
       <DailyRewardBanner />
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Transaction History</Text>
         <Text style={styles.sectionSub}>{transactions.length} records</Text>
       </View>
     </>
-  ), [balance, streak, geoConfig, transactions.length, handleMpesa, handleStripe]);
+  ), [balance, streak, geoConfig, transactions.length, handleMpesa, handleStripe, refreshWallet]);
 
   const ListEmpty = useMemo(() => (
     <View style={styles.emptyWrap}>
@@ -359,7 +429,7 @@ export default function CoinsScreen({ navigation }) {
       />
 
       {/* M-Pesa sheet — only mounts for M-Pesa countries */}
-      {geoConfig?.show_mpesa && (
+      {!USE_PLAY_BILLING && geoConfig?.show_mpesa && (
         <MpesaPaymentSheet
           visible={mpesaVisible}
           onClose={() => setMpesaVisible(false)}
@@ -368,11 +438,13 @@ export default function CoinsScreen({ navigation }) {
       )}
 
       {/* Stripe sheet — always available */}
-      <StripePaymentSheet
-        visible={stripeVisible}
-        onClose={() => setStripeVisible(false)}
-        packages={geoConfig?.packages}
-      />
+      {!USE_PLAY_BILLING && (
+        <StripePaymentSheet
+          visible={stripeVisible}
+          onClose={() => setStripeVisible(false)}
+          packages={geoConfig?.packages}
+        />
+      )}
     </SafeAreaView>
   );
 }

@@ -83,13 +83,7 @@ export default function SettingsScreen({ navigation }) {
   const [haptics,          setHaptics]          = useState(true);
   const [inAppSounds,      setInAppSounds]      = useState(true);
 
-  const handleDeleteAccount = useCallback(() => {
-    showToast({
-      type:    'warning',
-      title:   'This is permanent',
-      message: 'Your account and everything in it get erased for good. Contact support to do it.',
-    });
-  }, [showToast]);
+  const handleDeleteAccount = useCallback(() => navigation.navigate('DeleteAccount'), [navigation]);
 
   const openLink = useCallback((url) => {
     Linking.openURL(url).catch(() => {
@@ -128,6 +122,13 @@ export default function SettingsScreen({ navigation }) {
             label="Email & Password"
             desc="Manage login credentials"
             onPress={() => navigation.navigate('ChangePassword')}
+          />
+          <View style={sec.divider} />
+          <NavRow
+            icon={HelpCircle}
+            label="Customer Support"
+            desc="Chat with us or request a refund"
+            onPress={() => navigation.navigate('SupportChat')}
           />
           <View style={sec.divider} />
           <NavRow
@@ -314,6 +315,13 @@ export default function SettingsScreen({ navigation }) {
             label="Community Guidelines"
             onPress={() => navigation.navigate('Legal', { type: 'guidelines' })}
           />
+        </Section>
+
+        {/* ── Crisis support ── */}
+        <Section title="Need to talk to someone?">
+          <NavRow icon={HelpCircle} label="Befrienders Kenya · +254 722 178 177" onPress={() => openLink('tel:+254722178177')} />
+          <View style={sec.divider} />
+          <NavRow icon={HelpCircle} label="Kenya Red Cross · 1199 (free)" onPress={() => openLink('tel:1199')} />
         </Section>
 
         {/* ── Logout ── */}

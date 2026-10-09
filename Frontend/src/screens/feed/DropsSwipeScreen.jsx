@@ -33,18 +33,19 @@ import {
   ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
   TouchableWithoutFeedback, View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Slider from '@react-native-community/slider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
   Bookmark, Coins, Eye, ExternalLink, Heart, Link2, MapPin, Menu, MessageCircle,
-  Pause, Play, Search, Share2, X,
+  MoreHorizontal, Pause, Play, Search, Share2, X,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -55,6 +56,7 @@ import FeedAdCard from '../../components/feed/FeedAdCard';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useToast } from '../../components/ui/Toast';
+import ReportSheet from '../../components/feed/ReportSheet';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { getDeviceId } from '../../utils/deviceId';
@@ -73,7 +75,7 @@ const FEED_AD_FREQUENCY = 8;
 const { width, height } = Dimensions.get('window');
 
 // Matches COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
-const UNLOCK_COST = 50;
+const UNLOCK_COST = 6;
 
 // Mirrors LOCATION_SCOPE_LABELS in DropsFeedScreen.jsx
 const LOCATION_SCOPE_LABELS = {
@@ -151,16 +153,20 @@ const ViewsStat = React.memo(({ count }) => {
 // profile sheet DropCard.jsx already uses in the card feed — same
 // avatar-or-initial rendering, and Link Up lives there too as one of the
 // profile's own details, not just as the pinned button on the slide
-// itself. Never opens for admin drops — is_admin_drop's whole point is
-// that the account behind it stays untraceable.
+// itself. Never opens a profile for admin drops — is_admin_drop's whole
+// point is that the account behind it stays untraceable. An admin tapping
+// an Anonixx name is taken to the admin dashboard instead; for everyone
+// else that tap does nothing.
 const AuthorProfileTrigger = ({ post, navigation, children }) => {
   const [visible, setVisible] = useState(false);
+  const isAdminViewer = useSelector((state) => !!state.auth.user?.is_admin);
+  const opensDashboard = post.is_admin_drop && isAdminViewer;
   return (
     <>
       <TouchableOpacity
-        onPress={() => setVisible(true)}
-        activeOpacity={post.is_admin_drop ? 1 : 0.75}
-        disabled={post.is_admin_drop}
+        onPress={() => (opensDashboard ? navigation.navigate('AdminDashboard') : setVisible(true))}
+        activeOpacity={post.is_admin_drop && !opensDashboard ? 1 : 0.75}
+        disabled={post.is_admin_drop && !opensDashboard}
       >
         {children}
       </TouchableOpacity>
@@ -197,7 +203,7 @@ const RailAvatar = ({ post, navigation }) => (
 // ─── VIDEO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 const VideoSlide = ({
   post, isActive, onLike, liked, likesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, navigation,
+  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const lastTap = useRef(null);
   const [showHeart, setShowHeart] = useState(false);
@@ -207,7 +213,6 @@ const VideoSlide = ({
   const [expanded, setExpanded] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
-  const isSeekingRef = useRef(false);
   const [playerStatus, setPlayerStatus] = useState('loading');
   const wasEverActive = useRef(false);
   const sourceLoaded = useRef(false);
@@ -235,7 +240,6 @@ const VideoSlide = ({
   useEffect(() => {
     if (!isActive) return;
     const id = setInterval(() => {
-      if (isSeekingRef.current) return;
       const ct = player.currentTime;
       const d = player.duration;
       if (typeof ct === 'number' && !isNaN(ct)) setVideoCurrentTime(ct);
@@ -301,25 +305,30 @@ const VideoSlide = ({
     ]).start(() => setShowHeart(false));
   };
 
-  const formatTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-
   const shouldTruncate = (post.content?.length || 0) > 100;
   const displayContent = shouldTruncate && !expanded
     ? post.content.substring(0, 100) + '...' : post.content;
 
   return (
     <View style={ss.slide}>
+      <VideoView
+        player={player}
+        style={StyleSheet.absoluteFill}
+        contentFit="contain"
+        nativeControls={false}
+        allowsPictureInPicture={false}
+        pointerEvents="none"
+      />
+      {/* A separate top-most sibling, not a wrapper around VideoView —
+          expo-video's native surface (ExoPlayer/SurfaceView on Android)
+          can swallow touches over the actual video pixels even with
+          pointerEvents="none" on the view itself, which is why tapping
+          dead-center (where the video, not letterboxing, actually renders)
+          silently did nothing while taps near the letterboxed edges still
+          worked. Rendering this touch layer after VideoView in the stack
+          makes it the one that always receives the tap first, everywhere. */}
       <TouchableWithoutFeedback onPress={handleTap}>
-        <View style={StyleSheet.absoluteFill}>
-          <VideoView
-            player={player}
-            style={StyleSheet.absoluteFill}
-            contentFit="contain"
-            nativeControls={false}
-            allowsPictureInPicture={false}
-            pointerEvents="none"
-          />
-        </View>
+        <View style={StyleSheet.absoluteFill} />
       </TouchableWithoutFeedback>
 
       {playerStatus === 'loading' && (
@@ -328,74 +337,72 @@ const VideoSlide = ({
         </View>
       )}
 
-      <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
-      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
-
       {showHeart && (
         <Animated.View pointerEvents="none" style={[ss.heartBurst, { transform: [{ scale: heartScale }], opacity: heartOpacity }]}>
           <Heart size={100} color={THEME.primary} fill={THEME.primary} />
         </Animated.View>
       )}
 
-      <View style={ss.rail}>
-        <RailAvatar post={post} navigation={navigation} />
-        <AnimatedActionBtn
-          icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-          count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
-        />
-        <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
-        <ActionBtn
-          icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-          count={null} onPress={onSave} active={saved}
-        />
-        <ActionBtn
-          icon={<Share2 size={28} color="#fff" />} count={null}
-          onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
-        />
-        <ViewsStat count={post.views_count} />
-      </View>
+      {/* Two-finger hold declutters down to header + raw video — every
+          gradient, the rail, the caption/link-up column, and the progress
+          line all drop out together so there's nothing left crowding it. */}
+      {!chromeHidden && (
+        <>
+          <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
 
-      <View style={ss.bottomInfo}>
-        <View style={ss.authorRow}>
-          {/* Avatar lives in the rail now (RailAvatar, above Like) — the
-              same TikTok pattern of showing it once, not duplicated here.
-              @name stays its own tap target, same as TikTok's username. */}
-          <AuthorProfileTrigger post={post} navigation={navigation}>
-            <View style={ss.authorMeta}>
-              <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-              <Text style={ss.timeAgo}>{post.time_ago}</Text>
-            </View>
-          </AuthorProfileTrigger>
-        </View>
-
-        {post.content ? (
-          <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
-            <Text style={ss.contentText}>
-              {displayContent}
-              {shouldTruncate && <Text style={ss.moreText}>{expanded ? ' less' : ' more'}</Text>}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
-      </View>
-
-      {videoDuration > 0 && (
-        <View style={ss.progressWrap}>
-          <View style={ss.progressTimeRow}>
-            <Text style={ss.progressTime}>{formatTime(videoCurrentTime)}</Text>
-            <Text style={ss.progressTime}>{formatTime(videoDuration)}</Text>
+          <View style={ss.rail}>
+            <RailAvatar post={post} navigation={navigation} />
+            <AnimatedActionBtn
+              icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
+              count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
+            />
+            <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn
+              icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
+              count={null} onPress={onSave} active={saved}
+            />
+            <ActionBtn
+              icon={<Share2 size={28} color="#fff" />} count={null}
+              onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+            />
+            {!isOwnPost && !post.is_admin_drop && (
+              <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+            )}
+            <ViewsStat count={post.views_count} />
           </View>
-          <Slider
-            style={ss.progressSlider}
-            minimumValue={0} maximumValue={videoDuration} value={videoCurrentTime}
-            minimumTrackTintColor={THEME.primary} maximumTrackTintColor="rgba(255,255,255,0.2)"
-            thumbTintColor={THEME.primary}
-            onSlidingStart={() => { isSeekingRef.current = true; }}
-            onValueChange={(val) => setVideoCurrentTime(val)}
-            onSlidingComplete={(val) => { player.seekBy(val - player.currentTime); setVideoCurrentTime(val); isSeekingRef.current = false; }}
-          />
-        </View>
+
+          <View style={ss.bottomInfo}>
+            <View style={ss.authorRow}>
+              {/* Avatar lives in the rail now (RailAvatar, above Like) — the
+                  same TikTok pattern of showing it once, not duplicated here.
+                  @name stays its own tap target, same as TikTok's username. */}
+              <AuthorProfileTrigger post={post} navigation={navigation}>
+                <View style={ss.authorMeta}>
+                  <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
+                  <Text style={ss.timeAgo}>{post.time_ago}</Text>
+                </View>
+              </AuthorProfileTrigger>
+            </View>
+
+            {post.content ? (
+              <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
+                <Text style={ss.contentText}>
+                  {displayContent}
+                  {shouldTruncate && <Text style={ss.moreText}>{expanded ? ' less' : ' more'}</Text>}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
+          </View>
+
+          {videoDuration > 0 && (
+            <View style={ss.progressWrap} pointerEvents="none">
+              <View style={[ss.progressFill, { width: `${Math.min(100, (videoCurrentTime / videoDuration) * 100)}%` }]} />
+            </View>
+          )}
+        </>
       )}
     </View>
   );
@@ -404,7 +411,7 @@ const VideoSlide = ({
 // ─── AUDIO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 const AudioSlide = ({
   post, isActive, onLike, liked, likesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, navigation,
+  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const audioPlayer = useAudioPlayer(null);
   const audioStatus = useAudioPlayerStatus(audioPlayer);
@@ -475,23 +482,28 @@ const AudioSlide = ({
       <View style={as.bgAccent} />
       <View style={as.bgAccent2} />
 
-      <View style={ss.rail}>
-        <RailAvatar post={post} navigation={navigation} />
-        <ActionBtn
-          icon={<Heart size={26} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-          count={likesCount} onPress={onLike} active={liked}
-        />
-        <ActionBtn icon={<MessageCircle size={26} color="#fff" />} count={commentCount} onPress={onComment} />
-        <ActionBtn
-          icon={<Bookmark size={26} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-          count={null} onPress={onSave} active={saved}
-        />
-        <ActionBtn
-          icon={<Share2 size={26} color="#fff" />} count={null}
-          onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
-        />
-        <ViewsStat count={post.views_count} />
-      </View>
+      {!chromeHidden && (
+        <View style={ss.rail}>
+          <RailAvatar post={post} navigation={navigation} />
+          <ActionBtn
+            icon={<Heart size={26} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
+            count={likesCount} onPress={onLike} active={liked}
+          />
+          <ActionBtn icon={<MessageCircle size={26} color="#fff" />} count={commentCount} onPress={onComment} />
+          <ActionBtn
+            icon={<Bookmark size={26} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
+            count={null} onPress={onSave} active={saved}
+          />
+          <ActionBtn
+            icon={<Share2 size={26} color="#fff" />} count={null}
+            onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+          />
+          {!isOwnPost && !post.is_admin_drop && (
+            <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+          )}
+          <ViewsStat count={post.views_count} />
+        </View>
+      )}
 
       <View style={as.center}>
         <View style={as.authorRow}>
@@ -537,6 +549,39 @@ const AudioSlide = ({
   );
 };
 
+// ─── IMAGE SLIDE CAROUSEL ───────────────────────────────────────────
+// A multi-image post's own horizontal swipe, nested inside the vertical
+// feed's swipe — same shape as Instagram/TikTok's photo-carousel posts:
+// swiping left/right pages through this post's own photos, swiping up/
+// down (the outer FlatList, untouched by this) moves to the next post.
+const ImageSlideCarousel = React.memo(({ images }) => {
+  const [index, setIndex] = useState(0);
+  const onScrollEnd = useCallback((e) => {
+    setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+  }, []);
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onScrollEnd}
+        scrollEventThrottle={16}
+        decelerationRate="fast"
+      >
+        {images.map((url, i) => (
+          <Image key={i} source={{ uri: url }} style={{ width, height: '100%' }} resizeMode="contain" />
+        ))}
+      </ScrollView>
+      <View style={sw.imageDotsRow} pointerEvents="none">
+        {images.map((_, i) => (
+          <View key={i} style={[sw.imageDot, i === index && sw.imageDotActive]} />
+        ))}
+      </View>
+    </View>
+  );
+});
+
 // ─── TEXT SLIDE (new) ─────────────────────────────────────────────
 // Full-bleed, same as VideoSlide — an attached image fills the entire
 // slide with the confession as a caption underneath (identical shape to
@@ -546,7 +591,7 @@ const AudioSlide = ({
 // top of a separate black background.
 const TextSlide = ({
   post, onLike, liked, likesCount, onSave, saved, onComment, commentCount,
-  isOwnPost, onLinkUp, navigation,
+  isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false,
 }) => {
   const [showHeart, setShowHeart] = useState(false);
   const heartScale = useRef(new Animated.Value(0)).current;
@@ -557,7 +602,10 @@ const TextSlide = ({
   const [fullTextVisible, setFullTextVisible] = useState(false);
 
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
-  const hasImage = !!(post.media_url && post.media_type === 'image');
+  const imageList = Array.isArray(post.images) && post.images.length
+    ? post.images
+    : (post.media_url && post.media_type === 'image' ? [post.media_url] : []);
+  const hasImage = imageList.length > 0;
 
   // Guaranteed-readable fallback for the no-image case's big centered
   // text: adjustsFontSizeToFit below already shrinks to fit most
@@ -608,14 +656,25 @@ const TextSlide = ({
       <TouchableWithoutFeedback onPress={handleTap}>
         <View style={StyleSheet.absoluteFill}>
           {hasImage ? (
-            // "contain" — same call already made for VideoSlide's video
-            // above ("cover" crops whatever doesn't match a full-screen
-            // portrait frame; images come from an arbitrary gallery pick,
-            // not a fixed vertical shot, so cropping cuts off real content
-            // at the edges just like it did for video).
-            <Image source={{ uri: post.media_url }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+            imageList.length > 1 ? (
+              <ImageSlideCarousel images={imageList} />
+            ) : (
+              // "contain" — same call already made for VideoSlide's video
+              // above ("cover" crops whatever doesn't match a full-screen
+              // portrait frame; images come from an arbitrary gallery pick,
+              // not a fixed vertical shot, so cropping cuts off real content
+              // at the edges just like it did for video).
+              <Image source={{ uri: imageList[0] }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+            )
           ) : (
-            <View style={sw.bigTextWrap} pointerEvents="none">
+            // paddingTop clears the opaque header panel (headerHeight),
+            // which otherwise sat on top of this box and cut off however
+            // many lines happened to land underneath it. paddingBottom is
+            // deliberately small — the old rp(140) reserved way more room
+            // than bottomInfo/rail actually need, which just biased the
+            // centered text upward and left dead space above the tab bar
+            // instead of the text sitting near true mid-screen.
+            <View style={[sw.bigTextWrap, { paddingTop: headerHeight + rp(12) }]} pointerEvents="none">
               <Text
                 style={sw.bigTextConfession}
                 numberOfLines={14}
@@ -635,59 +694,66 @@ const TextSlide = ({
         </Animated.View>
       )}
 
-      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={ss.gradientBottom} pointerEvents="none" />
+      {!chromeHidden && (
+        <>
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={ss.gradientBottom} pointerEvents="none" />
 
-      <View style={ss.rail}>
-        <RailAvatar post={post} navigation={navigation} />
-        <AnimatedActionBtn
-          icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-          count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
-        />
-        <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
-        <ActionBtn
-          icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-          count={null} onPress={onSave} active={saved}
-        />
-        <ActionBtn
-          icon={<Share2 size={28} color="#fff" />} count={null}
-          onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
-        />
-        <ViewsStat count={post.views_count} />
-      </View>
+          <View style={ss.rail}>
+            <RailAvatar post={post} navigation={navigation} />
+            <AnimatedActionBtn
+              icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
+              count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
+            />
+            <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn
+              icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
+              count={null} onPress={onSave} active={saved}
+            />
+            <ActionBtn
+              icon={<Share2 size={28} color="#fff" />} count={null}
+              onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+            />
+            {!isOwnPost && !post.is_admin_drop && (
+              <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+            )}
+            <ViewsStat count={post.views_count} />
+          </View>
 
-      <View style={ss.bottomInfo}>
-        <View style={ss.authorRow}>
-          <AuthorProfileTrigger post={post} navigation={navigation}>
-            <View style={ss.authorMeta}>
-              <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-              <Text style={ss.timeAgo}>{post.time_ago}</Text>
+          <View style={ss.bottomInfo}>
+            <View style={ss.authorRow}>
+              <AuthorProfileTrigger post={post} navigation={navigation}>
+                <View style={ss.authorMeta}>
+                  <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
+                  <Text style={ss.timeAgo}>{post.time_ago}</Text>
+                </View>
+              </AuthorProfileTrigger>
             </View>
-          </AuthorProfileTrigger>
-        </View>
 
-        {/* Image posts show the confession as a caption below it, exactly
-            like a video's caption (same inline "... more/less", not a
-            modal) — the image is the primary visual, text is secondary.
-            No-image posts already show the confession as the big centered
-            text itself, so it isn't repeated here — just the escape hatch
-            for the rare case that's still too long to read comfortably at
-            its shrunk-to-fit size. */}
-        {hasImage && post.content ? (
-          <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
-            <Text style={ss.contentText}>
-              {displayCaption}
-              {shouldTruncateCaption && <Text style={ss.moreText}>{expanded ? ' less' : ' more'}</Text>}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-        {!hasImage && isLong && (
-          <TouchableOpacity onPress={() => setFullTextVisible(true)} activeOpacity={0.7} style={sw.readMoreBtn} hitSlop={HIT_SLOP}>
-            <Text style={sw.readMoreText}>Read full confession</Text>
-          </TouchableOpacity>
-        )}
+            {/* Image posts show the confession as a caption below it, exactly
+                like a video's caption (same inline "... more/less", not a
+                modal) — the image is the primary visual, text is secondary.
+                No-image posts already show the confession as the big centered
+                text itself, so it isn't repeated here — just the escape hatch
+                for the rare case that's still too long to read comfortably at
+                its shrunk-to-fit size. */}
+            {hasImage && post.content ? (
+              <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
+                <Text style={ss.contentText}>
+                  {displayCaption}
+                  {shouldTruncateCaption && <Text style={ss.moreText}>{expanded ? ' less' : ' more'}</Text>}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {!hasImage && isLong && (
+              <TouchableOpacity onPress={() => setFullTextVisible(true)} activeOpacity={0.7} style={sw.readMoreBtn} hitSlop={HIT_SLOP}>
+                <Text style={sw.readMoreText}>Read full confession</Text>
+              </TouchableOpacity>
+            )}
 
-        {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
-      </View>
+            {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
+          </View>
+        </>
+      )}
 
       <Modal visible={fullTextVisible} transparent animationType="slide" onRequestClose={() => setFullTextVisible(false)}>
         <View style={sw.fullTextBackdrop}>
@@ -712,7 +778,7 @@ const TextSlide = ({
 // ─── POLL SLIDE (new) ─────────────────────────────────────────────
 const PollSlide = ({
   post, isAuthenticated, onVote, onLike, liked, likesCount, onSave, saved,
-  onComment, commentCount, isOwnPost, onLinkUp, navigation,
+  onComment, commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
 
@@ -724,33 +790,40 @@ const PollSlide = ({
         <PollCard poll={post.poll} postId={post.id} isAuthenticated={isAuthenticated} onVote={onVote} />
       </View>
 
-      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={ss.gradientBottom} pointerEvents="none" />
+      {!chromeHidden && (
+        <>
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={ss.gradientBottom} pointerEvents="none" />
 
-      <View style={ss.rail}>
-        <RailAvatar post={post} navigation={navigation} />
-        <ActionBtn
-          icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-          count={likesCount} onPress={onLike} active={liked}
-        />
-        <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
-        <ActionBtn
-          icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-          count={null} onPress={onSave} active={saved}
-        />
-        <ViewsStat count={post.views_count} />
-      </View>
+          <View style={ss.rail}>
+            <RailAvatar post={post} navigation={navigation} />
+            <ActionBtn
+              icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
+              count={likesCount} onPress={onLike} active={liked}
+            />
+            <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn
+              icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
+              count={null} onPress={onSave} active={saved}
+            />
+            {!isOwnPost && !post.is_admin_drop && (
+              <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+            )}
+            <ViewsStat count={post.views_count} />
+          </View>
 
-      <View style={ss.bottomInfo}>
-        <View style={ss.authorRow}>
-          <AuthorProfileTrigger post={post} navigation={navigation}>
-            <View style={ss.authorMeta}>
-              <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-              <Text style={ss.timeAgo}>{post.time_ago}</Text>
+          <View style={ss.bottomInfo}>
+            <View style={ss.authorRow}>
+              <AuthorProfileTrigger post={post} navigation={navigation}>
+                <View style={ss.authorMeta}>
+                  <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
+                  <Text style={ss.timeAgo}>{post.time_ago}</Text>
+                </View>
+              </AuthorProfileTrigger>
             </View>
-          </AuthorProfileTrigger>
-        </View>
-        {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
-      </View>
+            {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
+          </View>
+        </>
+      )}
     </View>
   );
 };
@@ -815,10 +888,45 @@ export default function DropsSwipeScreen({ navigation, route }) {
   // onLayout below corrects it to the real measured height once mounted.
   const estimatedSlideHeight = height - tabBarHeight;
   const [listHeight, setListHeight] = useState(estimatedSlideHeight);
+  // Real footprint of the opaque header panel below — insets.top + its own
+  // paddingTop (rp(8)) + the icon row's height (rs(34)) + paddingBottom
+  // (rp(12)). TextSlide's centered confession needs this to know where the
+  // header actually stops covering content, instead of centering across
+  // the full slide and getting its top lines hidden underneath it.
+  const headerHeight = insets.top + rp(8) + rs(34) + rp(12);
   const dispatch = useDispatch();
   const marketFeed = useSelector(selectMarketFeed);
 
+  // ── Two-finger long-press to declutter ─────────────────────────
+  // Holding two fingers anywhere on the feed hides every overlay (rail,
+  // captions, gradients, the video progress line, the daily-claim banner)
+  // except the header, so a video/photo/confession can be looked at
+  // without icons and buttons crowding it — same idea as a chat app's
+  // "hold to peek". Chrome comes back the instant either finger lifts.
+  //
+  // Built on react-native-gesture-handler's native recognizer, not RN's
+  // legacy PanResponder — a first attempt with PanResponder never fired,
+  // because once ANY single-finger touch already claims the legacy
+  // responder (the FlatList's own scroll, or a slide's tap handler), RN's
+  // responder system doesn't re-run "should I become responder" just
+  // because a second finger joined mid-gesture. Gesture-handler recognizes
+  // pointer count natively, independent of whatever else is already
+  // tracking the first finger, so it actually sees the second finger land.
+  // LongPressGesture only exposes numberOfPointers() (an exact count) —
+  // not minPointers()/maxPointers(), which don't exist on this gesture
+  // and throw "is not a function" if called.
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const chromeLongPress = useMemo(() => (
+    Gesture.LongPress()
+      .numberOfPointers(2)
+      .minDuration(450)
+      .maxDistance(30)
+      .onStart(() => { runOnJS(setChromeHidden)(true); })
+      .onFinalize(() => { runOnJS(setChromeHidden)(false); })
+  ), []);
+
   const [posts, setPosts] = useState([]);
+  const [linkedPost, setLinkedPost] = useState(null);
   const [feedAds, setFeedAds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sessionPosts, setSessionPosts] = useState(0);
@@ -831,9 +939,13 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [likeMap, setLikeMap] = useState({});
   const [saveMap, setSaveMap] = useState({});
   const [commentCounts, setCommentCounts] = useState({});
+  const [reportPost, setReportPost] = useState(null);
   const [commentSheet, setCommentSheet] = useState({ visible: false, postId: null, isOwner: false });
 
   const loadingRef = useRef(false);
+  const cursorRef = useRef(null);
+  const sessionPostsRef = useRef(0);
+  const hasMoreRef = useRef(true);
   const hasLoadedRef = useRef(false);
   const viewedRef = useRef(new Set());
   const flatListRef = useRef(null);
@@ -856,9 +968,11 @@ export default function DropsSwipeScreen({ navigation, route }) {
       const token = await AsyncStorage.getItem('token');
       const headers = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const currentOffset = reset ? 0 : sessionPosts;
+      const currentOffset = reset ? 0 : sessionPostsRef.current;
+      const params = `session_posts=${currentOffset}` +
+        (!reset && cursorRef.current ? `&cursor=${encodeURIComponent(cursorRef.current)}` : '');
 
-      const res = await fetch(`${API_BASE_URL}/api/v1/drops/feed?session_posts=${currentOffset}`, { headers });
+      const res = await fetch(`${API_BASE_URL}/api/v1/drops/feed?${params}`, { headers });
       if (!res.ok) {
         if (res.status === 401) await AsyncStorage.removeItem('token');
         return;
@@ -896,6 +1010,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
         fresh.forEach((p) => { next[p.id] = p.thread_count || 0; });
         return next;
       });
+      sessionPostsRef.current = data.session_posts;
+      cursorRef.current = data.next_cursor || null;
+      hasMoreRef.current = !!data.has_more;
       setSessionPosts(data.session_posts);
       setHasMore(data.has_more);
     } catch {
@@ -904,7 +1021,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [sessionPosts, showToast]);
+  }, [showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1042,8 +1159,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }, []);
 
   const handleEndReached = useCallback(() => {
-    if (!loadingRef.current && hasMore && !sessionLimitReached) loadFeed(false);
-  }, [hasMore, sessionLimitReached, loadFeed]);
+    if (!loadingRef.current && hasMoreRef.current && !sessionLimitReached) loadFeed(false);
+  }, [sessionLimitReached, loadFeed]);
 
   const getItemLayout = useCallback((_, index) => ({ length: listHeight, offset: listHeight * index, index }), [listHeight]);
   const keyExtractor = useCallback((item) => item.id, []);
@@ -1053,12 +1170,13 @@ export default function DropsSwipeScreen({ navigation, route }) {
   // gets a market slide, every FEED_AD_FREQUENCY-th an ad slide (both can
   // land on the same position, matching the original independent moduli).
   const data = useMemo(() => {
-    let out = posts;
+    const base = linkedPost ? [linkedPost, ...posts.filter((p) => p.id !== linkedPost.id)] : posts;
+    let out = base;
     if (marketFeed.length > 0 || feedAds.length > 0) {
       out = [];
       let mIdx = 0;
       let aIdx = 0;
-      posts.forEach((p, i) => {
+      base.forEach((p, i) => {
         out.push(p);
         const n = i + 1;
         if (n % MARKET_FREQUENCY === 0 && mIdx < marketFeed.length) {
@@ -1073,7 +1191,43 @@ export default function DropsSwipeScreen({ navigation, route }) {
       });
     }
     return sessionLimitReached ? [...out, { id: '__session_limit__', __sessionLimit: true }] : out;
-  }, [posts, marketFeed, feedAds, sessionLimitReached]);
+  }, [posts, linkedPost, marketFeed, feedAds, sessionLimitReached]);
+
+  // Opened from a shared link (anonixx.app/drop/<id>): show that drop first.
+  const linkedDropId = route?.params?.dropId;
+  useEffect(() => {
+    if (!linkedDropId) return;
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/api/v1/drops/single/${encodeURIComponent(linkedDropId)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          showToast({ type: 'info', message: 'That post is no longer available.' });
+          return;
+        }
+        const d = await res.json();
+        setLinkedPost(d.post);
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch { /* offline — the normal feed still shows */ }
+    })();
+  }, [linkedDropId, showToast]);
+
+  // TikTok-style prefetch: pull the next page while the viewer is still a few
+  // slides from the end, so the list never runs dry mid-swipe, and warm the
+  // image cache for the slides just ahead.
+  const PREFETCH_AHEAD = 4;
+  useEffect(() => {
+    if (data.length > 0 && activeIndex >= data.length - PREFETCH_AHEAD) handleEndReached();
+    for (let i = activeIndex + 1; i <= activeIndex + 3 && i < data.length; i++) {
+      const it = data[i];
+      if (!it || it.__market || it.__ad || it.__sessionLimit) continue;
+      [it.image_url, it.card_image_url, ...(it.images || []).map((im) => (typeof im === 'string' ? im : im?.url))]
+        .filter(Boolean)
+        .forEach((u) => Image.prefetch(u).catch(() => {}));
+    }
+  }, [activeIndex, data, handleEndReached]);
 
   const renderItem = useCallback(({ item, index }) => {
     if (item.__sessionLimit) {
@@ -1111,7 +1265,10 @@ export default function DropsSwipeScreen({ navigation, route }) {
       onComment: () => setCommentSheet({ visible: true, postId: item.id, isOwner: item.is_own_post }),
       isOwnPost: item.is_own_post || false,
       onLinkUp: () => handleLinkUp(item),
+      onMore: () => setReportPost(item),
       navigation,
+      headerHeight,
+      chromeHidden,
     };
 
     let slide;
@@ -1128,7 +1285,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }, [
     activeIndex, screenFocused, likeMap, saveMap, commentCounts, listHeight,
     handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress,
-    isAuthenticated, navigation,
+    isAuthenticated, navigation, headerHeight, chromeHidden,
   ]);
 
   if (loading && posts.length === 0) {
@@ -1141,6 +1298,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }
 
   return (
+    <GestureDetector gesture={chromeLongPress}>
     <View style={ss.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
@@ -1170,9 +1328,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
         // instance count (not just what's visibly playing) that determines
         // how many video decoders/buffers are competing at once.
         removeClippedSubviews
-        maxToRenderPerBatch={1}
-        windowSize={3}
-        initialNumToRender={1}
+        maxToRenderPerBatch={2}
+        windowSize={5}
+        initialNumToRender={2}
       />
 
       {/* Header — a solid panel spanning the status bar down through the
@@ -1204,7 +1362,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
           height (rs(34)) + paddingBottom (rp(12)), now that the header is
           an opaque bar instead of floating icons with no real footprint
           to clear. */}
-      {isAuthenticated && (
+      {isAuthenticated && !chromeHidden && (
         <View style={[sw.rewardBannerWrap, { top: insets.top + rp(8) + rs(34) + rp(12) }]} pointerEvents="box-none">
           <DailyRewardBanner />
         </View>
@@ -1224,8 +1382,16 @@ export default function DropsSwipeScreen({ navigation, route }) {
         }}
       />
 
+      <ReportSheet
+        visible={!!reportPost}
+        post={reportPost}
+        onClose={() => setReportPost(null)}
+        onBlocked={(p) => setPosts((prev) => prev.filter((x) => x.user_id !== p.user_id))}
+      />
+
       <HamburgerMenu visible={menuVisible} onClose={() => setMenuVisible(false)} navigation={navigation} />
     </View>
+    </GestureDetector>
   );
 }
 
@@ -1235,20 +1401,34 @@ const ss = StyleSheet.create({
   slide: { width, height: '100%', backgroundColor: '#000' },
   gradientTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, zIndex: 1 },
   gradientBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 340, zIndex: 1 },
-  rail: { position: 'absolute', right: 12, bottom: 110, alignItems: 'center', gap: 24, zIndex: 10 },
+  // TikTok pins the rail's lowest icon almost flush with the tab bar, not
+  // floating well above it — bottom: 110 left a big dead gap under Views
+  // (the rail's last/lowest item). 14 sits it just above the bar instead.
+  rail: { position: 'absolute', right: 12, bottom: 14, alignItems: 'center', gap: 24, zIndex: 10 },
   actionBtn: { alignItems: 'center', gap: 5 },
   actionCount: { fontSize: 12, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
-  bottomInfo: { position: 'absolute', bottom: 52, left: 16, right: 76, zIndex: 10 },
+  // Brought down to sit at roughly the same baseline as the rail (bottom:
+  // 14) now that it's no longer floating well above the tab bar — same
+  // TikTok-style close-to-the-bottom placement, just a touch higher since
+  // this column grows upward from author row + caption + Link Up button,
+  // where the rail is only ever one icon tall at its lowest point.
+  bottomInfo: { position: 'absolute', bottom: 20, left: 16, right: 76, zIndex: 10 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   authorMeta: { flex: 1 },
   authorName: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
   timeAgo: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
   contentText: { fontSize: 14, color: 'rgba(255,255,255,0.92)', lineHeight: 21, marginBottom: 10, letterSpacing: 0.1 },
   moreText: { color: THEME.primary, fontWeight: '700' },
-  progressWrap: { position: 'absolute', bottom: 12, left: 0, right: 0, paddingHorizontal: 8, zIndex: 10 },
-  progressTimeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: -2 },
-  progressTime: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '600' },
-  progressSlider: { width: '100%', height: 30 },
+  // TikTok's own feed progress indicator: a hairline, not a boxed slider
+  // with time labels and a draggable thumb (the feed doesn't support
+  // scrubbing at all — only the full-screen player does). Thin enough
+  // (3px) to sit inside the gap already open below the rail (bottom: 14)
+  // and bottomInfo (bottom: 20) without touching either.
+  progressWrap: {
+    position: 'absolute', bottom: 4, left: 0, right: 0, height: 3,
+    backgroundColor: 'rgba(255,255,255,0.18)', zIndex: 10,
+  },
+  progressFill: { height: '100%', backgroundColor: THEME.primary },
   videoLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', zIndex: 2 },
   heartBurst: { position: 'absolute', top: '50%', left: '50%', marginLeft: -50, marginTop: -50, zIndex: 100 },
 });
@@ -1330,13 +1510,25 @@ const sw = StyleSheet.create({
   linkUpCostText: { fontSize: rf(11), fontWeight: '700', color: '#fff' },
 
 
-  bigTextWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(28), paddingBottom: rp(140) },
+  bigTextWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(28), paddingBottom: rp(24) },
   bigTextConfession: {
     fontFamily: 'PlayfairDisplay-Italic', fontSize: rf(34), lineHeight: rf(44),
     color: '#fff', textAlign: 'center', letterSpacing: 0.2,
     textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
   },
   pollSlideCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(20) },
+
+  // Multi-image carousel dots — sits just under the top safe area, clear
+  // of the bottom caption/rail chrome that already owns the lower third.
+  imageDotsRow: {
+    position: 'absolute', top: rp(10), left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'center', gap: rp(5),
+  },
+  imageDot: {
+    width: rs(5), height: rs(5), borderRadius: rs(2.5),
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  imageDotActive: { backgroundColor: '#fff', width: rs(14) },
 
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,

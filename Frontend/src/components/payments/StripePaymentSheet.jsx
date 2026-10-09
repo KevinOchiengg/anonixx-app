@@ -66,10 +66,8 @@ import { THEME } from '../../utils/theme';
 
 // ─── Static fallback packages (shown while geo config loads) ─────────────────
 const FALLBACK_PACKAGES = [
-  { id: 'starter', coins: 55,  label: 'Starter', tag: null,         stripe_display: '$0.99' },
-  { id: 'popular', coins: 120, label: 'Popular', tag: 'Best Value', stripe_display: '$1.99' },
-  { id: 'value',   coins: 350, label: 'Value',   tag: '+40% bonus', stripe_display: '$3.99' },
-  { id: 'power',   coins: 800, label: 'Power',   tag: '+60% bonus', stripe_display: '$6.99' },
+  { id: 'starter', coins: 3, label: 'Starter', tag: null,         stripe_display: '$0.99' },
+  { id: 'popular', coins: 6, label: 'Popular', tag: 'Best Value', stripe_display: '$1.99' },
 ];
 
 const SHEET_HEIGHT = SCREEN.height * 0.88;

@@ -21,11 +21,12 @@ import AnonProfileSheet from '../connect/AnonProfileSheet';
 import { useToast } from '../ui/Toast';
 import VoiceWaveform from '../common/VoiceWaveform';
 import { CommentBottomSheet } from './CommentBottomSheet';
+import ReportSheet from './ReportSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
 // Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
 // tapping Link up is never a price surprise.
-const UNLOCK_COST = 50;
+const UNLOCK_COST = 6;
 
 // removeClippedSubviews unmounts/remounts cards as they scroll in and out
 // of the render window — without this, every remount of the same video
@@ -373,6 +374,7 @@ function DropCard({
   const { showToast }       = useToast();
 
   const [menuVisible,         setMenuVisible]         = useState(false);
+  const [reportVisible,       setReportVisible]       = useState(false);
   const [profileSheetVisible, setProfileSheetVisible] = useState(false);
   const [showFullContent,     setShowFullContent]     = useState(false);
   const [textTruncated,       setTextTruncated]       = useState(false);
@@ -384,16 +386,19 @@ function DropCard({
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  // media_url/media_type is the drop's PRIMARY content slot (an image drop's
-  // photo, or a voice drop's audio). image_url is a separate, optional
-  // supplement a poll or voice drop can carry alongside its primary content
-  // — so both can be present and both render here.
+  // A real multi-image post (post.images, 2-10 photos picked at compose
+  // time) takes priority and renders every photo as its own slide. Falls
+  // back to the single-image pair below for everything else: media_url/
+  // media_type is the drop's PRIMARY content slot (an image drop's photo,
+  // or a voice drop's audio); image_url is a separate, optional supplement
+  // a poll or voice drop can carry alongside its primary content.
   const images = useMemo(() => {
+    if (Array.isArray(post.images) && post.images.length) return post.images;
     const arr = [];
     if (post.media_type === 'image' && post.media_url) arr.push(post.media_url);
     if (post.image_url && post.image_url !== post.media_url) arr.push(post.image_url);
     return arr;
-  }, [post.media_type, post.media_url, post.image_url]);
+  }, [post.images, post.media_type, post.media_url, post.image_url]);
 
   useEffect(() => {
     setLiked(post.is_liked || false);
@@ -494,19 +499,7 @@ function DropCard({
     } catch {}
   }, [post.content]);
 
-  const handleReport    = useCallback(() => { setMenuVisible(false); showToast({ type: 'info', message: 'Report submitted. Thank you.' }); }, [showToast]);
-  const handleBlockUser = useCallback(async () => {
-    setMenuVisible(false);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      await fetch(`${API_BASE_URL}/api/v1/users/block`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ user_id: post.user_id }),
-      });
-      showToast({ type: 'success', message: 'User blocked.' });
-    } catch {}
-  }, [post.user_id, showToast]);
+  const handleReport    = useCallback(() => { setMenuVisible(false); setReportVisible(true); }, []);
 
   // Admin drops carry the real admin account's user_id/anonymous_name
   // underneath the "Anonixx" display name — never open the profile sheet
@@ -538,8 +531,8 @@ function DropCard({
     { icon: <Share2 size={rs(18)} color={T.textSecondary} />, label: 'Share', onPress: () => { handleMenuClose(); handleShare(); } },
     { icon: <EyeOff size={rs(18)} color={T.textSecondary} />, label: 'Hide Drop', onPress: handleMenuClose },
     { icon: <Flag size={rs(18)} color={T.primary} />, label: 'Report', onPress: handleReport, danger: true },
-    { icon: <UserX size={rs(18)} color={T.primary} />, label: 'Block User', onPress: handleBlockUser, danger: true },
-  ], [post.is_saved, post.id, onSave, handleShare, handleReport, handleBlockUser, handleMenuClose]);
+    { icon: <UserX size={rs(18)} color={T.primary} />, label: 'Block User', onPress: handleReport, danger: true },
+  ], [post.is_saved, post.id, onSave, handleShare, handleReport, handleMenuClose]);
 
   return (
     <View style={styles.cardWrapper}>
@@ -661,6 +654,8 @@ function DropCard({
         onClose={handleCommentsClose}
         isOwner={post.is_own_post}
       />
+
+      <ReportSheet visible={reportVisible} post={post} onClose={() => setReportVisible(false)} />
 
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={handleMenuClose}>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={handleMenuClose}>
