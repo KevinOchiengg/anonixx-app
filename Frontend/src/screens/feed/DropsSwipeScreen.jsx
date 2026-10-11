@@ -380,7 +380,7 @@ const VideoSlide = ({
               <AuthorProfileTrigger post={post} navigation={navigation}>
                 <View style={ss.authorMeta}>
                   <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-                  <Text style={ss.timeAgo}>{post.time_ago}</Text>
+                  <Text style={ss.timeAgo}>{post.time_ago}{post.kind === 'hookup' ? ' · Hookup' : post.kind === 'confession' ? ' · Confession' : ''}</Text>
                 </View>
               </AuthorProfileTrigger>
             </View>
@@ -394,7 +394,7 @@ const VideoSlide = ({
               </TouchableOpacity>
             ) : null}
 
-            {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
           </View>
 
           {videoDuration > 0 && (
@@ -543,7 +543,7 @@ const AudioSlide = ({
           {playing ? <Pause size={32} color="#fff" fill="#fff" /> : <Play size={32} color="#fff" fill="#fff" />}
         </TouchableOpacity>
 
-        {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
+        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
       </View>
     </View>
   );
@@ -724,7 +724,7 @@ const TextSlide = ({
               <AuthorProfileTrigger post={post} navigation={navigation}>
                 <View style={ss.authorMeta}>
                   <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-                  <Text style={ss.timeAgo}>{post.time_ago}</Text>
+                  <Text style={ss.timeAgo}>{post.time_ago}{post.kind === 'hookup' ? ' · Hookup' : post.kind === 'confession' ? ' · Confession' : ''}</Text>
                 </View>
               </AuthorProfileTrigger>
             </View>
@@ -750,7 +750,7 @@ const TextSlide = ({
               </TouchableOpacity>
             )}
 
-            {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
           </View>
         </>
       )}
@@ -816,11 +816,11 @@ const PollSlide = ({
               <AuthorProfileTrigger post={post} navigation={navigation}>
                 <View style={ss.authorMeta}>
                   <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-                  <Text style={ss.timeAgo}>{post.time_ago}</Text>
+                  <Text style={ss.timeAgo}>{post.time_ago}{post.kind === 'hookup' ? ' · Hookup' : post.kind === 'confession' ? ' · Confession' : ''}</Text>
                 </View>
               </AuthorProfileTrigger>
             </View>
-            {!isOwnPost && !post.is_admin_drop && <LinkUpButton onPress={onLinkUp} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
           </View>
         </>
       )}

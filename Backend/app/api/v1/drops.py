@@ -121,7 +121,51 @@ class DropVoteRequest(BaseModel):
     option_index: int
 
 
+HOOKUP_GENDERS = ("woman", "man", "other")
+HOOKUP_LOOKING = ("woman", "man", "anyone")
+HOOKUP_VIBES = ("company", "friendship", "dating", "casual", "discreet", "adventure")
+
+
+class HookupDetails(BaseModel):
+    age: int
+    gender: Optional[str] = None
+    area: str
+    looking_for: Optional[str] = None
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+    vibes: Optional[List[str]] = None
+
+
+def clean_hookup(h: "HookupDetails") -> dict:
+    if h.age < 18 or h.age > 99:
+        raise HTTPException(status_code=400, detail="You must be 18 or older to post a hookup confession.")
+    area = (h.area or "").strip()[:60]
+    if not area:
+        raise HTTPException(status_code=400, detail="Add the area you are based in.")
+    lo = h.age_min if h.age_min and h.age_min >= 18 else None
+    hi = h.age_max if h.age_max and h.age_max <= 99 else None
+    if lo and hi and lo > hi:
+        lo, hi = hi, lo
+    return {
+        "age": h.age,
+        "gender": h.gender if h.gender in HOOKUP_GENDERS else None,
+        "area": area,
+        "looking_for": h.looking_for if h.looking_for in HOOKUP_LOOKING else None,
+        "age_min": lo,
+        "age_max": hi,
+        "vibes": [v for v in dict.fromkeys(h.vibes or []) if v in HOOKUP_VIBES][:4],
+    }
+
+
+def ensure_linkable(drop: dict) -> None:
+    """Regular confessions are read-only; only hookup (or older untyped) posts can be linked up."""
+    if drop.get("kind") == "confession":
+        raise HTTPException(status_code=400, detail="This is a regular confession. It can't be linked up.")
+
+
 class CreateDropRequest(BaseModel):
+    kind: Optional[str] = None  # "hookup" | "confession"
+    hookup: Optional[HookupDetails] = None
     confession: Optional[str] = None
     is_group: bool = False
     group_size: Optional[int] = None
@@ -609,6 +653,11 @@ async def create_drop(
     # unless the client explicitly opted out.
     publisher_opt_in = (data.publisher_opt_in is not False)
 
+    kind = data.kind if data.kind in ("hookup", "confession") else None
+    hookup_data = clean_hookup(data.hookup) if kind == "hookup" and data.hookup else None
+    if kind == "hookup" and not hookup_data:
+        raise HTTPException(status_code=400, detail="Fill in your age and area for a hookup confession.")
+
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD
     is_admin_drop = bool(user.get("is_admin"))
@@ -644,7 +693,9 @@ async def create_drop(
             "image" if images_data else data.media_type,
         ),
         "target_user_id": data.target_user_id or None,
-        "intent": data.intent if data.intent in VALID_INTENTS else None,
+        "intent": data.intent if data.intent in VALID_INTENTS and data.intent != "the-exchange" else None,
+        "kind": kind,
+        "hookup": hookup_data,
         "created_at": now_utc(),
 
         # ── Drop spec upgrade fields ──────────────────────────
@@ -662,7 +713,7 @@ async def create_drop(
         "moderation_status": "visible",   # "visible" | "flagged" | "hidden"
         "sensitivity": classify_sensitivity(
             data.confession, data.poll.question if data.poll else None,
-            marked_mature=data.sensitivity == "mature",
+            marked_mature=data.sensitivity == "mature" or kind == "hookup",
         ),
         # All drops are always public in the marketplace.
         # target_user_id means "also deliver to this inbox" — not "private only".
@@ -1709,6 +1760,8 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "mood_tag":         drop.get("mood_tag"),
             "theme":            drop.get("theme"),
             "intent":           drop.get("intent"),
+            "kind":             drop.get("kind"),
+            "hookup":           drop.get("hookup"),
             "sensitivity":      drop.get("sensitivity", "general"),
             "intensity":        drop.get("intensity"),
             "media_url":        drop.get("media_url"),
@@ -2095,6 +2148,7 @@ async def unlock_drop_coins(
         raise HTTPException(status_code=400, detail="Cannot unlock your own drop.")
     if drop.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
+    ensure_linkable(drop)
     if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired.")
 
@@ -2187,6 +2241,7 @@ async def unlock_drop_mpesa(
 
     if drop.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
+    ensure_linkable(drop)
 
     if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired")
@@ -2265,6 +2320,7 @@ async def unlock_drop_stripe(
 
     if drop.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
+    ensure_linkable(drop)
 
     if is_expired(drop.get("expires_at")):
         raise HTTPException(status_code=400, detail="This drop has expired")

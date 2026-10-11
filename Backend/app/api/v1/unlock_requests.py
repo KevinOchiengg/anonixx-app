@@ -222,6 +222,8 @@ async def create_unlock_request(
         raise HTTPException(status_code=400, detail="Cannot unlock your own confession.")
     if doc.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
+    if doc.get("kind") == "confession":
+        raise HTTPException(status_code=400, detail="This is a regular confession. It can't be linked up.")
     # None = never expires (un-unlocked drop, or a plain feed post).
     if target_expires_at is not None and target_expires_at < now_utc():
         raise HTTPException(status_code=400, detail="This confession has expired.")

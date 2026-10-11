@@ -632,7 +632,7 @@ function DropCard({
                 anyway, but there's no reason to show a button that can only
                 ever fail. Also hidden on Anonixx's own official drops — no
                 real person behind them to link up with. */}
-            {!post.is_own_post && !post.is_admin_drop && (
+            {!post.is_own_post && !post.is_admin_drop && post.kind !== 'confession' && (
               <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
                 <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
                 <Text style={styles.linkUpBtnText}>Link up</Text>
