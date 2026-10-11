@@ -157,3 +157,19 @@
 .legal h2 { font-size: 19px; margin: 28px 0 8px; }
 .legal li, .legal p { color: var(--muted); line-height: 1.6; font-size: 16px; }
 .legal .back { display: inline-block; margin-bottom: 16px; color: var(--muted); }
+
+/* confession kind chooser + hookup template */
+.kind-pick { display: grid; gap: 12px; }
+.kind-pick h2 { margin: 0 0 4px; font-size: 20px; }
+.kind-card { display: grid; gap: 4px; text-align: left; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--fg); }
+.kind-card strong { font-size: 16px; }
+.kind-card span { font-size: 14px; color: var(--muted); line-height: 1.4; }
+.kind-card:hover { border-color: var(--rose); }
+.linkish { justify-self: start; background: none; border: 0; padding: 0; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; }
+.hk-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 16px; line-height: 1.6; }
+.hk-line input, .hk-line select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--fg); font-size: 15px; min-width: 0; }
+.hk-line input[type="number"] { width: 72px; }
+.hk-line input[type="text"] { flex: 1; min-width: 120px; }
+.hk-line select option { background: #17060e; }
+.hk-preview { margin: 0; padding: 12px 14px; border-left: 3px solid var(--rose); background: rgba(255,255,255,0.03); border-radius: 8px; font-size: 14px; line-height: 1.5; }
+.kind-tag { text-transform: uppercase; letter-spacing: 0.06em; }

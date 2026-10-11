@@ -380,7 +380,6 @@ const INTENTS: [string, string][] = [
   ["meet-me", "Meet Me"],
   ["skeleton-in-the-closet", "Skeleton In The Closet"],
   ["just-tonight", "Just Tonight"],
-  ["the-exchange", "The Exchange"],
 ];
 const MOODS = ["longing", "untold", "horny", "discreet"];
 

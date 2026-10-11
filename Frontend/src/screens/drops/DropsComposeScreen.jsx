@@ -225,6 +225,117 @@ function OptionSheet({ visible, title, onClose, children }) {
   );
 }
 
+// ─── Hookup vs regular confession ──────────────────────────────
+const HOOKUP_GENDERS = [['woman', 'Woman'], ['man', 'Man'], ['other', 'Other']];
+const HOOKUP_LOOKING = [['woman', 'a woman'], ['man', 'a man'], ['anyone', 'anyone']];
+const HOOKUP_VIBES = [
+  ['company', 'Company'], ['friendship', 'Friendship'], ['dating', 'Dating'],
+  ['casual', 'Casual'], ['discreet', 'Discreet'], ['adventure', 'Adventure'],
+];
+
+function buildHookupText(h, extra) {
+  const gender = h.gender ? ` (${h.gender})` : '';
+  const looking = HOOKUP_LOOKING.find(([k]) => k === h.lookingFor)?.[1] || 'anyone';
+  const range = h.ageMin && h.ageMax ? ` aged ${h.ageMin}–${h.ageMax}` : '';
+  const vibes = h.vibes.length
+    ? ` Vibe: ${h.vibes.map((v) => HOOKUP_VIBES.find(([k]) => k === v)?.[1].toLowerCase()).join(', ')}.`
+    : '';
+  const line = `Hi, I'm ${h.age}${gender}, based in ${h.area.trim()}. Looking for ${looking}${range}.${vibes}`;
+  return extra.trim() ? `${line}\n\n${extra.trim()}` : line;
+}
+
+function KindChooser({ onPick, onBack }) {
+  return (
+    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={onBack} hitSlop={HIT_SLOP}>
+          <ChevronLeft size={rs(24)} color={T.text} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Drop</Text>
+        <View style={{ width: rs(24) }} />
+      </View>
+      <View style={s.kindWrap}>
+        <Text style={s.kindTitle}>What are you confessing?</Text>
+        <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('hookup')}>
+          <Text style={s.kindCardTitle}>Hookup confession</Text>
+          <Text style={s.kindCardSub}>Say who you are and who you want. People nearby can link up with you.</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('confession')}>
+          <Text style={s.kindCardTitle}>Regular confession</Text>
+          <Text style={s.kindCardSub}>The thing you can't say out loud. Read, felt, never linked up.</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function Chip({ label, active, onPress }) {
+  return (
+    <TouchableOpacity style={[s.chip, active && s.chipActive]} onPress={onPress} activeOpacity={0.85}>
+      <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function HookupTemplate({ h, setH }) {
+  const num = (v) => v.replace(/\D/g, '').slice(0, 2);
+  const toggleVibe = (k) => setH({
+    ...h,
+    vibes: h.vibes.includes(k) ? h.vibes.filter((x) => x !== k) : [...h.vibes, k].slice(0, 4),
+  });
+  const underAge = h.age !== '' && Number(h.age) < 18;
+  return (
+    <View style={s.tplBox}>
+      <View style={s.tplRow}>
+        <Text style={s.tplText}>Hi, I'm</Text>
+        <TextInput
+          style={s.tplInput} value={h.age} placeholder="age" keyboardType="number-pad"
+          placeholderTextColor={T.textMute} onChangeText={(v) => setH({ ...h, age: num(v) })}
+        />
+        <Text style={s.tplText}>, based in</Text>
+        <TextInput
+          style={[s.tplInput, { flex: 1 }]} value={h.area} placeholder="area, e.g. Ruiru"
+          placeholderTextColor={T.textMute} maxLength={60} onChangeText={(v) => setH({ ...h, area: v })}
+        />
+      </View>
+      {underAge && <Text style={s.tplWarn}>You must be 18 or older.</Text>}
+      <Text style={s.tplLabel}>I am</Text>
+      <View style={s.chipRow}>
+        {HOOKUP_GENDERS.map(([k, l]) => (
+          <Chip key={k} label={l} active={h.gender === k} onPress={() => setH({ ...h, gender: k })} />
+        ))}
+      </View>
+      <Text style={s.tplLabel}>Looking for</Text>
+      <View style={s.chipRow}>
+        {HOOKUP_LOOKING.map(([k, l]) => (
+          <Chip key={k} label={l} active={h.lookingFor === k} onPress={() => setH({ ...h, lookingFor: k })} />
+        ))}
+      </View>
+      <View style={s.tplRow}>
+        <Text style={s.tplText}>aged</Text>
+        <TextInput
+          style={s.tplInput} value={h.ageMin} placeholder="min" keyboardType="number-pad"
+          placeholderTextColor={T.textMute} onChangeText={(v) => setH({ ...h, ageMin: num(v) })}
+        />
+        <Text style={s.tplText}>to</Text>
+        <TextInput
+          style={s.tplInput} value={h.ageMax} placeholder="max" keyboardType="number-pad"
+          placeholderTextColor={T.textMute} onChangeText={(v) => setH({ ...h, ageMax: num(v) })}
+        />
+      </View>
+      <Text style={s.tplLabel}>Vibe (up to 4)</Text>
+      <View style={s.chipRow}>
+        {HOOKUP_VIBES.map(([k, l]) => (
+          <Chip key={k} label={l} active={h.vibes.includes(k)} onPress={() => toggleVibe(k)} />
+        ))}
+      </View>
+      <Text style={s.tplNote}>
+        Add anything else on the card below. Paid sex and escort offers are not allowed.
+      </Text>
+    </View>
+  );
+}
+
 // ─── Main screen ───────────────────────────────────────────────
 export default function DropsComposeScreen({ navigation, route }) {
   const { showToast } = useToast();
@@ -262,6 +373,10 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [format,   setFormat]   = useState('text');    // text | image | video | voice
   const [text,     setText]     = useState(initialText);
   const [cardIntent, setCardIntent] = useState(DEFAULT_INTENT);
+  const [kind, setKind] = useState(null); // null (choosing) | 'hookup' | 'confession'
+  const [hookup, setHookup] = useState({
+    age: '', gender: null, area: '', lookingFor: 'anyone', ageMin: '', ageMax: '', vibes: [],
+  });
   // After Dark / Tier-2 themes have been removed — every drop uses the
   // single remaining theme. External social publishing is gated purely by
   // the "Share to Anonixx socials" toggle below, not by confession type.
@@ -365,7 +480,7 @@ export default function DropsComposeScreen({ navigation, route }) {
                 (typeof d.text === 'string' && d.text.trim().length > 0);
               if (typeof d.text     === 'string') setText(d.text);
               if (typeof d.format   === 'string') setFormat(d.format);
-              if (typeof d.cardIntent === 'string' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
+              if (typeof d.cardIntent === 'string' && d.cardIntent !== 'the-exchange' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
               if (typeof d.hint     === 'string') setHint(d.hint);
               // Only surface the unsent banner if the restored draft has substance.
@@ -507,7 +622,17 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Submit drop (client-side stub — posts to /drops) ───────────
   const handleDrop = useCallback(async () => {
-    if (!text.trim() && !mediaUri) {
+    const ageNum = Number(hookup.age);
+    if (kind === 'hookup') {
+      if (!ageNum || ageNum < 18) {
+        showToast({ type: 'warning', message: 'You must be 18 or older to post a hookup confession.' });
+        return;
+      }
+      if (!hookup.area.trim()) {
+        showToast({ type: 'warning', message: 'Add the area you are based in.' });
+        return;
+      }
+    } else if (!text.trim() && !mediaUri) {
       showToast({ type: 'warning', message: 'Write something or add a photo first.' });
       return;
     }
@@ -541,10 +666,22 @@ export default function DropsComposeScreen({ navigation, route }) {
         .slice(0, HINT_MAX)
         .toLowerCase();
 
-      const confessionText = text.trim();
+      const confessionText = kind === 'hookup' ? buildHookupText(hookup, text) : text.trim();
 
       const body = {
         confession: confessionText || undefined,
+        kind,
+        ...(kind === 'hookup' ? {
+          hookup: {
+            age: ageNum,
+            ...(hookup.gender ? { gender: hookup.gender } : {}),
+            area: hookup.area.trim(),
+            looking_for: hookup.lookingFor,
+            ...(hookup.ageMin ? { age_min: Number(hookup.ageMin) } : {}),
+            ...(hookup.ageMax ? { age_max: Number(hookup.ageMax) } : {}),
+            vibes: hookup.vibes,
+          },
+        } : {}),
         theme,
         intent:     cardIntent,
         mood_tag:   moodTag,
@@ -626,13 +763,15 @@ export default function DropsComposeScreen({ navigation, route }) {
     }
   }, [
     format, text, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
-    intensity, hint, taggedUser, publisherOptIn,
+    kind, hookup, intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
     dispatch, navigation, showToast,
   ]);
 
   // ── Derived ───────────────────────────────────────────────────
-  const canDrop       = !!text.trim() || !!mediaUri;
+  const canDrop       = kind === 'hookup'
+    ? Number(hookup.age) >= 18 && !!hookup.area.trim()
+    : (!!text.trim() || !!mediaUri);
   const layoutMode    = 'split';
   const remaining     = MAX_CHARS - text.length;
   const remColor      = remaining <= 20
@@ -643,6 +782,10 @@ export default function DropsComposeScreen({ navigation, route }) {
   const placeholder = intentPrompts ? intentPrompts[promptIndex % intentPrompts.length] : FALLBACK_PLACEHOLDER;
 
   // ─────────────────────────────────────────────────────────────
+  if (!kind) {
+    return <KindChooser onPick={setKind} onBack={() => navigation.goBack()} />;
+  }
+
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
@@ -654,7 +797,9 @@ export default function DropsComposeScreen({ navigation, route }) {
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
             <ChevronLeft size={rs(24)} color={T.text} />
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Drop</Text>
+          <TouchableOpacity onPress={() => setKind(null)} hitSlop={HIT_SLOP}>
+            <Text style={s.kindSwitch}>{kind === 'hookup' ? 'Hookup' : 'Confession'} · change</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.navigate('WhatsAppSend', { text })}
             hitSlop={HIT_SLOP}
@@ -720,7 +865,9 @@ export default function DropsComposeScreen({ navigation, route }) {
               blank-page-staring) user what's expected before they start
               typing. Fades out once they've actually started writing, so
               it doesn't linger as clutter once the card speaks for itself. */}
-          {!text && (
+          {kind === 'hookup' && <HookupTemplate h={hookup} setH={setHookup} />}
+
+          {!text && kind !== 'hookup' && (
             <Text style={s.composeGuide}>
               Say what you can't say out loud — nobody will know it's you.
             </Text>
@@ -953,7 +1100,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             You want it. They want it. Drop it, get found.
           </Text>
           <View style={s.intentGrid}>
-            {CARD_INTENT_LIST.map((def) => (
+            {CARD_INTENT_LIST.filter((def) => def.id !== 'the-exchange').map((def) => (
               <IntentCard
                 key={def.id}
                 def={def}
@@ -1035,6 +1182,36 @@ export default function DropsComposeScreen({ navigation, route }) {
 
 // ─── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
+  kindWrap: { flex: 1, padding: rp(20), gap: rp(14), justifyContent: 'center' },
+  kindTitle: { fontSize: FONT.xl || FONT.lg, fontWeight: '800', color: T.text, marginBottom: rp(6) },
+  kindCard: {
+    borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    borderRadius: RADIUS.lg, padding: rp(18), gap: rp(6),
+  },
+  kindCardTitle: { fontSize: FONT.md, fontWeight: '800', color: T.primary },
+  kindCardSub: { fontSize: FONT.sm, color: T.textSecondary, lineHeight: rs(20) },
+  kindSwitch: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
+  tplBox: {
+    borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    borderRadius: RADIUS.lg, padding: rp(14), gap: rp(8), marginBottom: rp(12),
+  },
+  tplRow: { flexDirection: 'row', alignItems: 'center', gap: rp(8), flexWrap: 'wrap' },
+  tplText: { color: T.text, fontSize: FONT.md },
+  tplLabel: { color: T.textSecondary, fontSize: FONT.sm, marginTop: rp(4) },
+  tplInput: {
+    minWidth: rs(56), borderBottomWidth: 1, borderBottomColor: T.primary,
+    color: T.text, fontSize: FONT.md, paddingVertical: rp(4), paddingHorizontal: rp(6),
+  },
+  tplWarn: { color: T.danger, fontSize: FONT.sm },
+  tplNote: { color: T.textMute, fontSize: FONT.sm, marginTop: rp(4) },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
+  chip: {
+    borderWidth: 1, borderColor: T.border, borderRadius: RADIUS.lg,
+    paddingVertical: rp(6), paddingHorizontal: rp(12),
+  },
+  chipActive: { backgroundColor: T.primary, borderColor: T.primary },
+  chipText: { color: T.text, fontSize: FONT.sm },
+  chipTextActive: { color: '#fff', fontWeight: '700' },
   safe: { flex: 1, backgroundColor: T.background },
 
   header: {

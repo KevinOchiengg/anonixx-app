@@ -138,6 +138,8 @@ export default function Slide({
       ) : null}
 
       <div className={hasMedia ? "caption" : undefined} style={{ position: "relative", zIndex: 2 }}>
+        {post.kind === "hookup" ? <span className="mood kind-tag">Hookup</span> : null}
+        {post.kind === "confession" ? <span className="mood kind-tag">Confession</span> : null}
         {post.mood_tag ? <span className="mood">{post.mood_tag}</span> : null}
         {post.content ? <Text className="confession">{post.content}</Text> : null}
 
@@ -191,7 +193,7 @@ export default function Slide({
         ) : null}
       </div>
 
-      {!post.is_admin_drop && !post.is_own_post ? (
+      {!post.is_admin_drop && !post.is_own_post && post.kind !== "confession" ? (
         <button
           className="linkup"
           onClick={() => (user ? onLinkUp(post) : onGate("Sign in to link up. Your name stays hidden until they say yes."))}
