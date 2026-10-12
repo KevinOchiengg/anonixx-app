@@ -62,6 +62,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const [ads, setAds] = useState<FeedAd[]>([]);
   const [market, setMarket] = useState<MarketTease[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
+  const [coach, setCoach] = useState(false);
   const loading = useRef(false);
 
   const showHero = withHero && !user;
@@ -186,6 +187,24 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     run().catch(() => {}).finally(() => { loading.current = false; });
   }, [active, cursor, items.length, authed, sessionPosts]);
 
+  useEffect(() => {
+    try { if (localStorage.getItem("anonixx.coach.v1")) return; } catch { return; }
+    const show = window.setTimeout(() => setCoach(true), 1200);
+    return () => window.clearTimeout(show);
+  }, []);
+
+  useEffect(() => {
+    if (!coach) return;
+    const el = scroller.current;
+    const done = () => {
+      setCoach(false);
+      try { localStorage.setItem("anonixx.coach.v1", "1"); } catch { /* ignore */ }
+    };
+    const t = window.setTimeout(done, 6000);
+    el?.addEventListener("scroll", done, { once: true });
+    return () => { window.clearTimeout(t); el?.removeEventListener("scroll", done); };
+  }, [coach]);
+
   const step = useCallback((dir: 1 | -1) => {
     const el = scroller.current;
     if (el) el.scrollBy({ top: dir * el.clientHeight, behavior: "smooth" });
@@ -289,6 +308,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
           })}
         </div>
 
+        {coach ? <div className="coach" role="status"><span>Swipe up for the next one</span><i /><span>Double-tap to like</span></div> : null}
         <BottomNav />
 
         {gate ? (

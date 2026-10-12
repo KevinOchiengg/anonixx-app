@@ -4,7 +4,7 @@ import { api, API_URL, COST, compact, getDeviceId, getToken, type Post } from "@
 import { useAuth } from "@/lib/auth";
 import VideoPlayer from "./VideoPlayer";
 import { Bookmark, Comment, Heart, Share } from "./icons";
-import { Flag, Link2 } from "./feedicons";
+import { Link2, More } from "./feedicons";
 import AudioWave from "./AudioWave";
 import Sheet from "./Sheet";
 
@@ -225,17 +225,17 @@ export default function Slide({
           <Comment />{compact(post.thread_count)}
         </button>
         <button onClick={save} aria-label="Save" className={post.is_saved ? "liked" : ""}>
-          <Bookmark filled={Boolean(post.is_saved)} />Save
+          <Bookmark filled={Boolean(post.is_saved)} />
         </button>
         <button onClick={() => onShare(post)} aria-label="Share">
-          <Share />Share
+          <Share />
         </button>
         {!post.is_admin_drop && !post.is_own_post ? (
           <button
             onClick={() => (user ? onReport(post) : onGate("Sign in to report a post."))}
-            aria-label="Report"
+            aria-label="More options"
           >
-            <Flag />Report
+            <More />
           </button>
         ) : null}
       </div>

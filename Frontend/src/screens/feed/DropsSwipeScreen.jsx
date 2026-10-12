@@ -82,6 +82,37 @@ const LOCATION_SCOPE_LABELS = {
   country: 'Country', county: 'Region', sub_county: 'Area', estate: 'Nearby',
 };
 
+// First-run hint, shown once (AsyncStorage) just under the header, then
+// fades itself out — same wording as the web feed.
+const COACH_KEY = 'anonixx.coach.v1';
+const CoachHint = ({ top }) => {
+  const [show, setShow] = useState(false);
+  const fade = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    let t1; let t2; let alive = true;
+    AsyncStorage.getItem(COACH_KEY).then((seen) => {
+      if (seen || !alive) return;
+      t1 = setTimeout(() => {
+        setShow(true);
+        Animated.timing(fade, { toValue: 1, duration: 350, useNativeDriver: true }).start();
+        t2 = setTimeout(() => {
+          Animated.timing(fade, { toValue: 0, duration: 350, useNativeDriver: true }).start(() => setShow(false));
+          AsyncStorage.setItem(COACH_KEY, '1').catch(() => {});
+        }, 6000);
+      }, 1200);
+    }).catch(() => {});
+    return () => { alive = false; clearTimeout(t1); clearTimeout(t2); };
+  }, [fade]);
+  if (!show) return null;
+  return (
+    <Animated.View pointerEvents="none" style={[sw.coach, { top, opacity: fade }]}>
+      <Text style={sw.coachText}>Swipe up for the next one</Text>
+      <View style={sw.coachDot} />
+      <Text style={sw.coachText}>Double-tap to like</Text>
+    </Animated.View>
+  );
+};
+
 // ─── Shared: Link Up button ─────────────────────────────────────
 // Same coin-gated CTA as DropCard.jsx's card-feed version (Link2 icon,
 // "Link up" label, coin-cost pill) — positioned like a TikTok ad's CTA,
@@ -1368,6 +1399,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
         </View>
       )}
 
+      <CoachHint top={headerHeight + rp(10)} />
+
       <CommentBottomSheet
         visible={commentSheet.visible}
         postId={commentSheet.postId}
@@ -1538,6 +1571,13 @@ const sw = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
     shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 24,
   },
+  coach: {
+    position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: rs(10),
+    paddingHorizontal: rs(16), paddingVertical: rs(9), borderRadius: 999, zIndex: 40,
+    backgroundColor: 'rgba(21,25,36,0.92)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  coachText: { color: '#fff', fontSize: rf(12.5), fontWeight: '600' },
+  coachDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: THEME.primary },
   headerLogo: { fontFamily: 'PlayfairDisplay-Italic', fontSize: rf(19), color: THEME.primary, letterSpacing: 0.3 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: rp(10) },
   headerBtn: {

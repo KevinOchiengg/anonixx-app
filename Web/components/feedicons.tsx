@@ -63,3 +63,6 @@ export const Gif = () => (
 export const Send = () => (
   <svg {...base}><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg>
 );
+export const More = () => (
+  <svg {...base}><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></svg>
+);
