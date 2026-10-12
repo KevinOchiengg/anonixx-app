@@ -164,15 +164,17 @@ export default function Slide({
         </div>
       ) : null}
 
-      <div className={hasMedia ? "caption" : undefined} style={{ position: "relative", zIndex: 2 }}>
+      <div className={hasMedia ? "caption" : "text-body"} style={{ position: "relative", zIndex: 2 }}>
         {post.content ? (
           <Text
             className={`confession${hasMedia && !expanded ? " clamp" : ""}${textSlide && longText ? " clamp-text" : ""}`}
             onClick={hasMedia && mediaLong ? () => setExpanded((v) => !v) : undefined}
           >
             {post.content}
-            {hasMedia && !expanded && mediaLong ? <span className="more"> more</span> : null}
           </Text>
+        ) : null}
+        {hasMedia && mediaLong ? (
+          <button type="button" className="more-btn" onClick={() => setExpanded((v) => !v)}>{expanded ? "less" : "more"}</button>
         ) : null}
         {!hasMedia && longText ? (
           <button className="read-full" onClick={() => setFullText(true)}>Read full confession</button>
