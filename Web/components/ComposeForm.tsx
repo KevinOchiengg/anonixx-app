@@ -283,11 +283,13 @@ function Inner() {
         ))}
       </div>
 
-      <div className="cx-tabs" role="tablist" aria-label="Format">
-        {MODES.map(([id, label]) => (
-          <button type="button" key={id} role="tab" aria-selected={mode === id} className={mode === id ? "on" : ""} onClick={() => setMode(id)}>{label}</button>
-        ))}
-      </div>
+      {user?.is_admin ? (
+        <div className="cx-tabs" role="tablist" aria-label="Format">
+          {MODES.map(([id, label]) => (
+            <button type="button" key={id} role="tab" aria-selected={mode === id} className={mode === id ? "on" : ""} onClick={() => setMode(id)}>{label}</button>
+          ))}
+        </div>
+      ) : null}
 
       {mode === "media" ? <MediaPicker value={media} onChange={setMedia} onError={setError} /> : null}
       {mode === "voice" ? <VoiceRecorder value={voice} onChange={setVoice} onError={setError} /> : null}
