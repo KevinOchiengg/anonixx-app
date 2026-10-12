@@ -223,6 +223,29 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     return () => window.removeEventListener("keydown", onKey);
   }, [step]);
 
+  // Mouse wheels and trackpads: one gesture = one slide, like the app's swipe.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    let locked = false;
+    let steppedAt = 0;
+    let idle: number | undefined;
+    const onWheel = (e: WheelEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest(".confession:not(.clamp), .sheet, textarea, input, audio")) return;
+      if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      window.clearTimeout(idle);
+      idle = window.setTimeout(() => { if (Date.now() - steppedAt > 450) locked = false; else idle = window.setTimeout(() => { locked = false; }, 450); }, 140);
+      if (locked || Math.abs(e.deltaY) < 8) return;
+      locked = true;
+      steppedAt = Date.now();
+      step(e.deltaY > 0 ? 1 : -1);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => { el.removeEventListener("wheel", onWheel); window.clearTimeout(idle); };
+  }, [step]);
+
   const flash = useCallback((msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 1800);
