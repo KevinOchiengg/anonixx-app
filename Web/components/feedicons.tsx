@@ -66,3 +66,9 @@ export const Send = () => (
 export const More = () => (
   <svg {...base}><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></svg>
 );
+export const SoundOn = () => (
+  <svg {...base}><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></svg>
+);
+export const SoundOff = () => (
+  <svg {...base}><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor" /><path d="m16 9.5 5 5" /><path d="m21 9.5-5 5" /></svg>
+);
