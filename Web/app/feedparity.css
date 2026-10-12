@@ -302,3 +302,8 @@
 .vp-progress { height: 3px; background: rgba(255, 255, 255, 0.18); }
 .vp-progress > span { background: var(--rose); border-radius: 0 2px 2px 0; }
 @keyframes badgein { from { opacity: 0; transform: translate(-50%, -50%) scale(0.7); } }
+
+/* ---------- text slides: text, byline and Link up stack together at the bottom ---------- */
+.slide.text-slide:not(.has-media), .hasnav .slide.text-slide:not(.has-media) { justify-content: flex-end; }
+.slide.text-slide .author { margin-top: 14px; }
+.slide.text-slide.has-linkup .author { margin-bottom: 0; }
