@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     AGORA_APP_ID: str = ""
     AGORA_APP_CERTIFICATE: str = ""
 
+    # WEB PUSH (VAPID) — browser notifications for the Anonixx website
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:support@anonixx.app"
+
     # RESEND (email)
     RESEND_API_KEY: str = ""
     FROM_EMAIL: str = "Anonixx <noreply@anonixx.app>"

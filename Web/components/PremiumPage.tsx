@@ -9,7 +9,8 @@ import "@/app/money.css";
 type Plan = { id: string; label: string; usd_display?: string; kes: number; days: number; save?: string | null };
 
 function Inner() {
-  const { refresh } = useAuth();
+  const { user, refresh } = useAuth();
+  const until = user?.premium_until ? new Date(user.premium_until) : null;
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [phone, setPhone] = useState("");
@@ -55,6 +56,14 @@ function Inner() {
   return (
     <div className="pad">
       <div className="balance"><span>Premium</span><strong>∞</strong></div>
+      {user?.is_premium ? (
+        <div className="prem-status on">
+          <b>You&apos;re premium</b>
+          <small>{until ? `Active until ${until.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}` : "Active"}. Buying a plan extends it.</small>
+        </div>
+      ) : (
+        <div className="prem-status"><b>Not premium yet</b><small>Pick a plan to post and link up without coins.</small></div>
+      )}
       <p className="muted small">Post and link up without spending coins. Pay with M-Pesa, no auto-renew.</p>
       <h2 className="sec">Choose a plan</h2>
       {plans === null ? <p className="muted">Loading…</p> : plans.length === 0 ? <p className="muted">Plans aren&apos;t available right now.</p> : (

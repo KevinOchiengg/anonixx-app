@@ -14,6 +14,7 @@ export default function Sheet({
   return (
     <div className="sheet-back" onClick={onClose}>
       <div className={`sheet${tall ? " tall" : ""}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
+        <span className="sheet-handle" aria-hidden />
         {title ? <h3>{title}</h3> : null}
         {children}
       </div>

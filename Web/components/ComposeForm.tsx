@@ -4,9 +4,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, COST } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { uploadFile } from "@/lib/upload";
 import AppShell from "./AppShell";
+import MediaPicker, { type MediaDraft } from "./compose/MediaPicker";
+import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
+import PollEditor, { type PollDraft } from "./compose/PollEditor";
+import LocationFields, { type LocationDraft } from "./compose/LocationFields";
 
-const MOODS = ["longing", "untold", "horny", "discreet"];
+const INTENTS = [
+  { id: "meet-me", label: "Meet Me", sub: "looking for something real", mood: "longing" },
+  { id: "skeleton-in-the-closet", label: "Skeleton In The Closet", sub: "secrets don't stay buried", mood: "untold" },
+  { id: "just-tonight", label: "Just Tonight", sub: "no strings attached affair", mood: "horny" },
+] as const;
+const FONTS = [
+  { id: "classic", label: "Classic" },
+  { id: "sultry-script", label: "Sultry" },
+  { id: "bold-tease", label: "Bold" },
+] as const;
+const MODES = [["text", "Text"], ["media", "Photo / Video"], ["voice", "Voice"], ["poll", "Poll"]] as const;
+type Mode = (typeof MODES)[number][0];
+const fontStyle = (id: string): React.CSSProperties =>
+  id === "classic" ? { fontFamily: "Georgia, serif", fontStyle: "italic" }
+  : id === "sultry-script" ? { fontFamily: "'Brush Script MT', cursive" }
+  : { fontWeight: 800 };
 const MAX = 500;
 const VIBES = ["company", "friendship", "dating", "casual", "discreet", "adventure"];
 const GENDERS = ["woman", "man", "other"];
@@ -16,7 +36,13 @@ function Inner() {
   const { user, refresh } = useAuth();
   const router = useRouter();
   const [text, setText] = useState("");
-  const [mood, setMood] = useState("longing");
+  const [intent, setIntent] = useState<(typeof INTENTS)[number]["id"]>("skeleton-in-the-closet");
+  const [mode, setMode] = useState<Mode>("text");
+  const [media, setMedia] = useState<MediaDraft>(null);
+  const [voice, setVoice] = useState<VoiceDraft>(null);
+  const [poll, setPoll] = useState<PollDraft>({ question: "", options: ["", ""] });
+  const [font, setFont] = useState<string>("bold-tease");
+  const [loc, setLoc] = useState<LocationDraft>({ country: "", county: "", subCounty: "", estate: "" });
   const [mature, setMature] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +56,13 @@ function Inner() {
   const [ageMax, setAgeMax] = useState("");
   const [vibes, setVibes] = useState<string[]>([]);
   const [extra, setExtra] = useState("");
+  const mood = INTENTS.find((i) => i.id === intent)!.mood;
+  const pollOpts = poll.options.map((o) => o.trim()).filter(Boolean);
+  const confessionOk =
+    mode === "poll" ? poll.question.trim().length > 0 && pollOpts.length >= 2
+    : mode === "voice" ? !!voice
+    : mode === "media" ? !!media || !!text.trim()
+    : !!text.trim();
   const short = (user?.coin_balance ?? 0) < COST.post;
 
   const ageNum = parseInt(age, 10);
@@ -51,10 +84,28 @@ function Inner() {
     if (kind === "hookup") {
       if (ageNum < 18) { setError("You must be 18 or older to post a hookup confession."); return; }
       if (!hookupOk) { setError("Add your age and the area you are based in."); return; }
-    } else if (!text.trim()) return;
+    } else if (!confessionOk) return;
     setBusy(true);
     setError("");
     try {
+      let payload: Record<string, unknown> = {};
+      if (kind === "confession") {
+        if (mode === "media" && media) {
+          const urls: string[] = [];
+          for (const f of media.files) urls.push(await uploadFile(f, media.kind));
+          payload = media.kind === "video" ? { media_type: "video", media_url: urls[0] }
+            : urls.length > 1 ? { images: urls } : { media_type: "image", media_url: urls[0] };
+        } else if (mode === "voice" && voice) {
+          payload = {
+            media_type: "voice",
+            media_url: await uploadFile(voice.blob, "voice"),
+            duration_seconds: voice.seconds,
+            waveform_data: voice.waveform,
+          };
+        } else if (mode === "poll") {
+          payload = { poll: { question: poll.question.trim(), options: pollOpts.slice(0, 4) } };
+        }
+      }
       await api("/drops", {
         body: kind === "hookup" ? {
           kind: "hookup",
@@ -73,10 +124,17 @@ function Inner() {
           publisher_opt_in: true,
         } : {
           kind: "confession",
-          confession: text.trim(),
+          confession: text.trim() || undefined,
+          intent,
           mood_tag: mood,
+          font_style: font,
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: true,
+          ...(loc.country ? { location_country: loc.country } : {}),
+          ...(loc.county.trim() ? { location_county: loc.county.trim() } : {}),
+          ...(loc.subCounty.trim() ? { location_sub_county: loc.subCounty.trim() } : {}),
+          ...(loc.estate.trim() ? { location_estate: loc.estate.trim() } : {}),
+          ...payload,
         },
       });
       refresh();
@@ -168,26 +226,48 @@ function Inner() {
   return (
     <form className="form pad" onSubmit={submit}>
       <button type="button" className="linkish" onClick={() => setKind(null)}>← Change type</button>
+      <div className="cx-intents" role="radiogroup" aria-label="Confession type">
+        {INTENTS.map((i) => (
+          <button type="button" key={i.id} role="radio" aria-checked={intent === i.id} className={intent === i.id ? "on" : ""} onClick={() => setIntent(i.id)}>
+            <strong>{i.label}</strong>
+            <small>{i.sub}</small>
+          </button>
+        ))}
+      </div>
+
+      <div className="cx-tabs" role="tablist" aria-label="Format">
+        {MODES.map(([id, label]) => (
+          <button type="button" key={id} role="tab" aria-selected={mode === id} className={mode === id ? "on" : ""} onClick={() => setMode(id)}>{label}</button>
+        ))}
+      </div>
+
+      {mode === "media" ? <MediaPicker value={media} onChange={setMedia} onError={setError} /> : null}
+      {mode === "voice" ? <VoiceRecorder value={voice} onChange={setVoice} onError={setError} /> : null}
+      {mode === "poll" ? <PollEditor value={poll} onChange={setPoll} /> : null}
+
       <label className="field">
-        What can&apos;t you say out loud?
+        {mode === "text" ? "What can't you say out loud?" : "Add a caption (optional)"}
         <textarea
-          rows={7}
+          rows={mode === "text" ? 7 : 3}
           maxLength={MAX}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type it here. No name, no trace."
-          autoFocus
+          style={fontStyle(font)}
         />
       </label>
       <div className="counter">{text.length}/{MAX}</div>
 
-      <div className="chips" role="radiogroup" aria-label="Mood">
-        {MOODS.map((m) => (
-          <button type="button" key={m} role="radio" aria-checked={mood === m} className={mood === m ? "on" : ""} onClick={() => setMood(m)}>
-            {m}
-          </button>
+      <div className="cx-fonts" role="radiogroup" aria-label="Font style">
+        {FONTS.map((f) => (
+          <button type="button" key={f.id} role="radio" aria-checked={font === f.id} className={font === f.id ? "on" : ""} style={fontStyle(f.id)} onClick={() => setFont(f.id)}>{f.label}</button>
         ))}
       </div>
+
+      <details className="cx-fold">
+        <summary>Location (optional)</summary>
+        <div><LocationFields value={loc} onChange={setLoc} /></div>
+      </details>
 
       <label className="check">
         <input type="checkbox" checked={mature} onChange={(e) => setMature(e.target.checked)} />

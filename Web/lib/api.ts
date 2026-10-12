@@ -34,6 +34,7 @@ export type Post = {
   is_liked?: boolean;
   is_saved?: boolean;
   is_own_post?: boolean;
+  user_id?: string;
   type?: string;
 };
 
@@ -145,10 +146,36 @@ export type AuthUser = {
   is_admin: boolean;
   coin_balance: number;
   age_verified: boolean;
+  is_premium?: boolean;
+  premium_until?: string | null;
+  feed_location_scope?: string | null;
 };
 
 export const COST = { post: 3, linkUp: 6 };
 
 export function compact(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
+}
+
+export type FeedAd = {
+  id: string;
+  title: string;
+  link_url: string;
+  media_url?: string | null;
+  media_type?: "image" | "gif" | "video" | "audio" | null;
+  ad_type?: string;
+};
+export type MarketTease = { id: string; title: string; teaser: string; media_url?: string | null; price_coins: number };
+
+export function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem("anonixx_device_id");
+    if (!id) {
+      id = (crypto.randomUUID?.() || String(Date.now()) + Math.random().toString(36).slice(2));
+      localStorage.setItem("anonixx_device_id", id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
 }

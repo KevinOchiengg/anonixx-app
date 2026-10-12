@@ -27,3 +27,15 @@ export const Inbox = () => (
 export const User = () => (
   <svg {...base}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>
 );
+export const Flame = ({ filled = false }: { filled?: boolean }) => (
+  <svg {...base} fill={filled ? "currentColor" : "none"}><path d="M12 2c1 4 5 6 5 11a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-6 1-10z" /></svg>
+);
+export const Chats = ({ filled = false }: { filled?: boolean }) => (
+  <svg {...base} fill={filled ? "currentColor" : "none"}><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z" /></svg>
+);
+export const Requests = ({ filled = false }: { filled?: boolean }) => (
+  <svg {...base} fill={filled ? "currentColor" : "none"}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9z" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
+);
+export const Person = ({ filled = false }: { filled?: boolean }) => (
+  <svg {...base} fill={filled ? "currentColor" : "none"}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>
+);

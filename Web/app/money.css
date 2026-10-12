@@ -4,10 +4,10 @@
 .stat span { color: var(--muted); font-size: 12px; }
 .tx { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .tx b.plus { color: var(--ok); }
-.tx b.minus { color: #fb7185; }
+.tx b.minus { color: #ef4444; }
 .badge { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .badge.paid { color: var(--ok); }
-.badge.rejected { color: #fb7185; }
+.badge.rejected { color: #ef4444; }
 .mrow { display: block; padding: 14px 20px; border-bottom: 1px solid var(--line); }
 .mrow h3 { margin: 4px 0; font-size: 16px; }
 .mrow p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.4; }
@@ -22,7 +22,7 @@
 .tier i { display: block; font-style: normal; font-size: 22px; }
 .bar { height: 8px; border-radius: 999px; background: var(--card); overflow: hidden; margin: 8px 0; }
 .bar > div { height: 100%; background: var(--rose); border-radius: 999px; }
-.vibe-hero { text-align: center; padding: 26px 16px; border-radius: 18px; background: linear-gradient(135deg, #4a0f26, #1a0610); border: 1px solid var(--line); }
+.vibe-hero { text-align: center; padding: 26px 16px; border-radius: 18px; background: linear-gradient(135deg, rgba(255,99,74,0.22), #151924); border: 1px solid var(--line); }
 .vibe-hero b { display: block; font-size: 56px; line-height: 1; }
 .vibe-hero span { font-size: 18px; font-weight: 800; }
 .plan-save { font-size: 11px; font-weight: 800; color: var(--ok); }

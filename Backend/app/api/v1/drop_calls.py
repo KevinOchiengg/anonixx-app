@@ -17,6 +17,7 @@ GET /drops/connections/{id}/messages every few seconds, and that response
 carries `active_call` so a guest finds out even if they missed the socket
 event.
 """
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -121,7 +122,12 @@ async def start_call(
     # anyone already online.
     try:
         from app.sio import sio
+        from app.api.v1.drops import send_push_notification
         async for conn in db["drop_connections"].find({"sender_id": current_user_id}):
+            asyncio.create_task(send_push_notification(
+                conn["unlocker_id"], "A call is live 📞", "Someone you linked up with just opened their room. Join in.",
+                db, {"url": f"/chat/{conn['_id']}"},
+            ))
             await sio.emit(
                 "drop_call_started",
                 {"host_user_id": current_user_id, "call_id": call_id, "max_guests": capacity["max_guests"]},

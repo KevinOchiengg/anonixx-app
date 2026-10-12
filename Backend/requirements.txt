@@ -21,3 +21,4 @@ agora-token-builder==1.0.0
 python-socketio==5.11.4
 resend==2.4.0
 Pillow==12.1.1
+pywebpush==2.5.0

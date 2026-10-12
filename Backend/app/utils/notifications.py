@@ -3,6 +3,8 @@ app/utils/notifications.py
 Push notification utility — sends via Expo Push Notifications API.
 Uses push tokens stored in the push_tokens collection by AuthContext.
 """
+import asyncio
+import json
 import httpx
 import logging
 from typing import Optional
@@ -81,6 +83,49 @@ TEMPLATES = {
 }
 
 
+def _web_push_one(sub: dict, payload: str) -> str:
+    """Blocking send to one browser subscription. Returns 'ok', 'gone' or 'error'."""
+    from pywebpush import webpush, WebPushException
+    from app.config import settings
+    try:
+        webpush(
+            subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
+            data=payload,
+            vapid_private_key=settings.VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": settings.VAPID_SUBJECT},
+            ttl=86400,
+        )
+        return "ok"
+    except WebPushException as e:
+        code = getattr(getattr(e, "response", None), "status_code", None)
+        return "gone" if code in (404, 410) else "error"
+    except Exception:
+        return "error"
+
+
+async def send_web_push(user_id: str, title: str, body: str, data: Optional[dict], db) -> int:
+    """Deliver a notification to every browser the user enabled notifications on."""
+    from app.config import settings
+    if not settings.VAPID_PRIVATE_KEY or not settings.VAPID_PUBLIC_KEY:
+        return 0
+    try:
+        subs = await db["web_push_subscriptions"].find({"user_id": user_id}).to_list(length=10)
+        if not subs:
+            return 0
+        payload = json.dumps({"title": title, "body": body, "data": data or {}})
+        sent = 0
+        for sub in subs:
+            result = await asyncio.to_thread(_web_push_one, sub, payload)
+            if result == "ok":
+                sent += 1
+            elif result == "gone":
+                await db["web_push_subscriptions"].delete_one({"_id": sub["_id"]})
+        return sent
+    except Exception as e:
+        logger.warning(f"Web push failed for {user_id}: {e}")
+        return 0
+
+
 async def get_push_token(user_id: str, db) -> Optional[str]:
     """Fetch the most recent push token for a user."""
     try:
@@ -117,15 +162,6 @@ async def send_push_notification(
     Returns:
         True if sent successfully, False otherwise
     """
-    token = await get_push_token(user_id, db)
-    if not token:
-        logger.info(f"No push token for user {user_id} — skipping notification")
-        return False
-
-    if not token.startswith("ExponentPushToken["):
-        logger.warning(f"Invalid push token format for user {user_id}: {token[:20]}...")
-        return False
-
     template = TEMPLATES.get(template_key)
     if not template:
         logger.error(f"Unknown notification template: {template_key}")
@@ -135,6 +171,19 @@ async def send_push_notification(
     data = {**template["data"]}
     if extra_data:
         data.update(extra_data)
+
+    web_sent = await send_web_push(
+        user_id, title_override or template["title"], body_override or template["body"], data, db,
+    )
+
+    token = await get_push_token(user_id, db)
+    if not token:
+        logger.info(f"No push token for user {user_id} — skipping notification")
+        return web_sent > 0
+
+    if not token.startswith("ExponentPushToken["):
+        logger.warning(f"Invalid push token format for user {user_id}: {token[:20]}...")
+        return web_sent > 0
 
     payload = {
         "to": token,

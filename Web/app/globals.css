@@ -1,10 +1,16 @@
 :root {
-  --bg: #0a0308;
-  --bg-edge: #050103;
-  --fg: #f6e6ec;
-  --muted: rgba(246, 230, 236, 0.66);
-  --rose: #e11d48;
-  --line: rgba(246, 230, 236, 0.14);
+  --bg: #0b0f18;
+  --bg-edge: #070a11;
+  --surface: #151924;
+  --surface-alt: #1a1f2e;
+  --fg: #EAEAF0;
+  --muted: #9A9AA3;
+  --faint: #4a5068;
+  --rose: #FF634A;
+  --rose-dim: rgba(255, 99, 74, 0.12);
+  --gold: #fbbf24;
+  --violet: #B36BFF;
+  --line: rgba(255, 255, 255, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -39,7 +45,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .topbar > * { pointer-events: auto; }
 .wordmark { font-weight: 800; font-size: 20px; letter-spacing: -0.02em; }
-.wordmark b { color: var(--rose); }
+.wordmark b { color: #e11d48; }
 .pill {
   font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px;
   background: var(--rose); color: #fff;
@@ -61,12 +67,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .slide.has-media { justify-content: flex-end; padding-top: 0; background: #000; }
 
-.g0 { background: radial-gradient(120% 90% at 20% 0%, #4a0f26 0%, #14040b 70%); }
-.g1 { background: radial-gradient(120% 90% at 80% 10%, #3b0f3f 0%, #10040f 70%); }
-.g2 { background: radial-gradient(120% 90% at 10% 90%, #5a1320 0%, #12040a 70%); }
-.g3 { background: radial-gradient(120% 90% at 90% 80%, #2a0f4a 0%, #0c0414 70%); }
-.g4 { background: radial-gradient(120% 90% at 50% 0%, #531034 0%, #0f0409 70%); }
-.g5 { background: radial-gradient(120% 90% at 0% 40%, #40121a 0%, #0d0408 70%); }
+.g0 { background: radial-gradient(120% 90% at 20% 0%, #3a1a2e 0%, #0b0f18 70%); }
+.g1 { background: radial-gradient(120% 90% at 80% 10%, #2a1a4a 0%, #0b0f18 70%); }
+.g2 { background: radial-gradient(120% 90% at 10% 90%, #4a1f1a 0%, #0b0f18 70%); }
+.g3 { background: radial-gradient(120% 90% at 90% 80%, #1f1a4a 0%, #0b0f18 70%); }
+.g4 { background: radial-gradient(120% 90% at 50% 0%, #3d1a3a 0%, #0b0f18 70%); }
+.g5 { background: radial-gradient(120% 90% at 0% 40%, #3a1a22 0%, #0b0f18 70%); }
 
 .mood {
   align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
@@ -145,7 +151,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* ── Sheet / toast ── */
 .sheet-back { position: absolute; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.55); display: flex; align-items: flex-end; }
 .sheet {
-  width: 100%; padding: 26px 22px 34px; border-radius: 22px 22px 0 0; background: #17060e;
+  width: 100%; padding: 26px 22px 34px; border-radius: 22px 22px 0 0; background: var(--surface);
   border-top: 1px solid var(--line);
 }
 .sheet h3 { margin: 0 0 8px; font-size: 20px; }

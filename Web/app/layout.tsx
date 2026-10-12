@@ -2,6 +2,12 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import "./app.css";
+import "./parity.css";
+import "./compose.css";
+import "./profile.css";
+import "./unlock.css";
+import "./call.css";
+import "./feedparity.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";
 
@@ -24,7 +30,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0a0308",
+  themeColor: "#0b0f18",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
