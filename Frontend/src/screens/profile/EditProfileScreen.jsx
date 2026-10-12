@@ -80,6 +80,7 @@ export default function EditProfileScreen({ navigation }) {
   const [email,           setEmail]           = useState(user?.email || '');
   const [anonymousName,   setAnonymousName]   = useState(user?.anonymous_name || '');
   const [gender,          setGender]          = useState(user?.gender || null);
+  const [bio,             setBio]             = useState(user?.bio || '');
   const [avatarUri,       setAvatarUri]       = useState(user?.avatar_url || null);
   const [loading,         setLoading]         = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -237,6 +238,7 @@ export default function EditProfileScreen({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('token');
       const body  = { username: username.trim(), email: email.trim() };
+      if (bio.trim() !== (user?.bio || '')) body.bio = bio.trim();
       if (avatarUri && avatarUri !== user?.avatar_url) body.avatar_url = avatarUri;
       if (anonymousName.trim() && anonymousName.trim() !== user?.anonymous_name) {
         body.anonymous_name = anonymousName.trim();
@@ -269,6 +271,7 @@ export default function EditProfileScreen({ navigation }) {
         email:          data.email,
         avatar_url:     data.avatar_url,
         anonymous_name: data.anonymous_name,
+        bio:            data.bio ?? user?.bio,
         gender,
       };
       // AuthContext and Redux's auth slice both hold their own copy of
@@ -436,6 +439,18 @@ export default function EditProfileScreen({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
+          </FieldCard>
+
+          <FieldCard label="Bio" hint={`${bio.length}/160 · a line about you`}>
+            <TextInput
+              value={bio}
+              onChangeText={setBio}
+              placeholder="say a little, stay hidden"
+              placeholderTextColor={T.textMuted}
+              maxLength={160}
+              multiline
+              style={[styles.inputText, { minHeight: rh(64), textAlignVertical: 'top' }]}
+            />
           </FieldCard>
 
           <FieldCard label="Gender" hint="only visible on your anonymous connect profile">

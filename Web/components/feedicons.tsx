@@ -51,3 +51,15 @@ export const Smile = () => (
 export const Pin = () => (
   <svg {...base}><path d="M12 17v5" /><path d="M5 17h14l-2-6V4H7v7z" /></svg>
 );
+export const ImageIcon = () => (
+  <svg {...base}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.5" /><path d="M21 16l-5-5-9 9" /></svg>
+);
+export const Mic = () => (
+  <svg {...base}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+);
+export const Gif = () => (
+  <svg {...base}><rect x="2.5" y="6" width="19" height="12" rx="3" /><path d="M10 10.5a2 2 0 1 0 0 3v-1H9M13 10v4M15.5 14v-4h2.5" /></svg>
+);
+export const Send = () => (
+  <svg {...base}><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg>
+);

@@ -61,6 +61,7 @@ class UpdateProfileRequest(BaseModel):
     email:          Optional[EmailStr]= None
     anonymous_name: Optional[str]     = None
     avatar_url:     Optional[str]     = None   # Cloudinary URL for real photo
+    bio:            Optional[str]     = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -281,6 +282,8 @@ async def get_current_user(
         "email":          user["email"],
         "username":       user.get("username"),
         "anonymous_name": user.get("anonymous_name"),
+        "bio":            user.get("bio"),
+        "avatar_url":     user.get("avatar_url"),
         "created_at":     user["created_at"].isoformat(),
         "age_verified":            user.get("age_verified", False),
         "is_premium":     _premium_running(user),
@@ -444,6 +447,15 @@ async def update_profile(
     if data.avatar_url is not None:
         update["avatar_url"] = data.avatar_url
 
+    if data.bio is not None:
+        bio = data.bio.strip()
+        if len(bio) > 160:
+            raise HTTPException(400, detail="Keep your bio under 160 characters.")
+        from app.utils.moderation import violates_policy, MODERATION_ERROR
+        if violates_policy(bio):
+            raise HTTPException(400, detail=MODERATION_ERROR)
+        update["bio"] = bio
+
     if not update:
         return {"message": "Nothing to update"}
 
@@ -456,6 +468,7 @@ async def update_profile(
         "email":          refreshed.get("email"),
         "anonymous_name": refreshed.get("anonymous_name"),
         "avatar_url":     refreshed.get("avatar_url"),
+        "bio":            refreshed.get("bio"),
     }
 
 

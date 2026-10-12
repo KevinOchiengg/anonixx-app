@@ -29,6 +29,7 @@ function Inner() {
         </div>
         <strong>{name}</strong>
         <small>{user.email}</small>
+        {user.bio ? <p className="prof-bio">{user.bio}</p> : null}
       </div>
 
       <div className="prof-stats">

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { ChatBackground, FONTS_HREF, fontStyleById, type GalleryItem } from "@/lib/chatTheme";
 import { uploadFile, type UploadKind } from "@/lib/upload";
+import { connectSocket } from "@/lib/socket";
+import type { Socket } from "socket.io-client";
 import AppShell from "./AppShell";
 import CallRoom, { type CallInfo } from "./CallRoom";
 import "../app/chat-media.css";
@@ -78,6 +80,12 @@ function Inner({ id }: { id: string }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
+  const sock = useRef<Socket | null>(null);
+  const [sockUp, setSockUp] = useState(false);
+  const lastTyping = useRef(0);
+  const typingTimer = useRef<number | null>(null);
+  const [typing, setTyping] = useState(false);
+  const [presence, setPresence] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,6 +108,51 @@ function Inner({ id }: { id: string }) {
     const t = window.setInterval(load, 4000);
     return () => window.clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    const so = connectSocket();
+    if (!so) return;
+    sock.current = so;
+    setSockUp(true);
+    const refresh = (d: { connectionId?: string }) => { if (d?.connectionId === id) load(); };
+    so.on("new_message", refresh);
+    so.on("messages_seen", refresh);
+    so.on("message_deleted", refresh);
+    so.on("user_typing", (d: { connectionId?: string }) => {
+      if (d?.connectionId !== id) return;
+      setTyping(true);
+      if (typingTimer.current) window.clearTimeout(typingTimer.current);
+      typingTimer.current = window.setTimeout(() => setTyping(false), 3000);
+    });
+    return () => {
+      if (typingTimer.current) window.clearTimeout(typingTimer.current);
+      so.disconnect();
+      sock.current = null;
+      setSockUp(false);
+    };
+  }, [id, load]);
+
+  const otherId = conn?.other_user_id;
+  useEffect(() => {
+    const so = sock.current;
+    if (!so || !sockUp || !otherId) return;
+    const on = (d: { userId?: string }) => { if (d?.userId === otherId) setPresence(true); };
+    const off = (d: { userId?: string }) => { if (d?.userId === otherId) setPresence(false); };
+    so.on("user_online", on);
+    so.on("user_offline", off);
+    return () => { so.off("user_online", on); so.off("user_offline", off); };
+  }, [otherId, sockUp]);
+
+  useEffect(() => { setPresence(null); }, [conn?.other_is_online]);
+
+  function onType(v: string) {
+    setText(v);
+    const now = Date.now();
+    if (v && now - lastTyping.current > 2000) {
+      lastTyping.current = now;
+      sock.current?.emit("typing", { connectionId: id });
+    }
+  }
 
   useEffect(() => {
     if (msgs.length !== lastCount.current) {
@@ -273,6 +326,7 @@ function Inner({ id }: { id: string }) {
   }
 
   const name = conn?.other_anonymous_name || "…";
+  const online = presence ?? !!conn?.other_is_online;
   const pic = profile?.profile_picture_url;
   const hasGallery = !!profile?.gallery?.length;
 
@@ -285,11 +339,11 @@ function Inner({ id }: { id: string }) {
           <span style={pic ? undefined : { background: "var(--rose-dim)", color: "var(--rose)" }}>
             {pic ? <img src={pic} alt="" /> : name[0]?.toUpperCase() || "A"}
           </span>
-          {conn?.other_is_online ? <em /> : null}
+          {online ? <em /> : null}
         </span>
         <span className="u-head-t">
           <b>{name}</b>
-          <small>{conn?.other_is_online ? "online" : ""}</small>
+          <small>{typing ? "typing…" : online ? "online" : ""}</small>
         </span>
         <button className={`call-btn${activeCall ? " live" : ""}`} onClick={() => pressCall(true)} disabled={callBusy} aria-label="Voice call">
           <svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
@@ -357,7 +411,7 @@ function Inner({ id }: { id: string }) {
         <form className="chat-input" onSubmit={send}>
           <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={pickFile} />
           <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photo or video">📎</button>
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Say something…" maxLength={1000} />
+          <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
           {text.trim() ? (
             <button className="pill" disabled={busy}>Send</button>
           ) : (

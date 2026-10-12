@@ -232,7 +232,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
 
   return (
     <div className="stage">
-      <div className={`phone${user ? " hasnav" : ""}`}>
+      <div className="phone hasnav">
         <header className="topbar">
           <Link href="/" className="wordmark">anonix<b>x</b></Link>
           <span className="topbar-actions">
@@ -289,7 +289,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
           })}
         </div>
 
-        {user ? <BottomNav /> : null}
+        <BottomNav />
 
         {gate ? (
           <div className="sheet-back" onClick={() => setGate(null)}>

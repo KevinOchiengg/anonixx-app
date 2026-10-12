@@ -143,6 +143,7 @@ export type AuthUser = {
   username: string | null;
   anonymous_name: string | null;
   avatar_url: string | null;
+  bio?: string | null;
   is_admin: boolean;
   coin_balance: number;
   age_verified: boolean;

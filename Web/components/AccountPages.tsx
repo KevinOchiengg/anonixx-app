@@ -66,6 +66,7 @@ function EditProfileInner() {
   const { user, refresh } = useAuth();
   const [name, setName] = useState(user?.anonymous_name || "");
   const [gender, setGender] = useState("");
+  const [bio, setBio] = useState(user?.bio || "");
   const [avatar, setAvatar] = useState(user?.avatar_url || "");
   const [avail, setAvail] = useState<null | boolean>(null);
   const [availMsg, setAvailMsg] = useState("");
@@ -109,6 +110,7 @@ function EditProfileInner() {
       const body: Record<string, string> = {};
       if (changed && name.trim()) body.anonymous_name = name.trim();
       if (avatar && avatar !== user?.avatar_url) body.avatar_url = avatar;
+      if (bio.trim() !== (user?.bio || "")) body.bio = bio.trim();
       if (Object.keys(body).length) await api("/auth/update-profile", { method: "PUT", body });
       if (gender) await api("/auth/gender", { method: "PUT", body: { gender } });
       await refresh();
@@ -121,7 +123,7 @@ function EditProfileInner() {
   }
 
   if (!user) return null;
-  const dirty = (changed && avail !== false) || avatar !== (user.avatar_url || "") || Boolean(gender);
+  const dirty = (changed && avail !== false) || avatar !== (user.avatar_url || "") || bio.trim() !== (user.bio || "") || Boolean(gender);
 
   return (
     <form className="form pad" onSubmit={save}>
@@ -141,6 +143,10 @@ function EditProfileInner() {
       <label className="field">Hidden name
         <input value={name} maxLength={30} onChange={(e) => setName(e.target.value)} />
         {avail !== null && changed ? <span className={`acct-hint ${avail ? "good" : "bad"}`}>{availMsg}</span> : null}
+      </label>
+      <label className="field">Bio
+        <textarea value={bio} maxLength={160} rows={3} placeholder="A line about you. Keep it hidden-friendly." onChange={(e) => setBio(e.target.value)} />
+        <span className="acct-hint">{bio.length}/160</span>
       </label>
       <label className="field">Gender
         <select value={gender} onChange={(e) => setGender(e.target.value)}>
