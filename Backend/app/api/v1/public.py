@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import get_database
 from app.api.v1.drops import batch_format_drops
 from app.utils.content_mode import SAFE_FILTER
+from app.utils.feed_mix import fetch_mixed
 
 router = APIRouter(prefix="/public", tags=["Public"])
 
@@ -33,21 +34,7 @@ async def public_feed(
     db = Depends(get_database),
 ):
     query: dict = {**_LIVE, **SAFE_FILTER}
-    if cursor:
-        try:
-            ts, oid = cursor.rsplit("|", 1)
-            dt = datetime.fromisoformat(ts)
-            query = {"$and": [query, {"$or": [
-                {"created_at": {"$lt": dt}},
-                {"created_at": dt, "_id": {"$lt": ObjectId(oid)}},
-            ]}]}
-        except Exception:
-            raise HTTPException(status_code=400, detail="Bad cursor.")
-
-    rows = await db["drops"].find(query).sort([("created_at", -1), ("_id", -1)]).limit(limit + 1).to_list(None)
-    page = rows[:limit]
-    has_more = len(rows) > limit
-    next_cursor = f"{page[-1]['created_at'].isoformat()}|{page[-1]['_id']}" if page and has_more else None
+    page, next_cursor, has_more = await fetch_mixed(db, query, limit, cursor)
 
     posts = [_public_post(p) for p in await batch_format_drops(page, None, db)]
     return {"posts": posts, "next_cursor": next_cursor, "has_more": has_more}

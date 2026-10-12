@@ -22,6 +22,7 @@ from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
 from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode
 from app.utils.fingerprint import fingerprint_hash
+from app.utils.feed_mix import fetch_mixed, reslot
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
@@ -1863,36 +1864,13 @@ async def get_drops_feed(
     if loc_filter:
         pool_query = {"$and": [pool_query, loc_filter]} if pool_query else loc_filter
 
-    # Cursor pagination (newest first). Each page is the next `drops_to_load`
-    # drops after the cursor — none skipped, none repeated — then ordered by
-    # affinity within the page only. (The old approach shuffled a bigger pool
-    # and kept a random slice, so unseen drops were silently dropped and
-    # others came back twice, while has_more flipped false early.)
-    if cursor:
-        try:
-            cur_ts, cur_id = cursor.rsplit("|", 1)
-            cur_dt = datetime.fromisoformat(cur_ts)
-            after = {"$or": [
-                {"created_at": {"$lt": cur_dt}},
-                {"created_at": cur_dt, "_id": {"$lt": ObjectId(cur_id)}},
-            ]}
-            pool_query = {"$and": [pool_query, after]} if pool_query else after
-        except Exception:
-            raise HTTPException(status_code=400, detail="Bad cursor.")
+    # Mixed feed: MEDIA_RUN media drops, then one text confession, repeating.
+    # Each kind is paged newest-first with its own position inside `cursor`
+    # (see utils/feed_mix.py) — none skipped, none repeated. Affinity ordering
+    # only reorders within a kind, so the rhythm stays intact.
+    page, next_cursor, page_has_more = await fetch_mixed(db, pool_query, drops_to_load, cursor)
 
-    # One extra row tells us whether another page exists.
-    rows = await db["drops"].find(pool_query) \
-        .sort([("created_at", -1), ("_id", -1)]) \
-        .limit(drops_to_load + 1) \
-        .to_list(None)
-    page = rows[:drops_to_load]
-    page_has_more = len(rows) > drops_to_load
-    next_cursor = (
-        f"{page[-1]['created_at'].isoformat()}|{page[-1]['_id']}"
-        if page and page_has_more else None
-    )
-
-    drops = _weighted_shuffle_drops(page, user_affinities)
+    drops = reslot(page, _weighted_shuffle_drops(page, user_affinities))
     formatted_drops = await batch_format_drops(drops, current_user_id, db)
 
     final_feed = []
