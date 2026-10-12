@@ -1,8 +1,11 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
+import { ChatBackground, FONTS_HREF, fontStyleById, type GalleryItem } from "@/lib/chatTheme";
 import { uploadFile, type UploadKind } from "@/lib/upload";
 import AppShell from "./AppShell";
+import CallRoom, { type CallInfo } from "./CallRoom";
 import "../app/chat-media.css";
 
 type Msg = {
@@ -18,15 +21,52 @@ type Msg = {
   duration_seconds?: number | null;
   reply_to?: { id: string; preview: string; media_type: string | null; is_own: boolean } | null;
 };
-type Conn = { other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string };
+type Conn = { other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean };
+type ActiveCall = { id: string; guest_count: number; max_guests: number };
+type Profile = { background_pattern: string; font_style: string; profile_picture_url: string | null; gallery: GalleryItem[] };
+
+function GalleryOverlay({ items, title, onClose }: { items: GalleryItem[]; title?: string; onClose: () => void }) {
+  const [i, setI] = useState(0);
+  const track = useRef<HTMLDivElement>(null);
+  return (
+    <div className="u-welcome" role="dialog" aria-modal>
+      <button className="u-modal-x" onClick={onClose} aria-label="Close">×</button>
+      <div
+        className="u-welcome-track"
+        ref={track}
+        onScroll={() => {
+          const el = track.current;
+          if (el) setI(Math.round(el.scrollLeft / el.clientWidth));
+        }}
+      >
+        {items.map((m, k) => (
+          <div key={k}>
+            {m.media_type === "video" ? <video src={m.media_url} controls autoPlay={k === 0} loop playsInline /> : <img src={m.media_url} alt="" />}
+          </div>
+        ))}
+      </div>
+      {items.length > 1 ? (
+        <div className="u-welcome-dots">{items.map((_, k) => <i key={k} className={k === i ? "on" : ""} />)}</div>
+      ) : null}
+      <p>{title || "Swipe to see more"}</p>
+    </div>
+  );
+}
 
 function Inner({ id }: { id: string }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [conn, setConn] = useState<Conn | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [welcome, setWelcome] = useState<GalleryItem[]>([]);
+  const [gallery, setGallery] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
+  const [room, setRoom] = useState<CallInfo | null>(null);
+  const [callBusy, setCallBusy] = useState(false);
+  const roomRef = useRef<CallInfo | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
   const [recording, setRecording] = useState(false);
@@ -41,9 +81,15 @@ function Inner({ id }: { id: string }) {
 
   const load = useCallback(async () => {
     try {
-      const r = await api<{ messages: Msg[]; connection: Conn }>(`/drops/connections/${id}/messages`);
+      const r = await api<{ messages: Msg[]; connection: Conn; chat_profile?: Profile; welcome_gallery?: GalleryItem[]; welcome_sound?: string | null; active_call?: ActiveCall | null }>(
+        `/drops/connections/${id}/messages`,
+      );
       setMsgs(r.messages);
       setConn(r.connection);
+      if (r.chat_profile) setProfile(r.chat_profile);
+      setActiveCall(r.active_call || null);
+      if (!r.active_call && roomRef.current && !roomRef.current.isHost) { roomRef.current = null; setRoom(null); }
+      if (r.welcome_gallery?.length) setWelcome(r.welcome_gallery);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -61,6 +107,32 @@ function Inner({ id }: { id: string }) {
       bottom.current?.scrollIntoView({ block: "end" });
     }
   }, [msgs]);
+
+  function openRoom(info: CallInfo | null) {
+    roomRef.current = info;
+    setRoom(info);
+  }
+
+  async function pressCall(audioOnly: boolean) {
+    if (callBusy || !conn) return;
+    if (!conn.is_sender && !activeCall) { setError("No live call right now."); return; }
+    setCallBusy(true);
+    setError("");
+    try {
+      type Res = { call_id: string; channel: string; token: string; uid: number; app_id: string };
+      const r = conn.is_sender
+        ? await api<Res>("/drop-calls/start", { method: "POST" })
+        : await api<Res>(`/drop-calls/${activeCall!.id}/join`, { method: "POST" });
+      openRoom({
+        callId: r.call_id, channel: r.channel, token: r.token, uid: r.uid, appId: r.app_id,
+        isHost: !!conn.is_sender, audioOnly, hostName: conn.other_anonymous_name || "Anonymous",
+      });
+    } catch (e) {
+      setError((e as Error).message || "Could not start the call.");
+    } finally {
+      setCallBusy(false);
+    }
+  }
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -200,21 +272,49 @@ function Inner({ id }: { id: string }) {
     }
   }
 
+  const name = conn?.other_anonymous_name || "…";
+  const pic = profile?.profile_picture_url;
+  const hasGallery = !!profile?.gallery?.length;
+
   return (
-    <div className="chat">
-      <div className="chat-head">
-        <b>{conn?.other_anonymous_name || "…"}</b>
-        <small>{conn?.other_is_online ? "online" : ""}</small>
-        {conn?.other_user_id ? (
-          <button className="kebab" onClick={() => setMenu((m) => !m)} aria-label="More">⋯</button>
-        ) : null}
+    <div className="chat u-themed" style={fontStyleById(profile?.font_style)}>
+      <link rel="stylesheet" href={FONTS_HREF} precedence="default" />
+      <ChatBackground id={profile?.background_pattern} />
+      <div className="chat-head u-chat-head">
+        <span className="u-ava">
+          <span style={pic ? undefined : { background: "var(--rose-dim)", color: "var(--rose)" }}>
+            {pic ? <img src={pic} alt="" /> : name[0]?.toUpperCase() || "A"}
+          </span>
+          {conn?.other_is_online ? <em /> : null}
+        </span>
+        <span className="u-head-t">
+          <b>{name}</b>
+          <small>{conn?.other_is_online ? "online" : ""}</small>
+        </span>
+        <button className={`call-btn${activeCall ? " live" : ""}`} onClick={() => pressCall(true)} disabled={callBusy} aria-label="Voice call">
+          <svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
+          {activeCall ? <i /> : null}
+        </button>
+        <button className={`call-btn${activeCall ? " live" : ""}`} onClick={() => pressCall(false)} disabled={callBusy} aria-label="Video call">
+          <svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2" /><path d="M16 10l6-3v10l-6-3" /></svg>
+          {activeCall ? <i /> : null}
+        </button>
+        <button className="kebab" onClick={() => setMenu((m) => !m)} aria-label="More">⋯</button>
         {menu ? (
-          <div className="menu">
-            <button onClick={report}>Report</button>
-            <button onClick={block}>Block</button>
+          <div className="menu" onClick={() => setMenu(false)}>
+            {hasGallery ? <button onClick={() => setGallery(true)}>View gallery</button> : null}
+            {conn?.is_sender ? <Link href="/chat-setup" className="u-menu-link">Chat interface</Link> : null}
+            {conn?.other_user_id ? <button onClick={report}>Report</button> : null}
+            {conn?.other_user_id ? <button onClick={block}>Block</button> : null}
           </div>
         ) : null}
       </div>
+      {activeCall ? (
+        <div className="call-strip"><i />{conn?.is_sender ? "Your call is live" : "Call live"} · {activeCall.guest_count}/{activeCall.max_guests} in room</div>
+      ) : null}
+      {room ? <CallRoom info={room} onClose={() => { openRoom(null); load(); }} /> : null}
+      {welcome.length ? <GalleryOverlay items={welcome} title="Swipe to see more · tap × to start chatting" onClose={() => setWelcome([])} /> : null}
+      {gallery && profile?.gallery?.length ? <GalleryOverlay items={profile.gallery} onClose={() => setGallery(false)} /> : null}
       {conn?.confession ? <div className="chat-origin">“{conn.confession}”</div> : null}
       <div className="chat-log">
         {msgs.map((m) => (

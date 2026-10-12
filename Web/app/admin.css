@@ -1,4 +1,4 @@
-.adm { min-height: 100vh; background: var(--bg, #0b0b0f); color: var(--fg); padding: 0 16px 60px; max-width: 1040px; margin: 0 auto; }
+.adm { min-height: 100vh; background: var(--bg); color: var(--fg); padding: 0 16px 60px; max-width: 1040px; margin: 0 auto; }
 .adm h2 { font-size: 22px; margin: 18px 0 10px; }
 .adm-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 8px; }
 .adm-brand { font-weight: 800; font-size: 20px; color: var(--rose); }

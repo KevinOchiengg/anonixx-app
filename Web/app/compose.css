@@ -1,0 +1,28 @@
+.cx-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 12px 0; display: grid; gap: 10px; }
+.cx-tabs { display: flex; gap: 6px; margin: 12px 0 4px; flex-wrap: wrap; }
+.cx-tabs button { flex: 1; min-width: 70px; padding: 9px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 13px; font-weight: 600; }
+.cx-tabs button.on { color: var(--fg); border-color: var(--rose); background: rgba(255,99,74,0.12); }
+.cx-opt { display: flex; gap: 8px; align-items: center; }
+.cx-opt input { flex: 1; }
+.cx-x { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-alt); color: var(--muted); font-size: 18px; line-height: 1; }
+.cx-add { display: grid; gap: 4px; padding: 22px 12px; border: 1.5px dashed var(--faint); border-radius: 14px; color: var(--fg); font-weight: 600; text-align: center; }
+.cx-add small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.cx-thumbs { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; }
+.cx-thumbs img, .cx-thumbs video { height: 180px; max-width: 100%; border-radius: 12px; object-fit: cover; flex: none; scroll-snap-align: start; background: #000; }
+.cx-wave { display: flex; align-items: center; gap: 3px; height: 72px; }
+.cx-wave i { flex: 1; min-height: 4px; border-radius: 2px; background: var(--rose); opacity: 0.85; }
+.cx-timer { font-size: 28px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.cx-timer small { font-size: 13px; color: var(--muted); font-weight: 400; }
+.cx-voice audio { width: 100%; }
+.cx-fonts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cx-fonts button { padding: 12px 6px; border-radius: 12px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--fg); font-size: 16px; }
+.cx-fonts button.on { border-color: var(--rose); background: rgba(255,99,74,0.12); }
+.cx-intents { display: grid; gap: 8px; margin: 8px 0; }
+.cx-intents button { text-align: left; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); display: grid; gap: 2px; }
+.cx-intents button small { color: var(--muted); font-size: 12px; }
+.cx-intents button.on { border-color: var(--rose); background: rgba(255,99,74,0.12); }
+.cx-fold { border: 1px solid var(--line); border-radius: 16px; margin: 12px 0; background: var(--surface); }
+.cx-fold > summary { padding: 13px 14px; cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; }
+.cx-fold > summary::-webkit-details-marker { display: none; }
+.cx-fold > div { padding: 0 14px 14px; }
+.cx-fold .cx-card { margin: 0; padding: 0; border: 0; background: none; }

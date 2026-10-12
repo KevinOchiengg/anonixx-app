@@ -1,10 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, loadMoreClient, type Post } from "@/lib/api";
+import { api, loadMoreClient, type FeedAd, type MarketTease, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
+import { AdSlide, MarketSlide } from "./FeedPromo";
+import { MapPin, MenuIcon, SearchIcon } from "./feedicons";
 import Hero from "./Hero";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
@@ -15,6 +17,8 @@ type Item =
   | { kind: "hero" }
   | { kind: "post"; post: Post; first: boolean }
   | { kind: "ad"; key: string }
+  | { kind: "promo"; key: string; ad: FeedAd }
+  | { kind: "market"; key: string; item: MarketTease }
   | { kind: "end" };
 
 type AuthedFeed = {
@@ -26,6 +30,10 @@ type AuthedFeed = {
 };
 
 const AD_EVERY = 6;
+const MARKET_EVERY = 7;
+const FEED_AD_EVERY = 8;
+const ADSENSE_ON = Boolean(process.env.NEXT_PUBLIC_ADSENSE_CLIENT && process.env.NEXT_PUBLIC_ADSENSE_SLOT);
+const LOCATION_LABELS: Record<string, string> = { country: "Country", county: "Region", sub_county: "Area", estate: "Nearby" };
 const LOAD_AHEAD = 4;
 
 type Props = {
@@ -51,10 +59,18 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const [commentsFor, setCommentsFor] = useState<Post | null>(null);
   const [linkFor, setLinkFor] = useState<Post | null>(null);
   const [reportFor, setReportFor] = useState<Post | null>(null);
+  const [ads, setAds] = useState<FeedAd[]>([]);
+  const [market, setMarket] = useState<MarketTease[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
   const loading = useRef(false);
 
   const showHero = withHero && !user;
+
+  useEffect(() => {
+    if (!ready) return;
+    api<{ ads?: FeedAd[] }>("/ads/active?limit=10").then((r) => setAds(r.ads || [])).catch(() => {});
+    api<{ items?: MarketTease[] }>("/market/items?limit=20&offset=0").then((r) => setMarket(r.items || [])).catch(() => {});
+  }, [ready, user]);
 
   // Once we know who the viewer is, swap the public feed for their own (likes, saves, mature posts).
   useEffect(() => {
@@ -93,15 +109,29 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [];
     if (showHero) out.push({ kind: "hero" });
+    let mIdx = 0;
+    let aIdx = 0;
     posts.forEach((post, i) => {
       out.push({ kind: "post", post, first: i === 0 && !showHero });
+      const n = i + 1;
       const next = posts[i + 1];
       const calm = post.sensitivity !== "mature" && next?.sensitivity !== "mature";
-      if ((i + 1) % AD_EVERY === 0 && calm) out.push({ kind: "ad", key: `ad-${i}` });
+      if (!calm) return;
+      if (n % MARKET_EVERY === 0 && mIdx < market.length) {
+        const m = market[mIdx++];
+        out.push({ kind: "market", key: `market-${m.id}`, item: m });
+      }
+      if (n % FEED_AD_EVERY === 0 && ads.length > 0) {
+        const a = ads[aIdx % ads.length];
+        aIdx++;
+        out.push({ kind: "promo", key: `ad-${a.id}-${n}`, ad: a });
+      } else if (ads.length === 0 && ADSENSE_ON && n % AD_EVERY === 0) {
+        out.push({ kind: "ad", key: `adsense-${i}` });
+      }
     });
     if (ended) out.push({ kind: "end" });
     return out;
-  }, [posts, showHero, ended]);
+  }, [posts, showHero, ended, ads, market]);
 
   useEffect(() => {
     const root = scroller.current;
@@ -187,7 +217,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     const url = `${window.location.origin}/drop/${post.id}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Anonixx", text: "Someone confessed something on Anonixx", url });
+        await navigator.share({ title: "Anonixx", text: `"${post.content.substring(0, 100)}..." — Anonixx`, url });
       } else {
         await navigator.clipboard.writeText(url);
         flash("Link copied");
@@ -205,31 +235,35 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       <div className={`phone${user ? " hasnav" : ""}`}>
         <header className="topbar">
           <Link href="/" className="wordmark">anonix<b>x</b></Link>
-          {user ? (
-            <span className="topbar-actions">
-              <Link href="/search" className="pill ghost">Search</Link>
-              <Link href="/coins" className="pill ghost">{user.coin_balance} coins</Link>
-            </span>
-          ) : (
-            <span className="topbar-actions">
-              <Link href="/login" className="pill ghost">Sign in</Link>
-              <Link href="/signup" className="pill">Join</Link>
-            </span>
-          )}
+          <span className="topbar-actions">
+            {user && user.feed_location_scope && user.feed_location_scope !== "off" ? (
+              <Link href="/location" className="loc-pill"><MapPin />{LOCATION_LABELS[user.feed_location_scope] || "Nearby"}</Link>
+            ) : null}
+            {!user ? (
+              <>
+                <Link href="/login" className="pill ghost">Sign in</Link>
+                <Link href="/signup" className="pill">Join</Link>
+              </>
+            ) : null}
+            <Link href="/search" className="hbtn" aria-label="Search"><SearchIcon /></Link>
+            {user ? <Link href="/settings" className="hbtn" aria-label="Menu"><MenuIcon /></Link> : null}
+          </span>
         </header>
 
         <div className="scroller" ref={scroller}>
           {items.map((it, i) => {
             if (it.kind === "hero") return <Hero key="hero" index={i} />;
             if (it.kind === "ad") return <AdSlot key={it.key} index={i} />;
+            if (it.kind === "promo") return <AdSlide key={it.key} ad={it.ad} index={i} />;
+            if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;
             if (it.kind === "end") {
               return (
-                <section key="end" className="slide g0" data-idx={i}>
-                  <h2 className="confession">You&apos;re all caught up.</h2>
-                  <p className="byline">Come back in a bit. There&apos;s always something new. Or drop your own.</p>
-                  <div className="row" style={{ marginTop: 18 }}>
-                    <Link href="/compose" className="pill">Drop a confession</Link>
-                  </div>
+                <section key="end" className="slide limit-slide" data-idx={i}>
+                  <span className="limit-moon" aria-hidden>🌑</span>
+                  <h2>You&apos;ve been deep in it.</h2>
+                  <p>Sometimes the truth hits differently when you step away from it.</p>
+                  <em>Come back when you have more to say.</em>
+                  <button className="pill" onClick={() => scroller.current?.scrollTo({ top: 0, behavior: "smooth" })}>Close</button>
                 </section>
               );
             }
@@ -260,6 +294,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         {gate ? (
           <div className="sheet-back" onClick={() => setGate(null)}>
             <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <span className="sheet-handle" aria-hidden />
               <h3>{gate}</h3>
               <p>It&apos;s free. Your name stays hidden the whole way.</p>
               <div className="row">
@@ -274,6 +309,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         {commentsFor ? (
           <CommentsSheet
             postId={commentsFor.id}
+            isOwner={Boolean(commentsFor.is_own_post)}
             onClose={() => setCommentsFor(null)}
             onCount={onCount}
             onNeedAuth={() => { setCommentsFor(null); setGate("Sign in to join the thread. Your name stays hidden."); }}
@@ -282,8 +318,9 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         {linkFor ? <LinkUpSheet post={linkFor} onClose={() => setLinkFor(null)} /> : null}
         {reportFor ? (
           <ReportSheet
-            postId={reportFor.id}
+            post={reportFor}
             onClose={() => setReportFor(null)}
+            onBlocked={(p) => setPosts((prev) => prev.filter((x) => !p.user_id || x.user_id !== p.user_id))}
             onDone={(m) => { setReportFor(null); flash(m); }}
           />
         ) : null}

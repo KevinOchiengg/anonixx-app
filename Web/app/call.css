@@ -1,0 +1,28 @@
+.cr { position: fixed; inset: 0; z-index: 200; background: #050608; display: flex; flex-direction: column; color: var(--fg); }
+.cr-head { text-align: center; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 2px; }
+.cr-head b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.cr-head small { font-size: 11px; color: var(--faint); }
+.cr-grid { flex: 1; min-height: 0; display: grid; gap: 4px; padding: 4px 8px; align-content: center; }
+.cr-tile { position: relative; background: #111318; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; overflow: hidden; aspect-ratio: 3 / 4; max-height: 100%; width: 100%; justify-self: center; }
+@media (min-width: 900px) { .cr-tile { aspect-ratio: 16 / 10; } }
+.cr-video, .cr-video > div { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; }
+.cr-tile.mirror video { transform: scaleX(-1); }
+.cr-av { position: absolute; inset: 0; margin: auto; width: 64px; height: 64px; border-radius: 50%; background: var(--rose-dim); color: var(--rose); display: grid; place-items: center; font-size: 26px; font-weight: 700; }
+.cr-label { position: absolute; left: 8px; bottom: 8px; background: rgba(0, 0, 0, 0.55); border-radius: 8px; padding: 3px 8px; font-size: 11px; font-weight: 600; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-ctrls { display: flex; justify-content: center; align-items: center; gap: 14px; padding: 16px 12px calc(16px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
+.cr-ctrls button { width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line); color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+.cr-ctrls button svg { width: 20px; height: 20px; }
+.cr-ctrls button.on { background: rgba(255, 99, 74, 0.3); border-color: var(--rose); }
+.cr-ctrls button:disabled { opacity: 0.4; cursor: default; }
+.cr-ctrls button.end { width: 60px; height: 60px; background: #ef4444; border-color: #ef4444; box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45); }
+.cr-ctrls button.end svg { width: 24px; height: 24px; }
+.cr-err { text-align: center; color: var(--rose); font-size: 12px; padding: 0 16px; }
+.cr-note { text-align: center; font-size: 10px; font-style: italic; color: var(--faint); padding: 0 16px 10px; }
+
+.call-btn { position: relative; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, 0.06); color: var(--muted); border: 0; cursor: pointer; }
+.call-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.call-btn.live { color: var(--rose); background: var(--rose-dim); }
+.call-btn.live i { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--rose); }
+.call-btn:disabled { opacity: 0.5; }
+.call-strip { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 6px 12px; font-size: 12px; background: var(--rose-dim); color: var(--rose); }
+.call-strip i { width: 8px; height: 8px; border-radius: 50%; background: var(--rose); }

@@ -283,7 +283,20 @@ async def get_current_user(
         "anonymous_name": user.get("anonymous_name"),
         "created_at":     user["created_at"].isoformat(),
         "age_verified":            user.get("age_verified", False),
+        "is_premium":     _premium_running(user),
+        "premium_until":  user["premium_until"].isoformat() if user.get("premium_until") else None,
     }
+
+
+def _premium_running(user: dict) -> bool:
+    if not user.get("is_premium"):
+        return False
+    until = user.get("premium_until")
+    if not until:
+        return True
+    if until.tzinfo is None:
+        until = until.replace(tzinfo=timezone.utc)
+    return until > datetime.now(timezone.utc)
 
 
 # ─── Anonymous name helpers ───────────────────────────────────

@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "agora-rtc-sdk-ng": "^4.24.8",
     "next": "^16.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

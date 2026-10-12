@@ -137,6 +137,52 @@ async def register_push_token(
     return {"message": "Push token registered"}
 
 
+class WebPushKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class WebPushRequest(BaseModel):
+    endpoint: str
+    keys: WebPushKeys
+
+
+class WebPushRemoveRequest(BaseModel):
+    endpoint: str
+
+
+@router.post("/web-push")
+async def register_web_push(
+    data: WebPushRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Browser notification subscription for the Anonixx website (Web Push / VAPID)."""
+    if not data.endpoint.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Invalid subscription.")
+    await db["web_push_subscriptions"].update_one(
+        {"endpoint": data.endpoint},
+        {"$set": {
+            "user_id": current_user_id,
+            "endpoint": data.endpoint,
+            "keys": {"p256dh": data.keys.p256dh, "auth": data.keys.auth},
+            "updated_at": _now(),
+        }},
+        upsert=True,
+    )
+    return {"message": "Notifications on"}
+
+
+@router.delete("/web-push")
+async def remove_web_push(
+    data: WebPushRemoveRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    await db["web_push_subscriptions"].delete_one({"endpoint": data.endpoint, "user_id": current_user_id})
+    return {"message": "Notifications off"}
+
+
 @router.post("/me/verify-age")
 async def verify_age(
     data: VerifyAgeRequest,
@@ -399,5 +445,7 @@ async def delete_my_account(
     await db["drop_connections"].delete_many({"$or": [{"user_id": uid}, {"sender_id": uid}]})
     await db["support_messages"].delete_many({"user_id": uid})
     await db["refund_requests"].delete_many({"user_id": uid})
+    await db["push_tokens"].delete_many({"user_id": uid})
+    await db["web_push_subscriptions"].delete_many({"user_id": uid})
     await db["users"].delete_one({"_id": oid})
     return {"deleted": True}

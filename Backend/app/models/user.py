@@ -47,6 +47,8 @@ class User(BaseModel):
     # age_verified is set True at signup once date_of_birth proves adulthood.
     date_of_birth: Optional[date] = None
     age_verified: bool = False
+    is_premium: bool = False
+    premium_until: Optional[str] = None
     blocked_user_ids: List[str] = []
 
     # Deceptive-confession strikes — see api/v1/deception_reports.py. Strike
@@ -110,3 +112,5 @@ class UserResponse(BaseModel):
     coin_balance: int
     created_at: datetime
     age_verified: bool = False
+    is_premium: bool = False
+    premium_until: Optional[str] = None

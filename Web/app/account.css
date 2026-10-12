@@ -6,7 +6,7 @@
 }
 .acct-hint { font-size: 12px; font-weight: 500; margin-top: 2px; }
 .acct-hint.good { color: var(--ok); }
-.acct-hint.bad { color: #fb7185; }
+.acct-hint.bad { color: #ef4444; }
 .acct-scope { display: grid; gap: 8px; margin: 8px 0 16px; }
 .acct-scope button {
   text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line);
@@ -30,7 +30,7 @@
 .acct-stats b { display: block; font-size: 24px; }
 .acct-stats small { color: var(--muted); }
 .acct-flag { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
-.acct-flag.hidden { color: #fb7185; }
+.acct-flag.hidden { color: #ef4444; }
 .acct-flag.flagged { color: #fbbf24; }
 .acct-search { display: flex; gap: 8px; padding: 14px 20px 0; }
 .acct-search input {

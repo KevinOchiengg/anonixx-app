@@ -406,7 +406,12 @@ async def update_vibe_score(user_id: str, action: str, db):
     )
 
 
-async def send_push_notification(user_id: str, title: str, body: str, db):
+async def send_push_notification(user_id: str, title: str, body: str, db, data: Optional[dict] = None):
+    try:
+        from app.utils.notifications import send_web_push
+        await send_web_push(user_id, title, body, data, db)
+    except Exception as e:
+        print(f"⚠️ Web push failed: {e}")
     try:
         doc = await db["push_tokens"].find_one({"user_id": user_id})
         if not doc:
@@ -417,7 +422,7 @@ async def send_push_notification(user_id: str, title: str, body: str, db):
         async with httpx.AsyncClient() as client:
             await client.post(
                 "https://exp.host/--/api/v2/push/send",
-                json={"to": token, "title": title, "body": body, "sound": "default"},
+                json={"to": token, "title": title, "body": body, "sound": "default", **({"data": data} if data else {})},
                 headers={"Content-Type": "application/json"},
                 timeout=5.0
             )
@@ -2932,7 +2937,8 @@ async def send_drop_message(
         other_id,
         f"{sender_name} sent a message 💬",
         notify_body,
-        db
+        db,
+        {"url": f"/chat/{connection_id}"},
     )
 
     return {

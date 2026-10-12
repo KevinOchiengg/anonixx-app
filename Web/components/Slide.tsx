@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { api, compact, type Post } from "@/lib/api";
+import { api, API_URL, COST, compact, getDeviceId, getToken, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import VideoPlayer from "./VideoPlayer";
 import { Bookmark, Comment, Heart, More, Share } from "./icons";
+import { Eye, Link2 } from "./feedicons";
+import AudioWave from "./AudioWave";
+import Sheet from "./Sheet";
 
 type Props = {
   post: Post;
@@ -35,15 +38,24 @@ export default function Slide({
   const { user } = useAuth();
   const [page, setPage] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [fullText, setFullText] = useState(false);
+  const [burst, setBurst] = useState(0);
   const viewed = useRef(false);
+  const lastTap = useRef(0);
 
   const mature = post.sensitivity === "mature" && !revealed;
 
   useEffect(() => {
-    if (!active || !user || viewed.current || mature) return;
+    if (!active || viewed.current || mature) return;
     viewed.current = true;
-    api(`/drops/${post.id}/view`, { method: "POST" }).catch(() => {});
-  }, [active, user, mature, post.id]);
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const device = getDeviceId();
+    if (device) headers["X-Device-Id"] = device;
+    fetch(`${API_URL}/drops/${post.id}/view`, { method: "POST", headers }).catch(() => {});
+  }, [active, mature, post.id]);
 
   const slides = post.images && post.images.length > 1 ? post.images : null;
   const videoSrc = post.video_url;
@@ -52,6 +64,9 @@ export default function Slide({
   const hasMedia = Boolean(slides || videoSrc || singleImage);
 
   const Text = headline ? "h1" : "p";
+  const textSlide = !hasMedia && !audioSrc;
+  const longText = post.content.length > 200;
+  const mediaLong = post.content.length > 100;
 
   async function like() {
     if (!user) return onGate("Sign in to like it. They'll never know it was you.");
@@ -62,6 +77,17 @@ export default function Slide({
     } catch (e) {
       onPatch(post.id, { is_liked: was, likes_count: post.likes_count });
       onToast((e as Error).message);
+    }
+  }
+
+  function mediaTap() {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      lastTap.current = 0;
+      setBurst((b) => b + 1);
+      if (!post.is_liked) like();
+    } else {
+      lastTap.current = now;
     }
   }
 
@@ -97,12 +123,13 @@ export default function Slide({
 
   return (
     <article
-      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}`}
+      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}`}
       data-idx={index}
       data-post={post.id}
     >
       {hasMedia ? (
-        <div className="media">
+        <div className="media" onClick={mediaTap}>
+          {burst ? <span key={burst} className="heart-burst" aria-hidden><Heart filled /></span> : null}
           {slides ? (
             <>
               <div
@@ -141,7 +168,18 @@ export default function Slide({
         {post.kind === "hookup" ? <span className="mood kind-tag">Hookup</span> : null}
         {post.kind === "confession" ? <span className="mood kind-tag">Confession</span> : null}
         {post.mood_tag ? <span className="mood">{post.mood_tag}</span> : null}
-        {post.content ? <Text className="confession">{post.content}</Text> : null}
+        {post.content ? (
+          <Text
+            className={`confession${hasMedia && !expanded ? " clamp" : ""}${textSlide && longText ? " clamp-text" : ""}`}
+            onClick={hasMedia && mediaLong ? () => setExpanded((v) => !v) : undefined}
+          >
+            {post.content}
+            {hasMedia && !expanded && mediaLong ? <span className="more"> more</span> : null}
+          </Text>
+        ) : null}
+        {!hasMedia && longText ? (
+          <button className="read-full" onClick={() => setFullText(true)}>Read full confession</button>
+        ) : null}
 
         {post.poll ? (
           <div className="poll">
@@ -161,16 +199,24 @@ export default function Slide({
           </div>
         ) : null}
 
-        {audioSrc && near && !mature ? <audio className="voice" controls preload="none" src={audioSrc} /> : null}
+        {audioSrc && near && !mature ? (
+          hasMedia ? <audio className="voice" controls preload="none" src={audioSrc} /> : <AudioWave src={audioSrc} seed={post.id} active={active} />
+        ) : null}
 
-        <div className="byline">
-          <b>{post.anonymous_name || "Anonymous"}</b>
-          {post.is_admin_drop ? <span className="official">Anonixx</span> : null}
-          {" · "}{post.time_ago}
+        <div className="author">
+          <span className="avatar" aria-hidden>{(post.anonymous_name || "A").charAt(0).toUpperCase()}</span>
+          <div className="byline">
+            <b>{post.anonymous_name || "Anonymous"}</b>
+            {post.is_admin_drop ? <span className="official">Anonixx</span> : null}
+            <time>{post.time_ago}</time>
+          </div>
         </div>
       </div>
 
       <div className="rail">
+        <span className="avatar big ring" aria-hidden>
+          {post.avatar_url ? <img src={post.avatar_url} alt="" /> : (post.anonymous_name || "A").charAt(0).toUpperCase()}
+        </span>
         <button onClick={like} aria-label="Like" className={post.is_liked ? "liked" : ""}>
           <Heart filled={Boolean(post.is_liked)} />{compact(post.likes_count)}
         </button>
@@ -191,6 +237,7 @@ export default function Slide({
             <More />
           </button>
         ) : null}
+        <span className="views" aria-label={`${post.views_count} views`}><Eye />{compact(post.views_count || 0)}</span>
       </div>
 
       {!post.is_admin_drop && !post.is_own_post && post.kind !== "confession" ? (
@@ -198,8 +245,14 @@ export default function Slide({
           className="linkup"
           onClick={() => (user ? onLinkUp(post) : onGate("Sign in to link up. Your name stays hidden until they say yes."))}
         >
-          Link up
+          <Link2 />Link up<span className="coin-cost">{COST.linkUp}</span>
         </button>
+      ) : null}
+
+      {fullText ? (
+        <Sheet onClose={() => setFullText(false)}>
+          <p className="full-text">{post.content}</p>
+        </Sheet>
       ) : null}
 
       {mature ? (
