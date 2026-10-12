@@ -215,7 +215,6 @@ function ResultCard({ post }: { post: Post }) {
     <Link href={`/drop/${post.id}`} className="sp-card">
       <div className="sp-card-top">
         {post.kind === "hookup" ? <span className="tag">Hookup</span> : null}
-        {post.mood_tag ? <span className="tag">{post.mood_tag}</span> : null}
         <span className="sp-time">{post.time_ago}</span>
       </div>
       {media ? (

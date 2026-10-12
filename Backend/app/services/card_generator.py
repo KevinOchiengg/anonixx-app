@@ -7,8 +7,8 @@ Auto-posting to social needs SOMETHING visual for every drop (Instagram
 can't post text-only at all; Facebook/Telegram engagement drops without an
 image). Rather than post the raw content, this renders a small branded
 card: the confession is teased/cut mid-thought, and any attached image or
-video thumbnail is Gaussian-blurred behind the text with a lock icon and
-"Unlock on Anonixx" caption — the unblur becomes the click-through hook.
+video thumbnail is Gaussian-blurred behind the text with a
+lock icon — the unblur becomes the click-through hook.
 
 This is a simplified, server-side approximation of
 Frontend/src/components/drops/DropCardRenderer.jsx's visual language (all
@@ -133,7 +133,6 @@ async def generate_teaser_card(drop: dict) -> bytes:
     draw = ImageDraw.Draw(card)
 
     body_font = ImageFont.load_default(size=54)
-    small_font = ImageFont.load_default(size=32)
 
     teased = _tease(drop.get("confession") or "")
     if not teased:
@@ -147,14 +146,10 @@ async def generate_teaser_card(drop: dict) -> bytes:
         draw.text(((CARD_SIZE - w) / 2, y), line, font=body_font, fill=text_color)
         y += 68
 
-    # Lock badge + CTA near the bottom.
+    # Lock badge near the bottom.
     lock_cx, lock_cy, r = CARD_SIZE / 2, CARD_SIZE - 170, 30
     draw.ellipse([lock_cx - r, lock_cy - r, lock_cx + r, lock_cy + r], outline=text_color, width=4)
     draw.rectangle([lock_cx - 14, lock_cy - 4, lock_cx + 14, lock_cy + 20], outline=text_color, width=4)
-
-    cta = "unlock on anonixx"
-    w = draw.textlength(cta, font=small_font)
-    draw.text(((CARD_SIZE - w) / 2, CARD_SIZE - 110), cta, font=small_font, fill=text_color)
 
     buf = io.BytesIO()
     card.save(buf, format="JPEG", quality=88)

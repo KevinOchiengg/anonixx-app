@@ -64,6 +64,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const scroller = useRef<HTMLDivElement>(null);
   const [coach, setCoach] = useState(false);
   const loading = useRef(false);
+  const [retry, setRetry] = useState(0);
 
   const showHero = withHero && !user;
 
@@ -184,8 +185,8 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         setCursor(page.next_cursor);
       }
     };
-    run().catch(() => {}).finally(() => { loading.current = false; });
-  }, [active, cursor, items.length, authed, sessionPosts]);
+    run().catch(() => { window.setTimeout(() => setRetry((n) => n + 1), 2500); }).finally(() => { loading.current = false; });
+  }, [active, cursor, items.length, authed, sessionPosts, retry]);
 
   useEffect(() => {
     try { if (localStorage.getItem("anonixx.coach.v1")) return; } catch { return; }

@@ -382,6 +382,12 @@ const VideoSlide = ({
           <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
 
+          {isActive && videoDuration > 0 && !isPlaying && (
+            <View style={ss.pauseBadge} pointerEvents="none">
+              <Play size={30} color="#fff" fill="#fff" />
+            </View>
+          )}
+
           <View style={ss.rail}>
             <RailAvatar post={post} navigation={navigation} />
             <AnimatedActionBtn
@@ -1437,9 +1443,18 @@ const ss = StyleSheet.create({
   // TikTok pins the rail's lowest icon almost flush with the tab bar, not
   // floating well above it — bottom: 110 left a big dead gap under Views
   // (the rail's last/lowest item). 14 sits it just above the bar instead.
-  rail: { position: 'absolute', right: 12, bottom: 14, alignItems: 'center', gap: 24, zIndex: 10 },
+  rail: {
+    position: 'absolute', right: 10, bottom: 14, width: 54, alignItems: 'center', gap: 16, zIndex: 10,
+    paddingVertical: 10, borderRadius: 28, backgroundColor: 'rgba(10,12,20,0.42)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+  },
+  pauseBadge: {
+    position: 'absolute', top: '45%', alignSelf: 'center', width: 72, height: 72, borderRadius: 36,
+    alignItems: 'center', justifyContent: 'center', paddingLeft: 4, zIndex: 9,
+    backgroundColor: 'rgba(10,12,20,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
   actionBtn: { alignItems: 'center', gap: 5 },
-  actionCount: { fontSize: 12, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
+  actionCount: { fontSize: 11, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   // Brought down to sit at roughly the same baseline as the rail (bottom:
   // 14) now that it's no longer floating well above the tab bar — same
   // TikTok-style close-to-the-bottom placement, just a touch higher since
@@ -1498,8 +1513,8 @@ const sw = StyleSheet.create({
 
   // Top of the right rail, above Like — TikTok's own creator-avatar spot.
   railAvatarRing: {
-    width: rs(46), height: rs(46), borderRadius: rs(23),
-    borderWidth: 2, borderColor: '#fff', overflow: 'hidden',
+    width: rs(40), height: rs(40), borderRadius: rs(20),
+    borderWidth: 2, borderColor: THEME.primary, overflow: 'hidden',
     backgroundColor: THEME.avatarBg, marginBottom: rp(2),
   },
   railAvatarImg: { width: '100%', height: '100%' },
