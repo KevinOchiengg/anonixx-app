@@ -1813,7 +1813,7 @@ async def get_drops_feed(
         except Exception as e:
             print(f"⚠️ Guest token: {e}")
 
-    SESSION_LIMIT = 50
+    SESSION_LIMIT = 100000  # effectively uncapped: the feed pages through every drop
     BATCH_SIZE = 10
 
     if session_posts >= SESSION_LIMIT:

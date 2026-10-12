@@ -166,9 +166,6 @@ export default function Slide({
       ) : null}
 
       <div className={hasMedia ? "caption" : undefined} style={{ position: "relative", zIndex: 2 }}>
-        {post.kind === "hookup" ? <span className="mood kind-tag">Hookup</span> : null}
-        {post.kind === "confession" ? <span className="mood kind-tag">Confession</span> : null}
-        {post.mood_tag ? <span className="mood">{post.mood_tag}</span> : null}
         {post.content ? (
           <Text
             className={`confession${hasMedia && !expanded ? " clamp" : ""}${textSlide && longText ? " clamp-text" : ""}`}
@@ -209,7 +206,7 @@ export default function Slide({
           <div className="byline">
             <b>{post.anonymous_name || "Anonymous"}</b>
             {post.is_admin_drop ? <span className="official">Anonixx</span> : null}
-            <time>{post.time_ago}</time>
+            <time>{post.time_ago}{post.kind === "hookup" ? " · Hookup" : post.kind === "confession" ? " · Confession" : ""}</time>
           </div>
         </div>
       </div>

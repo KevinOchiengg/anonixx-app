@@ -270,3 +270,35 @@
 .coach i { width: 4px; height: 4px; border-radius: 50%; background: var(--rose); flex: none; }
 @keyframes coachin { from { opacity: 0; transform: translate(-50%, 8px); } }
 @media (max-width: 380px) { .coach span:last-child, .coach i { display: none; } }
+
+/* ---------- signature rail: one frosted capsule, avatar on top, coral glow on like ---------- */
+.rail, .hasnav .rail {
+  width: 54px; right: 10px; gap: 14px; padding: 10px 0; border-radius: 28px;
+  background: rgba(10, 12, 20, 0.42); border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.rail svg { width: 26px; height: 26px; stroke-width: 1.8; filter: none; }
+.rail .avatar.big { width: 40px; height: 40px; font-size: 16px; margin-bottom: 2px; box-shadow: 0 0 0 2px rgba(255, 99, 74, 0.25); }
+.rail button { text-shadow: none; font-size: 11px; letter-spacing: 0.3px; }
+.rail button.liked { color: var(--rose); }
+.rail button.liked svg { filter: drop-shadow(0 0 8px rgba(255, 99, 74, 0.75)); }
+@media (max-height: 720px) {
+  .rail, .hasnav .rail { gap: 6px; padding: 8px 0; }
+  .rail svg { width: 23px; height: 23px; }
+  .rail .avatar.big { width: 34px; height: 34px; }
+}
+
+/* ---------- player controls: same frosted glass as the rail ---------- */
+.play-badge, .slide .sound-btn {
+  background: rgba(10, 12, 20, 0.5); border: 1px solid rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); color: #fff;
+}
+.play-badge { width: 72px; height: 72px; padding-left: 4px; font-size: 0; animation: badgein 0.18s ease-out; }
+.play-badge svg { width: 30px; height: 30px; }
+.slide .sound-btn { top: 12px; right: 12px; width: 38px; height: 38px; font-size: 0; transition: transform 0.12s; }
+.slide .sound-btn:active { transform: scale(0.9); }
+.slide .sound-btn svg { width: 19px; height: 19px; }
+.vp-progress { height: 3px; background: rgba(255, 255, 255, 0.18); }
+.vp-progress > span { background: var(--rose); border-radius: 0 2px 2px 0; }
+@keyframes badgein { from { opacity: 0; transform: translate(-50%, -50%) scale(0.7); } }
