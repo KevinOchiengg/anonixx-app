@@ -246,3 +246,27 @@
 @media (min-width: 700px) {
   .slide.text-slide .confession { font-size: 30px; }
 }
+
+/* ---------- quiet icon-only rail, calmer caption, first-run hint ---------- */
+.rail button { min-width: 44px; min-height: 44px; justify-content: center; gap: 2px; font-size: 11.5px; }
+.rail svg { filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.55)); }
+.rail button:active svg { transform: scale(0.88); }
+.rail button.liked svg { animation: likepop 0.28s ease-out; }
+@keyframes likepop { 0% { transform: scale(0.7); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.slide.has-media .caption, .hasnav .slide.has-media .caption {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%);
+}
+.author .official { margin-left: 0; padding: 1px 7px; font-size: 10px; letter-spacing: 0.04em; }
+.author .byline time::before { content: "· "; }
+
+.phone { position: relative; }
+.coach {
+  position: absolute; z-index: 40; left: 50%; top: calc(var(--top-h) + 14px); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 999px; max-width: calc(100% - 32px);
+  background: rgba(21, 25, 36, 0.92); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 12.5px; font-weight: 600; color: var(--fg); white-space: nowrap; pointer-events: none;
+  animation: coachin 0.4s ease-out;
+}
+.coach i { width: 4px; height: 4px; border-radius: 50%; background: var(--rose); flex: none; }
+@keyframes coachin { from { opacity: 0; transform: translate(-50%, 8px); } }
+@media (max-width: 380px) { .coach span:last-child, .coach i { display: none; } }
