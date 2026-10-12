@@ -4,7 +4,7 @@ import { api, API_URL, COST, compact, getDeviceId, getToken, type Post } from "@
 import { useAuth } from "@/lib/auth";
 import VideoPlayer from "./VideoPlayer";
 import { Bookmark, Comment, Heart, Share } from "./icons";
-import { Link2, More } from "./feedicons";
+import { Link2, More, SoundOff, SoundOn } from "./feedicons";
 import AudioWave from "./AudioWave";
 import Sheet from "./Sheet";
 
@@ -157,7 +157,6 @@ export default function Slide({
               active={active && !mature}
               near={near}
               muted={muted}
-              onToggleMute={onToggleMute}
             />
           ) : singleImage ? (
             <img src={singleImage} alt={post.content.slice(0, 100)} loading={near ? "eager" : "lazy"} />
@@ -227,6 +226,11 @@ export default function Slide({
         <button onClick={() => onShare(post)} aria-label="Share">
           <Share />
         </button>
+        {videoSrc && !slides && !mature ? (
+          <button onClick={onToggleMute} aria-label={muted ? "Turn sound on" : "Mute"} className="sound-rail">
+            {muted ? <SoundOff /> : <SoundOn />}
+          </button>
+        ) : null}
         {!post.is_admin_drop && !post.is_own_post ? (
           <button
             onClick={() => (user ? onReport(post) : onGate("Sign in to report a post."))}
