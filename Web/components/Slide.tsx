@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import VideoPlayer from "./VideoPlayer";
-import { Bookmark, Comment, Heart, More, Share } from "./icons";
-import { Eye, Link2 } from "./feedicons";
+import { Bookmark, Comment, Heart, Share } from "./icons";
+import { Flag, Link2 } from "./feedicons";
 import AudioWave from "./AudioWave";
 import Sheet from "./Sheet";
 
@@ -234,10 +234,9 @@ export default function Slide({
             onClick={() => (user ? onReport(post) : onGate("Sign in to report a post."))}
             aria-label="Report"
           >
-            <More />
+            <Flag />Report
           </button>
         ) : null}
-        <span className="views" aria-label={`${post.views_count} views`}><Eye />{compact(post.views_count || 0)}</span>
       </div>
 
       {!post.is_admin_drop && !post.is_own_post && post.kind !== "confession" ? (

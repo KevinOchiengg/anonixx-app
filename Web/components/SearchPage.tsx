@@ -115,7 +115,7 @@ export default function SearchPage() {
 
   return (
     <div className="stage">
-      <div className={`phone sp-phone${user ? " hasnav" : ""}`}>
+      <div className="phone sp-phone hasnav">
         <form className="sp-head" onSubmit={submit}>
           <button type="button" className="sp-back" onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} aria-label="Back">←</button>
           <div className="sp-input">
@@ -202,7 +202,7 @@ export default function SearchPage() {
             </div>
           )}
         </div>
-        {user ? <BottomNav /> : null}
+        <BottomNav />
       </div>
     </div>
   );

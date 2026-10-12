@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, COST } from "@/lib/api";
@@ -10,6 +10,7 @@ import MediaPicker, { type MediaDraft } from "./compose/MediaPicker";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import PollEditor, { type PollDraft } from "./compose/PollEditor";
 import LocationFields, { type LocationDraft } from "./compose/LocationFields";
+import TagUser, { type Tagged } from "./compose/TagUser";
 
 const INTENTS = [
   { id: "meet-me", label: "Meet Me", sub: "looking for something real", mood: "longing" },
@@ -28,6 +29,7 @@ const fontStyle = (id: string): React.CSSProperties =>
   : id === "sultry-script" ? { fontFamily: "'Brush Script MT', cursive" }
   : { fontWeight: 800 };
 const MAX = 500;
+const DRAFT_KEY = "anonixx.drops.draft.v1";
 const VIBES = ["company", "friendship", "dating", "casual", "discreet", "adventure"];
 const GENDERS = ["woman", "man", "other"];
 const LOOKING = ["woman", "man", "anyone"];
@@ -56,6 +58,39 @@ function Inner() {
   const [ageMax, setAgeMax] = useState("");
   const [vibes, setVibes] = useState<string[]>([]);
   const [extra, setExtra] = useState("");
+  const [tagged, setTagged] = useState<Tagged>(null);
+  const [hint, setHint] = useState("");
+  const [unsent, setUnsent] = useState(false);
+  const draftReady = useRef(false);
+  useEffect(() => {
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+      if (d && typeof d === "object") {
+        if (typeof d.text === "string") setText(d.text);
+        if (typeof d.font === "string") setFont(d.font);
+        if (typeof d.hint === "string") setHint(d.hint);
+        if (INTENTS.some((i) => i.id === d.intent)) setIntent(d.intent);
+        if (typeof d.text === "string" && d.text.trim()) { setUnsent(true); setKind("confession"); }
+      }
+    } catch { /* storage unavailable or corrupt draft */ }
+    draftReady.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady.current || done) return;
+    const t = setTimeout(() => {
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, intent, font, hint })); } catch { /* ignore */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [text, intent, font, hint, done]);
+
+  function discardDraft() {
+    setText("");
+    setHint("");
+    setUnsent(false);
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+  }
+
   const mood = INTENTS.find((i) => i.id === intent)!.mood;
   const pollOpts = poll.options.map((o) => o.trim()).filter(Boolean);
   const confessionOk =
@@ -130,6 +165,8 @@ function Inner() {
           font_style: font,
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: true,
+          ...(tagged ? { target_user_id: tagged.id } : {}),
+          ...(tagged && hint.trim() ? { recognition_hint: hint.trim().toLowerCase() } : {}),
           ...(loc.country ? { location_country: loc.country } : {}),
           ...(loc.county.trim() ? { location_county: loc.county.trim() } : {}),
           ...(loc.subCounty.trim() ? { location_sub_county: loc.subCounty.trim() } : {}),
@@ -137,6 +174,7 @@ function Inner() {
           ...payload,
         },
       });
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       refresh();
       setDone(true);
     } catch (err) {
@@ -226,6 +264,16 @@ function Inner() {
   return (
     <form className="form pad" onSubmit={submit}>
       <button type="button" className="linkish" onClick={() => setKind(null)}>← Change type</button>
+      {unsent ? (
+        <div className="unsent">
+          <b>You almost sent this to them…</b>
+          <span>Still here. Still waiting to be sent.</span>
+          <div className="row">
+            <button type="button" className="pill" onClick={() => setUnsent(false)}>Continue</button>
+            <button type="button" className="pill ghost" onClick={discardDraft}>Discard</button>
+          </div>
+        </div>
+      ) : null}
       <div className="cx-intents" role="radiogroup" aria-label="Confession type">
         {INTENTS.map((i) => (
           <button type="button" key={i.id} role="radio" aria-checked={intent === i.id} className={intent === i.id ? "on" : ""} onClick={() => setIntent(i.id)}>
@@ -263,6 +311,11 @@ function Inner() {
           <button type="button" key={f.id} role="radio" aria-checked={font === f.id} className={font === f.id ? "on" : ""} style={fontStyle(f.id)} onClick={() => setFont(f.id)}>{f.label}</button>
         ))}
       </div>
+
+      <details className="cx-fold" open={!!tagged}>
+        <summary>{tagged ? `Tagged: ${tagged.username ? "@" + tagged.username : tagged.anonymous_name}` : "Tag someone (optional)"}</summary>
+        <div><TagUser value={tagged} onChange={setTagged} hint={hint} onHint={setHint} /></div>
+      </details>
 
       <details className="cx-fold">
         <summary>Location (optional)</summary>

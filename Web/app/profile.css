@@ -27,3 +27,5 @@
 .refund-item { display: grid; gap: 2px; text-align: left; padding: 12px; border-radius: 14px; background: var(--surface-alt); border: 1px solid rgba(255,255,255,0.06); color: var(--fg); cursor: pointer; }
 .refund-item small { color: var(--muted); }
 .refund-item.on { border-color: var(--rose); }
+.prof-bio { margin: 6px 0 0; max-width: 320px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }
+.field textarea[rows="3"] { min-height: 84px; }
