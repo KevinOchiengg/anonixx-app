@@ -119,11 +119,12 @@ export default function Slide({
     }
   }
 
+  const canLinkUp = !post.is_admin_drop && !post.is_own_post && post.kind !== "confession";
   const voted = post.poll ? post.poll.voted_option !== null : false;
 
   return (
     <article
-      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}`}
+      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp ? " has-linkup" : ""}`}
       data-idx={index}
       data-post={post.id}
     >
@@ -239,7 +240,7 @@ export default function Slide({
         ) : null}
       </div>
 
-      {!post.is_admin_drop && !post.is_own_post && post.kind !== "confession" ? (
+      {canLinkUp ? (
         <button
           className="linkup"
           onClick={() => (user ? onLinkUp(post) : onGate("Sign in to link up. Your name stays hidden until they say yes."))}

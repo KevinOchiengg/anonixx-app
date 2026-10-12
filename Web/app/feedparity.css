@@ -204,3 +204,45 @@
 .gif-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gif-grid .muted { grid-column: 1 / -1; }
 .gif-by { display: block; text-align: right; color: var(--faint); font-size: 10px; margin-top: 4px; }
+
+/* ---------- responsive slide layout: caption, rail and link-up share one bottom edge ---------- */
+:root { --lu-h: 42px; --pad: 16px; --rail-w: 60px; }
+.slide { --reserve: 18px; }
+.slide.has-linkup { --reserve: calc(var(--lu-h) + 22px); }
+
+.slide:not(.hero), .hasnav .slide:not(.hero) {
+  padding: 16px calc(var(--rail-w) + 10px) var(--reserve) var(--pad);
+}
+.slide.has-media, .hasnav .slide.has-media { padding: 0; }
+.slide.has-media .caption, .hasnav .slide.has-media .caption {
+  padding: 88px calc(var(--rail-w) + 10px) var(--reserve) var(--pad);
+}
+.rail, .hasnav .rail { right: 8px; bottom: var(--reserve); width: var(--rail-w); gap: 14px; }
+.rail svg { width: 28px; height: 28px; }
+
+.slide .linkup, .hasnav .slide .linkup, .slide.has-media .linkup, .hasnav .slide.has-media .linkup {
+  left: var(--pad); bottom: 10px; height: var(--lu-h); padding: 0 18px;
+  display: inline-flex; align-items: center; font-size: 14px; white-space: nowrap; max-width: calc(100% - var(--rail-w) - 30px);
+}
+.linkup svg { margin-right: 6px; vertical-align: 0; flex: none; }
+
+.slide .sound-btn { top: 12px; }
+.slide .dots { top: 12px; }
+.audio-slide .wave { width: 100%; }
+.slide.text-slide .confession { font-size: clamp(20px, 5.4vw, 28px); }
+
+@media (max-height: 720px) {
+  .rail, .hasnav .rail { gap: 8px; }
+  .rail svg { width: 25px; height: 25px; }
+  .rail .avatar.big { width: 38px; height: 38px; margin-bottom: 0; }
+  .slide.text-slide .confession { font-size: clamp(18px, 5vw, 24px); }
+  .confession.clamp-text { -webkit-line-clamp: 6; }
+  .slide.has-media .caption, .hasnav .slide.has-media .caption { padding-top: 56px; }
+}
+@media (max-width: 360px) {
+  :root { --rail-w: 52px; --pad: 12px; }
+  .slide .linkup, .hasnav .slide .linkup { padding: 0 14px; font-size: 13px; }
+}
+@media (min-width: 700px) {
+  .slide.text-slide .confession { font-size: 30px; }
+}
