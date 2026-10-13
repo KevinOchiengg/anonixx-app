@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, loadMoreClient, type FeedAd, type MarketTease, type Post } from "@/lib/api";
+import { api, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
@@ -65,11 +65,13 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const [coach, setCoach] = useState(false);
   const loading = useRef(false);
   const [retry, setRetry] = useState(0);
+  const [sounds, setSounds] = useState<Sound[]>([]);
 
   const showHero = withHero && !user;
 
   useEffect(() => {
     if (!ready) return;
+    api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => {});
     api<{ ads?: FeedAd[] }>("/ads/active?limit=10").then((r) => setAds(r.ads || [])).catch(() => {});
     api<{ items?: MarketTease[] }>("/market/items?limit=20&offset=0").then((r) => setMarket(r.items || [])).catch(() => {});
   }, [ready, user]);
@@ -318,6 +320,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
                 active={active === i}
                 near={Math.abs(active - i) <= 1}
                 muted={muted}
+                sounds={sounds}
                 headline={it.first}
                 onToggleMute={() => setMuted((m) => !m)}
                 onGate={setGate}

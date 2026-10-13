@@ -60,6 +60,8 @@ _EXT_BY_CONTENT_TYPE = {
     "audio/mp4":       "m4a",
     "audio/x-m4a":     "m4a",
     "audio/aac":       "aac",
+    "audio/mpeg":      "mp3",
+    "audio/mp3":       "mp3",
 }
 
 _s3_client = None

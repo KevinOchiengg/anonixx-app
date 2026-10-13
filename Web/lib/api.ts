@@ -38,6 +38,8 @@ export type Post = {
   type?: string;
 };
 
+export type Sound = { id: string; title: string; mood: string; url: string };
+
 export type FeedPage = { posts: Post[]; next_cursor: string | null; has_more: boolean };
 
 // Server-side fetches revalidate so crawlers get fast cached HTML but fresh posts still appear.
@@ -118,14 +120,15 @@ export async function api<T = unknown>(
     headers.Authorization = `Bearer ${token}`;
     if (adultMode()) headers["X-Content-Mode"] = "full";
   }
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  if (opts.body !== undefined && !isForm) headers["Content-Type"] = "application/json";
 
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: opts.method || (opts.body !== undefined ? "POST" : "GET"),
       headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
     });
   } catch {
     throw new ApiError(0, "Can't reach Anonixx right now. Check your connection.");

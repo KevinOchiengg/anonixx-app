@@ -14,6 +14,7 @@ from app.api.v1 import admin
 from app.api.v1 import publisher
 from app.api.v1 import chat_profile
 from app.api.v1 import ads
+from app.api.v1 import sounds
 from app.api.v1 import drop_calls
 from app.api.v1 import unlock_requests
 from app.api.v1 import deception_reports
@@ -228,6 +229,7 @@ app.include_router(admin.router,      prefix=settings.API_V1_PREFIX)
 app.include_router(publisher.router,  prefix=settings.API_V1_PREFIX)
 app.include_router(chat_profile.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ads.router,          prefix=settings.API_V1_PREFIX)
+app.include_router(sounds.router,       prefix=settings.API_V1_PREFIX)
 app.include_router(drop_calls.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(unlock_requests.router, prefix=settings.API_V1_PREFIX)
 app.include_router(deception_reports.router, prefix=settings.API_V1_PREFIX)
