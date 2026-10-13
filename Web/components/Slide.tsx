@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { api, API_URL, COST, compact, getDeviceId, getToken, type Post } from "@/lib/api";
+import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import VideoPlayer from "./VideoPlayer";
 import { Bookmark, Comment, Heart, Share } from "./icons";
 import { Link2, More, SoundOff, SoundOn } from "./feedicons";
 import AudioWave from "./AudioWave";
+import AmbientSound from "./AmbientSound";
 import Sheet from "./Sheet";
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
   active: boolean;
   near: boolean;
   muted: boolean;
+  sounds?: Sound[];
   headline?: boolean;
   onToggleMute: () => void;
   onGate: (message: string) => void;
@@ -31,8 +33,15 @@ function hash(id: string) {
   return h;
 }
 
+function pickSound(sounds: Sound[] | undefined, post: Post): Sound | null {
+  if (!sounds?.length) return null;
+  const exact = sounds.filter((s) => s.mood === post.mood_tag);
+  const pool = exact.length ? exact : sounds.filter((s) => s.mood === "any");
+  return pool.length ? pool[hash(post.id) % pool.length] : null;
+}
+
 export default function Slide({
-  post, index, active, near, muted, headline,
+  post, index, active, near, muted, sounds, headline,
   onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onReport, onToast,
 }: Props) {
   const { user } = useAuth();
@@ -65,6 +74,7 @@ export default function Slide({
 
   const Text = headline ? "h1" : "p";
   const textSlide = !hasMedia && !audioSrc;
+  const ambient = textSlide && !mature ? pickSound(sounds, post) : null;
   const longText = post.content.length > 200;
   const mediaLong = post.content.length > 100;
 
@@ -212,6 +222,8 @@ export default function Slide({
         </div>
       </div>
 
+      {ambient && near ? <AmbientSound src={ambient.url} play={active && !muted} /> : null}
+
       <div className="rail">
         <span className="avatar big ring" aria-hidden>
           {post.avatar_url ? <img src={post.avatar_url} alt="" /> : (post.anonymous_name || "A").charAt(0).toUpperCase()}
@@ -228,7 +240,7 @@ export default function Slide({
         <button onClick={() => onShare(post)} aria-label="Share">
           <Share />
         </button>
-        {videoSrc && !slides && !mature ? (
+        {(videoSrc && !slides && !mature) || ambient ? (
           <button onClick={onToggleMute} aria-label={muted ? "Turn sound on" : "Mute"} className="sound-rail">
             {muted ? <SoundOff /> : <SoundOn />}
           </button>
