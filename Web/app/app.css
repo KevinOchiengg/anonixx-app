@@ -182,7 +182,7 @@
 .kind-tag { text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* ── TikTok-style video slides ── */
-.scroller { scroll-behavior: smooth; }
+.scroller { scroll-behavior: auto; }
 .slide.has-media { padding: 0; }
 .media img, .media video { object-fit: cover; }
 .media .carousel img { object-fit: contain; }

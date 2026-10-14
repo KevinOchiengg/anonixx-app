@@ -210,7 +210,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
 
   const step = useCallback((dir: 1 | -1) => {
     const el = scroller.current;
-    if (el) el.scrollBy({ top: dir * el.clientHeight, behavior: "smooth" });
+    if (el) el.scrollBy({ top: dir * el.clientHeight, behavior: "instant" });
   }, []);
 
   useEffect(() => {
