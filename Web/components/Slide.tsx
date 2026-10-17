@@ -130,11 +130,19 @@ export default function Slide({
   }
 
   const canLinkUp = !post.is_admin_drop && !post.is_own_post && post.kind !== "confession";
+  const linkBtn = (
+    <button
+      className="linkup"
+      onClick={() => (user ? onLinkUp(post) : onGate("Sign in to link up. Your name stays hidden until they say yes."))}
+    >
+      <Link2 />Link up<span className="coin-cost">{COST.linkUp}</span>
+    </button>
+  );
   const voted = post.poll ? post.poll.voted_option !== null : false;
 
   return (
     <article
-      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp ? " has-linkup" : ""}`}
+      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
       data-idx={index}
       data-post={post.id}
     >
@@ -189,6 +197,7 @@ export default function Slide({
         {!hasMedia && longText ? (
           <button className="read-full" onClick={() => setFullText(true)}>Read full confession</button>
         ) : null}
+        {canLinkUp && !hasMedia ? linkBtn : null}
 
         {post.poll ? (
           <div className="poll">
@@ -255,14 +264,7 @@ export default function Slide({
         ) : null}
       </div>
 
-      {canLinkUp ? (
-        <button
-          className="linkup"
-          onClick={() => (user ? onLinkUp(post) : onGate("Sign in to link up. Your name stays hidden until they say yes."))}
-        >
-          <Link2 />Link up<span className="coin-cost">{COST.linkUp}</span>
-        </button>
-      ) : null}
+      {canLinkUp && hasMedia ? linkBtn : null}
 
       {fullText ? (
         <Sheet onClose={() => setFullText(false)}>
