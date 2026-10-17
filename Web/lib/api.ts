@@ -63,12 +63,16 @@ export type Sitemap = { total: number; pages: number; items: { id: string; lastm
 export const fetchSitemap = (page = 0) => get<Sitemap>(`/public/sitemap?page=${page}`, 3600);
 
 // Browser-side page loader for infinite scroll.
-export async function loadMoreClient(cursor: string): Promise<FeedPage | null> {
+export async function loadMoreClient(cursor?: string | null): Promise<FeedPage | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
   try {
-    const res = await fetch(`${API_URL}/public/feed?cursor=${encodeURIComponent(cursor)}`);
+    const res = await fetch(`${API_URL}/public/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { signal: ctl.signal });
     return res.ok ? ((await res.json()) as FeedPage) : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -123,17 +127,25 @@ export async function api<T = unknown>(
   const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
   if (opts.body !== undefined && !isForm) headers["Content-Type"] = "application/json";
 
+  // Uploads can legitimately take a while; everything else gives up on a stalled connection.
+  const ctl = isForm ? null : new AbortController();
+  const timer = ctl ? setTimeout(() => ctl.abort(), 25000) : null;
   let res: Response;
+  let text: string;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: opts.method || (opts.body !== undefined ? "POST" : "GET"),
       headers,
       body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
+      signal: ctl?.signal,
     });
+    text = await res.text();
   } catch {
+    if (ctl?.signal.aborted) throw new ApiError(0, "Slow connection. Try again in a moment.");
     throw new ApiError(0, "Can't reach Anonixx right now. Check your connection.");
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  const text = await res.text();
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON body */ }
   if (!res.ok) throw new ApiError(res.status, errorText(data, `Something went wrong (${res.status}).`));

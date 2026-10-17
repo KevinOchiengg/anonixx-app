@@ -10,6 +10,7 @@ import "./call.css";
 import "./feedparity.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";
+import OfflineBar from "@/components/OfflineBar";
 
 const ADSENSE = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
 
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <AuthProvider>{children}</AuthProvider>
+        <OfflineBar />
         {ADSENSE ? (
           <Script
             async
