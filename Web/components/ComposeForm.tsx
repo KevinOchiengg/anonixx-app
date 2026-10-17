@@ -9,25 +9,10 @@ import AppShell from "./AppShell";
 import MediaPicker, { type MediaDraft } from "./compose/MediaPicker";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import PollEditor, { type PollDraft } from "./compose/PollEditor";
-import LocationFields, { type LocationDraft } from "./compose/LocationFields";
 import TagUser, { type Tagged } from "./compose/TagUser";
 
-const INTENTS = [
-  { id: "meet-me", label: "Meet Me", sub: "looking for something real", mood: "longing" },
-  { id: "skeleton-in-the-closet", label: "Skeleton In The Closet", sub: "secrets don't stay buried", mood: "untold" },
-  { id: "just-tonight", label: "Just Tonight", sub: "no strings attached affair", mood: "horny" },
-] as const;
-const FONTS = [
-  { id: "classic", label: "Classic" },
-  { id: "sultry-script", label: "Sultry" },
-  { id: "bold-tease", label: "Bold" },
-] as const;
 const MODES = [["text", "Text"], ["media", "Photo / Video"], ["voice", "Voice"], ["poll", "Poll"]] as const;
 type Mode = (typeof MODES)[number][0];
-const fontStyle = (id: string): React.CSSProperties =>
-  id === "classic" ? { fontFamily: "Georgia, serif", fontStyle: "italic" }
-  : id === "sultry-script" ? { fontFamily: "'Brush Script MT', cursive" }
-  : { fontWeight: 800 };
 const MAX = 500;
 const DRAFT_KEY = "anonixx.drops.draft.v1";
 const VIBES = ["company", "friendship", "dating", "casual", "discreet", "adventure"];
@@ -38,14 +23,10 @@ function Inner() {
   const { user, refresh } = useAuth();
   const router = useRouter();
   const [text, setText] = useState("");
-  const [intent, setIntent] = useState<(typeof INTENTS)[number]["id"]>("skeleton-in-the-closet");
   const [mode, setMode] = useState<Mode>("text");
   const [media, setMedia] = useState<MediaDraft>(null);
   const [voice, setVoice] = useState<VoiceDraft>(null);
   const [poll, setPoll] = useState<PollDraft>({ question: "", options: ["", ""] });
-  const [font, setFont] = useState<string>("bold-tease");
-  const [loc, setLoc] = useState<LocationDraft>({ country: "", county: "", subCounty: "", estate: "" });
-  const [mature, setMature] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -67,9 +48,7 @@ function Inner() {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
       if (d && typeof d === "object") {
         if (typeof d.text === "string") setText(d.text);
-        if (typeof d.font === "string") setFont(d.font);
         if (typeof d.hint === "string") setHint(d.hint);
-        if (INTENTS.some((i) => i.id === d.intent)) setIntent(d.intent);
         if (typeof d.text === "string" && d.text.trim()) { setUnsent(true); setKind("confession"); }
       }
     } catch { /* storage unavailable or corrupt draft */ }
@@ -79,10 +58,10 @@ function Inner() {
   useEffect(() => {
     if (!draftReady.current || done) return;
     const t = setTimeout(() => {
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, intent, font, hint })); } catch { /* ignore */ }
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, hint })); } catch { /* ignore */ }
     }, 400);
     return () => clearTimeout(t);
-  }, [text, intent, font, hint, done]);
+  }, [text, hint, done]);
 
   function discardDraft() {
     setText("");
@@ -91,7 +70,6 @@ function Inner() {
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
   }
 
-  const mood = INTENTS.find((i) => i.id === intent)!.mood;
   const pollOpts = poll.options.map((o) => o.trim()).filter(Boolean);
   const confessionOk =
     mode === "poll" ? poll.question.trim().length > 0 && pollOpts.length >= 2
@@ -160,17 +138,13 @@ function Inner() {
         } : {
           kind: "confession",
           confession: text.trim() || undefined,
-          intent,
-          mood_tag: mood,
-          font_style: font,
-          sensitivity: mature ? "mature" : "general",
+          intent: "skeleton-in-the-closet",
+          mood_tag: "untold",
+          font_style: "bold-tease",
+          sensitivity: "general",
           publisher_opt_in: true,
           ...(tagged ? { target_user_id: tagged.id } : {}),
           ...(tagged && hint.trim() ? { recognition_hint: hint.trim().toLowerCase() } : {}),
-          ...(loc.country ? { location_country: loc.country } : {}),
-          ...(loc.county.trim() ? { location_county: loc.county.trim() } : {}),
-          ...(loc.subCounty.trim() ? { location_sub_county: loc.subCounty.trim() } : {}),
-          ...(loc.estate.trim() ? { location_estate: loc.estate.trim() } : {}),
           ...payload,
         },
       });
@@ -249,7 +223,7 @@ function Inner() {
         </label>
         {hookupOk ? <p className="hk-preview">{hookupText()}</p> : null}
         <p className="muted small">
-          18+ only. Paid sex or escort offers aren&apos;t allowed and will be removed.
+          18+ only.
           Posting costs {COST.post} coins (free with a subscription). You have {user?.coin_balance ?? 0}.
         </p>
         {error ? <div className="err">{error}</div> : null}
@@ -274,15 +248,6 @@ function Inner() {
           </div>
         </div>
       ) : null}
-      <div className="cx-intents" role="radiogroup" aria-label="Confession type">
-        {INTENTS.map((i) => (
-          <button type="button" key={i.id} role="radio" aria-checked={intent === i.id} className={intent === i.id ? "on" : ""} onClick={() => setIntent(i.id)}>
-            <strong>{i.label}</strong>
-            <small>{i.sub}</small>
-          </button>
-        ))}
-      </div>
-
       {user?.is_admin ? (
         <div className="cx-tabs" role="tablist" aria-label="Format">
           {MODES.map(([id, label]) => (
@@ -303,31 +268,14 @@ function Inner() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type it here. No name, no trace."
-          style={fontStyle(font)}
         />
       </label>
       <div className="counter">{text.length}/{MAX}</div>
-
-      <div className="cx-fonts" role="radiogroup" aria-label="Font style">
-        {FONTS.map((f) => (
-          <button type="button" key={f.id} role="radio" aria-checked={font === f.id} className={font === f.id ? "on" : ""} style={fontStyle(f.id)} onClick={() => setFont(f.id)}>{f.label}</button>
-        ))}
-      </div>
 
       <details className="cx-fold" open={!!tagged}>
         <summary>{tagged ? `Tagged: ${tagged.username ? "@" + tagged.username : tagged.anonymous_name}` : "Tag someone (optional)"}</summary>
         <div><TagUser value={tagged} onChange={setTagged} hint={hint} onHint={setHint} /></div>
       </details>
-
-      <details className="cx-fold">
-        <summary>Location (optional)</summary>
-        <div><LocationFields value={loc} onChange={setLoc} /></div>
-      </details>
-
-      <label className="check">
-        <input type="checkbox" checked={mature} onChange={(e) => setMature(e.target.checked)} />
-        <span>Mark as mature. Only age-verified members see it, and it won&apos;t show on Google.</span>
-      </label>
 
       <p className="muted small">
         Posting costs {COST.post} coins (free with a subscription). You have {user?.coin_balance ?? 0}.
