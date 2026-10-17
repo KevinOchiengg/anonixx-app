@@ -1157,11 +1157,15 @@ async def save_drop(
 
     if existing:
         await db["saved_drops"].delete_one({"_id": existing["_id"]})
+        saves = 0
         try:
-            await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"saves_count": -1}})
+            d = await db["drops"].find_one_and_update(
+                {"_id": ObjectId(drop_id)}, {"$inc": {"saves_count": -1}}, return_document=ReturnDocument.AFTER,
+            )
+            saves = max(0, (d or {}).get("saves_count", 0))
         except Exception:
             pass
-        return {"message": "Drop removed from saved", "saved": False}
+        return {"message": "Drop removed from saved", "saved": False, "saves_count": saves}
 
     await db["saved_drops"].insert_one({
         "_id":        ObjectId(),
@@ -1169,15 +1173,18 @@ async def save_drop(
         "user_id":    current_user_id,
         "created_at": now_utc(),
     })
+    saves = 0
     try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-        await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"saves_count": 1}})
+        drop = await db["drops"].find_one_and_update(
+            {"_id": ObjectId(drop_id)}, {"$inc": {"saves_count": 1}}, return_document=ReturnDocument.AFTER,
+        )
         if drop:
+            saves = max(0, drop.get("saves_count", 0))
             await update_drop_affinity(current_user_id, drop.get("mood_tag"), "save", db)
     except Exception:
         pass
 
-    return {"message": "Saved to your collection", "saved": True}
+    return {"message": "Saved to your collection", "saved": True, "saves_count": saves}
 
 
 @router.get("/saved")

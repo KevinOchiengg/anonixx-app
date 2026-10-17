@@ -233,7 +233,7 @@ const RailAvatar = ({ post, navigation }) => (
 
 // ─── VIDEO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 const VideoSlide = ({
-  post, isActive, onLike, liked, likesCount, onSave, saved, onComment,
+  post, isActive, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const lastTap = useRef(null);
@@ -397,7 +397,7 @@ const VideoSlide = ({
             <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-              count={null} onPress={onSave} active={saved}
+              count={savesCount} onPress={onSave} active={saved}
             />
             <ActionBtn
               icon={<Share2 size={28} color="#fff" />} count={null}
@@ -447,7 +447,7 @@ const VideoSlide = ({
 
 // ─── AUDIO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 const AudioSlide = ({
-  post, isActive, onLike, liked, likesCount, onSave, saved, onComment,
+  post, isActive, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const audioPlayer = useAudioPlayer(null);
@@ -529,7 +529,7 @@ const AudioSlide = ({
           <ActionBtn icon={<MessageCircle size={26} color="#fff" />} count={commentCount} onPress={onComment} />
           <ActionBtn
             icon={<Bookmark size={26} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-            count={null} onPress={onSave} active={saved}
+            count={savesCount} onPress={onSave} active={saved}
           />
           <ActionBtn
             icon={<Share2 size={26} color="#fff" />} count={null}
@@ -627,7 +627,7 @@ const ImageSlideCarousel = React.memo(({ images }) => {
 // as large, centered, auto-sized text — no small graphic card sitting on
 // top of a separate black background.
 const TextSlide = ({
-  post, onLike, liked, likesCount, onSave, saved, onComment, commentCount,
+  post, onLike, liked, likesCount, savesCount, onSave, saved, onComment, commentCount,
   isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false,
 }) => {
   const [showHeart, setShowHeart] = useState(false);
@@ -744,7 +744,7 @@ const TextSlide = ({
             <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-              count={null} onPress={onSave} active={saved}
+              count={savesCount} onPress={onSave} active={saved}
             />
             <ActionBtn
               icon={<Share2 size={28} color="#fff" />} count={null}
@@ -814,7 +814,7 @@ const TextSlide = ({
 
 // ─── POLL SLIDE (new) ─────────────────────────────────────────────
 const PollSlide = ({
-  post, isAuthenticated, onVote, onLike, liked, likesCount, onSave, saved,
+  post, isAuthenticated, onVote, onLike, liked, likesCount, savesCount, onSave, saved,
   onComment, commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
@@ -840,7 +840,7 @@ const PollSlide = ({
             <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-              count={null} onPress={onSave} active={saved}
+              count={savesCount} onPress={onSave} active={saved}
             />
             {!isOwnPost && !post.is_admin_drop && (
               <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
@@ -976,6 +976,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
   const [likeMap, setLikeMap] = useState({});
   const [saveMap, setSaveMap] = useState({});
+  const [saveCounts, setSaveCounts] = useState({});
   const [commentCounts, setCommentCounts] = useState({});
   const [reportPost, setReportPost] = useState(null);
   const [commentSheet, setCommentSheet] = useState({ visible: false, postId: null, isOwner: false });
@@ -1045,6 +1046,11 @@ export default function DropsSwipeScreen({ navigation, route }) {
       setSaveMap((prev) => {
         const next = { ...prev };
         fresh.forEach((p) => { next[p.id] = p.is_saved || false; });
+        return next;
+      });
+      setSaveCounts((prev) => {
+        const next = { ...prev };
+        fresh.forEach((p) => { next[p.id] = p.saves_count || 0; });
         return next;
       });
       setCommentCounts((prev) => {
@@ -1143,6 +1149,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     }
     const wasSaved = saveMap[postId];
     setSaveMap((prev) => ({ ...prev, [postId]: !wasSaved }));
+    setSaveCounts((prev) => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) + (wasSaved ? -1 : 1)) }));
     try {
       const token = await AsyncStorage.getItem('token');
       await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/save`, {
@@ -1151,6 +1158,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       });
     } catch {
       setSaveMap((prev) => ({ ...prev, [postId]: wasSaved }));
+      setSaveCounts((prev) => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) + (wasSaved ? 1 : -1)) }));
     }
   }, [isAuthenticated, saveMap, navigation, showToast]);
 
@@ -1302,6 +1310,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       liked: likeState.liked,
       likesCount: likeState.count,
       saved: saveMap[item.id] || false,
+      savesCount: saveCounts[item.id] || 0,
       commentCount: commentCounts[item.id] || 0,
       onLike: () => handleLike(item.id),
       onSave: () => handleSave(item.id),
@@ -1326,7 +1335,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     }
     return <View style={{ height: listHeight, width }}>{slide}</View>;
   }, [
-    activeIndex, screenFocused, likeMap, saveMap, commentCounts, listHeight,
+    activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
     handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress,
     isAuthenticated, navigation, headerHeight, chromeHidden,
   ]);

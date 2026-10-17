@@ -29,6 +29,7 @@ export type Post = {
   thread_count: number;
   views_count: number;
   likes_count: number;
+  saves_count?: number;
   created_at: string;
   time_ago: string;
   is_liked?: boolean;

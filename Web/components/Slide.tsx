@@ -105,12 +105,13 @@ export default function Slide({
   async function save() {
     if (!user) return onGate("Sign in to save it for later.");
     const was = Boolean(post.is_saved);
-    onPatch(post.id, { is_saved: !was });
+    const n = post.saves_count ?? 0;
+    onPatch(post.id, { is_saved: !was, saves_count: Math.max(0, n + (was ? -1 : 1)) });
     try {
       await api(`/drops/${post.id}/save`, { method: "POST" });
       onToast(was ? "Removed from saved" : "Saved");
     } catch (e) {
-      onPatch(post.id, { is_saved: was });
+      onPatch(post.id, { is_saved: was, saves_count: n });
       onToast((e as Error).message);
     }
   }
@@ -250,7 +251,7 @@ export default function Slide({
           <Comment />{compact(post.thread_count)}
         </button>
         <button onClick={save} aria-label="Save" className={post.is_saved ? "liked" : ""}>
-          <Bookmark filled={Boolean(post.is_saved)} />
+          <Bookmark filled={Boolean(post.is_saved)} />{compact(post.saves_count ?? 0)}
         </button>
         <button onClick={() => onShare(post)} aria-label="Share">
           <Share />
