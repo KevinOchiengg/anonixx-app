@@ -20,6 +20,7 @@ type Item =
   | { kind: "ad"; key: string }
   | { kind: "promo"; key: string; ad: FeedAd }
   | { kind: "market"; key: string; item: MarketTease }
+  | { kind: "status" }
   | { kind: "end" };
 
 type AuthedFeed = {
@@ -36,6 +37,7 @@ const FEED_AD_EVERY = 8;
 const ADSENSE_ON = Boolean(process.env.NEXT_PUBLIC_ADSENSE_CLIENT && process.env.NEXT_PUBLIC_ADSENSE_SLOT);
 const LOCATION_LABELS: Record<string, string> = { country: "Country", county: "Region", sub_county: "Area", estate: "Nearby" };
 const LOAD_AHEAD = 4;
+const CACHE_KEY = "anonixx.feed.cache.v1";
 
 type Props = {
   initialPosts: Post[];
@@ -67,6 +69,9 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const [coach, setCoach] = useState(false);
   const loading = useRef(false);
   const [retry, setRetry] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [first, setFirst] = useState<"idle" | "loading" | "failed">(initialPosts.length ? "idle" : "loading");
   const [sounds, setSounds] = useState<Sound[]>([]);
 
   const showHero = withHero && !user;
@@ -77,6 +82,39 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     api<{ ads?: FeedAd[] }>("/ads/active?limit=10").then((r) => setAds(r.ads || [])).catch(() => {});
     api<{ items?: MarketTease[] }>("/market/items?limit=20&offset=0").then((r) => setMarket(r.items || [])).catch(() => {});
   }, [ready, user]);
+
+  // The server couldn't hand us any posts (backend slow or down at build time): fetch them here,
+  // and fall back to the last feed this browser saw.
+  const [firstTry, setFirstTry] = useState(0);
+  const authedRef = useRef(false);
+  authedRef.current = authed;
+  useEffect(() => { if (authed) setFirst("idle"); }, [authed]);
+  useEffect(() => {
+    if (initialPosts.length) return;
+    let live = true;
+    setFirst("loading");
+    loadMoreClient(null).then((page) => {
+      if (!live || authedRef.current) return;
+      if (page && page.posts.length) {
+        setPosts(page.posts);
+        setCursor(page.next_cursor);
+        setFirst("idle");
+        return;
+      }
+      let cached: Post[] = [];
+      try { cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}").posts || []; } catch { /* ignore */ }
+      if (cached.length) { setPosts(cached); setFirst("idle"); }
+      else setFirst("failed");
+    });
+    return () => { live = false; };
+  }, [initialPosts.length, firstTry]);
+
+  const topId = posts[0]?.id;
+  useEffect(() => {
+    if (authed || !topId) return;
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ posts: posts.slice(0, 12) })); } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed, topId]);
 
   // Once we know who the viewer is, swap the public feed for their own (likes, saves, mature posts).
   useEffect(() => {
@@ -135,9 +173,10 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         out.push({ kind: "ad", key: `adsense-${i}` });
       }
     });
+    if (loadingMore || loadFailed || first !== "idle") out.push({ kind: "status" });
     if (ended) out.push({ kind: "end" });
     return out;
-  }, [posts, showHero, ended, ads, market]);
+  }, [posts, showHero, ended, ads, market, loadingMore, loadFailed, first]);
 
   useEffect(() => {
     const root = scroller.current;
@@ -164,8 +203,9 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   }, [active, items]);
 
   useEffect(() => {
-    if (!cursor || loading.current || active < items.length - LOAD_AHEAD) return;
+    if (!cursor || loading.current || loadFailed || active < items.length - LOAD_AHEAD) return;
     loading.current = true;
+    setLoadingMore(true);
     const run = async () => {
       if (authed) {
         const page = await api<AuthedFeed>(
@@ -181,7 +221,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         if (page.message === "session_limit" || (!page.has_more && !page.next_cursor)) setEnded(true);
       } else {
         const page = await loadMoreClient(cursor);
-        if (!page) return;
+        if (!page) throw new Error("load");
         setPosts((prev) => {
           const seen = new Set(prev.map((p) => p.id));
           return [...prev, ...page.posts.filter((p) => !seen.has(p.id))];
@@ -189,8 +229,23 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         setCursor(page.next_cursor);
       }
     };
-    run().catch(() => { window.setTimeout(() => setRetry((n) => n + 1), 2500); }).finally(() => { loading.current = false; });
-  }, [active, cursor, items.length, authed, sessionPosts, retry]);
+    run()
+      .then(() => setLoadFailed(false))
+      .catch(() => setLoadFailed(true))
+      .finally(() => { loading.current = false; setLoadingMore(false); });
+  }, [active, cursor, items.length, authed, sessionPosts, retry, loadFailed]);
+
+  const tryAgain = useCallback(() => {
+    setLoadFailed(false);
+    setRetry((n) => n + 1);
+    setFirstTry((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    const back = () => { if (loadFailed || first === "failed") tryAgain(); };
+    window.addEventListener("online", back);
+    return () => window.removeEventListener("online", back);
+  }, [loadFailed, first, tryAgain]);
 
   useEffect(() => {
     try { if (localStorage.getItem("anonixx.coach.v1")) return; } catch { return; }
@@ -303,6 +358,26 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
             if (it.kind === "ad") return <AdSlot key={it.key} index={i} />;
             if (it.kind === "promo") return <AdSlide key={it.key} ad={it.ad} index={i} />;
             if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;
+            if (it.kind === "status") {
+              const bad = first === "failed" || loadFailed;
+              return (
+                <section key="status" className="slide limit-slide net-slide" data-idx={i}>
+                  {bad ? (
+                    <>
+                      <span className="limit-moon" aria-hidden>📡</span>
+                      <h2>{first === "failed" ? "Can't reach Anonixx." : "Couldn't load more."}</h2>
+                      <p>Check your connection. Nothing you've seen is lost.</p>
+                      <button className="pill" onClick={tryAgain}>Try again</button>
+                    </>
+                  ) : (
+                    <div className="sk" aria-label="Loading">
+                      <i className="sk-av" /><i className="sk-line w60" /><i className="sk-line" /><i className="sk-line w80" /><i className="sk-line w40" />
+                      <p>Finding more confessions…</p>
+                    </div>
+                  )}
+                </section>
+              );
+            }
             if (it.kind === "end") {
               return (
                 <section key="end" className="slide limit-slide" data-idx={i}>

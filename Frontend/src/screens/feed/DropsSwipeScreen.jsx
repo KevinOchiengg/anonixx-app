@@ -966,6 +966,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [linkedPost, setLinkedPost] = useState(null);
   const [feedAds, setFeedAds] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [sessionPosts, setSessionPosts] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
@@ -1001,6 +1002,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 20000);
     try {
       const token = await AsyncStorage.getItem('token');
       const headers = {};
@@ -1009,12 +1012,14 @@ export default function DropsSwipeScreen({ navigation, route }) {
       const params = `session_posts=${currentOffset}` +
         (!reset && cursorRef.current ? `&cursor=${encodeURIComponent(cursorRef.current)}` : '');
 
-      const res = await fetch(`${API_BASE_URL}/api/v1/drops/feed?${params}`, { headers });
+      const res = await fetch(`${API_BASE_URL}/api/v1/drops/feed?${params}`, { headers, signal: ctl.signal });
       if (!res.ok) {
         if (res.status === 401) await AsyncStorage.removeItem('token');
+        setLoadError(true);
         return;
       }
       const data = await res.json();
+      setLoadError(false);
 
       if (data.message === 'session_limit') {
         setSessionLimitReached(true);
@@ -1053,8 +1058,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
       setSessionPosts(data.session_posts);
       setHasMore(data.has_more);
     } catch {
-      showToast({ type: 'error', message: 'Could not load the feed. Pull down to try again.' });
+      setLoadError(true);
     } finally {
+      clearTimeout(timer);
       setLoading(false);
       loadingRef.current = false;
     }
@@ -1325,6 +1331,19 @@ export default function DropsSwipeScreen({ navigation, route }) {
     isAuthenticated, navigation, headerHeight, chromeHidden,
   ]);
 
+  if (!loading && loadError && posts.length === 0) {
+    return (
+      <View style={[ss.container, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#000" />
+        <Text style={ss.netTitle}>Can't reach Anonixx.</Text>
+        <Text style={ss.netSub}>Check your connection and try again.</Text>
+        <TouchableOpacity style={ss.netBtn} onPress={() => loadFeed(true)} activeOpacity={0.85}>
+          <Text style={ss.netBtnText}>Try again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (loading && posts.length === 0) {
     return (
       <View style={[ss.container, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -1338,6 +1357,12 @@ export default function DropsSwipeScreen({ navigation, route }) {
     <GestureDetector gesture={chromeLongPress}>
     <View style={ss.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+
+      {loadError && posts.length > 0 ? (
+        <TouchableOpacity style={ss.netPill} onPress={() => loadFeed(false)} activeOpacity={0.85}>
+          <Text style={ss.netPillText}>Couldn't load more. Tap to retry</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <FlatList
         ref={flatListRef}
@@ -1437,6 +1462,12 @@ export default function DropsSwipeScreen({ navigation, route }) {
 // ─── SLIDE STYLES (ported from MediaFeedScreen.jsx) ───────────────
 const ss = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  netTitle: { color: '#fff', fontSize: 20, fontWeight: '700', textAlign: 'center' },
+  netSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center', marginTop: 8 },
+  netBtn: { marginTop: 20, backgroundColor: THEME.primary, borderRadius: 24, paddingHorizontal: 28, paddingVertical: 12 },
+  netBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  netPill: { position: 'absolute', top: 100, alignSelf: 'center', zIndex: 60, backgroundColor: 'rgba(30,30,30,0.95)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  netPillText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   slide: { width, height: '100%', backgroundColor: '#000' },
   gradientTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, zIndex: 1 },
   gradientBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 340, zIndex: 1 },
