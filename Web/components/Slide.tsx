@@ -225,7 +225,6 @@ export default function Slide({
           <span className="avatar" aria-hidden>{(post.anonymous_name || "A").charAt(0).toUpperCase()}</span>
           <div className="byline">
             <b>{post.anonymous_name || "Anonymous"}</b>
-            {post.is_admin_drop ? <span className="official">Anonixx</span> : null}
             <time>{post.time_ago}{post.kind === "hookup" ? " · Hookup" : post.kind === "confession" ? " · Confession" : ""}</time>
           </div>
         </div>
