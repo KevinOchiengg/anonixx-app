@@ -128,6 +128,15 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
             "Active a while ago"
         )
 
+    # The gallery they set up for their chat (up to 3 items) — shown as a
+    # preview so someone can decide whether to send a Link Up request.
+    chat_profile = await db["chat_profiles"].find_one({"user_id": target_id}, {"gallery": 1}) or {}
+    gallery = [
+        {"media_url": g["media_url"], "media_type": g.get("media_type", "image")}
+        for g in (chat_profile.get("gallery") or [])[:3]
+        if g.get("media_url")
+    ]
+
     return {
         "user_id": target_id,               # internal id — needed for Link Up routing
         "is_self": is_self,                 # viewing your own profile preview
@@ -143,6 +152,7 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
         "is_premium": bool(user.get("is_premium")),
         "is_online": is_online,
         "last_seen": last_seen,
+        "gallery": gallery,
         "gender": user.get("gender"),       # male | female | nonbinary | prefer_not_to_say | null
     }
 

@@ -11,6 +11,7 @@ import Hero from "./Hero";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
+import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
 
 type Item =
@@ -58,6 +59,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const [toast, setToast] = useState<string | null>(null);
   const [commentsFor, setCommentsFor] = useState<Post | null>(null);
   const [linkFor, setLinkFor] = useState<Post | null>(null);
+  const [profileFor, setProfileFor] = useState<Post | null>(null);
   const [reportFor, setReportFor] = useState<Post | null>(null);
   const [ads, setAds] = useState<FeedAd[]>([]);
   const [market, setMarket] = useState<MarketTease[]>([]);
@@ -328,6 +330,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
                 onPatch={patch}
                 onComments={setCommentsFor}
                 onLinkUp={setLinkFor}
+                onProfile={setProfileFor}
                 onReport={setReportFor}
                 onToast={flash}
               />
@@ -362,6 +365,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
             onNeedAuth={() => { setCommentsFor(null); setGate("Sign in to join the thread. Your name stays hidden."); }}
           />
         ) : null}
+        {profileFor ? <AuthorSheet post={profileFor} onClose={() => setProfileFor(null)} onLinkUp={setLinkFor} /> : null}
         {linkFor ? <LinkUpSheet post={linkFor} onClose={() => setLinkFor(null)} /> : null}
         {reportFor ? (
           <ReportSheet
