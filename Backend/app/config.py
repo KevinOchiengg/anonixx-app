@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Comma-separated emails of super admins (must also have is_admin=True).
     SUPER_ADMIN_EMAILS: str = ""
 
+    # GOOGLE SIGN-IN: comma-separated OAuth client IDs allowed to sign users in
+    # (web client ID, plus the Android/iOS ones when the app adds Google sign-in).
+    GOOGLE_CLIENT_IDS: str = ""
+
     # DATABASE
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "anonixx"

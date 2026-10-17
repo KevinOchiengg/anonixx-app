@@ -13,11 +13,20 @@ export type SignupInput = {
   referral_code?: string;
 };
 
+export type GoogleExtra = {
+  date_of_birth?: string;
+  username?: string;
+  gender?: string;
+  referral_code?: string;
+};
+export type GoogleResult = { status: "ok" } | { status: "needs_profile"; email: string };
+
 type Ctx = {
   user: AuthUser | null;
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (input: SignupInput) => Promise<void>;
+  googleLogin: (idToken: string, extra?: GoogleExtra) => Promise<GoogleResult>;
   logout: () => void;
   refresh: () => Promise<void>;
   setBalance: (n: number) => void;
@@ -70,6 +79,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     accept(await api<AuthResponse>("/auth/register", { body }));
   }, [accept]);
 
+  const googleLogin = useCallback(async (idToken: string, extra: GoogleExtra = {}): Promise<GoogleResult> => {
+    const res = await api<AuthResponse | { needs_profile: true; email: string }>("/auth/google", {
+      body: { id_token: idToken, ...extra },
+    });
+    if ("needs_profile" in res) return { status: "needs_profile", email: res.email };
+    accept(res);
+    return { status: "ok" };
+  }, [accept]);
+
   const logout = useCallback(() => {
     setToken(null);
     setAdultMode(false);
@@ -81,8 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, ready, login, signup, logout, refresh, setBalance }),
-    [user, ready, login, signup, logout, refresh, setBalance],
+    () => ({ user, ready, login, signup, googleLogin, logout, refresh, setBalance }),
+    [user, ready, login, signup, googleLogin, logout, refresh, setBalance],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

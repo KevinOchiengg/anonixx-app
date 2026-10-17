@@ -17,6 +17,7 @@ const GENDERS: [string, string][] = [
 
 // ── Change password ──────────────────────────────────────────────────────────
 function ChangePasswordInner() {
+  const { user } = useAuth();
   const [cur, setCur] = useState("");
   const [pw, setPw] = useState("");
   const [again, setAgain] = useState("");
@@ -42,9 +43,9 @@ function ChangePasswordInner() {
 
   return (
     <form className="form pad" onSubmit={submit}>
-      <label className="field">Current password
+      {user?.has_password === false ? null : <label className="field">Current password
         <input type="password" required autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} />
-      </label>
+      </label>}
       <label className="field">New password
         <input type="password" required autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
       </label>
@@ -53,7 +54,7 @@ function ChangePasswordInner() {
       </label>
       {err ? <div className="err">{err}</div> : null}
       {ok ? <div className="ok">{ok}</div> : null}
-      <button className="btn" disabled={busy || !cur || !pw}>{busy ? "Saving…" : "Change password"}</button>
+      <button className="btn" disabled={busy || (user?.has_password !== false && !cur) || !pw}>{busy ? "Saving…" : "Change password"}</button>
     </form>
   );
 }

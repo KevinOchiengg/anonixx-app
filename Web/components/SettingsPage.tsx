@@ -158,8 +158,8 @@ function Inner() {
       ) : (
         <form className="form danger-box" onSubmit={deleteAccount}>
           <p>This permanently erases your account, your posts and your chats. It can&apos;t be undone.</p>
-          <label className="field">Enter your password to confirm
-            <input type="password" required autoComplete="current-password" value={delPw} onChange={(e) => setDelPw(e.target.value)} />
+          <label className="field">{user?.has_password === false ? "Type DELETE to confirm" : "Enter your password to confirm"}
+            <input type={user?.has_password === false ? "text" : "password"} required autoComplete={user?.has_password === false ? "off" : "current-password"} value={delPw} onChange={(e) => setDelPw(e.target.value)} />
           </label>
           <div className="row">
             <button className="btn danger" disabled={busy || !delPw}>{busy ? "Deleting…" : "Delete forever"}</button>

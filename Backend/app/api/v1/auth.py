@@ -7,6 +7,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from bson import ObjectId
 import secrets
+import httpx
 import hashlib
 import re
 import random
@@ -80,6 +81,7 @@ class UserResponse(BaseModel):
     is_admin:       bool = False
     is_premium:     bool = False
     premium_until:  Optional[str] = None
+    has_password:   bool = True
 
 
 # ─── Helpers ──────────────────────────────────────────────────
@@ -131,6 +133,26 @@ async def generate_unique_anonymous_name(db, attempts: int = 12) -> str:
             return name
 
 
+async def _check_chosen_name(db, chosen_name: str) -> None:
+    """Format, profanity, reserved-word and uniqueness checks for a public anonymous name."""
+    if not _ANON_NAME_RE.match(chosen_name):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Username must be 3–30 characters — letters, numbers, spaces, dots, hyphens, underscores or emoji only",
+        )
+    if _contains_profanity(chosen_name):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
+    if chosen_name.lower() in RESERVED_ANON_NAMES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
+    name_clash = await db["users"].find_one({
+        "$or": [
+            {"username":       {"$regex": f"^{re.escape(chosen_name)}$", "$options": "i"}},
+            {"anonymous_name": {"$regex": f"^{re.escape(chosen_name)}$", "$options": "i"}},
+        ]
+    })
+    if name_clash:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username is already taken")
+
 # ─── Endpoints ────────────────────────────────────────────────
 @router.post("/register", response_model=TokenResponse)
 async def register(data: RegisterRequest, request: Request, db=Depends(get_database)):
@@ -147,23 +169,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
     # against both fields, since the two are the same value from here on).
     chosen_name = (data.username or "").strip()
     if chosen_name:
-        if not _ANON_NAME_RE.match(chosen_name):
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Username must be 3–30 characters — letters, numbers, spaces, dots, hyphens, underscores or emoji only",
-            )
-        if _contains_profanity(chosen_name):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
-        if chosen_name.lower() in RESERVED_ANON_NAMES:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username isn't allowed. Try something else.")
-        name_clash = await db["users"].find_one({
-            "$or": [
-                {"username":       {"$regex": f"^{re.escape(chosen_name)}$", "$options": "i"}},
-                {"anonymous_name": {"$regex": f"^{re.escape(chosen_name)}$", "$options": "i"}},
-            ]
-        })
-        if name_clash:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username is already taken")
+        await _check_chosen_name(db, chosen_name)
         anonymous_name = chosen_name
     else:
         # No username supplied (shouldn't happen via SignUpScreen, which
@@ -245,6 +251,131 @@ async def login(data: LoginRequest, db=Depends(get_database)):
     }
 
 
+# ─── Google sign-in ───────────────────────────────────────────
+class GoogleAuthRequest(BaseModel):
+    id_token:      str
+    date_of_birth: Optional[date] = None   # required only the first time (new account)
+    username:      Optional[str]  = None
+    gender:        Optional[str]  = None
+    referral_code: Optional[str]  = None
+
+
+async def _verify_google_token(id_token: str) -> dict:
+    client_ids = {c.strip() for c in settings.GOOGLE_CLIENT_IDS.split(",") if c.strip()}
+    if not client_ids:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="Google sign-in isn't available right now.")
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            res = await client.get("https://oauth2.googleapis.com/tokeninfo", params={"id_token": id_token})
+    except httpx.HTTPError:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="Couldn't reach Google. Try again.")
+    if res.status_code != 200:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Google sign-in failed. Try again.")
+    info = res.json()
+    if (
+        info.get("aud") not in client_ids
+        or info.get("iss") not in ("accounts.google.com", "https://accounts.google.com")
+        or str(info.get("email_verified")).lower() != "true"
+        or not info.get("sub")
+        or not info.get("email")
+    ):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Google sign-in failed. Try again.")
+    return info
+
+
+def _session(user: dict, **extra) -> dict:
+    return {
+        "access_token": create_access_token({"sub": str(user["_id"])}),
+        "token_type":   "bearer",
+        "user": {
+            "id":             str(user["_id"]),
+            "email":          user["email"],
+            "username":       user.get("username"),
+            "anonymous_name": user.get("anonymous_name"),
+            "avatar_url":     user.get("avatar_url"),
+            "is_admin":       user.get("is_admin", False),
+            "coin_balance":   user.get("coin_balance", 0),
+            "age_verified":   user.get("age_verified", False),
+        },
+        **extra,
+    }
+
+
+@router.post("/google")
+async def google_auth(data: GoogleAuthRequest, db=Depends(get_database)):
+    """Sign in or sign up with a Google ID token.
+
+    Existing Google or same-email accounts sign straight in. A brand-new person
+    gets `needs_profile` until they send a date of birth: Google doesn't share
+    one and Anonixx is 18+. Their Google name and photo are never used; the
+    public identity is a name they pick, or a random one.
+    """
+    info  = await _verify_google_token(data.id_token)
+    sub   = info["sub"]
+    email = info["email"].strip().lower()
+
+    user = await db["users"].find_one({"google_sub": sub})
+    if not user:
+        user = await db["users"].find_one({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
+        if user:
+            # Same verified email as a password account: link it.
+            await db["users"].update_one(
+                {"_id": user["_id"]},
+                {"$set": {"google_sub": sub, "updated_at": _now()}},
+            )
+    if user:
+        return _session(user, is_new=False)
+
+    if not data.date_of_birth:
+        return {"needs_profile": True, "email": email}
+    if not _is_adult(data.date_of_birth):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Anonixx is for adults 18+")
+
+    chosen_name = (data.username or "").strip()
+    if chosen_name:
+        await _check_chosen_name(db, chosen_name)
+        anonymous_name = chosen_name
+    else:
+        anonymous_name = await generate_unique_anonymous_name(db)
+
+    user_id = ObjectId()
+    user = {
+        "_id":            user_id,
+        "email":          email,
+        "username":       anonymous_name,
+        # Unusable random password; has_password=False lets them set a real one later.
+        "password":       get_password_hash(secrets.token_urlsafe(32)),
+        "has_password":   False,
+        "google_sub":     sub,
+        "anonymous_name": anonymous_name,
+        "interests":      [],
+        "coin_balance":   0,
+        "streak_count":   0,
+        "date_of_birth":  data.date_of_birth.isoformat(),
+        "gender":         data.gender if data.gender in VALID_GENDERS else None,
+        "age_verified":   True,
+        "blocked_user_ids": [],
+        "created_at":     _now(),
+        "updated_at":     _now(),
+    }
+    if data.referral_code:
+        referrer = await db["users"].find_one({"referral_code": data.referral_code.upper()})
+        if referrer:
+            user["referred_by"]         = data.referral_code.upper()
+            user["referred_by_user_id"] = str(referrer["_id"])
+
+    await db["users"].insert_one(user)
+    await credit_coins(
+        db          = db,
+        user_id     = str(user_id),
+        amount      = WELCOME_BONUS,
+        reason      = "welcome_bonus",
+        description = "Welcome to Anonixx 🎉",
+    )
+    user["coin_balance"] = WELCOME_BONUS
+    return _session(user, is_new=True)
+
+
 @router.post("/token", response_model=TokenResponse)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -294,6 +425,7 @@ async def get_current_user(
         "is_admin":       bool(user.get("is_admin", False)),
         "is_premium":     _premium_running(user),
         "premium_until":  user["premium_until"].isoformat() if user.get("premium_until") else None,
+        "has_password":   user.get("has_password", True),
     }
 
 
@@ -533,12 +665,13 @@ async def change_password(
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if not verify_password(data.current_password, user["password"]):
+    # Google-only accounts have no password to confirm; they are setting their first one.
+    if user.get("has_password", True) and not verify_password(data.current_password, user["password"]):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
 
     await db["users"].update_one(
         {"_id": ObjectId(current_user_id)},
-        {"$set": {"password": get_password_hash(data.new_password), "updated_at": _now()}},
+        {"$set": {"password": get_password_hash(data.new_password), "has_password": True, "updated_at": _now()}},
     )
     return {"message": "Password changed successfully"}
 
@@ -614,7 +747,7 @@ async def reset_password(data: ResetPasswordRequest, db=Depends(get_database)):
     await db["users"].update_one(
         {"_id": user["_id"]},
         {
-            "$set":   {"password": get_password_hash(data.new_password), "updated_at": _now()},
+            "$set":   {"password": get_password_hash(data.new_password), "has_password": True, "updated_at": _now()},
             "$unset": {"reset_otp_hash": "", "reset_otp_expires": "", "reset_otp_attempts": ""},
         },
     )
