@@ -23,6 +23,7 @@ type Props = {
   onPatch: (id: string, patch: Partial<Post>) => void;
   onComments: (post: Post) => void;
   onLinkUp: (post: Post) => void;
+  onProfile: (post: Post) => void;
   onReport: (post: Post) => void;
   onToast: (msg: string) => void;
 };
@@ -42,7 +43,7 @@ function pickSound(sounds: Sound[] | undefined, post: Post): Sound | null {
 
 export default function Slide({
   post, index, active, near, muted, sounds, headline,
-  onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onReport, onToast,
+  onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onProfile, onReport, onToast,
 }: Props) {
   const { user } = useAuth();
   const [page, setPage] = useState(0);
@@ -129,6 +130,12 @@ export default function Slide({
     }
   }
 
+  const hasProfile = !post.is_admin_drop;
+  const openProfile = () => {
+    if (!hasProfile) return;
+    if (user) { if (post.user_id) onProfile(post); }
+    else onGate("Sign in to see who they are. Your name stays hidden.");
+  };
   const canLinkUp = !post.is_admin_drop && !post.is_own_post && post.kind !== "confession";
   const linkBtn = (
     <button
@@ -221,7 +228,7 @@ export default function Slide({
           hasMedia ? <audio className="voice" controls preload="none" src={audioSrc} /> : <AudioWave src={audioSrc} seed={post.id} active={active} />
         ) : null}
 
-        <div className="author">
+        <div className="author" onClick={hasProfile ? openProfile : undefined} style={hasProfile ? undefined : { cursor: "default" }}>
           <span className="avatar" aria-hidden>{(post.anonymous_name || "A").charAt(0).toUpperCase()}</span>
           <div className="byline">
             <b>{post.anonymous_name || "Anonymous"}</b>
@@ -233,7 +240,7 @@ export default function Slide({
       {ambient && near ? <AmbientSound src={ambient.url} play={active && !muted} /> : null}
 
       <div className="rail">
-        <span className="avatar big ring" aria-hidden>
+        <span className="avatar big ring" role={hasProfile ? "button" : undefined} aria-label={hasProfile ? "View profile" : undefined} onClick={hasProfile ? openProfile : undefined} style={hasProfile ? undefined : { cursor: "default" }}>
           {post.avatar_url ? <img src={post.avatar_url} alt="" /> : (post.anonymous_name || "A").charAt(0).toUpperCase()}
         </span>
         <button onClick={like} aria-label="Like" className={post.is_liked ? "liked" : ""}>

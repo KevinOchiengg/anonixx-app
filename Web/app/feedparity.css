@@ -413,3 +413,30 @@
 .cmt-input .pill svg { width: 20px; height: 20px; }
 .replying { background: transparent; padding: 0 4px 8px; }
 .replying b { color: var(--fg); }
+
+/* ---------- author profile sheet ---------- */
+.author, .rail > .avatar.big { cursor: pointer; }
+.ap { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 0 8px; text-align: center; }
+.ap-avatar { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; background: var(--rose-dim); border: 2px solid var(--rose); box-shadow: 0 0 0 6px rgba(255, 99, 74, 0.1); font-size: 34px; font-weight: 800; color: var(--rose); flex: none; }
+.ap-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ap-name { margin: 0; font-size: 20px; }
+.ap-presence { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-top: -6px; }
+.ap-presence.on { color: #34d399; }
+.ap-presence i { width: 7px; height: 7px; border-radius: 50%; background: #34d399; }
+.ap-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.ap-chips span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: 700; color: var(--rose); border: 1px solid rgba(255, 99, 74, 0.4); background: rgba(255, 99, 74, 0.08); }
+.ap-gallery { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ap-gallery button { position: relative; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--surface-alt); border: 1px solid var(--line); padding: 0; }
+.ap-gallery img, .ap-gallery video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ap-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 22px; background: rgba(0, 0, 0, 0.25); }
+.ap-stats { width: 100%; display: flex; justify-content: space-around; padding: 12px 8px; border-radius: 14px; background: var(--surface-alt); border: 1px solid var(--line); }
+.ap-stats div { display: grid; gap: 2px; }
+.ap-stats b { font-size: 17px; color: var(--fg); }
+.ap-stats span { font-size: 11px; color: var(--muted); }
+.ap-since { margin: 0; font-size: 12px; color: var(--faint); }
+.ap .u-cta { flex: none; gap: 8px; white-space: nowrap; }
+.ap .u-cta svg { width: 20px; height: 20px; flex: none; }
+.ap .u-cta .coin-cost { margin-left: 4px; padding: 2px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.28); color: var(--gold); font-size: 12px; font-weight: 800; }
+.ap-lightbox { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(0, 0, 0, 0.92); }
+.ap-lightbox img, .ap-lightbox video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.ap-lightbox button { position: absolute; top: 14px; right: 16px; width: 40px; height: 40px; border-radius: 50%; font-size: 28px; line-height: 1; color: #fff; background: rgba(255, 255, 255, 0.12); }
