@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { uploadFile } from "@/lib/upload";
 import AudioWave from "./AudioWave";
 import { ChevronDown, Reply, Smile, Close, Pin, ImageIcon, Mic, Gif, Send } from "./feedicons";
+import { Heart } from "./icons";
 
 type Comment = {
   id: string;
@@ -32,6 +33,19 @@ type Media = { image_url?: string; gif_url?: string; voice_url?: string; voice_d
 type GifItem = { id: string; tiny: string; full: string };
 const mmss = (s: number) => `0:${String(Math.floor(s)).padStart(2, "0")}`;
 const MENTION = /@([A-Za-z0-9_.]{2,30})/g;
+
+const HUES = [8, 352, 338, 358, 14, 328];
+function Av({ name, small }: { name: string; small?: boolean }) {
+  const n = name || "A";
+  let h = 0;
+  for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const hue = HUES[h % HUES.length];
+  return (
+    <span className={`cmt-av${small ? " sm" : ""}`} style={{ background: `linear-gradient(135deg, hsl(${hue} 90% 62%), hsl(${(hue + 22) % 360} 80% 42%))` }} aria-hidden>
+      {n.trim().charAt(0).toUpperCase() || "A"}
+    </span>
+  );
+}
 
 function Mentions({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
@@ -276,37 +290,46 @@ export default function CommentsSheet({
 
   const row = (c: Comment, depth = 0) => {
     const expanded = open[c.id];
+    const name = c.anonymous_name || "Anonymous";
     return (
       <div key={c.id} className={`cmt${depth ? " nested" : ""}`}>
-        <div className="cmt-head">
-          <b>{c.anonymous_name || "Anonymous"}</b>
-          {c.pinned ? <span className="cmt-badge pinned"><Pin />pinned</span> : null}
-          {depth === 0 && c.id === firstId && c.id !== hotId ? <span className="cmt-badge first">first 🎯</span> : null}
-          {depth === 0 && c.id === hotId ? <span className="cmt-badge hot">🔥 hot</span> : null}
-        </div>
-        {c.content ? <div className="cmt-body"><Mentions text={c.content} /></div> : null}
-        {c.voice_url ? <div className="cmt-voice"><AudioWave src={c.voice_url} seed={c.id} active /></div> : null}
-        {c.image_url || c.gif_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className="cmt-img" src={c.image_url || c.gif_url} alt="" loading="lazy" />
-        ) : null}
-        <div className="cmt-actions">
-          <span className="cmt-time">{c.time_ago || "just now"}</span>
-          {depth === 0 ? (
-            <button onClick={() => { if (!user) onNeedAuth(); else setReplyTo(replyTo?.id === c.id ? null : c); }}>
-              {replyTo?.id === c.id ? "Cancel" : "Reply"}
-            </button>
-          ) : null}
-          {depth === 0 && isOwner && !c.id.startsWith("tmp-") ? (
-            <button className={c.pinned ? "on" : ""} onClick={() => pin(c)}>{c.pinned ? "Unpin" : "Pin"}</button>
-          ) : null}
+        <div className="cmt-main">
+          <Av name={name} small={depth > 0} />
+          <div className="cmt-col">
+            <div className="cmt-head">
+              <b>{name}</b>
+              {c.pinned ? <span className="cmt-badge pinned"><Pin />Pinned</span> : null}
+              {depth === 0 && c.id === firstId && c.id !== hotId ? <span className="cmt-badge first">first</span> : null}
+              {depth === 0 && c.id === hotId ? <span className="cmt-badge hot">hot</span> : null}
+            </div>
+            {c.content ? <div className="cmt-body"><Mentions text={c.content} /></div> : null}
+            {c.voice_url ? <div className="cmt-voice"><AudioWave src={c.voice_url} seed={c.id} active /></div> : null}
+            {c.image_url || c.gif_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="cmt-img" src={c.image_url || c.gif_url} alt="" loading="lazy" />
+            ) : null}
+            <div className="cmt-actions">
+              <span className="cmt-time">{c.time_ago || "just now"}</span>
+              {depth === 0 ? (
+                <button onClick={() => { if (!user) onNeedAuth(); else setReplyTo(replyTo?.id === c.id ? null : c); }}>
+                  {replyTo?.id === c.id ? "Cancel" : "Reply"}
+                </button>
+              ) : null}
+              {depth === 0 && isOwner && !c.id.startsWith("tmp-") ? (
+                <button className={c.pinned ? "on" : ""} onClick={() => pin(c)}>{c.pinned ? "Unpin" : "Pin"}</button>
+              ) : null}
+            </div>
+          </div>
           <button className={`cmt-like${c.liked_by_me ? " on" : ""}`} onClick={() => like(c)} aria-label="Like comment">
-            {c.liked_by_me ? "♥" : "♡"} {c.likes_count || ""}
+            <Heart filled={c.liked_by_me} />
+            <span>{c.likes_count || ""}</span>
           </button>
         </div>
         {depth === 0 && c.replies.length > 0 ? (
           <button className="cmt-toggle" onClick={() => setOpen((o) => ({ ...o, [c.id]: !o[c.id] }))}>
-            {expanded ? "Hide replies" : `View ${c.replies.length} ${c.replies.length === 1 ? "reply" : "replies"}`}
+            <i aria-hidden />
+            {expanded ? "Hide" : `View ${c.replies.length} ${c.replies.length === 1 ? "reply" : "replies"}`}
+            <span className={expanded ? "up" : ""}><ChevronDown /></span>
           </button>
         ) : null}
         {depth === 0 && expanded ? c.replies.map((r) => row(r, 1)) : null}
@@ -323,8 +346,8 @@ export default function CommentsSheet({
         <span className="sheet-handle" aria-hidden />
         <div className="cmt-top">
           <span />
-          <h3>{count} {count === 1 ? "drop" : "drops"}</h3>
-          <button onClick={onClose} aria-label="Close"><ChevronDown /></button>
+          <h3>{count} {count === 1 ? "comment" : "comments"}</h3>
+          <button onClick={onClose} aria-label="Close"><Close /></button>
         </div>
         <div className="cmt-sort">
           <button className={sort === "new" ? "on" : ""} onClick={() => setSort("new")}>Newest</button>
@@ -385,19 +408,22 @@ export default function CommentsSheet({
             </div>
           ) : (
             <div className="cmt-input">
-              <button type="button" className={`emoji-toggle${picker ? " on" : ""}`} onClick={() => { setPicker((p) => !p); setGifOpen(false); }} aria-label="Emoji"><Smile /></button>
-              <button type="button" className="emoji-toggle" onClick={() => { if (!user) onNeedAuth(); else fileRef.current?.click(); }} disabled={busy} aria-label="Add a photo"><ImageIcon /></button>
-              {TENOR ? <button type="button" className={`emoji-toggle${gifOpen ? " on" : ""}`} onClick={() => { setGifOpen((g) => !g); setPicker(false); }} aria-label="Add a GIF"><Gif /></button> : null}
-              <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickImage} />
-              <input
-                value={text}
-                maxLength={500}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={!user ? "sign in. no one will know it's you." : replyTo ? "say whats really weighs you down" : "No one knows it's you"}
-                onFocus={() => { if (!user) onNeedAuth(); }}
-              />
+              <div className="cmt-field">
+                <input
+                  value={text}
+                  maxLength={500}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={!user ? "Sign in. No one will know it's you." : replyTo ? "Add reply..." : "Add comment..."}
+                  onFocus={() => { if (!user) onNeedAuth(); }}
+                />
+                <button type="button" className="emoji-toggle at" onClick={() => setText((t) => (t + "@").slice(0, 500))} aria-label="Mention someone">@</button>
+                <button type="button" className="emoji-toggle" onClick={() => { if (!user) onNeedAuth(); else fileRef.current?.click(); }} disabled={busy} aria-label="Add a photo"><ImageIcon /></button>
+                {TENOR ? <button type="button" className={`emoji-toggle${gifOpen ? " on" : ""}`} onClick={() => { setGifOpen((g) => !g); setPicker(false); }} aria-label="Add a GIF"><Gif /></button> : null}
+                <button type="button" className={`emoji-toggle${picker ? " on" : ""}`} onClick={() => { setPicker((p) => !p); setGifOpen(false); }} aria-label="Emoji"><Smile /></button>
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickImage} />
+              </div>
               {text.trim() ? (
-                <button className="pill" disabled={busy}><Send />Post</button>
+                <button className="pill send" disabled={busy} aria-label="Post comment"><Send /></button>
               ) : (
                 <button type="button" className="pill mic" onClick={startRec} disabled={busy} aria-label="Record a voice note"><Mic /></button>
               )}
