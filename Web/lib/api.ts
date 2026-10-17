@@ -153,6 +153,7 @@ export type AuthUser = {
   is_premium?: boolean;
   premium_until?: string | null;
   feed_location_scope?: string | null;
+  has_password?: boolean;
 };
 
 export const COST = { post: 3, linkUp: 6 };

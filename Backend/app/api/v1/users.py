@@ -431,11 +431,15 @@ async def delete_my_account(
         oid = ObjectId(current_user_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid user.")
-    user = await db["users"].find_one({"_id": oid}, {"password": 1, "is_admin": 1})
+    user = await db["users"].find_one({"_id": oid}, {"password": 1, "has_password": 1, "is_admin": 1})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if not verify_password(data.password, user.get("password", "")):
-        raise HTTPException(status_code=400, detail="Wrong password.")
+    if user.get("has_password", True):
+        if not verify_password(data.password, user.get("password", "")):
+            raise HTTPException(status_code=400, detail="Wrong password.")
+    elif data.password.strip().upper() != "DELETE":
+        # Google-only account: no password exists, so the user types DELETE instead.
+        raise HTTPException(status_code=400, detail="Type DELETE to confirm.")
 
     uid = current_user_id
     await db["drops"].delete_many({"sender_id": uid})
