@@ -20,10 +20,7 @@ router = APIRouter(prefix="/sounds", tags=["sounds"])
 
 MAX_BYTES = 5 * 1024 * 1024
 ALLOWED_TYPES = {"audio/mpeg", "audio/mp3", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac"}
-MOODS = {
-    "any", "longing", "restless", "tender", "bitter", "hopeful",
-    "ashamed", "dangerous", "quiet", "unsent", "reckless",
-}
+MOODS = {"any", "longing", "untold", "horny", "discreet"}
 
 
 def _out(doc: dict) -> dict:

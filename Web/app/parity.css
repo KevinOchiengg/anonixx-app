@@ -67,3 +67,6 @@
 .lock { border-color: rgba(255,255,255,0.12); border-radius: 16px; background: var(--surface); }
 .badge { background: var(--surface-alt); }
 .acct-code { border-color: rgba(255,99,74,0.4); color: var(--rose); }
+
+.apphead .back { line-height: 1; justify-self: center; }
+.apphead .back svg { display: block; }

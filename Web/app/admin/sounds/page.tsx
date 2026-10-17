@@ -6,7 +6,7 @@ import { Badge } from "@/components/admin/bits";
 type Sound = { id: string; title: string; mood: string; url: string; active: boolean };
 type Draft = { file: File; title: string; mood: string; state: "ready" | "sending" | "done" | "error"; error?: string };
 
-const MOODS = ["any", "longing", "restless", "tender", "bitter", "hopeful", "ashamed", "dangerous", "quiet", "unsent", "reckless"];
+const MOODS = ["any", "longing", "untold", "horny", "discreet"];
 const MAX_MB = 5;
 const titleOf = (name: string) => name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
 
