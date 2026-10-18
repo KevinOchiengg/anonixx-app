@@ -270,6 +270,7 @@ export default function Slide({
           <button
             onClick={() => (user ? onReport(post) : onGate("Sign in to report a post."))}
             aria-label="More options"
+            className="r-act r-more"
           >
             <More />
           </button>

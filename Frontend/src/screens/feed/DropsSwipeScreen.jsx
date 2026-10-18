@@ -157,6 +157,7 @@ const RAIL_TINTS = {
   like:    { c: '#ff9d8c', ca: '#ff634a', bg: 'rgba(255,99,74,0.2)',  line: 'rgba(255,99,74,0.4)' },
   comment: { c: '#cdd5ff', ca: '#cdd5ff', bg: 'rgba(205,213,255,0.16)', line: 'rgba(205,213,255,0.32)' },
   save:    { c: '#ffd27a', ca: '#ffb81f', bg: 'rgba(255,184,31,0.2)', line: 'rgba(255,210,122,0.4)' },
+  more:    { c: '#e8eaf2', ca: '#e8eaf2', bg: 'rgba(255,255,255,0.14)', line: 'rgba(255,255,255,0.28)' },
   share:   { c: '#8fe8de', ca: '#8fe8de', bg: 'rgba(143,232,222,0.16)', line: 'rgba(143,232,222,0.35)' },
 };
 
@@ -484,7 +485,7 @@ const VideoSlide = ({
               onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
             />
             {!isOwnPost && !post.is_admin_drop && (
-              <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+              <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
             )}
             <ViewsStat count={post.views_count} />
           </View>
@@ -616,7 +617,7 @@ const AudioSlide = ({
             onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
           />
           {!isOwnPost && !post.is_admin_drop && (
-            <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+            <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
           )}
           <ViewsStat count={post.views_count} />
         </View>
@@ -872,7 +873,7 @@ const TextSlide = ({
               onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
             />
             {!isOwnPost && !post.is_admin_drop && (
-              <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+              <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
             )}
             <ViewsStat count={post.views_count} />
           </View>
@@ -964,7 +965,7 @@ const PollSlide = ({
               tint="save" count={savesCount} onPress={onSave} active={saved}
             />
             {!isOwnPost && !post.is_admin_drop && (
-              <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
+              <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
             )}
             <ViewsStat count={post.views_count} />
           </View>
