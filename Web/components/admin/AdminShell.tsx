@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic, IcFlag,
-  IcCalendar, IcKanban, IcGear, IcMenu, IcBell, IcClose, IcHome,
+  IcCalendar, IcKanban, IcMenu, IcBell, IcClose, IcHome,
 } from "./adminicons";
 import "../../app/admin.css";
 
@@ -40,15 +40,6 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: React
   },
 ];
 
-const ACCENTS = [
-  { name: "Coral", c: "#FF634A" },
-  { name: "Rose", c: "#FF3B7A" },
-  { name: "Violet", c: "#8B5CF6" },
-  { name: "Blue", c: "#3B82F6" },
-  { name: "Green", c: "#10B981" },
-  { name: "Amber", c: "#F59E0B" },
-];
-
 type Role = { isSuper: boolean };
 const RoleCtx = createContext<Role>({ isSuper: false });
 export const useAdminRole = () => useContext(RoleCtx);
@@ -61,25 +52,23 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const path = usePathname() || "/admin";
   const [state, setState] = useState<"checking" | "ok" | "denied">("checking");
   const [isSuper, setIsSuper] = useState(false);
-  const [accent, setAccent] = useState(ACCENTS[0].c);
   const [collapsed, setCollapsed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
-  const [panel, setPanel] = useState<"" | "theme" | "bell">("");
+  const [panel, setPanel] = useState<"" | "bell">("");
   const [alerts, setAlerts] = useState<Alerts>({ refunds: 0, chats: 0 });
 
   useEffect(() => {
     try {
       const t = JSON.parse(localStorage.getItem(THEME_KEY) || "{}");
-      if (typeof t.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(t.accent)) setAccent(t.accent);
       if (t.collapsed) setCollapsed(true);
     } catch {}
     setLoaded(true);
   }, []);
   useEffect(() => {
     if (!loaded) return;
-    try { localStorage.setItem(THEME_KEY, JSON.stringify({ accent, collapsed })); } catch {}
-  }, [loaded, accent, collapsed]);
+    try { localStorage.setItem(THEME_KEY, JSON.stringify({ collapsed })); } catch {}
+  }, [loaded, collapsed]);
   useEffect(() => { setOpen(false); setPanel(""); }, [path]);
 
   useEffect(() => {
@@ -104,11 +93,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return () => { live = false; window.clearInterval(t); };
   }, [state]);
 
-  const vars = { "--rose": accent, "--rose-dim": `${accent}22` } as React.CSSProperties;
-
   if (state !== "ok") {
     return (
-      <div className="adm" style={vars}>
+      <div className="adm">
         <div className="adm-card adm-gate">
           {state === "checking" ? (
             <p className="muted">Checking access…</p>
@@ -133,7 +120,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   return (
     <RoleCtx.Provider value={{ isSuper }}>
-      <div className="adm" data-collapsed={collapsed ? "1" : "0"} data-open={open ? "1" : "0"} style={vars}>
+      <div className="adm" data-collapsed={collapsed ? "1" : "0"} data-open={open ? "1" : "0"}>
         <div className="adm-backdrop" onClick={() => setOpen(false)} />
         <aside className="adm-side">
           <div className="adm-sidehead">
@@ -187,20 +174,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <main className="adm-main">{children}</main>
         </div>
 
-        <button type="button" className={`adm-fab${path.startsWith("/admin/post") ? " lift" : ""}`} aria-label="Theme settings" onClick={() => setPanel(panel === "theme" ? "" : "theme")}><IcGear /></button>
-        {panel === "theme" ? (
-          <div className={`adm-theme${path.startsWith("/admin/post") ? " lift" : ""}`} role="dialog" aria-label="Theme settings">
-            <div className="adm-theme-head"><b>Settings</b><button type="button" className="adm-iconbtn" aria-label="Close" onClick={() => setPanel("")}><IcClose /></button></div>
-            <div className="adm-theme-sec">
-              <span className="adm-label">Accent colour</span>
-              <div className="adm-swatches">
-                {ACCENTS.map((a) => (
-                  <button key={a.c} type="button" aria-label={a.name} title={a.name} className={accent === a.c ? "on" : ""} style={{ background: a.c }} onClick={() => setAccent(a.c)} />
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
     </RoleCtx.Provider>
   );
