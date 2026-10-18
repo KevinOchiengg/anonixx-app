@@ -161,6 +161,36 @@ const RailIcon = ({ icon, tint, active }) => {
   );
 };
 
+const PlayBadge = () => {
+  const { height: winH } = useWindowDimensions();
+  const size = Math.max(60, Math.min(76, winH * 0.095));
+  const ring = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(ring, { toValue: 1, duration: 1800, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [ring]);
+  return (
+    <View style={[ss.pauseBadge, { width: size, height: size, borderRadius: size / 2 }]} pointerEvents="none">
+      <Animated.View
+        style={{
+          position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2,
+          borderColor: 'rgba(255,138,115,0.7)',
+          opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0] }),
+          transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }) }],
+        }}
+      />
+      <LinearGradient
+        colors={['#ff8a73', '#ff634a', '#e0452e']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', paddingLeft: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' }}
+      >
+        <Play size={Math.round(size * 0.4)} color="#fff" fill="#fff" />
+      </LinearGradient>
+    </View>
+  );
+};
+
 const ActionBtn = ({ icon, count, onPress, active, tint }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const handlePress = () => {
@@ -415,9 +445,7 @@ const VideoSlide = ({
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
 
           {isActive && videoDuration > 0 && !isPlaying && (
-            <View style={ss.pauseBadge} pointerEvents="none">
-              <Play size={30} color="#fff" fill="#fff" />
-            </View>
+            <PlayBadge />
           )}
 
           <View style={ss.rail}>
@@ -1562,9 +1590,8 @@ const ss = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
   pauseBadge: {
-    position: 'absolute', top: '45%', alignSelf: 'center', width: 72, height: 72, borderRadius: 36,
-    alignItems: 'center', justifyContent: 'center', paddingLeft: 4, zIndex: 9,
-    backgroundColor: 'rgba(10,12,20,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+    position: 'absolute', top: '45%', alignSelf: 'center', alignItems: 'center', justifyContent: 'center', zIndex: 9,
+    shadowColor: '#ff634a', shadowOpacity: 0.55, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8,
   },
   actionBtn: { alignItems: 'center', gap: 5 },
   actionCount: { fontSize: 11, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
