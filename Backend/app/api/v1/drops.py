@@ -209,6 +209,9 @@ class CreateDropRequest(BaseModel):
     location_estate:     Optional[str] = None   # e.g. "Kilimani"
     poll:       Optional[DropPollInput] = None   # optional attached poll
     font_style: Optional[str] = None             # "classic" | "sultry-script" | "bold-tease"
+    # Admin-only search keywords: lets Anonixx content (polls, photos, voice
+    # notes) be found from the search bar even when it has little or no text.
+    tags: Optional[List[str]] = None
 
 
 class ReactToDropRequest(BaseModel):
@@ -667,6 +670,13 @@ async def create_drop(
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD
     is_admin_drop = bool(user.get("is_admin"))
+    tags: list = []
+    if is_admin_drop and data.tags:
+        for t in data.tags:
+            t = re.sub(r"\s+", " ", (t or "").strip().lstrip("#").lower())[:30]
+            if t and t not in tags:
+                tags.append(t)
+        tags = tags[:10]
 
     drop = {
         "_id": ObjectId(),
@@ -730,6 +740,7 @@ async def create_drop(
         "location_detail": location_detail,    # {country, county, sub_county, estate} — used for filtering
         "poll":       poll_data,
         "font_style": font_style,
+        "tags":       tags or None,
 
         # ── Native social engagement (like/save/comment/view) ─
         "liked_by":     [],
@@ -1788,6 +1799,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "images":           drop.get("images") or None,
             "card_image_url":   drop.get("card_image_url"),
             "poll":             poll_out,
+            "tags":             drop.get("tags") or None,
             "thread_count":     thread_counts.get(did, 0),
             "views_count":      drop.get("views_count", 0),
             "saves_count":      drop.get("saves_count", 0),
@@ -1978,6 +1990,8 @@ async def search_drops(
         base_filter["$or"] = [
             {"confession":            rx},
             {"sender_anonymous_name": rx},
+            {"tags":                  rx},
+            {"poll.question":         rx},
         ]
 
     if valid_mood:
