@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 export const MAX_VIDEO_SECONDS = 60;
 export type MediaDraft = { kind: "image" | "video"; files: File[] } | null;
 
-function videoLength(file: File): Promise<number> {
+export function videoLength(file: File): Promise<number> {
   return new Promise((resolve) => {
     const v = document.createElement("video");
     const url = URL.createObjectURL(file);
