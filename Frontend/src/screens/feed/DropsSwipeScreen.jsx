@@ -118,16 +118,36 @@ const CoachHint = ({ top }) => {
 // Same coin-gated CTA as DropCard.jsx's card-feed version (Link2 icon,
 // "Link up" label, coin-cost pill) — positioned like a TikTok ad's CTA,
 // pinned near the bottom of the slide instead of squeezed into a caption.
-const LinkUpButton = React.memo(({ onPress }) => (
-  <TouchableOpacity onPress={onPress} style={sw.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
-    <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
-    <Text style={sw.linkUpBtnText}>Link up</Text>
-    <View style={sw.linkUpCostPill}>
-      <Coins size={rs(11)} color="#fff" />
-      <Text style={sw.linkUpCostText}>{UNLOCK_COST}</Text>
-    </View>
-  </TouchableOpacity>
-));
+const LinkUpButton = React.memo(({ onPress, name, wide }) => {
+  const glow = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(glow, { toValue: 1, duration: 1300, useNativeDriver: true }),
+      Animated.timing(glow, { toValue: 0, duration: 1300, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [glow]);
+  return (
+    <Animated.View style={[sw.linkUpWrap, wide && { alignSelf: 'stretch' }, { transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] }) }] }]}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85} hitSlop={HIT_SLOP}>
+        <LinearGradient
+          colors={['#ff8a73', '#ff634a', '#ff4f7b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={[sw.linkUpBtn, wide && { justifyContent: 'center' }]}
+        >
+          <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
+          <Text style={sw.linkUpBtnText} numberOfLines={1}>
+            Link up{name ? ' with ' : ''}{name ? <Text style={{ fontWeight: '900' }}>{name}</Text> : null}
+          </Text>
+          <View style={sw.linkUpCostPill}>
+            <Coins size={rs(12)} color="#ffc93c" />
+            <Text style={sw.linkUpCostText}>{UNLOCK_COST}</Text>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
 
 // ─── Shared: right action rail ───────────────────────────────────
 // Each rail action has its own colour: idle is a tinted outline on dark glass,
@@ -491,7 +511,7 @@ const VideoSlide = ({
               </TouchableOpacity>
             ) : null}
 
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
 
           {videoDuration > 0 && (
@@ -640,7 +660,7 @@ const AudioSlide = ({
           {playing ? <Pause size={32} color="#fff" fill="#fff" /> : <Play size={32} color="#fff" fill="#fff" />}
         </TouchableOpacity>
 
-        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
+        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
       </View>
     </View>
   );
@@ -888,7 +908,7 @@ const TextSlide = ({
               </TouchableOpacity>
             )}
 
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} wide />}
           </View>
         </>
       )}
@@ -958,7 +978,7 @@ const PollSlide = ({
                 </View>
               </AuthorProfileTrigger>
             </View>
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
         </>
       )}
@@ -1687,15 +1707,18 @@ const sw = StyleSheet.create({
   },
   adCtaBtnText: { fontSize: FONT.sm, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
 
-  linkUpBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(8),
-    marginTop: rp(6), paddingVertical: rp(12), paddingHorizontal: rp(18), borderRadius: RADIUS.full,
-    backgroundColor: THEME.primary, alignSelf: 'flex-start',
-    shadowColor: THEME.primary, shadowOffset: { width: 0, height: rs(4) }, shadowOpacity: 0.4, shadowRadius: rs(10), elevation: 5,
+  linkUpWrap: {
+    marginTop: rp(6), alignSelf: 'flex-start', maxWidth: '100%', borderRadius: RADIUS.full,
+    shadowColor: THEME.primary, shadowOffset: { width: 0, height: rs(5) }, shadowOpacity: 0.55, shadowRadius: rs(12), elevation: 6,
   },
-  linkUpBtnText: { fontSize: FONT.sm, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
-  linkUpCostPill: { flexDirection: 'row', alignItems: 'center', gap: rp(3), backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: RADIUS.full, paddingHorizontal: rp(8), paddingVertical: rp(3) },
-  linkUpCostText: { fontSize: rf(11), fontWeight: '700', color: '#fff' },
+  linkUpBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(8),
+    paddingVertical: rp(12), paddingHorizontal: rp(18), borderRadius: RADIUS.full,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
+  },
+  linkUpBtnText: { flexShrink: 1, fontSize: FONT.sm, fontWeight: '800', color: '#fff', letterSpacing: 0.1 },
+  linkUpCostPill: { flexDirection: 'row', alignItems: 'center', gap: rp(4), backgroundColor: 'rgba(60,20,10,0.32)', borderRadius: RADIUS.full, paddingHorizontal: rp(8), paddingVertical: rp(3) },
+  linkUpCostText: { fontSize: rf(12), fontWeight: '800', color: '#ffe7a3' },
 
 
   bigTextWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(28), paddingBottom: rp(24) },

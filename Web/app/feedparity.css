@@ -532,3 +532,27 @@
 .play-badge svg { width: 38%; height: 38%; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25)); }
 @keyframes playring { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.5); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .play-badge::after { animation: none; opacity: 0; } }
+
+/* ---------- link up: personal label, gradient pill with a slow shine, breathing glow ---------- */
+.linkup, .slide .linkup, .slide.has-media .linkup {
+  gap: 8px; font-weight: 800; letter-spacing: 0.1px; position: relative;
+  background:
+    linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, 0.38) 50%, transparent 62%) no-repeat 220% 0 / 220% 100%,
+    linear-gradient(135deg, #ff8a73 0%, #ff634a 55%, #ff4f7b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  animation: lushine 4.2s ease-in-out 1.2s infinite, luglow 2.6s ease-in-out infinite;
+  transition: transform 0.12s ease-out;
+}
+.linkup:active { transform: scale(0.96); }
+.linkup .lu-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linkup .lu-label b { font-weight: 900; }
+.linkup svg { margin-right: 0; }
+.linkup .coin-cost {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: 0; padding: 2px 8px 2px 5px;
+  background: rgba(60, 20, 10, 0.32); color: #ffe7a3; font-size: 12px;
+}
+.linkup .coin-cost svg { width: 14px; height: 14px; color: #ffc93c; }
+.slide:not(.has-media) > .text-body > .linkup { align-self: stretch; justify-content: center; height: calc(var(--lu-h) + 4px); }
+@keyframes lushine { 0%, 55% { background-position: 220% 0, 0 0; } 100% { background-position: -120% 0, 0 0; } }
+@keyframes luglow { 0%, 100% { box-shadow: 0 6px 18px rgba(255, 99, 74, 0.4); } 50% { box-shadow: 0 8px 28px rgba(255, 99, 74, 0.72); } }
+@media (prefers-reduced-motion: reduce) { .linkup, .slide .linkup { animation: none; } }
