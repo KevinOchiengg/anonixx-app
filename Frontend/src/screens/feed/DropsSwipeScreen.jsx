@@ -130,7 +130,38 @@ const LinkUpButton = React.memo(({ onPress }) => (
 ));
 
 // ─── Shared: right action rail ───────────────────────────────────
-const ActionBtn = ({ icon, count, onPress, active }) => {
+// Each rail action has its own colour: idle is a tinted outline on dark glass,
+// active fills with the stronger shade. The chip and icon scale with the
+// window height so five stacked actions still fit on short phones.
+const RAIL_TINTS = {
+  like:    { c: '#ff9d8c', ca: '#ff634a', bg: 'rgba(255,99,74,0.2)',  line: 'rgba(255,99,74,0.4)' },
+  comment: { c: '#cdd5ff', ca: '#cdd5ff', bg: 'rgba(205,213,255,0.16)', line: 'rgba(205,213,255,0.32)' },
+  save:    { c: '#ffd27a', ca: '#ffb81f', bg: 'rgba(255,184,31,0.2)', line: 'rgba(255,210,122,0.4)' },
+  share:   { c: '#8fe8de', ca: '#8fe8de', bg: 'rgba(143,232,222,0.16)', line: 'rgba(143,232,222,0.35)' },
+};
+
+const RailIcon = ({ icon, tint, active }) => {
+  const { height: winH } = useWindowDimensions();
+  const t = RAIL_TINTS[tint];
+  if (!t) return icon;
+  const chip = Math.max(36, Math.min(46, winH * 0.056));
+  const color = active ? t.ca : t.c;
+  const filled = icon.props.fill && icon.props.fill !== 'none';
+  return (
+    <View
+      style={{
+        width: chip, height: chip, borderRadius: chip / 2, alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1.5, borderColor: active ? t.ca : t.line,
+        backgroundColor: active ? t.bg : 'rgba(10,12,18,0.5)',
+        ...(active ? { shadowColor: t.ca, shadowOpacity: 0.6, shadowRadius: 8, shadowOffset: { width: 0, height: 0 }, elevation: 4 } : null),
+      }}
+    >
+      {React.cloneElement(icon, { size: Math.round(chip * 0.54), color, ...(filled ? { fill: color } : null) })}
+    </View>
+  );
+};
+
+const ActionBtn = ({ icon, count, onPress, active, tint }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const handlePress = () => {
     Animated.sequence([
@@ -141,9 +172,9 @@ const ActionBtn = ({ icon, count, onPress, active }) => {
   };
   return (
     <TouchableOpacity style={ss.actionBtn} onPress={handlePress} activeOpacity={0.9}>
-      <Animated.View style={{ transform: [{ scale }] }}>{icon}</Animated.View>
+      <Animated.View style={{ transform: [{ scale }] }}><RailIcon icon={icon} tint={tint} active={active} /></Animated.View>
       {count !== null && count !== undefined && (
-        <Text style={[ss.actionCount, active && { color: THEME.primary }]}>
+        <Text style={[ss.actionCount, tint && { color: RAIL_TINTS[tint]?.c }, active && { color: tint ? RAIL_TINTS[tint]?.ca : THEME.primary }]}>
           {count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}
         </Text>
       )}
@@ -151,11 +182,11 @@ const ActionBtn = ({ icon, count, onPress, active }) => {
   );
 };
 
-const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef }) => (
+const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef, tint }) => (
   <TouchableOpacity style={ss.actionBtn} onPress={onPress} activeOpacity={0.9}>
-    <Animated.View style={{ transform: [{ scale: scaleRef }] }}>{icon}</Animated.View>
+    <Animated.View style={{ transform: [{ scale: scaleRef }] }}><RailIcon icon={icon} tint={tint} active={active} /></Animated.View>
     {count !== null && count !== undefined && (
-      <Text style={[ss.actionCount, active && { color: THEME.primary }]}>
+      <Text style={[ss.actionCount, tint && { color: RAIL_TINTS[tint]?.c }, active && { color: tint ? RAIL_TINTS[tint]?.ca : THEME.primary }]}>
         {count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}
       </Text>
     )}
@@ -393,15 +424,15 @@ const VideoSlide = ({
             <RailAvatar post={post} navigation={navigation} />
             <AnimatedActionBtn
               icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-              count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
+              tint="like" count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
             />
-            <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn tint="comment" icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-              count={savesCount} onPress={onSave} active={saved}
+              tint="save" count={savesCount} onPress={onSave} active={saved}
             />
             <ActionBtn
-              icon={<Share2 size={28} color="#fff" />} count={null}
+              tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
               onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
             />
             {!isOwnPost && !post.is_admin_drop && (
@@ -525,15 +556,15 @@ const AudioSlide = ({
           <RailAvatar post={post} navigation={navigation} />
           <ActionBtn
             icon={<Heart size={26} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-            count={likesCount} onPress={onLike} active={liked}
+            tint="like" count={likesCount} onPress={onLike} active={liked}
           />
-          <ActionBtn icon={<MessageCircle size={26} color="#fff" />} count={commentCount} onPress={onComment} />
+          <ActionBtn tint="comment" icon={<MessageCircle size={26} color="#fff" />} count={commentCount} onPress={onComment} />
           <ActionBtn
             icon={<Bookmark size={26} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-            count={savesCount} onPress={onSave} active={saved}
+            tint="save" count={savesCount} onPress={onSave} active={saved}
           />
           <ActionBtn
-            icon={<Share2 size={26} color="#fff" />} count={null}
+            tint="share" icon={<Share2 size={26} color="#fff" />} count={null}
             onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
           />
           {!isOwnPost && !post.is_admin_drop && (
@@ -781,15 +812,15 @@ const TextSlide = ({
             <RailAvatar post={post} navigation={navigation} />
             <AnimatedActionBtn
               icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-              count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
+              tint="like" count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
             />
-            <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn tint="comment" icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-              count={savesCount} onPress={onSave} active={saved}
+              tint="save" count={savesCount} onPress={onSave} active={saved}
             />
             <ActionBtn
-              icon={<Share2 size={28} color="#fff" />} count={null}
+              tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
               onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
             />
             {!isOwnPost && !post.is_admin_drop && (
@@ -877,12 +908,12 @@ const PollSlide = ({
             <RailAvatar post={post} navigation={navigation} />
             <ActionBtn
               icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-              count={likesCount} onPress={onLike} active={liked}
+              tint="like" count={likesCount} onPress={onLike} active={liked}
             />
-            <ActionBtn icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn tint="comment" icon={<MessageCircle size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-              count={savesCount} onPress={onSave} active={saved}
+              tint="save" count={savesCount} onPress={onSave} active={saved}
             />
             {!isOwnPost && !post.is_admin_drop && (
               <ActionBtn icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
