@@ -1,3 +1,4 @@
+from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.dependencies import get_current_user_id
 from app.utils import r2_storage
@@ -61,7 +62,7 @@ async def upload_image(
         raise HTTPException(status_code=400, detail="File too large. Max 5MB.")
 
     try:
-        url = r2_storage.upload_bytes(contents, "image", file.content_type)
+        url = await run_in_threadpool(r2_storage.upload_bytes, contents, "image", file.content_type)
         return {"url": url, "resource_type": "image"}
     except Exception as e:
         logger.error(f"Image upload failed: {e}", exc_info=True)
@@ -79,7 +80,7 @@ async def upload_audio(
         raise HTTPException(status_code=400, detail="File too large. Max 10MB.")
 
     try:
-        url = r2_storage.upload_bytes(contents, "audio", file.content_type or "audio/m4a")
+        url = await run_in_threadpool(r2_storage.upload_bytes, contents, "audio", file.content_type or "audio/m4a")
         return {"url": url, "resource_type": "audio"}
     except Exception as e:
         logger.error(f"Audio upload failed: {e}", exc_info=True)
@@ -97,7 +98,7 @@ async def upload_video(
         raise HTTPException(status_code=400, detail="File too large. Max 50MB.")
 
     try:
-        url = r2_storage.upload_bytes(contents, "video", file.content_type or "video/mp4")
+        url = await run_in_threadpool(r2_storage.upload_bytes, contents, "video", file.content_type or "video/mp4")
         return {"url": url, "resource_type": "video"}
     except Exception as e:
         logger.error(f"Video upload failed: {e}", exc_info=True)
