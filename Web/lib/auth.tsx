@@ -50,11 +50,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const me = await api<Omit<AuthUser, "coin_balance" | "is_admin" | "avatar_url">>("/auth/me");
       const bal = await api<{ balance: number }>("/coins/balance").catch(() => null);
       setAdultMode(Boolean(me.age_verified));
+      // Older backends omit is_admin from /auth/me; /admin/me answers either way.
+      const adminCheck = (me as { is_admin?: boolean }).is_admin === undefined
+        ? await api("/admin/me").then(() => true, () => false)
+        : undefined;
       setUser((prev) => ({
         avatar_url: null,
         is_admin: false,
         ...prev,
         ...me,
+        ...(adminCheck === undefined ? {} : { is_admin: adminCheck }),
         coin_balance: bal?.balance ?? prev?.coin_balance ?? 0,
       }));
     } catch (e) {
