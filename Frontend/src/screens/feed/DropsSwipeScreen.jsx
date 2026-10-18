@@ -31,8 +31,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator, Animated, Dimensions, FlatList, Image, Linking, Modal,
   ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
-  TouchableWithoutFeedback, View,
+  TouchableWithoutFeedback, View, useWindowDimensions,
 } from 'react-native';
+import Svg, { Line, Polygon } from 'react-native-svg';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -626,6 +627,41 @@ const ImageSlideCarousel = React.memo(({ images }) => {
 // the confession's own intent/mood gradient, with the confession itself
 // as large, centered, auto-sized text — no small graphic card sitting on
 // top of a separate black background.
+// Sealed-letter backdrop for text-only confessions: a flap, two fold lines and
+// a coral wax seal, all sized from the live window so it holds up on small
+// phones, tablets and rotation. The flap height is returned so the text can
+// clear it.
+const envelopeFlapHeight = (h) => Math.max(52, Math.min(140, h * 0.14));
+
+const EnvelopeBackdrop = ({ top }) => {
+  const { width: w, height: h } = useWindowDimensions();
+  const gut = Math.max(10, Math.min(26, w * 0.035));
+  const ew = Math.min(560, w - gut * 2);
+  const flap = envelopeFlapHeight(h);
+  const seal = Math.max(30, Math.min(44, w * 0.08));
+  const left = (w - ew) / 2;
+  const y = top + gut;
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
+        <Polygon points={`${left},${y} ${left + ew},${y} ${w / 2},${y + flap}`} fill="rgba(255,255,255,0.09)" />
+        <Line x1={0} y1={h} x2={w / 2} y2={h * 0.62} stroke="rgba(255,255,255,0.07)" strokeWidth={1} />
+        <Line x1={w} y1={h} x2={w / 2} y2={h * 0.62} stroke="rgba(255,255,255,0.07)" strokeWidth={1} />
+      </Svg>
+      <View
+        style={{
+          position: 'absolute', left: w / 2 - seal / 2, top: y + flap - seal * 0.55,
+          width: seal, height: seal, borderRadius: seal / 2, backgroundColor: '#ff634a',
+          alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)',
+          shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 6,
+        }}
+      >
+        <Text style={{ color: 'rgba(255,255,255,0.88)', fontFamily: 'PlayfairDisplay-Italic', fontSize: seal * 0.5, fontWeight: '700' }}>x</Text>
+      </View>
+    </View>
+  );
+};
+
 const TextSlide = ({
   post, onLike, liked, likesCount, savesCount, onSave, saved, onComment, commentCount,
   isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false,
@@ -643,6 +679,10 @@ const TextSlide = ({
     ? post.images
     : (post.media_url && post.media_type === 'image' ? [post.media_url] : []);
   const hasImage = imageList.length > 0;
+  const { height: winH } = useWindowDimensions();
+  const isEnvelope = !hasImage && post.kind !== 'hookup';
+  const envTop = headerHeight + rp(4);
+  const envClear = isEnvelope ? envelopeFlapHeight(winH) * 0.55 + rp(18) : 0;
 
   // Guaranteed-readable fallback for the no-image case's big centered
   // text: adjustsFontSizeToFit below already shrinks to fit most
@@ -689,6 +729,8 @@ const TextSlide = ({
           entire slide instead, same as VideoSlide's video layer — not a
           small graphic card floating on top of it. */}
       {!hasImage && <LinearGradient colors={[t.bgFrom, t.bgTo]} style={StyleSheet.absoluteFill} />}
+      {isEnvelope && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,16,0.72)' }]} pointerEvents="none" />}
+      {isEnvelope && <EnvelopeBackdrop top={envTop} />}
 
       <TouchableWithoutFeedback onPress={handleTap}>
         <View style={StyleSheet.absoluteFill}>
@@ -711,7 +753,7 @@ const TextSlide = ({
             // than bottomInfo/rail actually need, which just biased the
             // centered text upward and left dead space above the tab bar
             // instead of the text sitting near true mid-screen.
-            <View style={[sw.bigTextWrap, { paddingTop: headerHeight + rp(12) }]} pointerEvents="none">
+            <View style={[sw.bigTextWrap, { paddingTop: headerHeight + rp(12) + envClear }]} pointerEvents="none">
               <Text
                 style={sw.bigTextConfession}
                 numberOfLines={14}
