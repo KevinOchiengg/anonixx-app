@@ -17,12 +17,9 @@ const FORMATS: { id: Format; label: string; hint: string; icon: string }[] = [
   { id: "poll", label: "Poll", hint: "2 to 4 options", icon: "▤" },
 ];
 
-const LOOKS = {
-  "meet-me": { label: "Meet Me", sub: "Looking for something real", mood: "longing", from: "#12070c", to: "#2a121b", accent: "#FF6B8A", text: "#FBE8ED" },
-  "skeleton-in-the-closet": { label: "Skeleton In The Closet", sub: "Secrets don't stay buried", mood: "untold", from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC" },
-  "just-tonight": { label: "Just Tonight", sub: "No strings attached", mood: "horny", from: "#0a0000", to: "#2b0505", accent: "#FF1744", text: "#FFE4E4" },
-} as const;
-type LookId = keyof typeof LOOKS;
+const THEME = { from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC" };
+const SUGGEST = ["funny", "relationships", "dating", "advice", "love", "heartbreak", "late night", "story time", "music", "challenge"];
+const MAX_TAGS = 10;
 
 const MAX_TEXT = 500;
 const MAX_IMG_MB = 5;
@@ -39,7 +36,8 @@ export default function PostStudio() {
   const [voice, setVoice] = useState<VoiceDraft>(null);
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
-  const [look, setLook] = useState<LookId>("skeleton-in-the-closet");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
   const [mature, setMature] = useState(false);
   const [share, setShare] = useState(true);
   const [place, setPlace] = useState<LocationDraft>(EMPTY_PLACE);
@@ -52,7 +50,7 @@ export default function PostStudio() {
 
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
-  const theme = LOOKS[look];
+  const theme = THEME;
   const opts = options.map((o) => o.trim()).filter(Boolean);
   const placed = Object.values(place).some((v) => v.trim());
 
@@ -68,6 +66,17 @@ export default function PostStudio() {
     const url = URL.createObjectURL(file);
     urls.current.push(url);
     return { file, url };
+  }
+
+  function addTag(raw: string) {
+    const parts = raw.split(",").map((t) => t.trim().replace(/^#/, "").split(" ").filter(Boolean).join(" ").toLowerCase().slice(0, 30)).filter(Boolean);
+    if (!parts.length) return;
+    setTags((l) => {
+      const next = [...l];
+      for (const t of parts) if (!next.includes(t) && next.length < MAX_TAGS) next.push(t);
+      return next;
+    });
+    setTagDraft("");
   }
 
   function chooseFormat(f: Format) {
@@ -135,9 +144,8 @@ export default function PostStudio() {
           kind: "confession",
           // the API needs some text on every drop; a poll's question stands in for a caption
           confession: text.trim() || (format === "poll" ? question.trim() : undefined),
-          intent: look,
-          mood_tag: theme.mood,
           font_style: "bold-tease",
+          ...(tags.length ? { tags } : {}),
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: share,
           ...(place.country.trim() ? { location_country: place.country.trim() } : {}),
@@ -158,7 +166,7 @@ export default function PostStudio() {
   function reset() {
     setText(""); setPhotos([]); setVideo(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
-    setMature(false); setError(""); setPublished(false);
+    setTags([]); setTagDraft(""); setMature(false); setError(""); setPublished(false);
   }
 
   const cover = format === "photo" ? photos[0]?.url : undefined;
@@ -291,17 +299,33 @@ export default function PostStudio() {
           </section>
 
           <section className="ps-sec">
-            <h3><i>3</i> Look</h3>
-            <div className="ps-looks">
-              {(Object.keys(LOOKS) as LookId[]).map((id) => (
-                <button key={id} type="button" className={look === id ? "on" : ""} onClick={() => setLook(id)}
-                  style={{ "--f": LOOKS[id].from, "--t": LOOKS[id].to, "--a": LOOKS[id].accent } as React.CSSProperties}>
-                  <span className="sw" />
-                  <b>{LOOKS[id].label}</b>
-                  <small>{LOOKS[id].sub}</small>
-                </button>
+            <h3><i>3</i> Search keywords</h3>
+            <p className="ps-help">When someone searches Anonixx, these words (and your caption) are what find this drop. Add what people would type.</p>
+            <div className="ps-tags">
+              {tags.map((t) => (
+                <span key={t} className="ps-tag">#{t}<button type="button" aria-label={`Remove ${t}`} onClick={() => setTags((l) => l.filter((x) => x !== t))}>×</button></span>
+              ))}
+              {tags.length < MAX_TAGS ? (
+                <input
+                  type="text"
+                  value={tagDraft}
+                  maxLength={30}
+                  placeholder={tags.length ? "Add another…" : "Type a keyword, press Enter"}
+                  onChange={(e) => { if (e.target.value.includes(",")) addTag(e.target.value); else setTagDraft(e.target.value); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); addTag(tagDraft); }
+                    else if (e.key === "Backspace" && !tagDraft && tags.length) setTags((l) => l.slice(0, -1));
+                  }}
+                  onBlur={() => addTag(tagDraft)}
+                />
+              ) : null}
+            </div>
+            <div className="ps-suggest">
+              {SUGGEST.filter((t) => !tags.includes(t)).map((t) => (
+                <button key={t} type="button" onClick={() => addTag(t)} disabled={tags.length >= MAX_TAGS}>+ {t}</button>
               ))}
             </div>
+            <small className="ps-help">{tags.length}/{MAX_TAGS} keywords{!tags.length && !text.trim() && format !== "poll" ? " · with no caption or keywords, this drop can't be found by search." : ""}</small>
           </section>
 
           <section className="ps-sec">
