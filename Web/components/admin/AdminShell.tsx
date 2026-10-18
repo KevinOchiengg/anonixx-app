@@ -8,6 +8,7 @@ import "../../app/admin.css";
 
 const NAV = [
   { href: "/admin", label: "Overview" },
+  { href: "/compose", label: "Post a drop" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/posts", label: "Posts" },
   { href: "/admin/moderation", label: "Moderation" },

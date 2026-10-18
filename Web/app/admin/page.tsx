@@ -11,6 +11,7 @@ type Stats = {
 type Revenue = { total_usd: number; by_method: Record<string, { total_usd: number; count: number }> };
 
 const LINKS = [
+  { href: "/compose", title: "Post a drop", desc: "Publish text, photo, video, voice or poll drops as Anonixx" },
   { href: "/admin/users", title: "Users", desc: "Search, ban, verify, grant admin, adjust coins" },
   { href: "/admin/posts", title: "Posts", desc: "Browse, search and delete any post" },
   { href: "/admin/moderation", title: "Moderation queue", desc: "Flagged and hidden drops awaiting review" },
