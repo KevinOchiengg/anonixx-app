@@ -150,7 +150,7 @@ export default function Slide({
 
   return (
     <article
-      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
+      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${textSlide && post.kind !== "hookup" ? " env" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
       data-idx={index}
       data-post={post.id}
     >
