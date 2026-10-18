@@ -4,7 +4,7 @@ import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sou
 import { useAuth } from "@/lib/auth";
 import VideoPlayer from "./VideoPlayer";
 import { Bookmark, Comment, Heart, Share } from "./icons";
-import { Link2, More, SoundOff, SoundOn } from "./feedicons";
+import { Link2, More, SoundOff } from "./feedicons";
 import AudioWave from "./AudioWave";
 import AmbientSound from "./AmbientSound";
 import Sheet from "./Sheet";
@@ -256,9 +256,9 @@ export default function Slide({
         <button onClick={() => onShare(post)} aria-label="Share" className="r-act r-share">
           <Share />
         </button>
-        {(videoSrc && !slides && !mature) || ambient ? (
-          <button onClick={onToggleMute} aria-label={muted ? "Turn sound on" : "Mute"} className="sound-rail">
-            {muted ? <SoundOff /> : <SoundOn />}
+        {muted && ((videoSrc && !slides && !mature) || ambient) ? (
+          <button onClick={onToggleMute} aria-label="Turn sound on" className="sound-rail r-act r-sound">
+            <SoundOff />
           </button>
         ) : null}
         {!post.is_admin_drop && !post.is_own_post ? (
