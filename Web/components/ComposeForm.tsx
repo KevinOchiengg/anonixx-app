@@ -43,6 +43,12 @@ function Inner() {
   const [hint, setHint] = useState("");
   const [unsent, setUnsent] = useState(false);
   const draftReady = useRef(false);
+  const adminSkipped = useRef(false);
+  useEffect(() => {
+    if (!user?.is_admin || adminSkipped.current) return;
+    adminSkipped.current = true;
+    setKind((k) => k ?? "confession");
+  }, [user?.is_admin]);
   useEffect(() => {
     try {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
