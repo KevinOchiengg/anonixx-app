@@ -78,12 +78,9 @@ function Inner() {
     el.style.height = `${el.scrollHeight}px`;
   }, [text, mode, kind]);
   const draftReady = useRef(false);
-  const adminSkipped = useRef(false);
   useEffect(() => {
-    if (!user?.is_admin || adminSkipped.current) return;
-    adminSkipped.current = true;
-    setKind((k) => k ?? "confession");
-  }, [user?.is_admin]);
+    if (user?.is_admin) router.replace("/admin/post");
+  }, [user?.is_admin, router]);
   useEffect(() => {
     try {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
