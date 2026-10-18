@@ -212,6 +212,7 @@ class CreateDropRequest(BaseModel):
     # Admin-only search keywords: lets Anonixx content (polls, photos, voice
     # notes) be found from the search bar even when it has little or no text.
     tags: Optional[List[str]] = None
+    display_name: Optional[str] = None
 
 
 class ReactToDropRequest(BaseModel):
@@ -670,6 +671,7 @@ async def create_drop(
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD
     is_admin_drop = bool(user.get("is_admin"))
+    admin_name = re.sub(r"\s+", " ", (data.display_name or "").strip())[:30] or ADMIN_DROP_NAME
     tags: list = []
     if is_admin_drop and data.tags:
         for t in data.tags:
@@ -681,7 +683,7 @@ async def create_drop(
     drop = {
         "_id": ObjectId(),
         "sender_id": current_user_id,
-        "sender_anonymous_name": ADMIN_DROP_NAME if is_admin_drop else user.get("anonymous_name", "Anonymous"),
+        "sender_anonymous_name": admin_name if is_admin_drop else user.get("anonymous_name", "Anonymous"),
         "is_admin_drop": is_admin_drop,
         "confession": data.confession.strip() if data.confession else None,
         # A multi-image post backfills the single-media fields from its
