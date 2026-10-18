@@ -44,6 +44,7 @@ export default function PostStudio() {
   const [share, setShare] = useState(true);
   const [place, setPlace] = useState<LocationDraft>(EMPTY_PLACE);
   const [busy, setBusy] = useState("");
+  const [noPreview, setNoPreview] = useState(false);
   const [error, setError] = useState("");
   const [published, setPublished] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -105,6 +106,7 @@ export default function PostStudio() {
       const len = await videoLength(f);
       setBusy("");
       if (len > MAX_VIDEO_SECONDS) return setError(`Videos must be ${MAX_VIDEO_SECONDS}s or shorter. This one is ${Math.round(len)}s.`);
+      setNoPreview(false);
       setVideo(track(f));
       return;
     }
@@ -134,8 +136,8 @@ export default function PostStudio() {
         }
         media = out.length > 1 ? { images: out } : { media_type: "image", media_url: out[0] };
       } else if (format === "video" && video) {
-        setBusy("Uploading video…");
-        media = { media_type: "video", media_url: await uploadFile(video.file, "video") };
+        setBusy("Uploading video… 0%");
+        media = { media_type: "video", media_url: await uploadFile(video.file, "video", (n) => setBusy(n >= 100 ? "Finishing upload…" : `Uploading video… ${n}%`)) };
       } else if (format === "voice" && voice) {
         setBusy("Uploading voice note…");
         media = {
@@ -277,7 +279,8 @@ export default function PostStudio() {
                   </>
                 ) : video ? (
                   <div className="ps-video">
-                    <video src={video.url} controls playsInline muted />
+                    <video src={video.url} controls playsInline muted onError={() => setNoPreview(true)} />
+                    {noPreview ? <p className="ps-note">Your browser can't preview this video format (phone .mov/HEVC files often can't be). It can still be posted, but an H.264 .mp4 is safest.</p> : null}
                     <button type="button" className="ps-btn" onClick={() => setVideo(null)}>Replace video</button>
                   </div>
                 ) : drop}
