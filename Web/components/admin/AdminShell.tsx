@@ -4,30 +4,83 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import {
+  IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic, IcFlag,
+  IcCalendar, IcKanban, IcGear, IcMenu, IcBell, IcClose, IcHome,
+} from "./adminicons";
 import "../../app/admin.css";
 
-const NAV = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/post", label: "Post a drop" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/posts", label: "Posts" },
-  { href: "/admin/moderation", label: "Moderation" },
-  { href: "/admin/refunds", label: "Refunds" },
-  { href: "/admin/support", label: "Support" },
-  { href: "/admin/ads", label: "Ads" },
-  { href: "/admin/sounds", label: "Sounds" },
-  { href: "/admin/deception-reports", label: "Deception" },
+const GROUPS: { title: string; items: { href: string; label: string; icon: React.ReactNode }[] }[] = [
+  { title: "Dashboard", items: [{ href: "/admin", label: "Overview", icon: <IcDash /> }] },
+  {
+    title: "Create",
+    items: [
+      { href: "/admin/post", label: "Post a drop", icon: <IcPost /> },
+      { href: "/admin/sounds", label: "Sounds", icon: <IcMusic /> },
+    ],
+  },
+  {
+    title: "Manage",
+    items: [
+      { href: "/admin/users", label: "Users", icon: <IcUsers /> },
+      { href: "/admin/posts", label: "Posts", icon: <IcPosts /> },
+      { href: "/admin/moderation", label: "Moderation", icon: <IcShield /> },
+      { href: "/admin/refunds", label: "Refunds", icon: <IcRefund /> },
+      { href: "/admin/support", label: "Support", icon: <IcChat /> },
+      { href: "/admin/ads", label: "Ads", icon: <IcMegaphone /> },
+      { href: "/admin/deception-reports", label: "Deception", icon: <IcFlag /> },
+    ],
+  },
+  {
+    title: "Apps",
+    items: [
+      { href: "/admin/kanban", label: "Refund board", icon: <IcKanban /> },
+      { href: "/admin/calendar", label: "Calendar", icon: <IcCalendar /> },
+    ],
+  },
+];
+
+const ACCENTS = [
+  { name: "Coral", c: "#FF634A" },
+  { name: "Rose", c: "#FF3B7A" },
+  { name: "Violet", c: "#8B5CF6" },
+  { name: "Blue", c: "#3B82F6" },
+  { name: "Green", c: "#10B981" },
+  { name: "Amber", c: "#F59E0B" },
 ];
 
 type Role = { isSuper: boolean };
 const RoleCtx = createContext<Role>({ isSuper: false });
 export const useAdminRole = () => useContext(RoleCtx);
 
+type Alerts = { refunds: number; chats: number };
+const THEME_KEY = "anonixx_adm_theme";
+
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
   const path = usePathname() || "/admin";
   const [state, setState] = useState<"checking" | "ok" | "denied">("checking");
   const [isSuper, setIsSuper] = useState(false);
+  const [accent, setAccent] = useState(ACCENTS[0].c);
+  const [collapsed, setCollapsed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<"" | "theme" | "bell">("");
+  const [alerts, setAlerts] = useState<Alerts>({ refunds: 0, chats: 0 });
+
+  useEffect(() => {
+    try {
+      const t = JSON.parse(localStorage.getItem(THEME_KEY) || "{}");
+      if (typeof t.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(t.accent)) setAccent(t.accent);
+      if (t.collapsed) setCollapsed(true);
+    } catch {}
+    setLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(THEME_KEY, JSON.stringify({ accent, collapsed })); } catch {}
+  }, [loaded, accent, collapsed]);
+  useEffect(() => { setOpen(false); setPanel(""); }, [path]);
 
   useEffect(() => {
     if (!ready) return;
@@ -39,9 +92,23 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return () => { live = false; };
   }, [ready, user]);
 
+  useEffect(() => {
+    if (state !== "ok") return;
+    let live = true;
+    const load = () =>
+      api<{ support: { open_conversations: number; pending_refunds: number } }>("/admin/stats")
+        .then((s) => { if (live) setAlerts({ refunds: s.support.pending_refunds, chats: s.support.open_conversations }); })
+        .catch(() => {});
+    load();
+    const t = window.setInterval(load, 30000);
+    return () => { live = false; window.clearInterval(t); };
+  }, [state]);
+
+  const vars = { "--rose": accent, "--rose-dim": `${accent}22` } as React.CSSProperties;
+
   if (state !== "ok") {
     return (
-      <div className="adm">
+      <div className="adm" style={vars}>
         <div className="adm-card adm-gate">
           {state === "checking" ? (
             <p className="muted">Checking access…</p>
@@ -59,19 +126,81 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     );
   }
 
+  const total = alerts.refunds + alerts.chats;
+  const active = (href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(`${href}/`));
+  const badge = (href: string) => (href === "/admin/refunds" || href === "/admin/kanban" ? alerts.refunds : href === "/admin/support" ? alerts.chats : 0);
+  const initial = (user?.anonymous_name || user?.email || "A").charAt(0).toUpperCase();
+
   return (
     <RoleCtx.Provider value={{ isSuper }}>
-      <div className="adm">
-        <header className="adm-top">
-          <Link href="/" className="adm-brand">Anonixx</Link>
-          <span className="adm-role">{isSuper ? "Super admin" : "Admin"}</span>
-        </header>
-        <nav className="adm-nav">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className={path === n.href ? "on" : ""}>{n.label}</Link>
-          ))}
-        </nav>
-        <main className="adm-main">{children}</main>
+      <div className="adm" data-collapsed={collapsed ? "1" : "0"} data-open={open ? "1" : "0"} style={vars}>
+        <div className="adm-backdrop" onClick={() => setOpen(false)} />
+        <aside className="adm-side">
+          <div className="adm-sidehead">
+            <Link href="/admin" className="adm-brand"><span className="mark">A</span><span className="word">Anonixx</span></Link>
+            <button type="button" className="adm-iconbtn adm-only-mobile" onClick={() => setOpen(false)} aria-label="Close menu"><IcClose /></button>
+          </div>
+          <nav className="adm-sidenav" aria-label="Admin">
+            {GROUPS.map((g) => (
+              <div key={g.title} className="adm-group">
+                <div className="adm-grouptitle">{g.title}</div>
+                {g.items.map((n) => {
+                  const b = badge(n.href);
+                  return (
+                    <Link key={n.href} href={n.href} className={active(n.href) ? "on" : ""} title={n.label}>
+                      <span className="ic">{n.icon}</span>
+                      <span className="lb">{n.label}</span>
+                      {b > 0 ? <span className="bd">{b}</span> : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+          <Link href="/" className="adm-sidefoot" title="Back to Anonixx"><span className="ic"><IcHome /></span><span className="lb">Back to Anonixx</span></Link>
+        </aside>
+
+        <div className="adm-wrap">
+          <header className="adm-top">
+            <button
+              type="button"
+              className="adm-iconbtn"
+              aria-label="Toggle menu"
+              onClick={() => (window.matchMedia("(min-width: 900px)").matches ? setCollapsed((c) => !c) : setOpen(true))}
+            ><IcMenu /></button>
+            <div className="adm-spacer" />
+            <div className="adm-pop">
+              <button type="button" className="adm-iconbtn" aria-label="Alerts" onClick={() => setPanel(panel === "bell" ? "" : "bell")}>
+                <IcBell />{total > 0 ? <span className="dot">{total > 9 ? "9+" : total}</span> : null}
+              </button>
+              {panel === "bell" ? (
+                <div className="adm-menu">
+                  <b>Needs attention</b>
+                  <Link href="/admin/refunds"><span>Pending refunds</span><em>{alerts.refunds}</em></Link>
+                  <Link href="/admin/support"><span>Unread chats</span><em>{alerts.chats}</em></Link>
+                </div>
+              ) : null}
+            </div>
+            <span className="adm-role">{isSuper ? "Super admin" : "Admin"}</span>
+            <span className="adm-avatar" aria-hidden>{initial}</span>
+          </header>
+          <main className="adm-main">{children}</main>
+        </div>
+
+        <button type="button" className={`adm-fab${path.startsWith("/admin/post") ? " lift" : ""}`} aria-label="Theme settings" onClick={() => setPanel(panel === "theme" ? "" : "theme")}><IcGear /></button>
+        {panel === "theme" ? (
+          <div className={`adm-theme${path.startsWith("/admin/post") ? " lift" : ""}`} role="dialog" aria-label="Theme settings">
+            <div className="adm-theme-head"><b>Settings</b><button type="button" className="adm-iconbtn" aria-label="Close" onClick={() => setPanel("")}><IcClose /></button></div>
+            <div className="adm-theme-sec">
+              <span className="adm-label">Accent colour</span>
+              <div className="adm-swatches">
+                {ACCENTS.map((a) => (
+                  <button key={a.c} type="button" aria-label={a.name} title={a.name} className={accent === a.c ? "on" : ""} style={{ background: a.c }} onClick={() => setAccent(a.c)} />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </RoleCtx.Provider>
   );

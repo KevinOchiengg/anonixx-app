@@ -470,6 +470,35 @@ async def get_revenue(
     return {"total_usd": round(total, 2), "by_method": breakdown}
 
 
+@router.get("/timeseries", summary="Daily signups, drops and coin activity for charts")
+async def get_timeseries(
+    days:     int = Query(30, ge=7, le=90),
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    now   = _now()
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    labels = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+    collections = await db.list_collection_names()
+
+    async def daily(name: str, match: Optional[dict] = None) -> list:
+        if name not in collections:
+            return [0] * days
+        pipeline = [
+            {"$match": {"created_at": {"$gte": start}, **(match or {})}},
+            {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}}, "n": {"$sum": 1}}},
+        ]
+        counts = {row["_id"]: row["n"] async for row in db[name].aggregate(pipeline)}
+        return [counts.get(d, 0) for d in labels]
+
+    return {
+        "labels":       labels,
+        "signups":      await daily("users"),
+        "drops":        await daily("drops"),
+        "transactions": await daily("coin_transactions"),
+    }
+
+
 # ─── Coin Transactions ────────────────────────────────────────
 
 @router.get("/coins/transactions", summary="Recent coin transactions — all users")
