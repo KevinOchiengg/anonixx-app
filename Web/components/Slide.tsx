@@ -244,16 +244,16 @@ export default function Slide({
         <span className="avatar big ring" role={hasProfile ? "button" : undefined} aria-label={hasProfile ? "View profile" : undefined} onClick={hasProfile ? openProfile : undefined} style={hasProfile ? undefined : { cursor: "default" }}>
           {post.avatar_url ? <img src={post.avatar_url} alt="" /> : (post.anonymous_name || "A").charAt(0).toUpperCase()}
         </span>
-        <button onClick={like} aria-label="Like" className={post.is_liked ? "liked" : ""}>
+        <button onClick={like} aria-label="Like" className={`r-act r-like${post.is_liked ? " liked on" : ""}`}>
           <Heart filled={Boolean(post.is_liked)} />{compact(post.likes_count)}
         </button>
-        <button onClick={() => onComments(post)} aria-label="Comments">
+        <button onClick={() => onComments(post)} aria-label="Comments" className="r-act r-cmt">
           <Comment />{compact(post.thread_count)}
         </button>
-        <button onClick={save} aria-label="Save" className={post.is_saved ? "liked" : ""}>
+        <button onClick={save} aria-label="Save" className={`r-act r-save${post.is_saved ? " on" : ""}`}>
           <Bookmark filled={Boolean(post.is_saved)} />{compact(post.saves_count ?? 0)}
         </button>
-        <button onClick={() => onShare(post)} aria-label="Share">
+        <button onClick={() => onShare(post)} aria-label="Share" className="r-act r-share">
           <Share />
         </button>
         {(videoSrc && !slides && !mature) || ambient ? (
