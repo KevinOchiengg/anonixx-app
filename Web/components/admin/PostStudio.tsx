@@ -6,15 +6,16 @@ import { uploadFile } from "@/lib/upload";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
 import LocationFields, { type LocationDraft } from "../compose/LocationFields";
 import { MAX_VIDEO_SECONDS, videoLength } from "../compose/MediaPicker";
+import { IconText, IconImages, IconVideo, IconMic, IconPoll } from "../compose/toolicons";
 import "../../app/poststudio.css";
 
 type Format = "text" | "photo" | "video" | "voice" | "poll";
-const FORMATS: { id: Format; label: string; hint: string; icon: string }[] = [
-  { id: "text", label: "Text", hint: "Words on a gradient", icon: "Aa" },
-  { id: "photo", label: "Photos", hint: "1 to 10 images", icon: "◧" },
-  { id: "video", label: "Video", hint: `Up to ${MAX_VIDEO_SECONDS}s`, icon: "▶" },
-  { id: "voice", label: "Voice", hint: "Record a note", icon: "●" },
-  { id: "poll", label: "Poll", hint: "2 to 4 options", icon: "▤" },
+const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode }[] = [
+  { id: "text", label: "Text", hint: "Words on a gradient", icon: <IconText /> },
+  { id: "photo", label: "Photos", hint: "1 to 10 images", icon: <IconImages /> },
+  { id: "video", label: "Video", hint: `Up to ${MAX_VIDEO_SECONDS}s`, icon: <IconVideo /> },
+  { id: "voice", label: "Voice", hint: "Record a note", icon: <IconMic /> },
+  { id: "poll", label: "Poll", hint: "2 to 4 options", icon: <IconPoll /> },
 ];
 
 const THEME = { from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC" };
@@ -36,6 +37,7 @@ export default function PostStudio() {
   const [voice, setVoice] = useState<VoiceDraft>(null);
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
+  const [name, setName] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [mature, setMature] = useState(false);
@@ -48,6 +50,13 @@ export default function PostStudio() {
   const fileRef = useRef<HTMLInputElement>(null);
   const urls = useRef<string[]>([]);
 
+  useEffect(() => {
+    try { setName(localStorage.getItem("anonixx_post_as") || ""); } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("anonixx_post_as", name); } catch {}
+  }, [name]);
+  const poster = name.trim() || "Anonixx";
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
   const theme = THEME;
@@ -142,6 +151,7 @@ export default function PostStudio() {
       await api("/drops", {
         body: {
           kind: "confession",
+          ...(name.trim() ? { display_name: name.trim() } : {}),
           // the API needs some text on every drop; a poll's question stands in for a caption
           confession: text.trim() || (format === "poll" ? question.trim() : undefined),
           font_style: "bold-tease",
@@ -179,7 +189,7 @@ export default function PostStudio() {
       <div className="ps-done">
         <div className="ps-check" aria-hidden>✓</div>
         <h2>It&apos;s live.</h2>
-        <p>Posted as Anonixx. It&apos;s in the feed now.</p>
+        <p>Posted as {poster}. It&apos;s in the feed now.</p>
         <div className="ps-done-row">
           <Link href="/" className="ps-btn primary">View the feed</Link>
           <button type="button" className="ps-btn" onClick={reset}>Post another</button>
@@ -209,9 +219,17 @@ export default function PostStudio() {
       <div className="ps-head">
         <div>
           <h2>Post a drop</h2>
-          <p>Publishes to the feed as <b>Anonixx</b>. Free, no coins.</p>
+          <p>Free, no coins. Shows in the feed under the name below.</p>
         </div>
       </div>
+
+      <section className="ps-sec ps-as">
+        <label className="ps-text">
+          <span>Post as</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} placeholder="Anonixx" />
+        </label>
+        <p className="ps-help">Give the page a personality, like SweetSpot or Midnight Confessions. Leave it empty to post as Anonixx.</p>
+      </section>
 
       <div className="ps-grid">
         <div className="ps-col">
@@ -368,8 +386,8 @@ export default function PostStudio() {
                 ) : null}
                 {text.trim() || format === "text" ? <p>{previewText || "Your words show up here."}</p> : null}
                 <div className="ps-by">
-                  <span className="av">A</span>
-                  <div><b>Anonixx</b><small>just now · Official</small></div>
+                  <span className="av">{poster.charAt(0).toUpperCase()}</span>
+                  <div><b>{poster}</b><small>just now · Official</small></div>
                 </div>
               </div>
               {mature ? <div className="ps-mature">Mature · blurred</div> : null}
@@ -384,7 +402,7 @@ export default function PostStudio() {
           {error ? <span className="bad">{error}</span> : busy ? <span>{busy}</span> : missing ? <span className="mute">{missing}</span> : <span className="ok">Ready to publish.</span>}
         </div>
         <button type="button" className="ps-btn primary big" disabled={Boolean(busy) || Boolean(missing)} onClick={publish}>
-          {busy ? "Working…" : "Publish as Anonixx"}
+          {busy ? "Working…" : `Publish as ${poster}`}
         </button>
       </div>
     </div>

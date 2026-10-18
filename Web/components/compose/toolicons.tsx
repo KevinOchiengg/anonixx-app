@@ -5,7 +5,9 @@ export const IconSparkles = () => (<svg {...P}><path d="M12 3l1.8 4.7L18.5 9.5l-
 export const IconUserPlus = () => (<svg {...P}><circle cx="10" cy="8" r="3.5" /><path d="M3 20c0-3.3 3.1-5.5 7-5.5" /><path d="M18 8v6M15 11h6" /></svg>);
 export const IconPin = () => (<svg {...P}><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 export const IconMic = () => (<svg {...P}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>);
-export const IconPoll = () => (<svg {...P}><path d="M5 20V10M12 20V4M19 20v-7" /></svg>);
+export const IconPoll = () => (<svg {...P}><rect x="3" y="4" width="12" height="4.5" rx="2.25" /><rect x="3" y="10" width="18" height="4.5" rx="2.25" /><rect x="3" y="16" width="8" height="4.5" rx="2.25" /></svg>);
+export const IconText = () => (<svg {...P}><path d="M5 7V5h14v2M12 5v14M9 19h6" /></svg>);
+export const IconVideo = () => (<svg {...P}><rect x="3" y="6" width="13" height="12" rx="3" /><path d="m16 10.5 5-3v9l-5-3z" /></svg>);
 export const IconShare = () => (<svg {...P}><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6" /></svg>);
 export const IconShuffle = () => (<svg {...P} width={14} height={14}><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg>);
 export const IconX = () => (<svg {...P}><path d="M6 6l12 12M18 6 6 18" /></svg>);
