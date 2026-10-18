@@ -388,10 +388,6 @@ export default function PostStudio() {
                   <div className="ps-pv-wave">{voiceBars.map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}</div>
                 ) : null}
                 {text.trim() || format === "text" ? <p>{previewText || "Your words show up here."}</p> : null}
-                <div className="ps-by">
-                  <span className="av">{poster.charAt(0).toUpperCase()}</span>
-                  <div><b>{poster}</b><small>just now · Official</small></div>
-                </div>
               </div>
               {mature ? <div className="ps-mature">Mature · blurred</div> : null}
             </div>

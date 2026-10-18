@@ -558,3 +558,15 @@
 @media (prefers-reduced-motion: reduce) { .linkup, .slide .linkup { animation: none; } }
 .r-more { --c: #e8eaf2; --cb: rgba(255, 255, 255, 0.28); }
 .rail button.r-more svg circle { r: 1.8px; }
+
+/* ---------- no avatar or name on the feed: caption and poll take the space ---------- */
+.slide.has-media .caption, .hasnav .slide.has-media .caption { padding-top: 64px; }
+.slide.has-media .confession { font-size: 16px; line-height: 1.4; }
+.slide.has-media .confession:not(.clamp) { max-height: 34dvh; }
+.slide.has-media .poll { margin-top: 10px; gap: 6px; }
+.slide.has-media .poll-q { font-size: 16px; }
+.slide.has-media .poll button { font-size: 14px; padding: 9px 14px; }
+.slide:not(.has-media) > .text-body { padding-bottom: 8px; }
+.slide .poll-q { font-size: 17px; }
+.slide .poll button { font-size: 15px; }
+.slide.has-media .poll { width: 100%; }
