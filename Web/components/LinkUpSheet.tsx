@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, COST, type Post } from "@/lib/api";
@@ -113,7 +114,7 @@ export default function LinkUpSheet({ post, onClose }: { post: Post; onClose: ()
     <Sheet onClose={onClose}>
       <div className="u-link">
         <div className="u-avatar">
-          {post.avatar_url ? <img src={post.avatar_url} alt="" /> : name[0]?.toUpperCase() || "A"}
+          {post.avatar_url ? <Image src={post.avatar_url} alt="" width={56} height={56} /> : name[0]?.toUpperCase() || "A"}
         </div>
         <h3 className="u-name">{name}</h3>
         {post.content ? <p className="u-quote">&ldquo;{post.content}&rdquo;</p> : null}

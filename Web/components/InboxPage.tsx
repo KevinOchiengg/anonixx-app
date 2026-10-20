@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -70,7 +71,7 @@ function ClueThumb({ r, onOpen }: { r: Req; onOpen: () => void }) {
   if (!r.media_url) return null;
   return (
     <button className="u-thumb" onClick={onOpen} aria-label="View clue">
-      {r.media_type === "video" ? <video src={r.media_url} muted loop autoPlay playsInline /> : <img src={r.media_url} alt="" />}
+      {r.media_type === "video" ? <video src={r.media_url} muted loop autoPlay playsInline /> : <Image src={r.media_url} alt="" width={40} height={40} />}
     </button>
   );
 }
@@ -235,7 +236,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
       {preview.type === "video" ? (
         <video src={preview.url} controls autoPlay loop playsInline onClick={(e) => e.stopPropagation()} />
       ) : (
-        <img src={preview.url} alt="" />
+        <Image src={preview.url} alt="" width={800} height={800} />
       )}
       <button className="u-modal-x" aria-label="Close" onClick={() => setPreview(null)}>×</button>
     </div>
@@ -267,7 +268,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
                       <div className="u-req-who">
                         <ClueThumb r={r} onOpen={() => setPreview({ url: r.media_url!, type: r.media_type || "image" })} />
                         <span className="u-avatar">
-                          {r.requester_avatar_url ? <img src={r.requester_avatar_url} alt="" /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}
+                          {r.requester_avatar_url ? <Image src={r.requester_avatar_url} alt="" width={30} height={30} /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}
                         </span>
                         <b>{r.requester_anonymous_name}</b>
                       </div>
@@ -349,7 +350,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
             return (
               <button className="u-story" key={r.id} onClick={() => setDetail(r)}>
                 <span className="u-ring">
-                  <span>{clue ? <img src={clue} alt="" /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}</span>
+                  <span>{clue ? <Image src={clue} alt="" width={58} height={58} /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}</span>
                 </span>
                 <small>{r.requester_anonymous_name || "Anonymous"}</small>
               </button>
@@ -385,7 +386,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
                 <Link href={`/chat/${c.id}`} className={`u-card${unread ? " unread" : ""}`}>
                   <span className="u-ava">
                     <span style={c.other_avatar_url ? undefined : { background: avatarColor(c.other_user_id || c.other_anonymous_name) }}>
-                      {c.other_avatar_url ? <img src={c.other_avatar_url} alt="" /> : c.other_anonymous_name?.[0]?.toUpperCase() || "A"}
+                      {c.other_avatar_url ? <Image src={c.other_avatar_url} alt="" width={50} height={50} /> : c.other_anonymous_name?.[0]?.toUpperCase() || "A"}
                     </span>
                     {c.other_is_online ? <em /> : null}
                   </span>
@@ -414,7 +415,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
           <div className="sheet u-mini" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
             <div className="u-mini-media">
               {detail.media_url ? (
-                detail.media_type === "video" ? <video src={detail.media_url} muted loop autoPlay playsInline /> : <img src={detail.media_url} alt="" />
+                detail.media_type === "video" ? <video src={detail.media_url} muted loop autoPlay playsInline /> : <Image src={detail.media_url} alt="" width={400} height={400} />
               ) : (
                 detail.requester_anonymous_name?.[0]?.toUpperCase() || "A"
               )}

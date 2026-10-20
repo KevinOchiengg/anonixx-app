@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { api, compact } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -25,7 +26,7 @@ function Inner() {
     <div className="pad prof">
       <div className="prof-top">
         <div className="prof-avatar">
-          {user.avatar_url ? <img src={user.avatar_url} alt="" /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
+          {user.avatar_url ? <Image src={user.avatar_url} alt="" width={84} height={84} /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
         </div>
         <strong>{name}</strong>
         <small>{user.email}</small>

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { Badge, fmtDate } from "@/components/admin/bits";
 
@@ -40,8 +41,7 @@ export default function AdminAds() {
           {ads.map((ad) => (
             <div key={ad.id} className="adm-card">
               {ad.media_url && (ad.media_type === "image" || ad.media_type === "gif" || !ad.media_type) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={ad.media_url} alt="" className="adm-cover" />
+                <Image src={ad.media_url} alt="" className="adm-cover" width={800} height={450} sizes="100vw" />
               ) : ad.media_url ? (
                 <a href={ad.media_url} target="_blank" rel="noopener noreferrer" className="adm-clip">{(ad.media_type || "media").toUpperCase()} attached — open</a>
               ) : null}

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { ChatBackground, FONTS_HREF, fontStyleById, type GalleryItem } from "@/lib/chatTheme";
@@ -43,7 +44,7 @@ function GalleryOverlay({ items, title, onClose }: { items: GalleryItem[]; title
       >
         {items.map((m, k) => (
           <div key={k}>
-            {m.media_type === "video" ? <video src={m.media_url} controls autoPlay={k === 0} loop playsInline /> : <img src={m.media_url} alt="" />}
+            {m.media_type === "video" ? <video src={m.media_url} controls autoPlay={k === 0} loop playsInline /> : <Image src={m.media_url} alt="" width={460} height={600} sizes="460px" />}
           </div>
         ))}
       </div>
@@ -337,7 +338,7 @@ function Inner({ id }: { id: string }) {
       <div className="chat-head u-chat-head">
         <span className="u-ava">
           <span style={pic ? undefined : { background: "var(--rose-dim)", color: "var(--rose)" }}>
-            {pic ? <img src={pic} alt="" /> : name[0]?.toUpperCase() || "A"}
+            {pic ? <Image src={pic} alt="" width={38} height={38} /> : name[0]?.toUpperCase() || "A"}
           </span>
           {online ? <em /> : null}
         </span>
@@ -377,7 +378,7 @@ function Inner({ id }: { id: string }) {
               <div className="reply-quote">{m.reply_to.is_own ? "You" : "Them"}: {m.reply_to.preview || m.reply_to.media_type}</div>
             ) : null}
             {m.deleted ? <em>Message deleted</em> : null}
-            {!m.deleted && m.media_type === "image" && m.media_url ? <img src={m.media_url} alt="" loading="lazy" /> : null}
+            {!m.deleted && m.media_type === "image" && m.media_url ? <Image src={m.media_url} alt="" width={400} height={400} style={{ height: "auto" }} sizes="80vw" /> : null}
             {!m.deleted && m.media_type === "video" && m.media_url ? <video src={m.media_url} controls preload="metadata" playsInline onClick={(e) => e.stopPropagation()} /> : null}
             {!m.deleted && m.media_type === "voice" && m.media_url ? <audio src={m.media_url} controls preload="none" onClick={(e) => e.stopPropagation()} /> : null}
             {!m.deleted && m.content ? <span>{m.content}</span> : null}

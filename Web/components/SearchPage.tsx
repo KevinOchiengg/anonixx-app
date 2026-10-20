@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, compact, type Post } from "@/lib/api";
@@ -218,8 +219,7 @@ function ResultCard({ post }: { post: Post }) {
         <span className="sp-time">{post.time_ago}</span>
       </div>
       {media ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="sp-media" src={media} alt="" loading="lazy" />
+        <Image className="sp-media" src={media} alt="" width={800} height={450} sizes="100vw" />
       ) : null}
       {text ? <p className="sp-text">{text}</p> : <p className="sp-text dim">A post with media</p>}
       <div className="sp-card-foot">

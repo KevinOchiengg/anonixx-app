@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { api, COST, type Post } from "@/lib/api";
 import Sheet from "./Sheet";
 import { Link2 } from "./feedicons";
@@ -53,8 +54,7 @@ export default function AuthorSheet({
       <Sheet onClose={onClose} tall>
         <div className="ap">
           <div className="ap-avatar">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {avatar ? <img src={avatar} alt="" /> : name.charAt(0).toUpperCase()}
+            {avatar ? <Image src={avatar} alt="" width={84} height={84} /> : name.charAt(0).toUpperCase()}
           </div>
           <h3 className="ap-name">{name}</h3>
 
@@ -86,8 +86,7 @@ export default function AuthorSheet({
                       {g.media_type === "video" ? (
                         <><video src={g.media_url} muted playsInline preload="metadata" /><span className="ap-play">▶</span></>
                       ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={g.media_url} alt="" loading="lazy" />
+                        <Image src={g.media_url} alt="" width={240} height={320} sizes="33vw" />
                       )}
                     </button>
                   ))}
@@ -122,8 +121,7 @@ export default function AuthorSheet({
           {big.media_type === "video" ? (
             <video src={big.media_url} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={big.media_url} alt="" />
+            <Image src={big.media_url} alt="" width={1200} height={1500} sizes="100vw" />
           )}
           <button type="button" aria-label="Close" onClick={() => setBig(null)}>×</button>
         </div>

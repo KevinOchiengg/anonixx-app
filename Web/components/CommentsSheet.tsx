@@ -1,5 +1,6 @@
 "use client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { uploadFile } from "@/lib/upload";
@@ -305,8 +306,7 @@ export default function CommentsSheet({
             {c.content ? <div className="cmt-body"><Mentions text={c.content} /></div> : null}
             {c.voice_url ? <div className="cmt-voice"><AudioWave src={c.voice_url} seed={c.id} active /></div> : null}
             {c.image_url || c.gif_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="cmt-img" src={c.image_url || c.gif_url} alt="" loading="lazy" />
+              <Image className="cmt-img" src={(c.image_url || c.gif_url)!} alt="" width={480} height={480} style={{ height: "auto" }} sizes="70vw" />
             ) : null}
             <div className="cmt-actions">
               <span className="cmt-time">{c.time_ago || "just now"}</span>
@@ -391,8 +391,7 @@ export default function CommentsSheet({
                 {!gifLoading && gifs.length === 0 ? <p className="muted center">No GIFs found.</p> : null}
                 {gifs.map((g) => (
                   <button type="button" key={g.id} onClick={() => send(undefined, { gif_url: g.full })}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={g.tiny} alt="" loading="lazy" />
+                    <Image src={g.tiny} alt="" width={100} height={100} />
                   </button>
                 ))}
               </div>

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import VideoPlayer from "./VideoPlayer";
@@ -167,7 +168,7 @@ export default function Slide({
               >
                 {slides.map((src, i) => (
                   <div key={src}>
-                    <img src={src} alt={i === 0 ? post.content.slice(0, 100) : ""} loading={near ? "eager" : "lazy"} />
+                    <Image src={src} alt={i === 0 ? post.content.slice(0, 100) : ""} width={1080} height={1350} sizes="100vw" priority={near && i === 0} />
                   </div>
                 ))}
               </div>
@@ -184,7 +185,7 @@ export default function Slide({
               muted={muted}
             />
           ) : singleImage ? (
-            <img src={singleImage} alt={post.content.slice(0, 100)} loading={near ? "eager" : "lazy"} />
+            <Image src={singleImage} alt={post.content.slice(0, 100)} width={1080} height={1350} sizes="100vw" priority={near} />
           ) : null}
         </div>
       ) : null}

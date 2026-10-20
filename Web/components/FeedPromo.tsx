@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import type { FeedAd, MarketTease } from "@/lib/api";
 import { ChevronRight, ExternalLink, Lock, Megaphone } from "./feedicons";
@@ -14,8 +15,7 @@ export function AdSlide({ ad, index }: { ad: FeedAd; index: number }) {
           ) : ad.media_url && ad.media_type === "audio" ? (
             <span className="fad-audio">♪ Audio</span>
           ) : ad.media_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="fad-cover" src={ad.media_url} alt="" loading="lazy" />
+            <Image className="fad-cover" src={ad.media_url} alt="" width={1080} height={1350} sizes="100vw" />
           ) : null}
           <span className="fad-title">{ad.title}</span>
         </a>
@@ -37,8 +37,7 @@ export function MarketSlide({ item, index }: { item: MarketTease; index: number 
             <span className="mk-label">Anonixx Intel</span>
           </span>
           {item.media_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="mk-cover" src={item.media_url} alt="" loading="lazy" />
+            <Image className="mk-cover" src={item.media_url} alt="" width={1080} height={1350} sizes="100vw" />
           ) : null}
           <span className="mk-title">{item.title}</span>
           <span className="mk-teaser">{item.teaser}</span>
