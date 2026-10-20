@@ -1,9 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// Only the production system domains — not a wildcard on *.vercel.app, which would also
-// catch per-branch preview deployment URLs and make them unreachable for testing.
-// Both the pre- and post-rename aliases are listed so old links/bookmarks still redirect.
-const LEGACY_HOSTS = new Set(["anonixx-app.vercel.app", "anonixx.vercel.app"]);
+// Only the one publicly-reachable legacy host — not a wildcard on *.vercel.app, which
+// would also catch per-branch preview deployment URLs and make them unreachable for
+// testing. The project's new team-scoped alias (anonixx-anonixx1.vercel.app) sits behind
+// Vercel's own SSO gate and isn't publicly reachable, so it needs no redirect here.
+// anonixx.vercel.app (bare, no team suffix) belongs to an unrelated third-party project —
+// renaming this project did not grant us that name.
+const LEGACY_HOSTS = new Set(["anonixx-app.vercel.app"]);
 const CANONICAL_HOST = "anonixx.com";
 
 export function middleware(req: NextRequest) {
