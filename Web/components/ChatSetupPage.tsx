@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -169,7 +170,7 @@ function Inner() {
 
       <input ref={picInput} type="file" accept="image/*" hidden onChange={pickPic} />
       <button type="button" className="u-pic" onClick={() => picInput.current?.click()} disabled={uploading} aria-label="Change profile picture">
-        {pic ? <img src={pic} alt="" /> : name[0]?.toUpperCase() || "A"}
+        {pic ? <Image src={pic} alt="" width={84} height={84} /> : name[0]?.toUpperCase() || "A"}
       </button>
       <p className="u-sub" style={{ textAlign: "center" }}>{uploading ? "Uploading…" : name ? `${name} · tap to change picture` : "Tap to change picture"}</p>
 
@@ -227,7 +228,7 @@ function Inner() {
       <div className="u-gallery">
         {gallery.map((m, i) => (
           <div className="u-gal" key={i}>
-            {m.media_type === "video" ? <video src={m.media_url} muted playsInline preload="metadata" /> : <img src={m.media_url} alt="" />}
+            {m.media_type === "video" ? <video src={m.media_url} muted playsInline preload="metadata" /> : <Image src={m.media_url} alt="" width={92} height={92} />}
             {m.media_type !== "image" ? <b>{m.media_type.toUpperCase()}</b> : null}
             <button type="button" onClick={() => removeMedia(i)} aria-label="Remove">×</button>
           </div>

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -37,8 +38,7 @@ function Inner({ id }: { id: string }) {
   return (
     <div className="pad mfull">
       {item.media_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.media_url} alt="" />
+        <Image src={item.media_url} alt="" width={800} height={450} sizes="100vw" />
       ) : null}
       {item.category ? <span className="badge">{item.category}</span> : null}
       <h2>{item.title}</h2>

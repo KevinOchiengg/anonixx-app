@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { api, compact } from "@/lib/api";
 import AppShell from "./AppShell";
@@ -36,8 +37,7 @@ function Inner() {
       {items.map((it) => (
         <Link key={it.id} href={`/market/${it.id}`} className="mrow">
           {it.media_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={it.media_url} alt="" loading="lazy" />
+            <Image src={it.media_url} alt="" width={200} height={200} sizes="25vw" />
           ) : null}
           {it.category ? <span className="badge">{it.category}</span> : null}
           <h3>{it.title}</h3>

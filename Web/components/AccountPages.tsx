@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { api, teaser } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -130,8 +131,7 @@ function EditProfileInner() {
     <form className="form pad" onSubmit={save}>
       <div className="acct-avatar">
         {avatar ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatar} alt="Your photo" />
+          <Image src={avatar} alt="Your photo" width={76} height={76} />
         ) : (
           <span className="ph">{(original || "?").charAt(0).toUpperCase()}</span>
         )}
