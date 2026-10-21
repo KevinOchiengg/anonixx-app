@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import VideoEditor from "./VideoEditor";
-import { checkReadable } from "@/lib/upload";
+import { keepReadable, clearLocalCopies } from "@/lib/localCopy";
 import { sniffVideo, formatProblem } from "@/lib/videoFormat";
 import { MAX_CLIP_SECONDS, defaultEdit, type VideoEdit } from "@/lib/videoEdit";
 
@@ -28,12 +28,16 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
 
   async function pick(list: FileList | null) {
     if (!list || !list.length) return;
-    const files = Array.from(list);
+    // Copy picks now, while Android still lets the page read them (see lib/localCopy.ts).
+    setBusy(true);
+    await clearLocalCopies();
+    let files: File[];
+    try { files = await Promise.all(Array.from(list).map(keepReadable)); } catch (e) { setBusy(false); onError((e as Error).message); return; }
+    setBusy(false);
     if (files.length === 1) {
       const f = files[0];
       if (f.type.startsWith("video/")) {
         setBusy(true);
-        try { await checkReadable(f); } catch (e) { setBusy(false); onError((e as Error).message); return; }
         const len = await videoLength(f);
         // The browser couldn't open it: find out why from the file itself.
         setFormatNote(len ? "" : formatProblem(await sniffVideo(f)));

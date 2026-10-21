@@ -1,4 +1,5 @@
 import { api, API_URL, ApiError, getToken } from "./api";
+import { UNREADABLE_FILE } from "./localCopy";
 
 export type UploadKind = "image" | "video" | "voice";
 
@@ -63,8 +64,6 @@ async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: num
 // of such a file fails before a single byte is sent, which looks exactly like a dead
 // connection. Reading a little from both ends first tells the two apart.
 const PROBE = 256 * 1024;
-export const UNREADABLE_FILE =
-  "Your phone wouldn't let the browser read that file. If it's in Google Photos or another cloud app, download it to your phone first (in Google Photos: open it, ⋮, Download), then pick it again from your gallery or Files.";
 
 export async function checkReadable(file: Blob): Promise<void> {
   try {

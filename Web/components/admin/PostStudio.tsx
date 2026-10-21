@@ -5,7 +5,8 @@ import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
 import { streamEnabled, uploadToStream, queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
 import ScheduledDrops, { toLocalInput } from "./ScheduledDrops";
-import { uploadFile, checkReadable } from "@/lib/upload";
+import { uploadFile } from "@/lib/upload";
+import { keepReadable, clearLocalCopies } from "@/lib/localCopy";
 import { sniffVideo, formatProblem } from "@/lib/videoFormat";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
 import LocationFields, { type LocationDraft } from "../compose/LocationFields";
@@ -145,11 +146,15 @@ export default function PostStudio() {
     setError("");
     const files = Array.from(list);
     if (format === "video") {
-      const f = files.find((x) => x.type.startsWith("video/"));
-      if (!f) return setError("That isn't a video file.");
-      if (f.size > MAX_VID_MB * 1024 * 1024) return setError(`That video is too big. Max ${MAX_VID_MB}MB.`);
+      const picked = files.find((x) => x.type.startsWith("video/"));
+      if (!picked) return setError("That isn't a video file.");
+      if (picked.size > MAX_VID_MB * 1024 * 1024) return setError(`That video is too big. Max ${MAX_VID_MB}MB.`);
+      // Copy it now, while Android still lets the page read it (see lib/localCopy.ts).
+      setBusy("Preparing video…");
+      await clearLocalCopies();
+      let f: File;
+      try { f = await keepReadable(picked); } catch (e) { setBusy(""); return setError((e as Error).message); }
       setBusy("Checking video…");
-      try { await checkReadable(f); } catch (e) { setBusy(""); return setError((e as Error).message); }
       const len = await videoLength(f);
       // The browser couldn't open it: find out why from the file itself.
       setFormatNote(len ? "" : formatProblem(await sniffVideo(f)));
@@ -168,7 +173,9 @@ export default function PostStudio() {
     if (big) return setError(`${big.name} is too big. Max ${MAX_IMG_MB}MB per photo.`);
     const room = 10 - photos.length;
     if (imgs.length > room) setError("Only 10 photos fit in one drop. Extras were skipped.");
-    setPhotos((p) => [...p, ...imgs.slice(0, room).map(track)]);
+    let kept: File[];
+    try { kept = await Promise.all(imgs.slice(0, room).map(keepReadable)); } catch (e) { return setError((e as Error).message); }
+    setPhotos((p) => [...p, ...kept.map(track)]);
   }
 
   function makeCover(i: number) {
