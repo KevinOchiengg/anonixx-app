@@ -7,13 +7,14 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.database import get_database
 from app.api.v1.drops import batch_format_drops
 from app.utils.content_mode import SAFE_FILTER
 from app.utils.feed_mix import fetch_mixed, not_promoted, fetch_promoted, splice_promoted
 from app.tasks import scheduled_publisher
+from app.utils.countries import country_from_header
 
 router = APIRouter(prefix="/public", tags=["Public"])
 
@@ -32,12 +33,15 @@ def _public_post(post: dict) -> dict:
 async def public_feed(
     cursor: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=20),
+    x_country: Optional[str] = Header(None, alias="X-Country"),
     db = Depends(get_database),
 ):
     scheduled_publisher.nudge(db)
     query: dict = {**_LIVE, **SAFE_FILTER}
     now = datetime.now(timezone.utc)
-    page, next_cursor, has_more = await fetch_mixed(db, {"$and": [query, not_promoted(now)]}, limit, cursor)
+    page, next_cursor, has_more = await fetch_mixed(
+        db, {"$and": [query, not_promoted(now)]}, limit, cursor, country_from_header(x_country),
+    )
     if not cursor:
         page = splice_promoted(page, await fetch_promoted(db, query, now))
 

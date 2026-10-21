@@ -65,6 +65,7 @@ import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 import { CARD_INTENTS, DROP_THEMES } from '../../components/drops/DropCardRenderer';
 import VideoOverlays from '../../components/common/VideoOverlays';
+import { countryHeader } from '../../utils/country';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 
 // Matches the injection frequency in the old DropsFeedScreen.jsx — every
@@ -1226,7 +1227,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     const timer = setTimeout(() => ctl.abort(), 20000);
     try {
       const token = await AsyncStorage.getItem('token');
-      const headers = {};
+      const headers = { ...countryHeader() };   // local-first feed (utils/country.js)
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const currentOffset = reset ? 0 : sessionPostsRef.current;
       const params = `session_posts=${currentOffset}` +

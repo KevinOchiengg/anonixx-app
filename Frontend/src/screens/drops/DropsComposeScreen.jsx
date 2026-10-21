@@ -39,6 +39,7 @@ import { useAudioPlayer } from 'expo-audio';
 import VideoEditorModal from '../../components/compose/VideoEditorModal';
 import { defaultEdit, isMeaningful, withoutEmptyText } from '../../utils/videoEdit';
 import { streamEnabled, uploadToStream, queueDrop, STREAM_DIRECT_MAX_BYTES } from '../../utils/streamVideo';
+import { countryHeader } from '../../utils/country';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
 
@@ -823,6 +824,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...countryHeader(),   // tags the drop with where its author is, for local-first feeds
         },
         body: JSON.stringify(body),
       });

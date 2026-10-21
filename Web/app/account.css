@@ -39,3 +39,9 @@
 }
 .acct-search input:focus { border-color: var(--rose); }
 .acct-pad { padding: 0 20px; }
+
+/* Local-first switch on the feed location page */
+.acct-local { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); cursor: pointer; }
+.acct-local span { display: grid; gap: 2px; }
+.acct-local small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.acct-local input { width: 22px; height: 22px; accent-color: var(--rose); flex: none; }

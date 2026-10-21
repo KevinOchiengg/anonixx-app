@@ -31,6 +31,8 @@ class UpdateProfileRequest(BaseModel):
     location_estate:     Optional[str] = None
     # "off" | "country" | "county" | "sub_county" | "estate"
     feed_location_scope: Optional[str] = None
+    # Local first: confessions from the viewer's country lead the feed (utils/feed_mix.py). On by default.
+    local_first: Optional[bool] = None
 
 
 class VerifyAgeRequest(BaseModel):
@@ -70,6 +72,8 @@ async def get_current_user(
         "location_sub_county": user.get("location_sub_county"),
         "location_estate":     user.get("location_estate"),
         "feed_location_scope": user.get("feed_location_scope") or "off",
+        "local_first":         user.get("local_first") is not False,
+        "detected_country":    user.get("detected_country"),
     }
 
 
@@ -104,6 +108,9 @@ async def update_profile(
                 detail=f"Invalid feed_location_scope. Choose from: {', '.join(sorted(FEED_LOCATION_SCOPES))}",
             )
         update_data["feed_location_scope"] = data.feed_location_scope
+
+    if data.local_first is not None:
+        update_data["local_first"] = data.local_first
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
