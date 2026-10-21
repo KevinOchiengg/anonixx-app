@@ -6,6 +6,7 @@ import { captureCover } from "@/lib/coverFrame";
 import { streamEnabled, uploadToStream, queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
 import ScheduledDrops, { toLocalInput } from "./ScheduledDrops";
 import { uploadFile, checkReadable } from "@/lib/upload";
+import { sniffVideo, formatProblem } from "@/lib/videoFormat";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
 import LocationFields, { type LocationDraft } from "../compose/LocationFields";
 import { videoLength } from "../compose/MediaPicker";
@@ -58,6 +59,7 @@ export default function PostStudio() {
   const [place, setPlace] = useState<LocationDraft>(EMPTY_PLACE);
   const [busy, setBusy] = useState("");
   const [noPreview, setNoPreview] = useState(false);
+  const [formatNote, setFormatNote] = useState("");
   const [error, setError] = useState("");
   const [published, setPublished] = useState<Done | null>(null);
   const [drag, setDrag] = useState(false);
@@ -149,6 +151,8 @@ export default function PostStudio() {
       setBusy("Checking video…");
       try { await checkReadable(f); } catch (e) { setBusy(""); return setError((e as Error).message); }
       const len = await videoLength(f);
+      // The browser couldn't open it: find out why from the file itself.
+      setFormatNote(len ? "" : formatProblem(await sniffVideo(f)));
       setBusy("");
       // Over three minutes isn't refused: the editor opens on its first 3:00 instead.
       setNoPreview(!len);
@@ -416,11 +420,11 @@ export default function PostStudio() {
                   <div className="ps-video">
                     {vedit && !noPreview ? (
                       <VideoEditor
-                        src={video.url} duration={vlen} value={vedit} onChange={setVedit} onNoPreview={() => setNoPreview(true)}
+                        src={video.url} duration={vlen} value={vedit} onChange={setVedit} onNoPreview={() => { setNoPreview(true); sniffVideo(video.file).then((r) => setFormatNote(formatProblem(r))).catch(() => {}); }}
                         cover={coverAt ?? vedit.start} onCover={setCoverAt}
                       />
                     ) : (
-                      <p className="ps-note">Your browser can&apos;t open this video format (phone .mov/HEVC files often can&apos;t be), so it can&apos;t be trimmed or captioned here and will post as-is. Convert it to an H.264 .mp4 to edit it.</p>
+                      <p className="ps-note">{formatNote || "This browser can't play this video, so it can't be trimmed or captioned here. An H.264 .mp4 is the safest choice."}</p>
                     )}
                     <button type="button" className="ps-btn" onClick={() => setVideo(null)}>Replace video</button>
                   </div>
