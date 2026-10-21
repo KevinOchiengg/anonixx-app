@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     R2_ENDPOINT: str = ""
     R2_PUBLIC_URL: str = ""
 
+    # CLOUDFLARE STREAM — video encoding, cutting, watermark, adaptive playback.
+    # Off (videos go to R2 as before) until the token and account id are set.
+    CF_ACCOUNT_ID: str = ""
+    CF_STREAM_TOKEN: str = ""          # API token with Stream: Edit
+    STREAM_WATERMARK_UID: str = ""     # from scripts/stream_setup.py
+
     # AUTH
     SECRET_KEY: str = (
         "your-super-secret-key-change-in-production-at-least-32-characters-long"

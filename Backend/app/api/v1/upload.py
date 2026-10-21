@@ -1,7 +1,7 @@
 from fastapi.concurrency import run_in_threadpool
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from app.dependencies import get_current_user_id
-from app.utils import r2_storage
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File
+from app.dependencies import get_current_user_id, require_admin
+from app.utils import r2_storage, stream
 from pydantic import BaseModel
 import logging
 
@@ -43,6 +43,33 @@ async def get_upload_signature(
     except Exception as e:
         logger.error(f"R2 presign failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate upload URL.")
+
+
+# ── Video drops via Cloudflare Stream (see app/utils/stream.py) ──────────────
+
+@router.get("/stream/status")
+async def stream_status(_: str = Depends(get_current_user_id)):
+    """Whether video drops go to Stream (true) or still to R2 (false)."""
+    return {"enabled": stream.is_configured()}
+
+
+@router.post("/stream/tus", status_code=201)
+async def create_stream_upload(
+    upload_length: int = Header(..., alias="Upload-Length"),
+    admin_id: str = Depends(require_admin),
+):
+    """tus "creation" endpoint for the browser's uploader: reserves a one-time
+    Stream upload and points the uploader at it via Location, so the file
+    itself goes straight to Cloudflare (resumable), never through this server.
+    Only admins post video drops."""
+    if not stream.is_configured():
+        raise HTTPException(status_code=503, detail="Video uploads to Stream aren't switched on yet.")
+    try:
+        location, uid = await stream.create_tus_upload(upload_length)
+    except Exception as e:
+        logger.error(f"Stream upload reservation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="Couldn't start the video upload. Try again.")
+    return Response(status_code=201, headers={"Location": location, "X-Stream-Uid": uid, "Tus-Resumable": "1.0.0"})
 
 
 # ── Server-side uploads (proxy — client sends the file to us, we forward

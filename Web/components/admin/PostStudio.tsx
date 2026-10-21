@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
+import { streamEnabled, uploadToStream, queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
 import ScheduledDrops, { toLocalInput } from "./ScheduledDrops";
 import { uploadFile } from "@/lib/upload";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
@@ -35,7 +36,7 @@ const MAX_VID_MB = 500;
 const EMPTY_PLACE: LocationDraft = { country: "", county: "", subCounty: "", estate: "" };
 
 type Pick = { file: File; url: string };
-type Done = { id?: string; scheduledFor?: string };
+type Done = { id?: string; scheduledFor?: string; finishing?: boolean };
 
 const PROMO_HOURS: [number, string][] = [[6, "6 hours"], [24, "1 day"], [72, "3 days"], [168, "7 days"]];
 
@@ -176,6 +177,8 @@ export default function PostStudio() {
     setHearing(false);
     try {
       let media: Record<string, unknown> = {};
+      let streamUid = "";
+      let streamEdit: VideoEdit | null = null;
       if (format === "photo") {
         const out: string[] = [];
         for (let i = 0; i < photos.length; i++) {
@@ -193,13 +196,26 @@ export default function PostStudio() {
             cover_url = await uploadFile(shot, "image");
           } catch { /* no cover: the feed falls back to the video itself */ }
         }
+        const edit = vedit ? { ...vedit, overlays: vedit.overlays.filter((o) => o.text.trim()) } : null;
         setBusy("Uploading video… 0%");
-        media = {
-          media_type: "video",
-          media_url: await uploadFile(video.file, "video", (n) => setBusy(n >= 100 ? "Finishing upload…" : `Uploading video… ${n}%`)),
-          ...(isMeaningful(vedit, vlen) ? { video_edit: { ...vedit, overlays: vedit.overlays.filter((o) => o.text.trim()) } } : {}),
-          ...(cover_url ? { cover_url } : {}),
-        };
+        const progress = (n: number) => setBusy(n >= 100 ? "Finishing upload…" : `Uploading video… ${n}%`);
+        if (await streamEnabled()) {
+          // Stream: the backend cuts edit's window out of the original and watermarks it.
+          streamUid = await uploadToStream(video.file, progress);
+          streamEdit = edit;
+          media = {
+            media_type: "video",
+            ...(edit?.overlays.length ? { video_edit: edit } : {}),
+            ...(cover_url ? { cover_url } : {}),
+          };
+        } else {
+          media = {
+            media_type: "video",
+            media_url: await uploadFile(video.file, "video", progress),
+            ...(isMeaningful(edit, vlen) ? { video_edit: edit } : {}),
+            ...(cover_url ? { cover_url } : {}),
+          };
+        }
       } else if (format === "voice" && voice) {
         setBusy("Uploading voice note…");
         media = {
@@ -229,7 +245,20 @@ export default function PostStudio() {
           ...(promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
           ...media,
       };
-      if (later) {
+      if (streamUid) {
+        const at = later ? new Date(laterAt).toISOString() : null;
+        const job = await queueStreamDrop(body, streamUid, streamEdit, at);
+        setSchedRefresh((n) => n + 1);
+        if (at) {
+          setPublished({ scheduledFor: at });
+        } else {
+          setBusy("Cutting and watermarking your video… this takes a minute or two.");
+          const done = await waitForStreamDrop(job.id);
+          setSchedRefresh((n) => n + 1);
+          if (done.status === "failed") throw new Error(done.error || "Stream couldn't process this video.");
+          setPublished(done.drop_id ? { id: done.drop_id } : { finishing: true });
+        }
+      } else if (later) {
         const at = new Date(laterAt).toISOString();
         await api("/admin/scheduled", { body: { publish_at: at, drop: body } });
         setSchedRefresh((n) => n + 1);
@@ -267,7 +296,12 @@ export default function PostStudio() {
     return (
       <div className="ps-done">
         <div className="ps-check" aria-hidden>✓</div>
-        {published.scheduledFor ? (
+        {published.finishing ? (
+          <>
+            <h2>Almost there.</h2>
+            <p>Stream is still finishing the video. It posts itself as {poster} the moment it&apos;s ready, so you can leave this page. Track it under Coming up.</p>
+          </>
+        ) : published.scheduledFor ? (
           <>
             <h2>It&apos;s queued.</h2>
             <p>Goes live as {poster} on {new Date(published.scheduledFor).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Find it under Coming up.</p>

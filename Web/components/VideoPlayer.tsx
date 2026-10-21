@@ -40,6 +40,48 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit }: 
   const start = edit?.start ?? 0;
   const end = edit?.end ?? 0;
 
+  // Cloudflare Stream videos are HLS manifests. Safari plays them natively; elsewhere
+  // hls.js is loaded on demand. Only the active slide fetches segments (Stream bills
+  // preloading as watch time); neighbours just sit on their poster.
+  const hls = src.includes(".m3u8");
+  const hlsRef = useRef<{ startLoad(): void; stopLoad(): void; destroy(): void } | null>(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  useEffect(() => {
+    const v = ref.current;
+    if (!hls || !near || !v) return;
+    if (v.canPlayType("application/vnd.apple.mpegurl")) {
+      v.preload = activeRef.current ? "auto" : "none";
+      v.src = src;
+      return;
+    }
+    let dead = false;
+    import("hls.js").then(({ default: Hls }) => {
+      if (dead || !Hls.isSupported()) return;
+      const h = new Hls({ autoStartLoad: false, capLevelToPlayerSize: true, maxBufferLength: 12 });
+      h.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!activeRef.current) return;
+        h.startLoad(start);
+        v.play().catch(() => {});
+      });
+      h.loadSource(src);
+      h.attachMedia(v);
+      hlsRef.current = h;
+    }).catch(() => {});
+    return () => { dead = true; hlsRef.current?.destroy(); hlsRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hls, near, src]);
+  useEffect(() => {
+    const v = ref.current;
+    if (!hls || !v) return;
+    if (hlsRef.current) {
+      if (active) hlsRef.current.startLoad();
+      else hlsRef.current.stopLoad();
+    } else if (active) {
+      v.preload = "auto";
+    }
+  }, [hls, active]);
+
   useEffect(() => {
     const v = ref.current;
     if (v) v.muted = muted;
@@ -183,7 +225,7 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit }: 
       {landscape && poster ? <div className="vp-blur" style={{ backgroundImage: `url(${poster})` }} /> : null}
       <video
         ref={ref}
-        src={src}
+        src={hls ? undefined : src}
         poster={poster || undefined}
         muted
         loop={!end}

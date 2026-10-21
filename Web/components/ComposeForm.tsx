@@ -8,6 +8,7 @@ import { uploadFile } from "@/lib/upload";
 import AppShell from "./AppShell";
 import MediaPicker, { type MediaDraft } from "./compose/MediaPicker";
 import { isMeaningful } from "@/lib/videoEdit";
+import { streamEnabled, uploadToStream, queueStreamDrop } from "@/lib/streamVideo";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import PollEditor, { type PollDraft } from "./compose/PollEditor";
 import TagUser, { type Tagged } from "./compose/TagUser";
@@ -52,7 +53,7 @@ function Inner() {
   const [poll, setPoll] = useState<PollDraft>({ question: "", options: ["", ""] });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<"" | "live" | "processing">("");
   const [kind, setKind] = useState<"hookup" | "confession" | null>(null);
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("woman");
@@ -147,8 +148,14 @@ function Inner() {
     setError("");
     try {
       let payload: Record<string, unknown> = {};
+      let streamUid = "";
       if (kind === "confession") {
-        if (mode === "media" && media) {
+        if (mode === "media" && media?.kind === "video" && await streamEnabled()) {
+          // Stream: the backend cuts the window out, watermarks it and posts it when ready.
+          streamUid = await uploadToStream(media.files[0]);
+          const overlays = media.edit?.overlays.filter((o) => o.text.trim()) ?? [];
+          payload = { media_type: "video", ...(media.edit && overlays.length ? { video_edit: { ...media.edit, overlays } } : {}) };
+        } else if (mode === "media" && media) {
           const urls: string[] = [];
           for (const f of media.files) urls.push(await uploadFile(f, media.kind));
           const edit = media.kind === "video" && isMeaningful(media.edit, media.duration ?? 0)
@@ -166,8 +173,7 @@ function Inner() {
           payload = { poll: { question: poll.question.trim(), options: pollOpts.slice(0, 4) } };
         }
       }
-      await api("/drops", {
-        body: kind === "hookup" ? {
+      const body = kind === "hookup" ? {
           kind: "hookup",
           confession: hookupText(),
           hookup: {
@@ -197,11 +203,12 @@ function Inner() {
           ...(tagged ? { target_user_id: tagged.id } : {}),
           ...(tagged && hint.trim() ? { recognition_hint: hint.trim().toLowerCase() } : {}),
           ...payload,
-        },
-      });
+        };
+      if (streamUid && media) await queueStreamDrop(body, streamUid, media.edit ?? null, null);
+      else await api("/drops", { body });
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       refresh();
-      setDone(true);
+      setDone(streamUid ? "processing" : "live");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -212,8 +219,8 @@ function Inner() {
   if (done) {
     return (
       <div className="empty">
-        <h2>It&apos;s live.</h2>
-        <p>Your confession is out there. Nobody knows it&apos;s you.</p>
+        <h2>{done === "processing" ? "Almost out there." : "It's live."}</h2>
+        <p>{done === "processing" ? "Your video is being polished up. It lands in the feed in a minute or two, and nobody will know it's you." : "Your confession is out there. Nobody knows it's you."}</p>
         <div className="row">
           <button className="pill" onClick={() => router.push("/")}>Back to the feed</button>
         </div>

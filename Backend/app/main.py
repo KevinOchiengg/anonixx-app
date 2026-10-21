@@ -128,6 +128,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # the browser's tus uploader reads these from POST /upload/stream/tus
+    expose_headers=["Location", "X-Stream-Uid", "Tus-Resumable"],
 )
 
 

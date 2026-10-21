@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 from app.database import get_database
+from app.utils import stream
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ class DropCleanupWorker:
                 "expires_at":   {"$ne": None, "$lte": _now()},
                 "unlock_count": {"$gt": 0},
             },
-            {"_id": 1},
+            {"_id": 1, "stream_uid": 1},
         ).limit(BATCH_LIMIT).to_list(None)
 
         if not expired:
@@ -104,6 +105,8 @@ class DropCleanupWorker:
         drop_id_strs = [str(_id) for _id in drop_ids]
 
         await db["drops"].delete_many({"_id": {"$in": drop_ids}})
+        for d in expired:
+            await stream.delete_video(d.get("stream_uid"))
 
         # Same sub-collection cleanup DELETE /drops/{id} performs, so a
         # swept drop doesn't leave orphaned threads/saves/views behind.
