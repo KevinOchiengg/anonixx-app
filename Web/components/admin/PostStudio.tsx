@@ -5,7 +5,7 @@ import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
 import { streamEnabled, uploadToStream, queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
 import ScheduledDrops, { toLocalInput } from "./ScheduledDrops";
-import { uploadFile } from "@/lib/upload";
+import { uploadFile, checkReadable } from "@/lib/upload";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
 import LocationFields, { type LocationDraft } from "../compose/LocationFields";
 import { videoLength } from "../compose/MediaPicker";
@@ -147,6 +147,7 @@ export default function PostStudio() {
       if (!f) return setError("That isn't a video file.");
       if (f.size > MAX_VID_MB * 1024 * 1024) return setError(`That video is too big. Max ${MAX_VID_MB}MB.`);
       setBusy("Checking video…");
+      try { await checkReadable(f); } catch (e) { setBusy(""); return setError((e as Error).message); }
       const len = await videoLength(f);
       setBusy("");
       // Over three minutes isn't refused: the editor opens on its first 3:00 instead.
