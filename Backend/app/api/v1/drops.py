@@ -25,6 +25,7 @@ from app.utils.fingerprint import fingerprint_hash
 from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted, splice_promoted
 from app.tasks import scheduled_publisher
 from app.utils import stream
+from app.utils.countries import country_from_header, known_country
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
@@ -614,7 +615,8 @@ def _media_preview_url(media_url: Optional[str], media_type: Optional[str]) -> O
 async def create_drop(
     data: CreateDropRequest,
     current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
+    db = Depends(get_database),
+    x_country: Optional[str] = Header(None, alias="X-Country"),
 ):
     """Create a confession card. Authenticated users only."""
     if not data.confession and not data.media_url and not data.images:
@@ -848,6 +850,12 @@ async def create_drop(
         # Feed-as-drops upgrade
         "location":        location_display,   # joined display string, e.g. "Kilimani, Westlands, Nairobi, Kenya"
         "location_detail": location_detail,    # {country, county, sub_county, estate} — used for filtering
+        # Country the local-first feed matches this drop on (utils/feed_mix.py): the
+        # location the author picked, else where they are. Official drops stay global
+        # unless explicitly targeted.
+        "feed_country": known_country((location_detail or {}).get("country")) or (None if is_admin_drop else (
+            country_from_header(x_country) or known_country(user.get("location_country")) or known_country(user.get("detected_country"))
+        )),
         "poll":       poll_data,
         "font_style": font_style,
         "tags":       tags or None,
@@ -1935,6 +1943,7 @@ async def get_drops_feed(
     cursor: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None, alias="Authorization"),
     x_content_mode: Optional[str] = Header(None, alias="X-Content-Mode"),
+    x_country: Optional[str] = Header(None, alias="X-Country"),
     db = Depends(get_database),
 ):
     current_user_id = None
@@ -1971,6 +1980,7 @@ async def get_drops_feed(
                     "location_country": 1, "location_county": 1,
                     "location_sub_county": 1, "location_estate": 1,
                     "feed_location_scope": 1, "age_verified": 1,
+                    "detected_country": 1, "local_first": 1,
                 },
             )
 
@@ -2001,10 +2011,21 @@ async def get_drops_feed(
     # Each kind is paged newest-first with its own position inside `cursor`
     # (see utils/feed_mix.py) — none skipped, none repeated. Affinity ordering
     # only reorders within a kind, so the rhythm stays intact.
+    # Local first: the viewer's own pick in settings wins, else where the client says
+    # they are (remembered, for requests that don't say), unless they've turned it off.
+    detected = country_from_header(x_country)
+    if detected and user_doc and user_doc.get("detected_country") != detected:
+        await db["users"].update_one({"_id": user_doc["_id"]}, {"$set": {"detected_country": detected}})
+    viewer_country = (
+        known_country(user_doc.get("location_country")) if user_doc else None
+    ) or detected or (known_country(user_doc.get("detected_country")) if user_doc else None)
+    if user_doc and user_doc.get("local_first") is False:
+        viewer_country = None
+
     scheduled_publisher.nudge(db)
     now = now_utc()
     stream_query = {"$and": [pool_query, not_promoted(now)]} if pool_query else not_promoted(now)
-    page, next_cursor, page_has_more = await fetch_mixed(db, stream_query, drops_to_load, cursor)
+    page, next_cursor, page_has_more = await fetch_mixed(db, stream_query, drops_to_load, cursor, viewer_country)
 
     drops = reslot(page, _weighted_shuffle_drops(page, user_affinities))
     if not cursor:

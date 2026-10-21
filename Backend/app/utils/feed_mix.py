@@ -6,9 +6,17 @@ stream is paged newest-first with its own position, carried in one cursor,
 so nothing is skipped or repeated. When one stream runs dry the other fills
 the remaining slots.
 
-Cursor format:  "m=<iso>|<oid>;t=<iso>|<oid>;p=<n>"
-  m= / t= omitted -> that stream has not started; "END" -> exhausted
-  p            -> position inside the repeating pattern
+Local first: when the viewer's country is known, the text stream is split in
+two — confessions from their country ("l") and from everywhere else ("g") —
+and text slots take LOCAL_RUN local ones for every global one. Nothing is
+filtered out: when local runs dry, global fills in (and vice versa). Media
+drops are mostly Anonixx's own, aimed by explicit location targeting, so
+they stay one stream.
+
+Cursor format:  "m=<iso>|<oid>;t=<iso>|<oid>;p=<n>"  (+ "l=", "g=", "q=" when local first)
+  m= / t= / l= / g= omitted -> that stream has not started; "END" -> exhausted
+  p            -> position inside the repeating media/text pattern
+  q            -> position inside the local/global text pattern
 A legacy single cursor ("<iso>|<oid>") is read as both streams at that point.
 """
 from datetime import datetime
@@ -19,6 +27,9 @@ from fastapi import HTTPException
 
 MEDIA_RUN = 3
 PATTERN = ["m"] * MEDIA_RUN + ["t"]
+LOCAL_RUN = 2
+TEXT_PATTERN = ["l"] * LOCAL_RUN + ["g"]
+STREAMS = ("m", "t", "l", "g")
 
 _MEDIA = {"$or": [
     {"media_url": {"$nin": [None, ""]}},
@@ -41,7 +52,7 @@ def _pos(raw: str):
 
 
 def _parse(cursor: Optional[str]) -> dict:
-    state: dict = {"m": None, "t": None, "p": 0}
+    state: dict = {"m": None, "t": None, "l": None, "g": None, "p": 0, "q": 0}
     if not cursor:
         return state
     try:
@@ -51,10 +62,12 @@ def _parse(cursor: Optional[str]) -> dict:
             return state
         for part in cursor.split(";"):
             key, _, val = part.partition("=")
-            if key in ("m", "t"):
+            if key in STREAMS:
                 state[key] = "END" if val == "END" else _pos(val)
             elif key == "p":
                 state["p"] = int(val) % len(PATTERN)
+            elif key == "q":
+                state["q"] = int(val) % len(TEXT_PATTERN)
         return state
     except Exception:
         raise HTTPException(status_code=400, detail="Bad cursor.")
@@ -66,15 +79,25 @@ def _encode_pos(pos) -> str:
 
 def _encode(state: dict) -> str:
     parts = []
-    for k in ("m", "t"):
-        if state[k] is not None:
+    for k in STREAMS:
+        if state.get(k) is not None:
             parts.append(f"{k}={_encode_pos(state[k])}")
     parts.append(f"p={state['p']}")
+    if state.get("q"):
+        parts.append(f"q={state['q']}")
     return ";".join(parts)
 
 
-def _stream_query(base: dict, kind: str, pos) -> dict:
-    conds = [c for c in (base, _STREAM_FILTER[kind]) if c]
+def _stream_filter(kind: str, country: Optional[str]) -> dict:
+    if kind == "l":
+        return {"$and": [_TEXT, {"feed_country": country}]}
+    if kind == "g":
+        return {"$and": [_TEXT, {"feed_country": {"$ne": country}}]}   # $ne also matches untagged drops
+    return _STREAM_FILTER[kind]
+
+
+def _stream_query(base: dict, kind: str, pos, country: Optional[str] = None) -> dict:
+    conds = [c for c in (base, _stream_filter(kind, country)) if c]
     if pos:
         dt, oid = pos
         conds.append({"$or": [
@@ -84,35 +107,42 @@ def _stream_query(base: dict, kind: str, pos) -> dict:
     return conds[0] if len(conds) == 1 else {"$and": conds}
 
 
-async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str]):
-    """Returns (rows, next_cursor, has_more) for one page of the mixed feed."""
+async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str], country: Optional[str] = None):
+    """Returns (rows, next_cursor, has_more) for one page of the mixed feed.
+    With `country`, text slots favour confessions from that country (local first)."""
     state = _parse(cursor)
+    kinds = ("m", "l", "g") if country else ("m", "t")
     buf: dict = {}
-    for kind in ("m", "t"):
+    for kind in kinds:
         if state[kind] == "END":
             buf[kind] = []
             continue
-        buf[kind] = await db["drops"].find(_stream_query(base_query, kind, state[kind])) \
+        buf[kind] = await db["drops"].find(_stream_query(base_query, kind, state[kind], country)) \
             .sort([("created_at", -1), ("_id", -1)]).limit(limit + 1).to_list(None)
 
+    def preference(slot: str, q: int) -> list:
+        text = (["l", "g"] if TEXT_PATTERN[q % len(TEXT_PATTERN)] == "l" else ["g", "l"]) if country else ["t"]
+        return text + ["m"] if slot == "t" else ["m"] + text
+
     fetched = {k: len(v) for k, v in buf.items()}
-    taken: dict = {"m": [], "t": []}
+    taken: dict = {k: [] for k in kinds}
     rows: list = []
-    p = state["p"]
+    p, q = state["p"], state["q"]
     while len(rows) < limit:
-        want = PATTERN[p % len(PATTERN)]
-        other = "t" if want == "m" else "m"
-        kind = want if buf[want] else other if buf[other] else None
+        slot = PATTERN[p % len(PATTERN)]
+        kind = next((k for k in preference(slot, q) if buf[k]), None)
         if kind is None:
             break
         row = buf[kind].pop(0)
         taken[kind].append(row)
         rows.append(row)
         p += 1
+        if kind != "m":
+            q += 1
 
-    has_more = bool(buf["m"] or buf["t"])
-    nxt = {"m": state["m"], "t": state["t"], "p": p % len(PATTERN)}
-    for kind in ("m", "t"):
+    has_more = any(buf[k] for k in kinds)
+    nxt = {**{k: state[k] for k in STREAMS}, "p": p % len(PATTERN), "q": q % len(TEXT_PATTERN)}
+    for kind in kinds:
         if taken[kind]:
             last = taken[kind][-1]
             nxt[kind] = (last["created_at"], last["_id"])

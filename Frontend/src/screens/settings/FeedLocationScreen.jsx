@@ -12,7 +12,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Switch,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,6 +46,9 @@ export default function FeedLocationScreen({ navigation }) {
   const [subCounty,  setSubCounty]  = useState('');
   const [estate,     setEstate]     = useState('');
   const [scope,      setScope]      = useState('off');
+  // Local first: confessions from the viewer's country lead the feed (on by default)
+  const [localFirst, setLocalFirst] = useState(true);
+  const [detected,   setDetected]   = useState(null);
 
   // Load current values — prefer the cached user object, fall back to a
   // fresh fetch so this stays accurate even if the cache is stale.
@@ -63,6 +66,8 @@ export default function FeedLocationScreen({ navigation }) {
           setSubCounty(data.location_sub_county || '');
           setEstate(data.location_estate || '');
           setScope(data.feed_location_scope || 'off');
+          setLocalFirst(data.local_first !== false);
+          setDetected(data.detected_country || null);
         }
       } catch {
         // Fall back silently to whatever's cached on the user object.
@@ -77,6 +82,23 @@ export default function FeedLocationScreen({ navigation }) {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Saves on its own, straight away, like a settings switch should.
+  const toggleLocalFirst = useCallback(async (on) => {
+    setLocalFirst(on);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ local_first: on }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setLocalFirst(!on);
+      showToast({ type: 'error', message: 'Could not save. Try again.' });
+    }
+  }, [showToast]);
 
   const scopeNeedsLevel = {
     country: !!country.trim(),
@@ -162,6 +184,24 @@ export default function FeedLocationScreen({ navigation }) {
             </Text>
           </View>
 
+          <View style={s.localRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.localLabel}>Local first</Text>
+              <Text style={s.localSub}>
+                {localFirst
+                  ? `Confessions from ${country.trim() || detected || 'your country'} show up first. Everywhere else still mixes in.`
+                  : 'Your feed shows everywhere equally.'}
+              </Text>
+            </View>
+            <Switch
+              value={localFirst}
+              onValueChange={toggleLocalFirst}
+              trackColor={{ false: T.surfaceAlt, true: T.primary }}
+              thumbColor={localFirst ? '#fff' : T.textMute}
+              ios_backgroundColor={T.surfaceAlt}
+            />
+          </View>
+
           <Text style={s.sectionLabel}>Your location</Text>
           <LocationField
             country={country}
@@ -216,6 +256,12 @@ export default function FeedLocationScreen({ navigation }) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
+  localRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(12), padding: rp(14), marginBottom: SPACING.lg,
+    borderRadius: RADIUS.lg, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: T.surface,
+  },
+  localLabel: { fontSize: FONT.md, fontWeight: '800', color: T.text },
+  localSub: { fontSize: rf(12.5), color: T.textSecondary, lineHeight: rf(18), marginTop: rp(2) },
   header: {
     flexDirection:     'row',
     alignItems:        'center',

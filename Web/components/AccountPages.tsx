@@ -221,11 +221,21 @@ type MeLoc = {
   location_country?: string | null; location_county?: string | null;
   location_sub_county?: string | null; location_estate?: string | null;
   feed_location_scope?: string | null;
+  local_first?: boolean; detected_country?: string | null;
 };
 function LocationInner() {
   const [loaded, setLoaded] = useState(false);
   const [f, setF] = useState({ country: "", county: "", sub: "", estate: "" });
   const [scope, setScope] = useState("off");
+  const [localFirst, setLocalFirst] = useState(true);
+  const [detected, setDetected] = useState<string | null>(null);
+
+  // Saves on its own, straight away, like a settings switch should.
+  async function toggleLocal(on: boolean) {
+    setLocalFirst(on);
+    try { await api("/users/me", { method: "PUT", body: { local_first: on } }); }
+    catch (x) { setLocalFirst(!on); setErr((x as Error).message); }
+  }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
@@ -235,6 +245,8 @@ function LocationInner() {
       .then((d) => {
         setF({ country: d.location_country || "", county: d.location_county || "", sub: d.location_sub_county || "", estate: d.location_estate || "" });
         setScope(d.feed_location_scope || "off");
+        setLocalFirst(d.local_first !== false);
+        setDetected(d.detected_country || null);
       })
       .catch((e) => setErr((e as Error).message))
       .finally(() => setLoaded(true));
@@ -278,7 +290,18 @@ function LocationInner() {
   if (!loaded) return <p className="muted center">Loading…</p>;
   return (
     <form className="form pad" onSubmit={save}>
-      <p className="muted small">Tell us where home is and we&apos;ll lean your feed toward people nearby. Posts with no location still show.</p>
+      <label className="acct-local">
+        <span>
+          <b>Local first</b>
+          <small>
+            {localFirst
+              ? `Confessions from ${f.country.trim() || detected || "your country"} show up first. Everywhere else still mixes in.`
+              : "Your feed shows everywhere equally."}
+          </small>
+        </span>
+        <input type="checkbox" checked={localFirst} onChange={(e) => toggleLocal(e.target.checked)} />
+      </label>
+      <p className="muted small">Tell us where home is and we&apos;ll lean your feed toward people nearby. Posts with no location still show.{detected && !f.country.trim() ? ` Right now we think you're in ${detected}; set a country below to change that.` : ""}</p>
       <label className="field">Country<input value={f.country} onChange={set("country")} placeholder="Kenya" /></label>
       <label className="field">County or region<input value={f.county} onChange={set("county")} placeholder="Nairobi" /></label>
       <label className="field">Sub-county or area<input value={f.sub} onChange={set("sub")} placeholder="Westlands" /></label>

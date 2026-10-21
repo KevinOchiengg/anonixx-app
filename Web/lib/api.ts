@@ -69,12 +69,24 @@ export const fetchPublicDrop = (id: string) => get<PublicDrop>(`/public/drops/${
 export type Sitemap = { total: number; pages: number; items: { id: string; lastmod: string }[] };
 export const fetchSitemap = (page = 0) => get<Sitemap>(`/public/sitemap?page=${page}`, 3600);
 
+// The visitor's country, as set by middleware.ts from Vercel's geolocation. Sent to the
+// API as X-Country so the feed can put local confessions first.
+export function viewerCountry(): string | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(/(?:^|;\s*)anx_cc=([A-Z]{2})/);
+  return m ? m[1] : null;
+}
+const countryHeader = (): Record<string, string> => {
+  const c = viewerCountry();
+  return c ? { "X-Country": c } : {};
+};
+
 // Browser-side page loader for infinite scroll.
 export async function loadMoreClient(cursor?: string | null): Promise<FeedPage | null> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 15000);
   try {
-    const res = await fetch(`${API_URL}/public/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { signal: ctl.signal });
+    const res = await fetch(`${API_URL}/public/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { signal: ctl.signal, headers: countryHeader() });
     return res.ok ? ((await res.json()) as FeedPage) : null;
   } catch {
     return null;
@@ -125,7 +137,7 @@ export async function api<T = unknown>(
   path: string,
   opts: { method?: string; body?: unknown } = {},
 ): Promise<T> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = countryHeader();
   const token = getToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
