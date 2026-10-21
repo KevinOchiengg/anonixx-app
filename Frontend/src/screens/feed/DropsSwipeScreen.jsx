@@ -1483,6 +1483,51 @@ export default function DropsSwipeScreen({ navigation, route }) {
     return replay.length ? [...out, ...replay] : out;
   }, [posts, linkedPost, marketFeed, feedAds, replay]);
 
+  // ── Swipe between slides: follows the finger, then snaps instantly ──
+  // Native paging (pagingEnabled / snapToInterval) always plays its own
+  // glide into place after the finger lifts, and neither platform lets that
+  // animation be skipped. So the list's own scrolling is off and this pan
+  // drives it: the slide tracks the finger while dragging, and on release
+  // it jumps straight to the next/previous slide (or back) with no glide.
+  // A flick or a drag past SNAP_DRAG of the screen moves one slide.
+  const SNAP_DRAG = 0.15;
+  const SNAP_VELOCITY = 500;   // px/s
+  // `from` is captured when the drag starts: activeIndex can flip to the next
+  // slide mid-drag (viewability), and counting from that would skip one.
+  const swipeRef = useRef({ index: 0, height: listHeight, count: 0, from: 0 });
+  swipeRef.current.index = activeIndex;
+  swipeRef.current.height = listHeight;
+  swipeRef.current.count = data.length;
+  const goTo = useCallback((offset) => flatListRef.current?.scrollToOffset({ offset, animated: false }), []);
+  const feedPan = useMemo(() => (
+    Gesture.Pan()
+      .runOnJS(true)
+      .activeOffsetY([-8, 8])       // taps and holds stay taps and holds
+      .failOffsetX([-15, 15])       // sideways swipes belong to photo carousels / the scrub bar
+      .onStart(() => {
+        const r = swipeRef.current;
+        r.from = r.index;
+      })
+      .onUpdate((e) => {
+        const r = swipeRef.current;
+        const max = Math.max(0, (r.count - 1) * r.height);
+        goTo(Math.min(max, Math.max(0, r.from * r.height - e.translationY)));
+      })
+      .onEnd((e) => {
+        const r = swipeRef.current;
+        let next = r.from;
+        if (e.translationY < -r.height * SNAP_DRAG || e.velocityY < -SNAP_VELOCITY) next += 1;
+        else if (e.translationY > r.height * SNAP_DRAG || e.velocityY > SNAP_VELOCITY) next -= 1;
+        next = Math.min(Math.max(0, next), Math.max(0, r.count - 1));
+        goTo(next * r.height);
+      })
+      .onFinalize((_, ok) => {
+        // cancelled mid-drag (e.g. a second finger for the declutter hold): settle back
+        if (!ok) goTo(swipeRef.current.from * swipeRef.current.height);
+      })
+  ), [goTo]);
+  const feedGestures = useMemo(() => Gesture.Simultaneous(chromeLongPress, feedPan), [chromeLongPress, feedPan]);
+
   // Opened from a shared link (anonixx.app/drop/<id>): show that drop first.
   const linkedDropId = route?.params?.dropId;
   useEffect(() => {
@@ -1595,7 +1640,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }
 
   return (
-    <GestureDetector gesture={chromeLongPress}>
+    <GestureDetector gesture={feedGestures}>
     <View style={ss.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
@@ -1610,14 +1655,12 @@ export default function DropsSwipeScreen({ navigation, route }) {
         data={data}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        pagingEnabled
-        snapToInterval={listHeight}
+        scrollEnabled={false}   // feedPan above drives it, so slides snap with no glide
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
           if (h > 0 && h !== listHeight) setListHeight(h);
         }}
-        snapToAlignment="start"
-        decelerationRate="fast"
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         getItemLayout={getItemLayout}
         onViewableItemsChanged={onViewableItemsChanged}

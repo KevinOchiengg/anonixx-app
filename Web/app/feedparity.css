@@ -602,3 +602,8 @@
 /* scrubbing hides the caption and rail so the frame being searched for is visible, like TikTok */
 .slide:has(.vp-scrub.on) .caption, .slide:has(.vp-scrub.on) .rail { opacity: 0; transition: opacity 0.15s; pointer-events: none; }
 @keyframes fastin { from { opacity: 0; transform: translateX(-50%) scale(0.85); } }
+
+/* ---------- swipe: Feed.tsx drives vertical touch so slides snap with no glide ---------- */
+.scroller { touch-action: pan-x; }
+/* an expanded caption still scrolls on its own */
+.slide.has-media .confession:not(.clamp) { touch-action: pan-y; }

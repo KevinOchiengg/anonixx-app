@@ -314,6 +314,67 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     return () => window.removeEventListener("keydown", onKey);
   }, [step]);
 
+  // Touch: the slide follows the finger, then snaps instantly on release (no glide).
+  // Native vertical panning is off for the feed (touch-action: pan-x in feedparity.css)
+  // so the browser's own snap animation never runs; sideways swipes still reach photo
+  // carousels. A flick or a drag past 15% of the screen moves one slide.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    let tracking = false;
+    let axis: "" | "x" | "y" = "";
+    let x0 = 0, y0 = 0, top0 = 0, t0 = 0, from = 0;
+    const skip = (t: EventTarget | null) =>
+      (t as HTMLElement | null)?.closest?.(".confession:not(.clamp), .sheet, textarea, input, select, audio, .vp-scrub");
+    const start = (e: TouchEvent) => {
+      tracking = e.touches.length === 1 && !skip(e.target);
+      if (!tracking) return;
+      axis = "";
+      x0 = e.touches[0].clientX;
+      y0 = e.touches[0].clientY;
+      top0 = el.scrollTop;
+      t0 = performance.now();
+      from = Math.round(top0 / el.clientHeight);
+    };
+    const move = (e: TouchEvent) => {
+      if (!tracking) return;
+      const dx = e.touches[0].clientX - x0;
+      const dy = e.touches[0].clientY - y0;
+      if (!axis) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        axis = Math.abs(dy) >= Math.abs(dx) ? "y" : "x";
+        if (axis === "y") el.style.scrollSnapType = "none"; // let it track the finger freely
+      }
+      if (axis === "y") el.scrollTop = top0 - dy;
+    };
+    const end = (e: TouchEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      if (axis !== "y") return;
+      const h = el.clientHeight;
+      const dy = (e.changedTouches[0]?.clientY ?? y0) - y0;
+      const v = dy / Math.max(1, performance.now() - t0); // px per ms
+      let next = from;
+      if (e.type === "touchend") {
+        if (dy < -h * 0.15 || v < -0.5) next += 1;
+        else if (dy > h * 0.15 || v > 0.5) next -= 1;
+      }
+      const last = Math.max(0, Math.round(el.scrollHeight / h) - 1);
+      el.scrollTo({ top: Math.min(Math.max(0, next), last) * h, behavior: "instant" });
+      el.style.scrollSnapType = "";
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: true });
+    el.addEventListener("touchend", end);
+    el.addEventListener("touchcancel", end);
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+  }, []);
+
   // Mouse wheels and trackpads: one gesture = one slide, like the app's swipe.
   useEffect(() => {
     const el = scroller.current;
