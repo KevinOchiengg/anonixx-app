@@ -135,6 +135,20 @@ def upload_bytes(data: bytes, resource_type: str, content_type: str) -> str:
     return public_url_for(key)
 
 
+def upload_bytes_at(key: str, data: bytes, content_type: str) -> str:
+    """Server-side proxy upload to an explicit, caller-chosen key — for the
+    rare case that should overwrite a stable slot on repeat uploads (e.g. a
+    drop's teaser card) rather than get a fresh random key each time like
+    `upload_bytes` does."""
+    _client().put_object(
+        Bucket=settings.R2_BUCKET_NAME,
+        Key=key,
+        Body=data,
+        ContentType=content_type,
+    )
+    return public_url_for(key)
+
+
 def delete_by_url(url: Optional[str]):
     """Best-effort cleanup — takes a public URL (as stored on a document)
     and removes the underlying object. Silent no-op on any failure; this
