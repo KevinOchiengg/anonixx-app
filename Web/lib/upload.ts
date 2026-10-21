@@ -6,7 +6,7 @@ const ENDPOINT: Record<UploadKind, string> = { image: "image", video: "video", v
 const MAX_MB: Record<UploadKind, number> = { image: 5, video: 50, voice: 10 };
 
 function putXhr(url: string, file: Blob, type: string, onProgress?: (pct: number) => void) {
-  return new Promise<{ ok: boolean; sent: boolean }>((resolve) => {
+  return new Promise<{ ok: boolean; sent: boolean; status: number }>((resolve) => {
     const xhr = new XMLHttpRequest();
     let sent = false;
     xhr.open("PUT", url);
@@ -15,28 +15,44 @@ function putXhr(url: string, file: Blob, type: string, onProgress?: (pct: number
       if (e.loaded > 0) sent = true;
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };
-    xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, sent });
-    xhr.onerror = () => resolve({ ok: false, sent });
-    xhr.ontimeout = () => resolve({ ok: false, sent });
+    xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, sent, status: xhr.status });
+    xhr.onerror = () => resolve({ ok: false, sent, status: 0 });
+    xhr.ontimeout = () => resolve({ ok: false, sent, status: 0 });
     xhr.send(file);
   });
 }
 
-// Straight to storage with a presigned URL. Returns null if that isn't possible
-// (bucket CORS not set, signing failed...) so the caller can use the server route.
+// Straight to storage with a presigned URL. On failure returns why, so the caller can
+// use the server route and still tell the user what actually went wrong.
 let directBlocked = false;
-async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: number) => void): Promise<string | null> {
-  if (directBlocked) return null;
+async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: number) => void): Promise<{ url: string } | { reason: string }> {
+  if (directBlocked) return { reason: "storage isn't reachable from this browser" };
   const type = (file.type || (kind === "image" ? "image/jpeg" : kind === "video" ? "video/mp4" : "audio/webm")).split(";")[0];
-  try {
-    const s = await api<{ upload_url: string; public_url: string }>("/upload/sign", {
-      body: { resource_type: kind === "voice" ? "audio" : kind, content_type: type },
-    });
+  let reason = "";
+  // Two tries: a connection that drops mid-file gets one more go before we push the
+  // whole thing through our server instead. Re-signed each time — a slow first try
+  // can outlive the 5-minute URL.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let s: { upload_url: string; public_url: string };
+    try {
+      s = await api<{ upload_url: string; public_url: string }>("/upload/sign", {
+        body: { resource_type: kind === "voice" ? "audio" : kind, content_type: type },
+      });
+    } catch (e) {
+      return { reason: e instanceof Error && e.message ? e.message : "couldn't get an upload link" };
+    }
+    if (attempt > 0) onProgress?.(0);
     const r = await putXhr(s.upload_url, file, type, onProgress);
-    if (r.ok) return s.public_url;
-    if (!r.sent) directBlocked = true;
-  } catch { /* fall back */ }
-  return null;
+    if (r.ok) return { url: s.public_url };
+    if (!r.sent) {
+      // Nothing left the browser: blocked outright (CORS, offline). Retrying won't help.
+      directBlocked = r.status === 0;
+      return { reason: r.status ? `storage rejected the file (${r.status})` : "couldn't connect to storage" };
+    }
+    reason = r.status ? `storage rejected the file (${r.status})` : "the connection dropped mid-upload";
+    if (r.status >= 400 && r.status < 500) break;
+  }
+  return { reason };
 }
 
 // Uploads the file and returns its public URL. Tries storage directly first, then our server.
@@ -45,7 +61,7 @@ export async function uploadFile(file: Blob | File, kind: UploadKind, onProgress
     throw new ApiError(400, `That file is too big. Max ${MAX_MB[kind]}MB.`);
   }
   const direct = await uploadDirect(file, kind, onProgress);
-  if (direct) return direct;
+  if ("url" in direct) return direct.url;
   onProgress?.(0);
   const form = new FormData();
   const name = file instanceof File ? file.name : kind === "voice" ? "voice.webm" : "upload";
@@ -59,7 +75,7 @@ export async function uploadFile(file: Blob | File, kind: UploadKind, onProgress
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
     xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText });
-    xhr.onerror = () => reject(new ApiError(0, `Couldn't reach the upload server (${host}). Make sure the API is running, then try again.`));
+    xhr.onerror = () => reject(new ApiError(0, `Upload didn't go through: ${direct.reason}, and the backup server (${host}) didn't answer either. Try again on a steadier connection.`));
     xhr.ontimeout = () => reject(new ApiError(0, "The upload took too long. Try a smaller file."));
     xhr.send(form);
   });
