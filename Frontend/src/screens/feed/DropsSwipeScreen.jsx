@@ -66,6 +66,7 @@ import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 import { CARD_INTENTS, DROP_THEMES } from '../../components/drops/DropCardRenderer';
 import VideoOverlays from '../../components/common/VideoOverlays';
+import InlineMoreText from '../../components/common/InlineMoreText';
 import { countryHeader } from '../../utils/country';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 
@@ -537,9 +538,6 @@ const VideoSlide = ({
     ]).start(() => setShowHeart(false));
   };
 
-  const shouldTruncate = (post.content?.length || 0) > 100;
-  const displayContent = shouldTruncate && !expanded
-    ? post.content.substring(0, 100) + '...' : post.content;
 
   return (
     <View style={ss.slide}>
@@ -655,10 +653,7 @@ const VideoSlide = ({
 
             {post.content ? (
               <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
-                <Text style={ss.contentText}>
-                  {displayContent}
-                  {shouldTruncate && <Text style={ss.moreText}>{expanded ? ' less' : ' more'}</Text>}
-                </Text>
+                <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} expanded={expanded} />
               </TouchableOpacity>
             ) : null}
 
@@ -736,9 +731,6 @@ const AudioSlide = ({
     current: progress > 0 && i === activeBar,
   }));
 
-  const shouldTruncate = (post.content?.length || 0) > 120;
-  const displayContent = shouldTruncate && !expanded
-    ? post.content.substring(0, 120) + '...' : post.content;
 
   return (
     <View style={[ss.slide, { backgroundColor: THEME.background }]}>
@@ -780,10 +772,7 @@ const AudioSlide = ({
 
         {post.content ? (
           <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85} style={as.contentWrap}>
-            <Text style={as.contentText}>
-              {displayContent}
-              {shouldTruncate && <Text style={as.moreText}>{expanded ? ' less' : ' more'}</Text>}
-            </Text>
+            <InlineMoreText text={post.content} style={as.contentText} moreStyle={as.moreText} expanded={expanded} />
           </TouchableOpacity>
         ) : null}
 
@@ -916,9 +905,6 @@ const TextSlide = ({
   // it — this link always works regardless.
   const isLong = (post.content?.length || 0) > 200;
 
-  const shouldTruncateCaption = (post.content?.length || 0) > 100;
-  const displayCaption = shouldTruncateCaption && !expanded
-    ? post.content.substring(0, 100) + '...' : post.content;
 
   const handleLikeWithAnim = () => {
     Animated.sequence([
@@ -1042,10 +1028,7 @@ const TextSlide = ({
                 its shrunk-to-fit size. */}
             {hasImage && post.content ? (
               <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
-                <Text style={ss.contentText}>
-                  {displayCaption}
-                  {shouldTruncateCaption && <Text style={ss.moreText}>{expanded ? ' less' : ' more'}</Text>}
-                </Text>
+                <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} expanded={expanded} />
               </TouchableOpacity>
             ) : null}
             {!hasImage && isLong && (
@@ -1811,7 +1794,7 @@ const ss = StyleSheet.create({
   authorName: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
   timeAgo: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
   contentText: { fontSize: 14, color: 'rgba(255,255,255,0.92)', lineHeight: 21, marginBottom: 10, letterSpacing: 0.1 },
-  moreText: { color: THEME.primary, fontWeight: '700' },
+  moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
   // TikTok's own feed progress indicator: a hairline, not a boxed slider
   // with time labels and a draggable thumb (the feed doesn't support
   // scrubbing at all — only the full-screen player does). Thin enough
@@ -1855,7 +1838,7 @@ const as = StyleSheet.create({
   timeAgo: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
   contentWrap: { marginBottom: 28 },
   contentText: { fontSize: 16, lineHeight: 24, color: 'rgba(255,255,255,0.85)', letterSpacing: 0.2 },
-  moreText: { color: THEME.primary, fontWeight: '600' },
+  moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
   waveformWrap: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 64, marginBottom: 12 },
   bar: { width: 4, borderRadius: 3 },
   barPlayed: { backgroundColor: THEME.primary },
