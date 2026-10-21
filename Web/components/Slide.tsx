@@ -80,8 +80,24 @@ export default function Slide({
   const chosen = post.sound && !audioSrc && !mature ? post.sound : null;
   const ambient = chosen || (textSlide && !mature ? pickSound(sounds, post) : null);
   const muteClip = Boolean(chosen?.mute_original);
-  const longText = post.content.length > 200;
-  const mediaLong = post.content.length > 100;
+  // "more" / "Read full confession" show whenever the clamped text is actually cut
+  // off on this screen — measured, not guessed from character count (two lines on a
+  // phone hold ~70 characters, and line breaks fill them faster still).
+  const textRef = useRef<HTMLElement>(null);
+  const [cut, setCut] = useState(false);
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const check = () => {
+      if (el.classList.contains("clamp") || el.classList.contains("clamp-text")) setCut(el.scrollHeight > el.clientHeight + 2);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [post.content, hasMedia, expanded]);
+  const mediaLong = hasMedia && (cut || expanded);
+  const longText = !hasMedia && cut;
 
   async function like() {
     if (!user) return onGate("Sign in to like it. They'll never know it was you.");
@@ -198,16 +214,17 @@ export default function Slide({
         {post.promo_kind === "pin" ? <span className="pin-tag">pinned</span> : null}
         {post.content ? (
           <Text
-            className={`confession${hasMedia && !expanded ? " clamp" : ""}${textSlide && longText ? " clamp-text" : ""}`}
-            onClick={hasMedia && mediaLong ? () => setExpanded((v) => !v) : undefined}
+            ref={textRef as React.RefObject<HTMLParagraphElement>}
+            className={`confession${hasMedia && !expanded ? " clamp" : ""}${textSlide ? " clamp-text" : ""}`}
+            onClick={mediaLong ? () => setExpanded((v) => !v) : undefined}
           >
             {post.content}
           </Text>
         ) : null}
-        {hasMedia && mediaLong ? (
+        {mediaLong ? (
           <button type="button" className="more-btn" onClick={() => setExpanded((v) => !v)}>{expanded ? "less" : "more"}</button>
         ) : null}
-        {!hasMedia && longText ? (
+        {longText ? (
           <button className="read-full" onClick={() => setFullText(true)}>Read full confession</button>
         ) : null}
         {canLinkUp && !hasMedia ? linkBtn : null}
