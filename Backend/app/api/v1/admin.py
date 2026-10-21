@@ -7,6 +7,7 @@ from bson import ObjectId
 from app.database import get_database
 from app.dependencies import require_admin, require_super_admin, is_super_admin_user
 from app.utils.coin_service import credit_coins
+from app.api.v1.drops import PROMO_KINDS, PROMO_HOURS
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -388,6 +389,8 @@ async def list_drops(
             "confession":        (d.get("confession") or "")[:200],
             # full text only where the dashboard can edit it, so an edit never starts from the cut-off preview
             "confession_full":   (d.get("confession") or "") if d.get("is_admin_drop") else None,
+            "promo_kind":        d.get("promo_kind") if d.get("promo_until") and _aware(d["promo_until"]) > _now() else None,
+            "promo_until":       _aware(d["promo_until"]).isoformat() if d.get("promo_until") else None,
             "media_type":        d.get("media_type"),
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
@@ -395,6 +398,17 @@ async def list_drops(
         })
 
     return {"total": total, "skip": skip, "limit": limit, "drops": drops}
+
+
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _drop_oid(raw: str) -> ObjectId:
+    try:
+        return ObjectId(raw)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid ID")
 
 
 class AdminEditDropRequest(BaseModel):
@@ -430,6 +444,170 @@ async def edit_admin_drop(
         {"$set": {"confession": text, "edited_at": _now(), "edited_by": admin_id}},
     )
     return {"drop_id": drop_id, "confession": text}
+
+
+class PromoteRequest(BaseModel):
+    kind:  str   # "pin" | "boost"
+    hours: int   # 6, 24, 72 or 168
+
+
+@router.patch("/drops/{drop_id}/promote", summary="Pin or boost an admin post in the feed for a while")
+async def promote_drop(
+    drop_id:  str,
+    data:     PromoteRequest,
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    if data.kind not in PROMO_KINDS or data.hours not in PROMO_HOURS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pick pin or boost, for 6 hours, 1, 3 or 7 days")
+    oid = _drop_oid(drop_id)
+    drop = await db["drops"].find_one({"_id": oid}, {"is_admin_drop": 1})
+    if not drop:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
+    if not drop.get("is_admin_drop"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only posts made by admins can be pinned or boosted")
+    until = _now() + timedelta(hours=data.hours)
+    await db["drops"].update_one(
+        {"_id": oid},
+        {"$set": {"promo_kind": data.kind, "promo_until": until, "promoted_by": admin_id}},
+    )
+    return {"drop_id": drop_id, "promo_kind": data.kind, "promo_until": until.isoformat()}
+
+
+@router.delete("/drops/{drop_id}/promote", summary="Stop pinning/boosting a post")
+async def unpromote_drop(
+    drop_id:  str,
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    result = await db["drops"].update_one(
+        {"_id": _drop_oid(drop_id)}, {"$set": {"promo_kind": None, "promo_until": None}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
+    return {"drop_id": drop_id, "promo_kind": None}
+
+
+# ─── Scheduled drops ──────────────────────────────────────────
+# The Post Studio uploads the media straight away and parks the create
+# payload here; app/tasks/scheduled_publisher.py publishes it on time.
+
+MAX_SCHEDULE_DAYS = 60
+
+
+class ScheduleRequest(BaseModel):
+    publish_at: datetime
+    drop:       dict
+
+
+class RescheduleRequest(BaseModel):
+    publish_at: datetime
+
+
+def _check_publish_at(when: datetime) -> datetime:
+    when = _aware(when)
+    if when < _now() + timedelta(minutes=1):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pick a time at least a minute from now")
+    if when > _now() + timedelta(days=MAX_SCHEDULE_DAYS):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"You can schedule up to {MAX_SCHEDULE_DAYS} days ahead")
+    return when
+
+
+def _scheduled_out(s: dict) -> dict:
+    d = s.get("drop") or {}
+    return {
+        "id":           str(s["_id"]),
+        "status":       s.get("status"),
+        "publish_at":   _aware(s["publish_at"]).isoformat(),
+        "display_name": d.get("display_name") or None,
+        "confession":   (d.get("confession") or "")[:200],
+        "media_type":   "image" if d.get("images") else d.get("media_type") or ("poll" if d.get("poll") else None),
+        "thumb":        d.get("cover_url") or (d.get("images") or [None])[0] or (d.get("media_url") if d.get("media_type") == "image" else None),
+        "promo_kind":   d.get("promo_kind"),
+        "drop_id":      s.get("drop_id"),
+        "error":        s.get("error"),
+    }
+
+
+@router.post("/scheduled", summary="Schedule an admin drop to publish later")
+async def schedule_drop(
+    data:     ScheduleRequest,
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    from app.api.v1.drops import CreateDropRequest, clean_video_edit
+    when = _check_publish_at(data.publish_at)
+    try:
+        req = CreateDropRequest(**data.drop)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "That post isn't complete. Check it and try again")
+    if not (req.confession or req.media_url or req.images or req.poll):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Add something to post")
+    clean_video_edit(req.video_edit)   # surface trim/overlay problems now, not at publish time
+
+    doc = {
+        "admin_id":   admin_id,
+        "drop":       req.model_dump(exclude_none=True),
+        "publish_at": when,
+        "status":     "pending",
+        "created_at": _now(),
+    }
+    res = await db["scheduled_drops"].insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return _scheduled_out(doc)
+
+
+@router.get("/scheduled", summary="Upcoming scheduled drops, plus recent ones that published or failed")
+async def list_scheduled(
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    upcoming = await db["scheduled_drops"].find({"status": {"$in": ["pending", "publishing"]}}).sort("publish_at", 1).to_list(200)
+    recent = await db["scheduled_drops"].find({"status": {"$in": ["published", "failed"]}}).sort("publish_at", -1).to_list(20)
+    return {"upcoming": [_scheduled_out(s) for s in upcoming], "recent": [_scheduled_out(s) for s in recent]}
+
+
+@router.patch("/scheduled/{schedule_id}", summary="Move a scheduled drop to a new time")
+async def reschedule_drop(
+    schedule_id: str,
+    data:        RescheduleRequest,
+    admin_id:    str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    when = _check_publish_at(data.publish_at)
+    res = await db["scheduled_drops"].update_one(
+        {"_id": _drop_oid(schedule_id), "status": "pending"}, {"$set": {"publish_at": when}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
+    return {"id": schedule_id, "publish_at": when.isoformat()}
+
+
+@router.post("/scheduled/{schedule_id}/publish-now", summary="Publish a scheduled drop immediately")
+async def publish_scheduled_now(
+    schedule_id: str,
+    admin_id:    str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    from app.tasks.scheduled_publisher import publish_due_drops
+    oid = _drop_oid(schedule_id)
+    res = await db["scheduled_drops"].update_one({"_id": oid, "status": "pending"}, {"$set": {"publish_at": _now()}})
+    if res.matched_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
+    await publish_due_drops(db)
+    return _scheduled_out(await db["scheduled_drops"].find_one({"_id": oid}))
+
+
+@router.delete("/scheduled/{schedule_id}", summary="Cancel a scheduled drop")
+async def cancel_scheduled(
+    schedule_id: str,
+    admin_id:    str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    res = await db["scheduled_drops"].delete_one({"_id": _drop_oid(schedule_id), "status": {"$in": ["pending", "failed"]}})
+    if res.deleted_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
+    return {"cancelled": schedule_id}
 
 
 @router.patch("/drops/{drop_id}/dismiss", summary="Clear a drop from the moderation queue without deleting it")

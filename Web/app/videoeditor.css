@@ -33,7 +33,9 @@
 .vx-track { position: relative; height: 40px; }
 .vx-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 8px; transform: translateY(-50%); border-radius: 4px; background: var(--line); }
 .vx-sel { position: absolute; top: 50%; height: 8px; transform: translateY(-50%); left: var(--a); right: calc(100% - var(--b)); border-radius: 4px; background: var(--rose); }
-.vx-head { position: absolute; top: 7px; bottom: 7px; left: var(--n); width: 2px; margin-left: -1px; border-radius: 1px; background: var(--fg); pointer-events: none; }
+.vx-cover { position: absolute; top: 2px; left: var(--c); width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #ffc93c; border: 2px solid var(--bg, #0b0f18); pointer-events: none; }
+.vx-quick button.cov { border-color: #ffc93c; color: #ffc93c; }
+.vx-head {position: absolute; top: 7px; bottom: 7px; left: var(--n); width: 2px; margin-left: -1px; border-radius: 1px; background: var(--fg); pointer-events: none; }
 .vx-track input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
 .vx-track input::-webkit-slider-runnable-track { background: none; }
 .vx-track input::-moz-range-track { background: none; }

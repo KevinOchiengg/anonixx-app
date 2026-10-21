@@ -343,12 +343,32 @@ const VideoSlide = ({
   // Smart trim: the full original is streamed, but only [start, end] plays (and loops).
   const clipStart = post.video_edit?.start || 0;
   const clipEnd = post.video_edit?.end || 0;
+  // A track picked in the admin Post Studio plays over the clip, following its
+  // play/pause; with mute_original it replaces the clip's own audio.
+  const track = post.sound?.url ? post.sound : null;
+  const trackPlayer = useAudioPlayer(null);
+  const trackLoaded = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
     const sub = player.addListener('playingChange', ({ isPlaying: playing }) => setIsPlaying(playing));
     return () => sub.remove();
   }, [player]);
+
+  useEffect(() => {
+    if (!track) return;
+    if (isActive && isPlaying) {
+      if (!trackLoaded.current) {
+        trackLoaded.current = true;
+        trackPlayer.replace({ uri: track.url });
+        trackPlayer.loop = true;
+        if (track.mute_original) player.muted = true;
+      }
+      trackPlayer.play();
+    } else {
+      trackPlayer.pause();
+    }
+  }, [track, isActive, isPlaying, trackPlayer, player]);
 
   useEffect(() => {
     const sub = player.addListener('statusChange', ({ status }) => setPlayerStatus(status));

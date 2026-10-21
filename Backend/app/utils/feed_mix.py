@@ -121,6 +121,35 @@ async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str]):
     return rows, (_encode(nxt) if has_more else None), has_more
 
 
+# ── Promoted drops (admin pin / boost) ──────────────────────────
+# While a drop's promo_until is in the future it's taken out of the normal
+# streams (so it's never shown twice) and placed on the first page instead:
+# pinned drops at the very top, boosted ones a few slots down.
+MAX_PROMOTED = 4
+BOOST_SLOTS = (2, 5)
+
+
+def not_promoted(now: datetime) -> dict:
+    return {"$or": [{"promo_until": None}, {"promo_until": {"$lte": now}}]}
+
+
+async def fetch_promoted(db, base_query: dict, now: datetime) -> list:
+    live = {"promo_until": {"$gt": now}}
+    query = {"$and": [base_query, live]} if base_query else live
+    rows = await db["drops"].find(query).sort([("created_at", -1)]).limit(MAX_PROMOTED).to_list(None)
+    return sorted(rows, key=lambda d: d.get("promo_kind") != "pin")
+
+
+def splice_promoted(page: list, promoted: list) -> list:
+    pinned = [d for d in promoted if d.get("promo_kind") == "pin"]
+    boosted = [d for d in promoted if d.get("promo_kind") != "pin"]
+    out = pinned + list(page)
+    for slot, d in zip(BOOST_SLOTS, boosted):
+        out.insert(min(len(pinned) + slot, len(out)), d)
+    out.extend(boosted[len(BOOST_SLOTS):])
+    return out
+
+
 def reslot(page: list, shuffled: list) -> list:
     """Keep the media/text rhythm of `page` while using the order of `shuffled`
     (affinity ordering) inside each kind."""

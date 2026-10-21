@@ -17,11 +17,14 @@ type Props = {
   value: VideoEdit;
   onChange: (v: VideoEdit) => void;
   onNoPreview?: () => void;
+  // optional cover-frame picking (admin Post Studio)
+  cover?: number | null;
+  onCover?: (t: number) => void;
 };
 
 // Trim + text over the clip, previewed exactly as the feed will play it. Nothing is
 // re-encoded: the result is just the window and the overlays, saved with the post.
-export default function VideoEditor({ src, duration, value, onChange, onNoPreview }: Props) {
+export default function VideoEditor({ src, duration, value, onChange, onNoPreview, cover, onCover }: Props) {
   const vid = useRef<HTMLVideoElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const drag = useRef<number | null>(null);
@@ -153,8 +156,9 @@ export default function VideoEditor({ src, duration, value, onChange, onNoPrevie
           <span className="vx-len">{fmtTime(start)} – {fmtTime(end)} · <em>{fmtTime(len)}</em> of max {fmtTime(MAX_CLIP_SECONDS)}</span>
         </div>
         {cut ? <p className="vx-cut">This video is {fmtTime(duration)}, so it was cut to its first 3:00. Drag the handles to pick a different 3 minutes.</p> : null}
-        <div className="vx-track" style={{ "--a": pct(start), "--b": pct(end), "--n": pct(clamp(now, 0, duration)) } as React.CSSProperties}>
+        <div className="vx-track" style={{ "--a": pct(start), "--b": pct(end), "--n": pct(clamp(now, 0, duration)), "--c": pct(cover ?? 0) } as React.CSSProperties}>
           <span className="vx-sel" />
+          {onCover && cover != null ? <span className="vx-cover" title="Cover frame" /> : null}
           <span className="vx-head" />
           <input type="range" min={0} max={duration} step={0.1} value={start} aria-label="Clip start" onChange={(e) => setStart(Number(e.target.value))} />
           <input type="range" min={0} max={duration} step={0.1} value={end} aria-label="Clip end" onChange={(e) => setEnd(Number(e.target.value))} />
@@ -163,6 +167,11 @@ export default function VideoEditor({ src, duration, value, onChange, onNoPrevie
           <button type="button" onClick={() => setStart(now)}>Start here</button>
           <button type="button" onClick={() => setEnd(now)} disabled={now <= start + MIN_CLIP_SECONDS}>End here</button>
           <button type="button" onClick={() => onChange({ ...value, start: 0, end: Math.min(duration, MAX_CLIP_SECONDS) })}>Reset</button>
+          {onCover ? (
+            <button type="button" className="cov" onClick={() => onCover(clamp(now, start, end))}>
+              {cover != null && Math.abs(cover - now) < 0.15 ? "✓ Cover frame" : "Use this frame as cover"}
+            </button>
+          ) : null}
         </div>
 
         <div className="vx-row">

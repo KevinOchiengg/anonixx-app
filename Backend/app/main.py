@@ -34,6 +34,7 @@ from app.api.v1 import (
 )
 from app.tasks.publisher_worker import publisher_worker
 from app.tasks.drop_cleanup import drop_cleanup_worker
+from app.tasks import scheduled_publisher
 
 
 async def _ensure_indexes():
@@ -106,7 +107,9 @@ async def lifespan(app: FastAPI):
     await _ensure_indexes()
     await publisher_worker.start()          # start social publishing worker
     await drop_cleanup_worker.start()       # delete drops past their post-unlock grace
+    await scheduled_publisher.start()       # publish admin drops scheduled for later
     yield
+    await scheduled_publisher.stop()
     await drop_cleanup_worker.stop()        # clean shutdown
     await publisher_worker.stop()
     await close_mongo_connection()

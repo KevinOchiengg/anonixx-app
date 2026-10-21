@@ -113,3 +113,51 @@
 .ps-suggest button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted); font-size: 12.5px; cursor: pointer; }
 .ps-suggest button:hover:not(:disabled) { color: var(--fg); border-color: var(--faint); }
 .ps-as { margin-bottom: 14px; }
+
+/* ---------- spotlight: cover, sound, pin/boost, schedule ---------- */
+.ps-sec h3 em { font-style: normal; font-size: 12px; font-weight: 800; color: var(--muted); }
+.ps-sec h3 .ps-pro { padding: 2px 8px; border-radius: 999px; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffc93c; background: rgba(255, 201, 60, 0.12); }
+.ps-spot-row { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ps-spot-row:first-of-type { border-top: 0; padding-top: 0; }
+.ps-spot-row > b { font-size: 13.5px; }
+.ps-spot-row > span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.ps-spot-row > span a { color: var(--rose); }
+.ps-spot-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ps-spot-ctl select, .ps-spot-ctl input[type="datetime-local"] {
+  min-width: 0; max-width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface-alt); color: var(--fg); font: inherit; font-size: 14px; color-scheme: dark;
+}
+.ps-seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 12px; background: var(--surface-alt); border: 1px solid var(--line); }
+.ps-seg button { padding: 6px 12px; border-radius: 9px; border: 0; background: none; color: var(--muted); font-weight: 700; font-size: 13px; cursor: pointer; }
+.ps-seg button.on { background: var(--rose); color: #fff; }
+.ps-check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.ps-check-inline input { accent-color: var(--rose); width: 16px; height: 16px; }
+.ps-btn.danger { color: #ff7a6b; }
+
+.ps-chips { position: absolute; z-index: 2; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+.ps-chips .pin-tag { margin: 0; }
+.ps-sound { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(10, 12, 20, 0.55); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ps-share { display: grid; gap: 6px; width: min(100%, 460px); margin-top: 10px; }
+.ps-share input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; text-align: center; }
+.ps-share .ps-done-row { margin-top: 4px; }
+
+/* ---------- coming up: scheduled drops ---------- */
+.ps-sched { margin-top: 14px; }
+.ps-sched-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px 12px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+.ps-sched-row:first-of-type { border-top: 0; padding-top: 0; }
+.ps-sched-row img, .ps-sched-row .ph { width: 44px; height: 58px; border-radius: 8px; object-fit: cover; background: var(--surface-alt); display: grid; place-items: center; font-weight: 800; color: var(--muted); }
+.ps-sched-row .txt { display: grid; gap: 2px; min-width: 0; }
+.ps-sched-row .txt b { font-size: 13.5px; display: flex; gap: 6px; align-items: center; }
+.ps-sched-row .txt b i { font-style: normal; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--rose-dim); color: var(--rose); text-transform: uppercase; letter-spacing: 0.05em; }
+.ps-sched-row .txt span { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-sched-row .txt small { font-size: 12px; color: var(--muted); }
+.ps-sched-row .acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.ps-sched-row .acts .ps-btn { padding: 6px 12px; font-size: 13px; }
+.ps-sched-row .acts input { padding: 6px 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--fg); font: inherit; font-size: 13px; color-scheme: dark; }
+.ps-sched-row.bad .txt b { color: #ff7a6b; }
+.ps-sched-err { color: #ff7a6b; font-size: 13px; margin: 8px 0 0; }
+@media (min-width: 720px) {
+  .ps-sched-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .ps-sched-row .acts { grid-column: auto; justify-content: flex-end; }
+}

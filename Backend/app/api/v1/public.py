@@ -3,7 +3,7 @@ Public, unauthenticated read API for the website (Web/) — server-rendered
 pages, the sitemap and the guest feed. Only `general` posts are ever served
 here; `mature` posts need a signed-in, age-verified user via /drops/*.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from bson import ObjectId
@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import get_database
 from app.api.v1.drops import batch_format_drops
 from app.utils.content_mode import SAFE_FILTER
-from app.utils.feed_mix import fetch_mixed
+from app.utils.feed_mix import fetch_mixed, not_promoted, fetch_promoted, splice_promoted
+from app.tasks import scheduled_publisher
 
 router = APIRouter(prefix="/public", tags=["Public"])
 
@@ -33,8 +34,12 @@ async def public_feed(
     limit: int = Query(10, ge=1, le=20),
     db = Depends(get_database),
 ):
+    scheduled_publisher.nudge(db)
     query: dict = {**_LIVE, **SAFE_FILTER}
-    page, next_cursor, has_more = await fetch_mixed(db, query, limit, cursor)
+    now = datetime.now(timezone.utc)
+    page, next_cursor, has_more = await fetch_mixed(db, {"$and": [query, not_promoted(now)]}, limit, cursor)
+    if not cursor:
+        page = splice_promoted(page, await fetch_promoted(db, query, now))
 
     posts = [_public_post(p) for p in await batch_format_drops(page, None, db)]
     return {"posts": posts, "next_cursor": next_cursor, "has_more": has_more}
