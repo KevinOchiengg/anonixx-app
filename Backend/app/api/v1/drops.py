@@ -164,6 +164,63 @@ def ensure_linkable(drop: dict) -> None:
         raise HTTPException(status_code=400, detail="This is a regular confession. It can't be linked up.")
 
 
+# "Smart trim": the original video is stored untouched and the drop carries the
+# window to play plus any text laid over it. Clients apply both at playback, so
+# nothing is re-encoded here (R2 is dumb storage — see app/utils/r2_storage.py).
+MAX_CLIP_SECONDS = 180
+MIN_CLIP_SECONDS = 1
+MAX_VIDEO_OVERLAYS = 5
+MAX_OVERLAY_CHARS = 80
+OVERLAY_SIZES = ("s", "m", "l")
+OVERLAY_STYLES = ("shadow", "dark", "coral")
+
+
+class VideoOverlayInput(BaseModel):
+    text: str
+    x: float = 0.5   # centre, 0–1 across the frame
+    y: float = 0.5   # centre, 0–1 down the frame
+    size: str = "m"
+    style: str = "dark"
+
+
+class VideoEditInput(BaseModel):
+    start: float = 0
+    end: float
+    overlays: List[VideoOverlayInput] = []
+
+
+def clean_video_edit(edit: Optional[VideoEditInput]) -> Optional[dict]:
+    """Validates a smart-trim edit and returns what gets stored (None if empty)."""
+    if not edit:
+        return None
+    start = max(0.0, float(edit.start))
+    end = float(edit.end)
+    if end - start < MIN_CLIP_SECONDS:
+        raise HTTPException(status_code=400, detail="A trimmed video must be at least 1 second long.")
+    if end - start > MAX_CLIP_SECONDS + 0.5:
+        raise HTTPException(status_code=400, detail="Videos can play for 3 minutes at most. Trim it shorter.")
+    if len(edit.overlays) > MAX_VIDEO_OVERLAYS:
+        raise HTTPException(status_code=400, detail=f"Up to {MAX_VIDEO_OVERLAYS} texts fit on one video.")
+
+    overlays = []
+    for o in edit.overlays:
+        text = o.text.strip()[:MAX_OVERLAY_CHARS]
+        if not text:
+            continue
+        if contains_contact_info(text):
+            raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+        if violates_policy(text):
+            raise HTTPException(status_code=400, detail=MODERATION_ERROR)
+        overlays.append({
+            "text":  text,
+            "x":     min(1.0, max(0.0, float(o.x))),
+            "y":     min(1.0, max(0.0, float(o.y))),
+            "size":  o.size if o.size in OVERLAY_SIZES else "m",
+            "style": o.style if o.style in OVERLAY_STYLES else "dark",
+        })
+    return {"start": round(start, 2), "end": round(end, 2), "overlays": overlays}
+
+
 class CreateDropRequest(BaseModel):
     kind: Optional[str] = None  # "hookup" | "confession"
     hookup: Optional[HookupDetails] = None
@@ -198,6 +255,7 @@ class CreateDropRequest(BaseModel):
     publisher_opt_in: Optional[bool] = None
     duration_seconds: Optional[float] = None     # voice drops
     waveform_data: Optional[List[float]] = None  # voice drops
+    video_edit: Optional[VideoEditInput] = None  # video drops — trim window + text overlays
 
     # Feed-as-drops upgrade — structured location, most-specific to least.
     # Only country + county are backed by a real fixed list client-side
@@ -568,6 +626,8 @@ async def create_drop(
     if data.media_url and data.media_type not in ("image", "video", "voice"):
         raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'voice'")
 
+    video_edit_data = clean_video_edit(data.video_edit) if data.media_url and data.media_type == "video" else None
+
     images_data = None
     if data.images:
         cleaned_images = [u.strip() for u in data.images if u and u.strip()]
@@ -726,6 +786,7 @@ async def create_drop(
         "published_at": None,            # set by POST /drops/:id/publish
         "duration_seconds": float(data.duration_seconds) if data.duration_seconds else None,
         "waveform_data": (data.waveform_data or None) if data.media_type == "voice" else None,
+        "video_edit": video_edit_data,
         "reaction_counts": {r: 0 for r in VALID_REACTIONS},
         "report_count": 0,
         "moderation_status": "visible",   # "visible" | "flagged" | "hidden"
@@ -1793,6 +1854,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "media_url":        drop.get("media_url"),
             "media_type":       drop.get("media_type"),
             "video_url":        drop.get("media_url") if drop.get("media_type") == "video" else None,
+            "video_edit":       drop.get("video_edit") if drop.get("media_type") == "video" else None,
             "audio_url":        drop.get("media_url") if drop.get("media_type") == "voice" else None,
             "image_url":        drop.get("image_url"),
             # Multi-image posts — ordered list the client renders as swipeable

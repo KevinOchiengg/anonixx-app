@@ -1,4 +1,6 @@
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
+import type { VideoEdit } from "./videoEdit";
+
+export const API_URL =(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 
 export type Poll = {
@@ -21,6 +23,7 @@ export type Post = {
   media_url: string | null;
   media_type: "image" | "video" | "voice" | null;
   video_url: string | null;
+  video_edit?: VideoEdit | null;
   audio_url: string | null;
   image_url: string | null;
   images: string[] | null;

@@ -64,6 +64,7 @@ import { getDeviceId } from '../../utils/deviceId';
 import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 import { CARD_INTENTS, DROP_THEMES } from '../../components/drops/DropCardRenderer';
+import VideoOverlays from '../../components/common/VideoOverlays';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 
 // Matches the injection frequency in the old DropsFeedScreen.jsx — every
@@ -339,6 +340,9 @@ const VideoSlide = ({
   // screen — several videos competing for bandwidth/decoders at once is
   // exactly what made scrolling feel janky instead of smooth.
   const player = useVideoPlayer(null, (p) => { p.loop = true; p.muted = false; });
+  // Smart trim: the full original is streamed, but only [start, end] plays (and loops).
+  const clipStart = post.video_edit?.start || 0;
+  const clipEnd = post.video_edit?.end || 0;
 
   const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
@@ -353,21 +357,30 @@ const VideoSlide = ({
 
   useEffect(() => {
     if (!isActive) return;
+    // A trimmed clip polls faster so it doesn't run visibly past its end before looping.
     const id = setInterval(() => {
       const ct = player.currentTime;
       const d = player.duration;
-      if (typeof ct === 'number' && !isNaN(ct)) setVideoCurrentTime(ct);
-      if (typeof d === 'number' && !isNaN(d) && d > 0) setVideoDuration(d);
-    }, 250);
+      if (clipEnd && typeof ct === 'number' && (ct >= clipEnd || ct < clipStart - 0.25)) {
+        player.currentTime = clipStart;
+        return;
+      }
+      if (typeof ct === 'number' && !isNaN(ct)) setVideoCurrentTime(Math.max(0, ct - clipStart));
+      if (clipEnd) setVideoDuration(clipEnd - clipStart);
+      else if (typeof d === 'number' && !isNaN(d) && d > 0) setVideoDuration(d);
+    }, clipEnd ? 100 : 250);
     return () => clearInterval(id);
-  }, [isActive, player]);
+  }, [isActive, player, clipStart, clipEnd]);
 
   useEffect(() => {
     if (isActive) {
       wasEverActive.current = true;
       if (!sourceLoaded.current) {
         sourceLoaded.current = true;
-        player.replaceAsync({ uri: post.video_url }).then(() => player.play()).catch(() => {});
+        player.replaceAsync({ uri: post.video_url }).then(() => {
+          if (clipStart) player.currentTime = clipStart;
+          player.play();
+        }).catch(() => {});
       } else {
         player.play();
       }
@@ -444,6 +457,8 @@ const VideoSlide = ({
       <TouchableWithoutFeedback onPress={handleTap}>
         <View style={StyleSheet.absoluteFill} />
       </TouchableWithoutFeedback>
+
+      <VideoOverlays overlays={post.video_edit?.overlays} />
 
       {playerStatus === 'loading' && (
         <View style={ss.videoLoading} pointerEvents="none">

@@ -180,6 +180,7 @@ export default function Slide({
             <VideoPlayer
               src={videoSrc}
               poster={post.card_image_url}
+              edit={post.video_edit}
               active={active && !mature}
               near={near}
               muted={muted}

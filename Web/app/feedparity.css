@@ -517,21 +517,14 @@
 @media (prefers-reduced-motion: reduce) { .rail button.r-act.on svg { animation: none; } }
 .r-sound { --c: #e2c4ff; --cb: rgba(226, 196, 255, 0.36); }
 
-/* ---------- play badge: coral gradient disc with a soft pulsing ring ---------- */
+/* ---------- play badge: just a faded coral triangle, no disc behind it ---------- */
 .play-badge {
   width: clamp(60px, 9.5dvh, 76px); height: clamp(60px, 9.5dvh, 76px);
-  background: linear-gradient(145deg, #ff8a73 0%, #ff634a 55%, #e0452e 100%);
-  border: 1.5px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 6px 24px rgba(255, 99, 74, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  background: none; border: 0; box-shadow: none;
   -webkit-backdrop-filter: none; backdrop-filter: none;
+  color: var(--rose); opacity: 0.5;
 }
-.play-badge::after {
-  content: ""; position: absolute; inset: -2px; border-radius: 50%;
-  border: 2px solid rgba(255, 138, 115, 0.7); animation: playring 1.8s ease-out infinite;
-}
-.play-badge svg { width: 38%; height: 38%; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25)); }
-@keyframes playring { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.5); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .play-badge::after { animation: none; opacity: 0; } }
+.play-badge svg { width: 70%; height: 70%; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3)); }
 
 /* ---------- link up: personal label, gradient pill with a slow shine, breathing glow ---------- */
 .linkup, .slide .linkup, .slide.has-media .linkup {

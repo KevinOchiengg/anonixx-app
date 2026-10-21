@@ -20,6 +20,7 @@ import T from '../../utils/theme';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
 import { useToast } from '../ui/Toast';
 import VoiceWaveform from '../common/VoiceWaveform';
+import VideoOverlays from '../common/VideoOverlays';
 import { CommentBottomSheet } from './CommentBottomSheet';
 import ReportSheet from './ReportSheet';
 
@@ -139,7 +140,10 @@ const AudioPlayer = React.memo(({ audioUrl }) => (
 ));
 
 // ─── Video Player ─────────────────────────────────────────────
-const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) => {
+const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edit }) => {
+  // Smart trim: only [start, end] of the original plays, looping inside that window.
+  const clipStart = edit?.start || 0;
+  const clipEnd = edit?.end || 0;
   const { activeVideoId } = useActiveVideo() || {};
   const isActive = activeVideoId === postId;
   const [thumbnail,   setThumbnail]   = useState(() => videoThumbnailCache.get(videoUrl) || null);
@@ -165,18 +169,25 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
       if (isSeekingRef.current) return;
       const ct = inlinePlayer.currentTime;
       const d  = inlinePlayer.duration;
+      if (clipEnd && typeof ct === 'number' && (ct >= clipEnd || ct < clipStart - 0.25)) {
+        inlinePlayer.currentTime = clipStart;
+        return;
+      }
       if (typeof ct === 'number' && !isNaN(ct)) setCurrentTime(ct);
       if (typeof d  === 'number' && !isNaN(d) && d > 0) setDuration(d);
-    }, 250);
+    }, clipEnd ? 100 : 250);
     return () => clearInterval(id);
-  }, [isPlaying, inlinePlayer]);
+  }, [isPlaying, inlinePlayer, clipStart, clipEnd]);
 
   useEffect(() => {
     if (!isActive) { inlinePlayer.pause(); return; }
     if (!sourceLoaded.current) {
       sourceLoaded.current = true;
       inlinePlayer.replaceAsync({ uri: videoUrl })
-        .then(() => inlinePlayer.play())
+        .then(() => {
+          if (clipStart) inlinePlayer.currentTime = clipStart;
+          inlinePlayer.play();
+        })
         .catch(() => {});
     } else {
       inlinePlayer.play();
@@ -244,6 +255,7 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
       />
 
       <View style={styles.videoGradient} pointerEvents="none" />
+      <VideoOverlays overlays={edit?.overlays} />
 
       <Animated.View pointerEvents="none" style={[styles.videoCenter, { opacity: overlayOp }]}>
         <View style={styles.videoPlayRing}>
@@ -288,8 +300,8 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress }) =
         <View style={styles.videoProgressWrap}>
           <Slider
             style={styles.videoProgressSlider}
-            minimumValue={0}
-            maximumValue={duration}
+            minimumValue={clipStart}
+            maximumValue={clipEnd || duration}
             value={currentTime}
             minimumTrackTintColor={T.primary}
             maximumTrackTintColor="rgba(255,255,255,0.22)"
@@ -587,6 +599,7 @@ function DropCard({
             {post.video_url && (
               <VideoPlayer
                 videoUrl={post.video_url}
+                edit={post.video_edit}
                 postId={post.id}
                 viewCount={post.views_count || 0}
                 onMediaPress={handleMediaPress}

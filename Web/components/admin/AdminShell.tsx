@@ -47,6 +47,34 @@ export const useAdminRole = () => useContext(RoleCtx);
 type Alerts = { refunds: number; chats: number };
 const THEME_KEY = "anonixx_adm_theme";
 
+const GATE_LINES = [
+  "checking you're one of us…",
+  "lowering the lights…",
+  "nobody sees this side of anonixx…",
+  "unlocking the back room…",
+];
+
+// Shown while /admin/me answers: the brand mark under a sweeping scanner ring.
+function GateLoader() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setI((n) => (n + 1) % GATE_LINES.length), 1800);
+    return () => window.clearInterval(t);
+  }, []);
+  return (
+    <div className="adm-load" role="status" aria-label="Checking admin access">
+      <div className="adm-load-orb" aria-hidden>
+        <span className="ripple" />
+        <span className="ripple" />
+        <span className="sweep" />
+        <span className="mark">A</span>
+      </div>
+      <p key={i} className="adm-load-line" aria-hidden>{GATE_LINES[i]}</p>
+      <span className="adm-load-bar" aria-hidden />
+    </div>
+  );
+}
+
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
   const path = usePathname() || "/admin";
@@ -93,21 +121,16 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return () => { live = false; window.clearInterval(t); };
   }, [state]);
 
+  if (state === "checking") return <div className="adm"><GateLoader /></div>;
   if (state !== "ok") {
     return (
       <div className="adm">
         <div className="adm-card adm-gate">
-          {state === "checking" ? (
-            <p className="muted">Checking access…</p>
-          ) : (
-            <>
-              <h2>Admins only</h2>
-              <p className="muted">{user ? "This account doesn't have admin access." : "Sign in with an admin account."}</p>
-              <Link href={user ? "/" : `/login?next=${encodeURIComponent(path)}`} className="adm-btn primary">
-                {user ? "Back to Anonixx" : "Sign in"}
-              </Link>
-            </>
-          )}
+          <h2>Admins only</h2>
+          <p className="muted">{user ? "This account doesn't have admin access." : "Sign in with an admin account."}</p>
+          <Link href={user ? "/" : `/login?next=${encodeURIComponent(path)}`} className="adm-btn primary">
+            {user ? "Back to Anonixx" : "Sign in"}
+          </Link>
         </div>
       </div>
     );
