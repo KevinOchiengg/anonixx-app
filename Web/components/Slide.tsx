@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +28,8 @@ type Props = {
   onReport: (post: Post) => void;
   onToast: (msg: string) => void;
 };
+
+const CAPTION_LINES = 2;
 
 function hash(id: string) {
   let h = 0;
@@ -80,23 +82,63 @@ export default function Slide({
   const chosen = post.sound && !audioSrc && !mature ? post.sound : null;
   const ambient = chosen || (textSlide && !mature ? pickSound(sounds, post) : null);
   const muteClip = Boolean(chosen?.mute_original);
-  // "more" / "Read full confession" show whenever the clamped text is actually cut
-  // off on this screen — measured, not guessed from character count (two lines on a
-  // phone hold ~70 characters, and line breaks fill them faster still).
+  // Captions on media read like TikTok's: two lines, ending "… more" inline as if it
+  // were part of the sentence. How much text fits is measured on this screen (two
+  // lines on a phone hold ~70 characters; line breaks fill them faster), in a hidden
+  // copy of the caption at the same width, before paint so nothing jumps.
   const textRef = useRef<HTMLElement>(null);
+  const measureRef = useRef<HTMLParagraphElement>(null);
+  const [short, setShort] = useState<string | null | undefined>(undefined);  // undefined = not measured yet, null = fits
+  const fitCaption = useCallback(() => {
+    const el = textRef.current;
+    const m = measureRef.current;
+    if (!hasMedia || !el || !m) return;
+    const width = el.getBoundingClientRect().width;
+    if (!width) return;
+    m.style.width = `${width}px`;
+    const max = parseFloat(getComputedStyle(m).lineHeight) * CAPTION_LINES + 1;
+    const full = post.content;
+    m.textContent = full;
+    if (m.offsetHeight <= max) return setShort(null);
+    let lo = 0;
+    let hi = full.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      m.textContent = `${full.slice(0, mid).trimEnd()}… more`;
+      if (m.offsetHeight <= max) lo = mid;
+      else hi = mid - 1;
+    }
+    let cutAt = lo;
+    const space = full.lastIndexOf(" ", lo);
+    if (space > lo - 14 && space > 0) cutAt = space;   // end on a whole word when one is close
+    setShort(full.slice(0, cutAt).trimEnd().replace(/[\s.,;:!?-]+$/, ""));
+  }, [hasMedia, post.content]);
+  useLayoutEffect(() => {
+    fitCaption();
+    const el = textRef.current;
+    if (!el || !hasMedia) return;
+    let lastWidth = el.getBoundingClientRect().width;
+    const ro = new ResizeObserver(() => {
+      const w = el.getBoundingClientRect().width;
+      if (Math.abs(w - lastWidth) > 1) { lastWidth = w; fitCaption(); }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitCaption, hasMedia]);
+  const mediaLong = hasMedia && typeof short === "string";
+  const toggleCaption = (e?: React.MouseEvent) => { e?.stopPropagation(); setExpanded((v) => !v); };
+
+  // Text-only posts: "Read full confession" shows when the clamped text is actually cut.
   const [cut, setCut] = useState(false);
   useEffect(() => {
     const el = textRef.current;
-    if (!el) return;
-    const check = () => {
-      if (el.classList.contains("clamp") || el.classList.contains("clamp-text")) setCut(el.scrollHeight > el.clientHeight + 2);
-    };
+    if (!el || hasMedia) return;
+    const check = () => setCut(el.scrollHeight > el.clientHeight + 2);
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [post.content, hasMedia, expanded]);
-  const mediaLong = hasMedia && (cut || expanded);
+  }, [post.content, hasMedia]);
   const longText = !hasMedia && cut;
 
   async function like() {
@@ -215,15 +257,17 @@ export default function Slide({
         {post.content ? (
           <Text
             ref={textRef as React.RefObject<HTMLParagraphElement>}
-            className={`confession${hasMedia && !expanded ? " clamp" : ""}${textSlide ? " clamp-text" : ""}`}
-            onClick={mediaLong ? () => setExpanded((v) => !v) : undefined}
+            // until measured, CSS clamps it so the first paint never overflows
+            className={`confession${hasMedia && short === undefined ? " clamp" : ""}${textSlide ? " clamp-text" : ""}`}
+            onClick={mediaLong ? () => toggleCaption() : undefined}
           >
-            {post.content}
+            {mediaLong && !expanded ? (
+              <>{short}…{" "}<button type="button" className="more-inline" onClick={toggleCaption}>more</button></>
+            ) : post.content}
+            {mediaLong && expanded ? <>{" "}<button type="button" className="more-inline" onClick={toggleCaption}>less</button></> : null}
           </Text>
         ) : null}
-        {mediaLong ? (
-          <button type="button" className="more-btn" onClick={() => setExpanded((v) => !v)}>{expanded ? "less" : "more"}</button>
-        ) : null}
+        {hasMedia && post.content ? <p ref={measureRef} className="confession caption-measure" aria-hidden /> : null}
         {longText ? (
           <button className="read-full" onClick={() => setFullText(true)}>Read full confession</button>
         ) : null}

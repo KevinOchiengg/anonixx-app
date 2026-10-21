@@ -607,3 +607,15 @@
 .scroller { touch-action: pan-x; }
 /* an expanded caption still scrolls on its own */
 .slide.has-media .confession:not(.clamp) { touch-action: pan-y; }
+
+/* ---------- captions: "… more" / "less" inline, reading as part of the text ---------- */
+.more-inline {
+  display: inline; padding: 0; margin: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 800; color: rgba(255, 255, 255, 0.72); text-shadow: inherit;
+}
+.more-inline:hover { color: #fff; }
+/* hidden copy of the caption Slide.tsx measures to find how much fits on two lines */
+.slide.has-media .caption-measure {
+  position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none;
+  max-height: none !important; overflow: visible !important; display: block !important; margin: 0;
+}
