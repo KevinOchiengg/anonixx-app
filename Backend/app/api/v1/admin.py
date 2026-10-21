@@ -386,6 +386,8 @@ async def list_drops(
             "author":            d.get("sender_anonymous_name"),
             "is_admin_drop":     d.get("is_admin_drop", False),
             "confession":        (d.get("confession") or "")[:200],
+            # full text only where the dashboard can edit it, so an edit never starts from the cut-off preview
+            "confession_full":   (d.get("confession") or "") if d.get("is_admin_drop") else None,
             "media_type":        d.get("media_type"),
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
@@ -393,6 +395,41 @@ async def list_drops(
         })
 
     return {"total": total, "skip": skip, "limit": limit, "drops": drops}
+
+
+class AdminEditDropRequest(BaseModel):
+    confession: str
+
+
+@router.patch("/drops/{drop_id}", summary="Edit the text of a post made by an admin (users' posts stay untouchable)")
+async def edit_admin_drop(
+    drop_id:  str,
+    data:     AdminEditDropRequest,
+    admin_id: str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    text = data.confession.strip()
+    if not text:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text cannot be empty")
+    if len(text) > 500:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text must be 500 characters or fewer")
+
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
+
+    drop = await db["drops"].find_one({"_id": oid}, {"is_admin_drop": 1})
+    if not drop:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
+    if not drop.get("is_admin_drop"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only posts made by admins can be edited")
+
+    await db["drops"].update_one(
+        {"_id": oid},
+        {"$set": {"confession": text, "edited_at": _now(), "edited_by": admin_id}},
+    )
+    return {"drop_id": drop_id, "confession": text}
 
 
 @router.patch("/drops/{drop_id}/dismiss", summary="Clear a drop from the moderation queue without deleting it")

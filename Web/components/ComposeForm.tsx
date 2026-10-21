@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { uploadFile } from "@/lib/upload";
 import AppShell from "./AppShell";
 import MediaPicker, { type MediaDraft } from "./compose/MediaPicker";
+import { isMeaningful } from "@/lib/videoEdit";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import PollEditor, { type PollDraft } from "./compose/PollEditor";
 import TagUser, { type Tagged } from "./compose/TagUser";
@@ -150,7 +151,9 @@ function Inner() {
         if (mode === "media" && media) {
           const urls: string[] = [];
           for (const f of media.files) urls.push(await uploadFile(f, media.kind));
-          payload = media.kind === "video" ? { media_type: "video", media_url: urls[0] }
+          const edit = media.kind === "video" && isMeaningful(media.edit, media.duration ?? 0)
+            ? { ...media.edit, overlays: media.edit.overlays.filter((o) => o.text.trim()) } : null;
+          payload = media.kind === "video" ? { media_type: "video", media_url: urls[0], ...(edit ? { video_edit: edit } : {}) }
             : urls.length > 1 ? { images: urls } : { media_type: "image", media_url: urls[0] };
         } else if (mode === "voice" && voice) {
           payload = {

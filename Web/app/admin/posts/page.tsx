@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 
 type D = {
-  id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string;
+  id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string; confession_full: string | null;
   media_type: string | null; report_count: number; moderation_status: string | null; created_at: string | null;
 };
 type Page = { total: number; skip: number; limit: number; drops: D[] };
@@ -17,6 +17,7 @@ export default function AdminPosts() {
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -35,6 +36,16 @@ export default function AdminPosts() {
     if (!window.confirm("Delete this post for everyone? This cannot be undone.")) return;
     setBusy(d.id);
     try { await api(`/admin/drops/${d.id}`, { method: "DELETE" }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
+  }
+
+  async function save() {
+    if (!editing || !editing.text.trim()) return;
+    setBusy(editing.id);
+    try {
+      await api(`/admin/drops/${editing.id}`, { method: "PATCH", body: { confession: editing.text.trim() } });
+      setEditing(null);
+      await load();
+    } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }
 
   return (
@@ -56,10 +67,27 @@ export default function AdminPosts() {
                 {d.report_count ? <Badge tone="bad">{d.report_count} report{d.report_count === 1 ? "" : "s"}</Badge> : null}
                 {d.moderation_status ? <Badge>{d.moderation_status}</Badge> : null}
               </div>
-              <p className="adm-text">{d.confession || "[no text]"}</p>
+              {editing?.id === d.id ? (
+                <textarea
+                  className="adm-edit" rows={4} maxLength={500} autoFocus value={editing.text}
+                  onChange={(e) => setEditing({ id: d.id, text: e.target.value })} aria-label="Post text"
+                />
+              ) : <p className="adm-text">{d.confession || "[no text]"}</p>}
               <div className="adm-foot">
-                <span className="muted small">{fmtDate(d.created_at)}</span>
-                <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>
+                <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/500` : fmtDate(d.created_at)}</span>
+                <div className="adm-actions">
+                  {editing?.id === d.id ? (
+                    <>
+                      <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing(null)}>Cancel</button>
+                      <button className="adm-btn primary" disabled={busy === d.id || !editing.text.trim()} onClick={save}>Save</button>
+                    </>
+                  ) : (
+                    <>
+                      {d.is_admin_drop ? <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing({ id: d.id, text: d.confession_full ?? d.confession })}>Edit</button> : null}
+                      <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))}

@@ -3,7 +3,10 @@ import { api, API_URL, ApiError, getToken } from "./api";
 export type UploadKind = "image" | "video" | "voice";
 
 const ENDPOINT: Record<UploadKind, string> = { image: "image", video: "video", voice: "audio" };
-const MAX_MB: Record<UploadKind, number> = { image: 5, video: 50, voice: 10 };
+// Videos go up whole (trim is applied at playback), so they need room for a long original.
+const MAX_MB: Record<UploadKind, number> = { image: 5, video: 500, voice: 10 };
+// What the backup route through our server will take; bigger files only go direct to storage.
+const SERVER_MAX_MB: Record<UploadKind, number> = { image: 5, video: 50, voice: 10 };
 
 function putXhr(url: string, file: Blob, type: string, onProgress?: (pct: number) => void) {
   return new Promise<{ ok: boolean; sent: boolean; status: number }>((resolve) => {
@@ -62,6 +65,9 @@ export async function uploadFile(file: Blob | File, kind: UploadKind, onProgress
   }
   const direct = await uploadDirect(file, kind, onProgress);
   if ("url" in direct) return direct.url;
+  if (file.size > SERVER_MAX_MB[kind] * 1024 * 1024) {
+    throw new ApiError(0, `Upload didn't go through: ${direct.reason}. Files over ${SERVER_MAX_MB[kind]}MB can only go straight to storage, so try again on a steadier connection.`);
+  }
   onProgress?.(0);
   const form = new FormData();
   const name = file instanceof File ? file.name : kind === "voice" ? "voice.webm" : "upload";

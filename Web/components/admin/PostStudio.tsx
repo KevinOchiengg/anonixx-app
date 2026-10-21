@@ -5,7 +5,10 @@ import { api } from "@/lib/api";
 import { uploadFile } from "@/lib/upload";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
 import LocationFields, { type LocationDraft } from "../compose/LocationFields";
-import { MAX_VIDEO_SECONDS, videoLength } from "../compose/MediaPicker";
+import { videoLength } from "../compose/MediaPicker";
+import VideoEditor from "../compose/VideoEditor";
+import VideoPlayer from "../VideoPlayer";
+import { defaultEdit, isMeaningful, type VideoEdit } from "@/lib/videoEdit";
 import { IconText, IconImages, IconVideo, IconMic, IconPoll } from "../compose/toolicons";
 import "../../app/poststudio.css";
 
@@ -13,7 +16,7 @@ type Format = "text" | "photo" | "video" | "voice" | "poll";
 const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode }[] = [
   { id: "text", label: "Text", hint: "Words on a gradient", icon: <IconText /> },
   { id: "photo", label: "Photos", hint: "1 to 10 images", icon: <IconImages /> },
-  { id: "video", label: "Video", hint: `Up to ${MAX_VIDEO_SECONDS}s`, icon: <IconVideo /> },
+  { id: "video", label: "Video", hint: "Up to 3 min, trim + text", icon: <IconVideo /> },
   { id: "voice", label: "Voice", hint: "Record a note", icon: <IconMic /> },
   { id: "poll", label: "Poll", hint: "2 to 4 options", icon: <IconPoll /> },
 ];
@@ -24,7 +27,9 @@ const MAX_TAGS = 10;
 
 const MAX_TEXT = 500;
 const MAX_IMG_MB = 5;
-const MAX_VID_MB = 50;
+// The original goes up untouched (trim is applied at playback), so this has to leave
+// room for a long phone video that gets cut down to three minutes.
+const MAX_VID_MB = 500;
 const EMPTY_PLACE: LocationDraft = { country: "", county: "", subCounty: "", estate: "" };
 
 type Pick = { file: File; url: string };
@@ -34,6 +39,8 @@ export default function PostStudio() {
   const [text, setText] = useState("");
   const [photos, setPhotos] = useState<Pick[]>([]);
   const [video, setVideo] = useState<Pick | null>(null);
+  const [vlen, setVlen] = useState(0);
+  const [vedit, setVedit] = useState<VideoEdit | null>(null);
   const [voice, setVoice] = useState<VoiceDraft>(null);
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
@@ -105,8 +112,10 @@ export default function PostStudio() {
       setBusy("Checking video…");
       const len = await videoLength(f);
       setBusy("");
-      if (len > MAX_VIDEO_SECONDS) return setError(`Videos must be ${MAX_VIDEO_SECONDS}s or shorter. This one is ${Math.round(len)}s.`);
-      setNoPreview(false);
+      // Over three minutes isn't refused: the editor opens on its first 3:00 instead.
+      setNoPreview(!len);
+      setVlen(len);
+      setVedit(len ? defaultEdit(len) : null);
       setVideo(track(f));
       return;
     }
@@ -137,7 +146,11 @@ export default function PostStudio() {
         media = out.length > 1 ? { images: out } : { media_type: "image", media_url: out[0] };
       } else if (format === "video" && video) {
         setBusy("Uploading video… 0%");
-        media = { media_type: "video", media_url: await uploadFile(video.file, "video", (n) => setBusy(n >= 100 ? "Finishing upload…" : `Uploading video… ${n}%`)) };
+        media = {
+          media_type: "video",
+          media_url: await uploadFile(video.file, "video", (n) => setBusy(n >= 100 ? "Finishing upload…" : `Uploading video… ${n}%`)),
+          ...(isMeaningful(vedit, vlen) ? { video_edit: { ...vedit, overlays: vedit.overlays.filter((o) => o.text.trim()) } } : {}),
+        };
       } else if (format === "voice" && voice) {
         setBusy("Uploading voice note…");
         media = {
@@ -176,7 +189,7 @@ export default function PostStudio() {
   }
 
   function reset() {
-    setText(""); setPhotos([]); setVideo(null); setVoice(null);
+    setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
     setTags([]); setTagDraft(""); setMature(false); setError(""); setPublished(false);
   }
@@ -212,7 +225,7 @@ export default function PostStudio() {
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileRef.current?.click(); }}
     >
       <b>{format === "video" ? "Drop a video here" : photos.length ? "Add more photos" : "Drop photos here"}</b>
-      <span>or click to browse{format === "photo" ? ` · up to 10, ${MAX_IMG_MB}MB each` : ` · ${MAX_VIDEO_SECONDS}s, ${MAX_VID_MB}MB max`}</span>
+      <span>or click to browse{format === "photo" ? ` · up to 10, ${MAX_IMG_MB}MB each` : ` · ${MAX_VID_MB}MB max · longer than 3 min gets cut to 3`}</span>
     </div>
   );
 
@@ -279,8 +292,11 @@ export default function PostStudio() {
                   </>
                 ) : video ? (
                   <div className="ps-video">
-                    <video src={video.url} controls playsInline muted onError={() => setNoPreview(true)} />
-                    {noPreview ? <p className="ps-note">Your browser can't preview this video format (phone .mov/HEVC files often can't be). It can still be posted, but an H.264 .mp4 is safest.</p> : null}
+                    {vedit && !noPreview ? (
+                      <VideoEditor src={video.url} duration={vlen} value={vedit} onChange={setVedit} onNoPreview={() => setNoPreview(true)} />
+                    ) : (
+                      <p className="ps-note">Your browser can&apos;t open this video format (phone .mov/HEVC files often can&apos;t be), so it can&apos;t be trimmed or captioned here and will post as-is. Convert it to an H.264 .mp4 to edit it.</p>
+                    )}
                     <button type="button" className="ps-btn" onClick={() => setVideo(null)}>Replace video</button>
                   </div>
                 ) : drop}
@@ -373,7 +389,9 @@ export default function PostStudio() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img className="ps-bg" src={cover} alt="" />
               ) : null}
-              {format === "video" && video ? <video className="ps-bg" src={video.url} muted playsInline loop autoPlay /> : null}
+              {format === "video" && video ? (
+                <div className="ps-bg"><VideoPlayer src={video.url} active near muted edit={vedit} /></div>
+              ) : null}
               {format === "photo" && photos.length > 1 ? (
                 <div className="ps-dots">{photos.map((p, i) => <i key={p.url} className={i === 0 ? "on" : ""} />)}</div>
               ) : null}
