@@ -571,3 +571,34 @@
   background: color-mix(in srgb, var(--rose) 78%, transparent); pointer-events: none;
 }
 .pin-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+
+/* ---------- video controls: drag-to-scrub bar, time readout, hold-for-2x ---------- */
+.vp-scrub {
+  position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; height: 26px;
+  cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.vp-scrub .vp-progress { transition: height 0.15s ease-out; }
+.vp-scrub:hover .vp-progress, .vp-scrub.on .vp-progress { height: 6px; }
+.vp-scrub .vp-progress > span { position: relative; }
+.vp-scrub .vp-progress > span::after {
+  content: ""; position: absolute; right: -7px; top: 50%; width: 14px; height: 14px; margin-top: -7px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transform: scale(0); transition: transform 0.15s ease-out;
+}
+.vp-scrub:hover .vp-progress > span::after, .vp-scrub.on .vp-progress > span::after { transform: scale(1); }
+.vp-time {
+  position: absolute; z-index: 6; left: 50%; bottom: 22%; transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7); font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); pointer-events: none; white-space: nowrap;
+}
+.vp-time b { color: #fff; }
+.vp-fast {
+  position: absolute; z-index: 6; top: 72px; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+  background: rgba(10, 12, 20, 0.55); color: #fff; font-size: 14px; font-weight: 800; pointer-events: none;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); animation: fastin 0.18s ease-out;
+}
+.vp-fast i { font-style: normal; font-size: 10px; letter-spacing: -2px; }
+/* scrubbing hides the caption and rail so the frame being searched for is visible, like TikTok */
+.slide:has(.vp-scrub.on) .caption, .slide:has(.vp-scrub.on) .rail { opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+@keyframes fastin { from { opacity: 0; transform: translateX(-50%) scale(0.85); } }

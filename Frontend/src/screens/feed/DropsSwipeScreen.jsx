@@ -115,6 +115,11 @@ const CoachHint = ({ top }) => {
   );
 };
 
+const fmtClock = (s) => {
+  const t = Math.max(0, Math.round(s || 0));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+};
+
 // ─── Shared: Link Up button ─────────────────────────────────────
 // Same coin-gated CTA as DropCard.jsx's card-feed version (Link2 icon,
 // "Link up" label, coin-cost pill) — positioned like a TikTok ad's CTA,
@@ -431,6 +436,60 @@ const VideoSlide = ({
     lastTap.current = now;
   };
 
+  // TikTok's other two video gestures, so nothing here needs learning:
+  // press and hold = 2x speed until released, and drag along the progress
+  // line at the bottom to scrub (the time shows big while dragging).
+  const [fast, setFast] = useState(false);
+  const startFast = () => {
+    if (!isPlaying) return;
+    player.playbackRate = 2;
+    setFast(true);
+  };
+  const endFast = () => {
+    if (!fast) return;
+    player.playbackRate = 1;
+    setFast(false);
+  };
+  useEffect(() => { if (!isActive && fast) endFast(); }, [isActive]);
+
+  const [scrubT, setScrubT] = useState(null);   // seconds into the clip while dragging
+  const scrubWidth = useRef(1);
+  const scrubResume = useRef(false);
+  const scrubbing = useRef(false);
+  const durRef = useRef(0);
+  durRef.current = videoDuration;
+  const playingRef = useRef(false);
+  playingRef.current = isPlaying;
+  const scrubTo = (x) => {
+    const dur = durRef.current;
+    if (!dur) return;
+    const r = Math.min(Math.max(0, (x / scrubWidth.current) * dur), dur - 0.05);
+    player.currentTime = clipStart + r;
+    setScrubT(r);
+    setVideoCurrentTime(r);
+  };
+  const scrubGesture = useMemo(() => (
+    Gesture.Pan()
+      .runOnJS(true)
+      .minDistance(0)
+      .failOffsetY([-14, 14])     // a vertical swipe that starts on the bar still scrolls the feed
+      .onBegin((e) => {
+        if (!durRef.current) return;
+        scrubbing.current = true;
+        scrubResume.current = playingRef.current;
+        player.pause();
+        scrubTo(e.x);
+      })
+      .onUpdate((e) => { if (scrubbing.current) scrubTo(e.x); })
+      .onFinalize(() => {
+        if (!scrubbing.current) return;
+        scrubbing.current = false;
+        setScrubT(null);
+        if (scrubResume.current) player.play();
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [player, clipStart]);
+
   const handleLikeWithAnim = () => {
     Animated.sequence([
       Animated.spring(likeScale, { toValue: 1.4, friction: 3, useNativeDriver: true }),
@@ -474,11 +533,36 @@ const VideoSlide = ({
           silently did nothing while taps near the letterboxed edges still
           worked. Rendering this touch layer after VideoView in the stack
           makes it the one that always receives the tap first, everywhere. */}
-      <TouchableWithoutFeedback onPress={handleTap}>
+      <TouchableWithoutFeedback onPress={handleTap} onLongPress={startFast} onPressOut={endFast} delayLongPress={350}>
         <View style={StyleSheet.absoluteFill} />
       </TouchableWithoutFeedback>
 
       <VideoOverlays overlays={post.video_edit?.overlays} />
+
+      {fast && (
+        <View style={ss.fastPill} pointerEvents="none">
+          <Text style={ss.fastText}>2x  ▶▶</Text>
+        </View>
+      )}
+      {scrubT !== null && (
+        <Text style={ss.scrubTime} pointerEvents="none">
+          <Text style={ss.scrubTimeNow}>{fmtClock(scrubT)}</Text> / {fmtClock(videoDuration)}
+        </Text>
+      )}
+
+      {/* Scrub bar sits under the chrome in the stack, so where the two
+          overlap at the very bottom the rail and Link up keep their taps. */}
+      {videoDuration > 0 && !chromeHidden && (
+        <GestureDetector gesture={scrubGesture}>
+          <View style={ss.scrubHit} onLayout={(e) => { scrubWidth.current = e.nativeEvent.layout.width || 1; }}>
+            <View style={[ss.progressWrap, scrubT !== null && ss.progressWrapOn]} pointerEvents="none">
+              <View style={[ss.progressFill, { width: `${Math.min(100, (videoCurrentTime / videoDuration) * 100)}%` }]}>
+                {scrubT !== null && <View style={ss.scrubThumb} />}
+              </View>
+            </View>
+          </View>
+        </GestureDetector>
+      )}
 
       {playerStatus === 'loading' && (
         <View style={ss.videoLoading} pointerEvents="none">
@@ -494,8 +578,9 @@ const VideoSlide = ({
 
       {/* Two-finger hold declutters down to header + raw video — every
           gradient, the rail, the caption/link-up column, and the progress
-          line all drop out together so there's nothing left crowding it. */}
-      {!chromeHidden && (
+          line all drop out together so there's nothing left crowding it.
+          Scrubbing clears it too, so the frame being looked for is visible. */}
+      {!chromeHidden && scrubT === null && (
         <>
           <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
@@ -550,11 +635,6 @@ const VideoSlide = ({
             {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
 
-          {videoDuration > 0 && (
-            <View style={ss.progressWrap} pointerEvents="none">
-              <View style={[ss.progressFill, { width: `${Math.min(100, (videoCurrentTime / videoDuration) * 100)}%` }]} />
-            </View>
-          )}
         </>
       )}
     </View>
@@ -1022,25 +1102,6 @@ const PollSlide = ({
   );
 };
 
-// ─── Session-limit slide ─────────────────────────────────────────
-// Same guardrail DropsFeedScreen enforces (a capped number of confessions
-// per session) — swapped in as the final slide instead of a full-page
-// interstitial, so it's a swipe away like everything else, not a modal
-// that breaks the rhythm.
-const SessionLimitSlide = ({ onClose }) => (
-  <View style={[ss.slide, sw.limitSlide]}>
-    <Text style={sw.limitEmoji}>🌑</Text>
-    <Text style={sw.limitTitle}>You've been deep in it.</Text>
-    <Text style={sw.limitSubtitle}>
-      Sometimes the truth hits differently when you step away from it.
-    </Text>
-    <Text style={sw.limitMessage}>Come back when you have more to say.</Text>
-    <TouchableOpacity onPress={onClose} style={sw.limitBtn} activeOpacity={0.85}>
-      <Text style={sw.limitBtnText}>Close</Text>
-    </TouchableOpacity>
-  </View>
-);
-
 // ─── Market slide ─────────────────────────────────────────────────
 // MarketCard itself unchanged — just centered on a full-screen dark
 // surface instead of sitting inline between confession cards.
@@ -1127,6 +1188,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [sessionPosts, setSessionPosts] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
+  const [replay, setReplay] = useState([]);   // shuffled re-runs once the feed is exhausted (handleEndReached)
   const [activeIndex, setActiveIndex] = useState(0);
   const [screenFocused, setScreenFocused] = useState(true);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -1186,6 +1248,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       }
 
       const fresh = data.posts || [];
+      if (reset) setReplay([]);
       setPosts((prev) => {
         const merged = reset ? fresh : [...prev, ...fresh];
         const seen = new Set();
@@ -1252,7 +1315,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       // Only real drops get view-tracked — market/ad/session-limit slides
       // aren't drops, and POSTing their synthetic id to /drops/{id}/view
       // would just fail (or worse, coincidentally collide with a real id).
-      const postId = it && !it.__market && !it.__ad && !it.__sessionLimit ? it.id : null;
+      const postId = it && !it.__market && !it.__ad ? it.id : null;
       if (postId && !viewedRef.current.has(postId)) {
         viewedRef.current.add(postId);
         trackView(postId);
@@ -1366,12 +1429,30 @@ export default function DropsSwipeScreen({ navigation, route }) {
     Linking.openURL(ad.link_url).catch(() => {});
   }, []);
 
+  // Out of new posts (no next page, or the server's session cap): keep going on a
+  // shuffled replay of what's loaded — videos if there are enough, else anything
+  // with media, else everything — so the swipe never hits a wall.
   const handleEndReached = useCallback(() => {
-    if (!loadingRef.current && hasMoreRef.current && !sessionLimitReached) loadFeed(false);
-  }, [sessionLimitReached, loadFeed]);
+    if (loadingRef.current) return;
+    if (hasMoreRef.current && !sessionLimitReached) { loadFeed(false); return; }
+    const drops = posts.filter((p) => p.id && p.type !== 'divider');
+    if (!drops.length) return;
+    setReplay((prev) => {
+      const videos = drops.filter((p) => p.video_url);
+      const media = drops.filter((p) => p.video_url || p.media_url || p.images?.length);
+      const pool = [...(videos.length >= 3 ? videos : media.length >= 3 ? media : drops)];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      const lastId = prev.length ? prev[prev.length - 1].id : drops[drops.length - 1].id;
+      if (pool.length > 1 && pool[0].id === lastId) pool.push(pool.shift());
+      return [...prev, ...pool.map((p, i) => ({ ...p, __replayKey: `${p.id}~r${prev.length + i}` }))];
+    });
+  }, [sessionLimitReached, loadFeed, posts]);
 
   const getItemLayout = useCallback((_, index) => ({ length: listHeight, offset: listHeight * index, index }), [listHeight]);
-  const keyExtractor = useCallback((item) => item.id, []);
+  const keyExtractor = useCallback((item) => item.__replayKey || item.id, []);
 
   // Same interleaving DropsFeedScreen used, just producing full-screen
   // slide items instead of inline cards — every MARKET_FREQUENCY-th drop
@@ -1398,8 +1479,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
         }
       });
     }
-    return sessionLimitReached ? [...out, { id: '__session_limit__', __sessionLimit: true }] : out;
-  }, [posts, linkedPost, marketFeed, feedAds, sessionLimitReached]);
+    return replay.length ? [...out, ...replay] : out;
+  }, [posts, linkedPost, marketFeed, feedAds, replay]);
 
   // Opened from a shared link (anonixx.app/drop/<id>): show that drop first.
   const linkedDropId = route?.params?.dropId;
@@ -1430,7 +1511,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     if (data.length > 0 && activeIndex >= data.length - PREFETCH_AHEAD) handleEndReached();
     for (let i = activeIndex + 1; i <= activeIndex + 3 && i < data.length; i++) {
       const it = data[i];
-      if (!it || it.__market || it.__ad || it.__sessionLimit) continue;
+      if (!it || it.__market || it.__ad) continue;
       [it.image_url, it.card_image_url, ...(it.images || []).map((im) => (typeof im === 'string' ? im : im?.url))]
         .filter(Boolean)
         .forEach((u) => Image.prefetch(u).catch(() => {}));
@@ -1438,13 +1519,6 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }, [activeIndex, data, handleEndReached]);
 
   const renderItem = useCallback(({ item, index }) => {
-    if (item.__sessionLimit) {
-      return (
-        <View style={{ height: listHeight, width }}>
-          <SessionLimitSlide onClose={() => navigation.goBack()} />
-        </View>
-      );
-    }
     if (item.__market) {
       return (
         <View style={{ height: listHeight, width }}>
@@ -1673,6 +1747,26 @@ const ss = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)', zIndex: 10,
   },
   progressFill: { height: '100%', backgroundColor: THEME.primary },
+  // Drag-to-scrub: a taller invisible strip around the hairline catches the
+  // finger; while dragging the line thickens and grows a thumb, and the time
+  // shows big in the middle, like TikTok.
+  scrubHit: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 18, zIndex: 9 },
+  progressWrapOn: { height: 6, bottom: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
+  scrubThumb: {
+    position: 'absolute', right: -7, top: -4, width: 14, height: 14, borderRadius: 7,
+    backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3,
+  },
+  scrubTime: {
+    position: 'absolute', left: 0, right: 0, bottom: '22%', textAlign: 'center', zIndex: 11,
+    color: 'rgba(255,255,255,0.7)', fontSize: rf(26), fontWeight: '800', fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 10,
+  },
+  scrubTimeNow: { color: '#fff' },
+  fastPill: {
+    position: 'absolute', top: rp(96), alignSelf: 'center', zIndex: 11,
+    paddingHorizontal: rp(14), paddingVertical: rp(6), borderRadius: RADIUS.full, backgroundColor: 'rgba(10,12,20,0.6)',
+  },
+  fastText: { color: '#fff', fontSize: FONT.sm, fontWeight: '800' },
   videoLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', zIndex: 2 },
   heartBurst: { position: 'absolute', top: '50%', left: '50%', marginLeft: -50, marginTop: -50, zIndex: 100 },
 });
@@ -1804,11 +1898,4 @@ const sw = StyleSheet.create({
   },
   locationPillText: { fontSize: rf(11), fontWeight: '600', color: '#fff' },
 
-  limitSlide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(32) },
-  limitEmoji: { fontSize: rf(48), marginBottom: rp(16) },
-  limitTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: rf(22), color: '#fff', textAlign: 'center', marginBottom: rp(12) },
-  limitSubtitle: { fontSize: rf(14), color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: rf(21), marginBottom: rp(8) },
-  limitMessage: { fontSize: rf(13), color: 'rgba(255,255,255,0.5)', textAlign: 'center', fontStyle: 'italic', marginBottom: rp(28) },
-  limitBtn: { paddingHorizontal: rp(28), paddingVertical: rp(12), borderRadius: RADIUS.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  limitBtnText: { fontSize: FONT.sm, fontWeight: '700', color: '#fff' },
 });
