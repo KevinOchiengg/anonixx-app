@@ -35,6 +35,7 @@ from app.api.v1 import (
 from app.tasks.publisher_worker import publisher_worker
 from app.tasks.drop_cleanup import drop_cleanup_worker
 from app.tasks import scheduled_publisher
+from app.utils import geoip
 
 
 async def _ensure_indexes():
@@ -108,6 +109,7 @@ async def lifespan(app: FastAPI):
     await publisher_worker.start()          # start social publishing worker
     await drop_cleanup_worker.start()       # delete drops past their post-unlock grace
     await scheduled_publisher.start()       # publish admin drops scheduled for later
+    geoip.start_loading()                   # local IP->country database for payment pricing (background)
     yield
     await scheduled_publisher.stop()
     await drop_cleanup_worker.stop()        # clean shutdown

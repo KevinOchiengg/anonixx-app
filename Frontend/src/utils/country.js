@@ -5,8 +5,8 @@
  * sent to the API as the X-Country header (ISO alpha-2, e.g. "KE").
  *
  * Read from the phone's region setting — no network call, no permission, and
- * no wrong guess when a lookup fails (utils/geolocation.js, used for payments,
- * falls back to "US"). A country the user sets in Feed Location settings
+ * no wrong guess when a lookup fails (the old payment-region lookup used to
+ * fall back to "US"). A country the user sets in Feed Location settings
  * always wins on the server.
  */
 import { NativeModules, Platform } from 'react-native';

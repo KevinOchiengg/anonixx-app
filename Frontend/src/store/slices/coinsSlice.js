@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
+import { countryHeader } from '../../utils/country';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -273,7 +274,9 @@ export const fetchGeoConfig = createAsyncThunk(
   'coins/fetchGeoConfig',
   async (_, { rejectWithValue }) => {
     try {
-      const headers = await authHeaders();
+      // The server places the user by IP; the phone's region (X-Country) only
+      // decides whether M-Pesa shows if the IP can't be placed — never the price.
+      const headers = { ...(await authHeaders()), ...countryHeader() };
       const res     = await fetch(`${API_BASE_URL}/api/v1/geo/config`, { headers });
       const data    = await res.json();
       if (!res.ok) return rejectWithValue(data);
