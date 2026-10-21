@@ -90,3 +90,4 @@
 .cx-toggle span { display: grid; gap: 2px; }
 .cx-toggle small { color: var(--muted); font-size: 12px; }
 .cx-toggle input { width: 22px; height: 22px; accent-color: var(--rose); flex: none; }
+.cx-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }

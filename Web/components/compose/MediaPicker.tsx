@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import VideoEditor from "./VideoEditor";
 import { checkReadable } from "@/lib/upload";
+import { sniffVideo, formatProblem } from "@/lib/videoFormat";
 import { MAX_CLIP_SECONDS, defaultEdit, type VideoEdit } from "@/lib/videoEdit";
 
 export type MediaDraft = { kind: "image" | "video"; files: File[]; duration?: number; edit?: VideoEdit | null } | null;
@@ -20,6 +21,7 @@ export function videoLength(file: File): Promise<number> {
 export default function MediaPicker({ value, onChange, onError }: { value: MediaDraft; onChange: (v: MediaDraft) => void; onError: (m: string) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [formatNote, setFormatNote] = useState("");
   const files = value?.files;
   const urls = useMemo(() => (files ? files.map((f) => URL.createObjectURL(f)) : []), [files]);
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
@@ -33,6 +35,8 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
         setBusy(true);
         try { await checkReadable(f); } catch (e) { setBusy(false); onError((e as Error).message); return; }
         const len = await videoLength(f);
+        // The browser couldn't open it: find out why from the file itself.
+        setFormatNote(len ? "" : formatProblem(await sniffVideo(f)));
         setBusy(false);
         // Longer than three minutes isn't refused: the editor opens on its first 3:00.
         onChange({ kind: "video", files: [f], duration: len, edit: len ? defaultEdit(len) : null });
@@ -55,7 +59,10 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
               duration={value.duration}
               value={value.edit}
               onChange={(edit) => onChange({ ...value, edit })}
-              onNoPreview={() => onChange({ ...value, edit: null })}
+              onNoPreview={() => {
+                onChange({ ...value, edit: null });
+                sniffVideo(value.files[0]).then((r) => setFormatNote(formatProblem(r))).catch(() => {});
+              }}
             />
           ) : (
             <div className="cx-thumbs">
@@ -67,6 +74,7 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
                   ))}
             </div>
           )}
+          {value.kind === "video" && formatNote && !(value.edit && value.duration) ? <p className="cx-note">{formatNote}</p> : null}
           <button type="button" className="linkish" onClick={() => onChange(null)}>Remove {value.kind === "video" ? "video" : value.files.length > 1 ? "photos" : "photo"}</button>
         </>
       ) : (
