@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import VideoEditor from "./VideoEditor";
+import { checkReadable } from "@/lib/upload";
 import { MAX_CLIP_SECONDS, defaultEdit, type VideoEdit } from "@/lib/videoEdit";
 
 export type MediaDraft = { kind: "image" | "video"; files: File[]; duration?: number; edit?: VideoEdit | null } | null;
@@ -30,6 +31,7 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
       const f = files[0];
       if (f.type.startsWith("video/")) {
         setBusy(true);
+        try { await checkReadable(f); } catch (e) { setBusy(false); onError((e as Error).message); return; }
         const len = await videoLength(f);
         setBusy(false);
         // Longer than three minutes isn't refused: the editor opens on its first 3:00.

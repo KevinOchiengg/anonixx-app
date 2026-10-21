@@ -58,11 +58,29 @@ async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: num
   return { reason };
 }
 
+// Phones can hand the browser a file it can't actually read — most often a video that
+// lives in Google Photos or another cloud app rather than on the phone itself. An upload
+// of such a file fails before a single byte is sent, which looks exactly like a dead
+// connection. Reading a little from both ends first tells the two apart.
+const PROBE = 256 * 1024;
+export const UNREADABLE_FILE =
+  "Your phone wouldn't let the browser read that file. If it's in Google Photos or another cloud app, download it to your phone first (in Google Photos: open it, ⋮, Download), then pick it again from your gallery or Files.";
+
+export async function checkReadable(file: Blob): Promise<void> {
+  try {
+    await file.slice(0, PROBE).arrayBuffer();
+    if (file.size > PROBE) await file.slice(Math.max(0, file.size - PROBE)).arrayBuffer();
+  } catch {
+    throw new ApiError(0, UNREADABLE_FILE);
+  }
+}
+
 // Uploads the file and returns its public URL. Tries storage directly first, then our server.
 export async function uploadFile(file: Blob | File, kind: UploadKind, onProgress?: (pct: number) => void): Promise<string> {
   if (file.size > MAX_MB[kind] * 1024 * 1024) {
     throw new ApiError(400, `That file is too big. Max ${MAX_MB[kind]}MB.`);
   }
+  await checkReadable(file);
   const direct = await uploadDirect(file, kind, onProgress);
   if ("url" in direct) return direct.url;
   if (file.size > SERVER_MAX_MB[kind] * 1024 * 1024) {
