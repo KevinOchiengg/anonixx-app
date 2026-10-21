@@ -16,12 +16,11 @@ import ReportSheet from "./ReportSheet";
 
 type Item =
   | { kind: "hero" }
-  | { kind: "post"; post: Post; first: boolean }
+  | { kind: "post"; post: Post; first: boolean; key?: string }
   | { kind: "ad"; key: string }
   | { kind: "promo"; key: string; ad: FeedAd }
   | { kind: "market"; key: string; item: MarketTease }
-  | { kind: "status" }
-  | { kind: "end" };
+  | { kind: "status" };
 
 type AuthedFeed = {
   posts: (Post & { type?: string })[];
@@ -48,6 +47,22 @@ type Props = {
 
 const realPosts = (list: (Post & { type?: string })[]) => list.filter((p) => p.id && p.type !== "divider");
 
+// When the feed runs out it keeps going on a shuffled replay of what's loaded: videos if
+// there are enough of them, else anything with media, else everything. A new round never
+// opens with the post that closed the last one.
+const REPLAY_MIN = 3;
+function replayRound(posts: Post[], lastId: string | undefined): string[] {
+  const videos = posts.filter((p) => p.video_url);
+  const media = posts.filter((p) => p.video_url || p.media_url || p.images?.length);
+  const pool = (videos.length >= REPLAY_MIN ? videos : media.length >= REPLAY_MIN ? media : posts).map((p) => p.id);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  if (pool.length > 1 && pool[0] === lastId) pool.push(pool.shift()!);
+  return pool;
+}
+
 export default function Feed({ initialPosts, initialCursor, withHero = false, startId }: Props) {
   const { user, ready } = useAuth();
   const [posts, setPosts] = useState<Post[]>(initialPosts);
@@ -55,6 +70,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const [authed, setAuthed] = useState(false);
   const [sessionPosts, setSessionPosts] = useState(0);
   const [ended, setEnded] = useState(false);
+  const [replay, setReplay] = useState<string[]>([]);
   const [active, setActive] = useState(0);
   const [muted, setMuted] = useState(true);
   const [gate, setGate] = useState<string | null>(null);
@@ -132,6 +148,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
         setCursor(feed.next_cursor);
         setSessionPosts(feed.session_posts ?? list.length);
         setEnded(feed.message === "session_limit");
+        setReplay([]);
         setAuthed(true);
       } catch {
         /* keep the public feed */
@@ -147,6 +164,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       setPosts(initialPosts);
       setCursor(initialCursor);
       setEnded(false);
+      setReplay([]);
     }
   }, [ready, user, authed, initialPosts, initialCursor]);
 
@@ -174,9 +192,23 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       }
     });
     if (loadingMore || loadFailed || first !== "idle") out.push({ kind: "status" });
-    if (ended) out.push({ kind: "end" });
+    if (replay.length) {
+      const byId = new Map(posts.map((p) => [p.id, p]));
+      replay.forEach((id, i) => {
+        const post = byId.get(id);
+        if (post) out.push({ kind: "post", post, first: false, key: `${id}~r${i}` });
+      });
+    }
     return out;
-  }, [posts, showHero, ended, ads, market, loadingMore, loadFailed, first]);
+  }, [posts, showHero, replay, ads, market, loadingMore, loadFailed, first]);
+
+  // Out of new posts (no next page, or the server's session cap): add another replay round
+  // as the viewer nears the end, so the scroll never hits a wall.
+  const exhausted = posts.length > 0 && first === "idle" && !loadFailed && (authed ? ended || !cursor : !cursor);
+  useEffect(() => {
+    if (!exhausted || active < items.length - LOAD_AHEAD) return;
+    setReplay((prev) => [...prev, ...replayRound(posts, prev[prev.length - 1] ?? posts[posts.length - 1]?.id)]);
+  }, [exhausted, active, items.length, posts]);
 
   useEffect(() => {
     const root = scroller.current;
@@ -378,20 +410,9 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
                 </section>
               );
             }
-            if (it.kind === "end") {
-              return (
-                <section key="end" className="slide limit-slide" data-idx={i}>
-                  <span className="limit-moon" aria-hidden>🌑</span>
-                  <h2>You&apos;ve been deep in it.</h2>
-                  <p>Sometimes the truth hits differently when you step away from it.</p>
-                  <em>Come back when you have more to say.</em>
-                  <button className="pill" onClick={() => scroller.current?.scrollTo({ top: 0, behavior: "smooth" })}>Close</button>
-                </section>
-              );
-            }
             return (
               <Slide
-                key={it.post.id}
+                key={it.key ?? it.post.id}
                 post={it.post}
                 index={i}
                 active={active === i}
