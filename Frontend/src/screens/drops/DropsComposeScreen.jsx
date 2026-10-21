@@ -32,8 +32,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
-  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send,
+  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket,
 } from 'lucide-react-native';
+import * as VideoThumbnails from 'expo-video-thumbnails';
+import { useAudioPlayer } from 'expo-audio';
+import VideoEditorModal from '../../components/compose/VideoEditorModal';
+import { defaultEdit, isMeaningful, withoutEmptyText } from '../../utils/videoEdit';
+import { streamEnabled, uploadToStream, queueDrop, STREAM_DIRECT_MAX_BYTES } from '../../utils/streamVideo';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
 
@@ -62,10 +67,30 @@ const TOOLBAR_BG = DROP_THEMES['desire'].bgTo;
 const CARD_W   = SCREEN_W - SPACING.md * 2;
 const MAX_CHARS = 500;
 
-// Short confessional clips, not long-form video — a duration cap keeps
-// storage/bandwidth costs sane and sidesteps needing a real on-device
-// trim (no server-side cutting once media lives on R2, not Cloudinary).
-const MAX_VIDEO_SECONDS = 60;
+// Videos of any length can be picked: past 3 minutes the editor opens cut to
+// the first 3:00 (utils/videoEdit.js), and the cut is applied at playback —
+// or for real by Cloudflare Stream once that's switched on.
+
+// Admin "Spotlight" extras — same options as the website's Post Studio.
+const PROMO_HOURS = [[6, '6 hours'], [24, '1 day'], [72, '3 days'], [168, '7 days']];
+const atHour = (daysAhead, hour) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  d.setHours(hour, 0, 0, 0);
+  return d;
+};
+// Quick "post later" picks instead of a full date picker — evenings are when the feed is busiest.
+const schedulePresets = () => {
+  const now = Date.now();
+  const tonight = atHour(0, 21);
+  return [
+    ['In 1 hour', new Date(now + 3600e3)],
+    ['In 3 hours', new Date(now + 3 * 3600e3)],
+    tonight.getTime() > now + 15 * 60e3 ? ['Tonight 9pm', tonight] : ['Tomorrow 9pm', atHour(1, 21)],
+    ['Tomorrow 8pm', atHour(1, 20)],
+  ];
+};
+const whenLabel = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 
 const DRAFT_KEY = 'anonixx.drops.draft.v1';
 const TOOLBAR_HINT_KEY = 'anonixx.drops.toolbarHint.seen';
@@ -398,6 +423,22 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [extraImageUris, setExtraImageUris] = useState([]);
   const [loading,  setLoading]  = useState(false);
 
+  // ── Video editing (admin) — trim window, text overlays, cover frame ──
+  const [videoMeta, setVideoMeta] = useState(null);   // { duration (s), size (bytes), landscape }
+  const [videoEdit, setVideoEdit] = useState(null);
+  const [coverAt, setCoverAt] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+
+  // ── Spotlight (admin) — a track over the post, pin/boost, publish later ──
+  const [sounds, setSounds] = useState([]);
+  const [soundId, setSoundId] = useState('');
+  const [muteOriginal, setMuteOriginal] = useState(false);
+  const [hearingId, setHearingId] = useState('');
+  const [promo, setPromo] = useState('');            // '' | 'pin' | 'boost'
+  const [promoHours, setPromoHours] = useState(24);
+  const [publishAt, setPublishAt] = useState(null);  // ISO string, or null for now
+  const soundPlayer = useAudioPlayer(null);
+
   // ── Tag a specific user (optional — drop still hits marketplace) ─
   const [taggedUser, setTaggedUser] = useState(null);
 
@@ -549,17 +590,20 @@ export default function DropsComposeScreen({ navigation, route }) {
       if (result.assets.length === 1) {
         const asset = result.assets[0];
         const kind = asset.type === 'video' ? 'video' : 'image';
-        // Library picks aren't length-limited by the OS the way camera
-        // recording is (ImagePicker's videoMaxDuration only constrains
-        // launchCameraAsync) — so an existing long video has to be
-        // rejected here, after the fact, instead of prevented at pick time.
-        if (kind === 'video' && (asset.duration || 0) / 1000 > MAX_VIDEO_SECONDS) {
-          showToast({ type: 'warning', message: `Videos must be ${MAX_VIDEO_SECONDS}s or shorter.` });
-          return;
-        }
         setMediaUri(asset.uri);
         setMediaKind(kind);
         setExtraImageUris([]);
+        if (kind === 'video') {
+          // Any length is fine: the editor opens on it, cut to its first 3:00 if longer.
+          const duration = (asset.duration || 0) / 1000;
+          setVideoMeta({ duration, size: asset.fileSize || 0, landscape: (asset.width || 0) > (asset.height || 0) * 1.05 });
+          setVideoEdit(duration ? defaultEdit(duration) : null);
+          setCoverAt(null);
+          if (duration) setEditorOpen(true);
+        } else {
+          setVideoMeta(null);
+          setVideoEdit(null);
+        }
         return;
       }
 
@@ -583,7 +627,27 @@ export default function DropsComposeScreen({ navigation, route }) {
     setMediaUri(null);
     setMediaKind(null);
     setExtraImageUris([]);
+    setVideoMeta(null);
+    setVideoEdit(null);
+    setCoverAt(null);
   }, []);
+
+  // ── Spotlight sheet: load the Sounds library the first time it opens ──
+  useEffect(() => {
+    if (activeSheet !== 'spotlight' || sounds.length) return;
+    fetch(`${API_BASE_URL}/api/v1/sounds`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.sounds) setSounds(d.sounds); })
+      .catch(() => {});
+  }, [activeSheet, sounds.length]);
+  useEffect(() => { if (activeSheet !== 'spotlight' && hearingId) { soundPlayer.pause(); setHearingId(''); } }, [activeSheet]);
+
+  const hear = useCallback((snd) => {
+    if (hearingId === snd.id) { soundPlayer.pause(); setHearingId(''); return; }
+    soundPlayer.replace({ uri: snd.url });
+    soundPlayer.play();
+    setHearingId(snd.id);
+  }, [hearingId, soundPlayer]);
 
   const handleRemoveExtraImage = useCallback((uri) => {
     setExtraImageUris((prev) => prev.filter((u) => u !== uri));
@@ -646,8 +710,26 @@ export default function DropsComposeScreen({ navigation, route }) {
       // as text-only.
       let uploadedMediaUrl = null;
       let uploadedImageUrls = null;
-      if (mediaKind && mediaUri) {
-        const isVideo = mediaKind === 'video';
+      const isVideo = mediaKind === 'video' && !!mediaUri;
+      const edit = withoutEmptyText(videoEdit);
+
+      // Cover first (quick): the chosen frame, or the clip's first frame.
+      let coverUrl = null;
+      if (isAdmin && isVideo && videoMeta?.duration) {
+        try {
+          const ms = Math.round((coverAt ?? edit?.start ?? 0) * 1000);
+          const { uri: shot } = await VideoThumbnails.getThumbnailAsync(mediaUri, { time: ms, quality: 0.8 });
+          coverUrl = await uploadToR2(shot, 'image', 'image/jpeg');
+        } catch { /* no cover: the feed falls back to the video itself */ }
+      }
+
+      // Stream (when switched on, and within its 200 MB single-upload limit) cuts and
+      // watermarks the video for real; otherwise it goes to R2 with smart trim as before.
+      let streamUid = null;
+      if (isAdmin && isVideo && await streamEnabled()
+          && (!videoMeta?.size || videoMeta.size <= STREAM_DIRECT_MAX_BYTES)) {
+        streamUid = await uploadToStream(mediaUri);
+      } else if (mediaKind && mediaUri) {
         const mime = isVideo ? (Platform.OS === 'ios' ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
         uploadedMediaUrl = await uploadToR2(mediaUri, mediaKind, mime);
 
@@ -694,7 +776,17 @@ export default function DropsComposeScreen({ navigation, route }) {
         publisher_opt_in: !!publisherOptIn,
         ...(uploadedImageUrls
           ? { images: uploadedImageUrls }
-          : (mediaKind && mediaUri ? { media_type: mediaKind, media_url: uploadedMediaUrl } : {})),
+          : streamUid
+            ? { media_type: 'video', ...(edit?.overlays.length ? { video_edit: edit } : {}) }
+            : (mediaKind && mediaUri ? {
+                media_type: mediaKind,
+                media_url: uploadedMediaUrl,
+                ...(isVideo && isMeaningful(edit, videoMeta?.duration || 0) ? { video_edit: edit } : {}),
+              } : {})),
+        ...(coverUrl ? { cover_url: coverUrl } : {}),
+        // Spotlight (admin only; the server ignores these from anyone else)
+        ...(isAdmin && soundId ? { sound_id: soundId, sound_mute_original: isVideo && muteOriginal } : {}),
+        ...(isAdmin && promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
         ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
@@ -703,6 +795,28 @@ export default function DropsComposeScreen({ navigation, route }) {
         ...(locationEstate.trim() ? { location_estate: locationEstate.trim() } : {}),
         font_style: fontStyle,
       };
+
+      // A Stream video, or anything an admin schedules, goes through the scheduled
+      // queue: the server publishes it when the clip is ready / at the chosen time.
+      const later = isAdmin && publishAt && new Date(publishAt).getTime() > Date.now() + 60e3 ? publishAt : null;
+      if (streamUid || later) {
+        await queueDrop(body, {
+          publishAt: later,
+          stream: streamUid ? { uid: streamUid, start: edit?.start ?? 0, end: edit?.end ?? null } : null,
+        });
+        await AsyncStorage.removeItem(DRAFT_KEY);
+        setText('');
+        Keyboard.dismiss();
+        showToast({
+          type: 'success',
+          title: later ? 'Queued.' : 'Almost out there.',
+          message: later
+            ? `Goes live ${whenLabel(later)}.`
+            : 'Your video is being cut and watermarked. It posts itself in a minute or two.',
+        });
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        return;
+      }
 
       const res = await fetch(`${API_BASE_URL}/api/v1/drops`, {
         method:  'POST',
@@ -765,6 +879,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     format, text, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, hookup, intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
+    isAdmin, videoEdit, videoMeta, coverAt, soundId, muteOriginal, promo, promoHours, publishAt,
     dispatch, navigation, showToast,
   ]);
 
@@ -953,6 +1068,28 @@ export default function DropsComposeScreen({ navigation, route }) {
               {mediaUri
                 ? <X size={rs(18)} color={T.primary} />
                 : <Images size={rs(18)} color={T.textMute} />}
+            </ToolIcon>
+            )}
+
+            {isAdmin && mediaKind === 'video' && !!videoEdit && (
+            <ToolIcon
+              active={isMeaningful(videoEdit, videoMeta?.duration || 0) || coverAt != null}
+              onPress={() => { dismissToolbarHint(); setEditorOpen(true); }}
+              label="Edit"
+              a11yLabel="Trim the video, add text on it, pick its cover"
+            >
+              <Film size={rs(18)} color={T.primary} />
+            </ToolIcon>
+            )}
+
+            {isAdmin && (
+            <ToolIcon
+              active={!!soundId || !!promo || !!publishAt}
+              onPress={() => { dismissToolbarHint(); setActiveSheet('spotlight'); }}
+              label="Boost"
+              a11yLabel="Spotlight — sound, pin or boost, post later"
+            >
+              <Rocket size={rs(18)} color={soundId || promo || publishAt ? T.primary : T.textMute} />
             </ToolIcon>
             )}
 
@@ -1175,13 +1312,115 @@ export default function DropsComposeScreen({ navigation, route }) {
             />
           </View>
         </OptionSheet>
+
+        {/* ── Spotlight sheet (admin) — same extras as the website's Post Studio ── */}
+        {isAdmin && (
+        <OptionSheet visible={activeSheet === 'spotlight'} title="Spotlight" onClose={closeSheet}>
+          <Text style={s.sectionSubLabel}>Extras that make a drop stop the scroll and travel further.</Text>
+
+          <Text style={s.spotLabel}>Sound</Text>
+          {sounds.length ? (
+            <View style={s.spotChips}>
+              <SpotChip label="No sound" on={!soundId} onPress={() => setSoundId('')} />
+              {sounds.map((snd) => (
+                <View key={snd.id} style={s.spotSoundRow}>
+                  <SpotChip label={snd.title} on={soundId === snd.id} onPress={() => setSoundId(snd.id)} />
+                  <TouchableOpacity onPress={() => hear(snd)} hitSlop={HIT_SLOP}>
+                    <Text style={s.spotListen}>{hearingId === snd.id ? 'stop' : 'listen'}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={s.spotHint}>No sounds yet. Add some on the website's admin Sounds page.</Text>
+          )}
+          {!!soundId && mediaKind === 'video' && (
+            <View style={s.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.toggleRowLabel}>Replace the video's own audio</Text>
+                <Text style={s.toggleRowSub}>Off = the track plays over it</Text>
+              </View>
+              <Switch
+                value={muteOriginal}
+                onValueChange={setMuteOriginal}
+                trackColor={{ false: T.surfaceAlt, true: T.primary }}
+                thumbColor={muteOriginal ? '#fff' : T.textMute}
+                ios_backgroundColor={T.surfaceAlt}
+              />
+            </View>
+          )}
+
+          <Text style={s.spotLabel}>Pin or boost</Text>
+          <View style={s.spotChips}>
+            <SpotChip label="Off" on={!promo} onPress={() => setPromo('')} />
+            <SpotChip label="Pin to top" on={promo === 'pin'} onPress={() => setPromo('pin')} />
+            <SpotChip label="Boost" on={promo === 'boost'} onPress={() => setPromo('boost')} />
+          </View>
+          {!!promo && (
+            <View style={s.spotChips}>
+              {PROMO_HOURS.map(([h, l]) => <SpotChip key={h} label={`for ${l}`} on={promoHours === h} onPress={() => setPromoHours(h)} />)}
+            </View>
+          )}
+          <Text style={s.spotHint}>
+            {promo === 'pin' ? 'First thing everyone sees when they open the feed.'
+              : promo === 'boost' ? "Shown near the top of everyone's feed."
+              : 'Shows in the feed like any new drop.'}
+          </Text>
+
+          <Text style={s.spotLabel}>When</Text>
+          <View style={s.spotChips}>
+            <SpotChip label="Now" on={!publishAt} onPress={() => setPublishAt(null)} />
+            {schedulePresets().map(([label, d]) => (
+              <SpotChip
+                key={label}
+                label={label}
+                on={!!publishAt && Math.abs(new Date(publishAt).getTime() - d.getTime()) < 5 * 60e3}
+                onPress={() => setPublishAt(d.toISOString())}
+              />
+            ))}
+          </View>
+          {!!publishAt && (
+            <Text style={s.spotHint}>
+              Goes live {whenLabel(publishAt)}.{promo ? ' The pin/boost clock starts when it does.' : ''} Manage queued drops on the website's Post Studio.
+            </Text>
+          )}
+        </OptionSheet>
+        )}
+
+        {isAdmin && mediaKind === 'video' && (
+          <VideoEditorModal
+            visible={editorOpen}
+            uri={mediaUri}
+            duration={videoMeta?.duration || 0}
+            landscape={!!videoMeta?.landscape}
+            value={videoEdit}
+            cover={coverAt}
+            onClose={() => setEditorOpen(false)}
+            onDone={({ edit, coverAt: c }) => { setVideoEdit(edit); setCoverAt(c); setEditorOpen(false); }}
+          />
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+const SpotChip = ({ label, on, onPress }) => (
+  <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[s.spotChip, on && s.spotChipOn]}>
+    <Text style={[s.spotChipText, on && s.spotChipTextOn]} numberOfLines={1}>{label}</Text>
+  </TouchableOpacity>
+);
+
 // ─── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
+  spotLabel: { fontSize: FONT.sm, fontWeight: '800', color: T.text, marginTop: rp(14), marginBottom: rp(8) },
+  spotChips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8), marginBottom: rp(8) },
+  spotChip: { paddingHorizontal: rp(12), paddingVertical: rp(7), borderRadius: RADIUS.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', maxWidth: rs(220) },
+  spotChipOn: { backgroundColor: T.primary, borderColor: T.primary },
+  spotChipText: { fontSize: rf(13), fontWeight: '700', color: T.text },
+  spotChipTextOn: { color: '#fff' },
+  spotSoundRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
+  spotListen: { fontSize: rf(12), fontWeight: '700', color: T.primary },
+  spotHint: { fontSize: rf(12), color: T.textSecondary, lineHeight: rf(18) },
   kindWrap: { flex: 1, padding: rp(20), gap: rp(14), justifyContent: 'center' },
   kindTitle: { fontSize: FONT.xl || FONT.lg, fontWeight: '800', color: T.text, marginBottom: rp(6) },
   kindCard: {

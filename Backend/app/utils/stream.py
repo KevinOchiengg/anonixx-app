@@ -64,6 +64,18 @@ async def create_tus_upload(upload_length: int) -> tuple[str, str]:
     return location, uid
 
 
+async def create_direct_upload() -> tuple[str, str]:
+    """One-time basic (single POST, multipart field "file") upload URL, for
+    clients without a tus library — the app. Stream caps these at 200 MB.
+    Returns (upload_url, video_uid)."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(_url("/direct_upload"), headers=_auth(), json={"maxDurationSeconds": MAX_UPLOAD_SECONDS})
+    if r.status_code >= 300:
+        raise RuntimeError(f"Stream refused the upload ({r.status_code}): {r.text[:200]}")
+    res = r.json()["result"]
+    return res["uploadURL"], res["uid"]
+
+
 async def get_video(uid: str) -> Optional[dict]:
     async with httpx.AsyncClient(timeout=20) as client:
         r = await client.get(_url(f"/{uid}"), headers=_auth())

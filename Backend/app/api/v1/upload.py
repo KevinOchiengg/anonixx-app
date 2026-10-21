@@ -72,6 +72,20 @@ async def create_stream_upload(
     return Response(status_code=201, headers={"Location": location, "X-Stream-Uid": uid, "Tus-Resumable": "1.0.0"})
 
 
+@router.post("/stream/direct")
+async def create_stream_direct_upload(admin_id: str = Depends(require_admin)):
+    """Single-request upload URL (up to 200 MB) for the app, whose native file
+    uploader posts the video as multipart field "file" straight to Stream."""
+    if not stream.is_configured():
+        raise HTTPException(status_code=503, detail="Video uploads to Stream aren't switched on yet.")
+    try:
+        upload_url, uid = await stream.create_direct_upload()
+    except Exception as e:
+        logger.error(f"Stream direct upload failed: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="Couldn't start the video upload. Try again.")
+    return {"upload_url": upload_url, "uid": uid, "max_bytes": 200 * 1024 * 1024}
+
+
 # ── Server-side uploads (proxy — client sends the file to us, we forward
 #    it to R2) ────────────────────────────────────────────────────────────
 
