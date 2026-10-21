@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 type Item = {
-  id: string; status: string; publish_at: string; display_name: string | null; confession: string;
+  id: string; status: string; publish_at: string | null; display_name: string | null; confession: string;
   media_type: string | null; thumb: string | null; promo_kind: string | null; drop_id: string | null; error: string | null;
 };
 
@@ -46,7 +46,7 @@ export default function ScheduledDrops({ refresh }: { refresh: number }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {s.thumb ? <img src={s.thumb} alt="" /> : <span className="ph">{(s.media_type || "text").slice(0, 1).toUpperCase()}</span>}
           <div className="txt">
-            <b>{s.status === "failed" ? "Didn't publish" : when(s.publish_at)}{s.promo_kind ? <i>{s.promo_kind}</i> : null}</b>
+            <b>{s.status === "failed" ? "Didn't publish" : s.publish_at ? when(s.publish_at) : "As soon as it's ready"}{s.status === "processing" ? <i>processing video</i> : null}{s.promo_kind ? <i>{s.promo_kind}</i> : null}</b>
             <span>{s.status === "failed" ? s.error : s.confession || `[${s.media_type || "post"}]`}</span>
             <small>as {s.display_name || "Anonixx"}</small>
           </div>
@@ -59,9 +59,9 @@ export default function ScheduledDrops({ refresh }: { refresh: number }) {
             </div>
           ) : (
             <div className="acts">
-              {s.status === "pending" ? (
+              {s.status === "pending" || s.status === "processing" ? (
                 <>
-                  <button type="button" className="ps-btn" disabled={busy === s.id} onClick={() => setMoving({ id: s.id, at: toLocalInput(new Date(s.publish_at)) })}>Move</button>
+                  <button type="button" className="ps-btn" disabled={busy === s.id} onClick={() => setMoving({ id: s.id, at: toLocalInput(s.publish_at ? new Date(s.publish_at) : new Date(Date.now() + 3600000)) })}>{s.publish_at ? "Move" : "Set a time"}</button>
                   <button type="button" className="ps-btn" disabled={busy === s.id} onClick={() => act(s.id, () => api(`/admin/scheduled/${s.id}/publish-now`, { method: "POST" }))}>Post now</button>
                 </>
               ) : null}

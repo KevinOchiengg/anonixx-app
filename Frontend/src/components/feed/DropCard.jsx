@@ -140,14 +140,16 @@ const AudioPlayer = React.memo(({ audioUrl }) => (
 ));
 
 // ─── Video Player ─────────────────────────────────────────────
-const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edit }) => {
+const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edit, cover }) => {
   // Smart trim: only [start, end] of the original plays, looping inside that window.
   const clipStart = edit?.start || 0;
   const clipEnd = edit?.end || 0;
   const { activeVideoId } = useActiveVideo() || {};
   const isActive = activeVideoId === postId;
-  const [thumbnail,   setThumbnail]   = useState(() => videoThumbnailCache.get(videoUrl) || null);
-  const [thumbLoading,setThumbLoading]= useState(!videoThumbnailCache.has(videoUrl));
+  // A drop's cover (chosen frame, or Stream's thumbnail) beats generating one, and
+  // a Stream HLS manifest can't be thumbnailed on-device anyway.
+  const [thumbnail,   setThumbnail]   = useState(() => cover || videoThumbnailCache.get(videoUrl) || null);
+  const [thumbLoading,setThumbLoading]= useState(!cover && !videoThumbnailCache.has(videoUrl));
   const [isPlaying,   setIsPlaying]   = useState(false);
   const [isMuted,     setIsMuted]     = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -199,7 +201,7 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edi
   }, [isPlaying]);
 
   useEffect(() => {
-    if (videoThumbnailCache.has(videoUrl)) return;
+    if (cover || videoThumbnailCache.has(videoUrl)) return;
     let cancelled = false;
     const gen = async () => {
       try {
@@ -212,7 +214,7 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edi
     };
     gen();
     return () => { cancelled = true; };
-  }, [videoUrl]);
+  }, [videoUrl, cover]);
 
   const toggleMute = useCallback(() => {
     const next = !isMuted;
@@ -600,6 +602,7 @@ function DropCard({
               <VideoPlayer
                 videoUrl={post.video_url}
                 edit={post.video_edit}
+                cover={post.cover_url}
                 postId={post.id}
                 viewCount={post.views_count || 0}
                 onMediaPress={handleMediaPress}

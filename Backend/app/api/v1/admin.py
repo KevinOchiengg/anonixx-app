@@ -8,6 +8,7 @@ from app.database import get_database
 from app.dependencies import require_admin, require_super_admin, is_super_admin_user
 from app.utils.coin_service import credit_coins
 from app.api.v1.drops import PROMO_KINDS, PROMO_HOURS
+from app.utils import stream
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -491,13 +492,26 @@ async def unpromote_drop(
 # ─── Scheduled drops ──────────────────────────────────────────
 # The Post Studio uploads the media straight away and parks the create
 # payload here; app/tasks/scheduled_publisher.py publishes it on time.
+#
+# Video drops on Cloudflare Stream come through here too, even when posted
+# "now": the job sits in status "processing" while Stream encodes, cuts and
+# watermarks the clip (app/utils/stream.py), then turns "pending" and
+# publishes at publish_at — or straight away when none was given.
 
 MAX_SCHEDULE_DAYS = 60
+MIN_STREAM_CLIP = 1
+
+
+class StreamJob(BaseModel):
+    uid:   str             # the original upload
+    start: float = 0       # the window to keep, in the original's seconds
+    end:   Optional[float] = None
 
 
 class ScheduleRequest(BaseModel):
-    publish_at: datetime
+    publish_at: Optional[datetime] = None   # None = as soon as the video is ready
     drop:       dict
+    stream:     Optional[StreamJob] = None
 
 
 class RescheduleRequest(BaseModel):
@@ -518,7 +532,7 @@ def _scheduled_out(s: dict) -> dict:
     return {
         "id":           str(s["_id"]),
         "status":       s.get("status"),
-        "publish_at":   _aware(s["publish_at"]).isoformat(),
+        "publish_at":   _aware(s["publish_at"]).isoformat() if s.get("publish_at") else None,
         "display_name": d.get("display_name") or None,
         "confession":   (d.get("confession") or "")[:200],
         "media_type":   "image" if d.get("images") else d.get("media_type") or ("poll" if d.get("poll") else None),
@@ -535,26 +549,55 @@ async def schedule_drop(
     admin_id: str = Depends(require_admin),
     db=Depends(get_database),
 ):
-    from app.api.v1.drops import CreateDropRequest, clean_video_edit
-    when = _check_publish_at(data.publish_at)
+    from app.api.v1.drops import CreateDropRequest, clean_video_edit, MAX_CLIP_SECONDS
+    if not data.publish_at and not data.stream:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pick a time to publish it")
+    when = _check_publish_at(data.publish_at) if data.publish_at else None
     try:
         req = CreateDropRequest(**data.drop)
     except Exception:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "That post isn't complete. Check it and try again")
-    if not (req.confession or req.media_url or req.images or req.poll):
+    if not (req.confession or req.media_url or req.images or req.poll or data.stream):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Add something to post")
-    clean_video_edit(req.video_edit)   # surface trim/overlay problems now, not at publish time
+    if data.stream:
+        if not stream.is_configured():
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Video uploads to Stream aren't switched on yet")
+        end = data.stream.end
+        if end is not None and not (MIN_STREAM_CLIP <= end - data.stream.start <= MAX_CLIP_SECONDS + 0.5):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Videos play for 1 second to 3 minutes. Trim it again")
+        req.media_type = "video"
+        req.media_url = None        # filled in with the clip's playback URL once it's ready
+    else:
+        clean_video_edit(req.video_edit)   # surface trim/overlay problems now, not at publish time
 
     doc = {
         "admin_id":   admin_id,
         "drop":       req.model_dump(exclude_none=True),
         "publish_at": when,
-        "status":     "pending",
+        "status":     "processing" if data.stream else "pending",
         "created_at": _now(),
     }
+    if data.stream:
+        doc["stream"] = {"uid": data.stream.uid, "start": max(0.0, data.stream.start), "end": data.stream.end, "clip_uid": None}
     res = await db["scheduled_drops"].insert_one(doc)
     doc["_id"] = res.inserted_id
     return _scheduled_out(doc)
+
+
+@router.get("/scheduled/{schedule_id}", summary="One scheduled drop (the Post Studio polls this while a video finishes)")
+async def get_scheduled(
+    schedule_id: str,
+    admin_id:    str = Depends(require_admin),
+    db=Depends(get_database),
+):
+    from app.tasks.scheduled_publisher import publish_due_drops
+    oid = _drop_oid(schedule_id)
+    # Someone is watching this one: move it along now rather than on the next loop tick.
+    await publish_due_drops(db)
+    job = await db["scheduled_drops"].find_one({"_id": oid})
+    if not job:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Scheduled drop not found")
+    return _scheduled_out(job)
 
 
 @router.get("/scheduled", summary="Upcoming scheduled drops, plus recent ones that published or failed")
@@ -562,7 +605,7 @@ async def list_scheduled(
     admin_id: str = Depends(require_admin),
     db=Depends(get_database),
 ):
-    upcoming = await db["scheduled_drops"].find({"status": {"$in": ["pending", "publishing"]}}).sort("publish_at", 1).to_list(200)
+    upcoming = await db["scheduled_drops"].find({"status": {"$in": ["processing", "pending", "publishing"]}}).sort("publish_at", 1).to_list(200)
     recent = await db["scheduled_drops"].find({"status": {"$in": ["published", "failed"]}}).sort("publish_at", -1).to_list(20)
     return {"upcoming": [_scheduled_out(s) for s in upcoming], "recent": [_scheduled_out(s) for s in recent]}
 
@@ -576,7 +619,7 @@ async def reschedule_drop(
 ):
     when = _check_publish_at(data.publish_at)
     res = await db["scheduled_drops"].update_one(
-        {"_id": _drop_oid(schedule_id), "status": "pending"}, {"$set": {"publish_at": when}},
+        {"_id": _drop_oid(schedule_id), "status": {"$in": ["pending", "processing"]}}, {"$set": {"publish_at": when}},
     )
     if res.matched_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
@@ -591,7 +634,10 @@ async def publish_scheduled_now(
 ):
     from app.tasks.scheduled_publisher import publish_due_drops
     oid = _drop_oid(schedule_id)
-    res = await db["scheduled_drops"].update_one({"_id": oid, "status": "pending"}, {"$set": {"publish_at": _now()}})
+    # a video still processing gets "as soon as it's ready"
+    res = await db["scheduled_drops"].update_one(
+        {"_id": oid, "status": {"$in": ["pending", "processing"]}}, {"$set": {"publish_at": _now()}},
+    )
     if res.matched_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
     await publish_due_drops(db)
@@ -604,9 +650,15 @@ async def cancel_scheduled(
     admin_id:    str = Depends(require_admin),
     db=Depends(get_database),
 ):
-    res = await db["scheduled_drops"].delete_one({"_id": _drop_oid(schedule_id), "status": {"$in": ["pending", "failed"]}})
-    if res.deleted_count == 0:
+    job = await db["scheduled_drops"].find_one_and_delete(
+        {"_id": _drop_oid(schedule_id), "status": {"$in": ["processing", "pending", "failed"]}},
+    )
+    if not job:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
+    # A cancelled video shouldn't keep costing Stream storage.
+    s = job.get("stream") or {}
+    await stream.delete_video(s.get("uid"))
+    await stream.delete_video(s.get("clip_uid") or (job.get("drop") or {}).get("stream_uid"))
     return {"cancelled": schedule_id}
 
 
@@ -642,10 +694,11 @@ async def force_delete_drop(
     except Exception:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
 
-    result = await db["drops"].delete_one({"_id": oid})
-    if result.deleted_count == 0:
+    gone = await db["drops"].find_one_and_delete({"_id": oid}, {"stream_uid": 1})
+    if not gone:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
 
+    await stream.delete_video(gone.get("stream_uid"))
     await db["drop_unlocks"].delete_many({"drop_id": drop_id})
     await db["drop_connections"].delete_many({"drop_id": drop_id})
 

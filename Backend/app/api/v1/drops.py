@@ -24,6 +24,7 @@ from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_c
 from app.utils.fingerprint import fingerprint_hash
 from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted, splice_promoted
 from app.tasks import scheduled_publisher
+from app.utils import stream
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
@@ -262,6 +263,9 @@ class CreateDropRequest(BaseModel):
     waveform_data: Optional[List[float]] = None  # voice drops
     video_edit: Optional[VideoEditInput] = None  # video drops — trim window + text overlays
     cover_url: Optional[str] = None              # video drops — chosen cover frame (uploaded image)
+    # Set by the Stream video pipeline (app/tasks/scheduled_publisher.py), never by a client:
+    stream_uid: Optional[str] = None             # the published clip on Cloudflare Stream
+    media_download_url: Optional[str] = None     # its MP4 copy, for the socials publishers
     # Admin-only extras for official drops: a track from the Sounds library
     # played over the post, and a pin/boost that lifts it in the feed.
     sound_id: Optional[str] = None
@@ -745,11 +749,15 @@ async def create_drop(
                 tags.append(t)
         tags = tags[:10]
 
-    # Cover frame: only for videos, and only a file in our own storage.
+    # Cover frame: only for videos, and only a file in our own storage (or, for a
+    # Stream clip posted without a chosen cover, Stream's own thumbnail).
     r2_prefix = (settings.R2_PUBLIC_URL or "").rstrip("/") + "/"
-    cover_url = data.cover_url if (
-        data.cover_url and data.media_type == "video" and len(r2_prefix) > 1 and data.cover_url.startswith(r2_prefix)
-    ) else None
+    stream_uid = data.stream_uid if is_admin_drop and data.media_type == "video" else None
+    cover_ok = data.cover_url and data.media_type == "video" and (
+        (len(r2_prefix) > 1 and data.cover_url.startswith(r2_prefix))
+        or (stream_uid and re.match(r"^https://[\w.-]+\.cloudflarestream\.com/", data.cover_url))
+    )
+    cover_url = data.cover_url if cover_ok else None
 
     sound = None
     promo_until = None
@@ -821,6 +829,8 @@ async def create_drop(
         "waveform_data": (data.waveform_data or None) if data.media_type == "voice" else None,
         "video_edit": video_edit_data,
         "cover_url": cover_url,
+        "stream_uid": stream_uid,
+        "media_download_url": data.media_download_url if stream_uid else None,
         "sound": sound,
         "promo_kind": data.promo_kind if promo_until else None,
         "promo_until": promo_until,
@@ -911,7 +921,7 @@ async def create_drop(
             "theme":             drop.get("theme"),
             "media_type":        drop.get("media_type"),
             "confession":        drop.get("confession"),
-            "media_url":         drop.get("media_url"),
+            "media_url":         drop.get("media_download_url") or drop.get("media_url"),   # socials need a plain file
             "teaser_image_url":  teaser_image_url,
             "submitted_at":      drop["published_at"],
             "status":            "queued",
@@ -2231,6 +2241,7 @@ async def delete_drop(
     await db["drop_threads"].delete_many({"drop_id": drop_id})
     await db["saved_drops"].delete_many({"drop_id": drop_id})
     await db["drop_views"].delete_many({"drop_id": drop_id})
+    await stream.delete_video(drop.get("stream_uid"))   # Stream bills per stored minute
 
     return {"message": "Gone for good."}
 
@@ -3327,7 +3338,7 @@ async def publish_drop(
         "theme":             drop.get("theme"),
         "media_type":        drop.get("media_type"),         # text | image | video | None
         "confession":        drop.get("confession"),
-        "media_url":         drop.get("media_url"),
+        "media_url":         drop.get("media_download_url") or drop.get("media_url"),   # socials need a plain file
         "teaser_image_url":  teaser_image_url,
         "submitted_at":      published_at,
         "status":            "queued",                       # queued | processing | posted | failed | rejected
