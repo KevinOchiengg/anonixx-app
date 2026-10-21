@@ -1,9 +1,6 @@
-import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { useDispatch } from 'react-redux';
 import { useAuth } from '../context/AuthContext';
-import { detectLocation } from '../store/slices/locationSlice';
 import AppLoadingScreen from '../components/common/AppLoadingScreen';
 
 // One loading moment, not two: fonts (App.js's useFonts) and the
@@ -87,12 +84,6 @@ const linking = {
 export default function AppNavigator({ fontsReady }) {
   const { loading: authLoading } = useAuth();
   const loading = authLoading || !fontsReady;
-  const dispatch = useDispatch();
-
-  // Detect payment region once on app boot (cached for 24h in AsyncStorage)
-  useEffect(() => {
-    dispatch(detectLocation());
-  }, []);
 
   return (
     <NavigationContainer linking={linking}>

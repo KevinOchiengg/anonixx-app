@@ -19,13 +19,13 @@ Pricing tiers:
   Tier 3 (M-Pesa):     KES via M-Pesa      (KES 50 / 100 / 250 / 500)
                         USD via Stripe card (Tier 2 USD as fallback)
 
-IP lookup: ip-api.com free tier (10 k req/month).
-Upgrade to MaxMind GeoLite2 for production.
+IP lookup: local DB-IP country database (app/utils/geoip.py) — no per-request
+external call or rate limit.
 """
 
 from fastapi import APIRouter, Request, Depends
-import httpx
 from app.dependencies import get_current_user_id
+from app.utils import geoip
 
 router = APIRouter(prefix="/geo", tags=["geo"])
 
@@ -124,27 +124,23 @@ def build_packages(tier: int, is_mpesa_country: bool) -> list[dict]:
     return packages
 
 
-# ─── IP → country ─────────────────────────────────────────────────────────────
+# ─── Request → country → tier ─────────────────────────────────────────────────
+# One place for every price decision (packages shown here, the card charge in
+# coins.py, drop unlocks in drops.py), so what's shown is what's charged.
+# Country comes from the local IP database in app/utils/geoip.py.
 
-async def country_from_ip(ip: str) -> str:
-    """Resolve an IPv4/v6 address → ISO 3166-1 alpha-2 code.
+# Countries not in TIER_MAP, or a visitor who can't be placed at all, get the
+# emerging-market tier — the same for the price shown and the price charged.
+DEFAULT_TIER = 2
 
-    Uses ip-api.com free tier.  Falls back to "US" on any error.
-    For production, replace with MaxMind GeoLite2 DB (zero external calls).
-    """
-    if ip in ("127.0.0.1", "::1", "testclient", "", "localhost"):
-        return "KE"                  # sensible local-dev default
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(
-                f"http://ip-api.com/json/{ip}?fields=countryCode",
-                headers={"Accept": "application/json"},
-            )
-            if r.status_code == 200:
-                return r.json().get("countryCode", "US")
-    except Exception:
-        pass
-    return "US"
+
+def tier_for(country) -> int:
+    return TIER_MAP.get(country or "", DEFAULT_TIER)
+
+
+async def pricing_country(request, use_hint: bool = False):
+    """ISO code for the requester, or None. See geoip.request_country for use_hint."""
+    return await geoip.request_country(request, use_hint=use_hint)
 
 
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
@@ -160,11 +156,11 @@ async def get_geo_config(
     Reads X-Forwarded-For so it works correctly behind Render / Cloudflare.
     Safe to call on every CoinsScreen mount — response is cheap and fast.
     """
-    forwarded   = request.headers.get("X-Forwarded-For", "")
-    ip          = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "")
-    country     = await country_from_ip(ip)
-    tier        = TIER_MAP.get(country, 2)          # unknown countries → Tier 2
-    is_mpesa    = country in MPESA_COUNTRIES
+    country     = await pricing_country(request)
+    tier        = tier_for(country)
+    # M-Pesa may also show on the client's own country hint when the IP can't be
+    # placed — harmless, as M-Pesa itself only works with a valid local number.
+    is_mpesa    = (country or await pricing_country(request, use_hint=True)) in MPESA_COUNTRIES
 
     return {
         "country_code": country,

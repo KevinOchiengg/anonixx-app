@@ -2480,11 +2480,8 @@ async def unlock_drop_stripe(
     # Geo-price the same way coins.py's Stripe flow does — resolve the
     # caller's country from IP (never trust a client-supplied country) and
     # charge the matching PPP tier instead of a flat $2/$3 worldwide.
-    from app.api.v1.geo_pricing import country_from_ip, TIER_MAP, get_drop_unlock_price
-    forwarded   = request.headers.get("X-Forwarded-For", "")
-    ip          = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "")
-    country     = await country_from_ip(ip)
-    tier        = TIER_MAP.get(country, 2)
+    from app.api.v1.geo_pricing import pricing_country, tier_for, get_drop_unlock_price
+    tier        = tier_for(await pricing_country(request))
     price_info  = get_drop_unlock_price(tier, is_mpesa_country=False, is_group=bool(drop.get("is_group")))
 
     try:

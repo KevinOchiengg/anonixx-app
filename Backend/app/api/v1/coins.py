@@ -387,7 +387,7 @@ async def buy_coins_stripe_create_intent(
     Coins are credited via the /buy/stripe/webhook once payment succeeds.
     """
     from app.api.v1.geo_pricing import (
-        country_from_ip, TIER_MAP, STRIPE_PRICES, _PACKAGES_BASE,
+        pricing_country, tier_for, STRIPE_PRICES, _PACKAGES_BASE,
     )
 
     pkg = next((p for p in _PACKAGES_BASE if p["id"] == data.package_id), None)
@@ -397,11 +397,9 @@ async def buy_coins_stripe_create_intent(
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Card payments are not configured yet.")
 
-    # Derive tier from IP — prevents price manipulation from the client
-    forwarded    = request.headers.get("X-Forwarded-For", "")
-    ip           = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "")
-    country      = await country_from_ip(ip)
-    tier         = TIER_MAP.get(country, 1)     # unknown → Tier 1 (safest for revenue)
+    # Derive tier from IP — prevents price manipulation from the client. Same
+    # tier_for as GET /geo/config, so the price charged is the price shown.
+    tier         = tier_for(await pricing_country(request))
     stripe_tier  = min(tier, 2)                 # Tier 3 M-Pesa countries → Tier 2 USD
     amount_cents = STRIPE_PRICES[stripe_tier][data.package_id]
 
