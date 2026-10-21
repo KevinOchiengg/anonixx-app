@@ -6,3 +6,6 @@ out/
 .env.production
 next-env.d.ts
 *.tsbuildinfo
+
+.vercel
+.env*

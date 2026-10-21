@@ -591,28 +591,16 @@ async def trigger_mpesa_stk(
 def _media_preview_url(media_url: Optional[str], media_type: Optional[str]) -> Optional[str]:
     """
     Returns a static image URL suitable for og:image.
-    - Images: use the URL as-is (already a Cloudinary image URL).
-    - Videos: transform the Cloudinary video URL into a JPG thumbnail
-      by injecting 'w_1200,h_630,c_fill,so_0' and swapping the extension.
+    - Images: use the URL as-is.
+    - Videos: R2 does no transforms (unlike Cloudinary before it), so there's
+      no way to derive a poster frame from the raw video URL — None until
+      the teaser-card pipeline (app/services/card_generator.py) or a client
+      upload (PATCH /{drop_id}/card-image) supplies a real preview image.
     """
     if not media_url:
         return None
     if media_type == "image":
         return media_url
-    if media_type == "video":
-        # Cloudinary video URL → poster frame thumbnail
-        # e.g. .../video/upload/v123/folder/file.mp4
-        #   →  .../video/upload/w_1200,h_630,c_fill,so_0/v123/folder/file.jpg
-        import re
-        url = re.sub(
-            r"(/video/upload/)(v\d+/)?",
-            lambda m: f"{m.group(1)}w_1200,h_630,c_fill,so_0/{m.group(2) or ''}",
-            media_url,
-            count=1,
-        )
-        # swap extension to .jpg
-        url = re.sub(r"\.\w+$", ".jpg", url)
-        return url
     return None
 
 
@@ -1070,7 +1058,7 @@ async def set_card_image(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Attach a Cloudinary card-image URL to an existing drop (owner only)."""
+    """Attach a card-image URL to an existing drop (owner only)."""
     if not ObjectId.is_valid(drop_id):
         raise HTTPException(status_code=400, detail="Invalid drop ID")
     result = await db["drops"].update_one(

@@ -24,18 +24,9 @@ from typing import Optional
 import httpx
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-import cloudinary
-import cloudinary.uploader
-
-from app.config import settings
+from app.utils import r2_storage
 
 log = logging.getLogger(__name__)
-
-cloudinary.config(
-    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-    api_key=settings.CLOUDINARY_API_KEY,
-    api_secret=settings.CLOUDINARY_API_SECRET,
-)
 
 CARD_SIZE = 1080
 
@@ -157,16 +148,16 @@ async def generate_teaser_card(drop: dict) -> bytes:
 
 
 def upload_teaser_card(image_bytes: bytes, drop_id: str) -> Optional[str]:
-    """Upload the generated teaser JPEG to Cloudinary, return its secure URL."""
+    """Upload the generated teaser JPEG to R2, return its public URL.
+
+    Keyed by drop_id (not a random key like other R2 uploads) so a
+    re-publish overwrites the same object instead of orphaning the old one.
+    """
+    if not r2_storage.is_configured():
+        return None
     try:
-        result = cloudinary.uploader.upload(
-            io.BytesIO(image_bytes),
-            resource_type="image",
-            folder="drop_teasers",
-            public_id=f"teaser_{drop_id}",
-            overwrite=True,
-        )
-        return result.get("secure_url")
+        key = f"anonixx/drop_teasers/{drop_id}.jpg"
+        return r2_storage.upload_bytes_at(key, image_bytes, "image/jpeg")
     except Exception as e:
-        log.warning("card_generator: Cloudinary upload failed for drop %s: %s", drop_id, e)
+        log.warning("card_generator: R2 upload failed for drop %s: %s", drop_id, e)
         return None
