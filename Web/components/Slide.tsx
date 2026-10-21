@@ -76,7 +76,10 @@ export default function Slide({
 
   const Text = headline ? "h1" : "p";
   const textSlide = !hasMedia && !audioSrc;
-  const ambient = textSlide && !mature ? pickSound(sounds, post) : null;
+  // A track picked in the Post Studio wins; text slides otherwise get one by mood.
+  const chosen = post.sound && !audioSrc && !mature ? post.sound : null;
+  const ambient = chosen || (textSlide && !mature ? pickSound(sounds, post) : null);
+  const muteClip = Boolean(chosen?.mute_original);
   const longText = post.content.length > 200;
   const mediaLong = post.content.length > 100;
 
@@ -179,11 +182,11 @@ export default function Slide({
           ) : videoSrc ? (
             <VideoPlayer
               src={videoSrc}
-              poster={post.card_image_url}
+              poster={post.cover_url || post.card_image_url}
               edit={post.video_edit}
               active={active && !mature}
               near={near}
-              muted={muted}
+              muted={muted || muteClip}
             />
           ) : singleImage ? (
             <Image src={singleImage} alt={post.content.slice(0, 100)} width={1080} height={1350} sizes="100vw" priority={near} />
@@ -192,6 +195,7 @@ export default function Slide({
       ) : null}
 
       <div className={hasMedia ? "caption" : "text-body"} style={{ position: "relative", zIndex: 2 }}>
+        {post.promo_kind === "pin" ? <span className="pin-tag">pinned</span> : null}
         {post.content ? (
           <Text
             className={`confession${hasMedia && !expanded ? " clamp" : ""}${textSlide && longText ? " clamp-text" : ""}`}

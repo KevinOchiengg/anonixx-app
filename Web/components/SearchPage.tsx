@@ -210,7 +210,7 @@ export default function SearchPage() {
 }
 
 function ResultCard({ post }: { post: Post }) {
-  const media = post.card_image_url || post.image_url || (post.images && post.images[0]) || null;
+  const media = post.cover_url || post.card_image_url || post.image_url || (post.images && post.images[0]) || null;
   const text = post.content || "";
   return (
     <Link href={`/drop/${post.id}`} className="sp-card">

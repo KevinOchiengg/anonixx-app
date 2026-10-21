@@ -22,7 +22,8 @@ from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
 from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode
 from app.utils.fingerprint import fingerprint_hash
-from app.utils.feed_mix import fetch_mixed, reslot
+from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted, splice_promoted
+from app.tasks import scheduled_publisher
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
@@ -167,6 +168,10 @@ def ensure_linkable(drop: dict) -> None:
 # "Smart trim": the original video is stored untouched and the drop carries the
 # window to play plus any text laid over it. Clients apply both at playback, so
 # nothing is re-encoded here (R2 is dumb storage — see app/utils/r2_storage.py).
+# Admin pin/boost (see utils/feed_mix.py for where promoted drops land).
+PROMO_KINDS = ("pin", "boost")
+PROMO_HOURS = (6, 24, 72, 168)
+
 MAX_CLIP_SECONDS = 180
 MIN_CLIP_SECONDS = 1
 MAX_VIDEO_OVERLAYS = 5
@@ -256,6 +261,13 @@ class CreateDropRequest(BaseModel):
     duration_seconds: Optional[float] = None     # voice drops
     waveform_data: Optional[List[float]] = None  # voice drops
     video_edit: Optional[VideoEditInput] = None  # video drops — trim window + text overlays
+    cover_url: Optional[str] = None              # video drops — chosen cover frame (uploaded image)
+    # Admin-only extras for official drops: a track from the Sounds library
+    # played over the post, and a pin/boost that lifts it in the feed.
+    sound_id: Optional[str] = None
+    sound_mute_original: bool = False            # video drops: play the track instead of the clip's own audio
+    promo_kind: Optional[str] = None             # "pin" | "boost"
+    promo_hours: Optional[int] = None
 
     # Feed-as-drops upgrade — structured location, most-specific to least.
     # Only country + county are backed by a real fixed list client-side
@@ -341,6 +353,11 @@ VALID_REPORT_REASONS = {
 
 
 # ==================== HELPERS ====================
+
+def _aware(dt: datetime) -> datetime:
+    # Mongo hands datetimes back naive (UTC); make them comparable with now_utc().
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -740,6 +757,33 @@ async def create_drop(
                 tags.append(t)
         tags = tags[:10]
 
+    # Cover frame: only for videos, and only a file in our own storage.
+    r2_prefix = (settings.R2_PUBLIC_URL or "").rstrip("/") + "/"
+    cover_url = data.cover_url if (
+        data.cover_url and data.media_type == "video" and len(r2_prefix) > 1 and data.cover_url.startswith(r2_prefix)
+    ) else None
+
+    sound = None
+    promo_until = None
+    if is_admin_drop:
+        if data.sound_id and data.media_type != "voice":
+            try:
+                sound_doc = await db["sounds"].find_one({"_id": ObjectId(data.sound_id), "active": True})
+            except Exception:
+                sound_doc = None
+            if not sound_doc:
+                raise HTTPException(status_code=400, detail="That sound isn't available any more. Pick another.")
+            sound = {
+                "id": str(sound_doc["_id"]),
+                "title": sound_doc.get("title", ""),
+                "url": sound_doc.get("url", ""),
+                "mute_original": bool(data.sound_mute_original) and data.media_type == "video",
+            }
+        if data.promo_kind:
+            if data.promo_kind not in PROMO_KINDS or data.promo_hours not in PROMO_HOURS:
+                raise HTTPException(status_code=400, detail="Pick pin or boost, for 6 hours, 1, 3 or 7 days.")
+            promo_until = now_utc() + timedelta(hours=data.promo_hours)
+
     drop = {
         "_id": ObjectId(),
         "sender_id": current_user_id,
@@ -766,7 +810,8 @@ async def create_drop(
         "unlock_count": 0,
         "admirer_count": 0,
         "reactions": [],
-        "card_image_url": _media_preview_url(
+        # a chosen video cover doubles as the share preview (and the teaser card's backdrop)
+        "card_image_url": cover_url or _media_preview_url(
             images_data[0] if images_data else data.media_url,
             "image" if images_data else data.media_type,
         ),
@@ -787,6 +832,10 @@ async def create_drop(
         "duration_seconds": float(data.duration_seconds) if data.duration_seconds else None,
         "waveform_data": (data.waveform_data or None) if data.media_type == "voice" else None,
         "video_edit": video_edit_data,
+        "cover_url": cover_url,
+        "sound": sound,
+        "promo_kind": data.promo_kind if promo_until else None,
+        "promo_until": promo_until,
         "reaction_counts": {r: 0 for r in VALID_REACTIONS},
         "report_count": 0,
         "moderation_status": "visible",   # "visible" | "flagged" | "hidden"
@@ -1855,6 +1904,9 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "media_type":       drop.get("media_type"),
             "video_url":        drop.get("media_url") if drop.get("media_type") == "video" else None,
             "video_edit":       drop.get("video_edit") if drop.get("media_type") == "video" else None,
+            "cover_url":        drop.get("cover_url"),
+            "sound":            drop.get("sound"),
+            "promo_kind":       drop.get("promo_kind") if drop.get("promo_until") and _aware(drop["promo_until"]) > now_utc() else None,
             "audio_url":        drop.get("media_url") if drop.get("media_type") == "voice" else None,
             "image_url":        drop.get("image_url"),
             # Multi-image posts — ordered list the client renders as swipeable
@@ -1951,9 +2003,14 @@ async def get_drops_feed(
     # Each kind is paged newest-first with its own position inside `cursor`
     # (see utils/feed_mix.py) — none skipped, none repeated. Affinity ordering
     # only reorders within a kind, so the rhythm stays intact.
-    page, next_cursor, page_has_more = await fetch_mixed(db, pool_query, drops_to_load, cursor)
+    scheduled_publisher.nudge(db)
+    now = now_utc()
+    stream_query = {"$and": [pool_query, not_promoted(now)]} if pool_query else not_promoted(now)
+    page, next_cursor, page_has_more = await fetch_mixed(db, stream_query, drops_to_load, cursor)
 
     drops = reslot(page, _weighted_shuffle_drops(page, user_affinities))
+    if not cursor:
+        drops = splice_promoted(drops, await fetch_promoted(db, pool_query, now))
     formatted_drops = await batch_format_drops(drops, current_user_id, db)
 
     final_feed = []

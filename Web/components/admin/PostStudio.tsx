@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type Sound } from "@/lib/api";
+import { captureCover } from "@/lib/coverFrame";
+import ScheduledDrops, { toLocalInput } from "./ScheduledDrops";
 import { uploadFile } from "@/lib/upload";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
 import LocationFields, { type LocationDraft } from "../compose/LocationFields";
@@ -33,6 +35,9 @@ const MAX_VID_MB = 500;
 const EMPTY_PLACE: LocationDraft = { country: "", county: "", subCounty: "", estate: "" };
 
 type Pick = { file: File; url: string };
+type Done = { id?: string; scheduledFor?: string };
+
+const PROMO_HOURS: [number, string][] = [[6, "6 hours"], [24, "1 day"], [72, "3 days"], [168, "7 days"]];
 
 export default function PostStudio() {
   const [format, setFormat] = useState<Format>("text");
@@ -53,8 +58,21 @@ export default function PostStudio() {
   const [busy, setBusy] = useState("");
   const [noPreview, setNoPreview] = useState(false);
   const [error, setError] = useState("");
-  const [published, setPublished] = useState(false);
+  const [published, setPublished] = useState<Done | null>(null);
   const [drag, setDrag] = useState(false);
+  // Spotlight: cover frame, a track over the post, pin/boost, publish later
+  const [coverAt, setCoverAt] = useState<number | null>(null);
+  const [sounds, setSounds] = useState<Sound[]>([]);
+  const [soundId, setSoundId] = useState("");
+  const [muteOriginal, setMuteOriginal] = useState(false);
+  const [hearing, setHearing] = useState(false);
+  const [promo, setPromo] = useState<"" | "pin" | "boost">("");
+  const [promoHours, setPromoHours] = useState(24);
+  const [later, setLater] = useState(false);
+  const [laterAt, setLaterAt] = useState("");
+  const [schedRefresh, setSchedRefresh] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const audio = useRef<HTMLAudioElement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const urls = useRef<string[]>([]);
 
@@ -66,6 +84,21 @@ export default function PostStudio() {
   }, [name]);
   const poster = name.trim() || "Anonixx";
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
+  useEffect(() => {
+    api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => {});
+    return () => audio.current?.pause();
+  }, []);
+  const sound = sounds.find((s) => s.id === soundId) || null;
+
+  function hear() {
+    if (!sound) return;
+    if (hearing) { audio.current?.pause(); setHearing(false); return; }
+    audio.current?.pause();
+    const a = new Audio(sound.url);
+    a.onended = () => setHearing(false);
+    a.play().then(() => setHearing(true)).catch(() => setError("Couldn't play that sound."));
+    audio.current = a;
+  }
 
   const theme = THEME;
   const opts = options.map((o) => o.trim()).filter(Boolean);
@@ -77,7 +110,10 @@ export default function PostStudio() {
     : format === "video" ? (video ? "" : "Add a video.")
     : format === "voice" ? (voice ? "" : "Record a voice note.")
     : !question.trim() ? "Ask a question."
-    : opts.length < 2 ? "Add at least two options." : "";
+    : opts.length < 2 ? "Add at least two options."
+    : "";
+  const laterMissing = later && (!laterAt || new Date(laterAt).getTime() < Date.now() + 60000) ? "Pick a time at least a minute from now." : "";
+  const blocker = missing || laterMissing;
 
   function track(file: File): Pick {
     const url = URL.createObjectURL(file);
@@ -116,6 +152,7 @@ export default function PostStudio() {
       setNoPreview(!len);
       setVlen(len);
       setVedit(len ? defaultEdit(len) : null);
+      setCoverAt(null);
       setVideo(track(f));
       return;
     }
@@ -133,8 +170,10 @@ export default function PostStudio() {
   }
 
   async function publish() {
-    if (missing) return setError(missing);
+    if (blocker) return setError(blocker);
     setError("");
+    audio.current?.pause();
+    setHearing(false);
     try {
       let media: Record<string, unknown> = {};
       if (format === "photo") {
@@ -145,11 +184,21 @@ export default function PostStudio() {
         }
         media = out.length > 1 ? { images: out } : { media_type: "image", media_url: out[0] };
       } else if (format === "video" && video) {
+        // Cover first (it's quick): the chosen frame, or the clip's first frame, with its text.
+        let cover_url: string | undefined;
+        if (vedit && !noPreview) {
+          setBusy("Making the cover…");
+          try {
+            const shot = await captureCover(video.url, coverAt ?? vedit.start, vedit.overlays);
+            cover_url = await uploadFile(shot, "image");
+          } catch { /* no cover: the feed falls back to the video itself */ }
+        }
         setBusy("Uploading video… 0%");
         media = {
           media_type: "video",
           media_url: await uploadFile(video.file, "video", (n) => setBusy(n >= 100 ? "Finishing upload…" : `Uploading video… ${n}%`)),
           ...(isMeaningful(vedit, vlen) ? { video_edit: { ...vedit, overlays: vedit.overlays.filter((o) => o.text.trim()) } } : {}),
+          ...(cover_url ? { cover_url } : {}),
         };
       } else if (format === "voice" && voice) {
         setBusy("Uploading voice note…");
@@ -162,9 +211,8 @@ export default function PostStudio() {
       } else if (format === "poll") {
         media = { poll: { question: question.trim(), options: opts.slice(0, 4) } };
       }
-      setBusy("Publishing…");
-      await api("/drops", {
-        body: {
+      setBusy(later ? "Scheduling…" : "Publishing…");
+      const body = {
           kind: "confession",
           ...(name.trim() ? { display_name: name.trim() } : {}),
           // the API needs some text on every drop; a poll's question stands in for a caption
@@ -177,10 +225,19 @@ export default function PostStudio() {
           ...(place.county.trim() ? { location_county: place.county.trim() } : {}),
           ...(place.subCounty.trim() ? { location_sub_county: place.subCounty.trim() } : {}),
           ...(place.estate.trim() ? { location_estate: place.estate.trim() } : {}),
+          ...(sound && format !== "voice" ? { sound_id: sound.id, sound_mute_original: format === "video" && muteOriginal } : {}),
+          ...(promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
           ...media,
-        },
-      });
-      setPublished(true);
+      };
+      if (later) {
+        const at = new Date(laterAt).toISOString();
+        await api("/admin/scheduled", { body: { publish_at: at, drop: body } });
+        setSchedRefresh((n) => n + 1);
+        setPublished({ scheduledFor: at });
+      } else {
+        const r = await api<{ id?: string }>("/drops", { body });
+        setPublished({ id: r.id });
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -191,7 +248,14 @@ export default function PostStudio() {
   function reset() {
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
-    setTags([]); setTagDraft(""); setMature(false); setError(""); setPublished(false);
+    setTags([]); setTagDraft(""); setMature(false); setError(""); setPublished(null);
+    setCoverAt(null); setSoundId(""); setMuteOriginal(false); setPromo(""); setLater(false); setLaterAt(""); setCopied(false);
+  }
+
+  const link = published?.id && typeof window !== "undefined" ? `${window.location.origin}/drop/${published.id}` : "";
+  const shareText = text.trim().slice(0, 100) || "someone said this on anonixx…";
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(link); setCopied(true); } catch { setError("Couldn't copy. Long-press the link instead."); }
   }
 
   const cover = format === "photo" ? photos[0]?.url : undefined;
@@ -203,10 +267,31 @@ export default function PostStudio() {
     return (
       <div className="ps-done">
         <div className="ps-check" aria-hidden>✓</div>
-        <h2>It&apos;s live.</h2>
-        <p>Posted as {poster}. It&apos;s in the feed now.</p>
+        {published.scheduledFor ? (
+          <>
+            <h2>It&apos;s queued.</h2>
+            <p>Goes live as {poster} on {new Date(published.scheduledFor).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Find it under Coming up.</p>
+          </>
+        ) : (
+          <>
+            <h2>It&apos;s live.</h2>
+            <p>Posted as {poster}{promo ? `, ${promo === "pin" ? "pinned to the top" : "boosted"} for ${PROMO_HOURS.find(([h]) => h === promoHours)?.[1]}` : ""}. Now send it somewhere it can spread.</p>
+            {link ? (
+              <div className="ps-share">
+                <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} aria-label="Post link" />
+                <div className="ps-done-row">
+                  <button type="button" className="ps-btn" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
+                  <a className="ps-btn" href={`https://wa.me/?text=${encodeURIComponent(`${shareText} ${link}`)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                  <a className="ps-btn" href={`https://x.com/intent/post?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(link)}`} target="_blank" rel="noopener noreferrer">X</a>
+                  <a className="ps-btn" href={`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}`} target="_blank" rel="noopener noreferrer">Telegram</a>
+                </div>
+                <small className="ps-help">The link preview shows the cover{share ? " (blurred into a teaser once it goes out to our socials)" : ""}.</small>
+              </div>
+            ) : null}
+          </>
+        )}
         <div className="ps-done-row">
-          <Link href="/" className="ps-btn primary">View the feed</Link>
+          {published.id ? <Link href={`/drop/${published.id}`} className="ps-btn primary">See it</Link> : <Link href="/" className="ps-btn primary">View the feed</Link>}
           <button type="button" className="ps-btn" onClick={reset}>Post another</button>
         </div>
       </div>
@@ -245,6 +330,8 @@ export default function PostStudio() {
         </label>
         <p className="ps-help">Give the page a personality, like SweetSpot or Midnight Confessions. Leave it empty to post as Anonixx.</p>
       </section>
+
+      <ScheduledDrops refresh={schedRefresh} />
 
       <div className="ps-grid">
         <div className="ps-col">
@@ -293,7 +380,10 @@ export default function PostStudio() {
                 ) : video ? (
                   <div className="ps-video">
                     {vedit && !noPreview ? (
-                      <VideoEditor src={video.url} duration={vlen} value={vedit} onChange={setVedit} onNoPreview={() => setNoPreview(true)} />
+                      <VideoEditor
+                        src={video.url} duration={vlen} value={vedit} onChange={setVedit} onNoPreview={() => setNoPreview(true)}
+                        cover={coverAt ?? vedit.start} onCover={setCoverAt}
+                      />
                     ) : (
                       <p className="ps-note">Your browser can&apos;t open this video format (phone .mov/HEVC files often can&apos;t be), so it can&apos;t be trimmed or captioned here and will post as-is. Convert it to an H.264 .mp4 to edit it.</p>
                     )}
@@ -380,6 +470,67 @@ export default function PostStudio() {
               <LocationFields value={place} onChange={setPlace} />
             </details>
           </section>
+
+          <section className="ps-sec ps-spot">
+            <h3><i>5</i> Spotlight <em className="ps-pro">admin</em></h3>
+            <p className="ps-help">Extras that make a drop stop the scroll and travel further.</p>
+
+            {format === "video" ? (
+              <div className="ps-spot-row">
+                <b>Cover</b>
+                <span>{!video ? "Add a video first." : noPreview || !vedit ? "This format can't be framed here, so no cover." : `Frame at ${Math.floor((coverAt ?? vedit.start) / 60)}:${String(Math.round((coverAt ?? vedit.start) % 60)).padStart(2, "0")}${coverAt == null ? " (clip start)" : ""} with your text on it. Pick another with “Use this frame as cover” above. It's the poster and the link preview.`}</span>
+              </div>
+            ) : null}
+
+            {format !== "voice" ? (
+              <div className="ps-spot-row">
+                <b>Sound</b>
+                {sounds.length ? (
+                  <div className="ps-spot-ctl">
+                    <select value={soundId} onChange={(e) => { audio.current?.pause(); setHearing(false); setSoundId(e.target.value); }} aria-label="Sound">
+                      <option value="">{format === "text" ? "Auto (by mood)" : "No sound"}</option>
+                      {sounds.map((s) => <option key={s.id} value={s.id}>{s.title}{s.mood !== "any" ? ` · ${s.mood}` : ""}</option>)}
+                    </select>
+                    {sound ? <button type="button" className="ps-btn" onClick={hear}>{hearing ? "Stop" : "Listen"}</button> : null}
+                    {sound && format === "video" ? (
+                      <label className="ps-check-inline"><input type="checkbox" checked={muteOriginal} onChange={(e) => setMuteOriginal(e.target.checked)} /> Replace the video&apos;s own audio</label>
+                    ) : null}
+                  </div>
+                ) : <span>No sounds yet. Add some on the <Link href="/admin/sounds">Sounds</Link> page.</span>}
+              </div>
+            ) : null}
+
+            <div className="ps-spot-row">
+              <b>Pin or boost</b>
+              <div className="ps-spot-ctl">
+                <div className="ps-seg" role="group" aria-label="Promote">
+                  {([["", "Off"], ["pin", "Pin to top"], ["boost", "Boost"]] as const).map(([k, l]) => (
+                    <button key={k} type="button" className={promo === k ? "on" : ""} onClick={() => setPromo(k)}>{l}</button>
+                  ))}
+                </div>
+                {promo ? (
+                  <select value={promoHours} onChange={(e) => setPromoHours(Number(e.target.value))} aria-label="For how long">
+                    {PROMO_HOURS.map(([h, l]) => <option key={h} value={h}>for {l}</option>)}
+                  </select>
+                ) : null}
+              </div>
+              <span>{promo === "pin" ? "First thing everyone sees when they open the feed." : promo === "boost" ? "Shown near the top of everyone's feed." : "Shows in the feed like any new drop."}</span>
+            </div>
+
+            <div className="ps-spot-row">
+              <b>When</b>
+              <div className="ps-spot-ctl">
+                <div className="ps-seg" role="group" aria-label="When">
+                  <button type="button" className={!later ? "on" : ""} onClick={() => setLater(false)}>Now</button>
+                  <button type="button" className={later ? "on" : ""} onClick={() => { setLater(true); if (!laterAt) setLaterAt(toLocalInput(new Date(Date.now() + 3600000))); }}>Later</button>
+                </div>
+                {later ? (
+                  <input type="datetime-local" value={laterAt} min={toLocalInput(new Date(Date.now() + 120000))} onChange={(e) => setLaterAt(e.target.value)} aria-label="Publish at" />
+                ) : null}
+              </div>
+              {later ? <span>Evenings (8pm to midnight) are when the feed is busiest.{promo ? " The pin/boost clock starts when it goes live." : ""}</span> : null}
+            </div>
+          </section>
         </div>
 
         <aside className="ps-side">
@@ -408,6 +559,12 @@ export default function PostStudio() {
                 {text.trim() || format === "text" ? <p>{previewText || "Your words show up here."}</p> : null}
               </div>
               {mature ? <div className="ps-mature">Mature · blurred</div> : null}
+              {promo === "pin" || sound ? (
+                <div className="ps-chips">
+                  {promo === "pin" ? <span className="pin-tag">pinned</span> : null}
+                  {sound ? <span className="ps-sound">♪ {sound.title}</span> : null}
+                </div>
+              ) : null}
             </div>
           </div>
           <p className="ps-note">Live preview of the feed card.</p>
@@ -416,10 +573,10 @@ export default function PostStudio() {
 
       <div className="ps-bar">
         <div className="ps-bar-msg">
-          {error ? <span className="bad">{error}</span> : busy ? <span>{busy}</span> : missing ? <span className="mute">{missing}</span> : <span className="ok">Ready to publish.</span>}
+          {error ? <span className="bad">{error}</span> : busy ? <span>{busy}</span> : blocker ? <span className="mute">{blocker}</span> : <span className="ok">{later ? "Ready to schedule." : "Ready to publish."}</span>}
         </div>
-        <button type="button" className="ps-btn primary big" disabled={Boolean(busy) || Boolean(missing)} onClick={publish}>
-          {busy ? "Working…" : `Publish as ${poster}`}
+        <button type="button" className="ps-btn primary big" disabled={Boolean(busy) || Boolean(blocker)} onClick={publish}>
+          {busy ? "Working…" : later ? "Schedule it" : `Publish as ${poster}`}
         </button>
       </div>
     </div>

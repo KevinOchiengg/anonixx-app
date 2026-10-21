@@ -24,6 +24,9 @@ export type Post = {
   media_type: "image" | "video" | "voice" | null;
   video_url: string | null;
   video_edit?: VideoEdit | null;
+  cover_url?: string | null;
+  sound?: { id: string; title: string; url: string; mute_original: boolean } | null;
+  promo_kind?: "pin" | "boost" | null;
   audio_url: string | null;
   image_url: string | null;
   images: string[] | null;
