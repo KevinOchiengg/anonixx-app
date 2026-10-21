@@ -59,10 +59,14 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit }: 
     import("hls.js").then(({ default: Hls }) => {
       if (dead || !Hls.isSupported()) return;
       const h = new Hls({ autoStartLoad: false, capLevelToPlayerSize: true, maxBufferLength: 12 });
+      // A neighbour fetches just its first segment (one 4s piece of watch time), so a
+      // swipe lands on a frame instead of black; the rest waits until it's on screen.
       h.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (!activeRef.current) return;
         h.startLoad(start);
-        v.play().catch(() => {});
+        if (activeRef.current) v.play().catch(() => {});
+      });
+      h.on(Hls.Events.FRAG_BUFFERED, () => {
+        if (!activeRef.current) h.stopLoad();
       });
       h.loadSource(src);
       h.attachMedia(v);
@@ -225,7 +229,8 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit }: 
       {landscape && poster ? <div className="vp-blur" style={{ backgroundImage: `url(${poster})` }} /> : null}
       <video
         ref={ref}
-        src={hls ? undefined : src}
+        // "#t=" makes mobile browsers paint the opening frame of an MP4 with no poster
+        src={hls ? undefined : poster || src.includes("#") ? src : `${src}#t=${Math.max(0.001, start)}`}
         poster={poster || undefined}
         muted
         loop={!end}
@@ -235,6 +240,9 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit }: 
           const v = e.currentTarget;
           setLandscape(v.videoWidth > v.videoHeight * 1.05);
           if (start && v.currentTime < start) v.currentTime = start;
+          // A paused neighbour: seeking makes the browser decode and paint its first
+          // frame now (some phones otherwise leave it black until play).
+          else if (!activeRef.current && v.paused) v.currentTime = Math.max(0.001, start);
         }}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;

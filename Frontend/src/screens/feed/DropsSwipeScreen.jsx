@@ -34,6 +34,7 @@ import {
   TouchableWithoutFeedback, View, useWindowDimensions,
 } from 'react-native';
 import Svg, { Line, Polygon } from 'react-native-svg';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -322,8 +323,11 @@ const RailAvatar = ({ post, navigation }) => (
 );
 
 // ─── VIDEO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
+// Covers for videos posted without one (older R2 uploads), made once per URL.
+const posterCache = new Map();
+
 const VideoSlide = ({
-  post, isActive, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
+  post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const lastTap = useRef(null);
@@ -338,14 +342,19 @@ const VideoSlide = ({
   const wasEverActive = useRef(false);
   const sourceLoaded = useRef(false);
 
-  // Loads with no source and stays that way until this slide is actually
-  // the active one — same lazy pattern DropCard.jsx's feed-card player
-  // already uses. Loading post.video_url eagerly on every mount meant
-  // every slide within the FlatList's render window (windowSize) started
-  // buffering its video the instant it mounted, not just the one on
-  // screen — several videos competing for bandwidth/decoders at once is
-  // exactly what made scrolling feel janky instead of smooth.
+  // Loads with no source until this slide is on screen or right next to it
+  // (isNear) — TikTok's trick: the next video is already buffered, paused on
+  // its first frame, so a swipe lands on a picture instead of a black
+  // player. Further-out slides in the FlatList's window stay unloaded, so
+  // only ~3 decoders ever compete (loading every mounted slide made
+  // scrolling janky).
   const player = useVideoPlayer(null, (p) => { p.loop = true; p.muted = false; });
+  const activeRef = useRef(isActive);
+  activeRef.current = isActive;
+  // Until the player has drawn its first frame, the cover sits on top of it.
+  const [frameReady, setFrameReady] = useState(false);
+  const [poster, setPoster] = useState(() => post.cover_url || post.card_image_url || posterCache.get(post.video_url) || null);
+  const [slowLoad, setSlowLoad] = useState(false);
   // Smart trim: the full original is streamed, but only [start, end] plays (and loops).
   const clipStart = post.video_edit?.start || 0;
   const clipEnd = post.video_edit?.end || 0;
@@ -399,23 +408,39 @@ const VideoSlide = ({
   }, [isActive, player, clipStart, clipEnd]);
 
   useEffect(() => {
+    if ((isActive || isNear) && !sourceLoaded.current) {
+      sourceLoaded.current = true;
+      player.replaceAsync({ uri: post.video_url }).then(() => {
+        if (clipStart) player.currentTime = clipStart;
+        if (activeRef.current) player.play();   // a neighbour stays paused on its first frame
+      }).catch(() => {});
+    }
     if (isActive) {
       wasEverActive.current = true;
-      if (!sourceLoaded.current) {
-        sourceLoaded.current = true;
-        player.replaceAsync({ uri: post.video_url }).then(() => {
-          if (clipStart) player.currentTime = clipStart;
-          player.play();
-        }).catch(() => {});
-      } else {
-        player.play();
-      }
+      if (sourceLoaded.current) player.play();
     } else if (wasEverActive.current) {
       player.pause();
       setVideoCurrentTime(0);
       setVideoDuration(0);
     }
-  }, [isActive]);
+  }, [isActive, isNear]);
+
+  // No cover on the post (older R2 videos): make one from the file itself, once.
+  useEffect(() => {
+    if (poster || !(isActive || isNear) || !post.video_url || post.video_url.includes('.m3u8')) return;
+    let gone = false;
+    VideoThumbnails.getThumbnailAsync(post.video_url, { time: Math.round(clipStart * 1000), quality: 0.6 })
+      .then(({ uri }) => { posterCache.set(post.video_url, uri); if (!gone) setPoster(uri); })
+      .catch(() => {});
+    return () => { gone = true; };
+  }, [isActive, isNear, poster, post.video_url, clipStart]);
+
+  // The spinner only shows when loading is genuinely slow — a quick load never flashes it.
+  useEffect(() => {
+    if (!isActive || playerStatus !== 'loading') { setSlowLoad(false); return; }
+    const t = setTimeout(() => setSlowLoad(true), 700);
+    return () => clearTimeout(t);
+  }, [isActive, playerStatus]);
 
   // Single tap pauses/resumes directly — no intermediate "reveal a play
   // button, then tap that" step. Double tap (within 280ms) likes instead,
@@ -525,7 +550,11 @@ const VideoSlide = ({
         nativeControls={false}
         allowsPictureInPicture={false}
         pointerEvents="none"
+        onFirstFrameRender={() => setFrameReady(true)}
       />
+      {!frameReady && poster ? (
+        <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="contain" pointerEvents="none" />
+      ) : null}
       {/* A separate top-most sibling, not a wrapper around VideoView —
           expo-video's native surface (ExoPlayer/SurfaceView on Android)
           can swallow touches over the actual video pixels even with
@@ -565,7 +594,7 @@ const VideoSlide = ({
         </GestureDetector>
       )}
 
-      {playerStatus === 'loading' && (
+      {playerStatus === 'loading' && slowLoad && (
         <View style={ss.videoLoading} pointerEvents="none">
           <ActivityIndicator color="rgba(255,255,255,0.45)" size="large" />
         </View>
@@ -1581,6 +1610,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
     }
 
     const isActive = index === activeIndex && screenFocused;
+    // the slides either side preload, so a swipe lands on a ready frame
+    const isNear = screenFocused && Math.abs(index - activeIndex) === 1;
     const likeState = likeMap[item.id] || { liked: false, count: 0 };
     const commonProps = {
       post: item,
@@ -1602,7 +1633,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
     let slide;
     if (item.video_url) {
-      slide = <VideoSlide {...commonProps} isActive={isActive} />;
+      slide = <VideoSlide {...commonProps} isActive={isActive} isNear={isNear} />;
     } else if (item.audio_url) {
       slide = <AudioSlide {...commonProps} isActive={isActive} />;
     } else if (item.poll) {
@@ -1811,7 +1842,7 @@ const ss = StyleSheet.create({
     paddingHorizontal: rp(14), paddingVertical: rp(6), borderRadius: RADIUS.full, backgroundColor: 'rgba(10,12,20,0.6)',
   },
   fastText: { color: '#fff', fontSize: FONT.sm, fontWeight: '800' },
-  videoLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', zIndex: 2 },
+  videoLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   heartBurst: { position: 'absolute', top: '50%', left: '50%', marginLeft: -50, marginTop: -50, zIndex: 100 },
 });
 
