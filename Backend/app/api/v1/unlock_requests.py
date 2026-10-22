@@ -25,14 +25,16 @@ charged until accept.
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import debit_coins
-from app.api.v1.drops import _ensure_aware, send_push_notification
+from app.api.v1.drops import _ensure_aware, send_push_notification, AGE_GATE_DETAIL
+from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
+from app.utils.moderation import violates_policy, MODERATION_ERROR
 
 # Pending requests now carry their own clock. They used to inherit the
 # confession's expiry, but drops no longer expire until they're unlocked —
@@ -55,6 +57,11 @@ def now_utc() -> datetime:
 
 MAX_REQUEST_VIDEO_SECONDS = 30   # a quick clue, not a full drop-style upload
 
+# A link up is a pitch, not just a button: one line plus quick-intent chips, shown
+# to the poster before they accept (the sender's own Room goes along as their clue).
+MAX_PITCH_CHARS = 120
+INTENT_CHIPS = {"free-tonight", "can-host", "can-pick-up", "drinks-first", "just-talk", "nearby"}
+
 class CreateUnlockRequestBody(BaseModel):
     target_type: str            # "drop" — the only target type now
     target_id: str
@@ -66,6 +73,8 @@ class CreateUnlockRequestBody(BaseModel):
     media_url: Optional[str] = None
     media_type: Optional[str] = None       # "image" | "video"
     media_duration: Optional[float] = None  # seconds, video only
+    pitch: Optional[str] = None             # one line the poster reads before accepting
+    intents: Optional[List[str]] = None     # from INTENT_CHIPS
 
 
 class AcceptAllBody(BaseModel):
@@ -182,7 +191,8 @@ async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
         "request_id": str(request_oid), "connection_id": connection_id,
     })
     await send_push_notification(
-        claimed["requester_id"], "Request accepted 🎉", "You can now chat.", db,
+        claimed["requester_id"], "They said yes 🔥", "Your link up was accepted. The Room is open, go say something.", db,
+        data={"type": "linkup_accepted", "connection_id": connection_id, "url": f"/chat/{connection_id}"},
     )
     return {"error": None, "connection_id": connection_id}
 
@@ -212,6 +222,17 @@ async def create_unlock_request(
                 detail=f"Video clue must be {MAX_REQUEST_VIDEO_SECONDS}s or shorter.",
             )
 
+    pitch = (data.pitch or "").strip()[:MAX_PITCH_CHARS] or None
+    if pitch and contains_contact_info(pitch):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+    if pitch and violates_policy(pitch):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
+    intents = [i for i in dict.fromkeys(data.intents or []) if i in INTENT_CHIPS][:4]
+
+    requester = await db["users"].find_one({"_id": ObjectId(current_user_id)})
+    if requester and not requester.get("age_verified") and not requester.get("is_admin"):
+        raise HTTPException(status_code=403, detail=AGE_GATE_DETAIL)
+
     target = await _resolve_target(data.target_type, data.target_id, db)
     doc, owner_id, target_expires_at, snippet = (
         target["doc"], target["owner_id"], target["target_expires_at"],
@@ -227,6 +248,8 @@ async def create_unlock_request(
     # None = never expires (un-unlocked drop, or a plain feed post).
     if target_expires_at is not None and target_expires_at < now_utc():
         raise HTTPException(status_code=400, detail="This confession has expired.")
+    if doc.get("live_until") and _ensure_aware(doc["live_until"]) < now_utc():
+        raise HTTPException(status_code=400, detail="This post has ended. Catch them on their next one.")
 
     # The request's own window, independent of the confession's lifetime.
     expires_at = now_utc() + timedelta(days=REQUEST_EXPIRY_DAYS)
@@ -253,8 +276,13 @@ async def create_unlock_request(
             },
         )
 
-    requester = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     requester_name = requester.get("anonymous_name", "Anonymous") if requester else "Anonymous"
+
+    # Mutual link up: they already asked to link up with you. Connect both of you
+    # now, free — the "match" moment.
+    mutual = await _try_mutual(data, doc, owner_id, current_user_id, requester_name, pitch, intents, db)
+    if mutual:
+        return mutual
 
     req_doc = {
         "_id": ObjectId(),
@@ -268,6 +296,8 @@ async def create_unlock_request(
         "media_url": data.media_url,
         "media_type": data.media_type,
         "media_duration": data.media_duration,
+        "pitch": pitch,
+        "intents": intents,
         "status": "pending",
         "connection_id": None,
         "created_at": now_utc(),
@@ -283,12 +313,71 @@ async def create_unlock_request(
     })
     await send_push_notification(
         owner_id,
-        "A stranger is dying to know who you are 🔥",
-        "They found your confession. Decide if they're worth it.",
+        f"{requester_name} wants to link up 🔥",
+        f"“{pitch}”" if pitch else "They found your post. See their Room and decide.",
         db,
+        data={"type": "linkup_request", "request_id": request_id, "url": f"/inbox?request={request_id}"},
+        category="linkup_request",
     )
 
     return {"request_id": request_id, "status": "pending", "expires_at": expires_at.isoformat()}
+
+
+async def _try_mutual(data, doc, owner_id, requester_id, requester_name, pitch, intents, db) -> Optional[dict]:
+    """If the poster already has a pending link up to the requester, accept both
+    sides free. No coins move and no poster reward is credited (two accounts
+    shouldn't be able to farm rewards off each other)."""
+    reverse = await db["drop_unlock_requests"].find_one_and_update(
+        {"owner_id": requester_id, "requester_id": owner_id, "status": "pending", "expires_at": {"$gt": now_utc()}},
+        {"$set": {"status": "accepting"}},
+        return_document=True,
+    )
+    if not reverse:
+        return None
+    try:
+        connection_id = await _complete_free(data.target_id, requester_id, doc, db)
+    except Exception:
+        await db["drop_unlock_requests"].update_one({"_id": reverse["_id"]}, {"$set": {"status": "pending"}})
+        return None
+    now = now_utc()
+    await db["drop_unlock_requests"].update_one(
+        {"_id": reverse["_id"]},
+        {"$set": {"status": "accepted", "responded_at": now, "connection_id": connection_id, "mutual": True}},
+    )
+    mine = {
+        "_id": ObjectId(), "target_type": data.target_type, "target_id": data.target_id,
+        "owner_id": owner_id, "requester_id": requester_id, "requester_anonymous_name": requester_name,
+        "confession_snippet": (doc.get("confession") or "")[:140], "payment_method": "mutual",
+        "media_url": data.media_url, "media_type": data.media_type, "media_duration": data.media_duration,
+        "pitch": pitch, "intents": intents, "status": "accepted", "mutual": True,
+        "connection_id": connection_id, "created_at": now, "responded_at": now,
+        "expires_at": now + timedelta(days=REQUEST_EXPIRY_DAYS),
+    }
+    await db["drop_unlock_requests"].insert_one(mine)
+    for uid, rid in ((requester_id, mine["_id"]), (owner_id, reverse["_id"])):
+        await emit_unlock_request_accepted(uid, {"request_id": str(rid), "connection_id": connection_id, "mutual": True})
+        await send_push_notification(
+            uid, "It's mutual 🔥", "You both wanted this. Your Room is open, say something.", db,
+            data={"type": "linkup_mutual", "connection_id": connection_id, "url": f"/chat/{connection_id}"},
+        )
+    return {"mutual": True, "connection_id": connection_id, "status": "accepted"}
+
+
+async def _complete_free(target_id: str, requester_id: str, doc: dict, db) -> str:
+    """The unlock bookkeeping without a charge or a poster reward."""
+    from app.api.v1.drops import grace_days_for
+    await db["drop_unlocks"].insert_one({
+        "_id": ObjectId(), "drop_id": target_id, "unlocker_id": requester_id, "sender_id": doc["sender_id"],
+        "method": "mutual", "amount": 0, "sender_anonymous_name": doc.get("sender_anonymous_name"),
+        "created_at": now_utc(),
+    })
+    await db["drops"].update_one({"_id": ObjectId(target_id)}, {"$inc": {"unlock_count": 1}})
+    grace_days = await grace_days_for(doc["sender_id"], db)
+    await db["drops"].update_one(
+        {"_id": ObjectId(target_id), "expires_at": None},
+        {"$set": {"expires_at": now_utc() + timedelta(days=grace_days)}},
+    )
+    return await _create_connection_for_target("drop", target_id, doc, requester_id, db)
 
 
 async def count_pending_incoming(db, user_id: str) -> int:
@@ -320,10 +409,17 @@ async def list_incoming_requests(
     # sending the request. One batch lookup for the whole inbox.
     requester_ids = {r["requester_id"] for r in rows if r.get("requester_id")}
     requester_avatars: dict[str, Optional[str]] = {}
+    requester_rooms: dict[str, dict] = {}
     if requester_ids:
         valid_oids = [ObjectId(rid) for rid in requester_ids if ObjectId.is_valid(rid)]
         async for u in db["users"].find({"_id": {"$in": valid_oids}}, {"avatar_url": 1}):
             requester_avatars[str(u["_id"])] = u.get("avatar_url")
+        # Their Room is their clue: gallery thumbnails right in the inbox row.
+        async for cp in db["chat_profiles"].find(
+            {"user_id": {"$in": list(requester_ids)}},
+            {"user_id": 1, "gallery": 1, "background_pattern": 1, "profile_picture_url": 1},
+        ):
+            requester_rooms[cp["user_id"]] = cp
 
     requests = []
     for r in rows:
@@ -334,7 +430,15 @@ async def list_incoming_requests(
             "confession_snippet": r.get("confession_snippet", ""),
             "requester_id": r["requester_id"],
             "requester_anonymous_name": r.get("requester_anonymous_name", "Anonymous"),
-            "requester_avatar_url": requester_avatars.get(r.get("requester_id")),
+            "requester_avatar_url": (requester_rooms.get(r.get("requester_id"), {}).get("profile_picture_url")
+                                     or requester_avatars.get(r.get("requester_id"))),
+            "requester_gallery": [
+                {"media_url": g.get("media_url"), "media_type": g.get("media_type")}
+                for g in (requester_rooms.get(r.get("requester_id"), {}).get("gallery") or [])[:3]
+            ],
+            "requester_background": requester_rooms.get(r.get("requester_id"), {}).get("background_pattern"),
+            "pitch": r.get("pitch"),
+            "intents": r.get("intents") or [],
             "media_url": r.get("media_url"),
             "media_type": r.get("media_type"),
             "media_duration": r.get("media_duration"),

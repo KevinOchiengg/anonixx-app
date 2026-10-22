@@ -491,10 +491,16 @@ async def update_vibe_score(user_id: str, action: str, db):
     )
 
 
-async def send_push_notification(user_id: str, title: str, body: str, db, data: Optional[dict] = None):
+async def send_push_notification(user_id: str, title: str, body: str, db, data: Optional[dict] = None, category: Optional[str] = None):
+    """`category` names a set of action buttons — the app registers them by id
+    (e.g. "linkup_request" -> Accept), the website's sw.js reads data.actions."""
     try:
         from app.utils.notifications import send_web_push
-        await send_web_push(user_id, title, body, data, db)
+        web_data = dict(data or {})
+        if category == "linkup_request" and web_data.get("request_id"):
+            web_data["actions"] = [{"action": "accept", "title": "Accept"}]
+            web_data["accept_url"] = f"/inbox?accept={web_data['request_id']}"
+        await send_web_push(user_id, title, body, web_data, db)
     except Exception as e:
         print(f"⚠️ Web push failed: {e}")
     try:
@@ -507,7 +513,8 @@ async def send_push_notification(user_id: str, title: str, body: str, db, data: 
         async with httpx.AsyncClient() as client:
             await client.post(
                 "https://exp.host/--/api/v2/push/send",
-                json={"to": token, "title": title, "body": body, "sound": "default", **({"data": data} if data else {})},
+                json={"to": token, "title": title, "body": body, "sound": "default",
+                      **({"data": data} if data else {}), **({"categoryId": category} if category else {})},
                 headers={"Content-Type": "application/json"},
                 timeout=5.0
             )
@@ -738,6 +745,8 @@ async def create_drop(
     hookup_data = clean_hookup(data.hookup) if kind == "hookup" and data.hookup else None
     if kind == "hookup" and not hookup_data:
         raise HTTPException(status_code=400, detail="Fill in your age and area for a hookup confession.")
+    if kind == "hookup" and not user.get("age_verified") and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail=AGE_GATE_DETAIL)
 
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD
@@ -817,6 +826,7 @@ async def create_drop(
         "intent": data.intent if data.intent in VALID_INTENTS and data.intent != "the-exchange" else None,
         "kind": kind,
         "hookup": hookup_data,
+        "live_until": now_utc() + timedelta(hours=HOOKUP_LIVE_HOURS) if kind == "hookup" else None,
         "created_at": now_utc(),
 
         # ── Drop spec upgrade fields ──────────────────────────
@@ -1829,6 +1839,16 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
     ]):
         thread_counts[item["_id"]] = item["count"]
 
+    # "4 linked up" social proof on hookup posts: pending + accepted requests.
+    linkup_counts: dict[str, int] = {}
+    hookup_ids = [str(d["_id"]) for d in drops if d.get("kind") == "hookup"]
+    if hookup_ids:
+        async for item in db["drop_unlock_requests"].aggregate([
+            {"$match": {"target_id": {"$in": hookup_ids}, "status": {"$in": ["pending", "accepting", "accepted"]}}},
+            {"$group": {"_id": "$target_id", "count": {"$sum": 1}}},
+        ]):
+            linkup_counts[item["_id"]] = item["count"]
+
     saved_set = set()
     liked_set = set()
     voted_map: dict[str, int] = {}
@@ -1904,6 +1924,8 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "intent":           drop.get("intent"),
             "kind":             drop.get("kind"),
             "hookup":           drop.get("hookup"),
+            "live_until":       _aware(drop["live_until"]).isoformat() if drop.get("live_until") else None,
+            "linkup_count":     linkup_counts.get(did, 0) if drop.get("kind") == "hookup" else None,
             "sensitivity":      drop.get("sensitivity", "general"),
             "intensity":        drop.get("intensity"),
             "media_url":        drop.get("media_url"),
@@ -1994,6 +2016,7 @@ async def get_drops_feed(
 
     pool_query = {"sender_id": {"$nin": blocked_ids}} if blocked_ids else {}
     pool_query = apply_content_mode(pool_query, mature_allowed(x_content_mode, user_doc))
+    pool_query = {"$and": [pool_query, live_filter(now_utc())]} if pool_query else live_filter(now_utc())
 
     loc_filter = build_feed_location_filter(
         {
@@ -2208,6 +2231,35 @@ async def get_my_drops(
     }
 
 
+@router.post("/{drop_id}/extend")
+async def extend_hookup(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Keeps a hookup post live another HOOKUP_LIVE_HOURS (from now if it already
+    ran out), up to HOOKUP_MAX_LIVE_HOURS after it was posted. Owner only."""
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
+    drop = await db["drops"].find_one({"_id": oid}, {"sender_id": 1, "kind": 1, "live_until": 1, "created_at": 1})
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if drop["sender_id"] != current_user_id:
+        raise HTTPException(status_code=403, detail="Only the person who posted it can extend it.")
+    if drop.get("kind") != "hookup":
+        raise HTTPException(status_code=400, detail="Only hookup posts run on a timer.")
+    now = now_utc()
+    ceiling = _aware(drop["created_at"]) + timedelta(hours=HOOKUP_MAX_LIVE_HOURS)
+    base = max(now, _aware(drop["live_until"])) if drop.get("live_until") else now
+    if base >= ceiling - timedelta(minutes=1):
+        raise HTTPException(status_code=400, detail=f"Hookup posts can run {HOOKUP_MAX_LIVE_HOURS} hours at most. Post a fresh one.")
+    live_until = min(base + timedelta(hours=HOOKUP_LIVE_HOURS), ceiling)
+    await db["drops"].update_one({"_id": oid}, {"$set": {"live_until": live_until}})
+    return {"live_until": live_until.isoformat()}
+
+
 class EditDropRequest(BaseModel):
     content: str
 
@@ -2270,6 +2322,24 @@ async def delete_drop(
 # ==================== UNLOCK — COINS ====================
 
 COINS_UNLOCK_COST         = 6    # coins required to unlock a drop
+
+# Hookup posts are "tonight" posts: live for HOOKUP_LIVE_HOURS, extendable in the
+# same steps up to HOOKUP_MAX_LIVE_HOURS after posting. Past live_until they leave
+# the feed and can't be linked up with — the countdown is what makes people act.
+HOOKUP_LIVE_HOURS = 12
+HOOKUP_MAX_LIVE_HOURS = 48
+
+
+def live_filter(now: datetime) -> dict:
+    """Feed condition: drops with no live window (everything but hookups, and
+    hookups posted before the window existed) or one that hasn't run out."""
+    return {"$or": [{"live_until": None}, {"live_until": {"$gt": now}}]}
+
+
+AGE_GATE_DETAIL = {
+    "code": "age_verification_required",
+    "message": "Confirm you're 18+ first. It takes a second, and it keeps everyone here an adult.",
+}
 ORIGIN_AUTHOR_UNLOCK_COST = 3    # discounted rate for the author of the inspiring post
 
 @router.post("/{drop_id}/unlock/coins")

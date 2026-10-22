@@ -272,6 +272,94 @@ async def delete_gallery_media(
     return _sanitize(updated)
 
 
+@router.get("/{user_id}/preview")
+async def get_room_preview(
+    user_id:          str,
+    drop_id:          Optional[str] = None,
+    current_user_id:  str = Depends(get_current_user_id),
+    db                = Depends(get_database),
+):
+    """
+    The locked Room: what anyone (signed in, 18+) sees before linking up —
+    the person's theme, font, picture and 3-item gallery, plus their live
+    hookup post pinned at the top (the one they came from, via drop_id, else
+    their latest). Everything that lets you talk stays behind the link up;
+    the full profile above remains connection-only.
+
+    Also tells the viewer where they stand: already connected (open the
+    chat), their own pending link up, or a link up this person sent *them*
+    (they're reviewing it from the sender's Room, with Accept / Decline).
+    """
+    from app.api.v1.drops import unlock_cost_for, _aware, AGE_GATE_DETAIL
+
+    viewer = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"age_verified": 1, "is_admin": 1})
+    if user_id != current_user_id and viewer and not viewer.get("age_verified") and not viewer.get("is_admin"):
+        raise HTTPException(status_code=403, detail=AGE_GATE_DETAIL)
+    try:
+        owner_oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Room not found.")
+    user = await db["users"].find_one({"_id": owner_oid}, {"avatar_url": 1, "anonymous_name": 1, "is_active": 1})
+    if not user or user.get("is_active") is False:
+        raise HTTPException(status_code=404, detail="Room not found.")
+    profile = _sanitize(await db["chat_profiles"].find_one({"user_id": user_id}) or {}, user)
+    now = _now()
+
+    # The pinned post: the one they tapped through from, else their latest live hookup.
+    post_doc = None
+    if drop_id and ObjectId.is_valid(drop_id):
+        post_doc = await db["drops"].find_one({"_id": ObjectId(drop_id), "sender_id": user_id, "kind": "hookup"})
+    if not post_doc:
+        post_doc = await db["drops"].find_one(
+            {"sender_id": user_id, "kind": "hookup", "is_active": True, "live_until": {"$gt": now}},
+            sort=[("created_at", -1)],
+        )
+    post = None
+    if post_doc:
+        pid = str(post_doc["_id"])
+        live_until = _aware(post_doc["live_until"]) if post_doc.get("live_until") else None
+        post = {
+            "id":           pid,
+            "content":      post_doc.get("confession") or "",
+            "hookup":       post_doc.get("hookup"),
+            "live_until":   live_until.isoformat() if live_until else None,
+            "live":         live_until is None or live_until > now,
+            "linkup_count": await db["drop_unlock_requests"].count_documents(
+                {"target_id": pid, "status": {"$in": ["pending", "accepting", "accepted"]}}),
+            "created_at":   post_doc["created_at"].isoformat() if post_doc.get("created_at") else None,
+        }
+
+    connection = None
+    if user_id != current_user_id:
+        connection = await db["drop_connections"].find_one({"$or": [
+            {"sender_id": user_id, "unlocker_id": current_user_id},
+            {"sender_id": current_user_id, "unlocker_id": user_id},
+        ]}, {"_id": 1})
+    mine = await db["drop_unlock_requests"].find_one(
+        {"requester_id": current_user_id, "target_id": post["id"], "status": {"$in": ["pending", "accepting"]}},
+        {"_id": 1, "status": 1},
+    ) if post and user_id != current_user_id else None
+    theirs = await db["drop_unlock_requests"].find_one(
+        {"requester_id": user_id, "owner_id": current_user_id, "status": "pending", "expires_at": {"$gt": now}},
+        {"_id": 1, "pitch": 1, "intents": 1, "target_id": 1, "media_url": 1, "media_type": 1},
+    ) if user_id != current_user_id else None
+
+    return {
+        "user_id": user_id,
+        "room": {k: profile[k] for k in (
+            "background_pattern", "font_style", "profile_picture_url", "anonymous_name", "gallery", "call_mode",
+        )},
+        "post": post,
+        "connection_id": str(connection["_id"]) if connection else None,
+        "my_request": {"id": str(mine["_id"]), "status": mine["status"]} if mine else None,
+        "incoming_request": {
+            "id": str(theirs["_id"]), "pitch": theirs.get("pitch"), "intents": theirs.get("intents") or [],
+            "target_id": theirs.get("target_id"), "media_url": theirs.get("media_url"), "media_type": theirs.get("media_type"),
+        } if theirs else None,
+        "linkup_cost": await unlock_cost_for(current_user_id, db),
+    }
+
+
 @router.get("/{user_id}")
 async def get_chat_profile(
     user_id:          str,
