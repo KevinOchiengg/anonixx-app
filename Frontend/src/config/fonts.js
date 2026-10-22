@@ -25,6 +25,7 @@ import {
   Fraunces_400Regular,
   Fraunces_400Regular_Italic,
   Fraunces_700Bold,
+  Fraunces_600SemiBold_Italic,
 } from '@expo-google-fonts/fraunces';
 import {
   DMSans_400Regular,
@@ -65,6 +66,8 @@ export const FONT_MAP = {
   'PlayfairDisplay-Regular': Fraunces_400Regular,
   'PlayfairDisplay-Italic':  Fraunces_400Regular_Italic,
   'PlayfairDisplay-Bold':    Fraunces_700Bold,
+  // Feed caption hooks (components/common/InlineMoreText.jsx), same face as the website's
+  'Fraunces-SemiBoldItalic': Fraunces_600SemiBold_Italic,
 
   // DM Sans
   'DMSans-Regular':  DMSans_400Regular,

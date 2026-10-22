@@ -73,7 +73,7 @@
 .ps-dots i.on { background: #fff; }
 .ps-copy { position: relative; z-index: 1; align-self: end; display: grid; gap: 12px; padding: 18px 16px; }
 .ps-copy.over { background: linear-gradient(transparent, rgba(0,0,0,.78)); padding-top: 60px; color: #fff; }
-.ps-copy p { margin: 0; font-family: "Playfair Display", Georgia, serif; font-style: italic; font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 9; -webkit-box-orient: vertical; overflow: hidden; }
+.ps-copy p { margin: 0; font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 9; -webkit-box-orient: vertical; overflow: hidden; }
 .ps-screen:not(:has(.over)) .ps-copy { align-self: center; }
 .ps-pv-poll { display: grid; gap: 6px; }
 .ps-pv-poll b { font-size: 15px; margin-bottom: 2px; }
