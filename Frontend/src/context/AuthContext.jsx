@@ -68,6 +68,12 @@ if (Notifications) {
     }),
   });
 
+  // Link up pushes (Backend drops.py send_push_notification category) get an
+  // Accept button; AppNavigator handles the tap.
+  Notifications.setNotificationCategoryAsync?.('linkup_request', [
+    { identifier: 'accept', buttonTitle: 'Accept', options: { opensAppToForeground: true } },
+  ]).catch(() => {});
+
   if (Platform.OS === 'android') {
     Notifications.setNotificationChannelAsync('default', {
       name: 'default',

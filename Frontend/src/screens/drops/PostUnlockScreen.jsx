@@ -7,7 +7,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -23,6 +23,8 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { fetchBalance } from '../../store/slices/coinsSlice';
 import { uploadToR2 } from '../../utils/upload';
+import { INTENTS, MAX_INTENTS, MAX_PITCH } from '../../config/linkup';
+import AgeGate from '../../components/drops/AgeGate';
 
 // Must match COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
 const UNLOCK_COST = 6;
@@ -30,7 +32,9 @@ const UNLOCK_COST = 6;
 const MAX_CLUE_VIDEO_SECONDS = 30;
 
 export default function PostUnlockScreen({ route, navigation }) {
-  const { post, linkupTarget } = route.params ?? {};
+  // fromRoom: opened from RoomScreen's Link up — a sent request goes back to
+  // the Room (which shows "Link up sent") instead of resetting to the feed.
+  const { post, linkupTarget, fromRoom } = route.params ?? {};
   const dispatch = useDispatch();
   const { showToast } = useToast();
   const coinBalance = useSelector((state) => state.coins.balance);
@@ -47,6 +51,13 @@ export default function PostUnlockScreen({ route, navigation }) {
   const displayText   = post ? post.content : linkupTarget?.preview_text;
 
   const [unlocking, setUnlocking] = useState(false);
+  const [pitch, setPitch] = useState('');
+  const [intents, setIntents] = useState([]);
+  const [ageGate, setAgeGate] = useState(false);
+
+  const toggleIntent = useCallback((id) => {
+    setIntents((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= MAX_INTENTS ? cur : [...cur, id]));
+  }, []);
 
   // Optional clue attached to the request — never required to unlock.
   const [mediaUri,      setMediaUri]      = useState(null);
@@ -111,6 +122,8 @@ export default function PostUnlockScreen({ route, navigation }) {
       const token = await AsyncStorage.getItem('token');
 
       const body = { target_type: targetType, target_id: targetId, payment_method: 'coins' };
+      if (pitch.trim()) body.pitch = pitch.trim();
+      if (intents.length) body.intents = intents;
       if (mediaUri && mediaType) {
         try {
           const ext = mediaUri.split('?')[0].split('.').pop()?.toLowerCase() || '';
@@ -137,8 +150,15 @@ export default function PostUnlockScreen({ route, navigation }) {
 
       // Already unlocked earlier — skip straight to the existing chat, no
       // waiting screen needed since nothing's pending.
-      if (res.ok && data.already_unlocked) {
+      // Mutual: they'd already linked up with you, so it connects free.
+      if (res.ok && (data.already_unlocked || data.mutual) && data.connection_id) {
+        if (data.mutual) showToast({ type: 'success', title: "It's mutual 🔥", message: 'You both wanted this. The chat is open.' });
         navigation.replace('DropChat', { connectionId: data.connection_id });
+        return;
+      }
+
+      if (res.status === 403 && data?.detail?.code === 'age_verification_required') {
+        setAgeGate(true);
         return;
       }
 
@@ -146,11 +166,12 @@ export default function PostUnlockScreen({ route, navigation }) {
       if (requestId) {
         showToast({
           type: 'success',
-          title: 'Unlock sent.',
-          message: `We'll notify you when ${displayName || 'they'} responds.`,
+          title: 'Link up sent.',
+          message: `${displayName || 'They'} sees your line first. Nothing's charged unless they say yes.`,
         });
         dispatch(fetchBalance());
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        if (fromRoom) navigation.goBack();
+        else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         return;
       }
 
@@ -165,7 +186,7 @@ export default function PostUnlockScreen({ route, navigation }) {
     } finally {
       setUnlocking(false);
     }
-  }, [unlocking, targetType, targetId, displayName, displayText, mediaUri, mediaType, mediaDuration, navigation, showToast, dispatch]);
+  }, [unlocking, targetType, targetId, displayName, pitch, intents, fromRoom, mediaUri, mediaType, mediaDuration, navigation, showToast, dispatch]);
 
   const canAfford = coinBalance >= UNLOCK_COST;
 
@@ -196,10 +217,36 @@ export default function PostUnlockScreen({ route, navigation }) {
           </Text>
         )}
 
-        <Text style={s.copy}>
-          Send a request to open a private chat with whoever wrote this.
-          They'll need to accept first — you're only charged coins if they do.
-        </Text>
+        {ageGate && (
+          <View style={{ width: '100%', marginBottom: SPACING.lg }}>
+            <AgeGate onDone={() => setAgeGate(false)} />
+          </View>
+        )}
+
+        {/* Opening line + intent chips — what they read before deciding. */}
+        <View style={s.pitchSection}>
+          <Text style={s.pitchLabel}>YOUR OPENING LINE</Text>
+          <TextInput
+            value={pitch}
+            onChangeText={(v) => setPitch(v.slice(0, MAX_PITCH))}
+            placeholder="Make them want to say yes…"
+            placeholderTextColor={T.textMute}
+            multiline
+            maxLength={MAX_PITCH}
+            style={s.pitchInput}
+          />
+          <Text style={s.pitchCount}>{pitch.length}/{MAX_PITCH} · no numbers or handles, that comes after they accept</Text>
+          <View style={s.intentRow}>
+            {INTENTS.map((i) => {
+              const on = intents.includes(i.id);
+              return (
+                <TouchableOpacity key={i.id} style={[s.intentChip, on && s.intentChipOn]} onPress={() => toggleIntent(i.id)} activeOpacity={0.8}>
+                  <Text style={[s.intentText, on && { color: T.text }]}>{i.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
 
         {/* Optional clue — never required to unlock. */}
         <View style={s.mediaSection}>
@@ -221,12 +268,11 @@ export default function PostUnlockScreen({ route, navigation }) {
           ) : (
             <TouchableOpacity style={s.mediaAddBtn} onPress={handlePickMedia} activeOpacity={0.85} hitSlop={HIT_SLOP}>
               <Camera size={rs(16)} color={T.primary} strokeWidth={2} />
-              <Text style={s.mediaAddText}>Attach a photo or short video (optional)</Text>
+              <Text style={s.mediaAddText}>Add a photo or short clip (optional)</Text>
             </TouchableOpacity>
           )}
           <Text style={s.mediaHint}>
-            Gives them a clue who they'd be talking to before they accept. Keep it
-            decent — reported content can get your account restricted.
+            A clue of who's asking. Keep it decent, reported clues get accounts restricted.
           </Text>
         </View>
 
@@ -254,7 +300,7 @@ export default function PostUnlockScreen({ route, navigation }) {
               }
             </TouchableOpacity>
             <Text style={s.chargeNote}>
-              {UNLOCK_COST} coins — only deducted if they accept your request.
+              {UNLOCK_COST} coins, only if they say yes. Free if they already linked up with you.
             </Text>
           </>
         ) : (
@@ -279,7 +325,7 @@ export default function PostUnlockScreen({ route, navigation }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.background },
   body: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.xl,
@@ -298,6 +344,19 @@ const s = StyleSheet.create({
     fontStyle: 'italic', lineHeight: FONT.md * 1.5, marginBottom: SPACING.lg,
   },
   copy: { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: FONT.sm * 1.6, marginBottom: SPACING.lg },
+
+  pitchSection: { width: '100%', marginBottom: SPACING.lg, gap: rp(6) },
+  pitchLabel: { fontSize: rf(11), fontWeight: '700', color: T.textSecondary, letterSpacing: 0.8 },
+  pitchInput: {
+    width: '100%', minHeight: rs(64), borderRadius: RADIUS.md, backgroundColor: T.surfaceAlt,
+    borderWidth: 1, borderColor: T.border, color: T.text, fontSize: FONT.md,
+    paddingHorizontal: rp(14), paddingVertical: rp(12), textAlignVertical: 'top',
+  },
+  pitchCount: { fontSize: rf(10.5), color: T.textMute },
+  intentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6), marginTop: rp(4) },
+  intentChip: { paddingHorizontal: rp(12), paddingVertical: rp(7), borderRadius: 999, borderWidth: 1, borderColor: T.border },
+  intentChipOn: { borderColor: T.primary, backgroundColor: T.primaryDim },
+  intentText: { fontSize: FONT.xs, fontWeight: '600', color: T.textSecondary },
 
   mediaSection: { width: '100%', alignItems: 'center', marginBottom: SPACING.lg },
   mediaAddBtn: {

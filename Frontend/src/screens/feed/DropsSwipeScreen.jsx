@@ -68,6 +68,7 @@ import { CARD_INTENTS, DROP_THEMES } from '../../components/drops/DropCardRender
 import VideoOverlays from '../../components/common/VideoOverlays';
 import InlineMoreText from '../../components/common/InlineMoreText';
 import { countryHeader } from '../../utils/country';
+import { timeLeft } from '../../config/linkup';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 
 // Matches the injection frequency in the old DropsFeedScreen.jsx — every
@@ -157,6 +158,43 @@ const LinkUpButton = React.memo(({ onPress, name, wide }) => {
     </Animated.View>
   );
 });
+
+// ─── Shared: tonight chips on hookup posts ───────────────────────
+// Hookup posts are live for 12h (Backend drops.py HOOKUP_LIVE_HOURS). The
+// countdown and link-up count make the window felt; the owner can buy
+// another 12h (POST /drops/{id}/extend, capped server side at 48h).
+const LiveChips = ({ post, isOwnPost }) => {
+  const [liveUntil, setLiveUntil] = useState(post.live_until);
+  const { showToast } = useToast();
+  useEffect(() => { setLiveUntil(post.live_until); }, [post.live_until]);
+  if (post.kind !== 'hookup' || !liveUntil) return null;
+  const left = timeLeft(liveUntil);
+  const extend = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/extend`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not extend it right now.');
+      setLiveUntil(data.live_until);
+      showToast({ type: 'success', message: '12 more hours. Your post stays up.' });
+    } catch (e) {
+      showToast({ type: 'warning', message: e.message });
+    }
+  };
+  return (
+    <View style={sw.liveRow}>
+      <Text style={[sw.liveChip, left && sw.liveChipHot]}>{left ? `Tonight · ${left}` : 'Ended'}</Text>
+      {!!post.linkup_count && <Text style={sw.liveChip}>{post.linkup_count} linked up</Text>}
+      {isOwnPost && (
+        <TouchableOpacity onPress={extend} hitSlop={HIT_SLOP} style={sw.liveExtend}>
+          <Text style={sw.liveExtendText}>+12h</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
 
 // ─── Shared: right action rail ───────────────────────────────────
 // Each rail action has its own colour: idle is a tinted outline on dark glass,
@@ -283,11 +321,18 @@ const ViewsStat = React.memo(({ count }) => {
 const AuthorProfileTrigger = ({ post, navigation, children }) => {
   const [visible, setVisible] = useState(false);
   const isAdminViewer = useSelector((state) => !!state.auth.user?.is_admin);
+  const signedIn = useSelector((state) => !!state.auth.user);
   const opensDashboard = post.is_admin_drop && isAdminViewer;
+  // Signed-in taps on a real poster step into their Room; guests still get the sheet.
+  const opensRoom = signedIn && !post.is_admin_drop && !!post.user_id;
   return (
     <>
       <TouchableOpacity
-        onPress={() => (opensDashboard ? navigation.navigate('AdminDashboard') : setVisible(true))}
+        onPress={() => (
+          opensDashboard ? navigation.navigate('AdminDashboard')
+            : opensRoom ? navigation.navigate('Room', { userId: post.user_id, postId: post.id })
+              : setVisible(true)
+        )}
         activeOpacity={post.is_admin_drop && !opensDashboard ? 1 : 0.75}
         disabled={post.is_admin_drop && !opensDashboard}
       >
@@ -657,6 +702,7 @@ const VideoSlide = ({
               </TouchableOpacity>
             ) : null}
 
+            <LiveChips post={post} isOwnPost={isOwnPost} />
             {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
 
@@ -795,6 +841,7 @@ const AudioSlide = ({
           {playing ? <Pause size={32} color="#fff" fill="#fff" /> : <Play size={32} color="#fff" fill="#fff" />}
         </TouchableOpacity>
 
+        <LiveChips post={post} isOwnPost={isOwnPost} />
         {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
       </View>
     </View>
@@ -1037,6 +1084,7 @@ const TextSlide = ({
               </TouchableOpacity>
             )}
 
+            <LiveChips post={post} isOwnPost={isOwnPost} />
             {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} wide />}
           </View>
         </>
@@ -1107,6 +1155,7 @@ const PollSlide = ({
                 </View>
               </AuthorProfileTrigger>
             </View>
+            <LiveChips post={post} isOwnPost={isOwnPost} />
             {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
         </>
@@ -1429,6 +1478,10 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const handleLinkUp = useCallback((post) => {
     if (!isAuthenticated) {
       showToast({ type: 'warning', message: 'Sign in to link up.' });
+      return;
+    }
+    if (post.kind === 'hookup' && post.user_id) {
+      navigation.navigate('Room', { userId: post.user_id, postId: post.id });
       return;
     }
     navigation.navigate('PostUnlock', { post });
@@ -1869,6 +1922,14 @@ const as = StyleSheet.create({
 
 // ─── New-to-this-screen styles ────────────────────────────────────
 const sw = StyleSheet.create({
+  liveRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: rp(6), marginTop: rp(8), marginBottom: rp(2) },
+  liveChip: {
+    fontSize: rf(11), fontWeight: '700', color: '#fff', overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.38)', paddingHorizontal: rp(9), paddingVertical: rp(4), borderRadius: 999,
+  },
+  liveChipHot: { backgroundColor: 'rgba(255,99,74,0.88)' },
+  liveExtend: { backgroundColor: '#fbbf24', paddingHorizontal: rp(10), paddingVertical: rp(4), borderRadius: 999 },
+  liveExtendText: { fontSize: rf(11), fontWeight: '800', color: '#3a2400' },
   rewardBannerWrap: { position: 'absolute', left: 0, right: 0, zIndex: 90 },
 
   // Top of the right rail, above Like — TikTok's own creator-avatar spot.
