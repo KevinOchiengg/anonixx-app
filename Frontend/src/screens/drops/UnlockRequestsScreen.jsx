@@ -9,6 +9,9 @@
  *
  * Optional route params { targetType, targetId } pre-scope the list to one
  * confession (used by the push-notification deep link).
+ *
+ * Each row carries the sender's opening line, intent chips and their Room's
+ * photos; tapping the row steps into their Room (RoomScreen) to decide there.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -21,11 +24,12 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { X } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
-import { rs, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
+import { intentLabel } from '../../config/linkup';
 
 // Its own component so useVideoPlayer is only ever called once per row, not
 // conditionally inside renderItem — same pattern as DropChatScreen's
@@ -248,29 +252,49 @@ export default function UnlockRequestsScreen({ route, navigation }) {
 
   const renderItem = useCallback(({ item }) => {
     const isBusy = busyIds.has(item.id);
+    const thumbs = (item.requester_gallery || []).filter((g) => g.media_url && g.media_type !== 'video').slice(0, 3);
     return (
       <View style={s.row}>
-        <View style={s.rowInfo}>
-          <RequestMediaThumb
-            mediaUrl={item.media_url}
-            mediaType={item.media_type}
-            onPress={() => setPreviewMedia({ url: item.media_url, type: item.media_type })}
-          />
-          {/* Who's asking — the same "resume before you decide" the
-              requester already gets when they see a drop's avatar before
-              sending the request. Falls back to an initial-letter circle
-              for requesters without a photo set, same as the feed. */}
-          {item.requester_avatar_url ? (
-            <Image source={{ uri: item.requester_avatar_url }} style={s.rowAvatar} />
-          ) : (
-            <View style={s.rowAvatar}>
-              <Text style={s.rowAvatarText}>
-                {item.requester_anonymous_name?.[0]?.toUpperCase() || 'A'}
-              </Text>
+        <TouchableOpacity
+          style={s.rowMain}
+          activeOpacity={0.8}
+          onPress={() => item.requester_id && navigation.navigate('Room', { userId: item.requester_id })}
+        >
+          <View style={s.rowInfo}>
+            <RequestMediaThumb
+              mediaUrl={item.media_url}
+              mediaType={item.media_type}
+              onPress={() => setPreviewMedia({ url: item.media_url, type: item.media_type })}
+            />
+            {/* Who's asking — the same "resume before you decide" the
+                requester already gets when they see a drop's avatar before
+                sending the request. Falls back to an initial-letter circle
+                for requesters without a photo set, same as the feed. */}
+            {item.requester_avatar_url ? (
+              <Image source={{ uri: item.requester_avatar_url }} style={s.rowAvatar} />
+            ) : (
+              <View style={s.rowAvatar}>
+                <Text style={s.rowAvatarText}>
+                  {item.requester_anonymous_name?.[0]?.toUpperCase() || 'A'}
+                </Text>
+              </View>
+            )}
+            <Text style={s.rowName}>{item.requester_anonymous_name}</Text>
+          </View>
+          <Text style={[s.rowPitch, !item.pitch && s.rowPitchEmpty]} numberOfLines={2}>
+            {item.pitch || 'wants to link up'}
+          </Text>
+          {!!item.intents?.length && (
+            <View style={s.rowChips}>
+              {item.intents.map((i) => <Text key={i} style={s.rowChip}>{intentLabel(i)}</Text>)}
             </View>
           )}
-          <Text style={s.rowName}>{item.requester_anonymous_name}</Text>
-        </View>
+          {thumbs.length > 0 && (
+            <View style={s.rowThumbs}>
+              {thumbs.map((g, k) => <Image key={k} source={{ uri: g.media_url }} style={s.rowThumb} />)}
+            </View>
+          )}
+        </TouchableOpacity>
         {isBusy ? (
           <ActivityIndicator color={T.primary} size="small" />
         ) : (
@@ -285,7 +309,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
         )}
       </View>
     );
-  }, [busyIds, handleAccept, handleDecline]);
+  }, [busyIds, handleAccept, handleDecline, navigation]);
 
   return (
     <SafeAreaView style={s.root}>
@@ -295,7 +319,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
         <View style={s.centered}><ActivityIndicator color={T.primary} /></View>
       ) : sections.length === 0 ? (
         <View style={s.centered}>
-          <Text style={s.emptyText}>No one's waiting to unlock a confession right now.</Text>
+          <Text style={s.emptyText}>No link ups waiting. Post something for tonight and watch this fill up.</Text>
         </View>
       ) : (
         <SectionList
@@ -339,12 +363,19 @@ const s = StyleSheet.create({
   },
   acceptAllText: { color: '#fff', fontSize: FONT.xs, fontWeight: '700' },
   row: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: rp(10),
     paddingHorizontal: rp(14), paddingVertical: rp(12),
     backgroundColor: T.surfaceAlt, borderRadius: RADIUS.md,
     marginBottom: rp(8),
   },
+  rowMain: { flex: 1, minWidth: 0, gap: rp(6) },
   rowInfo: { flexDirection: 'row', alignItems: 'center', gap: rp(10), flexShrink: 1 },
+  rowPitch: { fontSize: FONT.sm, color: T.text, lineHeight: FONT.sm * 1.4 },
+  rowPitchEmpty: { color: T.textSecondary, fontStyle: 'italic' },
+  rowChips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(5) },
+  rowChip: { fontSize: rf(10.5), color: T.text, borderWidth: 1, borderColor: T.borderStrong, paddingHorizontal: rp(8), paddingVertical: rp(2), borderRadius: 999 },
+  rowThumbs: { flexDirection: 'row', gap: rp(4) },
+  rowThumb: { width: rs(30), height: rs(40), borderRadius: rs(6), backgroundColor: T.border },
   rowAvatar: {
     width: rs(30), height: rs(30), borderRadius: rs(15),
     backgroundColor: T.avatarBg, alignItems: 'center', justifyContent: 'center',

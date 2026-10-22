@@ -1,5 +1,8 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { useEffect } from 'react';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import AppLoadingScreen from '../components/common/AppLoadingScreen';
 
@@ -31,6 +34,7 @@ import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
 import PostUnlockScreen from '../screens/drops/PostUnlockScreen';
 import UnlockWaitingScreen from '../screens/drops/UnlockWaitingScreen';
 import UnlockRequestsScreen from '../screens/drops/UnlockRequestsScreen';
+import RoomScreen from '../screens/drops/RoomScreen';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminModerationScreen from '../screens/admin/AdminModerationScreen';
@@ -68,6 +72,7 @@ const linking = {
       Main: { screens: { Feed: { screens: { FeedSwipe: 'drop/:dropId' } } } },
       DropChat:              'drop-chat/:connectionId',
       UnlockRequestsScreen:  'unlock-requests',
+      Room:                  'room/:userId',
       VibeScore:             'vibe',
       Market:                'market',
       MarketItem:            'market/:itemId',
@@ -81,12 +86,53 @@ const linking = {
   },
 };
 
+let Notifications = null;
+try { Notifications = require('expo-notifications'); } catch { /* not available */ }
+
+const navigationRef = createNavigationContainerRef();
+
+// A tapped push lands where it points: the Accept button on a link up
+// accepts straight from the notification and opens the chat; a plain tap on
+// a link up opens the requests inbox; accepted / mutual pushes open the chat.
+async function handleNotificationResponse(response) {
+  const data = response?.notification?.request?.content?.data || {};
+  const go = (name, params) => { if (navigationRef.isReady()) navigationRef.navigate(name, params); };
+  if (response.actionIdentifier === 'accept' && data.request_id) {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests/${data.request_id}/accept`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.connection_id) return go('DropChat', { connectionId: body.connection_id });
+    } catch { /* fall through to the inbox */ }
+    return go('UnlockRequestsScreen');
+  }
+  const chat = typeof data.url === 'string' && data.url.match(/^\/chat\/([^/?#]+)/);
+  if (chat) return go('DropChat', { connectionId: chat[1] });
+  if (data.type === 'linkup_request') return go('UnlockRequestsScreen');
+  return undefined;
+}
+
 export default function AppNavigator({ fontsReady }) {
   const { loading: authLoading } = useAuth();
   const loading = authLoading || !fontsReady;
 
+  useEffect(() => {
+    if (!Notifications) return undefined;
+    const sub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+    return () => sub.remove();
+  }, []);
+
+  // Cold start from a notification: handle it once the stack is mounted.
+  const onReady = () => {
+    Notifications?.getLastNotificationResponseAsync?.()
+      .then((r) => { if (r) handleNotificationResponse(r); })
+      .catch(() => {});
+  };
+
   return (
-    <NavigationContainer linking={linking}>
+    <NavigationContainer linking={linking} ref={navigationRef} onReady={onReady}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {/* No login/signup gate — guests (and new users) land straight on the
             main feed. Auth screens stay reachable via "AuthNav" below for
@@ -108,6 +154,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="PostUnlock" component={PostUnlockScreen} />
         <Stack.Screen name="UnlockWaitingScreen" component={UnlockWaitingScreen} />
         <Stack.Screen name="UnlockRequestsScreen" component={UnlockRequestsScreen} />
+        <Stack.Screen name="Room" component={RoomScreen} />
         <Stack.Screen name="AdminDashboard"  component={AdminDashboardScreen} />
         <Stack.Screen name="AdminUsers"      component={AdminUsersScreen} />
         <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
