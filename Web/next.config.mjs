@@ -1,7 +1,10 @@
-// Hostname (no protocol/path) that serves uploaded media (avatars, drop photos/videos) —
-// must match the backend's R2_PUBLIC_URL domain. Placeholder until R2 is set up; set
-// NEXT_PUBLIC_MEDIA_HOST once it is, or next/image will refuse to load real media.
-const MEDIA_HOST = process.env.NEXT_PUBLIC_MEDIA_HOST || "media.anonixx.com";
+// Hosts next/image may load uploaded media from. Anything not listed is refused (HTTP 400
+// from /_next/image), which shows as a blank frame where the photo should be.
+//  - NEXT_PUBLIC_MEDIA_HOST: a custom domain on the R2 bucket, if one is connected later
+//    (must match the backend's R2_PUBLIC_URL host).
+//  - *.r2.dev: the bucket's public r2.dev address, which R2_PUBLIC_URL uses today.
+//  - *.cloudflarestream.com: Stream thumbnails, used as video covers once Stream is on.
+const MEDIA_HOST = process.env.NEXT_PUBLIC_MEDIA_HOST;
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -9,7 +12,9 @@ const nextConfig = {
   poweredByHeader: false,
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: MEDIA_HOST },
+      ...(MEDIA_HOST ? [{ protocol: "https", hostname: MEDIA_HOST }] : []),
+      { protocol: "https", hostname: "**.r2.dev" },
+      { protocol: "https", hostname: "**.cloudflarestream.com" },
       { protocol: "https", hostname: "**.tenor.com" },
     ],
   },
