@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
@@ -65,6 +66,10 @@ function replayRound(posts: Post[], lastId: string | undefined): string[] {
 
 export default function Feed({ initialPosts, initialCursor, withHero = false, startId }: Props) {
   const { user, ready } = useAuth();
+  const router = useRouter();
+  // Avatars open the person's Room; Link up on a hookup goes through it too, so the pitch lands with context.
+  const openRoom = (p: Post) => (p.user_id && !p.is_admin_drop ? router.push(`/room/${p.user_id}?post=${p.id}`) : setProfileFor(p));
+  const linkUp = (p: Post) => (p.kind === "hookup" && p.user_id ? router.push(`/room/${p.user_id}?post=${p.id}`) : setLinkFor(p));
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [authed, setAuthed] = useState(false);
@@ -486,8 +491,8 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
                 onShare={share}
                 onPatch={patch}
                 onComments={setCommentsFor}
-                onLinkUp={setLinkFor}
-                onProfile={setProfileFor}
+                onLinkUp={linkUp}
+                onProfile={openRoom}
                 onReport={setReportFor}
                 onToast={flash}
               />

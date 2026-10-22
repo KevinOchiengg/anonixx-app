@@ -4,6 +4,7 @@ import { splitHook } from "@/lib/captionHook";
 import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { timeLeft } from "@/lib/linkup";
 import VideoPlayer from "./VideoPlayer";
 import { Bookmark, Comment, Heart, Share } from "./icons";
 import { Link2, More, SoundOff } from "./feedicons";
@@ -56,7 +57,7 @@ function pickSound(sounds: Sound[] | undefined, post: Post): Sound | null {
 
 export default function Slide({
   post, index, active, near, muted, sounds, headline,
-  onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onReport, onToast,
+  onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onProfile, onReport, onToast,
 }: Props) {
   const { user } = useAuth();
   const [page, setPage] = useState(0);
@@ -257,6 +258,25 @@ export default function Slide({
   );
   const voted = post.poll ? post.poll.voted_option !== null : false;
 
+  async function extend() {
+    try {
+      const r = await api<{ live_until: string }>(`/drops/${post.id}/extend`, { method: "POST" });
+      onPatch(post.id, { live_until: r.live_until });
+      onToast("12 more hours. Your post stays up.");
+    } catch (e) {
+      onToast((e as Error).message);
+    }
+  }
+
+  const left = post.kind === "hookup" ? timeLeft(post.live_until) : null;
+  const liveChips = post.kind === "hookup" && (left || post.linkup_count || post.is_own_post) ? (
+    <div className="live-chips">
+      {left ? <span className="hot">Tonight · {left}</span> : post.live_until ? <span>Ended</span> : null}
+      {post.linkup_count ? <span>{post.linkup_count} linked up</span> : null}
+      {post.is_own_post && post.live_until ? <button onClick={extend}>+12h</button> : null}
+    </div>
+  ) : null;
+
   return (
     <article
       className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${textSlide && post.kind !== "hookup" ? " env" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
@@ -324,6 +344,7 @@ export default function Slide({
         {longText ? (
           <button className="read-full" onClick={() => setFullText(true)}>Read full confession</button>
         ) : null}
+        {liveChips}
         {canLinkUp && !hasMedia ? linkBtn : null}
 
         {post.poll ? (
@@ -352,6 +373,15 @@ export default function Slide({
       {ambient && near ? <AmbientSound src={ambient.url} play={active && !muted} /> : null}
 
       <div className="rail">
+        {!post.is_admin_drop && post.user_id ? (
+          <button
+            onClick={() => (user ? onProfile(post) : onGate("Sign in to step into their Room."))}
+            aria-label={`Open ${post.anonymous_name || "their"} Room`}
+            className="r-ava"
+          >
+            {post.avatar_url ? <Image src={post.avatar_url} alt="" width={44} height={44} /> : (post.anonymous_name || "A")[0].toUpperCase()}
+          </button>
+        ) : null}
         <button onClick={like} aria-label="Like" className={`r-act r-like${post.is_liked ? " liked on" : ""}`}>
           <Heart filled={Boolean(post.is_liked)} />{compact(post.likes_count)}
         </button>
