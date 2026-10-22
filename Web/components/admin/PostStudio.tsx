@@ -3,7 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
-import { streamEnabled, uploadToStream, queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
+import { queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
+import { BgUpload, useBgUpload, type BgResult } from "@/lib/bgUpload";
+import UploadCard from "../compose/UploadCard";
+import "../../app/uploadcard.css";
 import ScheduledDrops, { toLocalInput } from "./ScheduledDrops";
 import { uploadFile } from "@/lib/upload";
 import { keepReadable, clearLocalCopies } from "@/lib/localCopy";
@@ -61,6 +64,11 @@ export default function PostStudio() {
   const [busy, setBusy] = useState("");
   const [noPreview, setNoPreview] = useState(false);
   const [formatNote, setFormatNote] = useState("");
+  // The video starts uploading the moment it's picked (lib/bgUpload.ts).
+  const [bg, setBg] = useState<BgUpload | null>(null);
+  const bgRef = useRef<BgUpload | null>(null);
+  bgRef.current = bg;
+  useEffect(() => () => bgRef.current?.cancel(), []);
   const [error, setError] = useState("");
   const [published, setPublished] = useState<Done | null>(null);
   const [drag, setDrag] = useState(false);
@@ -117,7 +125,9 @@ export default function PostStudio() {
     : opts.length < 2 ? "Add at least two options."
     : "";
   const laterMissing = later && (!laterAt || new Date(laterAt).getTime() < Date.now() + 60000) ? "Pick a time at least a minute from now." : "";
-  const blocker = missing || laterMissing;
+  const bgState = useBgUpload(format === "video" ? bg : null);
+  const uploadFailed = bgState?.status === "error" ? "The video didn't upload. Tap Retry on it." : "";
+  const blocker = missing || laterMissing || uploadFailed;
 
   function track(file: File): Pick {
     const url = URL.createObjectURL(file);
@@ -165,6 +175,8 @@ export default function PostStudio() {
       setVedit(len ? defaultEdit(len) : null);
       setCoverAt(null);
       setVideo(track(f));
+      bgRef.current?.cancel();
+      setBg(new BgUpload(f));
       return;
     }
     const imgs = files.filter((x) => x.type.startsWith("image/"));
@@ -176,6 +188,24 @@ export default function PostStudio() {
     let kept: File[];
     try { kept = await Promise.all(imgs.slice(0, room).map(keepReadable)); } catch (e) { return setError((e as Error).message); }
     setPhotos((p) => [...p, ...kept.map(track)]);
+  }
+
+  function removeVideo() {
+    bgRef.current?.cancel();
+    setBg(null);
+    setVideo(null); setVlen(0); setVedit(null); setCoverAt(null); setFormatNote(""); setNoPreview(false);
+  }
+
+  // Waits for the background upload, showing its progress if Publish was pressed early.
+  async function uploadedVideo(): Promise<BgResult> {
+    const up = bgRef.current;
+    if (!up) throw new Error("Add the video again.");
+    let unsub: (() => void) | undefined;
+    if (up.state.status === "uploading") {
+      setBusy(`Finishing upload… ${up.state.pct}%`);
+      unsub = up.subscribe((st) => setBusy(`Finishing upload… ${st.pct}%`));
+    }
+    try { return await up.wait(); } finally { unsub?.(); }
   }
 
   function makeCover(i: number) {
@@ -209,11 +239,10 @@ export default function PostStudio() {
           } catch { /* no cover: the feed falls back to the video itself */ }
         }
         const edit = vedit ? { ...vedit, overlays: vedit.overlays.filter((o) => o.text.trim()) } : null;
-        setBusy("Uploading video… 0%");
-        const progress = (n: number) => setBusy(n >= 100 ? "Finishing upload…" : `Uploading video… ${n}%`);
-        if (await streamEnabled()) {
+        const uploaded = await uploadedVideo();
+        if ("streamUid" in uploaded) {
           // Stream: the backend cuts edit's window out of the original and watermarks it.
-          streamUid = await uploadToStream(video.file, progress);
+          streamUid = uploaded.streamUid;
           streamEdit = edit;
           media = {
             media_type: "video",
@@ -223,7 +252,7 @@ export default function PostStudio() {
         } else {
           media = {
             media_type: "video",
-            media_url: await uploadFile(video.file, "video", progress),
+            media_url: uploaded.url,
             ...(isMeaningful(edit, vlen) ? { video_edit: edit } : {}),
             ...(cover_url ? { cover_url } : {}),
           };
@@ -287,6 +316,7 @@ export default function PostStudio() {
   }
 
   function reset() {
+    bgRef.current?.cancel(); setBg(null);
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
     setTags([]); setTagDraft(""); setMature(false); setError(""); setPublished(null);
@@ -355,8 +385,18 @@ export default function PostStudio() {
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileRef.current?.click(); }}
     >
-      <b>{format === "video" ? "Drop a video here" : photos.length ? "Add more photos" : "Drop photos here"}</b>
-      <span>or click to browse{format === "photo" ? ` · up to 10, ${MAX_IMG_MB}MB each` : ` · ${MAX_VID_MB}MB max · longer than 3 min gets cut to 3`}</span>
+      <span className="ps-drop-ic" aria-hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" /></svg>
+      </span>
+      <b>{format === "video" ? "Select video to upload" : photos.length ? "Add more photos" : "Select photos to upload"}</b>
+      <span>or drag and drop {format === "video" ? "a file" : "them"} here · it starts uploading straight away</span>
+      <span className="up-specs">
+        {format === "video" ? (
+          <><span>MP4 (H.264)</span><span>Up to 3 min</span><span>{MAX_VID_MB}MB max</span><span>Camera: Most compatible</span></>
+        ) : (
+          <><span>JPG or PNG</span><span>Up to 10</span><span>{MAX_IMG_MB}MB each</span></>
+        )}
+      </span>
     </div>
   );
 
@@ -425,6 +465,14 @@ export default function PostStudio() {
                   </>
                 ) : video ? (
                   <div className="ps-video">
+                    {bg ? (
+                      <UploadCard
+                        up={bg}
+                        onReplace={() => fileRef.current?.click()}
+                        onCancel={removeVideo}
+                        onRetry={() => setBg(new BgUpload(video.file))}
+                      />
+                    ) : null}
                     {vedit && !noPreview ? (
                       <VideoEditor
                         src={video.url} duration={vlen} value={vedit} onChange={setVedit} onNoPreview={() => { setNoPreview(true); sniffVideo(video.file).then((r) => setFormatNote(formatProblem(r))).catch(() => {}); }}
@@ -433,7 +481,6 @@ export default function PostStudio() {
                     ) : (
                       <p className="ps-note">{formatNote || "This browser can't play this video, so it can't be trimmed or captioned here. An H.264 .mp4 is the safest choice."}</p>
                     )}
-                    <button type="button" className="ps-btn" onClick={() => setVideo(null)}>Replace video</button>
                   </div>
                 ) : drop}
               </>
@@ -619,7 +666,7 @@ export default function PostStudio() {
 
       <div className="ps-bar">
         <div className="ps-bar-msg">
-          {error ? <span className="bad">{error}</span> : busy ? <span>{busy}</span> : blocker ? <span className="mute">{blocker}</span> : <span className="ok">{later ? "Ready to schedule." : "Ready to publish."}</span>}
+          {error ? <span className="bad">{error}</span> : busy ? <span>{busy}</span> : blocker ? <span className="mute">{blocker}</span> : <span className="ok">{bgState?.status === "uploading" ? `Video uploading ${bgState.pct}%. You can ${later ? "schedule" : "publish"} now; it goes once the upload finishes.` : later ? "Ready to schedule." : "Ready to publish."}</span>}
         </div>
         <button type="button" className="ps-btn primary big" disabled={Boolean(busy) || Boolean(blocker)} onClick={publish}>
           {busy ? "Working…" : later ? "Schedule it" : `Publish as ${poster}`}
