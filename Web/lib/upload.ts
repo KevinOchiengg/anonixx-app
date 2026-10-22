@@ -9,9 +9,14 @@ const MAX_MB: Record<UploadKind, number> = { image: 5, video: 500, voice: 10 };
 // What the backup route through our server will take; bigger files only go direct to storage.
 const SERVER_MAX_MB: Record<UploadKind, number> = { image: 5, video: 50, voice: 10 };
 
-function putXhr(url: string, file: Blob, type: string, onProgress?: (pct: number) => void) {
-  return new Promise<{ ok: boolean; sent: boolean; status: number }>((resolve) => {
+export const CANCELLED = "Upload cancelled.";
+const cancelled = () => new ApiError(0, CANCELLED);
+
+function putXhr(url: string, file: Blob, type: string, onProgress?: (pct: number) => void, signal?: AbortSignal) {
+  return new Promise<{ ok: boolean; sent: boolean; status: number; aborted?: boolean }>((resolve) => {
     const xhr = new XMLHttpRequest();
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.onabort = () => resolve({ ok: false, sent: true, status: 0, aborted: true });
     let sent = false;
     xhr.open("PUT", url);
     xhr.setRequestHeader("Content-Type", type);
@@ -29,7 +34,7 @@ function putXhr(url: string, file: Blob, type: string, onProgress?: (pct: number
 // Straight to storage with a presigned URL. On failure returns why, so the caller can
 // use the server route and still tell the user what actually went wrong.
 let directBlocked = false;
-async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: number) => void): Promise<{ url: string } | { reason: string }> {
+async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: number) => void, signal?: AbortSignal): Promise<{ url: string } | { reason: string }> {
   if (directBlocked) return { reason: "storage isn't reachable from this browser" };
   const type = (file.type || (kind === "image" ? "image/jpeg" : kind === "video" ? "video/mp4" : "audio/webm")).split(";")[0];
   let reason = "";
@@ -45,8 +50,10 @@ async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: num
     } catch (e) {
       return { reason: e instanceof Error && e.message ? e.message : "couldn't get an upload link" };
     }
+    if (signal?.aborted) throw cancelled();
     if (attempt > 0) onProgress?.(0);
-    const r = await putXhr(s.upload_url, file, type, onProgress);
+    const r = await putXhr(s.upload_url, file, type, onProgress, signal);
+    if (r.aborted) throw cancelled();
     if (r.ok) return { url: s.public_url };
     if (!r.sent) {
       // Nothing left the browser: blocked outright (CORS, offline). Retrying won't help.
@@ -75,13 +82,15 @@ export async function checkReadable(file: Blob): Promise<void> {
 }
 
 // Uploads the file and returns its public URL. Tries storage directly first, then our server.
-export async function uploadFile(file: Blob | File, kind: UploadKind, onProgress?: (pct: number) => void): Promise<string> {
+// `signal` cancels it (rejects with CANCELLED).
+export async function uploadFile(file: Blob | File, kind: UploadKind, onProgress?: (pct: number) => void, signal?: AbortSignal): Promise<string> {
   if (file.size > MAX_MB[kind] * 1024 * 1024) {
     throw new ApiError(400, `That file is too big. Max ${MAX_MB[kind]}MB.`);
   }
   await checkReadable(file);
-  const direct = await uploadDirect(file, kind, onProgress);
+  const direct = await uploadDirect(file, kind, onProgress, signal);
   if ("url" in direct) return direct.url;
+  if (signal?.aborted) throw cancelled();
   if (file.size > SERVER_MAX_MB[kind] * 1024 * 1024) {
     throw new ApiError(0, `Upload didn't go through: ${direct.reason}. Files over ${SERVER_MAX_MB[kind]}MB can only go straight to storage, so try again on a steadier connection.`);
   }
@@ -94,6 +103,8 @@ export async function uploadFile(file: Blob | File, kind: UploadKind, onProgress
 
   const { status, body } = await new Promise<{ status: number; body: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.onabort = () => reject(cancelled());
     xhr.open("POST", `${API_URL}/upload/${ENDPOINT[kind]}`);
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };

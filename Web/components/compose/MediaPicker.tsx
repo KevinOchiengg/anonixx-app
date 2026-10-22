@@ -2,10 +2,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import VideoEditor from "./VideoEditor";
 import { keepReadable, clearLocalCopies } from "@/lib/localCopy";
+import { BgUpload } from "@/lib/bgUpload";
+import UploadCard from "./UploadCard";
 import { sniffVideo, formatProblem } from "@/lib/videoFormat";
 import { MAX_CLIP_SECONDS, defaultEdit, type VideoEdit } from "@/lib/videoEdit";
 
-export type MediaDraft = { kind: "image" | "video"; files: File[]; duration?: number; edit?: VideoEdit | null } | null;
+// A video starts uploading the moment it's picked (upload); the form waits for it on submit.
+export type MediaDraft = { kind: "image" | "video"; files: File[]; duration?: number; edit?: VideoEdit | null; upload?: BgUpload | null } | null;
 
 export function videoLength(file: File): Promise<number> {
   return new Promise((resolve) => {
@@ -28,6 +31,7 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
 
   async function pick(list: FileList | null) {
     if (!list || !list.length) return;
+    value?.upload?.cancel();
     // Copy picks now, while Android still lets the page read them (see lib/localCopy.ts).
     setBusy(true);
     await clearLocalCopies();
@@ -43,7 +47,7 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
         setFormatNote(len ? "" : formatProblem(await sniffVideo(f)));
         setBusy(false);
         // Longer than three minutes isn't refused: the editor opens on its first 3:00.
-        onChange({ kind: "video", files: [f], duration: len, edit: len ? defaultEdit(len) : null });
+        onChange({ kind: "video", files: [f], duration: len, edit: len ? defaultEdit(len) : null, upload: new BgUpload(f) });
       } else onChange({ kind: "image", files: [f] });
       return;
     }
@@ -57,6 +61,14 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
       <input ref={input} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
       {value ? (
         <>
+          {value.kind === "video" && value.upload ? (
+            <UploadCard
+              up={value.upload}
+              onReplace={() => input.current?.click()}
+              onCancel={() => { value.upload?.cancel(); onChange(null); }}
+              onRetry={() => onChange({ ...value, upload: new BgUpload(value.files[0]) })}
+            />
+          ) : null}
           {value.kind === "video" && value.edit && value.duration ? (
             <VideoEditor
               src={urls[0]}
@@ -79,7 +91,7 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
             </div>
           )}
           {value.kind === "video" && formatNote && !(value.edit && value.duration) ? <p className="cx-note">{formatNote}</p> : null}
-          <button type="button" className="linkish" onClick={() => onChange(null)}>Remove {value.kind === "video" ? "video" : value.files.length > 1 ? "photos" : "photo"}</button>
+          <button type="button" className="linkish" onClick={() => { value.upload?.cancel(); onChange(null); }}>Remove {value.kind === "video" ? "video" : value.files.length > 1 ? "photos" : "photo"}</button>
         </>
       ) : (
         <button type="button" className="cx-add" onClick={() => input.current?.click()} disabled={busy}>

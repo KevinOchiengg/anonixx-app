@@ -1,6 +1,6 @@
 import { Upload } from "tus-js-client";
 import { api, API_URL, ApiError, getToken } from "./api";
-import { checkReadable } from "./upload";
+import { checkReadable, CANCELLED } from "./upload";
 import type { VideoEdit } from "./videoEdit";
 
 // Video drops on Cloudflare Stream (Backend/app/utils/stream.py). The original goes
@@ -17,7 +17,7 @@ export function streamEnabled(): Promise<boolean> {
 
 const CHUNK = 50 * 1024 * 1024; // Stream wants multiples of 256 KiB, at least 5 MB
 
-export async function uploadToStream(file: Blob, onProgress?: (pct: number) => void): Promise<string> {
+export async function uploadToStream(file: Blob, onProgress?: (pct: number) => void, signal?: AbortSignal): Promise<string> {
   await checkReadable(file);
   const endpoint = `${API_URL}/upload/stream/tus`;
   return new Promise((resolve, reject) => {
@@ -46,6 +46,10 @@ export async function uploadToStream(file: Blob, onProgress?: (pct: number) => v
         else reject(new ApiError(0, "The video uploaded but Stream didn't say where. Try again."));
       },
     });
+    signal?.addEventListener("abort", () => {
+      up.abort(true).catch(() => {});
+      reject(new ApiError(0, CANCELLED));
+    }, { once: true });
     up.start();
   });
 }

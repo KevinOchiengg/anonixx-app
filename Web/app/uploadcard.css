@@ -1,0 +1,34 @@
+/* ---------- background upload card (TikTok-style: uploads while you write the post) ---------- */
+.uc {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface, rgba(255, 255, 255, 0.04));
+}
+.uc-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--rose); background: color-mix(in srgb, var(--rose) 14%, transparent); }
+.uc.done .uc-ic { color: #3ddc97; background: rgba(61, 220, 151, 0.14); }
+.uc.bad .uc-ic { color: #ff7a6b; background: rgba(255, 122, 107, 0.14); }
+.uc-ic svg { width: 22px; height: 22px; }
+.uc-body { display: grid; gap: 6px; min-width: 0; }
+.uc-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
+.uc-top b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uc-top span { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.uc-bar { height: 6px; border-radius: 3px; overflow: hidden; background: var(--line); }
+.uc-bar i { display: block; height: 100%; border-radius: inherit; background: var(--rose); transition: width 0.25s ease-out; }
+.uc.done .uc-bar i { background: #3ddc97; }
+.uc.bad .uc-bar i { background: #ff7a6b; }
+.uc-meta { font-size: 12.5px; color: var(--muted); line-height: 1.4; font-variant-numeric: tabular-nums; }
+.uc-err { color: #ff7a6b; }
+.uc-acts { display: flex; flex-direction: column; gap: 6px; }
+.uc-btn {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+  color: var(--fg); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.uc-btn.primary { background: var(--rose); border-color: var(--rose); color: #fff; }
+@media (max-width: 480px) {
+  .uc { grid-template-columns: 36px minmax(0, 1fr); }
+  .uc-ic { width: 36px; height: 36px; }
+  .uc-acts { grid-column: 1 / -1; flex-direction: row; justify-content: flex-end; }
+}
+
+/* ---------- TikTok-style drop zone copy ---------- */
+.up-specs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 4px; }
+.up-specs span { padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); }

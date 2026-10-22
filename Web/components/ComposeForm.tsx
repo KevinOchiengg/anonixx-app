@@ -8,7 +8,8 @@ import { uploadFile } from "@/lib/upload";
 import AppShell from "./AppShell";
 import MediaPicker, { type MediaDraft } from "./compose/MediaPicker";
 import { isMeaningful } from "@/lib/videoEdit";
-import { streamEnabled, uploadToStream, queueStreamDrop } from "@/lib/streamVideo";
+import { queueStreamDrop } from "@/lib/streamVideo";
+import { useBgUpload, type BgUpload } from "@/lib/bgUpload";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import PollEditor, { type PollDraft } from "./compose/PollEditor";
 import TagUser, { type Tagged } from "./compose/TagUser";
@@ -49,6 +50,11 @@ function Inner() {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<Mode>("text");
   const [media, setMedia] = useState<MediaDraft>(null);
+  // a picked video uploads in the background (lib/bgUpload.ts): show it, and stop it if we leave
+  const upState = useBgUpload(media?.kind === "video" ? media.upload ?? null : null);
+  const uploadRef = useRef<BgUpload | null | undefined>(null);
+  uploadRef.current = media?.upload;
+  useEffect(() => () => uploadRef.current?.cancel(), []);
   const [voice, setVoice] = useState<VoiceDraft>(null);
   const [poll, setPoll] = useState<PollDraft>({ question: "", options: ["", ""] });
   const [busy, setBusy] = useState(false);
@@ -150,11 +156,18 @@ function Inner() {
       let payload: Record<string, unknown> = {};
       let streamUid = "";
       if (kind === "confession") {
-        if (mode === "media" && media?.kind === "video" && await streamEnabled()) {
-          // Stream: the backend cuts the window out, watermarks it and posts it when ready.
-          streamUid = await uploadToStream(media.files[0]);
+        if (mode === "media" && media?.kind === "video" && media.upload) {
+          // Uploading since it was picked (lib/bgUpload.ts); this just waits for it to finish.
+          const uploaded = await media.upload.wait();
           const overlays = media.edit?.overlays.filter((o) => o.text.trim()) ?? [];
-          payload = { media_type: "video", ...(media.edit && overlays.length ? { video_edit: { ...media.edit, overlays } } : {}) };
+          if ("streamUid" in uploaded) {
+            // Stream: the backend cuts the window out, watermarks it and posts it when ready.
+            streamUid = uploaded.streamUid;
+            payload = { media_type: "video", ...(media.edit && overlays.length ? { video_edit: { ...media.edit, overlays } } : {}) };
+          } else {
+            const edit = isMeaningful(media.edit, media.duration ?? 0) ? { ...media.edit, overlays } : null;
+            payload = { media_type: "video", media_url: uploaded.url, ...(edit ? { video_edit: edit } : {}) };
+          }
         } else if (mode === "media" && media) {
           const urls: string[] = [];
           for (const f of media.files) urls.push(await uploadFile(f, media.kind));
@@ -302,7 +315,7 @@ function Inner() {
   const hasMedia = mode === "media" && !!media;
   const tools: { key: string; label: string; icon: React.ReactNode; on: boolean; show: boolean; act: () => void }[] = [
     { key: "photo", label: hasMedia ? "Remove" : "Photo", icon: hasMedia ? <IconX /> : <IconImages />, on: mode === "media", show: admin,
-      act: () => { if (hasMedia) { setMedia(null); setMode("text"); } else pickMode("media"); } },
+      act: () => { if (hasMedia) { media?.upload?.cancel(); setMedia(null); setMode("text"); } else pickMode("media"); } },
     { key: "mood", label: "Mood", icon: <IconSparkles />, on: false, show: true, act: () => setSheet("mood") },
     { key: "tag", label: "Tag", icon: <IconUserPlus />, on: !!tagged, show: true, act: () => setSheet("tag") },
     { key: "place", label: "Place", icon: <IconPin />, on: placed, show: true, act: () => setSheet("place") },
@@ -382,7 +395,7 @@ function Inner() {
       ) : null}
       {error ? <div className="err">{error}</div> : null}
 
-      <button className="cx-drop" disabled={busy || !confessionOk}>{busy ? "Posting…" : `Drop it — ${COST.post} coins  ↗`}</button>
+      <button className="cx-drop" disabled={busy || !confessionOk}>{busy ? (upState?.status === "uploading" ? `Finishing upload… ${upState.pct}%` : "Posting…") : `Drop it — ${COST.post} coins  ↗`}</button>
       <p className="cx-foot">Your identity stays hidden. Always. Don&apos;t share phone numbers, handles or links.</p>
 
       {sheet === "mood" ? (

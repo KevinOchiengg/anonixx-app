@@ -161,3 +161,11 @@
   .ps-sched-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
   .ps-sched-row .acts { grid-column: auto; justify-content: flex-end; }
 }
+
+/* ---------- TikTok-style upload zone ---------- */
+.ps-drop { gap: 6px; padding: 38px 16px 30px; }
+.ps-drop b { font-size: 16px; }
+.ps-drop .ps-drop-ic { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; margin-bottom: 6px; color: var(--rose); background: var(--rose-dim); }
+.ps-drop .ps-drop-ic svg { width: 26px; height: 26px; }
+.ps-drop .up-specs span { font-size: 11.5px; }
+.ps-video { justify-items: stretch; }
