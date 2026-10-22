@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { splitHook } from "@/lib/captionHook";
 import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -30,6 +31,15 @@ type Props = {
 };
 
 const CAPTION_LINES = 2;
+
+// Cuts text to `len` characters, ending on a whole word when one is close and
+// dropping trailing punctuation (an "…" follows).
+function wordCut(text: string, len: number) {
+  let cut = len;
+  const space = text.lastIndexOf(" ", len);
+  if (space > len - 14 && space > 0) cut = space;
+  return text.slice(0, cut).trimEnd().replace(/[\s.,;:!?-]+$/, "");
+}
 
 function hash(id: string) {
   let h = 0;
@@ -82,13 +92,15 @@ export default function Slide({
   const chosen = post.sound && !audioSrc && !mature ? post.sound : null;
   const ambient = chosen || (textSlide && !mature ? pickSound(sounds, post) : null);
   const muteClip = Boolean(chosen?.mute_original);
-  // Captions on media read like TikTok's: two lines, ending "… more" inline as if it
-  // were part of the sentence. How much text fits is measured on this screen (two
-  // lines on a phone hold ~70 characters; line breaks fill them faster), in a hidden
-  // copy of the caption at the same width, before paint so nothing jumps.
+  // Captions on media read like TikTok's, in the Anonixx voice: the first sentence is a
+  // hook in the brand serif (up to two of its lines), then two lines of plain text ending
+  // "… more" inline as if part of the sentence. How much fits is measured on this screen,
+  // in a hidden copy of the caption at the same width, before paint so nothing jumps.
   const textRef = useRef<HTMLElement>(null);
   const measureRef = useRef<HTMLParagraphElement>(null);
-  const [short, setShort] = useState<string | null | undefined>(undefined);  // undefined = not measured yet, null = fits
+  const parts = useMemo(() => (hasMedia ? splitHook(post.content) : null), [hasMedia, post.content]);
+  type Cut = { hook: string; rest: string };
+  const [short, setShort] = useState<Cut | null | undefined>(undefined);  // undefined = not measured yet, null = fits
   const fitCaption = useCallback(() => {
     const el = textRef.current;
     const m = measureRef.current;
@@ -96,23 +108,53 @@ export default function Slide({
     const width = el.getBoundingClientRect().width;
     if (!width) return;
     m.style.width = `${width}px`;
-    const max = parseFloat(getComputedStyle(m).lineHeight) * CAPTION_LINES + 1;
-    const full = post.content;
-    m.textContent = full;
-    if (m.offsetHeight <= max) return setShort(null);
-    let lo = 0;
-    let hi = full.length;
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      m.textContent = `${full.slice(0, mid).trimEnd()}… more`;
-      if (m.offsetHeight <= max) lo = mid;
-      else hi = mid - 1;
+    const hook = parts?.hook ?? "";
+    const rest = parts ? parts.rest : post.content;
+    // mirrors the visible markup: hook span, then body text, then the "… more" suffix
+    const draw = (h: string, r: string, cut: boolean) => {
+      m.replaceChildren();
+      if (h) {
+        const span = document.createElement("span");
+        span.className = "cap-hook";
+        span.textContent = cut && !r ? `${h}…` : h;
+        m.append(span);
+      }
+      m.append(document.createTextNode(cut ? (r ? `${r}… ` : " ") : r));
+      if (cut) {
+        // the visible "more" is bold, so measure a bold one too
+        const more = document.createElement("span");
+        more.className = "more-inline";
+        more.textContent = "more";
+        m.append(more);
+      }
+      return m.offsetHeight;
+    };
+    const bodyLH = parseFloat(getComputedStyle(m).lineHeight);
+    let hookH = 0;
+    if (hook) {
+      draw(hook, "", false);
+      const hl = parseFloat(getComputedStyle(m.firstChild as Element).lineHeight);
+      hookH = Math.min(m.offsetHeight, hl * 2 + 4);   // a hook gets at most two of its lines
     }
-    let cutAt = lo;
-    const space = full.lastIndexOf(" ", lo);
-    if (space > lo - 14 && space > 0) cutAt = space;   // end on a whole word when one is close
-    setShort(full.slice(0, cutAt).trimEnd().replace(/[\s.,;:!?-]+$/, ""));
-  }, [hasMedia, post.content]);
+    const max = hookH + bodyLH * CAPTION_LINES + 1;
+    if (draw(hook, rest, false) <= max) return setShort(null);
+    const fitLen = (text: string, test: (t: string) => boolean) => {
+      let lo = 0;
+      let hi = text.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (test(text.slice(0, mid).trimEnd())) lo = mid;
+        else hi = mid - 1;
+      }
+      return wordCut(text, lo);
+    };
+    if (draw(hook, rest.slice(0, 1), true) <= max) {
+      setShort({ hook, rest: fitLen(rest, (r) => draw(hook, r, true) <= max) });
+    } else {
+      // the hook alone is too long: cut the hook itself
+      setShort({ hook: fitLen(hook, (h) => draw(h, "", true) <= max), rest: "" });
+    }
+  }, [hasMedia, post.content, parts]);
   useLayoutEffect(() => {
     fitCaption();
     const el = textRef.current;
@@ -123,9 +165,15 @@ export default function Slide({
       if (Math.abs(w - lastWidth) > 1) { lastWidth = w; fitCaption(); }
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    // The serif can finish loading after the first measure (fonts.ready may already have
+    // resolved when this runs), so refit whenever any font finishes loading.
+    const fonts = document.fonts;
+    const refit = () => fitCaption();
+    fonts?.addEventListener?.("loadingdone", refit);
+    fonts?.ready.then(refit).catch(() => {});
+    return () => { ro.disconnect(); fonts?.removeEventListener?.("loadingdone", refit); };
   }, [fitCaption, hasMedia]);
-  const mediaLong = hasMedia && typeof short === "string";
+  const mediaLong = hasMedia && !!short;
   const toggleCaption = (e?: React.MouseEvent) => { e?.stopPropagation(); setExpanded((v) => !v); };
 
   // Text-only posts: "Read full confession" shows when the clamped text is actually cut.
@@ -261,8 +309,13 @@ export default function Slide({
             className={`confession${hasMedia && short === undefined ? " clamp" : ""}${textSlide ? " clamp-text" : ""}`}
             onClick={mediaLong ? () => toggleCaption() : undefined}
           >
-            {mediaLong && !expanded ? (
-              <>{short}…{" "}<button type="button" className="more-inline" onClick={toggleCaption}>more</button></>
+            {mediaLong && short && !expanded ? (
+              <>
+                {short.hook ? <span className="cap-hook">{short.rest ? short.hook : `${short.hook}…`}</span> : null}
+                {short.rest ? `${short.rest}…` : null}{" "}<button type="button" className="more-inline" onClick={toggleCaption}>more</button>
+              </>
+            ) : parts ? (
+              <><span className="cap-hook">{parts.hook}</span>{parts.rest}</>
             ) : post.content}
             {mediaLong && expanded ? <>{" "}<button type="button" className="more-inline" onClick={toggleCaption}>less</button></> : null}
           </Text>

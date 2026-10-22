@@ -653,7 +653,7 @@ const VideoSlide = ({
 
             {post.content ? (
               <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
-                <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} expanded={expanded} />
+                <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} hookStyle={ss.captionHook} expanded={expanded} />
               </TouchableOpacity>
             ) : null}
 
@@ -772,7 +772,7 @@ const AudioSlide = ({
 
         {post.content ? (
           <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85} style={as.contentWrap}>
-            <InlineMoreText text={post.content} style={as.contentText} moreStyle={as.moreText} expanded={expanded} />
+            <InlineMoreText text={post.content} style={as.contentText} moreStyle={as.moreText} hookStyle={ss.captionHook} expanded={expanded} />
           </TouchableOpacity>
         ) : null}
 
@@ -1028,7 +1028,7 @@ const TextSlide = ({
                 its shrunk-to-fit size. */}
             {hasImage && post.content ? (
               <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
-                <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} expanded={expanded} />
+                <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} hookStyle={ss.captionHook} expanded={expanded} />
               </TouchableOpacity>
             ) : null}
             {!hasImage && isLong && (
@@ -1793,7 +1793,16 @@ const ss = StyleSheet.create({
   authorMeta: { flex: 1 },
   authorName: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
   timeAgo: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
-  contentText: { fontSize: 14, color: 'rgba(255,255,255,0.92)', lineHeight: 21, marginBottom: 10, letterSpacing: 0.1 },
+  // Admin captions (option D): a calm warm-white body under a serif-italic hook —
+  // same type as the website's feed (Web/app/feedparity.css).
+  contentText: {
+    fontSize: 15.5, lineHeight: 22, color: '#F6E6EC', marginBottom: 10,
+    textShadowColor: 'rgba(0,0,0,0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
+  captionHook: {
+    fontFamily: 'Fraunces-SemiBoldItalic', fontSize: 19.5, lineHeight: 25, color: '#fff', letterSpacing: -0.1,
+    textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
+  },
   moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
   // TikTok's own feed progress indicator: a hairline, not a boxed slider
   // with time labels and a draggable thumb (the feed doesn't support
@@ -1837,7 +1846,10 @@ const as = StyleSheet.create({
   authorName: { fontSize: 15, fontWeight: '700', color: '#fff' },
   timeAgo: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
   contentWrap: { marginBottom: 28 },
-  contentText: { fontSize: 16, lineHeight: 24, color: 'rgba(255,255,255,0.85)', letterSpacing: 0.2 },
+  contentText: {
+    fontSize: 15.5, lineHeight: 22, color: '#F6E6EC',
+    textShadowColor: 'rgba(0,0,0,0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
   moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
   waveformWrap: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 64, marginBottom: 12 },
   bar: { width: 4, borderRadius: 3 },
