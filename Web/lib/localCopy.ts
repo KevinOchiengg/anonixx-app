@@ -48,17 +48,37 @@ async function copyToDisk(file: File): Promise<File | null> {
   }
 }
 
+// Reads the whole file in pieces, keeping none of it. Returns -1 when it all reads,
+// else how far it got (0–1) — a file that stops partway isn't fully on the phone.
+const CHUNK = 8 * 1024 * 1024;
+async function readThrough(file: Blob): Promise<number> {
+  for (let pos = 0; pos < file.size; pos += CHUNK) {
+    try {
+      await file.slice(pos, pos + CHUNK).arrayBuffer();
+    } catch {
+      return pos / file.size;
+    }
+  }
+  return -1;
+}
+
 /** A copy of a just-picked file that stays readable for the rest of the session. */
 export async function keepReadable(file: File): Promise<File> {
-  try {
-    if (file.size <= IN_MEMORY_MAX) {
+  if (file.size <= IN_MEMORY_MAX) {
+    try {
       return new File([await file.arrayBuffer()], file.name, { type: file.type, lastModified: file.lastModified });
-    }
+    } catch { /* checked below */ }
+  } else {
     const onDisk = await copyToDisk(file);
     if (onDisk) return onDisk;
-    // No on-device storage available: a memory copy is the only way to keep it.
-    return new File([await file.arrayBuffer()], file.name, { type: file.type, lastModified: file.lastModified });
-  } catch {
-    throw new ApiError(0, UNREADABLE_FILE);
   }
+  // Couldn't keep a copy (no on-device storage, or a big file that's too much to hold
+  // in memory). Never refuse a file that can actually be read: check it all reads, then
+  // carry on with the original — it stays readable as long as the post goes up soon.
+  const stoppedAt = await readThrough(file);
+  if (stoppedAt < 0) return file;
+  const mb = Math.round(file.size / (1024 * 1024));
+  throw new ApiError(0, stoppedAt > 0
+    ? `This video isn't fully on your phone: only ${Math.round(stoppedAt * 100)}% of its ${mb}MB could be read. Open it in your gallery app, let it finish downloading, then pick it again.`
+    : UNREADABLE_FILE);
 }
