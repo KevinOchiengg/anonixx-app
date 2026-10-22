@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { intentLabel } from "@/lib/linkup";
 import AppShell from "./AppShell";
 
 type Conn = {
@@ -24,10 +25,15 @@ type Req = {
   target_type: string;
   target_id: string;
   confession_snippet: string;
+  requester_id: string;
   requester_anonymous_name: string;
   requester_avatar_url?: string | null;
+  requester_gallery?: { media_url: string; media_type: string }[];
+  pitch?: string | null;
+  intents?: string[];
   media_url?: string | null;
   media_type?: string | null;
+  created_at?: string;
 };
 type Sent = { id: string; target_type: string; status: string; connection_id: string | null; target_id: string };
 type View = "chats" | "requests" | "sent";
@@ -67,15 +73,6 @@ const PlusIcon = ({ size }: { size?: number }) => <Svg size={size} d={<path d="M
 const PaletteIcon = ({ size }: { size?: number }) => <Svg size={size} d={<><circle cx="13.5" cy="6.5" r="1" /><circle cx="17.5" cy="10.5" r="1" /><circle cx="8.5" cy="7.5" r="1" /><circle cx="6.5" cy="12.5" r="1" /><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4a4.6 4.6 0 0 0 4.6-4.6C22 6 17.5 2 12 2z" /></>} />;
 const InboxIcon = ({ size }: { size?: number }) => <Svg size={size} d={<><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" /></>} />;
 
-function ClueThumb({ r, onOpen }: { r: Req; onOpen: () => void }) {
-  if (!r.media_url) return null;
-  return (
-    <button className="u-thumb" onClick={onOpen} aria-label="View clue">
-      {r.media_type === "video" ? <video src={r.media_url} muted loop autoPlay playsInline /> : <Image src={r.media_url} alt="" width={40} height={40} />}
-    </button>
-  );
-}
-
 function Inner({ search, view, setView }: { search: string; view: View; setView: (v: View) => void }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | "unread">("all");
@@ -85,8 +82,6 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set());
-  const [detail, setDetail] = useState<Req | null>(null);
-  const [preview, setPreview] = useState<{ url: string; type: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -128,7 +123,6 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
     try {
       const d = await api<{ connection_id?: string }>(`/unlock-requests/${r.id}/accept`, { method: "POST" });
       setReqs((p) => (p || []).filter((x) => x.id !== r.id));
-      setDetail(null);
       if (openChat && d.connection_id) {
         router.push(`/chat/${d.connection_id}`);
       } else {
@@ -148,31 +142,10 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
     try {
       await api(`/unlock-requests/${r.id}/decline`, { method: "POST" });
       setReqs((p) => (p || []).filter((x) => x.id !== r.id));
-      setDetail(null);
     } catch {
       setError("Could not decline right now.");
     } finally {
       setBusyIds([r.id], false);
-    }
-  }
-
-  async function acceptAll(group: { target_type: string; target_id: string; data: Req[] }) {
-    const ids = group.data.map((r) => r.id);
-    setBusyIds(ids, true);
-    setError("");
-    try {
-      const d = await api<{ accepted_count: number; failed?: { request_id: string }[] }>("/unlock-requests/accept-all", {
-        body: { target_type: group.target_type, target_id: group.target_id },
-      });
-      const failed = new Set((d.failed || []).map((f) => f.request_id));
-      setReqs((p) => (p || []).filter((r) => !ids.includes(r.id) || failed.has(r.id)));
-      if (d.accepted_count > 0) setNote(`Accepted ${d.accepted_count} — chats started.`);
-      if (failed.size) setError(`${failed.size} couldn't be accepted right now.`);
-      load();
-    } catch {
-      setError("Could not accept all right now.");
-    } finally {
-      setBusyIds(ids, false);
     }
   }
 
@@ -201,16 +174,6 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
     }
   }
 
-  const groups = useMemo(() => {
-    const m = new Map<string, { key: string; target_type: string; target_id: string; title: string; data: Req[] }>();
-    (reqs || []).forEach((r) => {
-      const key = `${r.target_type}:${r.target_id}`;
-      if (!m.has(key)) m.set(key, { key, target_type: r.target_type, target_id: r.target_id, title: r.confession_snippet || "A confession", data: [] });
-      m.get(key)!.data.push(r);
-    });
-    return Array.from(m.values());
-  }, [reqs]);
-
   const q = search.trim().toLowerCase();
   const shown = useMemo(() => {
     let base = conns || [];
@@ -231,17 +194,6 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
     </>
   );
 
-  const previewModal = preview ? (
-    <div className="u-modal" onClick={() => setPreview(null)}>
-      {preview.type === "video" ? (
-        <video src={preview.url} controls autoPlay loop playsInline onClick={(e) => e.stopPropagation()} />
-      ) : (
-        <Image src={preview.url} alt="" width={800} height={800} />
-      )}
-      <button className="u-modal-x" aria-label="Close" onClick={() => setPreview(null)}>×</button>
-    </div>
-  ) : null;
-
   if (view === "requests") {
     return (
       <div>
@@ -251,39 +203,46 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
         {banner}
         {reqs === null ? (
           <p className="muted center">Loading…</p>
-        ) : groups.length === 0 ? (
-          <div className="u-empty">No one&apos;s waiting to unlock a confession right now.</div>
+        ) : reqs.length === 0 ? (
+          <div className="u-empty">No link ups waiting. Post something for tonight and watch this fill up.</div>
         ) : (
-          <div className="u-reqs">
-            {groups.map((g) => (
-              <div className="u-group" key={g.key}>
-                <div className="u-group-h">
-                  <p>&ldquo;{g.title}&rdquo;</p>
-                  <button className="u-all" onClick={() => acceptAll(g)}>Accept All ({g.data.length})</button>
+          <div className="lr-list">
+            {reqs.map((r) => {
+              const b = busy.has(r.id);
+              const thumbs = (r.requester_gallery || []).slice(0, 3);
+              const open = () => router.push(`/room/${r.requester_id}`);
+              return (
+                <div className="lr-row" key={r.id} role="button" tabIndex={0} onClick={open} onKeyDown={(e) => e.key === "Enter" && open()}>
+                  <span className="lr-ava">
+                    <span>
+                      {r.requester_avatar_url ? <Image src={r.requester_avatar_url} alt="" width={48} height={48} /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}
+                    </span>
+                  </span>
+                  <span className="lr-main">
+                    <span className="lr-top">
+                      <b>{r.requester_anonymous_name || "Anonymous"}</b>
+                      <time>{chatTime(r.created_at || null)}</time>
+                    </span>
+                    <span className={`lr-pitch${r.pitch ? "" : " none"}`}>{r.pitch || "wants to link up"}</span>
+                    {r.intents?.length ? <span className="room-intents">{r.intents.map((i) => <i key={i}>{intentLabel(i)}</i>)}</span> : null}
+                    {r.confession_snippet ? <span className="lr-on">on &ldquo;{r.confession_snippet}&rdquo;</span> : null}
+                    {thumbs.length ? (
+                      <span className="lr-thumbs">
+                        {thumbs.map((g, k) => (
+                          <span key={k}>{g.media_type === "video" ? <video src={g.media_url} muted playsInline preload="metadata" /> : <Image src={g.media_url} alt="" width={34} height={44} />}</span>
+                        ))}
+                      </span>
+                    ) : null}
+                    <span className="lr-acts" onClick={(e) => e.stopPropagation()}>
+                      <button className="d" disabled={b} onClick={() => decline(r)}>Decline</button>
+                      <button className="a" disabled={b} onClick={() => accept(r, true)}>{b ? "…" : "Accept"}</button>
+                    </span>
+                  </span>
                 </div>
-                {g.data.map((r) => {
-                  const b = busy.has(r.id);
-                  return (
-                    <div className="u-req" key={r.id}>
-                      <div className="u-req-who">
-                        <ClueThumb r={r} onOpen={() => setPreview({ url: r.media_url!, type: r.media_type || "image" })} />
-                        <span className="u-avatar">
-                          {r.requester_avatar_url ? <Image src={r.requester_avatar_url} alt="" width={30} height={30} /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}
-                        </span>
-                        <b>{r.requester_anonymous_name}</b>
-                      </div>
-                      <div className="u-acts">
-                        <button className="u-dec" disabled={b} onClick={() => decline(r)}>Decline</button>
-                        <button className="u-acc" disabled={b} onClick={() => accept(r, false)}>Accept</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
-        {previewModal}
       </div>
     );
   }
@@ -348,7 +307,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
           {reqs.map((r) => {
             const clue = r.media_url ? (r.media_type === "video" ? poster(r.media_url) : r.media_url) : null;
             return (
-              <button className="u-story" key={r.id} onClick={() => setDetail(r)}>
+              <button className="u-story" key={r.id} onClick={() => router.push(`/room/${r.requester_id}`)}>
                 <span className="u-ring">
                   <span>{clue ? <Image src={clue} alt="" width={58} height={58} /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}</span>
                 </span>
@@ -410,30 +369,6 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
         </ul>
       )}
 
-      {detail ? (
-        <div className="sheet-back" onClick={() => setDetail(null)}>
-          <div className="sheet u-mini" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
-            <div className="u-mini-media">
-              {detail.media_url ? (
-                detail.media_type === "video" ? <video src={detail.media_url} muted loop autoPlay playsInline /> : <Image src={detail.media_url} alt="" width={400} height={400} />
-              ) : (
-                detail.requester_anonymous_name?.[0]?.toUpperCase() || "A"
-              )}
-            </div>
-            <div className="u-mini-body">
-              <h3>{detail.requester_anonymous_name || "Anonymous"}</h3>
-              <p>wants to unlock your confession</p>
-              {detail.confession_snippet ? <p className="u-quote">&ldquo;{detail.confession_snippet}&rdquo;</p> : null}
-              <div className="u-mini-acts">
-                <button className="d" disabled={busy.has(detail.id)} onClick={() => decline(detail)}>Decline</button>
-                <button className="a" disabled={busy.has(detail.id)} onClick={() => accept(detail, true)}>
-                  {busy.has(detail.id) ? "…" : "Accept"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -445,9 +380,26 @@ export default function InboxPage() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
+    const qs = new URLSearchParams(window.location.search);
+    const t = qs.get("tab");
     if (t === "requests" || t === "sent") setView(t);
-  }, []);
+    // From a link up push: the Accept action lands on ?accept=, a plain tap on ?request=.
+    const acc = qs.get("accept");
+    const req = qs.get("request");
+    if (acc) {
+      api<{ connection_id?: string }>(`/unlock-requests/${acc}/accept`, { method: "POST" })
+        .then((d) => router.replace(d.connection_id ? `/chat/${d.connection_id}` : "/inbox?tab=requests"))
+        .catch(() => { setView("requests"); router.replace("/inbox?tab=requests"); });
+    } else if (req) {
+      api<{ requests: Req[] }>("/unlock-requests/incoming")
+        .then((d) => {
+          const r = d.requests.find((x) => x.id === req);
+          if (r) router.replace(`/room/${r.requester_id}`);
+          else setView("requests");
+        })
+        .catch(() => setView("requests"));
+    }
+  }, [router]);
 
   const toggle = () => {
     if (searchOpen) setSearch("");

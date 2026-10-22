@@ -43,6 +43,8 @@ export type Post = {
   is_own_post?: boolean;
   user_id?: string;
   type?: string;
+  live_until?: string | null;
+  linkup_count?: number;
 };
 
 export type Sound = { id: string; title: string; mood: string; url: string };
@@ -120,15 +122,18 @@ const adultMode = () => {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
 function errorText(body: unknown, fallback: string): string {
   const d = (body as { detail?: unknown } | null)?.detail;
   if (typeof d === "string") return d;
+  if (d && typeof d === "object" && "message" in d) return String((d as { message: unknown }).message);
   if (Array.isArray(d) && d[0] && typeof d[0] === "object") return String((d[0] as { msg?: string }).msg || fallback);
   return fallback;
 }
@@ -167,7 +172,10 @@ export async function api<T = unknown>(
   }
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON body */ }
-  if (!res.ok) throw new ApiError(res.status, errorText(data, `Something went wrong (${res.status}).`));
+  if (!res.ok) {
+    const d = (data as { detail?: { code?: string } } | null)?.detail;
+    throw new ApiError(res.status, errorText(data, `Something went wrong (${res.status}).`), typeof d === "object" && d ? d.code : undefined);
+  }
   return data as T;
 }
 
