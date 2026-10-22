@@ -10,7 +10,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.database import get_database
-from app.api.v1.drops import batch_format_drops
+from app.api.v1.drops import batch_format_drops, live_filter
 from app.utils.content_mode import SAFE_FILTER
 from app.utils.feed_mix import fetch_mixed, not_promoted, fetch_promoted, splice_promoted
 from app.tasks import scheduled_publisher
@@ -37,8 +37,8 @@ async def public_feed(
     db = Depends(get_database),
 ):
     scheduled_publisher.nudge(db)
-    query: dict = {**_LIVE, **SAFE_FILTER}
     now = datetime.now(timezone.utc)
+    query: dict = {**_LIVE, **SAFE_FILTER, **live_filter(now)}   # finished "tonight" hookups drop out
     page, next_cursor, has_more = await fetch_mixed(
         db, {"$and": [query, not_promoted(now)]}, limit, cursor, country_from_header(x_country),
     )
