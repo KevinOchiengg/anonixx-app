@@ -18,6 +18,7 @@ from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins, debit_coins
 from app.utils.mpesa import MPesaClient
 from app.config import settings
+from app.utils import geoip
 
 router = APIRouter(prefix="/coins", tags=["coins"])
 
@@ -73,6 +74,25 @@ class WithdrawRequest(BaseModel):
 
 MIN_WITHDRAWAL_COINS = 100
 
+# Cash out pays to M-Pesa by hand, so it's Kenya only. The client's X-Country
+# hint is used only when the IP can't be placed; the payout number must be
+# Kenyan either way.
+CASH_OUT_COUNTRIES = {"KE"}
+
+
+async def cash_out_available(request: Request) -> bool:
+    return await geoip.request_country(request, use_hint=True) in CASH_OUT_COUNTRIES
+
+
+def kenyan_mpesa_number(raw: str) -> Optional[str]:
+    """254XXXXXXXXX, or None if it isn't a Kenyan mobile number."""
+    d = "".join(ch for ch in raw or "" if ch.isdigit())
+    if d.startswith("0"):
+        d = "254" + d[1:]
+    elif len(d) == 9 and d[0] in "17":
+        d = "254" + d
+    return d if d.startswith("254") and len(d) == 12 else None
+
 # Coins-to-cash payout rate, shown to users as an estimate before they
 # withdraw. Derived from the "Popular" package's KES rate (100 KES / 120
 # coins ≈ 0.833 KES/coin) discounted by the same 80% payout share Circles
@@ -91,6 +111,7 @@ async def list_packages():
 
 @router.get("/balance")
 async def get_coin_balance(
+    request:         Request,
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
@@ -110,6 +131,7 @@ async def get_coin_balance(
         "withdrawable_coins": earned,
         "payout_rate_kes_per_coin": PAYOUT_RATE_KES_PER_COIN,
         "estimated_kes": round(earned * PAYOUT_RATE_KES_PER_COIN, 2),
+        "cash_out_available": await cash_out_available(request),
     }
 
 
@@ -173,6 +195,7 @@ async def get_spend_costs():
 
 @router.post("/withdraw")
 async def request_withdrawal(
+    request:         Request,
     data:            WithdrawRequest,
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
@@ -187,8 +210,11 @@ async def request_withdrawal(
     """
     if data.amount_coins < MIN_WITHDRAWAL_COINS:
         raise HTTPException(status_code=400, detail=f"Minimum withdrawal is {MIN_WITHDRAWAL_COINS} coins.")
-    if not data.mpesa_number.strip():
-        raise HTTPException(status_code=400, detail="M-Pesa number is required.")
+    if not await cash_out_available(request):
+        raise HTTPException(status_code=403, detail="Cash out isn't available in your country.")
+    mpesa_number = kenyan_mpesa_number(data.mpesa_number)
+    if not mpesa_number:
+        raise HTTPException(status_code=400, detail="Enter a Kenyan M-Pesa number.")
 
     # Only EARNED coins are cashable. Without this, the signup bonus would be
     # free money for anyone willing to register throwaway accounts, and
@@ -228,7 +254,7 @@ async def request_withdrawal(
         "user_id":      current_user_id,
         "amount_coins": data.amount_coins,
         "estimated_kes": estimated_kes,
-        "mpesa_number": data.mpesa_number.strip(),
+        "mpesa_number": mpesa_number,
         "status":       "pending",   # pending | paid | rejected
         "created_at":   _now(),
     }

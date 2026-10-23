@@ -35,7 +35,7 @@ from app.utils.moderation import violates_policy, MODERATION_ERROR
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
-SHARE_BASE_URL = "https://anonixx.app/drop"
+SHARE_BASE_URL = "https://anonixx.com/drop"
 GRAPH_URL = "https://graph.facebook.com/v20.0"
 MAX_TEXT_LEN = 500
 SENDER_DAILY_LIMIT = 5

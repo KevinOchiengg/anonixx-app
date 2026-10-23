@@ -93,7 +93,7 @@ const PRIVACY = {
     },
     {
       heading: '9. Contact',
-      body: 'For privacy concerns, email privacy@anonixx.app. We respond within 72 hours.',
+      body: 'For privacy concerns, email privacy@anonixx.com. We respond within 72 hours.',
     },
   ],
 };

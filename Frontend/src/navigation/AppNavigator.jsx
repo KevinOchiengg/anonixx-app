@@ -64,8 +64,8 @@ const Stack = createStackNavigator();
 const linking = {
   prefixes: [
     'anonixx://',
-    'https://anonixx.app',
-    'https://www.anonixx.app',
+    'https://anonixx.com',
+    'https://www.anonixx.com',
   ],
   config: {
     screens: {

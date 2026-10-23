@@ -2107,7 +2107,7 @@ async def get_single_drop(
     current_user_id: Optional[str] = Depends(get_optional_user_id),
     db = Depends(get_database),
 ):
-    """One drop in feed shape — target of shared links (anonixx.app/drop/<id>)."""
+    """One drop in feed shape — target of shared links (anonixx.com/drop/<id>)."""
     if not ObjectId.is_valid(drop_id):
         raise HTTPException(status_code=404, detail="Drop not found")
     user_doc = None

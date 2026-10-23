@@ -45,37 +45,37 @@ _GENERIC_HOOKS: list[str] = [
 
 # ── Closing CTAs (rotated) ────────────────────────────────────────────────────
 _TIKTOK_CTAS: list[str] = [
-    "they're on Anonixx. so is the person you've been thinking about → anonixx.app",
-    "say something. it stays anonymous → anonixx.app",
-    "your confession is safe with us → anonixx.app",
-    "thousands are confessing right now → anonixx.app",
-    "read more at anonixx.app — where real feelings live",
-    "join the conversation. no real name needed → anonixx.app",
-    "drop your own → anonixx.app",
+    "they're on Anonixx. so is the person you've been thinking about → anonixx.com",
+    "say something. it stays anonymous → anonixx.com",
+    "your confession is safe with us → anonixx.com",
+    "thousands are confessing right now → anonixx.com",
+    "read more at anonixx.com — where real feelings live",
+    "join the conversation. no real name needed → anonixx.com",
+    "drop your own → anonixx.com",
 ]
 
 _FACEBOOK_CTAS: list[str] = [
-    "Someone in your life might feel exactly like this.\n\nAnonixx — where people say the things they can't say anywhere else. → anonixx.app",
-    "You're not alone in feeling this. Thousands of people are confessing anonymously right now.\n\nAnonixx → anonixx.app",
-    "This is what people are really feeling. What would yours say?\n\nAnonixx — Anonymous. Safe. Real. → anonixx.app",
-    "Some things are easier to say when no one knows your name.\n\nAnonixx → anonixx.app",
-    "Real feelings. No names. No judgement.\n\nAnonixx → anonixx.app",
+    "Someone in your life might feel exactly like this.\n\nAnonixx — where people say the things they can't say anywhere else. → anonixx.com",
+    "You're not alone in feeling this. Thousands of people are confessing anonymously right now.\n\nAnonixx → anonixx.com",
+    "This is what people are really feeling. What would yours say?\n\nAnonixx — Anonymous. Safe. Real. → anonixx.com",
+    "Some things are easier to say when no one knows your name.\n\nAnonixx → anonixx.com",
+    "Real feelings. No names. No judgement.\n\nAnonixx → anonixx.com",
 ]
 
 _INSTAGRAM_CTAS: list[str] = [
-    "anonymous. safe. real.\n\nanonixx.app",
-    "say the thing you can't say anywhere else.\n\nanonixx.app",
-    "thousands are confessing right now. anonymously.\n\nanonixx.app",
-    "you are not alone in this.\n\nanonixx.app",
-    "your confession is safe with us.\n\nanonixx.app",
+    "anonymous. safe. real.\n\nanonixx.com",
+    "say the thing you can't say anywhere else.\n\nanonixx.com",
+    "thousands are confessing right now. anonymously.\n\nanonixx.com",
+    "you are not alone in this.\n\nanonixx.com",
+    "your confession is safe with us.\n\nanonixx.com",
 ]
 
 _TELEGRAM_CTAS: list[str] = [
-    "Someone's waiting to hear from you. Unlock the full confession on Anonixx → anonixx.app",
-    "This is only part of it. The rest is on Anonixx → anonixx.app",
-    "Real people, real confessions, completely anonymous. → anonixx.app",
-    "You can respond to this one — anonymously — on Anonixx → anonixx.app",
-    "Thousands are confessing right now on Anonixx → anonixx.app",
+    "Someone's waiting to hear from you. Unlock the full confession on Anonixx → anonixx.com",
+    "This is only part of it. The rest is on Anonixx → anonixx.com",
+    "Real people, real confessions, completely anonymous. → anonixx.com",
+    "You can respond to this one — anonymously — on Anonixx → anonixx.com",
+    "Thousands are confessing right now on Anonixx → anonixx.com",
 ]
 
 # ── Hashtag banks ─────────────────────────────────────────────────────────────
