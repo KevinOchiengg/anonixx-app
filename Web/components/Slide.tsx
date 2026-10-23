@@ -6,6 +6,7 @@ import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sou
 import { useAuth } from "@/lib/auth";
 import { timeLeft } from "@/lib/linkup";
 import VideoPlayer from "./VideoPlayer";
+import FitImage from "./FitImage";
 import { Bookmark, Comment, Heart, Share } from "./icons";
 import { Link2, More, SoundOff } from "./feedicons";
 import AudioWave from "./AudioWave";
@@ -297,7 +298,7 @@ export default function Slide({
               >
                 {slides.map((src, i) => (
                   <div key={src}>
-                    <Image src={src} alt={i === 0 ? post.content.slice(0, 100) : ""} width={1080} height={1350} sizes="100vw" priority={near && i === 0} />
+                    <FitImage src={src} alt={i === 0 ? post.content.slice(0, 100) : ""} priority={near && i === 0} />
                   </div>
                 ))}
               </div>
@@ -315,7 +316,7 @@ export default function Slide({
               muted={muted || muteClip}
             />
           ) : singleImage ? (
-            <Image src={singleImage} alt={post.content.slice(0, 100)} width={1080} height={1350} sizes="100vw" priority={near} />
+            <FitImage src={singleImage} alt={post.content.slice(0, 100)} priority={near} />
           ) : null}
         </div>
       ) : null}

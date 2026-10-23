@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { fillsFrame } from "@/lib/mediaFit";
 import { fmtTime, type VideoEdit } from "@/lib/videoEdit";
 import VideoOverlays from "./VideoOverlays";
 
@@ -16,7 +17,8 @@ type Props = {
 // so memory stays flat no matter how far the viewer scrolls.
 // Controls are TikTok's, so nobody has to learn them: tap = pause/play, drag the bar at the
 // bottom to scrub, press and hold = 2x speed. On desktop ←/→ also jump 5s.
-// Portrait videos fill the screen; landscape ones are letterboxed over a blurred copy.
+// Phone-shaped videos fill the screen; anything else (square, 4:5, landscape) is shown
+// whole over a blurred copy, see lib/mediaFit.
 const PlayIcon = () => <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z" /></svg>;
 
 const HOLD_MS = 350;
@@ -238,7 +240,7 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit }: 
         preload="auto"
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
-          setLandscape(v.videoWidth > v.videoHeight * 1.05);
+          setLandscape(!fillsFrame(v.videoWidth, v.videoHeight, v.parentElement));
           if (start && v.currentTime < start) v.currentTime = start;
           // A paused neighbour: seeking makes the browser decode and paint its first
           // frame now (some phones otherwise leave it black until play).

@@ -69,6 +69,8 @@ import VideoOverlays from '../../components/common/VideoOverlays';
 import InlineMoreText from '../../components/common/InlineMoreText';
 import { countryHeader } from '../../utils/country';
 import { timeLeft } from '../../config/linkup';
+import FitImage, { FitBackdrop } from '../../components/feed/FitImage';
+import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 
 // Matches the injection frequency in the old DropsFeedScreen.jsx — every
@@ -399,6 +401,10 @@ const VideoSlide = ({
   activeRef.current = isActive;
   // Until the player has drawn its first frame, the cover sits on top of it.
   const [frameReady, setFrameReady] = useState(false);
+  // Fill vs. whole-over-blur (utils/mediaFit) — decided once the track's size and the slide's are known.
+  const [videoSize, setVideoSize] = useState(null);
+  const [slideSize, setSlideSize] = useState(null);
+  const fillVideo = !!videoSize && !!slideSize && fillsFrame(videoSize.width, videoSize.height, slideSize.width, slideSize.height);
   const [poster, setPoster] = useState(() => post.cover_url || post.card_image_url || posterCache.get(post.video_url) || null);
   const [slowLoad, setSlowLoad] = useState(false);
   // Smart trim: the full original is streamed, but only [start, end] plays (and loops).
@@ -413,6 +419,13 @@ const VideoSlide = ({
   const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
     const sub = player.addListener('playingChange', ({ isPlaying: playing }) => setIsPlaying(playing));
+    return () => sub.remove();
+  }, [player]);
+
+  useEffect(() => {
+    const sub = player.addListener('videoTrackChange', ({ videoTrack }) => {
+      if (videoTrack?.size?.width) setVideoSize(videoTrack.size);
+    });
     return () => sub.remove();
   }, [player]);
 
@@ -585,18 +598,22 @@ const VideoSlide = ({
 
 
   return (
-    <View style={ss.slide}>
+    <View style={ss.slide} onLayout={(e) => setSlideSize(e.nativeEvent.layout)}>
+      {!fillVideo && <FitBackdrop uri={poster} />}
       <VideoView
         player={player}
         style={StyleSheet.absoluteFill}
-        contentFit="contain"
+        contentFit={fillVideo ? 'cover' : 'contain'}
         nativeControls={false}
         allowsPictureInPicture={false}
         pointerEvents="none"
-        onFirstFrameRender={() => setFrameReady(true)}
+        onFirstFrameRender={() => {
+          setFrameReady(true);
+          if (player.videoTrack?.size?.width) setVideoSize(player.videoTrack.size);
+        }}
       />
       {!frameReady && poster ? (
-        <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="contain" pointerEvents="none" />
+        <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode={fillVideo ? 'cover' : 'contain'} pointerEvents="none" />
       ) : null}
       {/* A separate top-most sibling, not a wrapper around VideoView —
           expo-video's native surface (ExoPlayer/SurfaceView on Android)
@@ -869,7 +886,7 @@ const ImageSlideCarousel = React.memo(({ images }) => {
         decelerationRate="fast"
       >
         {images.map((url, i) => (
-          <Image key={i} source={{ uri: url }} style={{ width, height: '100%' }} resizeMode="contain" />
+          <FitImage key={i} uri={url} style={{ width, height: '100%' }} />
         ))}
       </ScrollView>
       <View style={sw.imageDotsRow} pointerEvents="none">
@@ -996,12 +1013,9 @@ const TextSlide = ({
             imageList.length > 1 ? (
               <ImageSlideCarousel images={imageList} />
             ) : (
-              // "contain" — same call already made for VideoSlide's video
-              // above ("cover" crops whatever doesn't match a full-screen
-              // portrait frame; images come from an arbitrary gallery pick,
-              // not a fixed vertical shot, so cropping cuts off real content
-              // at the edges just like it did for video).
-              <Image source={{ uri: imageList[0] }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+              // Phone-shaped photos fill; anything else is shown whole over
+              // its own blur (components/feed/FitImage, utils/mediaFit).
+              <FitImage uri={imageList[0]} style={StyleSheet.absoluteFill} />
             )
           ) : (
             // paddingTop clears the opaque header panel (headerHeight),
