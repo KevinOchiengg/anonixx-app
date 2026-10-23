@@ -16,7 +16,7 @@ export default function LocationFields({ value, onChange }: { value: LocationDra
       </label>
       {value.country ? (
         <label className="field">
-          {kenya ? "County" : "State / region"}
+          Region
           {kenya ? (
             <select value={value.county} onChange={(e) => onChange({ ...value, county: e.target.value })}>
               <option value="">Not set</option>
@@ -28,12 +28,12 @@ export default function LocationFields({ value, onChange }: { value: LocationDra
         </label>
       ) : null}
       <label className="field">
-        Sub-county
-        <input type="text" maxLength={60} value={value.subCounty} onChange={(e) => onChange({ ...value, subCounty: e.target.value })} placeholder="e.g. Westlands" />
+        Area
+        <input type="text" maxLength={60} value={value.subCounty} onChange={(e) => onChange({ ...value, subCounty: e.target.value })} placeholder="e.g. Downtown" />
       </label>
       <label className="field">
-        Estate / neighbourhood
-        <input type="text" maxLength={60} value={value.estate} onChange={(e) => onChange({ ...value, estate: e.target.value })} placeholder="e.g. Kilimani" />
+        Neighborhood
+        <input type="text" maxLength={60} value={value.estate} onChange={(e) => onChange({ ...value, estate: e.target.value })} placeholder="Close enough to matter" />
       </label>
     </div>
   );

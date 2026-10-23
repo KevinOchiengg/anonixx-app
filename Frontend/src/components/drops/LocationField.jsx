@@ -105,11 +105,11 @@ export default function LocationField({
       </TouchableOpacity>
 
       {/* County (Kenya, picker) or State/Region (everywhere else, freeform) */}
-      <Text style={s.label}>{kenya ? 'County' : 'State / Region'}</Text>
+      <Text style={s.label}>Region</Text>
       {kenya ? (
         <TouchableOpacity style={s.field} onPress={() => setCountyPickerOpen(true)} activeOpacity={0.8}>
           <Text style={[s.fieldText, !county && s.fieldPlaceholder]}>
-            {county || 'Select a county'}
+            {county || 'Select a region'}
           </Text>
           <ChevronDown size={rs(15)} color={T.textMute} />
         </TouchableOpacity>
@@ -117,7 +117,7 @@ export default function LocationField({
         <TextInput
           value={county}
           onChangeText={onChangeCounty}
-          placeholder="e.g. California"
+          placeholder="e.g. your state or county"
           placeholderTextColor={T.textMute}
           style={s.textField}
           maxLength={60}
@@ -125,22 +125,22 @@ export default function LocationField({
       )}
 
       {/* Sub-county / district — freeform */}
-      <Text style={s.label}>{kenya ? 'Sub-county' : 'District / Area'}</Text>
+      <Text style={s.label}>Area</Text>
       <TextInput
         value={subCounty}
         onChangeText={onChangeSubCounty}
-        placeholder={kenya ? 'e.g. Westlands' : 'e.g. Downtown'}
+        placeholder="e.g. Downtown"
         placeholderTextColor={T.textMute}
         style={s.textField}
         maxLength={60}
       />
 
       {/* Estate / neighborhood — freeform */}
-      <Text style={s.label}>Estate / Neighborhood</Text>
+      <Text style={s.label}>Neighborhood</Text>
       <TextInput
         value={estate}
         onChangeText={onChangeEstate}
-        placeholder="e.g. Kilimani"
+        placeholder="Close enough to matter"
         placeholderTextColor={T.textMute}
         style={s.textField}
         maxLength={60}
@@ -155,7 +155,7 @@ export default function LocationField({
       />
       <PickerModal
         visible={countyPickerOpen}
-        title="County"
+        title="Region"
         options={KENYA_COUNTIES}
         onSelect={onChangeCounty}
         onClose={() => setCountyPickerOpen(false)}

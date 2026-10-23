@@ -152,9 +152,9 @@ export default function SearchPage() {
           {locOpen ? (
             <div className="sp-loc">
               <input list="sp-countries" placeholder="Country" value={loc.country} onChange={(e) => setLoc({ ...loc, country: e.target.value })} />
-              <input list={loc.country === "Kenya" ? "sp-counties" : undefined} placeholder="County or region" value={loc.county} onChange={(e) => setLoc({ ...loc, county: e.target.value })} />
-              <input placeholder="Sub-county or area" value={loc.sub} onChange={(e) => setLoc({ ...loc, sub: e.target.value })} />
-              <input placeholder="Estate or neighborhood" value={loc.estate} onChange={(e) => setLoc({ ...loc, estate: e.target.value })} />
+              <input list={loc.country === "Kenya" ? "sp-counties" : undefined} placeholder="Region" value={loc.county} onChange={(e) => setLoc({ ...loc, county: e.target.value })} />
+              <input placeholder="Area" value={loc.sub} onChange={(e) => setLoc({ ...loc, sub: e.target.value })} />
+              <input placeholder="Neighborhood" value={loc.estate} onChange={(e) => setLoc({ ...loc, estate: e.target.value })} />
               <datalist id="sp-countries">{COUNTRIES.map((c) => <option key={c} value={c} />)}</datalist>
               <datalist id="sp-counties">{KENYA_COUNTIES.map((c) => <option key={c} value={c} />)}</datalist>
               {hasLoc ? <button type="button" className="sp-clear" onClick={() => setLoc(NO_LOC)}>Clear location</button> : null}

@@ -528,7 +528,8 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
           />
         ) : null}
         {profileFor ? <AuthorSheet post={profileFor} onClose={() => setProfileFor(null)} onLinkUp={setLinkFor} /> : null}
-        {linkFor ? <LinkUpSheet post={linkFor} onClose={() => setLinkFor(null)} /> : null}
+        {/* a confession has no card Link up, so one landing here came through AuthorSheet */}
+        {linkFor ? <LinkUpSheet post={linkFor} onClose={() => setLinkFor(null)} viaProfile={linkFor.kind === "confession"} /> : null}
         {reportFor ? (
           <ReportSheet
             post={reportFor}

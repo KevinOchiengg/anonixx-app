@@ -15,6 +15,8 @@ import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/res
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
+import { deviceCountry } from '../../utils/country';
+import { helplinesFor } from '../../config/helplines';
 
 const NavRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onPress, danger }) => (
   <TouchableOpacity style={row.wrap} onPress={onPress} activeOpacity={0.75} hitSlop={HIT_SLOP}>
@@ -319,9 +321,12 @@ export default function SettingsScreen({ navigation }) {
 
         {/* ── Crisis support ── */}
         <Section title="Need to talk to someone?">
-          <NavRow icon={HelpCircle} label="Befrienders Kenya · +254 722 178 177" onPress={() => openLink('tel:+254722178177')} />
-          <View style={sec.divider} />
-          <NavRow icon={HelpCircle} label="Kenya Red Cross · 1199 (free)" onPress={() => openLink('tel:1199')} />
+          {helplinesFor(deviceCountry()).map((h, i) => (
+            <React.Fragment key={h.href}>
+              {i > 0 && <View style={sec.divider} />}
+              <NavRow icon={HelpCircle} label={`${h.name} · ${h.label}`} onPress={() => openLink(h.href)} />
+            </React.Fragment>
+          ))}
         </Section>
 
         {/* ── Logout ── */}

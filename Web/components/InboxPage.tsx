@@ -164,7 +164,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
   async function resend(s: Sent) {
     setBusyIds([s.id], true);
     try {
-      await api("/unlock-requests", { body: { target_type: s.target_type, target_id: s.target_id, payment_method: "coins" } });
+      await api("/unlock-requests", { body: { target_type: s.target_type, target_id: s.target_id, payment_method: "coins", via_profile: true } });
       setNote("Request sent again.");
       await load();
     } catch (e) {

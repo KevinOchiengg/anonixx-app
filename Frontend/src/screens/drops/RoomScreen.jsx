@@ -198,6 +198,7 @@ export default function RoomScreen({ route, navigation }) {
   const font = CHAT_FONT_MAP[room.font_style] || CHAT_FONT_MAP[DEFAULT_CHAT_FONT];
   const post = p.post;
   const live = !!post?.live;
+  const isConfession = post?.kind === 'confession';   // no clock: open to link ups from here
   const left = live ? timeLeft(post.live_until) : null;
   const h = post?.hookup;
   const inc = p.incoming_request;
@@ -265,7 +266,7 @@ export default function RoomScreen({ route, navigation }) {
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[s.name, { fontFamily: font }]} numberOfLines={1}>{name}</Text>
-              <Text style={s.sub}>{own ? 'your Room' : live ? 'taking link ups tonight' : 'Room locked'}</Text>
+              <Text style={s.sub}>{own ? 'your Room' : isConfession ? 'open to link ups' : live ? 'taking link ups tonight' : 'Room locked'}</Text>
             </View>
             {[Phone, VideoIcon].map((Icon, i) => (
               <TouchableOpacity key={i} style={s.callBtn} onPress={locked} accessibilityLabel={i ? 'Video call, locked' : 'Voice call, locked'}>
@@ -284,7 +285,7 @@ export default function RoomScreen({ route, navigation }) {
             {post ? (
               <View style={[s.pin, !live && { opacity: 0.75, borderColor: T.border }]}>
                 <View style={s.chips}>
-                  <Text style={[s.chip, live && s.chipHot]}>{live ? (left ? `Tonight · ${left}` : 'Live') : 'Ended'}</Text>
+                  <Text style={[s.chip, live && !isConfession && s.chipHot]}>{isConfession ? 'Confession' : live ? (left ? `Tonight · ${left}` : 'Live') : 'Ended'}</Text>
                   {!!post.linkup_count && <Text style={s.chip}>{post.linkup_count} linked up</Text>}
                 </View>
                 {!!h && (

@@ -77,7 +77,7 @@ const PRIVACY = {
     },
     {
       heading: '5. Coins & Payments',
-      body: 'On Android, purchases are processed by Google Play. Elsewhere, payment is handled by Stripe, M-Pesa, or PayPal. We receive confirmation of payment but do not store full card or mobile money details on our servers.',
+      body: 'On Android, purchases are processed by Google Play. Elsewhere, cards are handled by Stripe and, in some countries, mobile money such as M-Pesa. We receive confirmation of payment but do not store full card or mobile money details on our servers.',
     },
     {
       heading: '6. Third-Party Services',

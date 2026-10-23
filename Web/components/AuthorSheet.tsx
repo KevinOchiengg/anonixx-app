@@ -46,7 +46,8 @@ export default function AuthorSheet({
 
   const name = p?.anonymous_name || post.anonymous_name || "Anonymous";
   const avatar = p?.avatar_url || post.avatar_url;
-  const canLinkUp = p ? !p.is_self && post.kind !== "confession" : false;
+  // Confessions have no Link up on the card; the profile is where you link up off one.
+  const canLinkUp = p ? !p.is_self : false;
   const gallery = (p?.gallery || []).filter((g) => g.media_url);
 
   return (

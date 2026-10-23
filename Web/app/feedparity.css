@@ -628,8 +628,8 @@
 .slide.has-media .cap-hook {
   display: block; margin-bottom: 3px; color: rgba(255, 255, 255, 0.88);
   font-family: var(--font-serif), Georgia, serif; font-style: italic; font-weight: 600;
-  font-size: 19.5px; line-height: 1.3; letter-spacing: -0.005em; font-variant-numeric: lining-nums;
+  font-size: 17.5px; line-height: 1.3; letter-spacing: -0.005em; font-variant-numeric: lining-nums;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.55);
 }
-/* no clear first sentence: the opening words in the serif, flowing into the rest */
-.slide.has-media .cap-hook.inline { display: inline; margin: 0; font-size: 17.5px; line-height: 1.2; }
+/* no clear first sentence: the opening words in the serif (same size), flowing into the rest */
+.slide.has-media .cap-hook.inline { display: inline; margin: 0; line-height: 1.2; }

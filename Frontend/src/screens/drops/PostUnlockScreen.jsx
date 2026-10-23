@@ -34,7 +34,9 @@ const MAX_CLUE_VIDEO_SECONDS = 30;
 export default function PostUnlockScreen({ route, navigation }) {
   // fromRoom: opened from RoomScreen's Link up — a sent request goes back to
   // the Room (which shows "Link up sent") instead of resetting to the feed.
-  const { post, linkupTarget, fromRoom } = route.params ?? {};
+  // viaProfile: opened from the poster's profile sheet. Either one is a profile
+  // link up, the only kind a regular confession accepts.
+  const { post, linkupTarget, fromRoom, viaProfile } = route.params ?? {};
   const dispatch = useDispatch();
   const { showToast } = useToast();
   const coinBalance = useSelector((state) => state.coins.balance);
@@ -122,6 +124,7 @@ export default function PostUnlockScreen({ route, navigation }) {
       const token = await AsyncStorage.getItem('token');
 
       const body = { target_type: targetType, target_id: targetId, payment_method: 'coins' };
+      if (fromRoom || viaProfile) body.via_profile = true;
       if (pitch.trim()) body.pitch = pitch.trim();
       if (intents.length) body.intents = intents;
       if (mediaUri && mediaType) {

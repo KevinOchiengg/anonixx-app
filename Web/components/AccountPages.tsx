@@ -213,9 +213,9 @@ export const BlockedPage = () => (
 const SCOPES: [string, string, string][] = [
   ["off", "Everyone", "No location filter"],
   ["country", "Country", "Same country as you"],
-  ["county", "Region", "Same county or state"],
-  ["sub_county", "Area", "Same sub-county or district"],
-  ["estate", "Neighborhood", "Same estate. Closest match"],
+  ["county", "Region", "Same region"],
+  ["sub_county", "Area", "Same area"],
+  ["estate", "Neighborhood", "Same neighborhood. Closest it gets."],
 ];
 type MeLoc = {
   location_country?: string | null; location_county?: string | null;
@@ -302,10 +302,10 @@ function LocationInner() {
         <input type="checkbox" checked={localFirst} onChange={(e) => toggleLocal(e.target.checked)} />
       </label>
       <p className="muted small">Tell us where home is and we&apos;ll lean your feed toward people nearby. Posts with no location still show.{detected && !f.country.trim() ? ` Right now we think you're in ${detected}; set a country below to change that.` : ""}</p>
-      <label className="field">Country<input value={f.country} onChange={set("country")} placeholder="Kenya" /></label>
-      <label className="field">County or region<input value={f.county} onChange={set("county")} placeholder="Nairobi" /></label>
-      <label className="field">Sub-county or area<input value={f.sub} onChange={set("sub")} placeholder="Westlands" /></label>
-      <label className="field">Estate or neighborhood<input value={f.estate} onChange={set("estate")} placeholder="Kileleshwa" /></label>
+      <label className="field">Country<input value={f.country} onChange={set("country")} placeholder="Where's home" /></label>
+      <label className="field">Region<input value={f.county} onChange={set("county")} placeholder="e.g. your state or county" /></label>
+      <label className="field">Area<input value={f.sub} onChange={set("sub")} placeholder="e.g. Downtown" /></label>
+      <label className="field">Neighborhood<input value={f.estate} onChange={set("estate")} placeholder="Close enough to matter" /></label>
       <div className="acct-scope" role="radiogroup" aria-label="Feed scope">
         {SCOPES.map(([id, label, sub]) => (
           <button type="button" key={id} role="radio" aria-checked={scope === id} className={scope === id ? "on" : ""} disabled={!has(id)} onClick={() => setScope(id)}>

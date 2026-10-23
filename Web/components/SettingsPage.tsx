@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, viewerCountry } from "@/lib/api";
+import { helplinesFor, FIND_A_HELPLINE } from "@/lib/helplines";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@/lib/push";
@@ -10,6 +11,9 @@ import { disablePush, enablePush, pushEnabled, pushSupported } from "@/lib/push"
 
 function Inner() {
   const { user, logout, refresh } = useAuth();
+  // Read after mount: the country cookie isn't available during server render.
+  const [helplines, setHelplines] = useState([FIND_A_HELPLINE]);
+  useEffect(() => setHelplines(helplinesFor(viewerCountry())), []);
   const router = useRouter();
   const [name, setName] = useState(user?.anonymous_name || "");
   const [note, setNote] = useState("");
@@ -142,7 +146,12 @@ function Inner() {
       ) : null}
 
       <h2 className="sec">Need to talk to someone?</h2>
-      <p className="muted small">If you are in crisis or thinking of hurting yourself, you are not alone. In Kenya, call Befrienders Kenya on <a href="tel:+254722178177">+254 722 178 177</a> or the Kenya Red Cross free line on <a href="tel:1199">1199</a>. In an emergency, call 999 or 112.</p>
+      <p className="muted small">If you&apos;re thinking of hurting yourself, you&apos;re not alone. Talk to someone tonight. In an emergency, call your local emergency number.</p>
+      <ul className="rows links">
+        {helplines.map((h) => (
+          <li key={h.href}><a href={h.href} className="row-item" {...(h.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}><span className="grow"><b>{h.name}</b> <span className="muted">{h.label}</span></span>›</a></li>
+        ))}
+      </ul>
 
       <h2 className="sec">Legal</h2>
       <ul className="rows links">

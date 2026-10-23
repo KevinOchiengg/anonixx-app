@@ -41,7 +41,6 @@ MAX_TEXT_LEN = 500
 SENDER_DAILY_LIMIT = 5
 RECIPIENT_DAILY_LIMIT = 3
 REQUEST_TTL = timedelta(days=7)
-DEFAULT_COUNTRY_CODE = "254"   # Kenya — local 07xx / 01xx numbers get this prefix
 
 
 def _now() -> datetime:
@@ -57,14 +56,18 @@ def _configured() -> bool:
 
 
 def normalize_phone(raw: str) -> Optional[str]:
-    """Return digits-only E.164 (no '+'), or None if it can't be a real number."""
+    """Return digits-only E.164 (no '+'), or None if it can't be a real number.
+
+    The country code is required (leading '+' or '00'). Guessing one would route
+    a local number to a stranger in another country.
+    """
     digits = re.sub(r"[^\d+]", "", raw or "")
     if digits.startswith("+"):
         digits = digits[1:]
     elif digits.startswith("00"):
         digits = digits[2:]
-    elif digits.startswith("0"):
-        digits = DEFAULT_COUNTRY_CODE + digits[1:]
+    else:
+        return None
     if not digits.isdigit() or not (8 <= len(digits) <= 15):
         return None
     return digits
@@ -145,7 +148,7 @@ async def send_anonymous_message(
     phone = normalize_phone(data.phone)
     if not phone:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            detail="Enter a valid WhatsApp number with country code.")
+                            detail="Add their country code, starting with +.")
 
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"is_active": 1})
     if not user or user.get("is_active") is False:
