@@ -145,7 +145,7 @@ const PendingUnlockStories = React.memo(({ requests, onOpenRequest, onOpenAll })
             <Text style={styles.storyAllBadgeText}>{requests.length > 99 ? '99+' : requests.length}</Text>
           </View>
         </View>
-        <Text style={styles.storyName}>All</Text>
+        <Text style={styles.storyName}>Knocking</Text>
       </TouchableOpacity>
       {requests.map((r) => (
         <PendingUnlockStory key={r.id} request={r} onPress={onOpenRequest} />
@@ -284,7 +284,7 @@ const AnonixxDemoCard = React.memo(({ onPress }) => (
         </Text>
       </View>
       <View style={styles.chatBottomRow}>
-        <Text style={styles.chatPreview} numberOfLines={1}>see what a real chat room looks like</Text>
+        <Text style={styles.chatPreview} numberOfLines={1}>see what a Room looks like inside</Text>
       </View>
     </View>
   </TouchableOpacity>
@@ -437,7 +437,10 @@ export default function MessagesScreen({ navigation }) {
   }, []);
 
   // ── Story avatar tap → mini profile sheet, not an instant accept ──
-  const handleOpenRequestDetail = useCallback((request) => setDetailRequest(request), []);
+  const handleOpenRequestDetail = useCallback((request) => {
+    if (request.requester_id) navigation.navigate('Room', { userId: request.requester_id });
+    else setDetailRequest(request);
+  }, [navigation]);
   const closeDetail = useCallback(() => setDetailRequest(null), []);
   const handleOpenAllRequests = useCallback(
     () => navigation.navigate('UnlockRequestsScreen'),
@@ -531,7 +534,7 @@ export default function MessagesScreen({ navigation }) {
           <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.iconBtn} hitSlop={HIT_SLOP}>
             <Menu size={rs(22)} color={T.text} strokeWidth={2} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>messages</Text>
+          <Text style={styles.headerTitle}>rooms</Text>
           {totalUnread > 0 && (
             <View style={styles.headerBadge}>
               <Text style={styles.headerBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
@@ -618,7 +621,7 @@ export default function MessagesScreen({ navigation }) {
       ) : filteredItems.length === 0 ? (
         search.trim().length > 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.noResultsText}>No chats match "{search.trim()}"</Text>
+            <Text style={styles.noResultsText}>No Rooms match "{search.trim()}"</Text>
           </View>
         ) : filter === 'unread' ? (
           <View style={styles.centered}>

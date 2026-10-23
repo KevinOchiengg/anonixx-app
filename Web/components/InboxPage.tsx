@@ -198,7 +198,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
     return (
       <div>
         <div className="u-segs">
-          <button className="u-seg" onClick={() => setView("chats")}>← Messages</button>
+          <button className="u-seg" onClick={() => setView("chats")}>← Rooms</button>
         </div>
         {banner}
         {reqs === null ? (
@@ -251,7 +251,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
     return (
       <div>
         <div className="u-segs">
-          <button className="u-seg" onClick={() => setView("chats")}>← Messages</button>
+          <button className="u-seg" onClick={() => setView("chats")}>← Rooms</button>
         </div>
         {banner}
         {sent === null ? (
@@ -302,7 +302,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
               <InboxIcon size={20} />
               <i>{reqs.length > 99 ? "99+" : reqs.length}</i>
             </span>
-            <small>All</small>
+            <small>Knocking</small>
           </button>
           {reqs.map((r) => {
             const clue = r.media_url ? (r.media_type === "video" ? poster(r.media_url) : r.media_url) : null;
@@ -333,7 +333,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
         <p className="muted center">Loading…</p>
       ) : shown.length === 0 ? (
         <div className="u-empty">
-          {q ? `No chats match “${search.trim()}”` : filter === "unread" ? "You're all caught up." : "No chats yet. Link up with someone from the feed and it shows up here."}
+          {q ? `No Rooms match “${search.trim()}”` : filter === "unread" ? "You're all caught up." : "No Rooms yet. Link up with someone tonight and their door opens here."}
         </div>
       ) : (
         <ul className="u-cards">
@@ -416,7 +416,7 @@ export default function InboxPage() {
     ) : null;
 
   return (
-    <AppShell title={view === "requests" ? "Requests" : view === "sent" ? "Sent" : "messages"} right={right}>
+    <AppShell title={view === "requests" ? "Requests" : view === "sent" ? "Sent" : "rooms"} right={right}>
       {searchOpen && view === "chats" ? (
         <div className="u-search">
           <label>

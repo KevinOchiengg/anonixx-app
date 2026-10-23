@@ -2,13 +2,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Chats, Flame, Person, Plus, Requests } from "./icons";
+import { Door, Flame, Person, Plus, Requests } from "./icons";
 
 type Tab = { href: string; label: string; Icon: (p: { filled?: boolean }) => React.ReactElement; match: (p: string, q: string) => boolean };
 
 const TABS: (Tab | "create")[] = [
   { href: "/", label: "Desires", Icon: Flame, match: (p: string) => p === "/" || p.startsWith("/drop/") },
-  { href: "/inbox", label: "Chats", Icon: Chats, match: (p: string, q: string) => (p.startsWith("/inbox") && !q.includes("tab=requests")) || p.startsWith("/chat") },
+  { href: "/inbox", label: "Rooms", Icon: Door, match: (p: string, q: string) => (p.startsWith("/inbox") && !q.includes("tab=requests")) || p.startsWith("/chat") },
   "create",
   { href: "/inbox?tab=requests", label: "Requests", Icon: Requests, match: (p: string, q: string) => p.startsWith("/inbox") && q.includes("tab=requests") },
   { href: "/profile", label: "You", Icon: Person, match: (p: string) => p.startsWith("/settings") || p.startsWith("/profile") },

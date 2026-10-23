@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import {
+  DoorOpen,
   Home,
-  MessageCircle,
   Plus,
   UserCheck,
   User,
@@ -59,7 +59,7 @@ const TabBarIcon = ({ route, focused, badgeCount }) => {
   const icons = {
     Feed:     Home,
     Requests: UserCheck,
-    Messages: MessageCircle,
+    Messages: DoorOpen,
     Profile:  User,
   };
   const IconComponent = icons[route.name];
@@ -182,7 +182,7 @@ export default function TabNavigator() {
       <Tab.Screen
         name="Messages"
         component={MessagesStack}
-        options={{ tabBarLabel: 'Chats' }}
+        options={{ tabBarLabel: 'Rooms' }}
       />
       <Tab.Screen
         name="Create"
