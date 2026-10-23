@@ -1863,11 +1863,11 @@ const ss = StyleSheet.create({
   // Admin captions (option D): a calm warm-white body under a serif-italic hook —
   // same type as the website's feed (Web/app/feedparity.css).
   contentText: {
-    fontSize: 15.5, lineHeight: 22, color: '#F6E6EC', marginBottom: 10,
+    fontSize: 15.5, lineHeight: 22, color: 'rgba(246,230,236,0.78)', marginBottom: 10,
     textShadowColor: 'rgba(0,0,0,0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   captionHook: {
-    fontFamily: 'Fraunces-SemiBoldItalic', fontSize: 19.5, lineHeight: 25, color: '#fff', letterSpacing: -0.1,
+    fontFamily: 'Fraunces-SemiBoldItalic', fontSize: 19.5, lineHeight: 25, color: 'rgba(255,255,255,0.88)', letterSpacing: -0.1,
     textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
   },
   moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
@@ -1914,7 +1914,7 @@ const as = StyleSheet.create({
   timeAgo: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
   contentWrap: { marginBottom: 28 },
   contentText: {
-    fontSize: 15.5, lineHeight: 22, color: '#F6E6EC',
+    fontSize: 15.5, lineHeight: 22, color: 'rgba(246,230,236,0.78)',
     textShadowColor: 'rgba(0,0,0,0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
