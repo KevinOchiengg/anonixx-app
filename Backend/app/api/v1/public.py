@@ -85,7 +85,8 @@ async def public_sitemap(page: int = Query(0, ge=0), db = Depends(get_database))
         "total": total,
         "pages": max(1, -(-total // SITEMAP_PAGE_SIZE)),
         "items": [
-            {"id": str(r["_id"]), "lastmod": r["created_at"].isoformat()}
+            # Mongo hands back naive UTC datetimes; sitemaps need the zone spelled out.
+            {"id": str(r["_id"]), "lastmod": r["created_at"].replace(tzinfo=timezone.utc).isoformat()}
             for r in rows if r.get("created_at")
         ],
     }

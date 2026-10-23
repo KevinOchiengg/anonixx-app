@@ -26,7 +26,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const item of page.items) {
       entries.push({
         url: `${SITE_URL}/drop/${item.id}`,
-        lastModified: item.lastmod,
+        // Sitemaps need a time zone on every date; older backends send naive UTC strings.
+        lastModified: new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(item.lastmod) ? item.lastmod : `${item.lastmod}Z`),
         changeFrequency: "weekly",
         priority: 0.6,
       });
