@@ -8,7 +8,9 @@ const MAX_PAGES = 10; // 10 × 5000 = 50,000 URLs, the sitemap protocol limit
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "hourly", priority: 1 },
-    { url: `${SITE_URL}/join`, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${SITE_URL}/join`, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.2 },
+    { url: `${SITE_URL}/privacy`, changeFrequency: "yearly", priority: 0.2 },
   ];
 
   const first = await fetchSitemap(0);

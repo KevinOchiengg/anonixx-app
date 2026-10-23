@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Legal, type LegalDoc } from "@/components/Legal";
 
-export const metadata: Metadata = { title: "Terms of Service" };
+export const metadata: Metadata = { title: "Terms of Service", alternates: { canonical: "/terms" } };
 
 const doc: LegalDoc = {
   title: "Terms of Service",
