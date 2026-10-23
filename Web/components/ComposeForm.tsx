@@ -251,7 +251,7 @@ function Inner() {
         </button>
         <button type="button" className="kind-card" onClick={() => setKind("confession")}>
           <strong>Regular confession</strong>
-          <span>Something you could never say out loud. Anyone can read it. No link-ups.</span>
+          <span>Something you could never say out loud. Free to post, anyone can read it, no Link up on it.</span>
         </button>
       </div>
     );
@@ -329,13 +329,6 @@ function Inner() {
       <div className="cx-top">
         <button type="button" className="cx-switch" onClick={() => setKind(null)}>Confession · change</button>
       </div>
-      <div className="cx-cost">
-        <span>{COST.post} coins to send</span>
-        <span className={short ? "low" : ""}>
-          Balance: {user?.coin_balance ?? 0}
-          {short ? <Link href="/coins"> Top up</Link> : null}
-        </span>
-      </div>
 
       {unsent ? (
         <div className="unsent">
@@ -395,7 +388,7 @@ function Inner() {
       ) : null}
       {error ? <div className="err">{error}</div> : null}
 
-      <button className="cx-drop" disabled={busy || !confessionOk}>{busy ? (upState?.status === "uploading" ? `Finishing upload… ${upState.pct}%` : "Posting…") : `Drop it — ${COST.post} coins  ↗`}</button>
+      <button className="cx-drop" disabled={busy || !confessionOk}>{busy ? (upState?.status === "uploading" ? `Finishing upload… ${upState.pct}%` : "Posting…") : "Drop it  ↗"}</button>
       <p className="cx-foot">Your identity stays hidden. Always. Don&apos;t share phone numbers, handles or links.</p>
 
       {sheet === "mood" ? (

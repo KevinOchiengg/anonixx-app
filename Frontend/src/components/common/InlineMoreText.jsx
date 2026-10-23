@@ -19,8 +19,8 @@ import { splitHook } from '../../utils/captionHook';
 const SUFFIX_ROOM = 8;   // characters given up for "… more" (bold, so a little wider than it reads)
 const STEP = 6;          // further trim per re-check
 const HOOK_MAX_LINES = 2;
-// No clear first sentence: the opening words in the serif, a touch smaller, sharing the line.
-const INLINE_HOOK = { fontSize: 17.5, lineHeight: 22 };
+// No clear first sentence: the opening words in the serif (same size), sharing the line.
+const INLINE_HOOK = { lineHeight: 22 };
 
 const tidy = (s) => s.replace(/[\s.,;:!?-]+$/, '');
 

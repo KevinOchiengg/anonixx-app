@@ -391,7 +391,7 @@ export default function PremiumScreen({ navigation }) {
         <Text style={styles.disclaimer}>
           {USE_PLAY_BILLING
             ? 'Renews monthly until cancelled. Manage or cancel anytime in Google Play > Payments & subscriptions > Subscriptions.'
-            : 'Cancel anytime. Subscription will auto-renew.'}
+            : 'One payment. 30 days. No auto-renew.'}
         </Text>
       </ScrollView>
     </SafeAreaView>

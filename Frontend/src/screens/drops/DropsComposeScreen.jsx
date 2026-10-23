@@ -96,7 +96,8 @@ const whenLabel = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 's
 const DRAFT_KEY = 'anonixx.drops.draft.v1';
 const TOOLBAR_HINT_KEY = 'anonixx.drops.toolbarHint.seen';
 
-// Must match DROP_POST_COST in Backend/app/api/v1/drops.py
+// Must match DROP_POST_COST in Backend/app/api/v1/drops.py — hookups only,
+// regular confessions post free.
 const POST_COST = 3;
 
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
@@ -288,7 +289,7 @@ function KindChooser({ onPick, onBack }) {
         </TouchableOpacity>
         <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('confession')}>
           <Text style={s.kindCardTitle}>Regular confession</Text>
-          <Text style={s.kindCardSub}>The thing you can't say out loud. Read, felt, never linked up.</Text>
+          <Text style={s.kindCardSub}>The thing you can't say out loud. Free to post, read and felt, no Link up on it.</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -927,7 +928,9 @@ export default function DropsComposeScreen({ navigation, route }) {
 
         {/* Cost — shown up front, not just on the send button, so nobody
             writes a whole confession before discovering they can't afford
-            to send it (that used to only surface as a 402 error on tap). */}
+            to send it (that used to only surface as a 402 error on tap).
+            Regular confessions are free, so only hookups get the strip. */}
+        {kind === 'hookup' && (
         <View style={s.costStrip}>
           <Text style={s.costStripText}>{POST_COST} coins to send</Text>
           <View style={s.costStripRight}>
@@ -941,6 +944,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             )}
           </View>
         </View>
+        )}
 
         <ScrollView
           style={{ flex: 1 }}
@@ -1224,7 +1228,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             {loading ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={s.dropBtnText}>Drop it — {POST_COST} coins  ↗</Text>
+              <Text style={s.dropBtnText}>{kind === 'hookup' ? `Drop it — ${POST_COST} coins  ↗` : 'Drop it  ↗'}</Text>
             )}
           </TouchableOpacity>
 

@@ -151,7 +151,7 @@ export default function AnonProfileSheet({
     if (!post && !linkupTarget) return;
     closeSheet();
     setTimeout(() => {
-      navigation?.navigate('PostUnlock', post ? { post } : { linkupTarget });
+      navigation?.navigate('PostUnlock', post ? { post, viaProfile: true } : { linkupTarget, viaProfile: true });
     }, 300);
   }, [post, linkupTarget, closeSheet, navigation]);
 

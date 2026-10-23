@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { normalizeKePhone } from "@/lib/phone";
 import AppShell from "./AppShell";
 import "@/app/money.css";
 
@@ -29,8 +28,9 @@ function Inner() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const num = normalizeKePhone(phone);
-    if (num.length < 12) { setError("Enter a valid phone number."); return; }
+    const num = phone.trim();
+    if (!/^(\+|00)/.test(num)) { setError("Add their country code, starting with +."); return; }
+    if (num.replace(/\D/g, "").length < 8) { setError("Enter a valid phone number."); return; }
     setBusy(true); setError(""); setOk(""); setNeedCoins(false);
     try {
       await api("/whatsapp/send", { body: { phone: num, text: text.trim() } });
@@ -48,8 +48,8 @@ function Inner() {
     <div className="pad">
       <form className="form" onSubmit={submit}>
         <p className="muted small">Send an anonymous message to someone&apos;s WhatsApp. They approve before they read it and never see who you are. 3 coins, free for premium.</p>
-        <label className="field">Their number
-          <input inputMode="tel" required placeholder="07XX XXX XXX" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <label className="field">Their number, with country code
+          <input inputMode="tel" required placeholder="+1 555 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </label>
         <label className="field">Message
           <textarea maxLength={500} required value={text} onChange={(e) => setText(e.target.value)} placeholder="Say what you could never say to their face" />

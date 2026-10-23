@@ -25,12 +25,14 @@ function videoSeconds(url: string): Promise<number> {
 }
 
 export default function LinkUpSheet({
-  post, onClose, onDone,
+  post, onClose, onDone, viaProfile,
 }: {
   post: Pick<Post, "id" | "anonymous_name" | "avatar_url" | "content">;
   onClose: () => void;
   /** When set (the Room), a sent link up closes the sheet and hands back instead of showing the sent screen. */
   onDone?: () => void;
+  /** Sent from the poster's Room or profile, the only way to link up on a regular confession. */
+  viaProfile?: boolean;
 }) {
   const { user, refresh } = useAuth();
   const router = useRouter();
@@ -78,6 +80,7 @@ export default function LinkUpSheet({
     setError("");
     try {
       const body: Record<string, unknown> = { target_type: "drop", target_id: post.id, payment_method: "coins" };
+      if (viaProfile) body.via_profile = true;
       if (pitch.trim()) body.pitch = pitch.trim();
       if (intents.length) body.intents = intents;
       if (clue) {

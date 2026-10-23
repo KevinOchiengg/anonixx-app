@@ -52,6 +52,10 @@ export default function WhatsAppSendScreen({ navigation, route }) {
       showToast({ type: 'warning', message: "Enter their WhatsApp number." });
       return;
     }
+    if (!/^(\+|00)/.test(phone.trim())) {
+      showToast({ type: 'warning', message: 'Add their country code, starting with +.' });
+      return;
+    }
     setSending(true);
     try {
       const { ok, data } = await apiFetch('/whatsapp/send', {
@@ -95,11 +99,11 @@ export default function WhatsAppSendScreen({ navigation, route }) {
             </Text>
           </View>
 
-          <Text style={s.label}>Their WhatsApp number</Text>
+          <Text style={s.label}>Their WhatsApp number, with country code</Text>
           <TextInput
             value={phone}
             onChangeText={setPhone}
-            placeholder="+254 712 345 678"
+            placeholder="+ country code and number"
             placeholderTextColor={T.textMuted}
             keyboardType="phone-pad"
             style={s.input}

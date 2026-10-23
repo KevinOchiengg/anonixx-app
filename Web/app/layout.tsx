@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   description:
     "Read anonymous confessions people could never say out loud. Drop yours, stay hidden, and link up only if you both want to.",
   applicationName: "Anonixx",
-  openGraph: { siteName: "Anonixx", type: "website", locale: "en_KE" },
+  openGraph: { siteName: "Anonixx", type: "website", locale: "en_US" },
   twitter: { card: "summary_large_image" },
   robots: { index: true, follow: true },
 };

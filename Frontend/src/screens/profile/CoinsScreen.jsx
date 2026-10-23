@@ -81,7 +81,7 @@ const TransactionRow = React.memo(({ item }) => {
 
   const dateStr = useMemo(() => {
     try {
-      return new Date(item.created_at).toLocaleDateString('en-KE', {
+      return new Date(item.created_at).toLocaleDateString(undefined, {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
       });
     } catch {

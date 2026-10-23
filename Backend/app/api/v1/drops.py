@@ -882,7 +882,9 @@ async def create_drop(
     # drop never takes someone's balance. Mirrored in posts.py's create_post;
     # charging only one route would leave the other a free bypass.
     # Admin drops are official filler content, not paid for by the admin.
-    if not is_admin_drop and not await is_premium_user_id(current_user_id, db):
+    # Regular confessions are free to post; only hookup (and untyped) drops pay.
+    post_cost = 0 if is_admin_drop or kind == "confession" else DROP_POST_COST
+    if post_cost and not await is_premium_user_id(current_user_id, db):
         try:
             await debit_coins(
                 db=db, user_id=current_user_id, amount=DROP_POST_COST,
@@ -967,7 +969,7 @@ async def create_drop(
         "time_left": None,
         "is_night_mode": night,
         "price": price,
-        "coins_spent": 0 if is_admin_drop else DROP_POST_COST,
+        "coins_spent": post_cost,
         "message": "Your card is live. Share it anywhere. 🔥",
     }
 
@@ -2736,11 +2738,14 @@ async def _complete_unlock(
     # field already set and doesn't extend the window, so the drop can't be
     # kept alive indefinitely by a trickle of unlocks. (None also matches a
     # missing field, so drops predating this field behave the same.)
-    grace_days = await grace_days_for(drop["sender_id"], db)
-    await db["drops"].update_one(
-        {"_id": ObjectId(drop_id), "expires_at": None},
-        {"$set": {"expires_at": now_utc() + timedelta(days=grace_days)}},
-    )
+    # Regular confessions never start it: they're only reached through a
+    # profile link up, and that shouldn't delete the confession itself.
+    if drop.get("kind") != "confession":
+        grace_days = await grace_days_for(drop["sender_id"], db)
+        await db["drops"].update_one(
+            {"_id": ObjectId(drop_id), "expires_at": None},
+            {"$set": {"expires_at": now_utc() + timedelta(days=grace_days)}},
+        )
 
     await update_vibe_score(drop["sender_id"], "card_unlocked", db)
 

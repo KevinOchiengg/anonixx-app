@@ -1867,7 +1867,7 @@ const ss = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   captionHook: {
-    fontFamily: 'Fraunces-SemiBoldItalic', fontSize: 19.5, lineHeight: 25, color: 'rgba(255,255,255,0.88)', letterSpacing: -0.1,
+    fontFamily: 'Fraunces-SemiBoldItalic', fontSize: 17.5, lineHeight: 23, color: 'rgba(255,255,255,0.88)', letterSpacing: -0.1,
     textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
   },
   moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption

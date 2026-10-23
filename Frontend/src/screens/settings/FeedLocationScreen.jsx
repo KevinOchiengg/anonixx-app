@@ -28,9 +28,9 @@ import T from '../../utils/theme';
 const SCOPE_OPTIONS = [
   { id: 'off',        label: 'Everyone',      sub: 'No location filter' },
   { id: 'country',    label: 'Country',       sub: 'Same country as you' },
-  { id: 'county',     label: 'Region',        sub: 'Same county / state' },
-  { id: 'sub_county', label: 'Area',          sub: 'Same sub-county / district' },
-  { id: 'estate',     label: 'Neighborhood',  sub: 'Same estate — closest match' },
+  { id: 'county',     label: 'Region',        sub: 'Same region' },
+  { id: 'sub_county', label: 'Area',          sub: 'Same area' },
+  { id: 'estate',     label: 'Neighborhood',  sub: 'Same neighborhood. Closest it gets.' },
 ];
 
 export default function FeedLocationScreen({ navigation }) {

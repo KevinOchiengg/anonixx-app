@@ -75,6 +75,9 @@ class CreateUnlockRequestBody(BaseModel):
     media_duration: Optional[float] = None  # seconds, video only
     pitch: Optional[str] = None             # one line the poster reads before accepting
     intents: Optional[List[str]] = None     # from INTENT_CHIPS
+    # Sent from the poster's profile/Room rather than the post itself — the only
+    # way to link up on a regular confession, which has no Link up button.
+    via_profile: bool = False
 
 
 class AcceptAllBody(BaseModel):
@@ -243,8 +246,8 @@ async def create_unlock_request(
         raise HTTPException(status_code=400, detail="Cannot unlock your own confession.")
     if doc.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
-    if doc.get("kind") == "confession":
-        raise HTTPException(status_code=400, detail="This is a regular confession. It can't be linked up.")
+    if doc.get("kind") == "confession" and not data.via_profile:
+        raise HTTPException(status_code=400, detail="This is a regular confession. Link up from their profile instead.")
     # None = never expires (un-unlocked drop, or a plain feed post).
     if target_expires_at is not None and target_expires_at < now_utc():
         raise HTTPException(status_code=400, detail="This confession has expired.")
@@ -372,11 +375,12 @@ async def _complete_free(target_id: str, requester_id: str, doc: dict, db) -> st
         "created_at": now_utc(),
     })
     await db["drops"].update_one({"_id": ObjectId(target_id)}, {"$inc": {"unlock_count": 1}})
-    grace_days = await grace_days_for(doc["sender_id"], db)
-    await db["drops"].update_one(
-        {"_id": ObjectId(target_id), "expires_at": None},
-        {"$set": {"expires_at": now_utc() + timedelta(days=grace_days)}},
-    )
+    if doc.get("kind") != "confession":   # see _complete_unlock — confessions don't expire on link up
+        grace_days = await grace_days_for(doc["sender_id"], db)
+        await db["drops"].update_one(
+            {"_id": ObjectId(target_id), "expires_at": None},
+            {"$set": {"expires_at": now_utc() + timedelta(days=grace_days)}},
+        )
     return await _create_connection_for_target("drop", target_id, doc, requester_id, db)
 
 

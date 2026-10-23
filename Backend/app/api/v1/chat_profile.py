@@ -305,21 +305,29 @@ async def get_room_preview(
     profile = _sanitize(await db["chat_profiles"].find_one({"user_id": user_id}) or {}, user)
     now = _now()
 
-    # The pinned post: the one they tapped through from, else their latest live hookup.
+    # The pinned post: the one they tapped through from, else their latest live
+    # hookup, else their latest regular confession. A confession has no Link up
+    # button of its own, so the Room is where you link up off one.
     post_doc = None
+    real = {"sender_id": user_id, "is_active": True, "is_admin_drop": {"$ne": True}}
     if drop_id and ObjectId.is_valid(drop_id):
-        post_doc = await db["drops"].find_one({"_id": ObjectId(drop_id), "sender_id": user_id, "kind": "hookup"})
+        post_doc = await db["drops"].find_one({
+            "_id": ObjectId(drop_id), "sender_id": user_id, "kind": {"$in": ["hookup", "confession"]},
+        })
     if not post_doc:
         post_doc = await db["drops"].find_one(
-            {"sender_id": user_id, "kind": "hookup", "is_active": True, "live_until": {"$gt": now}},
+            {**real, "kind": "hookup", "live_until": {"$gt": now}},
             sort=[("created_at", -1)],
         )
+    if not post_doc:
+        post_doc = await db["drops"].find_one({**real, "kind": "confession"}, sort=[("created_at", -1)])
     post = None
     if post_doc:
         pid = str(post_doc["_id"])
         live_until = _aware(post_doc["live_until"]) if post_doc.get("live_until") else None
         post = {
             "id":           pid,
+            "kind":         post_doc.get("kind"),
             "content":      post_doc.get("confession") or "",
             "hookup":       post_doc.get("hookup"),
             "live_until":   live_until.isoformat() if live_until else None,

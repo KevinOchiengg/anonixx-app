@@ -15,7 +15,7 @@ type Hookup = { age: number; gender: string | null; area: string; looking_for: s
 type Preview = {
   user_id: string;
   room: { background_pattern: string; font_style: string; profile_picture_url: string | null; anonymous_name: string; gallery: GalleryItem[] };
-  post: { id: string; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
+  post: { id: string; kind: "hookup" | "confession" | null; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
   connection_id: string | null;
   my_request: { id: string; status: string } | null;
   incoming_request: { id: string; pitch: string | null; intents: string[]; media_url: string | null; media_type: string | null } | null;
@@ -120,6 +120,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   const post = p.post;
   const left = post?.live ? timeLeft(post.live_until) : null;
   const live = !!post?.live;
+  const isConfession = post?.kind === "confession";   // no clock: open to link ups from here
   const inc = p.incoming_request;
   const locked = () => setToast(own ? "This is your Room as others see it." : "Calls open once you link up.");
   const h = post?.hookup;
@@ -177,7 +178,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
           </span>
           <span className="u-head-t">
             <b>{name}</b>
-            <small className="room-sub">{own ? "your Room" : live ? "taking link ups tonight" : "Room locked"}</small>
+            <small className="room-sub">{own ? "your Room" : isConfession ? "open to link ups" : live ? "taking link ups tonight" : "Room locked"}</small>
           </span>
           <button className="call-btn room-locked" onClick={locked} aria-label="Voice call, locked">
             <svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
@@ -192,7 +193,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
         {post ? (
           <div className={`room-pin${live ? "" : " ended"}`}>
             <div className="room-pin-top">
-              <span className={`room-chip${live ? " hot" : ""}`}>{live ? (left ? `Tonight · ${left}` : "Live") : "Ended"}</span>
+              <span className={`room-chip${live && !isConfession ? " hot" : ""}`}>{isConfession ? "Confession" : live ? (left ? `Tonight · ${left}` : "Live") : "Ended"}</span>
               {post.linkup_count ? <span className="room-chip">{post.linkup_count} linked up</span> : null}
             </div>
             {h ? (
@@ -249,6 +250,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
           post={{ id: post.id, anonymous_name: name, avatar_url: pic, content: post.content }}
           onClose={() => setSheet(false)}
           onDone={load}
+          viaProfile
         />
       ) : null}
     </>
