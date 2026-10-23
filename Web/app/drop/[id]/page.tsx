@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Feed from "@/components/Feed";
 import RestrictedDrop from "@/components/RestrictedDrop";
-import { fetchPublicDrop, fetchPublicFeed, SITE_URL, teaser } from "@/lib/api";
+import { fetchPublicDrop, isThinDrop, SITE_URL, teaser } from "@/lib/api";
 
 export const revalidate = 300;
 
@@ -19,22 +19,25 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
   const { post } = drop;
   const description = teaser(post.content) || "An anonymous confession on Anonixx.";
-  const image = post.card_image_url || post.image_url || post.images?.[0] || undefined;
-  const title = `“${teaser(post.content, 60)}”`;
+  const image = post.card_image_url || post.cover_url || post.image_url || post.images?.[0] || `${SITE_URL}/og/drop/${id}`;
+  const quote = teaser(post.content, 60);
+  const title = quote ? `“${quote}”` : "An anonymous confession";
 
   return {
     title,
     description,
     alternates: { canonical: `${SITE_URL}/drop/${id}` },
+    // Short drops nobody has reacted to are thin pages: keep them out of the index, keep links followed.
+    ...(isThinDrop(post) ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       type: "article",
       title: "Someone confessed something on Anonixx",
       description,
       url: `${SITE_URL}/drop/${id}`,
       publishedTime: post.created_at,
-      images: image ? [{ url: image }] : undefined,
+      images: [{ url: image }],
     },
-    twitter: { card: image ? "summary_large_image" : "summary", title, description, images: image ? [image] : undefined },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
 
@@ -46,8 +49,7 @@ export default async function DropPage({ params }: Params) {
   if (drop.restricted) return <RestrictedDrop id={id} />;
 
   const { post } = drop;
-  const rest = await fetchPublicFeed();
-  const following = (rest?.posts ?? []).filter((p) => p.id !== post.id);
+  const org = { "@type": "Organization", name: "Anonixx", url: SITE_URL, logo: `${SITE_URL}/icon.png` };
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -56,19 +58,37 @@ export default async function DropPage({ params }: Params) {
     articleBody: post.content,
     datePublished: post.created_at,
     url: `${SITE_URL}/drop/${post.id}`,
-    author: { "@type": "Person", name: post.anonymous_name || "Anonymous" },
-    publisher: { "@type": "Organization", name: "Anonixx", url: SITE_URL },
+    author: post.is_admin_drop ? org : { "@type": "Person", name: post.anonymous_name || "Anonymous" },
+    publisher: org,
     interactionStatistic: [
       { "@type": "InteractionCounter", interactionType: "https://schema.org/LikeAction", userInteractionCount: post.likes_count },
       { "@type": "InteractionCounter", interactionType: "https://schema.org/CommentAction", userInteractionCount: post.thread_count },
     ],
     ...(post.card_image_url ? { image: post.card_image_url } : {}),
   };
+  // Video drops also describe the video itself, so they can show up in Google's video results.
+  const thumb = post.cover_url || post.card_image_url;
+  const videoLd = post.media_type === "video" && post.video_url && thumb ? {
+    "@context": "https://schema.org",
+    "@type": "VideoObject",
+    name: teaser(post.content, 100) || "An anonymous confession on Anonixx",
+    description: teaser(post.content) || "An anonymous video confession on Anonixx.",
+    thumbnailUrl: [thumb],
+    uploadDate: post.created_at,
+    contentUrl: post.video_url,
+    embedUrl: `${SITE_URL}/drop/${post.id}`,
+    publisher: org,
+  } : null;
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <Feed initialPosts={[post, ...following]} initialCursor={rest?.next_cursor ?? null} startId={post.id} />
+      {videoLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoLd) }} /> : null}
+      {/* The drop's own text is the page's h1 (Slide headline); a drop with no text still needs one. */}
+      {post.content?.trim() ? null : <h1 className="sr-only">An anonymous confession on Anonixx</h1>}
+      {/* Only this drop is server-rendered, so every drop page's HTML is its own; the rest of the
+          feed loads in the browser (fillAfterStart). */}
+      <Feed initialPosts={[post]} initialCursor={null} startId={post.id} fillAfterStart />
     </>
   );
 }

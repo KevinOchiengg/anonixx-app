@@ -44,6 +44,8 @@ type Props = {
   initialCursor: string | null;
   withHero?: boolean;
   startId?: string;
+  /** Load the public feed after the server-rendered posts, in the browser (drop pages). */
+  fillAfterStart?: boolean;
 };
 
 const realPosts = (list: (Post & { type?: string })[]) => list.filter((p) => p.id && p.type !== "divider");
@@ -64,7 +66,7 @@ function replayRound(posts: Post[], lastId: string | undefined): string[] {
   return pool;
 }
 
-export default function Feed({ initialPosts, initialCursor, withHero = false, startId }: Props) {
+export default function Feed({ initialPosts, initialCursor, withHero = false, startId, fillAfterStart = false }: Props) {
   const { user, ready } = useAuth();
   const router = useRouter();
   // Avatars open the person's Room; Link up on a hookup goes through it too, so the pitch lands with context.
@@ -129,6 +131,21 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     });
     return () => { live = false; };
   }, [initialPosts.length, firstTry]);
+
+  // Drop pages server-render only their own drop; queue the public feed after it here.
+  useEffect(() => {
+    if (!fillAfterStart) return;
+    let live = true;
+    loadMoreClient(null).then((page) => {
+      if (!live || authedRef.current || !page) return;
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...page.posts.filter((p) => !seen.has(p.id))];
+      });
+      setCursor(page.next_cursor);
+    });
+    return () => { live = false; };
+  }, [fillAfterStart]);
 
   const topId = posts[0]?.id;
   useEffect(() => {

@@ -1,7 +1,17 @@
 import type { VideoEdit } from "./videoEdit";
 
 export const API_URL =(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+// Canonicals, the sitemap and robots are built from this, so a missing env var must never
+// tell Google the site lives on localhost.
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://anonixx.com").replace(/\/$/, "");
+
+// Text-only drops shorter than this with no likes or replies are kept out of search (thin
+// pages). A photo or video is content in itself, so media drops always count.
+// Mirrors THIN_DROP_CHARS in Backend/app/api/v1/public.py.
+export const THIN_DROP_CHARS = 80;
+export const isThinDrop = (p: Pick<Post, "content" | "likes_count" | "thread_count" | "media_type" | "images">) =>
+  p.media_type !== "image" && p.media_type !== "video" && !p.images?.length &&
+  (p.content || "").trim().length < THIN_DROP_CHARS && (p.likes_count || 0) + (p.thread_count || 0) === 0;
 
 export type Poll = {
   question: string;

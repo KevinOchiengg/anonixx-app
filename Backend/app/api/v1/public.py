@@ -19,6 +19,15 @@ from app.utils.countries import country_from_header
 router = APIRouter(prefix="/public", tags=["Public"])
 
 SITEMAP_PAGE_SIZE = 5000
+# Short text-only drops with no likes or replies are thin pages: left out of the sitemap (the web page
+# marks them noindex too). Mirrors THIN_DROP_CHARS in Web/lib/api.ts.
+THIN_DROP_CHARS = 80
+_NOT_THIN = {"$or": [
+    {"$expr": {"$gte": [{"$strLenCP": {"$trim": {"input": {"$ifNull": ["$confession", ""]}}}}, THIN_DROP_CHARS]}},
+    {"media_type": {"$in": ["image", "video", "gif"]}},   # the photo or video is the content
+    {"likes_count": {"$gte": 1}},
+    {"thread_count": {"$gte": 1}},
+]}
 _LIVE = {"is_active": True, "moderation_status": "visible"}
 
 
@@ -67,7 +76,7 @@ async def public_drop(drop_id: str, db = Depends(get_database)):
 
 @router.get("/sitemap")
 async def public_sitemap(page: int = Query(0, ge=0), db = Depends(get_database)):
-    query = {**_LIVE, **SAFE_FILTER}
+    query = {"$and": [{**_LIVE, **SAFE_FILTER}, _NOT_THIN]}
     total = await db["drops"].count_documents(query)
     rows = await db["drops"].find(query, {"_id": 1, "created_at": 1}) \
         .sort([("created_at", -1), ("_id", -1)]) \

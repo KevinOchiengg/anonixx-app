@@ -25,9 +25,17 @@ export const metadata: Metadata = {
   description:
     "Read anonymous confessions people could never say out loud. Drop yours, stay hidden, and link up only if you both want to.",
   applicationName: "Anonixx",
-  openGraph: { siteName: "Anonixx", type: "website", locale: "en_US" },
-  twitter: { card: "summary_large_image" },
+  openGraph: {
+    siteName: "Anonixx", type: "website", locale: "en_US",
+    images: [{ url: "/og", width: 1200, height: 630, alt: "Anonixx: say what you can't say out loud." }],
+  },
+  twitter: { card: "summary_large_image", images: ["/og"] },
+  icons: { icon: "/icon.png", apple: "/icon.png" },
   robots: { index: true, follow: true },
+  // Google Search Console HTML-tag verification, if that method is used instead of DNS.
+  ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { verification: { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION } }
+    : {}),
 };
 
 export const viewport: Viewport = {

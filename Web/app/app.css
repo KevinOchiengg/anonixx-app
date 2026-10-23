@@ -271,3 +271,5 @@
 .empty h2 { font-size: 18px; }
 .slide .mature-veil { background: rgba(11, 15, 24, 0.92); }
 .nav-arrows button { background: var(--surface-alt); border: 1px solid rgba(255, 255, 255, 0.08); }
+.join h3 { font-size: 16px; margin: 18px 0 4px; color: var(--fg); }
+.join section b { color: var(--fg); }
