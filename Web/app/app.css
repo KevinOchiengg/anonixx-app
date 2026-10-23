@@ -186,6 +186,11 @@
 .slide.has-media { padding: 0; }
 .media img, .media video { object-fit: cover; }
 .media .carousel img { object-fit: contain; }
+/* Photos: fill when phone-shaped, else whole over their own blur (components/FitImage) */
+.fit { position: relative; width: 100%; height: 100%; overflow: hidden; background: #000; }
+.media .fit > img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain; }
+.media .fit.fill > img { object-fit: cover; }
+.media .fit > img.fit-blur { position: absolute; z-index: 0; inset: -30px; width: calc(100% + 60px); height: calc(100% + 60px); object-fit: cover; filter: blur(28px) brightness(0.55); }
 .vp { position: relative; width: 100%; height: 100%; overflow: hidden; background: #000; }
 .vp video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .vp.land video { position: relative; object-fit: contain; z-index: 1; }
