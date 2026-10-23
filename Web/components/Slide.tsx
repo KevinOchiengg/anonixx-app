@@ -102,6 +102,7 @@ export default function Slide({
   const measureRef = useRef<HTMLParagraphElement>(null);
   const parts = useMemo(() => (hasMedia ? splitHook(post.content) : null), [hasMedia, post.content]);
   type Cut = { hook: string; rest: string };
+  const hookClass = parts?.inline ? "cap-hook inline" : "cap-hook";
   const [short, setShort] = useState<Cut | null | undefined>(undefined);  // undefined = not measured yet, null = fits
   const fitCaption = useCallback(() => {
     const el = textRef.current;
@@ -117,8 +118,8 @@ export default function Slide({
       m.replaceChildren();
       if (h) {
         const span = document.createElement("span");
-        span.className = "cap-hook";
-        span.textContent = cut && !r ? `${h}…` : h;
+        span.className = hookClass;
+        span.textContent = cut && !r ? `${h}…` : parts?.inline && r ? `${h} ` : h;
         m.append(span);
       }
       m.append(document.createTextNode(cut ? (r ? `${r}… ` : " ") : r));
@@ -156,7 +157,7 @@ export default function Slide({
       // the hook alone is too long: cut the hook itself
       setShort({ hook: fitLen(hook, (h) => draw(h, "", true) <= max), rest: "" });
     }
-  }, [hasMedia, post.content, parts]);
+  }, [hasMedia, post.content, parts, hookClass]);
   useLayoutEffect(() => {
     fitCaption();
     const el = textRef.current;
@@ -332,11 +333,11 @@ export default function Slide({
           >
             {mediaLong && short && !expanded ? (
               <>
-                {short.hook ? <span className="cap-hook">{short.rest ? short.hook : `${short.hook}…`}</span> : null}
+                {short.hook ? <span className={hookClass}>{short.rest ? (parts?.inline ? `${short.hook} ` : short.hook) : `${short.hook}…`}</span> : null}
                 {short.rest ? `${short.rest}…` : null}{" "}<button type="button" className="more-inline" onClick={toggleCaption}>more</button>
               </>
             ) : parts ? (
-              <><span className="cap-hook">{parts.hook}</span>{parts.rest}</>
+              <><span className={hookClass}>{parts.inline && parts.rest ? `${parts.hook} ` : parts.hook}</span>{parts.rest}</>
             ) : post.content}
             {mediaLong && expanded ? <>{" "}<button type="button" className="more-inline" onClick={toggleCaption}>less</button></> : null}
           </Text>

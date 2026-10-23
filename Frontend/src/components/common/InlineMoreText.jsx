@@ -19,6 +19,8 @@ import { splitHook } from '../../utils/captionHook';
 const SUFFIX_ROOM = 8;   // characters given up for "… more" (bold, so a little wider than it reads)
 const STEP = 6;          // further trim per re-check
 const HOOK_MAX_LINES = 2;
+// No clear first sentence: the opening words in the serif, a touch smaller, sharing the line.
+const INLINE_HOOK = { fontSize: 17.5, lineHeight: 22 };
 
 const tidy = (s) => s.replace(/[\s.,;:!?-]+$/, '');
 
@@ -46,7 +48,7 @@ export default function InlineMoreText({ text, style, moreStyle, hookStyle, line
     const laid = e.nativeEvent.lines || [];
     // how many laid-out lines the hook (plus its line break) takes
     let hookLines = 0;
-    if (parts) {
+    if (parts && !parts.inline) {
       let acc = 0;
       for (const l of laid) {
         if (acc >= parts.hook.length + 1) break;
@@ -63,7 +65,7 @@ export default function InlineMoreText({ text, style, moreStyle, hookStyle, line
       return;
     }
     const head = laid.slice(0, budget).map((l) => l.text).join('');
-    const body = parts ? head.slice(parts.hook.length + 1) : head;
+    const body = parts ? head.slice(parts.hook.length + (parts.rest ? 1 : 0)) : head;
     setShort({ hook: parts ? parts.hook : '', rest: trimTo(body, body.length - SUFFIX_ROOM), budget });
   }, [parts, lines]);
 
@@ -76,7 +78,7 @@ export default function InlineMoreText({ text, style, moreStyle, hookStyle, line
   }, [short, expanded]);
 
   const full = parts
-    ? <><Text style={hookStyle}>{parts.hook}{'\n'}</Text>{parts.rest}</>
+    ? <><Text style={[hookStyle, parts.inline && INLINE_HOOK]}>{parts.hook}{parts.rest ? (parts.inline ? ' ' : '\n') : ''}</Text>{parts.rest}</>
     : text;
 
   return (
@@ -89,7 +91,7 @@ export default function InlineMoreText({ text, style, moreStyle, hookStyle, line
       )}
       {short && !expanded ? (
         <Text style={style} onTextLayout={onVisibleLayout}>
-          {short.hook ? <Text style={hookStyle}>{short.rest ? `${short.hook}\n` : `${short.hook}…`}</Text> : null}
+          {short.hook ? <Text style={[hookStyle, parts?.inline && INLINE_HOOK]}>{short.rest ? `${short.hook}${parts?.inline ? ' ' : '\n'}` : `${short.hook}…`}</Text> : null}
           {short.rest ? `${short.rest}…` : ''}{' '}<Text style={moreStyle}>more</Text>
         </Text>
       ) : short && expanded ? (
@@ -98,7 +100,7 @@ export default function InlineMoreText({ text, style, moreStyle, hookStyle, line
         </Text>
       ) : (
         // measuring (first frame) or it fits: clamp so it never overflows meanwhile
-        <Text style={style} numberOfLines={short === null ? undefined : (parts ? HOOK_MAX_LINES : 0) + lines}>{full}</Text>
+        <Text style={style} numberOfLines={short === null ? undefined : (parts && !parts.inline ? HOOK_MAX_LINES : 0) + lines}>{full}</Text>
       )}
     </View>
   );
