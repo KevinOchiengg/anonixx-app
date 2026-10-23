@@ -1607,7 +1607,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   ), [goTo]);
   const feedGestures = useMemo(() => Gesture.Simultaneous(chromeLongPress, feedPan), [chromeLongPress, feedPan]);
 
-  // Opened from a shared link (anonixx.app/drop/<id>): show that drop first.
+  // Opened from a shared link (anonixx.com/drop/<id>): show that drop first.
   const linkedDropId = route?.params?.dropId;
   useEffect(() => {
     if (!linkedDropId) return;

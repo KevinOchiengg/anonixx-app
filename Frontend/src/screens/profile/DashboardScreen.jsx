@@ -62,6 +62,8 @@ export default function DashboardScreen({ navigation }) {
   const [balance, setBalance] = useState(0);
   const [estimatedKes, setEstimatedKes] = useState(0);
   const [payoutRate, setPayoutRate] = useState(0);
+  // Cash out is Kenya only (M-Pesa); the backend decides from the request's country.
+  const [cashOut, setCashOut] = useState(false);
   const [posts, setPosts] = useState([]);
   const [totalViews, setTotalViews] = useState(0);
   const [transactions, setTransactions] = useState([]);
@@ -102,6 +104,7 @@ export default function DashboardScreen({ navigation }) {
         setBalance(balData.balance || 0);
         setEstimatedKes(balData.estimated_kes || 0);
         setPayoutRate(balData.payout_rate_kes_per_coin || 0);
+        setCashOut(!!balData.cash_out_available);
       }
       if (postsRes.ok) {
         const data = await postsRes.json();
@@ -319,16 +322,20 @@ export default function DashboardScreen({ navigation }) {
           <View>
             <Text style={s.walletLabel}>Available balance</Text>
             <Text style={s.walletBalance}>{balance} coins</Text>
-            {estimatedKes > 0 && <Text style={s.walletKesEstimate}>≈ KES {estimatedKes.toLocaleString()}</Text>}
+            {cashOut && estimatedKes > 0 && <Text style={s.walletKesEstimate}>≈ KES {estimatedKes.toLocaleString()}</Text>}
           </View>
-          <TouchableOpacity style={s.withdrawBtn} onPress={() => setWithdrawOpen(true)} activeOpacity={0.85}>
-            <Wallet size={rs(15)} color="#fff" />
-            <Text style={s.withdrawBtnText}>Withdraw</Text>
-          </TouchableOpacity>
+          {cashOut && (
+            <TouchableOpacity style={s.withdrawBtn} onPress={() => setWithdrawOpen(true)} activeOpacity={0.85}>
+              <Wallet size={rs(15)} color="#fff" />
+              <Text style={s.withdrawBtnText}>Withdraw</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        <Text style={s.walletHint}>
-          Cash out coins to M-Pesa — minimum {MIN_WITHDRAWAL_COINS} coins{payoutRate > 0 ? ` (≈ KES ${payoutRate} per coin)` : ''}. Requests are reviewed and paid out manually, not instant.
-        </Text>
+        {cashOut && (
+          <Text style={s.walletHint}>
+            Cash out coins to M-Pesa — minimum {MIN_WITHDRAWAL_COINS} coins{payoutRate > 0 ? ` (≈ KES ${payoutRate} per coin)` : ''}. Requests are reviewed and paid out manually, not instant.
+          </Text>
+        )}
 
         {transactions.length > 0 && (
           <View style={s.card}>
@@ -398,7 +405,7 @@ export default function DashboardScreen({ navigation }) {
       </Modal>
 
       {/* Withdraw modal */}
-      <Modal visible={withdrawOpen} transparent animationType="slide" onRequestClose={() => setWithdrawOpen(false)}>
+      <Modal visible={withdrawOpen && cashOut} transparent animationType="slide" onRequestClose={() => setWithdrawOpen(false)}>
         <View style={s.modalOverlay}>
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>

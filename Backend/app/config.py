@@ -84,11 +84,11 @@ class Settings(BaseSettings):
     # WEB PUSH (VAPID) — browser notifications for the Anonixx website
     VAPID_PUBLIC_KEY: str = ""
     VAPID_PRIVATE_KEY: str = ""
-    VAPID_SUBJECT: str = "mailto:support@anonixx.app"
+    VAPID_SUBJECT: str = "mailto:support@anonixx.com"
 
     # RESEND (email)
     RESEND_API_KEY: str = ""
-    FROM_EMAIL: str = "Anonixx <noreply@anonixx.app>"
+    FROM_EMAIL: str = "Anonixx <noreply@anonixx.com>"
 
     # ── SOCIAL PUBLISHER ──────────────────────────────────────────
     # TikTok — long-lived OAuth 2.0 access token for the Anonixx brand account

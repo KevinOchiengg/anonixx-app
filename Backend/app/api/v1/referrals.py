@@ -73,7 +73,7 @@ async def get_my_referral_code(
             {"$set": {"referral_code": code}},
         )
 
-    share_link = f"https://anonixx.app/join?ref={code}"
+    share_link = f"https://anonixx.com/join?ref={code}"
 
     return {
         "code":       code,
@@ -219,7 +219,7 @@ async def get_referral_stats(
 
     return {
         "referral_code":    code,
-        "share_link":       f"https://anonixx.app/join?ref={code}" if code else None,
+        "share_link":       f"https://anonixx.com/join?ref={code}" if code else None,
         "total_referred":   user.get("total_referrals", 0),
         "coins_earned":     earned,
         "reward_per_ref":   REFERRER_REWARD,

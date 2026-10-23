@@ -8,7 +8,7 @@ import AppShell from "./AppShell";
 import Sheet from "./Sheet";
 import "@/app/money.css";
 
-type Balance = { balance: number; estimated_kes: number; payout_rate_kes_per_coin: number };
+type Balance = { balance: number; estimated_kes: number; payout_rate_kes_per_coin: number; cash_out_available?: boolean };
 type Mine = { id: string; content: string; views_count: number; likes_count: number; time_ago: string };
 type Tx = { id: string; description?: string; reason?: string; amount: number };
 type Wd = { id: string; amount_coins: number; mpesa_number: string; estimated_kes: number; status: string };
@@ -68,16 +68,18 @@ function Inner() {
   }
 
   const at = impact?.all_time;
+  // Cash out is Kenya only (M-Pesa); everyone else just sees their coins.
+  const cashOut = !!bal?.cash_out_available;
   return (
     <div className="pad">
       <div className="balance">
-        <span>Earnings<br /><small className="muted">≈ KES {bal?.estimated_kes ?? 0}</small></span>
+        <span>Earnings{cashOut ? <><br /><small className="muted">≈ KES {bal?.estimated_kes ?? 0}</small></> : null}</span>
         <strong>{bal?.balance ?? 0}</strong>
       </div>
       {ok ? <div className="ok">{ok}</div> : null}
       {err && !open ? <div className="err">{err}</div> : null}
       <div className="row" style={{ marginTop: 12 }}>
-        <button className="pill" onClick={() => { setErr(""); setOk(""); setOpen(true); }}>Withdraw to M-Pesa</button>
+        {cashOut ? <button className="pill" onClick={() => { setErr(""); setOk(""); setOpen(true); }}>Withdraw to M-Pesa</button> : null}
         <Link href="/coins" className="pill ghost">Buy coins</Link>
       </div>
 
@@ -101,13 +103,17 @@ function Inner() {
         </div>
       ))}
 
-      <h2 className="sec">Withdrawals</h2>
-      {wds.length === 0 ? <p className="muted small">None yet. Payouts are reviewed manually.</p> : wds.map((w) => (
-        <div key={w.id} className="tx">
-          <span>{w.amount_coins} coins · KES {w.estimated_kes}<br /><small className="muted">{w.mpesa_number}</small></span>
-          <span className={`badge ${w.status}`}>{w.status}</span>
-        </div>
-      ))}
+      {cashOut || wds.length > 0 ? (
+        <>
+          <h2 className="sec">Withdrawals</h2>
+          {wds.length === 0 ? <p className="muted small">None yet. Payouts are reviewed manually.</p> : wds.map((w) => (
+            <div key={w.id} className="tx">
+              <span>{w.amount_coins} coins · KES {w.estimated_kes}<br /><small className="muted">{w.mpesa_number}</small></span>
+              <span className={`badge ${w.status}`}>{w.status}</span>
+            </div>
+          ))}
+        </>
+      ) : null}
 
       <h2 className="sec">Transactions</h2>
       {txs.length === 0 ? <p className="muted small">Nothing yet.</p> : txs.slice(0, 40).map((t) => (
@@ -117,7 +123,7 @@ function Inner() {
         </div>
       ))}
 
-      {open ? (
+      {open && cashOut ? (
         <Sheet title="Withdraw to M-Pesa" onClose={() => setOpen(false)}>
           <form onSubmit={withdraw} className="form">
             <p className="muted small">Minimum {MIN_WITHDRAW} coins. Rate: KES {bal?.payout_rate_kes_per_coin ?? "—"} per coin. Paid manually after review.</p>
