@@ -32,7 +32,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
-  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket,
+  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, Feather, Check,
 } from 'lucide-react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useAudioPlayer } from 'expo-audio';
@@ -271,6 +271,21 @@ function buildHookupText(h, extra) {
   return extra.trim() ? `${line}\n\n${extra.trim()}` : line;
 }
 
+// What still stands between a hookup draft and the Drop button, in plain words.
+// Empty means it can go. Shown under the button so a disabled button never
+// leaves anyone guessing.
+function hookupMissing(h) {
+  const out = [];
+  const age = Number(h.age);
+  if (!h.age) out.push('your age');
+  else if (age < 18 || age > 99) out.push('an age between 18 and 99');
+  if (!h.area.trim()) out.push('where you are');
+  const min = Number(h.ageMin), max = Number(h.ageMax);
+  if ((h.ageMin && min < 18) || (h.ageMax && max < 18)) out.push('an age range from 18 up');
+  else if (h.ageMin && h.ageMax && min > max) out.push('a min age below the max');
+  return out;
+}
+
 function KindChooser({ onPick, onBack }) {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
@@ -282,14 +297,30 @@ function KindChooser({ onPick, onBack }) {
         <View style={{ width: rs(24) }} />
       </View>
       <View style={s.kindWrap}>
-        <Text style={s.kindTitle}>What are you confessing?</Text>
+        <Text style={s.kindTitle}>What are you dropping tonight?</Text>
+        <Text style={s.kindLead}>Either way, nobody sees who you are.</Text>
         <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('hookup')}>
-          <Text style={s.kindCardTitle}>Hookup confession</Text>
-          <Text style={s.kindCardSub}>Say who you are and who you want. People nearby can link up with you.</Text>
+          <View style={s.kindIcon}><Flame size={rs(20)} color={T.primary} /></View>
+          <View style={{ flex: 1, gap: rp(4) }}>
+            <Text style={s.kindCardTitle}>Hookup</Text>
+            <Text style={s.kindCardSub}>Say who you are and who you want. If someone wants you back, they ask to link up.</Text>
+            <View style={s.kindTags}>
+              <Text style={s.kindTag}>18+</Text>
+              <Text style={s.kindTag}>{POST_COST} coins</Text>
+              <Text style={s.kindTag}>Link up on</Text>
+            </View>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('confession')}>
-          <Text style={s.kindCardTitle}>Regular confession</Text>
-          <Text style={s.kindCardSub}>The thing you can't say out loud. Free to post, read and felt, no Link up on it.</Text>
+          <View style={s.kindIcon}><Feather size={rs(20)} color={T.primary} /></View>
+          <View style={{ flex: 1, gap: rp(4) }}>
+            <Text style={s.kindCardTitle}>Confession</Text>
+            <Text style={s.kindCardSub}>The thing you can't say out loud. Read, felt, never traced back to you.</Text>
+            <View style={s.kindTags}>
+              <Text style={s.kindTag}>Free</Text>
+              <Text style={s.kindTag}>Text, photo, video or voice</Text>
+            </View>
+          </View>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -299,65 +330,113 @@ function KindChooser({ onPick, onBack }) {
 function Chip({ label, active, onPress }) {
   return (
     <TouchableOpacity style={[s.chip, active && s.chipActive]} onPress={onPress} activeOpacity={0.85}>
+      {active && <Check size={rs(13)} color="#fff" />}
       <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
+function TplSection({ n, title, hint, aside, children }) {
+  return (
+    <View style={s.tplSection}>
+      <View style={s.tplHead}>
+        <Text style={s.tplNum}>{n}</Text>
+        <Text style={s.tplTitle}>{title}</Text>
+        {aside ? <Text style={s.tplAside}>{aside}</Text> : null}
+      </View>
+      {hint ? <Text style={s.tplHint}>{hint}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
+const LOOKING_CHIPS = [['woman', 'Women'], ['man', 'Men'], ['anyone', 'Anyone']];
+
+// The guided half of a hookup drop: four short steps, then a live preview of
+// exactly what will post. Anything extra goes on the card below.
 function HookupTemplate({ h, setH }) {
   const num = (v) => v.replace(/\D/g, '').slice(0, 2);
   const toggleVibe = (k) => setH({
     ...h,
     vibes: h.vibes.includes(k) ? h.vibes.filter((x) => x !== k) : [...h.vibes, k].slice(0, 4),
   });
-  const underAge = h.age !== '' && Number(h.age) < 18;
+  const age = Number(h.age);
+  const ageErr = h.age !== '' && (age < 18 || age > 99)
+    ? (age < 18 ? 'You have to be 18 or older to post here.' : 'Enter a real age.') : null;
+  const min = Number(h.ageMin), max = Number(h.ageMax);
+  const rangeErr = (h.ageMin && min < 18) || (h.ageMax && max < 18)
+    ? 'Everyone here is 18+, so start at 18.'
+    : h.ageMin && h.ageMax && min > max ? 'Min is higher than max.' : null;
+  const preview = buildHookupText({ ...h, age: h.age || '__', area: h.area.trim() || '__' }, '');
+
   return (
     <View style={s.tplBox}>
-      <View style={s.tplRow}>
-        <Text style={s.tplText}>Hi, I'm</Text>
-        <TextInput
-          style={s.tplInput} value={h.age} placeholder="age" keyboardType="number-pad"
-          placeholderTextColor={T.textMute} onChangeText={(v) => setH({ ...h, age: num(v) })}
-        />
-        <Text style={s.tplText}>, based in</Text>
-        <TextInput
-          style={[s.tplInput, { flex: 1 }]} value={h.area} placeholder="area, e.g. Ruiru"
-          placeholderTextColor={T.textMute} maxLength={60} onChangeText={(v) => setH({ ...h, area: v })}
-        />
-      </View>
-      {underAge && <Text style={s.tplWarn}>You must be 18 or older.</Text>}
-      <Text style={s.tplLabel}>I am</Text>
-      <View style={s.chipRow}>
-        {HOOKUP_GENDERS.map(([k, l]) => (
-          <Chip key={k} label={l} active={h.gender === k} onPress={() => setH({ ...h, gender: k })} />
-        ))}
-      </View>
-      <Text style={s.tplLabel}>Looking for</Text>
-      <View style={s.chipRow}>
-        {HOOKUP_LOOKING.map(([k, l]) => (
-          <Chip key={k} label={l} active={h.lookingFor === k} onPress={() => setH({ ...h, lookingFor: k })} />
-        ))}
-      </View>
-      <View style={s.tplRow}>
-        <Text style={s.tplText}>aged</Text>
-        <TextInput
-          style={s.tplInput} value={h.ageMin} placeholder="min" keyboardType="number-pad"
-          placeholderTextColor={T.textMute} onChangeText={(v) => setH({ ...h, ageMin: num(v) })}
-        />
-        <Text style={s.tplText}>to</Text>
-        <TextInput
-          style={s.tplInput} value={h.ageMax} placeholder="max" keyboardType="number-pad"
-          placeholderTextColor={T.textMute} onChangeText={(v) => setH({ ...h, ageMax: num(v) })}
-        />
-      </View>
-      <Text style={s.tplLabel}>Vibe (up to 4)</Text>
-      <View style={s.chipRow}>
-        {HOOKUP_VIBES.map(([k, l]) => (
-          <Chip key={k} label={l} active={h.vibes.includes(k)} onPress={() => toggleVibe(k)} />
-        ))}
+      <TplSection n="1" title="You" hint="Only what you choose to share.">
+        <View style={s.tplAgeRow}>
+          <TextInput
+            style={[s.tplField, s.tplAge, ageErr && s.tplFieldErr]} value={h.age} placeholder="Age"
+            keyboardType="number-pad" maxLength={2} placeholderTextColor={T.textMute}
+            onChangeText={(v) => setH({ ...h, age: num(v) })} accessibilityLabel="Your age"
+          />
+          <View style={[s.chipRow, { flex: 1 }]}>
+            {HOOKUP_GENDERS.map(([k, l]) => (
+              <Chip key={k} label={l} active={h.gender === k}
+                onPress={() => setH({ ...h, gender: h.gender === k ? null : k })} />
+            ))}
+          </View>
+        </View>
+        {ageErr && <Text style={s.tplWarn}>{ageErr}</Text>}
+      </TplSection>
+
+      <TplSection n="2" title="Where you are" hint="A neighborhood or city. Never your exact address.">
+        <View style={s.tplFieldRow}>
+          <MapPin size={rs(16)} color={T.textSecondary} />
+          <TextInput
+            style={[s.tplField, s.tplFieldBare]} value={h.area} placeholder="e.g. Downtown"
+            placeholderTextColor={T.textMute} maxLength={60} onChangeText={(v) => setH({ ...h, area: v })}
+            accessibilityLabel="Where you are"
+          />
+        </View>
+      </TplSection>
+
+      <TplSection n="3" title="Who you want">
+        <View style={s.chipRow}>
+          {LOOKING_CHIPS.map(([k, l]) => (
+            <Chip key={k} label={l} active={h.lookingFor === k} onPress={() => setH({ ...h, lookingFor: k })} />
+          ))}
+        </View>
+        <View style={s.tplRangeRow}>
+          <Text style={s.tplRangeLabel}>Aged</Text>
+          <TextInput
+            style={[s.tplField, s.tplRange, rangeErr && s.tplFieldErr]} value={h.ageMin} placeholder="18"
+            keyboardType="number-pad" maxLength={2} placeholderTextColor={T.textMute}
+            onChangeText={(v) => setH({ ...h, ageMin: num(v) })} accessibilityLabel="Youngest age"
+          />
+          <Text style={s.tplRangeLabel}>to</Text>
+          <TextInput
+            style={[s.tplField, s.tplRange, rangeErr && s.tplFieldErr]} value={h.ageMax} placeholder="99"
+            keyboardType="number-pad" maxLength={2} placeholderTextColor={T.textMute}
+            onChangeText={(v) => setH({ ...h, ageMax: num(v) })} accessibilityLabel="Oldest age"
+          />
+          <Text style={s.tplOptional}>optional</Text>
+        </View>
+        {rangeErr && <Text style={s.tplWarn}>{rangeErr}</Text>}
+      </TplSection>
+
+      <TplSection n="4" title="The vibe" aside={`${h.vibes.length}/4`}>
+        <View style={s.chipRow}>
+          {HOOKUP_VIBES.map(([k, l]) => (
+            <Chip key={k} label={l} active={h.vibes.includes(k)} onPress={() => toggleVibe(k)} />
+          ))}
+        </View>
+      </TplSection>
+
+      <View style={s.tplPreview}>
+        <Text style={s.tplPreviewLabel}>How it reads</Text>
+        <Text style={s.tplPreviewText}>{preview}</Text>
       </View>
       <Text style={s.tplNote}>
-        Add anything else on the card below. Paid sex and escort offers are not allowed.
+        Want to say more? Write it on the card below. No numbers, handles, or paid offers.
       </Text>
     </View>
   );
@@ -887,8 +966,9 @@ export default function DropsComposeScreen({ navigation, route }) {
   ]);
 
   // ── Derived ───────────────────────────────────────────────────
+  const missing       = kind === 'hookup' ? hookupMissing(hookup) : [];
   const canDrop       = kind === 'hookup'
-    ? Number(hookup.age) >= 18 && !!hookup.area.trim()
+    ? missing.length === 0
     : (!!text.trim() || !!mediaUri);
   const layoutMode    = 'split';
   const remaining     = MAX_CHARS - text.length;
@@ -987,6 +1067,10 @@ export default function DropsComposeScreen({ navigation, route }) {
               typing. Fades out once they've actually started writing, so
               it doesn't linger as clutter once the card speaks for itself. */}
           {kind === 'hookup' && <HookupTemplate h={hookup} setH={setHookup} />}
+
+          {kind === 'hookup' && (
+            <Text style={s.tplCardLabel}>Anything else? <Text style={s.tplOptional}>optional</Text></Text>
+          )}
 
           {!text && kind !== 'hookup' && (
             <Text style={s.composeGuide}>
@@ -1232,6 +1316,10 @@ export default function DropsComposeScreen({ navigation, route }) {
             )}
           </TouchableOpacity>
 
+          {kind === 'hookup' && missing.length > 0 && (
+            <Text style={s.missingNote}>Add {missing.join(', ')} to drop it.</Text>
+          )}
+
           <Text style={s.footerNote}>
             Your identity stays hidden. Always.
           </Text>
@@ -1428,34 +1516,69 @@ const s = StyleSheet.create({
   spotListen: { fontSize: rf(12), fontWeight: '700', color: T.primary },
   spotHint: { fontSize: rf(12), color: T.textSecondary, lineHeight: rf(18) },
   kindWrap: { flex: 1, padding: rp(20), gap: rp(14), justifyContent: 'center' },
-  kindTitle: { fontSize: FONT.xl || FONT.lg, fontWeight: '800', color: T.text, marginBottom: rp(6) },
+  kindTitle: { fontSize: FONT.xl || FONT.lg, fontWeight: '800', color: T.text },
+  kindLead: { fontSize: FONT.sm, color: T.textSecondary, marginBottom: rp(6) },
   kindCard: {
-    borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
-    borderRadius: RADIUS.lg, padding: rp(18), gap: rp(6),
+    flexDirection: 'row', gap: rp(14), alignItems: 'flex-start',
+    borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surface,
+    borderRadius: RADIUS.lg, padding: rp(18),
   },
-  kindCardTitle: { fontSize: FONT.md, fontWeight: '800', color: T.primary },
+  kindIcon: {
+    width: rs(40), height: rs(40), borderRadius: rs(20), alignItems: 'center', justifyContent: 'center',
+    backgroundColor: T.primaryDim, borderWidth: 1, borderColor: T.primaryBorder,
+  },
+  kindCardTitle: { fontSize: FONT.md, fontWeight: '800', color: T.text },
   kindCardSub: { fontSize: FONT.sm, color: T.textSecondary, lineHeight: rs(20) },
+  kindTags: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6), marginTop: rp(4) },
+  kindTag: {
+    fontSize: rf(11), fontWeight: '700', color: T.primary, overflow: 'hidden',
+    backgroundColor: T.primaryTint, borderRadius: rs(10), paddingHorizontal: rp(8), paddingVertical: rp(3),
+  },
   kindSwitch: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
-  tplBox: {
-    borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
-    borderRadius: RADIUS.lg, padding: rp(14), gap: rp(8), marginBottom: rp(12),
+  tplBox: { gap: rp(18), marginBottom: rp(16) },
+  tplSection: { gap: rp(10) },
+  tplHead: { flexDirection: 'row', alignItems: 'center', gap: rp(10) },
+  tplNum: {
+    width: rs(22), height: rs(22), borderRadius: rs(11), textAlign: 'center', lineHeight: rs(22), overflow: 'hidden',
+    fontSize: rf(12), fontWeight: '800', color: T.primary, backgroundColor: T.primaryDim,
   },
-  tplRow: { flexDirection: 'row', alignItems: 'center', gap: rp(8), flexWrap: 'wrap' },
-  tplText: { color: T.text, fontSize: FONT.md },
-  tplLabel: { color: T.textSecondary, fontSize: FONT.sm, marginTop: rp(4) },
-  tplInput: {
-    minWidth: rs(56), borderBottomWidth: 1, borderBottomColor: T.primary,
-    color: T.text, fontSize: FONT.md, paddingVertical: rp(4), paddingHorizontal: rp(6),
+  tplTitle: { flex: 1, fontSize: FONT.md, fontWeight: '800', color: T.text },
+  tplAside: { fontSize: FONT.sm, color: T.textSecondary, fontWeight: '700' },
+  tplHint: { fontSize: FONT.sm, color: T.textSecondary, marginTop: rp(-4) },
+  tplField: {
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.borderStrong, borderRadius: RADIUS.md,
+    color: T.text, fontSize: FONT.md, paddingVertical: rp(12), paddingHorizontal: rp(14),
   },
+  tplFieldBare: { flex: 1, borderWidth: 0, backgroundColor: 'transparent', paddingLeft: rp(4) },
+  tplFieldErr: { borderColor: T.danger },
+  tplFieldRow: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(4), paddingLeft: rp(14),
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.borderStrong, borderRadius: RADIUS.md,
+  },
+  tplAgeRow: { flexDirection: 'row', alignItems: 'center', gap: rp(12) },
+  tplAge: { width: rs(76), textAlign: 'center', fontWeight: '800' },
+  tplRangeRow: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
+  tplRangeLabel: { fontSize: FONT.sm, color: T.textSecondary },
+  tplRange: { width: rs(64), textAlign: 'center', paddingVertical: rp(10) },
+  tplOptional: { fontSize: rf(12), color: T.textMute, fontWeight: '400' },
   tplWarn: { color: T.danger, fontSize: FONT.sm },
-  tplNote: { color: T.textMute, fontSize: FONT.sm, marginTop: rp(4) },
+  tplPreview: {
+    backgroundColor: T.primaryTint, borderWidth: 1, borderColor: T.primaryBorder,
+    borderRadius: RADIUS.lg, padding: rp(14), gap: rp(6),
+  },
+  tplPreviewLabel: { fontSize: rf(11), fontWeight: '800', letterSpacing: 1, color: T.primary, textTransform: 'uppercase' },
+  tplPreviewText: { fontSize: FONT.md, color: T.text, lineHeight: rs(22) },
+  tplNote: { color: T.textSecondary, fontSize: FONT.sm, lineHeight: rs(19) },
+  tplCardLabel: { fontSize: FONT.md, fontWeight: '800', color: T.text, marginBottom: rp(8) },
+  missingNote: { textAlign: 'center', color: T.warn, fontSize: FONT.sm, marginTop: rp(10) },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
   chip: {
-    borderWidth: 1, borderColor: T.border, borderRadius: RADIUS.lg,
-    paddingVertical: rp(6), paddingHorizontal: rp(12),
+    flexDirection: 'row', alignItems: 'center', gap: rp(5),
+    borderWidth: 1, borderColor: T.borderStrong, borderRadius: rs(20),
+    paddingVertical: rp(9), paddingHorizontal: rp(14), minHeight: rs(40),
   },
   chipActive: { backgroundColor: T.primary, borderColor: T.primary },
-  chipText: { color: T.text, fontSize: FONT.sm },
+  chipText: { color: T.text, fontSize: FONT.sm, fontWeight: '600' },
   chipTextActive: { color: '#fff', fontWeight: '700' },
   safe: { flex: 1, backgroundColor: T.background },
 

@@ -41,8 +41,8 @@ function detectEdge(t: string): "raw" | "long" | null {
   return t.length > 200 ? "long" : null;
 }
 const VIBES = ["company", "friendship", "dating", "casual", "discreet", "adventure"];
-const GENDERS = ["woman", "man", "other"];
-const LOOKING = ["woman", "man", "anyone"];
+const GENDERS: [string, string][] = [["woman", "Woman"], ["man", "Man"], ["other", "Other"]];
+const LOOKING: [string, string][] = [["woman", "Women"], ["man", "Men"], ["anyone", "Anyone"]];
 
 function Inner() {
   const { user, refresh } = useAuth();
@@ -62,7 +62,7 @@ function Inner() {
   const [done, setDone] = useState<"" | "live" | "processing">("");
   const [kind, setKind] = useState<"hookup" | "confession" | null>(null);
   const [age, setAge] = useState("");
-  const [gender, setGender] = useState("woman");
+  const [gender, setGender] = useState("");
   const [area, setArea] = useState("");
   const [lookingFor, setLookingFor] = useState("anyone");
   const [ageMin, setAgeMin] = useState("");
@@ -133,12 +133,25 @@ function Inner() {
   const ageNum = parseInt(age, 10);
   const minNum = parseInt(ageMin, 10);
   const maxNum = parseInt(ageMax, 10);
-  const hookupOk = ageNum >= 18 && ageNum <= 99 && area.trim().length > 0;
+  const ageErr = age && (ageNum < 18 || ageNum > 99)
+    ? (ageNum < 18 ? "You have to be 18 or older to post here." : "Enter a real age.") : "";
+  const rangeErr = (ageMin && minNum < 18) || (ageMax && maxNum < 18)
+    ? "Everyone here is 18+, so start at 18."
+    : minNum && maxNum && minNum > maxNum ? "Min is higher than max." : "";
+  // What still stands between the draft and the Drop button, in plain words.
+  const missing = [
+    !age ? "your age" : ageErr ? "an age between 18 and 99" : "",
+    !area.trim() ? "where you are" : "",
+    rangeErr ? "a valid age range" : "",
+  ].filter(Boolean);
+  const hookupOk = missing.length === 0;
 
-  function hookupText() {
+  function hookupText(draft = false) {
     const range = minNum && maxNum ? ` aged ${minNum}–${maxNum}` : minNum ? ` aged ${minNum}+` : maxNum ? ` up to ${maxNum}` : "";
     const who = lookingFor === "anyone" ? "someone" : `a ${lookingFor}`;
-    let t = `Hi, I'm ${ageNum} (${gender}), based in ${area.trim()}. Looking for ${who}${range}.`;
+    const shownAge = age ? ageNum : draft ? "__" : "";
+    const shownArea = area.trim() || (draft ? "__" : "");
+    let t = `Hi, I'm ${shownAge}${gender ? ` (${gender})` : ""}, based in ${shownArea}. Looking for ${who}${range}.`;
     if (vibes.length) t += ` Vibe: ${vibes.join(", ")}.`;
     if (extra.trim()) t += ` ${extra.trim()}`;
     return t;
@@ -191,7 +204,7 @@ function Inner() {
           confession: hookupText(),
           hookup: {
             age: ageNum,
-            gender,
+            ...(gender ? { gender } : {}),
             area: area.trim(),
             looking_for: lookingFor,
             age_min: minNum || null,
@@ -244,14 +257,23 @@ function Inner() {
   if (!kind) {
     return (
       <div className="form pad kind-pick">
-        <h2>What kind of confession?</h2>
+        <h2>What are you dropping tonight?</h2>
+        <p className="muted small">Either way, nobody sees who you are.</p>
         <button type="button" className="kind-card" onClick={() => setKind("hookup")}>
-          <strong>Hookup confession</strong>
-          <span>Say who you are and what you&apos;re after. People nearby can link up with you. 18+ only.</span>
+          <span className="kind-ico" aria-hidden>🔥</span>
+          <span className="kind-body">
+            <strong>Hookup</strong>
+            <span>Say who you are and who you want. If someone wants you back, they ask to link up.</span>
+            <span className="kind-tags"><em>18+</em><em>{COST.post} coins</em><em>Link up on</em></span>
+          </span>
         </button>
         <button type="button" className="kind-card" onClick={() => setKind("confession")}>
-          <strong>Regular confession</strong>
-          <span>Something you could never say out loud. Free to post, anyone can read it, no Link up on it.</span>
+          <span className="kind-ico" aria-hidden>🪶</span>
+          <span className="kind-body">
+            <strong>Confession</strong>
+            <span>The thing you can&apos;t say out loud. Read, felt, never traced back to you.</span>
+            <span className="kind-tags"><em>Free</em><em>Text, photo, video or voice</em></span>
+          </span>
         </button>
       </div>
     );
@@ -259,48 +281,77 @@ function Inner() {
 
   if (kind === "hookup") {
     const toggle = (v: string) => setVibes((c) => (c.includes(v) ? c.filter((x) => x !== v) : c.length < 4 ? [...c, v] : c));
+    const digits = (v: string) => v.replace(/\D/g, "").slice(0, 2);
     return (
-      <form className="form pad" onSubmit={submit}>
-        <button type="button" className="linkish" onClick={() => setKind(null)}>← Change type</button>
-        <div className="hk-line">
-          Hi, I&apos;m
-          <input type="number" inputMode="numeric" min={18} max={99} value={age} onChange={(e) => setAge(e.target.value)} placeholder="age" aria-label="Age" />
-          <select value={gender} onChange={(e) => setGender(e.target.value)} aria-label="Gender">
-            {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-          based in
-          <input type="text" maxLength={60} value={area} onChange={(e) => setArea(e.target.value)} placeholder="area, e.g. Ruiru" aria-label="Area" />
+      <form className="form pad hk" onSubmit={submit}>
+        <button type="button" className="linkish" onClick={() => setKind(null)}>← Hookup · change</button>
+
+        <section className="hk-step">
+          <h3><b>1</b>You</h3>
+          <p className="hk-hint">Only what you choose to share.</p>
+          <div className="hk-you">
+            <input className={`hk-field hk-age${ageErr ? " bad" : ""}`} inputMode="numeric" value={age} onChange={(e) => setAge(digits(e.target.value))} placeholder="Age" aria-label="Your age" />
+            <div className="chips" role="group" aria-label="I am">
+              {GENDERS.map(([k, l]) => (
+                <button type="button" key={k} aria-pressed={gender === k} className={gender === k ? "on" : ""} onClick={() => setGender(gender === k ? "" : k)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          {ageErr ? <p className="hk-err">{ageErr}</p> : null}
+        </section>
+
+        <section className="hk-step">
+          <h3><b>2</b>Where you are</h3>
+          <p className="hk-hint">A neighborhood or city. Never your exact address.</p>
+          <input className="hk-field" type="text" maxLength={60} value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. Downtown" aria-label="Where you are" />
+        </section>
+
+        <section className="hk-step">
+          <h3><b>3</b>Who you want</h3>
+          <div className="chips" role="group" aria-label="Looking for">
+            {LOOKING.map(([k, l]) => (
+              <button type="button" key={k} aria-pressed={lookingFor === k} className={lookingFor === k ? "on" : ""} onClick={() => setLookingFor(k)}>{l}</button>
+            ))}
+          </div>
+          <div className="hk-range">
+            Aged
+            <input className={`hk-field${rangeErr ? " bad" : ""}`} inputMode="numeric" value={ageMin} onChange={(e) => setAgeMin(digits(e.target.value))} placeholder="18" aria-label="Youngest age" />
+            to
+            <input className={`hk-field${rangeErr ? " bad" : ""}`} inputMode="numeric" value={ageMax} onChange={(e) => setAgeMax(digits(e.target.value))} placeholder="99" aria-label="Oldest age" />
+            <span className="hk-opt">optional</span>
+          </div>
+          {rangeErr ? <p className="hk-err">{rangeErr}</p> : null}
+        </section>
+
+        <section className="hk-step">
+          <h3><b>4</b>The vibe <span className="hk-count">{vibes.length}/4</span></h3>
+          <div className="chips" role="group" aria-label="Vibe">
+            {VIBES.map((v) => (
+              <button type="button" key={v} aria-pressed={vibes.includes(v)} className={vibes.includes(v) ? "on" : ""} onClick={() => toggle(v)}>
+                {v[0].toUpperCase() + v.slice(1)}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="hk-step">
+          <h3>Anything else? <span className="hk-opt">optional</span></h3>
+          <textarea className="hk-field" rows={3} maxLength={250} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Keep it discreet. No numbers, handles or links." />
+        </section>
+
+        <div className="hk-preview">
+          <span>How it reads</span>
+          <p>{hookupText(true)}</p>
         </div>
-        <div className="hk-line">
-          Looking for
-          <select value={lookingFor} onChange={(e) => setLookingFor(e.target.value)} aria-label="Looking for">
-            {LOOKING.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-          aged
-          <input type="number" inputMode="numeric" min={18} max={99} value={ageMin} onChange={(e) => setAgeMin(e.target.value)} placeholder="min" aria-label="Minimum age" />
-          to
-          <input type="number" inputMode="numeric" min={18} max={99} value={ageMax} onChange={(e) => setAgeMax(e.target.value)} placeholder="max" aria-label="Maximum age" />
-        </div>
-        <div className="chips" aria-label="Vibe">
-          {VIBES.map((v) => (
-            <button type="button" key={v} aria-pressed={vibes.includes(v)} className={vibes.includes(v) ? "on" : ""} onClick={() => toggle(v)}>
-              {v}
-            </button>
-          ))}
-        </div>
-        <label className="field">
-          Anything else? (optional)
-          <textarea rows={3} maxLength={250} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Keep it discreet. No numbers, handles or links." />
-        </label>
-        {hookupOk ? <p className="hk-preview">{hookupText()}</p> : null}
-        <p className="muted small">
-          18+ only.
-          Posting costs {COST.post} coins (free with a subscription). You have {user?.coin_balance ?? 0}.
-        </p>
+
         {error ? <div className="err">{error}</div> : null}
-        <div className="row">
-          {short ? <Link href="/coins" className="pill ghost">Get coins</Link> : null}
-          <button className="btn" disabled={busy || !hookupOk}>{busy ? "Posting…" : "Drop it"}</button>
+        <div className="hk-foot">
+          <button className="btn" disabled={busy || !hookupOk}>{busy ? "Posting…" : `Drop it · ${COST.post} coins`}</button>
+          {!hookupOk ? <p className="hk-missing">Add {missing.join(", ")} to drop it.</p> : null}
+          <p className="muted small">
+            18+ only. Free with a subscription. You have {user?.coin_balance ?? 0} coins.
+            {short ? <> <Link href="/coins">Get coins</Link></> : null}
+          </p>
         </div>
       </form>
     );
