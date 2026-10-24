@@ -43,6 +43,7 @@ import { countryHeader } from '../../utils/country';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
 import GuidedConfession, { GUIDED_SAVE_KEY } from '../../components/drops/GuidedConfession';
+import { TAG_GROUPS, TOP_TAGS } from '../../config/adminTags';
 
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -75,6 +76,10 @@ const MAX_CHARS = 500;
 
 // Admin "Spotlight" extras — same options as the website's Post Studio.
 const PROMO_HOURS = [[6, '6 hours'], [24, '1 day'], [72, '3 days'], [168, '7 days']];
+// Search keywords — same rules as Post Studio and the server (drops.py):
+// lowercase, no '#', 30 chars, deduped, 10 max.
+const MAX_TAGS = 10;
+const cleanTag = (t) => t.trim().replace(/^#/, '').split(' ').filter(Boolean).join(' ').toLowerCase().slice(0, 30);
 const atHour = (daysAhead, hour) => {
   const d = new Date();
   d.setDate(d.getDate() + daysAhead);
@@ -369,6 +374,9 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [promo, setPromo] = useState('');            // '' | 'pin' | 'boost'
   const [promoHours, setPromoHours] = useState(24);
   const [publishAt, setPublishAt] = useState(null);  // ISO string, or null for now
+  const [tags, setTags] = useState([]);              // search keywords
+  const [tagDraft, setTagDraft] = useState('');
+  const [tagGroup, setTagGroup] = useState(null);    // open picker group, null = collapsed
   const soundPlayer = useAudioPlayer(null);
 
   // ── Tag a specific user (optional — drop still hits marketplace) ─
@@ -602,9 +610,34 @@ export default function DropsComposeScreen({ navigation, route }) {
     setExtraImageUris((prev) => prev.filter((u) => u !== uri));
   }, []);
 
+  // ── Keywords (admin) — tap a pick to add it, tap again to remove ──
+  const addTags = useCallback((raw) => {
+    const parts = raw.split(',').map(cleanTag).filter(Boolean);
+    if (parts.length) {
+      setTags((l) => {
+        const next = [...l];
+        for (const t of parts) if (!next.includes(t) && next.length < MAX_TAGS) next.push(t);
+        return next;
+      });
+    }
+    setTagDraft('');
+  }, []);
+  const toggleTag = useCallback((t) => {
+    setTags((l) => (l.includes(t) ? l.filter((x) => x !== t)
+      : l.length < MAX_TAGS ? [...l, t] : l));
+  }, []);
+  const tagChip = (t) => {
+    const on = tags.includes(t);
+    return (
+      <SpotChip key={t} label={on ? `✓ ${t}` : `+ ${t}`} on={on}
+        disabled={!on && tags.length >= MAX_TAGS} onPress={() => toggleTag(t)} />
+    );
+  };
+
   // ── Discard draft ─────────────────────────────────────────────
   const handleDiscardDraft = useCallback(async () => {
     setText('');
+    setTags([]); setTagDraft(''); setTagGroup(null);
     setMediaUri(null);
     setHint('');
     setTaggedUser(null);
@@ -718,6 +751,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         // Spotlight (admin only; the server ignores these from anyone else)
         ...(soundId && format !== 'voice' ? { sound_id: soundId, ...(isAdmin ? { sound_mute_original: isVideo && muteOriginal } : {}) } : {}),
         ...(isAdmin && promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
+        ...(isAdmin && tags.length ? { tags } : {}),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
         ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
@@ -737,6 +771,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         });
         await AsyncStorage.removeItem(DRAFT_KEY);
         setText('');
+        setTags([]); setTagDraft('');
         Keyboard.dismiss();
         showToast({
           type: 'success',
@@ -785,6 +820,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       // Clear draft
       await AsyncStorage.removeItem(DRAFT_KEY);
       setText('');
+      setTags([]); setTagDraft('');
 
       Keyboard.dismiss();
       showToast({
@@ -811,7 +847,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     format, text, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
-    isAdmin, videoEdit, videoMeta, coverAt, soundId, muteOriginal, promo, promoHours, publishAt,
+    isAdmin, videoEdit, videoMeta, coverAt, soundId, muteOriginal, promo, promoHours, publishAt, tags,
     dispatch, navigation, showToast,
   ]);
 
@@ -998,12 +1034,12 @@ export default function DropsComposeScreen({ navigation, route }) {
 
             {isAdmin && (
             <ToolIcon
-              active={!!soundId || !!promo || !!publishAt}
+              active={!!soundId || !!promo || !!publishAt || tags.length > 0}
               onPress={() => { dismissToolbarHint(); setActiveSheet('spotlight'); }}
               label="Boost"
-              a11yLabel="Spotlight — sound, pin or boost, post later"
+              a11yLabel="Spotlight — search keywords, sound, pin or boost, post later"
             >
-              <Rocket size={rs(18)} color={soundId || promo || publishAt ? T.primary : T.textMute} />
+              <Rocket size={rs(18)} color={soundId || promo || publishAt || tags.length ? T.primary : T.textMute} />
             </ToolIcon>
             )}
 
@@ -1265,6 +1301,59 @@ export default function DropsComposeScreen({ navigation, route }) {
         <OptionSheet visible={activeSheet === 'spotlight'} title="Spotlight" onClose={closeSheet}>
           <Text style={s.sectionSubLabel}>Extras that make a drop stop the scroll and travel further.</Text>
 
+          {/* Keywords — what search matches this drop on (with the caption).
+              Same picks as the website's Post Studio (config/adminTags.js). */}
+          <Text style={s.spotLabel}>Search keywords <Text style={s.spotCount}>{tags.length}/{MAX_TAGS}</Text></Text>
+          {tags.length > 0 && (
+            <View style={s.spotChips}>
+              {tags.map((t) => (
+                <TouchableOpacity key={t} onPress={() => toggleTag(t)} activeOpacity={0.8}
+                  style={[s.spotChip, s.spotChipOn, s.kwSel]} accessibilityLabel={`Remove ${t}`}>
+                  <Text style={[s.spotChipText, s.spotChipTextOn]} numberOfLines={1}>#{t}</Text>
+                  <X size={rs(12)} color="#fff" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {tags.length < MAX_TAGS && (
+            <TextInput
+              style={s.kwInput}
+              value={tagDraft}
+              maxLength={30}
+              placeholder={tags.length ? 'Type another, then return' : 'Type a keyword, then return'}
+              placeholderTextColor={T.textMute}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              blurOnSubmit={false}
+              onChangeText={(v) => (v.includes(',') ? addTags(v) : setTagDraft(v))}
+              onSubmitEditing={() => addTags(tagDraft)}
+              onBlur={() => addTags(tagDraft)}
+            />
+          )}
+          <Text style={s.kwHead}>Quick picks</Text>
+          <View style={s.spotChips}>{TOP_TAGS.map(tagChip)}</View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+            contentContainerStyle={s.kwTabs}>
+            {TAG_GROUPS.map((g) => {
+              const n = g.tags.filter((t) => tags.includes(t)).length;
+              const open = tagGroup === g.name;
+              return (
+                <TouchableOpacity key={g.name} onPress={() => setTagGroup(open ? null : g.name)} activeOpacity={0.8}
+                  style={[s.kwTab, open && s.kwTabOn]}>
+                  <Text style={[s.kwTabText, open && s.kwTabTextOn]}>{g.name}{n ? ` · ${n}` : ''}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          {!!tagGroup && (
+            <View style={s.spotChips}>{(TAG_GROUPS.find((g) => g.name === tagGroup)?.tags || []).map(tagChip)}</View>
+          )}
+          <Text style={s.spotHint}>
+            {tags.length >= MAX_TAGS ? "That's the max. Remove one to add another."
+              : 'What people would type in search to find this drop.'}
+          </Text>
+
           <Text style={s.spotLabel}>Sound</Text>
           {sounds.length ? (
             <View style={s.spotChips}>
@@ -1351,8 +1440,8 @@ export default function DropsComposeScreen({ navigation, route }) {
   );
 }
 
-const SpotChip = ({ label, on, onPress }) => (
-  <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[s.spotChip, on && s.spotChipOn]}>
+const SpotChip = ({ label, on, onPress, disabled }) => (
+  <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.8} style={[s.spotChip, on && s.spotChipOn, disabled && s.spotChipOff]}>
     <Text style={[s.spotChipText, on && s.spotChipTextOn]} numberOfLines={1}>{label}</Text>
   </TouchableOpacity>
 );
@@ -1368,6 +1457,16 @@ const s = StyleSheet.create({
   spotSoundRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   spotListen: { fontSize: rf(12), fontWeight: '700', color: T.primary },
   spotHint: { fontSize: rf(12), color: T.textSecondary, lineHeight: rf(18) },
+  spotChipOff: { opacity: 0.4 },
+  spotCount: { fontSize: rf(12), fontWeight: '700', color: T.textSecondary },
+  kwSel: { flexDirection: 'row', alignItems: 'center', gap: rp(4) },
+  kwInput: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderRadius: RADIUS.md, paddingHorizontal: rp(12), paddingVertical: rp(8), fontSize: rf(14), color: T.text, marginBottom: rp(10) },
+  kwHead: { fontSize: rf(12), fontWeight: '700', color: T.textSecondary, marginBottom: rp(6) },
+  kwTabs: { gap: rp(6), paddingBottom: rp(8) },
+  kwTab: { paddingHorizontal: rp(11), paddingVertical: rp(6), borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: T.surfaceAlt },
+  kwTabOn: { borderColor: T.primary },
+  kwTabText: { fontSize: rf(12.5), fontWeight: '700', color: T.textSecondary },
+  kwTabTextOn: { color: T.text },
   kindWrap: { flex: 1, padding: rp(20), gap: rp(14), justifyContent: 'center' },
   kindTitle: { fontSize: FONT.xl || FONT.lg, fontWeight: '800', color: T.text },
   kindLead: { fontSize: FONT.sm, color: T.textSecondary, marginBottom: rp(6) },

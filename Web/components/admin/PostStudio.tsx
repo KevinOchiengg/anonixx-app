@@ -18,6 +18,7 @@ import VideoEditor from "../compose/VideoEditor";
 import VideoPlayer from "../VideoPlayer";
 import { defaultEdit, isMeaningful, type VideoEdit } from "@/lib/videoEdit";
 import { IconText, IconImages, IconVideo, IconMic, IconPoll } from "../compose/toolicons";
+import { TAG_GROUPS, TOP_TAGS } from "@/lib/adminTags";
 import "../../app/poststudio.css";
 
 type Format = "text" | "photo" | "video" | "voice" | "poll";
@@ -30,7 +31,6 @@ const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode 
 ];
 
 const THEME = { from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC" };
-const SUGGEST = ["funny", "relationships", "dating", "advice", "love", "heartbreak", "late night", "story time", "music", "challenge"];
 const MAX_TAGS = 10;
 
 const MAX_TEXT = 500;
@@ -58,6 +58,7 @@ export default function PostStudio() {
   const [name, setName] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
+  const [tagGroup, setTagGroup] = useState<string | null>(null); // open picker section, null = collapsed
   const [mature, setMature] = useState(false);
   const [share, setShare] = useState(true);
   const [place, setPlace] = useState<LocationDraft>(EMPTY_PLACE);
@@ -144,6 +145,21 @@ export default function PostStudio() {
       return next;
     });
     setTagDraft("");
+  }
+
+  // Picker chips toggle: tap to add, tap again to remove.
+  function toggleTag(t: string) {
+    if (tags.includes(t)) setTags((l) => l.filter((x) => x !== t));
+    else addTag(t);
+  }
+
+  function pickChip(t: string) {
+    const on = tags.includes(t);
+    return (
+      <button key={t} type="button" className={on ? "on" : ""} aria-pressed={on} onClick={() => toggleTag(t)} disabled={!on && tags.length >= MAX_TAGS}>
+        {on ? "✓" : "+"} {t}
+      </button>
+    );
   }
 
   function chooseFormat(f: Format) {
@@ -319,7 +335,7 @@ export default function PostStudio() {
     bgRef.current?.cancel(); setBg(null);
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
-    setTags([]); setTagDraft(""); setMature(false); setError(""); setPublished(null);
+    setTags([]); setTagDraft(""); setTagGroup(null); setMature(false); setError(""); setPublished(null);
     setCoverAt(null); setSoundId(""); setMuteOriginal(false); setPromo(""); setLater(false); setLaterAt(""); setCopied(false);
   }
 
@@ -540,10 +556,23 @@ export default function PostStudio() {
                 />
               ) : null}
             </div>
-            <div className="ps-suggest">
-              {SUGGEST.filter((t) => !tags.includes(t)).map((t) => (
-                <button key={t} type="button" onClick={() => addTag(t)} disabled={tags.length >= MAX_TAGS}>+ {t}</button>
-              ))}
+            <div className="ps-pick">
+              <b>Quick picks</b>
+              <div className="ps-suggest">{TOP_TAGS.map(pickChip)}</div>
+              <div className="ps-pick-tabs" role="tablist">
+                {TAG_GROUPS.map((g) => {
+                  const n = g.tags.filter((t) => tags.includes(t)).length;
+                  const open = tagGroup === g.name;
+                  return (
+                    <button key={g.name} type="button" role="tab" aria-selected={open} className={open ? "on" : ""} onClick={() => setTagGroup(open ? null : g.name)}>
+                      {g.name}{n ? <em>{n}</em> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {tagGroup ? (
+                <div className="ps-suggest">{(TAG_GROUPS.find((g) => g.name === tagGroup)?.tags || []).map(pickChip)}</div>
+              ) : null}
             </div>
             <small className="ps-help">{tags.length}/{MAX_TAGS} keywords{!tags.length && !text.trim() && format !== "poll" ? " · with no caption or keywords, this drop can't be found by search." : ""}</small>
           </section>
