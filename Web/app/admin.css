@@ -52,9 +52,7 @@
 .adm-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .adm-toggle { white-space: nowrap; }
 .adm-toggle span { margin-left: 4px; font-size: 11px; color: var(--muted); }
-.adm-row-open > td { border-bottom-color: transparent; }
-.adm-expand > td { padding-top: 0; }
-.adm-menu { display: flex; flex-direction: column; max-width: 260px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+.adm-menu { display: flex; flex-direction: column; min-width: 160px; margin-top: 8px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
 .adm-menu button { text-align: left; padding: 11px 14px; font-size: 14px; font-weight: 600; color: var(--fg); background: none; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; }
 .adm-menu button:last-child { border-bottom: 0; }
 .adm-menu button:hover:not(:disabled) { background: rgba(255,255,255,0.04); }
@@ -228,3 +226,4 @@
 .adm-seg-sm { display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-alt); }
 .adm-seg-sm button { padding: 5px 11px; border-radius: 8px; border: 0; background: none; color: var(--muted); font-weight: 700; font-size: 12.5px; cursor: pointer; }
 .adm-seg-sm button.on { background: var(--rose); color: #fff; }
+.adm-users td { vertical-align: top; } /* an open Manage list grows the row; the rest of the row stays at the top */

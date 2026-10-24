@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
@@ -68,14 +68,13 @@ export default function AdminUsers() {
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted">Loading…</p> : data.users.length === 0 ? <p className="muted">No users found.</p> : (
         <div className="adm-scroll">
-          <table className="adm-table">
+          <table className="adm-table adm-users">
             <thead>
               <tr><th>User</th><th>Status</th><th>Coins</th><th>Joined</th><th>Last login</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {data.users.map((u) => (
-                <Fragment key={u.id}>
-                <tr className={open === u.id ? "adm-row-open" : undefined}>
+                <tr key={u.id}>
                   <td>
                     <b>{u.anonymous_name || u.username || "—"}</b>
                     <div className="muted small">{u.email}</div>
@@ -97,11 +96,8 @@ export default function AdminUsers() {
                     >
                       {busy === u.id ? "Working…" : "Manage"} <span aria-hidden>{open === u.id ? "▴" : "▾"}</span>
                     </button>
-                  </td>
-                </tr>
-                {open === u.id ? (
-                  <tr className="adm-expand">
-                    <td colSpan={6}>
+                    {/* Opens inside this cell, so the user's own row grows and shrinks. */}
+                    {open === u.id ? (
                       <div className="adm-menu">
                         <button disabled={busy === u.id} onClick={() => toggle(u, "ban")}>{u.is_active ? "Ban" : "Unban"}</button>
                         <button disabled={busy === u.id} onClick={() => toggle(u, "verify")}>{u.is_verified ? "Unverify" : "Verify"}</button>
@@ -113,10 +109,9 @@ export default function AdminUsers() {
                           </>
                         ) : null}
                       </div>
-                    </td>
-                  </tr>
-                ) : null}
-                </Fragment>
+                    ) : null}
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
