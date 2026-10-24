@@ -7,13 +7,17 @@ type D = {
   id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string; confession_full: string | null;
   promo_kind: "pin" | "boost" | null; promo_until: string | null;
   media_type: string | null; report_count: number; moderation_status: string | null; created_at: string | null;
+  kind: string | null;
+  stats: { views: number; likes: number; comments: number; saves: number; reactions: number; linkups: number; unlocks: number; engagement: number | null };
 };
+const SORTS: [string, string][] = [["recent", "Newest"], ["views", "Most viewed"], ["likes", "Most liked"], ["comments", "Most discussed"], ["engagement", "Best engagement"]];
 type Page = { total: number; skip: number; limit: number; drops: D[] };
 const LIMIT = 20;
 
 export default function AdminPosts() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("recent");
   const [skip, setSkip] = useState(0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
@@ -25,12 +29,13 @@ export default function AdminPosts() {
     try {
       const p = new URLSearchParams({ skip: String(skip), limit: String(LIMIT) });
       if (search) p.set("search", search);
+      p.set("sort", sort);
       setData(await api<Page>(`/admin/drops?${p}`));
       setError("");
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [skip, search]);
+  }, [skip, search, sort]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -65,6 +70,9 @@ export default function AdminPosts() {
       <form className="adm-search" onSubmit={(e) => { e.preventDefault(); setSkip(0); setSearch(q.trim()); }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search post text" />
         <button className="adm-btn primary">Search</button>
+        <select className="adm-select" value={sort} onChange={(e) => { setSkip(0); setSort(e.target.value); }} aria-label="Sort posts">
+          {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
       </form>
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted">Loading…</p> : data.drops.length === 0 ? <p className="muted">No posts found.</p> : (
@@ -85,6 +93,17 @@ export default function AdminPosts() {
                   onChange={(e) => setEditing({ id: d.id, text: e.target.value })} aria-label="Post text"
                 />
               ) : <p className="adm-text">{d.confession || "[no text]"}</p>}
+              <div className="adm-stats">
+                <span><b>{d.stats.views}</b> views</span>
+                <span><b>{d.stats.likes}</b> likes</span>
+                <span><b>{d.stats.comments}</b> comments</span>
+                <span><b>{d.stats.saves}</b> saves</span>
+                {d.stats.reactions ? <span><b>{d.stats.reactions}</b> reactions</span> : null}
+                {d.kind !== "confession" && !d.is_admin_drop ? <span><b>{d.stats.linkups}</b> link ups</span> : null}
+                <span className="adm-eng" title="Likes, comments, saves and link ups per view">
+                  <b>{d.stats.engagement == null ? "—" : `${d.stats.engagement}%`}</b> engagement
+                </span>
+              </div>
               {promoting?.id === d.id ? (
                 <div className="adm-actions">
                   <select className="adm-select" value={promoting.kind} onChange={(e) => setPromoting({ ...promoting, kind: e.target.value as "pin" | "boost" })} aria-label="Pin or boost">
