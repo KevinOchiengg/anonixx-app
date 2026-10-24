@@ -5,6 +5,7 @@ import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { timeLeft } from "@/lib/linkup";
+import { allowMature, useMatureOk } from "@/lib/matureConsent";
 import VideoPlayer from "./VideoPlayer";
 import FitImage from "./FitImage";
 import { Bookmark, Comment, Heart, Share } from "./icons";
@@ -77,14 +78,15 @@ export default function Slide({
 }: Props) {
   const { user } = useAuth();
   const [page, setPage] = useState(0);
-  const [revealed, setRevealed] = useState(false);
+  // One tap opens every mature post on this device; verified adults never see the veil.
+  const matureOk = useMatureOk();
   const [expanded, setExpanded] = useState(false);
   const [fullText, setFullText] = useState(false);
   const [burst, setBurst] = useState(0);
   const viewed = useRef(false);
   const lastTap = useRef(0);
 
-  const mature = post.sensitivity === "mature" && !revealed;
+  const mature = post.sensitivity === "mature" && !matureOk && !user?.age_verified;
 
   useEffect(() => {
     if (!active || viewed.current || mature) return;
@@ -438,9 +440,9 @@ export default function Slide({
       ) : null}
 
       {mature ? (
-        <button className="mature-veil" onClick={() => setRevealed(true)}>
+        <button className="mature-veil" onClick={allowMature}>
           <strong>Mature content</strong>
-          <span>Adults only. Tap to view.</span>
+          <span>Adults only. Tap once and you won't be asked again.</span>
         </button>
       ) : null}
     </article>
