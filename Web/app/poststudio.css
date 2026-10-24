@@ -112,6 +112,16 @@
 .ps-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
 .ps-suggest button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted); font-size: 12.5px; cursor: pointer; }
 .ps-suggest button:hover:not(:disabled) { color: var(--fg); border-color: var(--faint); }
+.ps-suggest button.on { background: var(--rose-dim); border-color: var(--rose); color: var(--rose); font-weight: 600; }
+.ps-suggest button:disabled { opacity: .4; cursor: not-allowed; }
+/* Keyword picker: quick picks, then one group open at a time */
+.ps-pick { display: grid; gap: 8px; }
+.ps-pick > b { font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.ps-pick-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-top: 2px; }
+.ps-pick-tabs::-webkit-scrollbar { display: none; }
+.ps-pick-tabs button { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--muted); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.ps-pick-tabs button.on { border-color: var(--rose); color: var(--fg); }
+.ps-pick-tabs em { font-style: normal; font-size: 10.5px; min-width: 16px; padding: 0 5px; border-radius: 999px; background: var(--rose); color: #fff; text-align: center; }
 .ps-as { margin-bottom: 14px; }
 
 /* ---------- spotlight: cover, sound, pin/boost, schedule ---------- */
