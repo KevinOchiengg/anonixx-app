@@ -633,3 +633,4 @@
 }
 /* no clear first sentence: the opening words in the serif (same size), flowing into the rest */
 .slide.has-media .cap-hook.inline { display: inline; margin: 0; line-height: 1.2; }
+.lu-heart { margin-right: 6px; font-size: 15px; line-height: 1; flex: none; }

@@ -21,7 +21,7 @@ North-star numbers: new signups, % posting within 24h, link up accept rate, 7-da
 5. **Brand voice.** Intimate, a little dangerous, never corporate, never cheesy. Short sentences. No emojis in official drops unless asked.
 5a. **Stay neutral.** Nothing public names a specific city, country, campus, or local slang, and prices are shown in coins, not a local currency. Regional payment options (e.g. M-Pesa) exist only for users detected in that region and are never part of the brand. Research can look at any market; what ships must read as global.
 6. **Be honest.** Cite sources with links. Say when data is thin or a guess. Never invent numbers.
-7. **Don't change app code** unless the founder asks. Agents recommend; the founder decides.
+7. **Don't change app code** unless the founder asks. Agents recommend; the founder decides. Exception: the product manager may suggest, write, and refine code, but never commits, pushes, or deploys without the founder's go-ahead.
 
 ## Where things go
 ```

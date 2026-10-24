@@ -19,6 +19,7 @@ certifi==2024.8.30
 agora-token-builder==1.0.0
 python-socketio==5.11.4
 resend==2.4.0
+anthropic==2.3.0
 Pillow==12.1.1
 pywebpush==2.5.0
 maxminddb==2.6.2

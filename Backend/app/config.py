@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     VAPID_PRIVATE_KEY: str = ""
     VAPID_SUBJECT: str = "mailto:support@anonixx.com"
 
+    # ANTHROPIC (guided confession writer — app/services/confession_writer.py).
+    # Server-side only; leave empty to switch the AI writer off.
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-opus-5-5"
+
     # RESEND (email)
     RESEND_API_KEY: str = ""
     FROM_EMAIL: str = "Anonixx <noreply@anonixx.com>"

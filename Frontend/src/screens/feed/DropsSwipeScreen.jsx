@@ -130,7 +130,8 @@ const fmtClock = (s) => {
 // Same coin-gated CTA as DropCard.jsx's card-feed version (Link2 icon,
 // "Link up" label, coin-cost pill) — positioned like a TikTok ad's CTA,
 // pinned near the bottom of the slide instead of squeezed into a caption.
-const LinkUpButton = React.memo(({ onPress, name, wide }) => {
+// heart: hookup posts get the 🖤 version, the invitation the post was written for.
+const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
   const glow = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -147,7 +148,7 @@ const LinkUpButton = React.memo(({ onPress, name, wide }) => {
           colors={['#ff8a73', '#ff634a', '#ff4f7b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={[sw.linkUpBtn, wide && { justifyContent: 'center' }]}
         >
-          <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
+          {heart ? <Text style={sw.linkUpHeart}>🖤</Text> : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
           <Text style={sw.linkUpBtnText} numberOfLines={1}>
             Link up{name ? ' with ' : ''}{name ? <Text style={{ fontWeight: '900' }}>{name}</Text> : null}
           </Text>
@@ -162,6 +163,21 @@ const LinkUpButton = React.memo(({ onPress, name, wide }) => {
 });
 
 // ─── Shared: tonight chips on hookup posts ───────────────────────
+// Compact facts from the hookup block (age, area, who, hosting) ride in the same
+// row as the countdown, so the confession text never has to list them.
+const HOSTING_TAG = { can_host: 'can host', can_travel: 'can travel', either: 'host or travel' };
+const hookupTags = (h) => {
+  if (!h) return [];
+  const who = h.looking_for === 'woman' ? 'into women' : h.looking_for === 'man' ? 'into men' : null;
+  const range = h.age_min || h.age_max ? ` ${h.age_min || 18}–${h.age_max || 99}` : '';
+  return [
+    h.age ? `${h.age}${h.gender && h.gender !== 'other' ? ` · ${h.gender}` : ''}` : null,
+    h.area || null,
+    who ? who + range : null,
+    HOSTING_TAG[h.guided?.hosting] || null,
+    h.guided?.public_first ? 'public first' : null,
+  ].filter(Boolean);
+};
 // Hookup posts are live for 12h (Backend drops.py HOOKUP_LIVE_HOURS). The
 // countdown and link-up count make the window felt; the owner can buy
 // another 12h (POST /drops/{id}/extend, capped server side at 48h).
@@ -188,6 +204,7 @@ const LiveChips = ({ post, isOwnPost }) => {
   return (
     <View style={sw.liveRow}>
       <Text style={[sw.liveChip, left && sw.liveChipHot]}>{left ? `Tonight · ${left}` : 'Ended'}</Text>
+      {hookupTags(post.hookup).map((tag) => <Text key={tag} style={sw.liveChip}>{tag}</Text>)}
       {!!post.linkup_count && <Text style={sw.liveChip}>{post.linkup_count} linked up</Text>}
       {isOwnPost && (
         <TouchableOpacity onPress={extend} hitSlop={HIT_SLOP} style={sw.liveExtend}>
@@ -720,7 +737,7 @@ const VideoSlide = ({
             ) : null}
 
             <LiveChips post={post} isOwnPost={isOwnPost} />
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
 
         </>
@@ -859,7 +876,7 @@ const AudioSlide = ({
         </TouchableOpacity>
 
         <LiveChips post={post} isOwnPost={isOwnPost} />
-        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
+        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
       </View>
     </View>
   );
@@ -1099,7 +1116,7 @@ const TextSlide = ({
             )}
 
             <LiveChips post={post} isOwnPost={isOwnPost} />
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} wide />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} wide />}
           </View>
         </>
       )}
@@ -1170,7 +1187,7 @@ const PollSlide = ({
               </AuthorProfileTrigger>
             </View>
             <LiveChips post={post} isOwnPost={isOwnPost} />
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton onPress={onLinkUp} name={post.anonymous_name} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
         </>
       )}
@@ -1992,6 +2009,7 @@ const sw = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
   },
   linkUpBtnText: { flexShrink: 1, fontSize: FONT.sm, fontWeight: '800', color: '#fff', letterSpacing: 0.1 },
+  linkUpHeart: { fontSize: rf(15) },
   linkUpCostPill: { flexDirection: 'row', alignItems: 'center', gap: rp(4), backgroundColor: 'rgba(60,20,10,0.32)', borderRadius: RADIUS.full, paddingHorizontal: rp(8), paddingVertical: rp(3) },
   linkUpCostText: { fontSize: rf(12), fontWeight: '800', color: '#ffe7a3' },
 
