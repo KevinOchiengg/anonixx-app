@@ -10,5 +10,6 @@ export const IconText = () => (<svg {...P}><path d="M5 7V5h14v2M12 5v14M9 19h6" 
 export const IconVideo = () => (<svg {...P}><rect x="3" y="6" width="13" height="12" rx="3" /><path d="m16 10.5 5-3v9l-5-3z" /></svg>);
 export const IconShare = () => (<svg {...P}><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6" /></svg>);
 export const IconShuffle = () => (<svg {...P} width={14} height={14}><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg>);
+export const IconMusic = () => (<svg {...P}><path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" /></svg>);
 export const IconX = () => (<svg {...P}><path d="M6 6l12 12M18 6 6 18" /></svg>);
 export const IconWarn = () => (<svg {...P} width={15} height={15}><path d="M12 3 2 20h20z" /><path d="M12 10v4.5M12 17.5v.01" /></svg>);

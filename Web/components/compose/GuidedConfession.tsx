@@ -1,7 +1,7 @@
 "use client";
 /**
- * The hookup half of /compose: five short questions asked one at a time, then a
- * reveal where the AI writer (POST /guided/generate) turns the answers into a
+ * The hookup half of /compose: five short questions asked one at a time, an
+ * optional sound to play behind it, then a reveal where the AI writer (POST /guided/generate) turns the answers into a
  * confession the poster can re-tone, regenerate, edit and drop.
  *
  * Answers, the step and the confession draft (generated or hand-edited) are kept
@@ -11,10 +11,10 @@
  * Posting goes through POST /drops (kind="hookup") with every usual check.
  * Mirrors Frontend/src/components/drops/GuidedConfession.jsx.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, ApiError, COST } from "@/lib/api";
+import { api, ApiError, COST, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AgeGate from "../AgeGate";
 
@@ -38,7 +38,9 @@ const STEPS = [
   { q: "What makes you, you?", sub: "Pick up to three. Only what feels true." },
   { q: "Tell us something they wouldn't know about you.", sub: "A small, real thing. It's what makes yours different from everyone else's." },
   { q: "If the chemistry feels right, what's possible?", sub: "Only what you're comfortable with. You can change your mind later." },
+  { q: "Want a sound behind it?", sub: "Optional. It plays softly while they read yours." },
 ];
+const REVEAL = STEPS.length;
 const WAITING = ["listening to what you said…", "finding your words…", "keeping it yours…"];
 
 type Answers = {
@@ -47,6 +49,7 @@ type Answers = {
   age: string; gender: string | null; traits: string[];
   secret: string;
   hosting: string | null; publicFirst: boolean;
+  sound: string;
 };
 const EMPTY: Answers = {
   craving: null, cravingCustom: "",
@@ -54,6 +57,7 @@ const EMPTY: Answers = {
   age: "", gender: null, traits: [],
   secret: "",
   hosting: null, publicFirst: false,
+  sound: "",
 };
 
 const digits = (v: string) => v.replace(/\D/g, "").slice(0, 2);
@@ -108,12 +112,15 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const [ageGate, setAgeGate] = useState(false);
   const [waitIx, setWaitIx] = useState(0);
   const [done, setDone] = useState(false);
+  const [sounds, setSounds] = useState<Sound[] | null>(null);
+  const [hearing, setHearing] = useState("");
+  const preview = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
       if (saved?.a) setA({ ...EMPTY, ...saved.a });
-      if (typeof saved?.step === "number") setStep(Math.min(saved.step, 5));
+      if (typeof saved?.step === "number") setStep(Math.min(saved.step, REVEAL));
       if (typeof saved?.text === "string") setText(saved.text);
       if (typeof saved?.aiText === "string") setAiText(saved.aiText);
       if (typeof saved?.tone === "string") setTone(saved.tone);
@@ -123,7 +130,25 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     api<{ enabled: boolean; remaining: number }>("/guided/status")
       .then((r) => setWriter({ enabled: r.enabled, remaining: r.remaining }))
       .catch(() => setWriter({ enabled: false, remaining: null }));
+    api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => setSounds([]));
   }, []);
+
+  // A sound preview stops when the poster leaves the sound step or the page.
+  useEffect(() => {
+    if (step === REVEAL - 1) return;
+    preview.current?.pause();
+    setHearing("");
+  }, [step]);
+  useEffect(() => () => preview.current?.pause(), []);
+  function hear(s: Sound) {
+    preview.current?.pause();
+    if (hearing === s.id) { setHearing(""); return; }
+    const el = new Audio(s.url);
+    el.onended = () => setHearing("");
+    el.play().catch(() => setHearing(""));
+    preview.current = el;
+    setHearing(s.id);
+  }
 
   useEffect(() => {
     if (!ready || done) return;
@@ -183,7 +208,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
 
   // First arrival at the reveal writes the first draft on its own.
   useEffect(() => {
-    if (step === 5 && writer.enabled && !text && !generating && !genError) generate();
+    if (step === REVEAL && writer.enabled && !text && !generating && !genError) generate();
   }, [step, writer.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function publish() {
@@ -218,6 +243,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           mood_tag: "longing",
           sensitivity: "mature",
           publisher_opt_in: true,
+          ...(a.sound ? { sound_id: a.sound } : {}),
         },
       });
       try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
@@ -242,17 +268,19 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   }
   if (ageGate) return <div className="form pad"><AgeGate onDone={() => setAgeGate(false)} /></div>;
 
-  const onReveal = step === 5;
+  const onReveal = step === REVEAL;
   const problem = onReveal ? "" : stepProblem(step, a);
   const go = (n: number) => { setStep(n); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const writerOff = writer.enabled === false;
   const short = (user?.coin_balance ?? 0) < COST.post;
+  const pickedSound = a.sound ? sounds?.find((x) => x.id === a.sound) : undefined;
   const tags = [
     `${a.age || "—"}${a.gender && a.gender !== "other" ? ` · ${a.gender}` : ""}`,
     a.area.trim() || null,
     `into ${a.lookingFor === "anyone" ? "anyone" : a.lookingFor === "woman" ? "women" : "men"}${a.ageMin || a.ageMax ? ` ${a.ageMin || 18}–${a.ageMax || 99}` : ""}`,
     (a.hosting && HOSTING_TAG[a.hosting]) || null,
     a.publicFirst ? "public first" : null,
+    pickedSound ? `♪ ${pickedSound.title}` : null,
   ].filter(Boolean) as string[];
 
   function body() {
@@ -311,6 +339,19 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           <p className="hk-hint">Nobody pays anybody on Anonixx. Link up is how you meet.</p>
         </>
       );
+      case 5: return sounds === null ? <p className="hk-hint">Loading sounds…</p> : sounds.length === 0 ? (
+        <p className="hk-hint">No sounds yet. Yours goes out quiet, which works too.</p>
+      ) : (
+        <div className="chips gc-chips gc-sounds" role="group" aria-label="Sound">
+          <button type="button" aria-pressed={!a.sound} className={!a.sound ? "on" : ""} onClick={() => set({ sound: "" })}>No sound</button>
+          {sounds.map((snd) => (
+            <span key={snd.id} className="gc-sound">
+              <button type="button" aria-pressed={a.sound === snd.id} className={a.sound === snd.id ? "on" : ""} onClick={() => set({ sound: snd.id })}>{snd.title}</button>
+              <button type="button" className="gc-hear" onClick={() => hear(snd)} aria-label={hearing === snd.id ? `Stop ${snd.title}` : `Listen to ${snd.title}`}>{hearing === snd.id ? "stop" : "listen"}</button>
+            </span>
+          ))}
+        </div>
+      );
       default: return null;
     }
   }
@@ -319,7 +360,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     <div className="form pad gc">
       <div className="gc-top">
         <button type="button" className="linkish" onClick={() => (step === 0 ? onBack() : go(step - 1))}>← {step === 0 ? "Change" : "Back"}</button>
-        <div className="gc-progress" aria-label={onReveal ? "Reveal" : `Step ${step + 1} of 5`}>
+        <div className="gc-progress" aria-label={onReveal ? "Reveal" : `Step ${step + 1} of ${STEPS.length}`}>
           {STEPS.map((_, i) => <i key={i} className={i <= step ? "on" : ""} />)}
         </div>
       </div>
@@ -370,7 +411,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           </>
         ) : (
           <>
-            <button className="btn" disabled={!!problem} onClick={() => go(step + 1)}>{step === 4 ? "Reveal it" : step === 3 && !a.secret.trim() ? "Skip" : "Next"}</button>
+            <button className="btn" disabled={!!problem} onClick={() => go(step + 1)}>{step === REVEAL - 1 ? (a.sound ? "Reveal it" : "Skip and reveal") : step === 3 && !a.secret.trim() ? "Skip" : "Next"}</button>
             {problem ? <p className="hk-missing">{problem}</p> : null}
           </>
         )}

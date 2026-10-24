@@ -91,3 +91,9 @@
 .cx-toggle small { color: var(--muted); font-size: 12px; }
 .cx-toggle input { width: 22px; height: 22px; accent-color: var(--rose); flex: none; }
 .cx-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.cx-sounds { display: grid; gap: 8px; }
+.cx-sounds > button, .cx-sound > button:first-child { text-align: left; padding: 11px 14px; border-radius: 14px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--fg); display: grid; gap: 2px; cursor: pointer; }
+.cx-sounds > button.on, .cx-sound.on > button:first-child { border-color: var(--rose); background: rgba(255,99,74,0.12); }
+.cx-sound { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.cx-sound small { color: var(--muted); font-size: 12px; text-transform: capitalize; }
+.cx-hear { padding: 9px 12px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--rose); font-weight: 600; font-size: 12px; cursor: pointer; }

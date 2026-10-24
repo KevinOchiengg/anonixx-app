@@ -32,7 +32,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useDispatch } from 'react-redux';
 import {
   ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
-  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, Feather,
+  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, Feather, Music,
 } from 'lucide-react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useAudioPlayer } from 'expo-audio';
@@ -583,13 +583,13 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Spotlight sheet: load the Sounds library the first time it opens ──
   useEffect(() => {
-    if (activeSheet !== 'spotlight' || sounds.length) return;
+    if ((activeSheet !== 'spotlight' && activeSheet !== 'sound') || sounds.length) return;
     fetch(`${API_BASE_URL}/api/v1/sounds`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d?.sounds) setSounds(d.sounds); })
       .catch(() => {});
   }, [activeSheet, sounds.length]);
-  useEffect(() => { if (activeSheet !== 'spotlight' && hearingId) { soundPlayer.pause(); setHearingId(''); } }, [activeSheet]);
+  useEffect(() => { if (activeSheet !== 'spotlight' && activeSheet !== 'sound' && hearingId) { soundPlayer.pause(); setHearingId(''); } }, [activeSheet]);
 
   const hear = useCallback((snd) => {
     if (hearingId === snd.id) { soundPlayer.pause(); setHearingId(''); return; }
@@ -716,7 +716,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               } : {})),
         ...(coverUrl ? { cover_url: coverUrl } : {}),
         // Spotlight (admin only; the server ignores these from anyone else)
-        ...(isAdmin && soundId ? { sound_id: soundId, sound_mute_original: isVideo && muteOriginal } : {}),
+        ...(soundId && format !== 'voice' ? { sound_id: soundId, ...(isAdmin ? { sound_mute_original: isVideo && muteOriginal } : {}) } : {}),
         ...(isAdmin && promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
@@ -1007,6 +1007,17 @@ export default function DropsComposeScreen({ navigation, route }) {
             </ToolIcon>
             )}
 
+            {!isAdmin && (
+            <ToolIcon
+              active={!!soundId}
+              onPress={() => { dismissToolbarHint(); setActiveSheet('sound'); }}
+              label="Sound"
+              a11yLabel="Add a sound that plays behind your confession"
+            >
+              <Music size={rs(18)} color={soundId ? T.primary : T.textMute} />
+            </ToolIcon>
+            )}
+
             <ToolIcon
               onPress={() => { dismissToolbarHint(); setActiveSheet('intent'); }}
               label="Mood"
@@ -1226,6 +1237,28 @@ export default function DropsComposeScreen({ navigation, route }) {
             />
           </View>
         </OptionSheet>
+
+        {/* ── Sound sheet (users) — the same Sounds library admins pick from in Spotlight ── */}
+        {!isAdmin && (
+        <OptionSheet visible={activeSheet === 'sound'} title="Sound" onClose={closeSheet}>
+          <Text style={s.sectionSubLabel}>Set the mood. It plays softly behind your words.</Text>
+          {sounds.length ? (
+            <View style={s.spotChips}>
+              <SpotChip label="No sound" on={!soundId} onPress={() => setSoundId('')} />
+              {sounds.map((snd) => (
+                <View key={snd.id} style={s.spotSoundRow}>
+                  <SpotChip label={snd.title} on={soundId === snd.id} onPress={() => setSoundId(snd.id)} />
+                  <TouchableOpacity onPress={() => hear(snd)} hitSlop={HIT_SLOP}>
+                    <Text style={s.spotListen}>{hearingId === snd.id ? 'stop' : 'listen'}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={s.spotHint}>No sounds yet. Check back soon.</Text>
+          )}
+        </OptionSheet>
+        )}
 
         {/* ── Spotlight sheet (admin) — same extras as the website's Post Studio ── */}
         {isAdmin && (
