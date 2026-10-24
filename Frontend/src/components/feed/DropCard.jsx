@@ -123,6 +123,7 @@ const ImageCarousel = React.memo(({ images }) => {
       {images.length > 1 && containerWidth > 0 && (
         <View style={styles.dotsRow}>
           {images.map((_, i) => <View key={i} style={[styles.dot, i === activeIndex && styles.dotActive]} />)}
+          <Text style={styles.dotsCount}>{activeIndex + 1}/{images.length}</Text>
         </View>
       )}
     </View>
@@ -725,6 +726,7 @@ const styles = StyleSheet.create({
   dotsRow:          { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: rp(5), paddingTop: rp(8) },
   dot:              { width: rs(5), height: rs(5), borderRadius: rs(3), backgroundColor: 'rgba(255,255,255,0.2)' },
   dotActive:        { backgroundColor: T.primary, width: rs(16), borderRadius: rs(3) },
+  dotsCount:        { fontSize: rf(11), fontWeight: '600', color: 'rgba(255,255,255,0.6)', marginLeft: rp(3), fontVariant: ['tabular-nums'] },
   videoWrap:        { position: 'relative', marginBottom: rp(14), borderRadius: RADIUS.lg, overflow: 'hidden', height: rs(240), backgroundColor: '#06080f', borderWidth: 1, borderColor: 'rgba(255,99,74,0.15)' },
   videoFill:        { width: '100%', height: '100%' },
   hidden:           { position: 'absolute', opacity: 0 },
