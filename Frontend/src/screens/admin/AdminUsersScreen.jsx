@@ -7,7 +7,7 @@
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,
   ActivityIndicator, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,7 +50,14 @@ const UserRow = React.memo(({ item, isSuper, open, onToggle, onBan, onVerify, on
     </TouchableOpacity>
 
     {open && (
-      <View style={s.menu}>
+      // Swallows taps on the list itself so only taps outside it fold it back.
+      <View style={s.menu} onStartShouldSetResponder={() => true}>
+        <View style={s.menuHead}>
+          <Text style={s.menuTitle}>ACTIONS</Text>
+          <TouchableOpacity onPress={() => onToggle(item.id)} hitSlop={HIT_SLOP} accessibilityLabel="Close">
+            <X size={rs(16)} color={T.textSecondary} />
+          </TouchableOpacity>
+        </View>
         <ActionBtn icon={ShieldOff} label={item.is_active ? 'Ban' : 'Unban'} onPress={() => onBan(item)} on={!item.is_active} />
         <ActionBtn icon={BadgeCheck} label={item.is_verified ? 'Unverify' : 'Verify'} onPress={() => onVerify(item)} on={item.is_verified} />
         {isSuper && (
@@ -204,6 +211,9 @@ export default function AdminUsersScreen({ navigation, route }) {
         />
       </View>
 
+      {/* A tap anywhere outside the open user's actions folds them back. */}
+      <TouchableWithoutFeedback onPress={() => setOpenId(null)} accessible={false}>
+      <View style={{ flex: 1 }}>
       {loading ? (
         <View style={s.centered}><ActivityIndicator color={T.primary} size="large" /></View>
       ) : (
@@ -225,9 +235,13 @@ export default function AdminUsersScreen({ navigation, route }) {
             />
           )}
           contentContainerStyle={s.listContent}
+          onScrollBeginDrag={() => setOpenId(null)}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={<Text style={s.emptyText}>No users found.</Text>}
         />
       )}
+      </View>
+      </TouchableWithoutFeedback>
 
       <Modal visible={!!coinModalUser} transparent animationType="fade" onRequestClose={() => setCoinModalUser(null)}>
         <View style={s.modalOverlay}>
@@ -304,6 +318,8 @@ const s = StyleSheet.create({
   },
   manageText: { fontSize: rf(12), fontWeight: '700', color: T.text },
   menu: { marginTop: rp(12), paddingTop: rp(8), borderTopWidth: 1, borderTopColor: T.border },
+  menuHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: rp(4), paddingBottom: rp(4) },
+  menuTitle: { fontSize: rf(10), fontWeight: '800', letterSpacing: 0.8, color: T.textMuted },
   actBtn: { flexDirection: 'row', alignItems: 'center', gap: rp(10), paddingVertical: rp(11), paddingHorizontal: rp(4) },
   actBtnDanger: { marginTop: rp(4), borderTopWidth: 1, borderTopColor: T.border },
   actText: { fontSize: FONT.sm, fontWeight: '600', color: T.text },

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
@@ -21,6 +21,24 @@ export default function AdminUsers() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null); // the one row whose actions are expanded
+  const openCell = useRef<HTMLTableCellElement | null>(null);
+
+  // A click anywhere outside the open Actions cell, or Esc, folds it back.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (openCell.current && !openCell.current.contains(e.target as Node)) setOpen(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(null); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   const load = useCallback(async () => {
     try {
@@ -88,7 +106,7 @@ export default function AdminUsers() {
                   <td>{u.coin_balance}</td>
                   <td className="small">{fmtDate(u.created_at)}</td>
                   <td className="small">{fmtDate(u.last_login)}</td>
-                  <td>
+                  <td ref={open === u.id ? openCell : undefined}>
                     <button
                       className="adm-btn adm-toggle"
                       aria-expanded={open === u.id}
@@ -99,6 +117,10 @@ export default function AdminUsers() {
                     {/* Opens inside this cell, so the user's own row grows and shrinks. */}
                     {open === u.id ? (
                       <div className="adm-menu">
+                        <div className="adm-menu-head">
+                          <span>Actions</span>
+                          <button type="button" className="adm-menu-x" aria-label="Close" onClick={() => setOpen(null)}>×</button>
+                        </div>
                         <button disabled={busy === u.id} onClick={() => toggle(u, "ban")}>{u.is_active ? "Ban" : "Unban"}</button>
                         <button disabled={busy === u.id} onClick={() => toggle(u, "verify")}>{u.is_verified ? "Unverify" : "Verify"}</button>
                         {isSuper ? (
