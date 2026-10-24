@@ -12,47 +12,71 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Search, ShieldCheck, ShieldOff, BadgeCheck, Coins, Trash2, X } from 'lucide-react-native';
+import {
+  ArrowLeft, Search, ShieldCheck, ShieldOff, BadgeCheck, Coins, Trash2, X, ChevronDown, ChevronUp,
+} from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
 
-const UserRow = React.memo(({ item, isSuper, onBan, onVerify, onAdmin, onAdjustCoins, onDelete }) => (
-  <View style={s.userCard}>
-    <View style={{ flex: 1 }}>
-      <Text style={s.userName}>{item.anonymous_name || item.username || item.email}</Text>
-      <Text style={s.userMeta}>
-        {item.email} · {item.coin_balance} coins
-        {item.is_super_admin ? ' · super admin' : item.is_admin ? ' · admin' : ''}
-        {item.is_verified ? ' · verified' : ''}
-        {!item.is_active ? ' · BANNED' : ''}
-      </Text>
-    </View>
-    <View style={s.userActions}>
-      {isSuper && (
-        <TouchableOpacity onPress={() => onAdjustCoins(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
-          <Coins size={rs(15)} color={T.textSecondary} />
-        </TouchableOpacity>
-      )}
-      <TouchableOpacity onPress={() => onVerify(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
-        <BadgeCheck size={rs(15)} color={item.is_verified ? T.primary : T.textSecondary} />
-      </TouchableOpacity>
-      {isSuper && (
-        <TouchableOpacity onPress={() => onAdmin(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
-          <ShieldCheck size={rs(15)} color={item.is_admin ? T.primary : T.textSecondary} />
-        </TouchableOpacity>
-      )}
-      <TouchableOpacity onPress={() => onBan(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
-        <ShieldOff size={rs(15)} color={item.is_active ? T.textSecondary : '#EF4444'} />
-      </TouchableOpacity>
-      {isSuper && (
-        <TouchableOpacity onPress={() => onDelete(item)} hitSlop={HIT_SLOP} style={s.actionBtn}>
-          <Trash2 size={rs(15)} color="#EF4444" />
-        </TouchableOpacity>
-      )}
-    </View>
+// One labelled action in the expanded panel.
+const ActionBtn = ({ icon: Icon, label, onPress, danger, on }) => (
+  <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[s.actBtn, danger && s.actBtnDanger]}>
+    <Icon size={rs(14)} color={danger ? '#EF4444' : on ? T.primary : T.textSecondary} />
+    <Text style={[s.actText, danger && s.actTextDanger]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+// Collapsed: name, facts and a Manage toggle. Open: the actions in labelled
+// groups under the row (same layout as the web admin Users page).
+const UserRow = React.memo(({ item, isSuper, open, onToggle, onBan, onVerify, onAdmin, onAdjustCoins, onDelete }) => (
+  <View style={[s.userCard, open && s.userCardOpen]}>
+    <TouchableOpacity style={s.userTop} onPress={() => onToggle(item.id)} activeOpacity={0.8} accessibilityState={{ expanded: open }}>
+      <View style={{ flex: 1 }}>
+        <Text style={s.userName}>{item.anonymous_name || item.username || item.email}</Text>
+        <Text style={s.userMeta}>
+          {item.email} · {item.coin_balance} coins
+          {item.is_super_admin ? ' · super admin' : item.is_admin ? ' · admin' : ''}
+          {item.is_verified ? ' · verified' : ''}
+          {!item.is_active ? ' · BANNED' : ''}
+        </Text>
+      </View>
+      <View style={s.manage}>
+        <Text style={s.manageText}>Manage</Text>
+        {open ? <ChevronUp size={rs(14)} color={T.textSecondary} /> : <ChevronDown size={rs(14)} color={T.textSecondary} />}
+      </View>
+    </TouchableOpacity>
+
+    {open && (
+      <View style={s.groups}>
+        <View style={s.group}>
+          <Text style={s.groupLabel}>MODERATION</Text>
+          <View style={s.groupRow}>
+            <ActionBtn icon={ShieldOff} label={item.is_active ? 'Ban' : 'Unban'} onPress={() => onBan(item)} on={!item.is_active} />
+            <ActionBtn icon={BadgeCheck} label={item.is_verified ? 'Unverify' : 'Verify'} onPress={() => onVerify(item)} on={item.is_verified} />
+          </View>
+        </View>
+        {isSuper && (
+          <>
+            <View style={s.group}>
+              <Text style={s.groupLabel}>ACCOUNT</Text>
+              <View style={s.groupRow}>
+                <ActionBtn icon={Coins} label="Coins" onPress={() => onAdjustCoins(item)} />
+                <ActionBtn icon={ShieldCheck} label={item.is_admin ? 'Remove admin' : 'Make admin'} onPress={() => onAdmin(item)} on={item.is_admin} />
+              </View>
+            </View>
+            <View style={s.group}>
+              <Text style={s.groupLabel}>DANGER</Text>
+              <View style={s.groupRow}>
+                <ActionBtn icon={Trash2} label="Delete" onPress={() => onDelete(item)} danger />
+              </View>
+            </View>
+          </>
+        )}
+      </View>
+    )}
   </View>
 ));
 
@@ -62,6 +86,8 @@ export default function AdminUsersScreen({ navigation, route }) {
   const [users, setUsers]     = useState([]);
   const [query, setQuery]     = useState('');
   const [loading, setLoading] = useState(true);
+  const [openId, setOpenId]   = useState(null); // the one user whose actions are expanded
+  const toggleOpen = useCallback((id) => setOpenId((cur) => (cur === id ? null : id)), []);
   const [coinModalUser, setCoinModalUser] = useState(null);
   const [coinAmount, setCoinAmount]       = useState('');
   const [coinReason, setCoinReason]       = useState('');
@@ -199,10 +225,13 @@ export default function AdminUsersScreen({ navigation, route }) {
         <FlatList
           data={users}
           keyExtractor={(u) => u.id}
+          extraData={openId}
           renderItem={({ item }) => (
             <UserRow
               item={item}
               isSuper={isSuper}
+              open={openId === item.id}
+              onToggle={toggleOpen}
               onDelete={handleDelete}
               onBan={handleBan}
               onVerify={handleVerify}
@@ -278,13 +307,29 @@ const s = StyleSheet.create({
   emptyText: { color: T.textMuted, fontSize: FONT.sm, textAlign: 'center', marginTop: rs(40) },
 
   userCard: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(10),
     backgroundColor: T.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border, padding: rp(12),
   },
+  userCardOpen: { borderColor: T.borderStrong },
+  userTop: { flexDirection: 'row', alignItems: 'center', gap: rp(10) },
   userName: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
   userMeta: { fontSize: rf(10), color: T.textMuted, marginTop: rp(2) },
-  userActions: { flexDirection: 'row', gap: rp(4) },
-  actionBtn: { padding: rp(6) },
+  manage: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(4),
+    paddingHorizontal: rp(10), paddingVertical: rp(6), borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.borderStrong,
+  },
+  manageText: { fontSize: rf(12), fontWeight: '700', color: T.text },
+  groups: { marginTop: rp(12), paddingTop: rp(12), borderTopWidth: 1, borderTopColor: T.border, gap: rp(12) },
+  group: { gap: rp(6) },
+  groupLabel: { fontSize: rf(10), fontWeight: '800', letterSpacing: 0.8, color: T.textMuted },
+  groupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
+  actBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(6),
+    paddingHorizontal: rp(12), paddingVertical: rp(8), borderRadius: RADIUS.sm,
+    borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.background,
+  },
+  actBtnDanger: { borderColor: 'rgba(239,68,68,0.45)', backgroundColor: 'rgba(239,68,68,0.10)' },
+  actText: { fontSize: rf(12), fontWeight: '700', color: T.text },
+  actTextDanger: { color: '#fca5a5' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: SPACING.lg },
   modalCard: { backgroundColor: T.background, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: T.border, padding: SPACING.md, gap: rp(10) },
