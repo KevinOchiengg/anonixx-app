@@ -688,8 +688,8 @@ async def create_drop(
     images_data = None
     if data.images:
         cleaned_images = [u.strip() for u in data.images if u and u.strip()]
-        if len(cleaned_images) < 2 or len(cleaned_images) > 10:
-            raise HTTPException(status_code=400, detail="A multi-image post needs 2–10 photos.")
+        if len(cleaned_images) < 2 or len(cleaned_images) > 9:
+            raise HTTPException(status_code=400, detail="A multi-image post needs 2–9 photos.")
         images_data = cleaned_images
 
     location_detail, location_display = build_location(

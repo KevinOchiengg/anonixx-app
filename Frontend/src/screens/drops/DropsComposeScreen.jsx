@@ -532,7 +532,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         quality:              0.85,
         allowsEditing:        false,
         allowsMultipleSelection: true,
-        selectionLimit:       10,
+        selectionLimit:       9,
       });
       if (result.canceled) return;
 
@@ -559,7 +559,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       // Multiple selected — a mixed photo/video multi-select doesn't map
       // to anything postable, so videos are silently dropped from the
       // selection rather than blocking the whole pick.
-      const photoUris = result.assets.filter((a) => a.type !== 'video').map((a) => a.uri).slice(0, 10);
+      const photoUris = result.assets.filter((a) => a.type !== 'video').map((a) => a.uri).slice(0, 9);
       if (photoUris.length < 2) {
         showToast({ type: 'warning', message: 'Pick at least 2 photos for a multi-photo drop.' });
         return;

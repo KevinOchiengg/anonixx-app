@@ -400,7 +400,7 @@ function DropCard({
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  // A real multi-image post (post.images, 2-10 photos picked at compose
+  // A real multi-image post (post.images, 2-9 photos picked at compose
   // time) takes priority and renders every photo as its own slide. Falls
   // back to the single-image pair below for everything else: media_url/
   // media_type is the drop's PRIMARY content slot (an image drop's photo,
