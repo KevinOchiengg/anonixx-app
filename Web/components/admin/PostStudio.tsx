@@ -23,7 +23,7 @@ import "../../app/poststudio.css";
 type Format = "text" | "photo" | "video" | "voice" | "poll";
 const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode }[] = [
   { id: "text", label: "Text", hint: "Words on a gradient", icon: <IconText /> },
-  { id: "photo", label: "Photos", hint: "1 to 10 images", icon: <IconImages /> },
+  { id: "photo", label: "Photos", hint: "1 to 9 images", icon: <IconImages /> },
   { id: "video", label: "Video", hint: "Up to 3 min, trim + text", icon: <IconVideo /> },
   { id: "voice", label: "Voice", hint: "Record a note", icon: <IconMic /> },
   { id: "poll", label: "Poll", hint: "2 to 4 options", icon: <IconPoll /> },
@@ -183,8 +183,8 @@ export default function PostStudio() {
     if (!imgs.length) return setError("Only image files can go here.");
     const big = imgs.find((x) => x.size > MAX_IMG_MB * 1024 * 1024);
     if (big) return setError(`${big.name} is too big. Max ${MAX_IMG_MB}MB per photo.`);
-    const room = 10 - photos.length;
-    if (imgs.length > room) setError("Only 10 photos fit in one drop. Extras were skipped.");
+    const room = 9 - photos.length;
+    if (imgs.length > room) setError("Only 9 photos fit in one drop. Extras were skipped.");
     let kept: File[];
     try { kept = await Promise.all(imgs.slice(0, room).map(keepReadable)); } catch (e) { return setError((e as Error).message); }
     setPhotos((p) => [...p, ...kept.map(track)]);
@@ -394,7 +394,7 @@ export default function PostStudio() {
         {format === "video" ? (
           <><span>MP4 (H.264)</span><span>Up to 3 min</span><span>{MAX_VID_MB}MB max</span><span>Camera: Most compatible</span></>
         ) : (
-          <><span>JPG or PNG</span><span>Up to 10</span><span>{MAX_IMG_MB}MB each</span></>
+          <><span>JPG or PNG</span><span>Up to 9</span><span>{MAX_IMG_MB}MB each</span></>
         )}
       </span>
     </div>
@@ -461,7 +461,7 @@ export default function PostStudio() {
                         ))}
                       </div>
                     ) : null}
-                    {photos.length < 10 ? drop : null}
+                    {photos.length < 9 ? drop : null}
                   </>
                 ) : video ? (
                   <div className="ps-video">

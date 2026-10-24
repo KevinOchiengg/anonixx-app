@@ -51,7 +51,7 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
       } else onChange({ kind: "image", files: [f] });
       return;
     }
-    const photos = files.filter((f) => f.type.startsWith("image/")).slice(0, 10);
+    const photos = files.filter((f) => f.type.startsWith("image/")).slice(0, 9);
     if (photos.length < 2) { onError("Pick at least 2 photos for a multi-photo drop."); return; }
     onChange({ kind: "image", files: photos });
   }
@@ -96,7 +96,7 @@ export default function MediaPicker({ value, onChange, onError }: { value: Media
       ) : (
         <button type="button" className="cx-add" onClick={() => input.current?.click()} disabled={busy}>
           {busy ? "Checking…" : "Add photos or a video"}
-          <small>Up to 10 photos, or one video (up to {MAX_CLIP_SECONDS / 60} min, trim it and add text)</small>
+          <small>Up to 9 photos, or one video (up to {MAX_CLIP_SECONDS / 60} min, trim it and add text)</small>
         </button>
       )}
     </div>
