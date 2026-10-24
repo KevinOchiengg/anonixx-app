@@ -22,6 +22,7 @@ import { uploadViaBackend } from '../../utils/upload';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
+import useDraft from '../../hooks/useDraft';
 
 // @mentions — plain-text markup, mirrors MENTION_RE in
 // Backend/app/api/v1/drops.py. Parsed here purely for rendering (coral,
@@ -276,7 +277,8 @@ export const CommentBottomSheet = React.memo(({
 
   const [comments,       setComments]       = useState([]);
   const [loading,        setLoading]        = useState(false);
-  const [text,           setText]           = useState('');
+  // Unsent comment stays put per post (hooks/useDraft.js); sending sets it back to '' which clears it.
+  const [text,           setText]           = useDraft(postId ? `comment:${postId}` : null, '');
   const [submitting,     setSubmitting]     = useState(false);
   const [replyingTo,     setReplyingTo]     = useState(null);
   const [sortBy,         setSortBy]         = useState('new');
@@ -303,7 +305,6 @@ export const CommentBottomSheet = React.memo(({
       setComments([]);
       setReplyingTo(null);
       setPicker(null);
-      setText('');
       loadComments();
       Animated.spring(slideAnim, {
         toValue: 0, useNativeDriver: true, friction: 9, tension: 70,

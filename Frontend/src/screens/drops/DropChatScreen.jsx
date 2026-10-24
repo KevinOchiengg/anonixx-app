@@ -54,6 +54,7 @@ import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
+import useDraft from '../../hooks/useDraft';
 
 // Real-time delivery (see new_message socket handling below) covers the
 // common case now — this is just a safety net for missed/dropped socket
@@ -475,7 +476,7 @@ export default function DropChatScreen({ route, navigation }) {
   const [messages, setMessages]     = useState([]);
   const [connection, setConnection] = useState(null);
   const [loading, setLoading]       = useState(true);
-  const [text, setText]             = useState('');
+  const [text, setText]             = useDraft(`chat:${connectionId}`, ''); // unsent message survives leaving
   const [sending, setSending]       = useState(false);
   const [showEmojiStrip, setShowEmojiStrip] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);

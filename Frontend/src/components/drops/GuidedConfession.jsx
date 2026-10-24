@@ -6,8 +6,9 @@
  * (POST /guided/generate) turns the answers into a confession the poster can
  * re-tone, regenerate, edit and drop.
  *
- * Answers live in one object and are saved to AsyncStorage as they change, so
- * going back a step, or leaving and coming back, never loses anything.
+ * Answers, the step, and the confession draft (generated or hand-edited) are
+ * saved to AsyncStorage as they change, so going back a step, or leaving and
+ * coming back, never loses anything.
  * If the writer is off or fails, the poster is told and writes it themselves;
  * nothing is filled in from a template behind their back.
  *
@@ -35,7 +36,8 @@ import T from '../../utils/theme';
 
 // Must match DROP_POST_COST in Backend/app/api/v1/drops.py.
 const POST_COST = 3;
-const SAVE_KEY = 'anonixx.drops.guided.v1';
+export const GUIDED_SAVE_KEY = 'anonixx.drops.guided.v1';
+const SAVE_KEY = GUIDED_SAVE_KEY;
 const MAX_CHARS = 500;
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
@@ -163,7 +165,11 @@ export default function GuidedConfession({ navigation, onBack }) {
       try {
         const saved = JSON.parse(await AsyncStorage.getItem(SAVE_KEY) || 'null');
         if (saved?.a) setA({ ...EMPTY, ...saved.a });
-        if (typeof saved?.step === 'number') setStep(Math.min(saved.step, 4));
+        if (typeof saved?.step === 'number') setStep(Math.min(saved.step, 5));
+        if (typeof saved?.text === 'string') setText(saved.text);
+        if (typeof saved?.aiText === 'string') setAiText(saved.aiText);
+        if (typeof saved?.tone === 'string') setTone(saved.tone);
+        if (Array.isArray(saved?.drafts)) setDrafts(saved.drafts.slice(-4));
       } catch { /* corrupt or missing: start fresh */ }
       setReady(true);
     })();
@@ -176,10 +182,14 @@ export default function GuidedConfession({ navigation, onBack }) {
   useEffect(() => {
     if (!ready) return undefined;
     const t = setTimeout(() => {
-      AsyncStorage.setItem(SAVE_KEY, JSON.stringify({ a, step: Math.min(step, 4) })).catch(() => {});
+      const started = step > 0 || !!text || JSON.stringify(a) !== JSON.stringify(EMPTY);
+      (started
+        ? AsyncStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, step, text, aiText, tone, drafts }))
+        : AsyncStorage.removeItem(SAVE_KEY)
+      ).catch(() => {});
     }, 300);
     return () => clearTimeout(t);
-  }, [a, step, ready]);
+  }, [a, step, text, aiText, tone, drafts, ready]);
 
   // ── Step transition ─────────────────────────────────────────
   const fade = useRef(new Animated.Value(1)).current;

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import useDraft from "@/lib/useDraft";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,7 +41,7 @@ export default function LinkUpSheet({
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [clue, setClue] = useState<Clue | null>(null);
-  const [pitch, setPitch] = useState("");
+  const [pitch, setPitch, clearPitch] = useDraft(`linkup:${post.id}`, "");
   const [intents, setIntents] = useState<string[]>([]);
   const [ageGate, setAgeGate] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -95,6 +96,7 @@ export default function LinkUpSheet({
         if (clue.kind === "video") body.media_duration = clue.seconds;
       }
       const r = await api<{ already_unlocked?: boolean; mutual?: boolean; connection_id?: string }>("/unlock-requests", { body });
+      clearPitch();
       if ((r.already_unlocked || r.mutual) && r.connection_id) {
         router.push(`/chat/${r.connection_id}`);
         return;

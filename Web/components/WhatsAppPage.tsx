@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import useDraft from "@/lib/useDraft";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -14,7 +15,7 @@ const LABEL: Record<string, string> = {
 function Inner() {
   const { refresh } = useAuth();
   const [phone, setPhone] = useState("");
-  const [text, setText] = useState("");
+  const [text, setText] = useDraft("whatsapp:text", "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [needCoins, setNeedCoins] = useState(false);

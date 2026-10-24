@@ -29,6 +29,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/respons
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
+import useDraft from '../../hooks/useDraft';
 
 const AD_COINS_PER_HOUR = 5;
 
@@ -42,7 +43,7 @@ const MEDIA_TABS = [
 export default function CreateAdScreen({ navigation }) {
   const { showToast } = useToast();
 
-  const [title, setTitle]         = useState('');
+  const [title, setTitle, clearTitle] = useDraft('ad:title', '');
   const [hours, setHours]         = useState('24');
   const [mediaType, setMediaType] = useState('image');
   const [mediaUri, setMediaUri]   = useState(null);
@@ -150,6 +151,7 @@ export default function CreateAdScreen({ navigation }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         showToast({ type: 'success', message: data.message || 'Ad submitted.' });
+        clearTitle();
         navigation.goBack();
       } else if (res.status === 402) {
         showToast({ type: 'warning', message: data.detail || 'Not enough coins.' });

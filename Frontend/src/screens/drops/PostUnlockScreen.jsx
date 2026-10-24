@@ -25,6 +25,7 @@ import { fetchBalance } from '../../store/slices/coinsSlice';
 import { uploadToR2 } from '../../utils/upload';
 import { INTENTS, MAX_INTENTS, MAX_PITCH } from '../../config/linkup';
 import AgeGate from '../../components/drops/AgeGate';
+import useDraft from '../../hooks/useDraft';
 
 // Must match COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
 const UNLOCK_COST = 6;
@@ -53,7 +54,7 @@ export default function PostUnlockScreen({ route, navigation }) {
   const displayText   = post ? post.content : linkupTarget?.preview_text;
 
   const [unlocking, setUnlocking] = useState(false);
-  const [pitch, setPitch] = useState('');
+  const [pitch, setPitch, clearPitch] = useDraft(targetId ? `linkup:${targetId}` : null, '');
   const [intents, setIntents] = useState([]);
   const [ageGate, setAgeGate] = useState(false);
 
@@ -156,6 +157,7 @@ export default function PostUnlockScreen({ route, navigation }) {
       // Mutual: they'd already linked up with you, so it connects free.
       if (res.ok && (data.already_unlocked || data.mutual) && data.connection_id) {
         if (data.mutual) showToast({ type: 'success', title: "It's mutual 🔥", message: 'You both wanted this. The chat is open.' });
+        clearPitch();
         navigation.replace('DropChat', { connectionId: data.connection_id });
         return;
       }
@@ -173,6 +175,7 @@ export default function PostUnlockScreen({ route, navigation }) {
           message: `${displayName || 'They'} sees your line first. Nothing's charged unless they say yes.`,
         });
         dispatch(fetchBalance());
+        clearPitch();
         if (fromRoom) navigation.goBack();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         return;

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import useDraft from "@/lib/useDraft";
 import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -62,7 +63,7 @@ function Inner({ id }: { id: string }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [welcome, setWelcome] = useState<GalleryItem[]>([]);
   const [gallery, setGallery] = useState(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useDraft(`chat:${id}`, ""); // unsent message survives leaving
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
