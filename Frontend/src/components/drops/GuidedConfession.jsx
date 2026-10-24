@@ -2,7 +2,7 @@
  * GuidedConfession.jsx
  *
  * The hookup half of the compose screen: five short questions, asked one at a
- * time like a private conversation, then a reveal where the AI writer
+ * time like a private conversation, an optional sound to play behind it, then a reveal where the AI writer
  * (POST /guided/generate) turns the answers into a confession the poster can
  * re-tone, regenerate, edit and drop.
  *
@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAudioPlayer } from 'expo-audio';
 import { useDispatch, useSelector } from 'react-redux';
 import { ChevronLeft, MapPin, Pencil, RefreshCw, Check, Lock } from 'lucide-react-native';
 
@@ -56,7 +57,9 @@ const STEPS = [
   { q: 'What makes you, you?', sub: 'Pick up to three. Only what feels true.' },
   { q: "Tell us something they wouldn't know about you.", sub: 'A small, real thing. It is what makes yours different from everyone else\'s.' },
   { q: "If the chemistry feels right, what's possible?", sub: 'Only what you are comfortable with. You can change your mind later.' },
+  { q: 'Want a sound behind it?', sub: 'Optional. It plays softly while they read yours.' },
 ];
+const REVEAL = STEPS.length;
 
 const WAITING = [
   'listening to what you said…',
@@ -70,6 +73,7 @@ const EMPTY = {
   age: '', gender: null, traits: [],
   secret: '',
   hosting: null, publicFirst: false,
+  sound: '',
 };
 
 const digits = (v) => v.replace(/\D/g, '').slice(0, 2);
@@ -143,7 +147,7 @@ export default function GuidedConfession({ navigation, onBack }) {
   const coinBalance = useSelector((state) => state.coins.balance);
 
   const [a, setA] = useState(EMPTY);
-  const [step, setStep] = useState(0);            // 0..4 questions, 5 reveal
+  const [step, setStep] = useState(0);            // 0..4 questions, 5 sound, 6 reveal
   const [ready, setReady] = useState(false);
   const set = (patch) => setA((cur) => ({ ...cur, ...patch }));
 
@@ -158,6 +162,9 @@ export default function GuidedConfession({ navigation, onBack }) {
   const [posting, setPosting] = useState(false);
   const [ageGate, setAgeGate] = useState(false);
   const [waitIx, setWaitIx] = useState(0);
+  const [sounds, setSounds] = useState(null);
+  const [hearing, setHearing] = useState('');
+  const preview = useAudioPlayer(null);
 
   // ── Restore and save answers ────────────────────────────────
   useEffect(() => {
@@ -165,7 +172,7 @@ export default function GuidedConfession({ navigation, onBack }) {
       try {
         const saved = JSON.parse(await AsyncStorage.getItem(SAVE_KEY) || 'null');
         if (saved?.a) setA({ ...EMPTY, ...saved.a });
-        if (typeof saved?.step === 'number') setStep(Math.min(saved.step, 5));
+        if (typeof saved?.step === 'number') setStep(Math.min(saved.step, REVEAL));
         if (typeof saved?.text === 'string') setText(saved.text);
         if (typeof saved?.aiText === 'string') setAiText(saved.aiText);
         if (typeof saved?.tone === 'string') setTone(saved.tone);
@@ -177,7 +184,17 @@ export default function GuidedConfession({ navigation, onBack }) {
     authedFetch('/guided/status').then(({ res, data }) => {
       setWriter(res.ok ? { enabled: !!data.enabled, remaining: data.remaining } : { enabled: false, remaining: null });
     }).catch(() => setWriter({ enabled: false, remaining: null }));
+    authedFetch('/sounds').then(({ res, data }) => setSounds(res.ok ? data.sounds || [] : [])).catch(() => setSounds([]));
   }, [dispatch]);
+
+  // A sound preview stops as soon as the poster leaves the sound step.
+  useEffect(() => { if (step !== REVEAL - 1 && hearing) { preview.pause(); setHearing(''); } }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hear = useCallback((snd) => {
+    if (hearing === snd.id) { preview.pause(); setHearing(''); return; }
+    preview.replace({ uri: snd.url });
+    preview.play();
+    setHearing(snd.id);
+  }, [hearing, preview]);
 
   useEffect(() => {
     if (!ready) return undefined;
@@ -247,7 +264,7 @@ export default function GuidedConfession({ navigation, onBack }) {
 
   // First arrival at the reveal writes the first draft on its own.
   useEffect(() => {
-    if (step === 5 && writer.enabled && !text && !generating && !genError) generate();
+    if (step === REVEAL && writer.enabled && !text && !generating && !genError) generate();
   }, [step, writer.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Publish ─────────────────────────────────────────────────
@@ -283,6 +300,7 @@ export default function GuidedConfession({ navigation, onBack }) {
         sensitivity: 'mature',
         font_style: 'bold-tease',
         publisher_opt_in: true,
+        ...(a.sound ? { sound_id: a.sound } : {}),
       });
       if (res.status === 403 && isAgeGate(data)) { setAgeGate(true); return; }
       if (res.status === 402) {
@@ -302,7 +320,7 @@ export default function GuidedConfession({ navigation, onBack }) {
   }, [a, aiText, text, tone, dispatch, navigation, showToast]);
 
   // ── Render helpers ──────────────────────────────────────────
-  const problem = step < 5 ? stepProblem(step, a) : '';
+  const problem = step < REVEAL ? stepProblem(step, a) : '';
   const back = () => (step === 0 ? onBack() : goTo(step - 1));
   const next = () => { if (!problem) goTo(step + 1); };
 
@@ -313,6 +331,7 @@ export default function GuidedConfession({ navigation, onBack }) {
     HOSTING_TAG[a.hosting] || null,
     a.publicFirst ? 'public first' : null,
   ].filter(Boolean);
+  const pickedSound = a.sound && sounds ? sounds.find((x) => x.id === a.sound) : null;
 
   function renderStep() {
     switch (step) {
@@ -403,6 +422,25 @@ export default function GuidedConfession({ navigation, onBack }) {
           <Text style={s.hint}>Nobody pays anybody on Anonixx. Link up is how you meet.</Text>
         </View>
       );
+      case 5: return (
+        <View style={s.group}>
+          {sounds === null ? <ActivityIndicator color={T.primary} /> : sounds.length === 0 ? (
+            <Text style={s.hint}>No sounds yet. Yours goes out quiet, which works too.</Text>
+          ) : (
+            <View style={s.chips}>
+              <Chip label="No sound" active={!a.sound} onPress={() => set({ sound: '' })} />
+              {sounds.map((snd) => (
+                <View key={snd.id} style={s.soundRow}>
+                  <Chip label={snd.title} active={a.sound === snd.id} onPress={() => set({ sound: snd.id })} />
+                  <TouchableOpacity onPress={() => hear(snd)} hitSlop={HIT_SLOP}>
+                    <Text style={s.link}>{hearing === snd.id ? 'stop' : 'listen'}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      );
       default: return null;
     }
   }
@@ -439,6 +477,7 @@ export default function GuidedConfession({ navigation, onBack }) {
                 <Text style={s.tagText}>{t}</Text>
               </View>
             ))}
+            {pickedSound && <View style={s.tag}><Text style={s.tagText}>♪ {pickedSound.title}</Text></View>}
           </View>
         </LinearGradient>
 
@@ -482,7 +521,7 @@ export default function GuidedConfession({ navigation, onBack }) {
     );
   }
 
-  const onReveal = step === 5;
+  const onReveal = step === REVEAL;
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -493,7 +532,7 @@ export default function GuidedConfession({ navigation, onBack }) {
           <View style={s.progress}>
             {STEPS.map((_, i) => <View key={i} style={[s.seg, i <= step && s.segOn]} />)}
           </View>
-          <Text style={s.stepNum}>{onReveal ? '' : `${step + 1}/5`}</Text>
+          <Text style={s.stepNum}>{onReveal ? '' : `${step + 1}/${STEPS.length}`}</Text>
         </View>
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -523,7 +562,7 @@ export default function GuidedConfession({ navigation, onBack }) {
           ) : (
             <>
               <TouchableOpacity style={[s.primaryBtn, !!problem && s.primaryOff]} onPress={next} disabled={!!problem} activeOpacity={0.85}>
-                <Text style={s.primaryText}>{step === 4 ? 'Reveal it' : step === 3 && !a.secret.trim() ? 'Skip' : 'Next'}</Text>
+                <Text style={s.primaryText}>{step === REVEAL - 1 ? (a.sound ? 'Reveal it' : 'Skip and reveal') : step === 3 && !a.secret.trim() ? 'Skip' : 'Next'}</Text>
               </TouchableOpacity>
               {!!problem && <Text style={s.footNote}>{problem}</Text>}
             </>
@@ -538,6 +577,7 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
   header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   progress: { flex: 1, flexDirection: 'row', gap: rs(5) },
+  soundRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
   seg: { flex: 1, height: rs(3), borderRadius: rs(2), backgroundColor: T.borderStrong },
   segOn: { backgroundColor: T.primary },
   stepNum: { width: rs(28), textAlign: 'right', color: T.textMute, fontFamily: 'DMSans-SemiBold', fontSize: FONT.xs },

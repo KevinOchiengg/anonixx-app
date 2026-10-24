@@ -809,22 +809,25 @@ async def create_drop(
     )
     cover_url = data.cover_url if cover_ok else None
 
+    # Any confession can carry a track from the Sounds library (not voice drops,
+    # which already have their own audio).
     sound = None
+    if data.sound_id and data.media_type != "voice":
+        try:
+            sound_doc = await db["sounds"].find_one({"_id": ObjectId(data.sound_id), "active": True})
+        except Exception:
+            sound_doc = None
+        if not sound_doc:
+            raise HTTPException(status_code=400, detail="That sound isn't available any more. Pick another.")
+        sound = {
+            "id": str(sound_doc["_id"]),
+            "title": sound_doc.get("title", ""),
+            "url": sound_doc.get("url", ""),
+            "mute_original": bool(data.sound_mute_original) and data.media_type == "video",
+        }
+
     promo_until = None
     if is_admin_drop:
-        if data.sound_id and data.media_type != "voice":
-            try:
-                sound_doc = await db["sounds"].find_one({"_id": ObjectId(data.sound_id), "active": True})
-            except Exception:
-                sound_doc = None
-            if not sound_doc:
-                raise HTTPException(status_code=400, detail="That sound isn't available any more. Pick another.")
-            sound = {
-                "id": str(sound_doc["_id"]),
-                "title": sound_doc.get("title", ""),
-                "url": sound_doc.get("url", ""),
-                "mute_original": bool(data.sound_mute_original) and data.media_type == "video",
-            }
         if data.promo_kind:
             if data.promo_kind not in PROMO_KINDS or data.promo_hours not in PROMO_HOURS:
                 raise HTTPException(status_code=400, detail="Pick pin or boost, for 6 hours, 1, 3 or 7 days.")

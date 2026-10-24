@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, COST } from "@/lib/api";
+import { api, COST, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { uploadFile } from "@/lib/upload";
 import AppShell from "./AppShell";
@@ -17,7 +17,7 @@ import LocationFields, { type LocationDraft } from "./compose/LocationFields";
 import Sheet from "./Sheet";
 import GuidedConfession, { GUIDED_SAVE_KEY } from "./compose/GuidedConfession";
 import {
-  IconImages, IconSparkles, IconUserPlus, IconPin, IconMic, IconPoll, IconShare, IconShuffle, IconX, IconWarn,
+  IconImages, IconSparkles, IconUserPlus, IconPin, IconMic, IconPoll, IconShare, IconShuffle, IconX, IconWarn, IconMusic,
 } from "./compose/toolicons";
 
 const MODES = [["text", "Text"], ["media", "Photo / Video"], ["voice", "Voice"], ["poll", "Poll"]] as const;
@@ -63,7 +63,11 @@ function Inner() {
   const [hint, setHint] = useState("");
   const [unsent, setUnsent] = useState(false);
   const [intent, setIntent] = useState<IntentId>("skeleton-in-the-closet");
-  const [sheet, setSheet] = useState<"mood" | "tag" | "place" | "share" | null>(null);
+  const [sheet, setSheet] = useState<"mood" | "sound" | "tag" | "place" | "share" | null>(null);
+  const [sounds, setSounds] = useState<Sound[] | null>(null);
+  const [soundId, setSoundId] = useState("");
+  const [hearing, setHearing] = useState("");
+  const preview = useRef<HTMLAudioElement | null>(null);
   const [place, setPlace] = useState<LocationDraft>({ country: "", county: "", subCounty: "", estate: "" });
   const [shareOut, setShareOut] = useState(true);
   const [promptIx, setPromptIx] = useState(0);
@@ -75,6 +79,26 @@ function Inner() {
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [text, mode, kind]);
+  // The Sounds library loads the first time the Sound sheet opens; a preview stops when it closes.
+  useEffect(() => {
+    if (sheet !== "sound" || sounds) return;
+    api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => setSounds([]));
+  }, [sheet, sounds]);
+  useEffect(() => {
+    if (sheet === "sound") return;
+    preview.current?.pause();
+    setHearing("");
+  }, [sheet]);
+  useEffect(() => () => preview.current?.pause(), []);
+  function hear(s: Sound) {
+    preview.current?.pause();
+    if (hearing === s.id) { setHearing(""); return; }
+    const a = new Audio(s.url);
+    a.onended = () => setHearing("");
+    a.play().catch(() => setHearing(""));
+    preview.current = a;
+    setHearing(s.id);
+  }
   const draftReady = useRef(false);
   useEffect(() => {
     if (user?.is_admin) router.replace("/admin/post");
@@ -179,6 +203,7 @@ function Inner() {
           ...(place.county.trim() ? { location_county: place.county.trim() } : {}),
           ...(place.subCounty.trim() ? { location_sub_county: place.subCounty.trim() } : {}),
           ...(place.estate.trim() ? { location_estate: place.estate.trim() } : {}),
+          ...(soundId && mode !== "voice" ? { sound_id: soundId } : {}),
           ...(tagged ? { target_user_id: tagged.id } : {}),
           ...(tagged && hint.trim() ? { recognition_hint: hint.trim().toLowerCase() } : {}),
           ...payload,
@@ -244,6 +269,7 @@ function Inner() {
   const tools: { key: string; label: string; icon: React.ReactNode; on: boolean; show: boolean; act: () => void }[] = [
     { key: "photo", label: hasMedia ? "Remove" : "Photo", icon: hasMedia ? <IconX /> : <IconImages />, on: mode === "media", show: admin,
       act: () => { if (hasMedia) { media?.upload?.cancel(); setMedia(null); setMode("text"); } else pickMode("media"); } },
+    { key: "sound", label: "Sound", icon: <IconMusic />, on: !!soundId, show: mode !== "voice", act: () => setSheet("sound") },
     { key: "mood", label: "Mood", icon: <IconSparkles />, on: false, show: true, act: () => setSheet("mood") },
     { key: "tag", label: "Tag", icon: <IconUserPlus />, on: !!tagged, show: true, act: () => setSheet("tag") },
     { key: "place", label: "Place", icon: <IconPin />, on: placed, show: true, act: () => setSheet("place") },
@@ -332,6 +358,23 @@ function Inner() {
               </button>
             ))}
           </div>
+        </Sheet>
+      ) : null}
+      {sheet === "sound" ? (
+        <Sheet title="Sound" onClose={() => setSheet(null)}>
+          <p className="cx-sub">Set the mood. It plays softly behind your words.</p>
+          {!sounds ? <p className="muted small">Loading…</p> : sounds.length === 0 ? <p className="muted small">No sounds yet. Check back soon.</p> : (
+            <div className="cx-sounds">
+              <button type="button" className={!soundId ? "on" : ""} onClick={() => setSoundId("")}><b>No sound</b></button>
+              {sounds.map((s) => (
+                <div key={s.id} className={`cx-sound${soundId === s.id ? " on" : ""}`}>
+                  <button type="button" onClick={() => setSoundId(s.id)}><b>{s.title}</b><small>{s.mood === "any" ? "any mood" : s.mood}</small></button>
+                  <button type="button" className="cx-hear" onClick={() => hear(s)} aria-label={hearing === s.id ? `Stop ${s.title}` : `Listen to ${s.title}`}>{hearing === s.id ? "stop" : "listen"}</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
         </Sheet>
       ) : null}
       {sheet === "tag" ? (

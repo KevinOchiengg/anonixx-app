@@ -960,8 +960,27 @@ const EnvelopeBackdrop = ({ top }) => {
 
 const TextSlide = ({
   post, onLike, liked, likesCount, savesCount, onSave, saved, onComment, commentCount,
-  isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false,
+  isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false, isActive = false,
 }) => {
+  // A sound the poster picked plays on a loop while this slide is on screen;
+  // the chip under the caption mutes it.
+  const track = post.sound?.url ? post.sound : null;
+  const trackPlayer = useAudioPlayer(null);
+  const trackLoaded = useRef(false);
+  const [trackMuted, setTrackMuted] = useState(false);
+  useEffect(() => {
+    if (!track) return;
+    if (isActive && !trackMuted) {
+      if (!trackLoaded.current) {
+        trackLoaded.current = true;
+        trackPlayer.replace({ uri: track.url });
+        trackPlayer.loop = true;
+      }
+      trackPlayer.play();
+    } else {
+      trackPlayer.pause();
+    }
+  }, [track, isActive, trackMuted, trackPlayer]);
   const [showHeart, setShowHeart] = useState(false);
   const heartScale = useRef(new Animated.Value(0)).current;
   const heartOpacity = useRef(new Animated.Value(1)).current;
@@ -1117,6 +1136,12 @@ const TextSlide = ({
             )}
 
             <LiveChips post={post} isOwnPost={isOwnPost} />
+            {track && (
+              <TouchableOpacity onPress={() => setTrackMuted((m) => !m)} hitSlop={HIT_SLOP} style={sw.liveRow}
+                accessibilityLabel={trackMuted ? `Play sound: ${track.title}` : `Mute sound: ${track.title}`}>
+                <Text style={sw.liveChip} numberOfLines={1}>{trackMuted ? '🔇' : '♪'} {track.title}</Text>
+              </TouchableOpacity>
+            )}
             {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} wide />}
           </View>
         </>
@@ -1707,7 +1732,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     } else if (item.poll) {
       slide = <PollSlide {...commonProps} isAuthenticated={isAuthenticated} onVote={(i) => handleVote(item.id, i)} />;
     } else {
-      slide = <TextSlide {...commonProps} />;
+      slide = <TextSlide {...commonProps} isActive={isActive} />;
     }
     return <View style={{ height: listHeight, width }}>{slide}</View>;
   }, [
