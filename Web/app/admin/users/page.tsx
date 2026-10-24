@@ -102,29 +102,14 @@ export default function AdminUsers() {
                 {open === u.id ? (
                   <tr className="adm-expand">
                     <td colSpan={6}>
-                      <div className="adm-groups">
-                        <div>
-                          <span>Moderation</span>
-                          <div className="adm-actions">
-                            <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "ban")}>{u.is_active ? "Ban" : "Unban"}</button>
-                            <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "verify")}>{u.is_verified ? "Unverify" : "Verify"}</button>
-                          </div>
-                        </div>
+                      <div className="adm-menu">
+                        <button disabled={busy === u.id} onClick={() => toggle(u, "ban")}>{u.is_active ? "Ban" : "Unban"}</button>
+                        <button disabled={busy === u.id} onClick={() => toggle(u, "verify")}>{u.is_verified ? "Unverify" : "Verify"}</button>
                         {isSuper ? (
                           <>
-                            <div>
-                              <span>Account</span>
-                              <div className="adm-actions">
-                                <button className="adm-btn" disabled={busy === u.id} onClick={() => coins(u)}>Coins</button>
-                                <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "admin")}>{u.is_admin ? "Remove admin" : "Make admin"}</button>
-                              </div>
-                            </div>
-                            <div>
-                              <span>Danger</span>
-                              <div className="adm-actions">
-                                <button className="adm-btn danger" disabled={busy === u.id} onClick={() => remove(u)}>Delete</button>
-                              </div>
-                            </div>
+                            <button disabled={busy === u.id} onClick={() => coins(u)}>Coins</button>
+                            <button disabled={busy === u.id} onClick={() => toggle(u, "admin")}>{u.is_admin ? "Remove admin" : "Make admin"}</button>
+                            <button className="danger" disabled={busy === u.id} onClick={() => remove(u)}>Delete</button>
                           </>
                         ) : null}
                       </div>

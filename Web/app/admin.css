@@ -54,9 +54,12 @@
 .adm-toggle span { margin-left: 4px; font-size: 11px; color: var(--muted); }
 .adm-row-open > td { border-bottom-color: transparent; }
 .adm-expand > td { padding-top: 0; }
-.adm-groups { display: flex; flex-wrap: wrap; gap: 14px 28px; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
-.adm-groups > div { display: grid; gap: 6px; }
-.adm-groups > div > span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.adm-menu { display: flex; flex-direction: column; max-width: 260px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+.adm-menu button { text-align: left; padding: 11px 14px; font-size: 14px; font-weight: 600; color: var(--fg); background: none; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.adm-menu button:last-child { border-bottom: 0; }
+.adm-menu button:hover:not(:disabled) { background: rgba(255,255,255,0.04); }
+.adm-menu button:disabled { opacity: 0.45; cursor: default; }
+.adm-menu button.danger { color: #f87171; }
 .adm-select { padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 13px; }
 .adm-edit { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
 .adm-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
