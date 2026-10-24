@@ -29,8 +29,8 @@ const ActionBtn = ({ icon: Icon, label, onPress, danger, on }) => (
   </TouchableOpacity>
 );
 
-// Collapsed: name, facts and a Manage toggle. Open: the actions in labelled
-// groups under the row (same layout as the web admin Users page).
+// Collapsed: name, facts and a Manage toggle. Open: the actions stacked
+// one per line under the row (same as the web admin Users page).
 const UserRow = React.memo(({ item, isSuper, open, onToggle, onBan, onVerify, onAdmin, onAdjustCoins, onDelete }) => (
   <View style={[s.userCard, open && s.userCardOpen]}>
     <TouchableOpacity style={s.userTop} onPress={() => onToggle(item.id)} activeOpacity={0.8} accessibilityState={{ expanded: open }}>
@@ -50,29 +50,14 @@ const UserRow = React.memo(({ item, isSuper, open, onToggle, onBan, onVerify, on
     </TouchableOpacity>
 
     {open && (
-      <View style={s.groups}>
-        <View style={s.group}>
-          <Text style={s.groupLabel}>MODERATION</Text>
-          <View style={s.groupRow}>
-            <ActionBtn icon={ShieldOff} label={item.is_active ? 'Ban' : 'Unban'} onPress={() => onBan(item)} on={!item.is_active} />
-            <ActionBtn icon={BadgeCheck} label={item.is_verified ? 'Unverify' : 'Verify'} onPress={() => onVerify(item)} on={item.is_verified} />
-          </View>
-        </View>
+      <View style={s.menu}>
+        <ActionBtn icon={ShieldOff} label={item.is_active ? 'Ban' : 'Unban'} onPress={() => onBan(item)} on={!item.is_active} />
+        <ActionBtn icon={BadgeCheck} label={item.is_verified ? 'Unverify' : 'Verify'} onPress={() => onVerify(item)} on={item.is_verified} />
         {isSuper && (
           <>
-            <View style={s.group}>
-              <Text style={s.groupLabel}>ACCOUNT</Text>
-              <View style={s.groupRow}>
-                <ActionBtn icon={Coins} label="Coins" onPress={() => onAdjustCoins(item)} />
-                <ActionBtn icon={ShieldCheck} label={item.is_admin ? 'Remove admin' : 'Make admin'} onPress={() => onAdmin(item)} on={item.is_admin} />
-              </View>
-            </View>
-            <View style={s.group}>
-              <Text style={s.groupLabel}>DANGER</Text>
-              <View style={s.groupRow}>
-                <ActionBtn icon={Trash2} label="Delete" onPress={() => onDelete(item)} danger />
-              </View>
-            </View>
+            <ActionBtn icon={Coins} label="Coins" onPress={() => onAdjustCoins(item)} />
+            <ActionBtn icon={ShieldCheck} label={item.is_admin ? 'Remove admin' : 'Make admin'} onPress={() => onAdmin(item)} on={item.is_admin} />
+            <ActionBtn icon={Trash2} label="Delete" onPress={() => onDelete(item)} danger />
           </>
         )}
       </View>
@@ -318,18 +303,11 @@ const s = StyleSheet.create({
     paddingHorizontal: rp(10), paddingVertical: rp(6), borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.borderStrong,
   },
   manageText: { fontSize: rf(12), fontWeight: '700', color: T.text },
-  groups: { marginTop: rp(12), paddingTop: rp(12), borderTopWidth: 1, borderTopColor: T.border, gap: rp(12) },
-  group: { gap: rp(6) },
-  groupLabel: { fontSize: rf(10), fontWeight: '800', letterSpacing: 0.8, color: T.textMuted },
-  groupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
-  actBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(6),
-    paddingHorizontal: rp(12), paddingVertical: rp(8), borderRadius: RADIUS.sm,
-    borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.background,
-  },
-  actBtnDanger: { borderColor: 'rgba(239,68,68,0.45)', backgroundColor: 'rgba(239,68,68,0.10)' },
-  actText: { fontSize: rf(12), fontWeight: '700', color: T.text },
-  actTextDanger: { color: '#fca5a5' },
+  menu: { marginTop: rp(12), paddingTop: rp(8), borderTopWidth: 1, borderTopColor: T.border },
+  actBtn: { flexDirection: 'row', alignItems: 'center', gap: rp(10), paddingVertical: rp(11), paddingHorizontal: rp(4) },
+  actBtnDanger: { marginTop: rp(4), borderTopWidth: 1, borderTopColor: T.border },
+  actText: { fontSize: FONT.sm, fontWeight: '600', color: T.text },
+  actTextDanger: { color: '#EF4444' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: SPACING.lg },
   modalCard: { backgroundColor: T.background, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: T.border, padding: SPACING.md, gap: rp(10) },
