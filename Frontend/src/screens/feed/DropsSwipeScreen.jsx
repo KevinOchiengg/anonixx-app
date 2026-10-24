@@ -910,6 +910,7 @@ const ImageSlideCarousel = React.memo(({ images }) => {
         {images.map((_, i) => (
           <View key={i} style={[sw.imageDot, i === index && sw.imageDotActive]} />
         ))}
+        <Text style={sw.imageDotsCount}>{index + 1}/{images.length}</Text>
       </View>
     </View>
   );
@@ -2026,13 +2027,17 @@ const sw = StyleSheet.create({
   // of the bottom caption/rail chrome that already owns the lower third.
   imageDotsRow: {
     position: 'absolute', top: rp(10), left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'center', gap: rp(5),
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: rp(5),
   },
   imageDot: {
     width: rs(5), height: rs(5), borderRadius: rs(2.5),
     backgroundColor: 'rgba(255,255,255,0.4)',
   },
   imageDotActive: { backgroundColor: '#fff', width: rs(14) },
+  imageDotsCount: {
+    fontSize: rf(11), fontWeight: '700', color: '#fff', marginLeft: rp(3), fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
+  },
 
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,

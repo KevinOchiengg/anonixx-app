@@ -324,6 +324,7 @@ export default function Slide({
               </div>
               <div className="dots">
                 {slides.map((s, i) => <i key={s} className={i === page ? "on" : ""} />)}
+                <span className="dots-count">{page + 1}/{slides.length}</span>
               </div>
             </>
           ) : videoSrc ? (
