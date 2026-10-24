@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
@@ -20,6 +20,7 @@ export default function AdminUsers() {
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null); // the one row whose actions are expanded
 
   const load = useCallback(async () => {
     try {
@@ -73,7 +74,8 @@ export default function AdminUsers() {
             </thead>
             <tbody>
               {data.users.map((u) => (
-                <tr key={u.id}>
+                <Fragment key={u.id}>
+                <tr className={open === u.id ? "adm-row-open" : undefined}>
                   <td>
                     <b>{u.anonymous_name || u.username || "—"}</b>
                     <div className="muted small">{u.email}</div>
@@ -88,19 +90,48 @@ export default function AdminUsers() {
                   <td className="small">{fmtDate(u.created_at)}</td>
                   <td className="small">{fmtDate(u.last_login)}</td>
                   <td>
-                    <div className="adm-actions">
-                      <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "ban")}>{u.is_active ? "Ban" : "Unban"}</button>
-                      <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "verify")}>{u.is_verified ? "Unverify" : "Verify"}</button>
-                      {isSuper ? (
-                        <>
-                          <button className="adm-btn" disabled={busy === u.id} onClick={() => coins(u)}>Coins</button>
-                          <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "admin")}>{u.is_admin ? "Remove admin" : "Make admin"}</button>
-                          <button className="adm-btn danger" disabled={busy === u.id} onClick={() => remove(u)}>Delete</button>
-                        </>
-                      ) : null}
-                    </div>
+                    <button
+                      className="adm-btn adm-toggle"
+                      aria-expanded={open === u.id}
+                      onClick={() => setOpen(open === u.id ? null : u.id)}
+                    >
+                      {busy === u.id ? "Working…" : "Manage"} <span aria-hidden>{open === u.id ? "▴" : "▾"}</span>
+                    </button>
                   </td>
                 </tr>
+                {open === u.id ? (
+                  <tr className="adm-expand">
+                    <td colSpan={6}>
+                      <div className="adm-groups">
+                        <div>
+                          <span>Moderation</span>
+                          <div className="adm-actions">
+                            <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "ban")}>{u.is_active ? "Ban" : "Unban"}</button>
+                            <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "verify")}>{u.is_verified ? "Unverify" : "Verify"}</button>
+                          </div>
+                        </div>
+                        {isSuper ? (
+                          <>
+                            <div>
+                              <span>Account</span>
+                              <div className="adm-actions">
+                                <button className="adm-btn" disabled={busy === u.id} onClick={() => coins(u)}>Coins</button>
+                                <button className="adm-btn" disabled={busy === u.id} onClick={() => toggle(u, "admin")}>{u.is_admin ? "Remove admin" : "Make admin"}</button>
+                              </div>
+                            </div>
+                            <div>
+                              <span>Danger</span>
+                              <div className="adm-actions">
+                                <button className="adm-btn danger" disabled={busy === u.id} onClick={() => remove(u)}>Delete</button>
+                              </div>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>
