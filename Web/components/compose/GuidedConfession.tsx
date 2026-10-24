@@ -4,8 +4,9 @@
  * reveal where the AI writer (POST /guided/generate) turns the answers into a
  * confession the poster can re-tone, regenerate, edit and drop.
  *
- * Answers are kept in localStorage as they change, so going back a step, or
- * leaving and coming back, never loses them. If the writer is off or fails the
+ * Answers, the step and the confession draft (generated or hand-edited) are kept
+ * in localStorage as they change, so going back a step, or leaving and coming
+ * back, never loses them. If the writer is off or fails the
  * poster is told and writes it themselves; nothing is filled in from a template.
  * Posting goes through POST /drops (kind="hookup") with every usual check.
  * Mirrors Frontend/src/components/drops/GuidedConfession.jsx.
@@ -17,7 +18,8 @@ import { api, ApiError, COST } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AgeGate from "../AgeGate";
 
-const SAVE_KEY = "anonixx.drops.guided.v1";
+export const GUIDED_SAVE_KEY = "anonixx.drops.guided.v1";
+const SAVE_KEY = GUIDED_SAVE_KEY;
 const MAX = 500;
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
@@ -111,7 +113,11 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     try {
       const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
       if (saved?.a) setA({ ...EMPTY, ...saved.a });
-      if (typeof saved?.step === "number") setStep(Math.min(saved.step, 4));
+      if (typeof saved?.step === "number") setStep(Math.min(saved.step, 5));
+      if (typeof saved?.text === "string") setText(saved.text);
+      if (typeof saved?.aiText === "string") setAiText(saved.aiText);
+      if (typeof saved?.tone === "string") setTone(saved.tone);
+      if (Array.isArray(saved?.drafts)) setDrafts(saved.drafts.slice(-4));
     } catch { /* storage unavailable or corrupt */ }
     setReady(true);
     api<{ enabled: boolean; remaining: number }>("/guided/status")
@@ -122,10 +128,14 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (!ready || done) return;
     const t = setTimeout(() => {
-      try { localStorage.setItem(SAVE_KEY, JSON.stringify({ a, step: Math.min(step, 4) })); } catch { /* ignore */ }
+      const started = step > 0 || !!text || JSON.stringify(a) !== JSON.stringify(EMPTY);
+      try {
+        if (started) localStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, step, text, aiText, tone, drafts }));
+        else localStorage.removeItem(SAVE_KEY);
+      } catch { /* ignore */ }
     }, 300);
     return () => clearTimeout(t);
-  }, [a, step, ready, done]);
+  }, [a, step, text, aiText, tone, drafts, ready, done]);
 
   useEffect(() => {
     if (!generating) return;

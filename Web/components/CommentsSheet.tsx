@@ -1,5 +1,6 @@
 "use client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useDraft from "@/lib/useDraft";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -77,7 +78,7 @@ export default function CommentsSheet({
 }) {
   const { user } = useAuth();
   const [items, setItems] = useState<Comment[] | null>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useDraft(`comment:${postId}`, ""); // unsent comment stays per post
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [sort, setSort] = useState<"new" | "top">("new");
   const [open, setOpen] = useState<Record<string, boolean>>({});

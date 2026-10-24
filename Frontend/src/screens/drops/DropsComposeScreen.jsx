@@ -42,7 +42,7 @@ import { streamEnabled, uploadToStream, queueDrop, STREAM_DIRECT_MAX_BYTES } fro
 import { countryHeader } from '../../utils/country';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
-import GuidedConfession from '../../components/drops/GuidedConfession';
+import GuidedConfession, { GUIDED_SAVE_KEY } from '../../components/drops/GuidedConfession';
 
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -456,10 +456,25 @@ export default function DropsComposeScreen({ navigation, route }) {
               if (typeof d.cardIntent === 'string' && d.cardIntent !== 'the-exchange' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
               if (typeof d.hint     === 'string') setHint(d.hint);
-              // Only surface the unsent banner if the restored draft has substance.
-              if (hasContent) setShowUnsentBanner(true);
+              if (typeof d.fontStyle === 'string') setFontStyle(d.fontStyle);
+              if (typeof d.publisherOptIn === 'boolean') setPublisherOptIn(d.publisherOptIn);
+              if (d.taggedUser && typeof d.taggedUser === 'object') setTaggedUser(d.taggedUser);
+              if (d.location && typeof d.location === 'object') {
+                setLocationCountry(d.location.country || '');
+                setLocationCounty(d.location.county || '');
+                setLocationSubCounty(d.location.subCounty || '');
+                setLocationEstate(d.location.estate || '');
+              }
+              // Only surface the unsent banner if the restored draft has substance,
+              // and skip the kind chooser: they were writing a confession.
+              if (hasContent) { setShowUnsentBanner(true); setKind((k) => k || 'confession'); }
             }
           } catch { /* corrupt draft — ignore */ }
+        }
+        // No confession in progress but a hookup half-done: reopen the guided flow.
+        if (!draftRaw || !JSON.parse(draftRaw)?.text?.trim()) {
+          const guided = await AsyncStorage.getItem(GUIDED_SAVE_KEY);
+          if (guided && JSON.parse(guided)?.started) setKind((k) => k || 'hookup');
         }
       } catch { /* storage unavailable — ignore */ }
     })();
@@ -471,11 +486,13 @@ export default function DropsComposeScreen({ navigation, route }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
-        text, format, cardIntent, intensity, hint,
+        text, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
+        location: { country: locationCountry, county: locationCounty, subCounty: locationSubCounty, estate: locationEstate },
       })).catch(() => {});
     }, 400);
     return () => clearTimeout(saveTimer.current);
-  }, [text, format, cardIntent, intensity, hint]);
+  }, [text, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
+      locationCountry, locationCounty, locationSubCounty, locationEstate]);
 
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
@@ -589,6 +606,9 @@ export default function DropsComposeScreen({ navigation, route }) {
   const handleDiscardDraft = useCallback(async () => {
     setText('');
     setMediaUri(null);
+    setHint('');
+    setTaggedUser(null);
+    setLocationCountry(''); setLocationCounty(''); setLocationSubCounty(''); setLocationEstate('');
     setShowUnsentBanner(false);
     try { await AsyncStorage.removeItem(DRAFT_KEY); } catch {}
     showToast({ type: 'info', message: 'Unsent layer cleared.' });

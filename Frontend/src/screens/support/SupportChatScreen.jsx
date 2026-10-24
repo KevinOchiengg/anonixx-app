@@ -16,6 +16,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/respons
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
 import { apiFetch, AdminHeader, a } from '../admin/adminShared';
+import useDraft from '../../hooks/useDraft';
 
 const POLL_MS = 5000;
 
@@ -38,7 +39,7 @@ export default function SupportChatScreen({ navigation, route }) {
   const { showToast } = useToast();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading]   = useState(true);
-  const [text, setText]         = useState('');
+  const [text, setText]         = useDraft(`support:${targetUserId || 'me'}`, '');
   const [sending, setSending]   = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const [purchases, setPurchases]   = useState([]);

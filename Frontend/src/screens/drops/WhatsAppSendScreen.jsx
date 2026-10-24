@@ -15,6 +15,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/respons
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
 import { apiFetch } from '../admin/adminShared';
+import useDraft from '../../hooks/useDraft';
 
 const MAX_LEN = 500;
 
@@ -28,7 +29,8 @@ const STATUS_LABEL = {
 
 export default function WhatsAppSendScreen({ navigation, route }) {
   const { showToast } = useToast();
-  const [text, setText]       = useState(route.params?.text ?? '');
+  // Text handed over from compose wins; otherwise pick up what was typed last time.
+  const [text, setText, clearText] = useDraft(route.params?.text ? null : 'whatsapp:text', route.params?.text ?? '');
   const [phone, setPhone]     = useState('');
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState([]);
@@ -67,6 +69,7 @@ export default function WhatsAppSendScreen({ navigation, route }) {
           title: 'Sent.',
           message: "They'll be asked before anything is shown. You stay anonymous.",
         });
+        clearText();
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       } else {
         const detail = typeof data?.detail === 'string' ? data.detail : null;

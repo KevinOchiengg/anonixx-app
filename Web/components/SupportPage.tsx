@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import useDraft from "@/lib/useDraft";
 import { api } from "@/lib/api";
 import AppShell from "./AppShell";
 
@@ -8,13 +9,13 @@ type Purchase = { id: string; coins: number; kes?: number | null; created_at?: s
 
 function Inner() {
   const [msgs, setMsgs] = useState<Msg[] | null>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useDraft("support:me", "");
   const [err, setErr] = useState("");
   const [refund, setRefund] = useState(false);
   const [buys, setBuys] = useState<Purchase[] | null>(null);
   const [pick, setPick] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useDraft("support:refund-note", "");
   const endRef = useRef<HTMLDivElement>(null);
   const count = useRef(0);
 

@@ -15,7 +15,7 @@ import PollEditor, { type PollDraft } from "./compose/PollEditor";
 import TagUser, { type Tagged } from "./compose/TagUser";
 import LocationFields, { type LocationDraft } from "./compose/LocationFields";
 import Sheet from "./Sheet";
-import GuidedConfession from "./compose/GuidedConfession";
+import GuidedConfession, { GUIDED_SAVE_KEY } from "./compose/GuidedConfession";
 import {
   IconImages, IconSparkles, IconUserPlus, IconPin, IconMic, IconPoll, IconShare, IconShuffle, IconX, IconWarn,
 } from "./compose/toolicons";
@@ -85,8 +85,14 @@ function Inner() {
       if (d && typeof d === "object") {
         if (typeof d.text === "string") setText(d.text);
         if (typeof d.hint === "string") setHint(d.hint);
+        if (typeof d.intent === "string" && d.intent in INTENTS) setIntent(d.intent as IntentId);
+        if (d.place && typeof d.place === "object") setPlace({ country: "", county: "", subCounty: "", estate: "", ...d.place });
+        if (typeof d.shareOut === "boolean") setShareOut(d.shareOut);
+        if (d.tagged && typeof d.tagged === "object") setTagged(d.tagged);
         if (typeof d.text === "string" && d.text.trim()) { setUnsent(true); setKind("confession"); }
       }
+      // No confession in progress but a hookup half-done: reopen the guided flow.
+      if (!(typeof d?.text === "string" && d.text.trim()) && JSON.parse(localStorage.getItem(GUIDED_SAVE_KEY) || "null")?.started) setKind("hookup");
     } catch { /* storage unavailable or corrupt draft */ }
     draftReady.current = true;
   }, []);
@@ -94,14 +100,16 @@ function Inner() {
   useEffect(() => {
     if (!draftReady.current || done) return;
     const t = setTimeout(() => {
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, hint })); } catch { /* ignore */ }
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, hint, intent, place, shareOut, tagged })); } catch { /* ignore */ }
     }, 400);
     return () => clearTimeout(t);
-  }, [text, hint, done]);
+  }, [text, hint, intent, place, shareOut, tagged, done]);
 
   function discardDraft() {
     setText("");
     setHint("");
+    setTagged(null);
+    setPlace({ country: "", county: "", subCounty: "", estate: "" });
     setUnsent(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
   }

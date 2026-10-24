@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import useDraft from "@/lib/useDraft";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -14,7 +15,7 @@ const HOURS = [6, 12, 24, 48, 72];
 function Inner() {
   const { refresh, user } = useAuth();
   const [drops, setDrops] = useState<MyDrop[] | null>(null);
-  const [title, setTitle] = useState("");
+  const [title, setTitle, clearTitle] = useDraft("ad:title", "");
   const [dropId, setDropId] = useState("");
   const [hours, setHours] = useState(24);
   const [file, setFile] = useState<File | null>(null);
@@ -52,6 +53,7 @@ function Inner() {
       const r = await api<{ message?: string }>("/ads", {
         body: { title: title.trim(), drop_id: dropId, media_url: url, media_type: mediaType, duration_hours: hours },
       });
+      clearTitle();
       setDone(r.message || "Submitted. We review ads before they go live. Rejected ads are refunded.");
       refresh();
     } catch (err) {
