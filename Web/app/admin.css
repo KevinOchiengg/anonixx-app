@@ -69,7 +69,7 @@
 .adm-badge.ok { background: rgba(16, 185, 129, 0.18); color: var(--ok, #34d399); }
 .adm-badge.bad { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
 .adm-badge.warn { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
-.adm-search { display: flex; gap: 8px; margin: 10px 0; }
+.adm-search { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .adm-search input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 14px; }
 .adm-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 16px 0; }
 .adm-tabs { display: flex; gap: 6px; margin: 10px 0; flex-wrap: wrap; }
@@ -231,3 +231,8 @@
 .adm-menu-head span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .adm-menu .adm-menu-x { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; text-align: center; font-size: 20px; line-height: 1; color: var(--muted); }
 .adm-menu .adm-menu-x:hover { background: rgba(255,255,255,0.06); color: var(--fg); }
+/* Post stats on the admin Posts list */
+.adm-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.adm-stats span { font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+.adm-stats b { color: var(--fg); font-weight: 800; margin-right: 2px; }
+.adm-stats .adm-eng { border-color: rgba(255,99,74,0.35); background: rgba(255,99,74,0.08); }

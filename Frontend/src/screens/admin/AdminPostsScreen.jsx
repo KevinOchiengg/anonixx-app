@@ -1,12 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search } from 'lucide-react-native';
 
-import { rs } from '../../utils/responsive';
+import { rs, rf, rp, RADIUS } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
 import { apiFetch, AdminHeader, a } from './adminShared';
+
+// Must match DROP_SORTS in Backend/app/api/v1/admin.py.
+const SORTS = [['recent', 'Newest'], ['views', 'Most viewed'], ['likes', 'Most liked'], ['comments', 'Most discussed'], ['engagement', 'Best engagement']];
+
+function Stat({ n, label, hot }) {
+  return (
+    <View style={[st.stat, hot && st.statHot]}>
+      <Text style={st.statText}><Text style={st.statNum}>{n}</Text> {label}</Text>
+    </View>
+  );
+}
 
 const PostRow = React.memo(({ item, onDelete }) => (
   <View style={a.card}>
@@ -17,6 +28,17 @@ const PostRow = React.memo(({ item, onDelete }) => (
       {item.moderation_status ? ` · ${item.moderation_status}` : ''}
     </Text>
     <Text style={a.cardBody} numberOfLines={4}>{item.confession || '(no text)'}</Text>
+    {item.stats && (
+      <View style={st.stats}>
+        <Stat n={item.stats.views} label="views" />
+        <Stat n={item.stats.likes} label="likes" />
+        <Stat n={item.stats.comments} label="comments" />
+        <Stat n={item.stats.saves} label="saves" />
+        {!!item.stats.reactions && <Stat n={item.stats.reactions} label="reactions" />}
+        {item.kind !== 'confession' && !item.is_admin_drop && <Stat n={item.stats.linkups} label="link ups" />}
+        <Stat n={item.stats.engagement == null ? '—' : `${item.stats.engagement}%`} label="engagement" hot />
+      </View>
+    )}
     <Text style={a.cardMeta}>{item.created_at ? new Date(item.created_at).toLocaleString() : ''}</Text>
     <View style={a.actionRow}>
       <TouchableOpacity style={[a.btn, a.btnDanger]} onPress={() => onDelete(item)} activeOpacity={0.85}>
@@ -32,12 +54,13 @@ export default function AdminPostsScreen({ navigation }) {
   const [total, setTotal]     = useState(0);
   const [query, setQuery]     = useState('');
   const [loading, setLoading] = useState(true);
+  const [sort, setSort]       = useState('recent');
   const timer = useRef(null);
 
   const load = useCallback(async (search = '') => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '50' });
+      const params = new URLSearchParams({ limit: '50', sort });
       if (search.trim()) params.set('search', search.trim());
       const { ok, data } = await apiFetch(`/admin/drops?${params}`);
       if (ok) { setPosts(data.drops || []); setTotal(data.total || 0); }
@@ -46,9 +69,9 @@ export default function AdminPostsScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, sort]);
 
-  useEffect(() => { load(''); }, [load]);
+  useEffect(() => { load(query); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearch = useCallback((text) => {
     setQuery(text);
@@ -87,6 +110,13 @@ export default function AdminPostsScreen({ navigation }) {
           autoCapitalize="none"
         />
       </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.sortBar} contentContainerStyle={st.sortRow}>
+        {SORTS.map(([k, l]) => (
+          <TouchableOpacity key={k} onPress={() => setSort(k)} style={[st.sortChip, sort === k && st.sortChipOn]} activeOpacity={0.8}>
+            <Text style={[st.sortText, sort === k && st.sortTextOn]}>{l}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
       {loading ? (
         <View style={a.centered}><ActivityIndicator color={T.primary} size="large" /></View>
       ) : (
@@ -101,3 +131,17 @@ export default function AdminPostsScreen({ navigation }) {
     </SafeAreaView>
   );
 }
+
+const st = StyleSheet.create({
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6), marginTop: rp(2) },
+  stat: { paddingHorizontal: rp(8), paddingVertical: rp(3), borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.border, backgroundColor: 'rgba(255,255,255,0.03)' },
+  statHot: { borderColor: T.primaryBorder, backgroundColor: T.primaryTint },
+  statText: { fontSize: rf(11), color: T.textSecondary },
+  statNum: { color: T.text, fontWeight: '800' },
+  sortBar: { flexGrow: 0, marginTop: rp(8) },
+  sortRow: { paddingHorizontal: rp(16), gap: rp(8) },
+  sortChip: { paddingHorizontal: rp(12), paddingVertical: rp(7), borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.borderStrong },
+  sortChipOn: { borderColor: T.primary, backgroundColor: T.primaryDim },
+  sortText: { fontSize: rf(12), fontWeight: '700', color: T.textSecondary },
+  sortTextOn: { color: T.text },
+});

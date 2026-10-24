@@ -365,11 +365,26 @@ async def get_moderation_queue(
     return {"total": total, "skip": skip, "limit": limit, "drops": drops}
 
 
-@router.get("/drops", summary="Browse all posts — paginated, searchable")
+# How the admin Posts list can be ordered. "engagement" is interactions per view:
+# (likes + comments + saves + link ups) / views, so a small post that lands well
+# can outrank a big one that people scroll past. Posts under ENGAGEMENT_MIN_VIEWS
+# rank after the rest, so 1 like on 1 view doesn't top the list at 100%.
+ENGAGEMENT_MIN_VIEWS = 20
+DROP_SORTS = {
+    "recent":     {"created_at": -1},
+    "views":      {"views_count": -1, "created_at": -1},
+    "likes":      {"likes_count": -1, "created_at": -1},
+    "comments":   {"thread_count": -1, "created_at": -1},
+    "engagement": {"_qual": -1, "_eng": -1, "views_count": -1},
+}
+
+
+@router.get("/drops", summary="Browse all posts with their stats — paginated, searchable, sortable")
 async def list_drops(
     skip:   int           = Query(0,  ge=0),
     limit:  int           = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None, description="Filter by confession text"),
+    sort:   str           = Query("recent", description="recent | views | likes | comments | engagement"),
     admin_id: str = Depends(require_admin),
     db=Depends(get_database),
 ):
@@ -377,16 +392,39 @@ async def list_drops(
     if search:
         query["confession"] = {"$regex": search, "$options": "i"}
 
-    total  = await db["drops"].count_documents(query)
-    cursor = db["drops"].find(query).sort("created_at", -1).skip(skip).limit(limit)
+    total = await db["drops"].count_documents(query)
+    pipeline = [{"$match": query}]
+    if sort == "engagement":
+        pipeline.append({"$addFields": {"_qual": {"$gte": [{"$ifNull": ["$views_count", 0]}, ENGAGEMENT_MIN_VIEWS]}, "_eng": {"$divide": [
+            {"$add": [{"$ifNull": ["$likes_count", 0]}, {"$ifNull": ["$thread_count", 0]},
+                      {"$ifNull": ["$saves_count", 0]}, {"$ifNull": ["$unlock_count", 0]}]},
+            {"$max": [{"$ifNull": ["$views_count", 0]}, 1]},
+        ]}}})
+    pipeline += [{"$sort": DROP_SORTS.get(sort, DROP_SORTS["recent"])}, {"$skip": skip}, {"$limit": limit}]
+    rows = await db["drops"].aggregate(pipeline).to_list(limit)
+
+    # Link up requests per post (pending, accepting or accepted), one query for the page.
+    ids = [str(d["_id"]) for d in rows]
+    linkups: dict = {}
+    if ids:
+        async for item in db["drop_unlock_requests"].aggregate([
+            {"$match": {"target_id": {"$in": ids}, "status": {"$in": ["pending", "accepting", "accepted"]}}},
+            {"$group": {"_id": "$target_id", "count": {"$sum": 1}}},
+        ]):
+            linkups[item["_id"]] = item["count"]
 
     drops = []
-    async for d in cursor:
+    for d in rows:
+        did = str(d["_id"])
+        views, likes = d.get("views_count", 0) or 0, d.get("likes_count", 0) or 0
+        comments, saves = d.get("thread_count", 0) or 0, d.get("saves_count", 0) or 0
+        lu = linkups.get(did, 0)
         drops.append({
-            "id":                str(d["_id"]),
+            "id":                did,
             "sender_id":         d.get("sender_id"),
             "author":            d.get("sender_anonymous_name"),
             "is_admin_drop":     d.get("is_admin_drop", False),
+            "kind":              d.get("kind"),
             "confession":        (d.get("confession") or "")[:200],
             # full text only where the dashboard can edit it, so an edit never starts from the cut-off preview
             "confession_full":   (d.get("confession") or "") if d.get("is_admin_drop") else None,
@@ -396,9 +434,20 @@ async def list_drops(
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
             "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
+            "stats": {
+                "views":      views,
+                "likes":      likes,
+                "comments":   comments,
+                "saves":      saves,
+                "reactions":  sum((d.get("reaction_counts") or {}).values()),
+                "linkups":    lu,
+                "unlocks":    d.get("unlock_count", 0) or 0,
+                # % of views that turned into an interaction; None until it has views
+                "engagement": round((likes + comments + saves + lu) * 100 / views, 1) if views else None,
+            },
         })
 
-    return {"total": total, "skip": skip, "limit": limit, "drops": drops}
+    return {"total": total, "skip": skip, "limit": limit, "sort": sort if sort in DROP_SORTS else "recent", "drops": drops}
 
 
 def _aware(dt: datetime) -> datetime:
