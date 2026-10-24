@@ -128,6 +128,24 @@ class DropVoteRequest(BaseModel):
 HOOKUP_GENDERS = ("woman", "man", "other")
 HOOKUP_LOOKING = ("woman", "man", "anyone")
 HOOKUP_VIBES = ("company", "friendship", "dating", "casual", "discreet", "adventure")
+# Guided confession answers (see api/v1/guided.py). Stored on the drop's hookup
+# block so the feed can show hosting tags; the private "secret" answer is not
+# kept, it only lives in the confession text if the poster left it there.
+HOOKUP_CRAVINGS = ("warmth", "attention", "intimacy", "chemistry", "companionship")
+HOOKUP_TRAITS = ("sweet", "playful", "shy", "adventurous", "affectionate", "bold", "curious", "calm")
+HOOKUP_HOSTING = ("can_host", "can_travel", "either", "decide")
+HOOKUP_TONES = ("vulnerable", "playful", "mysterious", "direct")
+
+
+class GuidedDetails(BaseModel):
+    craving: Optional[str] = None          # one of HOOKUP_CRAVINGS, or "custom"
+    craving_custom: Optional[str] = None
+    traits: Optional[List[str]] = None
+    hosting: Optional[str] = None
+    public_first: Optional[bool] = None
+    tone: Optional[str] = None
+    ai_generated: bool = False
+    edited: bool = False
 
 
 class HookupDetails(BaseModel):
@@ -138,6 +156,26 @@ class HookupDetails(BaseModel):
     age_min: Optional[int] = None
     age_max: Optional[int] = None
     vibes: Optional[List[str]] = None
+    guided: Optional[GuidedDetails] = None
+
+
+def clean_guided(g: Optional["GuidedDetails"]) -> Optional[dict]:
+    if not g:
+        return None
+    custom = re.sub(r"\s+", " ", (g.craving_custom or "").strip())[:40] or None
+    if custom and (contains_contact_info(custom) or violates_policy(custom)):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
+    craving = g.craving if g.craving in HOOKUP_CRAVINGS else ("custom" if custom else None)
+    return {
+        "craving": craving,
+        "craving_custom": custom if craving == "custom" else None,
+        "traits": [t for t in dict.fromkeys(g.traits or []) if t in HOOKUP_TRAITS][:3],
+        "hosting": g.hosting if g.hosting in HOOKUP_HOSTING else None,
+        "public_first": bool(g.public_first),
+        "tone": g.tone if g.tone in HOOKUP_TONES else None,
+        "ai_generated": bool(g.ai_generated),
+        "edited": bool(g.edited),
+    }
 
 
 def clean_hookup(h: "HookupDetails") -> dict:
@@ -158,6 +196,7 @@ def clean_hookup(h: "HookupDetails") -> dict:
         "age_min": lo,
         "age_max": hi,
         "vibes": [v for v in dict.fromkeys(h.vibes or []) if v in HOOKUP_VIBES][:4],
+        "guided": clean_guided(h.guided),
     }
 
 

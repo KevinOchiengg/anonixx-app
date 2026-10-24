@@ -56,6 +56,21 @@ function pickSound(sounds: Sound[] | undefined, post: Post): Sound | null {
   return pool.length ? pool[hash(post.id) % pool.length] : null;
 }
 
+// Compact facts from a hookup post (age, area, who, hosting), so the confession never has to list them.
+const HOSTING_TAG: Record<string, string> = { can_host: "can host", can_travel: "can travel", either: "host or travel" };
+function hookupTags(h: Post["hookup"]): string[] {
+  if (!h) return [];
+  const who = h.looking_for === "woman" ? "into women" : h.looking_for === "man" ? "into men" : null;
+  const range = h.age_min || h.age_max ? ` ${h.age_min || 18}–${h.age_max || 99}` : "";
+  return [
+    h.age ? `${h.age}${h.gender && h.gender !== "other" ? ` · ${h.gender}` : ""}` : null,
+    h.area || null,
+    who ? who + range : null,
+    (h.guided?.hosting && HOSTING_TAG[h.guided.hosting]) || null,
+    h.guided?.public_first ? "public first" : null,
+  ].filter((x): x is string => Boolean(x));
+}
+
 export default function Slide({
   post, index, active, near, muted, sounds, headline,
   onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onProfile, onReport, onToast,
@@ -250,7 +265,7 @@ export default function Slide({
       className="linkup"
       onClick={() => (user ? onLinkUp(post) : onGate("Sign in to link up. Your name stays hidden until they say yes."))}
     >
-      <Link2 />
+      {post.kind === "hookup" ? <span className="lu-heart" aria-hidden>🖤</span> : <Link2 />}
       <span className="lu-label">Link up{post.anonymous_name ? <> with <b>{post.anonymous_name}</b></> : null}</span>
       <span className="coin-cost">
         <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" fill="currentColor" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" fill="none" stroke="#7a4a00" strokeWidth="1.6" strokeLinecap="round" /></svg>
@@ -271,9 +286,11 @@ export default function Slide({
   }
 
   const left = post.kind === "hookup" ? timeLeft(post.live_until) : null;
-  const liveChips = post.kind === "hookup" && (left || post.linkup_count || post.is_own_post) ? (
+  const tags = hookupTags(post.hookup);
+  const liveChips = post.kind === "hookup" && (left || post.linkup_count || post.is_own_post || tags.length) ? (
     <div className="live-chips">
       {left ? <span className="hot">Tonight · {left}</span> : post.live_until ? <span>Ended</span> : null}
+      {tags.map((t) => <span key={t}>{t}</span>)}
       {post.linkup_count ? <span>{post.linkup_count} linked up</span> : null}
       {post.is_own_post && post.live_until ? <button onClick={extend}>+12h</button> : null}
     </div>

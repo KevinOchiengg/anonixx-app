@@ -650,7 +650,9 @@ function DropCard({
                 real person behind them to link up with. */}
             {!post.is_own_post && !post.is_admin_drop && post.kind !== 'confession' && (
               <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
-                <Link2 size={rs(16)} color="#fff" strokeWidth={2} />
+                {post.kind === 'hookup'
+                  ? <Text style={styles.linkUpBtnText}>🖤</Text>
+                  : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
                 <Text style={styles.linkUpBtnText}>Link up</Text>
                 <View style={styles.linkUpCostPill}>
                   <Coins size={rs(11)} color="#fff" />
