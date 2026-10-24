@@ -167,18 +167,39 @@
 
 /* confession kind chooser + hookup template */
 .kind-pick { display: grid; gap: 12px; }
-.kind-pick h2 { margin: 0 0 4px; font-size: 20px; }
-.kind-card { display: grid; gap: 4px; text-align: left; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--fg); }
-.kind-card strong { font-size: 16px; }
-.kind-card span { font-size: 14px; color: var(--muted); line-height: 1.4; }
-.kind-card:hover { border-color: var(--rose); }
+.kind-pick h2 { margin: 0; font-size: 22px; }
+.kind-pick > p { margin: -6px 0 4px; }
+.kind-card { display: flex; gap: 14px; align-items: flex-start; text-align: left; padding: 18px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.12); background: var(--surface); color: var(--fg); cursor: pointer; transition: border-color .15s, transform .15s; }
+.kind-card:hover, .kind-card:focus-visible { border-color: var(--rose); transform: translateY(-1px); }
+.kind-ico { flex: 0 0 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: var(--rose-dim); border: 1px solid rgba(255,99,74,0.25); }
+.kind-body { display: grid; gap: 4px; }
+.kind-body strong { font-size: 16px; }
+.kind-body > span { font-size: 14px; color: var(--muted); line-height: 1.45; }
+.kind-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.kind-tags em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--rose); background: rgba(255,99,74,0.08); padding: 3px 8px; border-radius: 10px; }
 .linkish { justify-self: start; background: none; border: 0; padding: 0; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; }
-.hk-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 16px; line-height: 1.6; }
-.hk-line input, .hk-line select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--fg); font-size: 15px; min-width: 0; }
-.hk-line input[type="number"] { width: 72px; }
-.hk-line input[type="text"] { flex: 1; min-width: 120px; }
-.hk-line select option { background: #151924; }
-.hk-preview { margin: 0; padding: 12px 14px; border-left: 3px solid var(--rose); background: rgba(255,255,255,0.03); border-radius: 8px; font-size: 14px; line-height: 1.5; }
+.hk { gap: 22px; }
+.hk-step { display: grid; gap: 10px; }
+.hk-step h3 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16px; }
+.hk-step h3 b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; color: var(--rose); background: var(--rose-dim); }
+.hk-hint { margin: -4px 0 0; font-size: 14px; color: var(--muted); }
+.hk-field { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: var(--surface); color: var(--fg); font-size: 16px; font-family: inherit; }
+.hk-field:focus { outline: none; border-color: var(--rose); }
+.hk-field.bad { border-color: #ef4444; }
+.hk-you { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.hk-age { width: 80px; text-align: center; font-weight: 800; }
+.hk-range { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.hk-range .hk-field { width: 68px; text-align: center; padding: 10px; }
+.hk-opt { font-size: 12px; font-weight: 400; color: var(--faint); }
+.hk-count { margin-left: auto; font-size: 13px; color: var(--muted); }
+.hk-err { margin: 0; font-size: 14px; color: #ef4444; }
+.hk-preview { display: grid; gap: 6px; padding: 14px; border-radius: 16px; background: rgba(255,99,74,0.08); border: 1px solid rgba(255,99,74,0.25); }
+.hk-preview span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--rose); }
+.hk-preview p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--fg); }
+.hk-foot { display: grid; gap: 8px; text-align: center; }
+.hk-foot .btn { width: 100%; }
+.hk-missing { margin: 0; font-size: 14px; color: #FB923C; }
+.hk-foot .muted { margin: 0; }
 .kind-tag { text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* ── TikTok-style video slides ── */
