@@ -72,3 +72,7 @@ export const SoundOn = () => (
 export const SoundOff = () => (
   <svg {...base}><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor" /><path d="m16 9.5 5 5" /><path d="m21 9.5-5 5" /></svg>
 );
+
+export const ShieldIcon = () => (
+  <svg {...base} aria-hidden><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8 7.5 9.5 4.4-1.5 7.5-4.9 7.5-9.5V6z" /><path d="m9 12 2.2 2.2L15.5 10" /></svg>
+);

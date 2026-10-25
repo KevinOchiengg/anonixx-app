@@ -47,7 +47,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
   Bookmark, Coins, Eye, ExternalLink, Heart, Link2, MapPin, Menu, MessageCircle,
-  MoreHorizontal, Pause, Play, Search, Share2, X,
+  MoreHorizontal, Pause, Play, Search, Share2, ShieldCheck, X,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -1815,6 +1815,16 @@ export default function DropsSwipeScreen({ navigation, route }) {
               <Text style={sw.locationPillText}>{LOCATION_SCOPE_LABELS[user.feed_location_scope] || 'Nearby'}</Text>
             </View>
           )}
+          {user?.is_admin && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('AdminDashboard')}
+              style={[sw.headerBtn, sw.headerBtnAdmin]}
+              hitSlop={HIT_SLOP}
+              accessibilityLabel="Admin dashboard"
+            >
+              <ShieldCheck size={rs(18)} color={THEME.primary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={sw.headerBtn} hitSlop={HIT_SLOP}>
             <Search size={rs(18)} color="#fff" />
           </TouchableOpacity>
@@ -2085,6 +2095,7 @@ const sw = StyleSheet.create({
     width: rs(34), height: rs(34), borderRadius: rs(17), backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
+  headerBtnAdmin: { backgroundColor: 'rgba(255,99,74,0.14)', borderColor: 'rgba(255,99,74,0.45)' },
   locationPill: {
     flexDirection: 'row', alignItems: 'center', gap: rp(4), paddingHorizontal: rp(10), paddingVertical: rp(6),
     borderRadius: RADIUS.full, backgroundColor: 'rgba(0,0,0,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',

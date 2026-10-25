@@ -4,6 +4,7 @@
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 .hbtn { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: rgba(21, 25, 36, 0.7); border: 1px solid var(--line); color: var(--fg); }
 .hbtn svg { width: 20px; height: 20px; }
+.hbtn.admin { color: #ff634a; border-color: rgba(255, 99, 74, 0.45); background: rgba(255, 99, 74, 0.12); }
 .loc-pill { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px; border-radius: 16px; background: rgba(255, 99, 74, 0.12); border: 1px solid rgba(255, 99, 74, 0.35); color: var(--rose); font-size: 12px; font-weight: 700; }
 .loc-pill svg { width: 14px; height: 14px; }
 

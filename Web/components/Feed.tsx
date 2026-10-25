@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
 import { AdSlide, MarketSlide } from "./FeedPromo";
-import { MapPin, MenuIcon, SearchIcon } from "./feedicons";
+import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
 import Hero from "./Hero";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
@@ -462,6 +462,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
                 <Link href="/signup" className="pill">Join</Link>
               </>
             ) : null}
+            {user?.is_admin ? <Link href="/admin" className="hbtn admin" aria-label="Admin dashboard" title="Admin dashboard"><ShieldIcon /></Link> : null}
             <Link href="/search" className="hbtn" aria-label="Search"><SearchIcon /></Link>
             {user ? <Link href="/settings" className="hbtn" aria-label="Menu"><MenuIcon /></Link> : null}
           </span>
