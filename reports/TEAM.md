@@ -34,6 +34,7 @@ reports/
   revenue/YYYY-MM-DD.md   revenue manager
   tiktok/YYYY-MM-DD.md    tiktok manager
   marketing/YYYY-MM-DD.md marketing manager
+  growth/YYYY-MM-DD.md    growth hacker (acquisition strategy, ads, viral loops)
   seo/YYYY-MM-DD.md       seo manager
   weekly/YYYY-MM-DD.md    chief of staff summary
 ```
