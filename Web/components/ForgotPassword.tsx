@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import "@/app/account.css";
+import { AuthHead, AuthShell, Field, IcKey, IcLock, IcMail, PasswordInput, StrengthMeter, SubmitButton } from "./AuthUI";
 
 export default function ForgotPassword() {
   const [step, setStep] = useState<"email" | "code" | "done">("email");
@@ -44,47 +44,43 @@ export default function ForgotPassword() {
   }
 
   return (
-    <main className="page narrow">
-      <Link href="/" className="wordmark">anonix<b>x</b></Link>
+    <AuthShell>
       {step === "email" ? (
         <>
-          <h1>Locked out?</h1>
-          <p>Enter your email and we&apos;ll send a 6-digit code. Your secrets stay exactly where they are.</p>
-          <form className="form" onSubmit={sendCode}>
-            <label className="field">Email
-              <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </label>
-            {error ? <div className="err">{error}</div> : null}
-            <button className="btn" disabled={busy || !email.trim()}>{busy ? "Sending…" : "Send code"}</button>
+          <AuthHead title="Locked out?" sub="Enter your email and we'll send a 6-digit code. Your secrets stay exactly where they are." />
+          <form className="au-form" onSubmit={sendCode}>
+            <Field label="Email" icon={<IcMail />}>
+              <input type="email" required autoComplete="email" placeholder="your@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            {error ? <div className="au-alert">{error}</div> : null}
+            <SubmitButton busy={busy} disabled={!email.trim()}>Send code</SubmitButton>
           </form>
         </>
       ) : null}
       {step === "code" ? (
         <>
-          <h1>Check your inbox.</h1>
-          <p>We sent a code to {email.trim()}. It expires soon, so use it now.</p>
-          <form className="form" onSubmit={reset}>
-            <label className="field">6-digit code
-              <input inputMode="numeric" maxLength={6} autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} />
-            </label>
-            <label className="field">New password
-              <input type="password" required autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
-            </label>
-            {note ? <div className="ok">{note}</div> : null}
-            {error ? <div className="err">{error}</div> : null}
-            <button className="btn" disabled={busy}>{busy ? "Saving…" : "Set new password"}</button>
-            <button type="button" className="btn ghost" disabled={busy} onClick={() => sendCode()}>Resend code</button>
+          <AuthHead title="Check your inbox" sub={`We sent a code to ${email.trim()}. It expires soon, so use it now.`} />
+          <form className="au-form" onSubmit={reset}>
+            <Field label="6-digit code" icon={<IcKey />}>
+              <input inputMode="numeric" maxLength={6} autoComplete="one-time-code" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} />
+            </Field>
+            <Field label="New password" icon={<IcLock />} after={<StrengthMeter pw={pw} />}>
+              <PasswordInput value={pw} onChange={setPw} placeholder="Min. 8 characters" autoComplete="new-password" />
+            </Field>
+            {note ? <div className="au-alert ok">{note}</div> : null}
+            {error ? <div className="au-alert">{error}</div> : null}
+            <SubmitButton busy={busy}>Set new password</SubmitButton>
+            <button type="button" className="au-btn ghost" style={{ marginTop: 12 }} disabled={busy} onClick={() => sendCode()}>Resend code</button>
           </form>
         </>
       ) : null}
       {step === "done" ? (
         <>
-          <h1>You&apos;re back in.</h1>
-          <p>Your password is updated. Sign in with the new one.</p>
-          <div className="cta"><Link href="/login" className="btn">Sign in</Link></div>
+          <AuthHead title="You're back in" sub="Your password is updated. Sign in with the new one." />
+          <Link href="/login" className="au-btn">Sign In</Link>
         </>
       ) : null}
-      <p className="alt">Remembered it? <Link href="/login">Sign in</Link></p>
-    </main>
+      <p className="au-alt" style={{ marginTop: 28 }}>Remembered it?&nbsp; <Link href="/login">Sign In</Link></p>
+    </AuthShell>
   );
 }

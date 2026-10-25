@@ -1,0 +1,125 @@
+/* Sign in / sign up / reset password: the app's auth screens (Frontend/src/screens/auth/*)
+   brought to the web, same tokens as Frontend/src/utils/theme.js. */
+.au {
+  --au-bg: #0b0f18;
+  --au-text: #eaeaf0;
+  --au-sub: #9a9aa3;
+  --au-mute: #4a5068;
+  --au-primary: #ff634a;
+  --au-input: rgba(255, 255, 255, 0.04);
+  --au-border: rgba(255, 255, 255, 0.06);
+  --au-error: #ef4444;
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--au-bg);
+  color: var(--au-text);
+}
+.au-stars { position: absolute; inset: 0; pointer-events: none; }
+.au-stars i { position: absolute; border-radius: 50%; background: var(--au-primary); }
+.au-orb {
+  position: absolute; width: 320px; height: 320px; border-radius: 50%;
+  background: var(--au-primary); opacity: 0.06; filter: blur(30px); pointer-events: none;
+  left: 50%; bottom: -60px; transform: translateX(-50%);
+}
+.au.top-orb .au-orb { left: auto; bottom: auto; right: -60px; top: -80px; transform: none; opacity: 0.05; }
+
+.au-col {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 440px; margin: 0 auto;
+  padding: 12px 24px 48px;
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column;
+}
+.au-top { display: flex; align-items: center; height: 44px; }
+.au-back {
+  display: grid; place-items: center; width: 36px; height: 36px; margin-left: -6px;
+  border: 0; background: none; color: var(--au-text); cursor: pointer; border-radius: 10px;
+}
+.au-back:hover { background: rgba(255, 255, 255, 0.05); }
+.au-back svg { width: 22px; height: 22px; }
+
+.au-brand { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; text-decoration: none; }
+.au-brand i { width: 8px; height: 8px; border-radius: 50%; background: var(--au-primary); box-shadow: 0 0 10px var(--au-primary); }
+.au-brand b { font-size: 11px; font-weight: 800; letter-spacing: 3px; color: var(--au-primary); opacity: 0.8; }
+
+.au-body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 32px 0 8px; animation: au-in 0.6s 0.15s both cubic-bezier(0.2, 0.8, 0.2, 1); }
+.au.scroll .au-body { justify-content: flex-start; }
+@keyframes au-in { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .au-body { animation: none; } }
+
+.au-head { margin-bottom: 32px; }
+.au-head h1 { margin: 0 0 8px; font-size: clamp(36px, 10vw, 44px); line-height: 1.15; font-weight: 800; letter-spacing: -1px; color: var(--au-text); }
+.au-head p { margin: 0; font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 16px; line-height: 1.6; color: var(--au-sub); }
+
+.au-form { display: flex; flex-direction: column; width: 100%; }
+.au-field { margin-bottom: 16px; }
+.au-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--au-sub); }
+.au-label em { font-style: normal; font-weight: 400; text-transform: none; letter-spacing: 0; opacity: 0.7; }
+.au-row {
+  display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 14px; margin-top: 8px;
+  text-transform: none; letter-spacing: 0; font-weight: 400;
+  background: var(--au-input); border: 1.5px solid var(--au-border); border-radius: 16px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.au-row:focus-within { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); }
+.au-row.bad { border-color: var(--au-error); }
+.au-row > svg { flex: none; width: 20px; height: 20px; color: var(--au-sub); }
+.au-row > svg.good { color: #22c55e; }
+.au-row input {
+  flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent;
+  color: var(--au-text); font: inherit; font-size: 16px;
+}
+.au-row input::placeholder { color: var(--au-sub); opacity: 1; }
+.au-row input:-webkit-autofill { -webkit-text-fill-color: var(--au-text); transition: background-color 9999s; }
+.au-eye { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: none; color: var(--au-sub); cursor: pointer; border-radius: 8px; }
+.au-eye svg { width: 20px; height: 20px; }
+.au-dob input { flex: none; width: 44px; text-align: center; }
+.au-dob input.yr { flex: 1; width: auto; }
+.au-dob span { color: var(--au-sub); }
+.au-err { margin: 6px 0 0 4px; font-size: 11px; font-weight: 600; color: var(--au-error); }
+.au-hint { margin: 6px 0 0 4px; font-size: 11px; line-height: 1.4; color: var(--au-mute); }
+.au-alert { margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
+.au-alert.ok { background: rgba(76, 175, 80, 0.08); border-color: rgba(76, 175, 80, 0.3); color: #a7f3d0; }
+
+.au-strength { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.au-strength > span { flex: 1; display: flex; gap: 4px; }
+.au-strength > span i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); }
+.au-strength b { width: 48px; text-align: right; font-size: 11px; }
+
+.au-label.solo { margin-bottom: 8px; }
+.au-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.au-chip {
+  padding: 8px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500;
+  background: var(--au-input); border: 1px solid var(--au-border); color: var(--au-sub);
+}
+.au-chip[aria-pressed="true"] { background: rgba(255, 99, 74, 0.12); border-color: rgba(255, 99, 74, 0.45); color: var(--au-primary); font-weight: 700; }
+
+.au-check { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 16px; font-size: 13px; line-height: 1.5; color: var(--au-sub); cursor: pointer; }
+.au-check input { margin-top: 3px; accent-color: var(--au-primary); width: 16px; height: 16px; flex: none; }
+.au-check a, .au-link, .au-alt a { color: var(--au-primary); font-weight: 700; text-decoration: none; }
+
+.au-forgot { align-self: flex-end; margin: -4px 0 4px; padding: 6px 0; font-size: 14px; font-weight: 500; color: var(--au-sub); text-decoration: none; }
+.au-forgot:hover { color: var(--au-text); }
+
+.au-btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 54px; margin-top: 8px;
+  border: 0; border-radius: 16px; cursor: pointer; text-decoration: none;
+  background: var(--au-primary); color: #fff; font: inherit; font-size: 18px; font-weight: 700; letter-spacing: 0.3px;
+  box-shadow: 0 8px 20px rgba(255, 99, 74, 0.45);
+  transition: transform 0.1s, opacity 0.15s;
+}
+.au-btn:active { transform: scale(0.985); }
+.au-btn:disabled { opacity: 0.55; box-shadow: none; cursor: default; }
+.au-btn.ghost { background: transparent; border: 1.5px solid var(--au-border); color: var(--au-sub); box-shadow: none; font-size: 15px; height: 48px; }
+.au-spin { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, 0.35); border-top-color: #fff; animation: au-spin 0.8s linear infinite; }
+@keyframes au-spin { to { transform: rotate(360deg); } }
+
+.au-or { display: flex; align-items: center; gap: 16px; margin: 24px 0; font-size: 14px; color: var(--au-sub); }
+.au-or::before, .au-or::after { content: ""; flex: 1; height: 1px; background: var(--au-border); }
+.au .g-btn { margin-bottom: 20px; }
+.au-alt { margin: 4px 0 0; text-align: center; font-size: 16px; color: var(--au-sub); }
+.au-alt button { padding: 0; border: 0; background: none; font: inherit; color: var(--au-primary); font-weight: 700; cursor: pointer; }
+.au-foot { margin-top: 48px; text-align: center; font-size: 11px; letter-spacing: 1px; color: var(--au-sub); opacity: 0.5; }
+.au-terms { margin-top: 20px; text-align: center; font-size: 11px; line-height: 1.7; color: var(--au-sub); opacity: 0.6; }
