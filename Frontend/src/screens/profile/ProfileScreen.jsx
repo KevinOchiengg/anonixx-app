@@ -166,9 +166,9 @@ export default function ProfileScreen({ navigation }) {
           >
             <Palette size={18} color={THEME.text} strokeWidth={1.8} />
             <View style={styles.accountRowBody}>
-              <Text style={styles.accountRowLabel}>Chat Interface</Text>
+              <Text style={styles.accountRowLabel}>Your Room</Text>
               <Text style={styles.accountRowDesc}>
-                Background, font, stickers, gallery
+                Theme, intro, gallery, privacy
               </Text>
             </View>
             <ChevronRight size={18} color={THEME.textMuted} />

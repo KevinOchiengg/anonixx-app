@@ -534,7 +534,7 @@ function DropCard({
   const handleLikePress     = useCallback((e) => { e.stopPropagation(); handleLike(); }, [handleLike]);
   const handleLinkUpPress = useCallback((e) => {
     e.stopPropagation();
-    if (!isAuthenticated) { showToast({ type: 'warning', message: 'Sign in to link up.' }); return; }
+    if (!isAuthenticated) { showToast({ type: 'warning', message: 'Sign in to knock.' }); return; }
     navigation.navigate('PostUnlock', { post });
   }, [isAuthenticated, navigation, post, showToast]);
   const handleReadMore      = useCallback((e) => { e.stopPropagation(); setShowFullContent(true); }, []);
@@ -654,7 +654,7 @@ function DropCard({
                 {post.kind === 'hookup'
                   ? <Text style={styles.linkUpBtnText}>🖤</Text>
                   : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
-                <Text style={styles.linkUpBtnText}>Link up</Text>
+                <Text style={styles.linkUpBtnText}>Knock</Text>
                 <View style={styles.linkUpCostPill}>
                   <Coins size={rs(11)} color="#fff" />
                   <Text style={styles.linkUpCostText}>{UNLOCK_COST}</Text>

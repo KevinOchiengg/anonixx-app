@@ -1059,6 +1059,35 @@ export default function DropChatScreen({ route, navigation }) {
     navigation.navigate('ChatProfileSetup');
   }, [navigation]);
 
+  // Owner only (the backend checks too): closes this person's threads in
+  // your Room. They'd have to Knock, be let in, and pay again to come back.
+  const handleRemoveGuest = useCallback(() => {
+    setShowMoreMenu(false);
+    Alert.alert(
+      `Remove ${connection?.other_anonymous_name || 'them'} from your Room?`,
+      "This conversation closes for both of you. They'd have to knock again.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove', style: 'destructive',
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const res = await fetch(`${API_BASE_URL}/api/v1/drops/connections/${connectionId}/remove`, {
+                method: 'POST', headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) throw new Error();
+              showToast({ type: 'info', message: 'Removed from your Room.' });
+              navigation.goBack();
+            } catch {
+              showToast({ type: 'error', message: 'Could not remove them. Try again.' });
+            }
+          },
+        },
+      ],
+    );
+  }, [connection, connectionId, navigation, showToast]);
+
   const handleBlockHost = useCallback(() => {
     if (!connection?.host_user_id) return;
     Alert.alert(
@@ -1463,16 +1492,22 @@ export default function DropChatScreen({ route, navigation }) {
                 ))}
               </ScrollView>
             ) : (
-              <Text style={s.guestEmptyText}>No one's unlocked this room yet.</Text>
+              <Text style={s.guestEmptyText}>No one's inside this Room yet.</Text>
             )}
 
             <View style={s.menuDivider} />
 
             {connection?.is_sender ? (
-              <TouchableOpacity style={s.menuAction} onPress={handleOpenSettings} hitSlop={HIT_SLOP}>
-                <Settings size={rs(16)} color={T.text} strokeWidth={1.8} />
-                <Text style={s.menuActionText}>Room settings</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={s.menuAction} onPress={handleOpenSettings} hitSlop={HIT_SLOP}>
+                  <Settings size={rs(16)} color={T.text} strokeWidth={1.8} />
+                  <Text style={s.menuActionText}>Room settings</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.menuAction} onPress={handleRemoveGuest} hitSlop={HIT_SLOP}>
+                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Remove from Room</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <>
                 <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>

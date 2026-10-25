@@ -17,10 +17,15 @@ Data model — one row per attempt in `drop_unlock_requests`:
     "declined"|"cancelled"|"expired"), connection_id, created_at,
     responded_at, expires_at
 
+In the product this is a Knock on someone's Room: free to send, the owner
+Lets In or Declines, and the visitor's coins move only on Let In.
+
 Resolved rows are kept (not deleted) so a decline isn't a dead end — the
 requester can send a fresh request later, and the owner's review screen
-keeps a little history. No coin escrow exists or is needed: nothing is
-charged until accept.
+keeps a little history. No coin escrow exists: nothing is charged until
+accept. Sending checks the visitor can cover the cost right now, and accept
+re-checks atomically (debit_coins only succeeds if the balance covers it),
+so a Let In can never overdraw or double-charge.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -35,6 +40,7 @@ from app.utils.coin_service import debit_coins
 from app.api.v1.drops import _ensure_aware, send_push_notification, AGE_GATE_DETAIL
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
+from app.api.v1.chat_profile import gallery_for, is_blocked_between, room_theme_of
 
 # Pending requests now carry their own clock. They used to inherit the
 # confession's expiry, but drops no longer expire until they're unlocked —
@@ -171,6 +177,11 @@ async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
     )
     if not claimed:
         return {"error": "not_found"}
+    if await is_blocked_between(db, owner_id, claimed["requester_id"]):
+        await db["drop_unlock_requests"].update_one(
+            {"_id": request_oid}, {"$set": {"status": "declined", "responded_at": now_utc()}},
+        )
+        return {"error": "not_found"}
 
     try:
         target = await _resolve_target(claimed["target_type"], claimed["target_id"], db)
@@ -194,8 +205,10 @@ async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
         "request_id": str(request_oid), "connection_id": connection_id,
     })
     await send_push_notification(
-        claimed["requester_id"], "They said yes 🔥", "Your link up was accepted. The Room is open, go say something.", db,
-        data={"type": "linkup_accepted", "connection_id": connection_id, "url": f"/chat/{connection_id}"},
+        claimed["requester_id"], "You're inside 🔥", "They let you in. The Room is open, go say something.", db,
+        # Lands on the owner's Room so the visitor gets the "You're inside" moment first.
+        data={"type": "linkup_accepted", "connection_id": connection_id, "room_user_id": owner_id,
+              "url": f"/room/{owner_id}"},
     )
     return {"error": None, "connection_id": connection_id}
 
@@ -243,11 +256,16 @@ async def create_unlock_request(
     )
 
     if owner_id == current_user_id:
-        raise HTTPException(status_code=400, detail="Cannot unlock your own confession.")
+        raise HTTPException(status_code=400, detail="That's your own Room.")
+    if await is_blocked_between(db, owner_id, current_user_id):
+        raise HTTPException(status_code=404, detail="Room not found.")
+    owner_room = await db["chat_profiles"].find_one({"user_id": owner_id}, {"knocks_open": 1}) or {}
+    if owner_room.get("knocks_open") is False:
+        raise HTTPException(status_code=403, detail="This Room isn't taking knocks right now.")
     if doc.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
     if doc.get("kind") == "confession" and not data.via_profile:
-        raise HTTPException(status_code=400, detail="This is a regular confession. Link up from their profile instead.")
+        raise HTTPException(status_code=400, detail="This is a regular confession. Knock from their Room instead.")
     # None = never expires (un-unlocked drop, or a plain feed post).
     if target_expires_at is not None and target_expires_at < now_utc():
         raise HTTPException(status_code=400, detail="This confession has expired.")
@@ -257,10 +275,15 @@ async def create_unlock_request(
     # The request's own window, independent of the confession's lifetime.
     expires_at = now_utc() + timedelta(days=REQUEST_EXPIRY_DAYS)
 
-    existing_unlock = await db["drop_unlocks"].find_one({
-        "drop_id": data.target_id, "unlocker_id": current_user_id,
-    })
-    if existing_unlock:
+    existing_unlock = await db["drop_unlocks"].find_one(
+        {"drop_id": data.target_id, "unlocker_id": current_user_id}, sort=[("created_at", -1)],
+    )
+    # Someone the owner removed has to Knock again, so their old unlock
+    # doesn't count as an open door.
+    removed = existing_unlock and existing_unlock.get("connection_id") and await db["drop_connections"].count_documents(
+        {"_id": ObjectId(existing_unlock["connection_id"]), "removed_at": {"$ne": None}},
+    )
+    if existing_unlock and not removed:
         connection_id = existing_unlock.get("connection_id") or await _create_connection_for_target(
             data.target_type, data.target_id, doc, current_user_id, db,
         )
@@ -277,6 +300,16 @@ async def create_unlock_request(
                 "message": "You already have a pending request for this confession.",
                 "request_id": str(existing_pending["_id"]),
             },
+        )
+
+    # A Knock is free to send, but only from someone who could pay if let
+    # in. Accept checks again atomically; this just stops dead-end knocks.
+    from app.api.v1.drops import unlock_cost_for
+    cost = await unlock_cost_for(current_user_id, db)
+    if cost > 0 and (requester or {}).get("coin_balance", 0) < cost:
+        raise HTTPException(
+            status_code=402,
+            detail=f"You need {cost} coins to knock. Nothing is charged unless they let you in.",
         )
 
     requester_name = requester.get("anonymous_name", "Anonymous") if requester else "Anonymous"
@@ -316,8 +349,8 @@ async def create_unlock_request(
     })
     await send_push_notification(
         owner_id,
-        f"{requester_name} wants to link up 🔥",
-        f"“{pitch}”" if pitch else "They found your post. See their Room and decide.",
+        f"{requester_name} knocked on your Room 🔥",
+        f"“{pitch}”" if pitch else "Peek through their window, then let them in or decline.",
         db,
         data={"type": "linkup_request", "request_id": request_id, "url": f"/inbox?request={request_id}"},
         category="linkup_request",
@@ -360,7 +393,7 @@ async def _try_mutual(data, doc, owner_id, requester_id, requester_name, pitch, 
     for uid, rid in ((requester_id, mine["_id"]), (owner_id, reverse["_id"])):
         await emit_unlock_request_accepted(uid, {"request_id": str(rid), "connection_id": connection_id, "mutual": True})
         await send_push_notification(
-            uid, "It's mutual 🔥", "You both wanted this. Your Room is open, say something.", db,
+            uid, "It's mutual 🔥", "You both knocked. You're inside each other's Room, say something.", db,
             data={"type": "linkup_mutual", "connection_id": connection_id, "url": f"/chat/{connection_id}"},
         )
     return {"mutual": True, "connection_id": connection_id, "status": "accepted"}
@@ -421,8 +454,11 @@ async def list_incoming_requests(
         # Their Room is their clue: gallery thumbnails right in the inbox row.
         async for cp in db["chat_profiles"].find(
             {"user_id": {"$in": list(requester_ids)}},
-            {"user_id": 1, "gallery": 1, "background_pattern": 1, "profile_picture_url": 1},
+            {"user_id": 1, "gallery": 1, "background_pattern": 1, "profile_picture_url": 1,
+             "gallery_visibility": 1, "room_theme": 1},
         ):
+            # Only what the knocker shows through their own window.
+            cp["gallery"] = gallery_for(cp, current_user_id, cp["user_id"], inside=False)
             requester_rooms[cp["user_id"]] = cp
 
     requests = []
@@ -441,6 +477,7 @@ async def list_incoming_requests(
                 for g in (requester_rooms.get(r.get("requester_id"), {}).get("gallery") or [])[:3]
             ],
             "requester_background": requester_rooms.get(r.get("requester_id"), {}).get("background_pattern"),
+            "requester_theme": room_theme_of(requester_rooms.get(r.get("requester_id"), {})),
             "pitch": r.get("pitch"),
             "intents": r.get("intents") or [],
             "media_url": r.get("media_url"),
@@ -579,7 +616,7 @@ async def decline_unlock_request(
     await emit_unlock_request_declined(req["requester_id"], {"request_id": request_id})
     await send_push_notification(
         req["requester_id"], "Not this time",
-        "No coins were charged. You can try requesting again later.", db,
+        "No coins were charged. You can knock again later.", db,
     )
     return {"declined": True}
 

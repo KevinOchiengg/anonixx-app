@@ -135,8 +135,8 @@ export default function SettingsScreen({ navigation }) {
           <View style={sec.divider} />
           <NavRow
             icon={Palette}
-            label="Chat Interface"
-            desc="Background, font, stickers, gallery — shown once someone unlocks a chat with you"
+            label="Your Room"
+            desc="Theme, intro, gallery, privacy, and who's inside"
             onPress={() => navigation.navigate('Main', {
               screen: 'Messages',
               params: { screen: 'ChatProfileSetup' },

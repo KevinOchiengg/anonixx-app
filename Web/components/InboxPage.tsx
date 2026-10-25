@@ -126,11 +126,11 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
       if (openChat && d.connection_id) {
         router.push(`/chat/${d.connection_id}`);
       } else {
-        setNote("Accepted — chat started.");
+        setNote("Let in. They're inside your Room.");
         load();
       }
     } catch (e) {
-      setError((e as Error).message || "Could not accept right now.");
+      setError((e as Error).message || "Could not let them in right now.");
     } finally {
       setBusyIds([r.id], false);
     }
@@ -204,7 +204,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
         {reqs === null ? (
           <p className="muted center">Loading…</p>
         ) : reqs.length === 0 ? (
-          <div className="u-empty">No link ups waiting. Post something for tonight and watch this fill up.</div>
+          <div className="u-empty">No knocks yet. Post something for tonight and watch your door.</div>
         ) : (
           <div className="lr-list">
             {reqs.map((r) => {
@@ -223,7 +223,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
                       <b>{r.requester_anonymous_name || "Anonymous"}</b>
                       <time>{chatTime(r.created_at || null)}</time>
                     </span>
-                    <span className={`lr-pitch${r.pitch ? "" : " none"}`}>{r.pitch || "wants to link up"}</span>
+                    <span className={`lr-pitch${r.pitch ? "" : " none"}`}>{r.pitch || "knocked on your door"}</span>
                     {r.intents?.length ? <span className="room-intents">{r.intents.map((i) => <i key={i}>{intentLabel(i)}</i>)}</span> : null}
                     {r.confession_snippet ? <span className="lr-on">on &ldquo;{r.confession_snippet}&rdquo;</span> : null}
                     {thumbs.length ? (
@@ -235,7 +235,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
                     ) : null}
                     <span className="lr-acts" onClick={(e) => e.stopPropagation()}>
                       <button className="d" disabled={b} onClick={() => decline(r)}>Decline</button>
-                      <button className="a" disabled={b} onClick={() => accept(r, true)}>{b ? "…" : "Accept"}</button>
+                      <button className="a" disabled={b} onClick={() => accept(r, true)}>{b ? "…" : "Let In"}</button>
                     </span>
                   </span>
                 </div>
@@ -257,21 +257,21 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
         {sent === null ? (
           <p className="muted center">Loading…</p>
         ) : sent.length === 0 ? (
-          <div className="u-empty">You haven&apos;t sent any link-up requests. Tap Link up on a post you can&apos;t stop thinking about.</div>
+          <div className="u-empty">You haven&apos;t knocked on anyone yet. Tap Knock on a post you can&apos;t stop thinking about.</div>
         ) : (
           sent.map((s) => (
             <div className="u-sent" key={s.id}>
               {s.status === "pending" ? (
                 <>
                   <b>Waiting for a response…</b>
-                  <small>Nothing&apos;s been charged yet — you&apos;ll only pay coins if they accept.</small>
+                  <small>Nothing&apos;s charged yet. Coins move only if they let you in.</small>
                 </>
               ) : s.status === "accepted" ? (
-                <b>They said yes.</b>
+                <b>You&apos;re inside.</b>
               ) : s.status === "declined" ? (
                 <>
                   <b>They&apos;re not up for it right now</b>
-                  <small>You can send another request anytime — no coins were spent.</small>
+                  <small>You can knock again anytime. No coins were spent.</small>
                 </>
               ) : (
                 <>
@@ -281,8 +281,8 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
               )}
               <div className="row">
                 {s.status === "accepted" && s.connection_id ? <Link href={`/chat/${s.connection_id}`} className="pill">Open chat</Link> : null}
-                {s.status === "pending" ? <button className="pill ghost" disabled={busy.has(s.id)} onClick={() => cancel(s)}>Cancel request</button> : null}
-                {s.status === "declined" ? <button className="pill" disabled={busy.has(s.id)} onClick={() => resend(s)}>Send another request</button> : null}
+                {s.status === "pending" ? <button className="pill ghost" disabled={busy.has(s.id)} onClick={() => cancel(s)}>Take back knock</button> : null}
+                {s.status === "declined" ? <button className="pill" disabled={busy.has(s.id)} onClick={() => resend(s)}>Knock again</button> : null}
                 <Link href={`/drop/${s.target_id}`} className="pill ghost">View the post</Link>
               </div>
             </div>
@@ -333,7 +333,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
         <p className="muted center">Loading…</p>
       ) : shown.length === 0 ? (
         <div className="u-empty">
-          {q ? `No Rooms match “${search.trim()}”` : filter === "unread" ? "You're all caught up." : "No Rooms yet. Link up with someone tonight and their door opens here."}
+          {q ? `No Rooms match “${search.trim()}”` : filter === "unread" ? "You're all caught up." : "No Rooms yet. Knock on someone tonight and their door opens here."}
         </div>
       ) : (
         <ul className="u-cards">
@@ -409,14 +409,14 @@ export default function InboxPage() {
   const right =
     view === "chats" ? (
       <>
-        <button className="u-icon" onClick={() => router.push("/chat-setup")} aria-label="Chat interface"><PaletteIcon size={18} /></button>
+        <button className="u-icon" onClick={() => router.push("/chat-setup")} aria-label="Your Room"><PaletteIcon size={18} /></button>
         <button className="u-icon" onClick={toggle} aria-label="Search">{searchOpen ? <CloseIcon size={18} /> : <SearchIcon size={18} />}</button>
         <button className="u-add" onClick={() => router.push("/")} aria-label="Find someone on the feed"><PlusIcon size={18} /></button>
       </>
     ) : null;
 
   return (
-    <AppShell title={view === "requests" ? "Requests" : view === "sent" ? "Sent" : "rooms"} right={right}>
+    <AppShell title={view === "requests" ? "Knocks" : view === "sent" ? "Your knocks" : "rooms"} right={right}>
       {searchOpen && view === "chats" ? (
         <div className="u-search">
           <label>

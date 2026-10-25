@@ -1,20 +1,22 @@
 /**
- * ChatProfileSetupScreen.jsx
+ * ChatProfileSetupScreen.jsx — "Your Room", the owner's Room studio.
  *
- * One-time (then editable) setup for the per-poster themed chat surface:
- * background color, font style, profile picture, and a media gallery
- * (max 3 items) — all of it only ever visible to someone who has actually
- * unlocked one of this user's drops (enforced server-side).
+ * Five tabs: My Room (picture, intro, status, welcome message, gallery,
+ * welcome sound, calls), Knocks (who's at the door), Inside (people you've
+ * let in: chat, Remove, Report, Block), Appearance (the ten Room themes with
+ * preview + Apply/Cancel, name font, chat background) and Privacy (who sees
+ * the gallery, whether the door takes knocks). Gallery visibility is
+ * enforced server-side; see chat_profile.gallery_for.
  *
- * Reached from the palette icon in MessagesScreen's header — the Messages
- * tab itself always opens straight to the conversation list, never gates
- * on this being configured first.
+ * Reached from the palette icon in MessagesScreen's header and from
+ * "Edit Room" in RoomScreen. Accepts { tab } as a route param.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Image, ActivityIndicator,
+  Image, ActivityIndicator, TextInput, Switch, Alert,
 } from 'react-native';
+import { useSelector } from 'react-redux';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,14 +32,29 @@ import { uploadViaBackend } from '../../utils/upload';
 import { WELCOME_SOUND_OPTIONS, WELCOME_SOUND_MAP } from '../../config/sounds';
 import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
+import { intentLabel } from '../../config/linkup';
+import {
+  DEFAULT_ROOM_THEME, GALLERY_VISIBILITY, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
+} from '../../config/roomThemes';
+import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
+
+const TABS = [
+  ['room', 'My Room'], ['knocks', 'Knocks'], ['inside', 'Inside'], ['appearance', 'Appearance'], ['privacy', 'Privacy'],
+];
+const REPORT_REASONS = [
+  ['abuse', 'Harassment or abuse'], ['explicit', 'Sexually explicit or unwanted'], ['doxxing', 'Shares private info'],
+  ['spam', 'Spam or scam'], ['other', 'Something else'],
+];
 
 function extOf(uri) {
   return uri.split('?')[0].split('.').pop()?.toLowerCase() || '';
 }
 
-export default function ChatProfileSetupScreen({ navigation }) {
+export default function ChatProfileSetupScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const me = useSelector((state) => state.auth.user?.id);
+  const [tab, setTab] = useState(route?.params?.tab || 'room');
 
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -53,6 +70,15 @@ export default function ChatProfileSetupScreen({ navigation }) {
   const [maxGuests, setMaxGuests]             = useState(1);
   const [purchasedSlots, setPurchasedSlots]   = useState(0);
   const [buyingSlots, setBuyingSlots]         = useState(false);
+  const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
+  const [intro, setIntro]                     = useState('');
+  const [welcomeMessage, setWelcomeMessage]   = useState('');
+  const [roomStatus, setRoomStatus]           = useState('');
+  const [galleryVisibility, setGalleryVisibility] = useState('window');
+  const [knocksOpen, setKnocksOpen]           = useState(true);
+  const [knocks, setKnocks]                   = useState(null);
+  const [inside, setInside]                   = useState(null);
+  const [personBusy, setPersonBusy]           = useState(null);
 
   const authHeaders = useCallback(async (json = false) => {
     const token = await AsyncStorage.getItem('token');
@@ -80,6 +106,12 @@ export default function ChatProfileSetupScreen({ navigation }) {
             setCallMode(data.call_mode || 'solo');
             setMaxGuests(data.max_guests || 1);
             setPurchasedSlots(data.purchased_slots || 0);
+            setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
+            setIntro(data.intro || '');
+            setWelcomeMessage(data.welcome_message || '');
+            setRoomStatus(data.room_status || '');
+            setGalleryVisibility(data.gallery_visibility || 'window');
+            setKnocksOpen(data.knocks_open !== false);
           }
         }
       } catch {
@@ -189,17 +221,120 @@ export default function ChatProfileSetupScreen({ navigation }) {
           profile_picture_url: profilePictureUrl,
           welcome_sound: welcomeSound,
           call_mode: callMode,
+          intro,
+          welcome_message: welcomeMessage,
+          room_status: roomStatus,
+          gallery_visibility: galleryVisibility,
+          knocks_open: knocksOpen,
         }),
       });
-      if (!res.ok) throw new Error('Save failed');
-      showToast({ type: 'success', message: 'Your room, your rules. Saved.' });
-      navigation.replace ? navigation.replace('MessagesMain') : navigation.navigate('MessagesMain');
-    } catch {
-      showToast({ type: 'error', message: 'Could not save. Try again.' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not save. Try again.');
+      showToast({ type: 'success', message: 'Saved. Your Room is ready for visitors.' });
+    } catch (e) {
+      showToast({ type: 'error', message: e?.message || 'Could not save. Try again.' });
     } finally {
       setSaving(false);
     }
-  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeSound, callMode, authHeaders, showToast, navigation]);
+  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeSound, callMode, intro, welcomeMessage, roomStatus,
+      galleryVisibility, knocksOpen, authHeaders, showToast]);
+
+  // Applies straight away (the picker has its own Apply / Cancel).
+  const handleApplyTheme = useCallback(async (id) => {
+    const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/me`, {
+      method: 'PUT', headers: await authHeaders(true), body: JSON.stringify({ room_theme: id }),
+    });
+    if (!res.ok) { showToast({ type: 'error', message: 'Could not save the theme. Try again.' }); return; }
+    setRoomTheme(id);
+    showToast({ type: 'success', message: `${roomThemeById(id).name} applied. Visitors see it now.` });
+  }, [authHeaders, showToast]);
+
+  const loadPeople = useCallback(async () => {
+    try {
+      const headers = await authHeaders();
+      const [k, c] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v1/unlock-requests/incoming`, { headers }).then((r) => r.json()),
+        fetch(`${API_BASE_URL}/api/v1/drops/connections`, { headers }).then((r) => r.json()),
+      ]);
+      setKnocks(k.requests || []);
+      // One row per person inside, their latest thread first.
+      const seen = new Set();
+      setInside((c.connections || []).filter((x) => x.is_sender && !seen.has(x.other_user_id) && seen.add(x.other_user_id)));
+    } catch {
+      setKnocks((v) => v || []);
+      setInside((v) => v || []);
+    }
+  }, [authHeaders]);
+  useEffect(() => { loadPeople(); }, [loadPeople]);
+
+  const post = useCallback(async (path, body) => {
+    const res = await fetch(`${API_BASE_URL}/api/v1${path}`, {
+      method: 'POST', headers: await authHeaders(!!body), ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Something went wrong.');
+    return data;
+  }, [authHeaders]);
+
+  const handleKnock = useCallback(async (k, letIn) => {
+    setPersonBusy(k.id);
+    try {
+      if (letIn) {
+        const d = await post(`/unlock-requests/${k.id}/accept`);
+        showToast({ type: 'success', message: `${k.requester_anonymous_name || 'They'} are inside now.` });
+        if (d.connection_id) navigation.navigate('DropChat', { connectionId: d.connection_id });
+      } else {
+        await post(`/unlock-requests/${k.id}/decline`);
+        showToast({ type: 'info', message: "Declined. They weren't charged." });
+      }
+      await loadPeople();
+    } catch (e) {
+      showToast({ type: 'warning', message: e.message });
+    } finally {
+      setPersonBusy(null);
+    }
+  }, [post, loadPeople, navigation, showToast]);
+
+  const handleRemove = useCallback((c) => {
+    Alert.alert(`Remove ${c.other_anonymous_name}?`, "The conversation closes for both of you. They'd have to knock again to come back.", [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => {
+        setPersonBusy(c.id);
+        try {
+          await post(`/drops/connections/${c.id}/remove`);
+          showToast({ type: 'info', message: `${c.other_anonymous_name} is out of your Room.` });
+          await loadPeople();
+        } catch (e) { showToast({ type: 'error', message: e.message }); } finally { setPersonBusy(null); }
+      } },
+    ]);
+  }, [post, loadPeople, showToast]);
+
+  const handleBlock = useCallback((c) => {
+    Alert.alert(`Block ${c.other_anonymous_name}?`, "They're removed from your Room and can't knock again.", [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Block', style: 'destructive', onPress: async () => {
+        setPersonBusy(c.id);
+        try {
+          await post(`/users/${c.other_user_id}/block`);
+          await post(`/drops/connections/${c.id}/remove`).catch(() => {});
+          showToast({ type: 'info', message: 'Blocked.' });
+          await loadPeople();
+        } catch (e) { showToast({ type: 'error', message: e.message }); } finally { setPersonBusy(null); }
+      } },
+    ]);
+  }, [post, loadPeople, showToast]);
+
+  const handleReport = useCallback((c) => {
+    Alert.alert(`Report ${c.other_anonymous_name}`, 'What happened?', [
+      ...REPORT_REASONS.map(([k, label]) => ({ text: label, onPress: async () => {
+        try {
+          await post(`/users/${c.other_user_id}/report`, { reason: k });
+          showToast({ type: 'success', message: 'Report received. Thank you.' });
+        } catch (e) { showToast({ type: 'error', message: e.message }); }
+      } })),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [post, showToast]);
 
   // Buys slots immediately (real coins spent) rather than waiting for the
   // main Save button, so the balance change and new cap are confirmed on
@@ -252,11 +387,30 @@ export default function ChatProfileSetupScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <DropScreenHeader title="Your Chat Interface" navigation={navigation} />
+      <DropScreenHeader title="Your Room" navigation={navigation} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsIn}>
+        {TABS.map(([k, label]) => (
+          <TouchableOpacity key={k} style={[styles.tab, tab === k && styles.tabOn]} onPress={() => setTab(k)} accessibilityRole="tab" accessibilityState={{ selected: tab === k }}>
+            <Text style={[styles.tabText, tab === k && styles.tabTextOn]}>{label}</Text>
+            {k === 'knocks' && knocks?.length ? <View style={styles.badge}><Text style={styles.badgeText}>{knocks.length}</Text></View> : null}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + rp(100) }]}>
-        <Text style={styles.intro}>
-          This is what people see once they unlock a chat with you — decorate it however fits your vibe.
-        </Text>
+        {tab === 'room' && (
+          <>
+        <View style={styles.heroCard}>
+          <RoomMini theme={roomTheme} name={anonymousName} big />
+          <View style={{ flex: 1, gap: rp(6) }}>
+            <Text style={styles.heroTitle}>{roomThemeById(roomTheme).room}</Text>
+            <Text style={styles.heroText}>Your private space. Visitors peek through the window, knock, and you decide who comes in.</Text>
+            {me ? (
+              <TouchableOpacity style={styles.pill} onPress={() => navigation.navigate('Room', { userId: me })}>
+                <Text style={styles.pillText}>See it as a visitor</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
 
         {/* Profile picture — pulled from your account photo by default;
             tap to set a different one just for chat. Falls back to your
@@ -278,8 +432,47 @@ export default function ChatProfileSetupScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.avatarHint}>Tap to change</Text>
 
+        <Text style={styles.sectionLabel}>About you</Text>
+        <TextInput
+          style={styles.input}
+          value={intro}
+          onChangeText={(v) => setIntro(v.slice(0, MAX_INTRO))}
+          placeholder="A line that makes them curious…"
+          placeholderTextColor={T.textMute}
+          multiline
+        />
+        <Text style={styles.sectionHint}>{intro.length}/{MAX_INTRO} · everyone peeking sees this. No numbers or handles.</Text>
+
+        <Text style={styles.sectionLabel}>Status</Text>
+        <View style={styles.chipRow}>
+          {[{ id: '', label: 'None' }, ...ROOM_STATUSES].map((st) => (
+            <TouchableOpacity key={st.id || 'none'} onPress={() => setRoomStatus(st.id)} style={[styles.chip, roomStatus === st.id && styles.chipActive]} hitSlop={HIT_SLOP}>
+              <Text style={[styles.chipText, roomStatus === st.id && styles.chipTextActive]}>{st.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>Welcome message</Text>
+        <TextInput
+          style={[styles.input, { minHeight: rs(84) }]}
+          value={welcomeMessage}
+          onChangeText={(v) => setWelcomeMessage(v.slice(0, MAX_WELCOME))}
+          placeholder="What they read the moment you let them in…"
+          placeholderTextColor={T.textMute}
+          multiline
+        />
+        <Text style={styles.sectionHint}>{welcomeMessage.length}/{MAX_WELCOME} · only people you let in see this.</Text>
+          </>
+        )}
+
+        {tab === 'appearance' && (
+          <>
+        <Text style={styles.sectionLabel}>Room theme</Text>
+        <RoomThemePicker saved={roomTheme} name={anonymousName} onApply={handleApplyTheme} />
+
         {/* Background pattern */}
-        <Text style={styles.sectionLabel}>Background</Text>
+        <Text style={styles.sectionLabel}>Chat background</Text>
+        <Text style={styles.sectionHint}>Behind your conversations once someone is inside.</Text>
         <View style={styles.swatchRow}>
           {BACKGROUND_PATTERNS.map((p) => (
             <TouchableOpacity
@@ -297,7 +490,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
         </View>
 
         {/* Font */}
-        <Text style={styles.sectionLabel}>Font</Text>
+        <Text style={styles.sectionLabel}>Name and intro font</Text>
         <View style={styles.chipRow}>
           {CHAT_FONT_OPTIONS.map((f) => (
             <TouchableOpacity
@@ -312,10 +505,15 @@ export default function ChatProfileSetupScreen({ navigation }) {
           ))}
         </View>
 
-        {/* Welcome sound — plays once for a first-time unlocker */}
+          </>
+        )}
+
+        {tab === 'room' && (
+          <>
+        {/* Welcome sound — plays once for someone you've just let in */}
         <Text style={styles.sectionLabel}>Welcome sound</Text>
         <Text style={styles.sectionHint}>
-          Plays once when someone unlocks a chat with you for the first time.
+          Plays once when someone you let in opens your Room for the first time.
         </Text>
         <View style={styles.chipRow}>
           {WELCOME_SOUND_OPTIONS.map((opt) => (
@@ -336,7 +534,7 @@ export default function ChatProfileSetupScreen({ navigation }) {
         {/* Video calls */}
         <Text style={styles.sectionLabel}>Video calls</Text>
         <Text style={styles.sectionHint}>
-          Anyone who's unlocked a chat with you can video call you, one at a time or as a group room.
+          Anyone inside your Room can video call you, one at a time or as a group room.
         </Text>
         <View style={styles.chipRow}>
           <TouchableOpacity
@@ -389,10 +587,9 @@ export default function ChatProfileSetupScreen({ navigation }) {
 
         {/* Gallery — stacked vertically, one under another, the same way
             they'll land as pre-shared media in the room itself. */}
-        <Text style={styles.sectionLabel}>Media gallery ({gallery.length}/3)</Text>
+        <Text style={styles.sectionLabel}>On the walls ({gallery.length}/3)</Text>
         <Text style={styles.sectionHint}>
-          Shown as a swipeable welcome to whoever unlocks your chat for the first time — image, video, or gif.
-          Entertains them if you're not online yet.
+          Photos, GIFs or short videos. Who sees them is set in Privacy.
         </Text>
         <View style={styles.galleryRow}>
           {gallery.map((item, idx) => (
@@ -427,8 +624,107 @@ export default function ChatProfileSetupScreen({ navigation }) {
             </TouchableOpacity>
           )}
         </View>
+          </>
+        )}
+
+        {tab === 'knocks' && (
+          knocks === null ? <ActivityIndicator color={T.primary} style={{ marginTop: rp(30) }} /> : (
+            <>
+              <Text style={styles.info}>Knocking is free for them. Let someone in and their coins move automatically. Decline and nothing happens.</Text>
+              {knocks.length === 0 ? <Text style={styles.empty}>No one's at the door. Post something and watch the knocks come in.</Text> : null}
+              {knocks.map((k) => (
+                <View key={k.id} style={styles.person}>
+                  <View style={styles.personAva}>
+                    {k.requester_avatar_url ? <Image source={{ uri: k.requester_avatar_url }} style={styles.personImg} /> : <Text style={styles.personInitial}>{(k.requester_anonymous_name || 'A')[0].toUpperCase()}</Text>}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.personName} numberOfLines={1}>{k.requester_anonymous_name || 'Anonymous'}</Text>
+                    <Text style={styles.personSub} numberOfLines={2}>
+                      {k.pitch ? `“${k.pitch}”` : 'Just knocked'}{k.intents?.length ? ` · ${k.intents.map(intentLabel).join(', ')}` : ''}
+                    </Text>
+                    <View style={styles.personActs}>
+                      <TouchableOpacity style={styles.actBtn} onPress={() => navigation.navigate('Room', { userId: k.requester_id })}><Text style={styles.actText}>Peek</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.actBtn} disabled={personBusy === k.id} onPress={() => handleKnock(k, false)}><Text style={styles.actText}>Decline</Text></TouchableOpacity>
+                      <TouchableOpacity style={[styles.actBtn, styles.actPrimary]} disabled={personBusy === k.id} onPress={() => handleKnock(k, true)}>
+                        {personBusy === k.id ? <ActivityIndicator size="small" color="#fff" /> : <Text style={[styles.actText, { color: '#fff' }]}>Let In</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </>
+          )
+        )}
+
+        {tab === 'inside' && (
+          inside === null ? <ActivityIndicator color={T.primary} style={{ marginTop: rp(30) }} /> : (
+            <>
+              <Text style={styles.info}>People you've let in. Remove closes the conversation; they'd have to knock again. Block also stops them knocking.</Text>
+              {inside.length === 0 ? <Text style={styles.empty}>Nobody's inside yet. When you let someone in, they show up here.</Text> : null}
+              {inside.map((c) => (
+                <View key={c.id} style={styles.person}>
+                  <View style={styles.personAva}>
+                    {c.other_avatar_url ? <Image source={{ uri: c.other_avatar_url }} style={styles.personImg} /> : <Text style={styles.personInitial}>{(c.other_anonymous_name || 'A')[0].toUpperCase()}</Text>}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.personName} numberOfLines={1}>{c.other_anonymous_name || 'Anonymous'}</Text>
+                    <Text style={styles.personSub} numberOfLines={1}>{c.last_message || 'No messages yet'}</Text>
+                    <View style={styles.personActs}>
+                      <TouchableOpacity style={styles.actBtn} onPress={() => navigation.navigate('DropChat', { connectionId: c.id })}><Text style={styles.actText}>Chat</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.actBtn} disabled={personBusy === c.id} onPress={() => handleRemove(c)}><Text style={styles.actText}>Remove</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.actBtn} onPress={() => handleReport(c)}><Text style={styles.actText}>Report</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.actBtn} disabled={personBusy === c.id} onPress={() => handleBlock(c)}><Text style={[styles.actText, { color: T.danger }]}>Block</Text></TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </>
+          )
+        )}
+
+        {tab === 'privacy' && (
+          <>
+            <Text style={styles.sectionLabel}>Who sees your photos</Text>
+            {GALLERY_VISIBILITY.map((v) => (
+              <TouchableOpacity
+                key={v.id}
+                style={[styles.option, galleryVisibility === v.id && styles.optionOn]}
+                onPress={() => setGalleryVisibility(v.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: galleryVisibility === v.id }}
+              >
+                <View style={[styles.radio, galleryVisibility === v.id && styles.radioOn]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.optionTitle}>{v.label}</Text>
+                  <Text style={styles.optionHint}>{v.hint}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            <Text style={styles.sectionLabel}>Your door</Text>
+            <View style={styles.option}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.optionTitle}>Taking knocks</Text>
+                <Text style={styles.optionHint}>
+                  {knocksOpen ? 'Anyone 18+ who finds your post can knock.' : 'Nobody can knock. People already inside stay inside.'}
+                </Text>
+              </View>
+              <Switch
+                value={knocksOpen}
+                onValueChange={setKnocksOpen}
+                trackColor={{ false: T.surfaceAlt, true: T.gold }}
+                thumbColor="#fff"
+                accessibilityLabel="Taking knocks"
+              />
+            </View>
+            <Text style={styles.info}>
+              Your Room is only reachable from your posts. It doesn't show up in search. People you block can't see your Room or knock on it.
+            </Text>
+          </>
+        )}
       </ScrollView>
 
+      {(tab === 'room' || tab === 'appearance' || tab === 'privacy') && (
       <View style={[styles.footer, { paddingBottom: insets.bottom + rp(12) }]}>
         <TouchableOpacity
           style={styles.saveBtn}
@@ -436,9 +732,10 @@ export default function ChatProfileSetupScreen({ navigation }) {
           disabled={saving}
           activeOpacity={0.88}
         >
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save changes</Text>}
         </TouchableOpacity>
       </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -448,13 +745,44 @@ const styles = StyleSheet.create({
   centered: { justifyContent: 'center', alignItems: 'center' },
   content:  { padding: SPACING.md, gap: rp(4) },
 
-  intro: {
-    fontFamily: 'DMSans-Italic',
-    fontSize:   FONT.sm,
-    color:      T.textSec,
-    lineHeight: rf(20),
-    marginBottom: SPACING.md,
+  tabs: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: T.border },
+  tabsIn: { paddingHorizontal: SPACING.md, paddingVertical: rp(10), gap: rp(6) },
+  tab: { flexDirection: 'row', alignItems: 'center', gap: rp(6), height: rs(34), paddingHorizontal: rp(14), borderRadius: 999, borderWidth: 1, borderColor: T.border },
+  tabOn: { borderColor: T.gold, backgroundColor: 'rgba(251,191,36,0.08)' },
+  tabText: { fontFamily: 'DMSans-Bold', fontSize: rf(13), color: T.textSec },
+  tabTextOn: { color: T.text },
+  badge: { minWidth: rs(18), height: rs(18), borderRadius: rs(9), paddingHorizontal: rp(5), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: '#fff', fontSize: rf(11), fontWeight: '800' },
+
+  heroCard: { flexDirection: 'row', alignItems: 'center', gap: rp(14), padding: rp(12), borderRadius: RADIUS.lg, backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, marginBottom: rp(4) },
+  heroTitle: { fontFamily: 'PlayfairDisplay-Italic', fontSize: rf(19), color: T.text },
+  heroText: { fontSize: rf(12), color: T.textSec, lineHeight: rf(17) },
+  pill: { alignSelf: 'flex-start', borderWidth: 1, borderColor: T.borderStrong, borderRadius: 999, paddingHorizontal: rp(12), paddingVertical: rp(6) },
+  pillText: { color: T.text, fontSize: rf(12), fontWeight: '700' },
+
+  input: {
+    backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border, borderRadius: RADIUS.md,
+    paddingHorizontal: rp(14), paddingVertical: rp(12), color: T.text, fontSize: FONT.md,
+    fontFamily: 'DMSans-Regular', minHeight: rs(56), textAlignVertical: 'top',
   },
+  info: { fontSize: FONT.sm, color: T.textSec, lineHeight: FONT.sm * 1.5, backgroundColor: T.surface, borderRadius: RADIUS.md, padding: rp(12), marginVertical: rp(8) },
+  empty: { fontSize: FONT.sm, color: T.textSec, textAlign: 'center', marginTop: rp(24) },
+  person: { flexDirection: 'row', gap: rp(12), paddingVertical: rp(12), borderBottomWidth: 1, borderBottomColor: T.border },
+  personAva: { width: rs(46), height: rs(46), borderRadius: rs(23), overflow: 'hidden', backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: T.goldBorder },
+  personImg: { width: '100%', height: '100%' },
+  personInitial: { color: T.text, fontWeight: '800', fontSize: FONT.md },
+  personName: { color: T.text, fontWeight: '700', fontSize: FONT.md },
+  personSub: { color: T.textSec, fontSize: rf(12), marginTop: rp(2) },
+  personActs: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6), marginTop: rp(8) },
+  actBtn: { height: rs(32), paddingHorizontal: rp(12), borderRadius: rs(10), borderWidth: 1, borderColor: T.border, alignItems: 'center', justifyContent: 'center' },
+  actPrimary: { backgroundColor: T.primary, borderColor: T.primary },
+  actText: { color: T.text, fontSize: rf(12), fontWeight: '700' },
+  option: { flexDirection: 'row', alignItems: 'center', gap: rp(12), padding: rp(14), borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border, marginBottom: rp(8) },
+  optionOn: { borderColor: T.gold, backgroundColor: 'rgba(251,191,36,0.06)' },
+  radio: { width: rs(18), height: rs(18), borderRadius: rs(9), borderWidth: 2, borderColor: T.borderStrong },
+  radioOn: { borderColor: T.gold, backgroundColor: T.gold },
+  optionTitle: { color: T.text, fontSize: FONT.sm, fontWeight: '700' },
+  optionHint: { color: T.textSec, fontSize: rf(12), lineHeight: rf(17), marginTop: rp(2) },
   sectionLabel: {
     fontFamily:    'DMSans-Bold',
     fontSize:      rf(11),

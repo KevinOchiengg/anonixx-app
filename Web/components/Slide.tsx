@@ -265,10 +265,10 @@ export default function Slide({
   const linkBtn = (
     <button
       className="linkup"
-      onClick={() => (user ? onLinkUp(post) : onGate("Sign in to link up. Your name stays hidden until they say yes."))}
+      onClick={() => (user ? onLinkUp(post) : onGate("Sign in to knock. Your name stays hidden until they let you in."))}
     >
       {post.kind === "hookup" ? <span className="lu-heart" aria-hidden>🖤</span> : <Link2 />}
-      <span className="lu-label">Link up{post.anonymous_name ? <> with <b>{post.anonymous_name}</b></> : null}</span>
+      <span className="lu-label">Knock{post.anonymous_name ? <> on <b>{post.anonymous_name}</b>&apos;s door</> : null}</span>
       <span className="coin-cost">
         <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" fill="currentColor" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" fill="none" stroke="#7a4a00" strokeWidth="1.6" strokeLinecap="round" /></svg>
         {COST.linkUp}

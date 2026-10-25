@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import useDraft from "@/lib/useDraft";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { ChatBackground, FONTS_HREF, fontStyleById, type GalleryItem } from "@/lib/chatTheme";
 import { uploadFile, type UploadKind } from "@/lib/upload";
@@ -66,6 +67,7 @@ function Inner({ id }: { id: string }) {
   const [text, setText] = useDraft(`chat:${id}`, ""); // unsent message survives leaving
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
   const [room, setRoom] = useState<CallInfo | null>(null);
@@ -316,6 +318,18 @@ function Inner({ id }: { id: string }) {
     }
   }
 
+  async function removeFromRoom() {
+    if (!window.confirm(`Remove ${conn?.other_anonymous_name || "them"} from your Room?
+
+This conversation closes for both of you. They'd have to knock again.`)) return;
+    try {
+      await api(`/drops/connections/${id}/remove`, { method: "POST" });
+      router.push("/inbox");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function report() {
     if (!conn?.other_user_id) return;
     try {
@@ -359,7 +373,8 @@ function Inner({ id }: { id: string }) {
         {menu ? (
           <div className="menu" onClick={() => setMenu(false)}>
             {hasGallery ? <button onClick={() => setGallery(true)}>View gallery</button> : null}
-            {conn?.is_sender ? <Link href="/chat-setup" className="u-menu-link">Chat interface</Link> : null}
+            {conn?.is_sender ? <Link href="/chat-setup" className="u-menu-link">Your Room</Link> : null}
+            {conn?.is_sender ? <button onClick={removeFromRoom}>Remove from Room</button> : null}
             {conn?.other_user_id ? <button onClick={report}>Report</button> : null}
             {conn?.other_user_id ? <button onClick={block}>Block</button> : null}
           </div>

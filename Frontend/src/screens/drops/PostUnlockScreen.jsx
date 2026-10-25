@@ -156,7 +156,7 @@ export default function PostUnlockScreen({ route, navigation }) {
       // waiting screen needed since nothing's pending.
       // Mutual: they'd already linked up with you, so it connects free.
       if (res.ok && (data.already_unlocked || data.mutual) && data.connection_id) {
-        if (data.mutual) showToast({ type: 'success', title: "It's mutual 🔥", message: 'You both wanted this. The chat is open.' });
+        if (data.mutual) showToast({ type: 'success', title: "It's mutual 🔥", message: "You both knocked. You're inside." });
         clearPitch();
         navigation.replace('DropChat', { connectionId: data.connection_id });
         return;
@@ -171,8 +171,8 @@ export default function PostUnlockScreen({ route, navigation }) {
       if (requestId) {
         showToast({
           type: 'success',
-          title: 'Link up sent.',
-          message: `${displayName || 'They'} sees your line first. Nothing's charged unless they say yes.`,
+          title: 'You knocked.',
+          message: `${displayName || 'They'} decides whether to let you in. Nothing's charged unless they do.`,
         });
         dispatch(fetchBalance());
         clearPitch();
@@ -182,10 +182,10 @@ export default function PostUnlockScreen({ route, navigation }) {
       }
 
       if (res.status === 402) {
-        showToast({ type: 'warning', message: 'Not enough coins. Top up your wallet first.' });
+        showToast({ type: 'warning', message: typeof data.detail === 'string' ? data.detail : 'You need enough coins ready in case they let you in.' });
       } else {
         const message = typeof data.detail === 'string' ? data.detail : data.detail?.message;
-        showToast({ type: 'error', message: message ?? 'Could not send request. Try again.' });
+        showToast({ type: 'error', message: message ?? 'Could not knock. Try again.' });
       }
     } catch {
       showToast({ type: 'error', message: 'Something went wrong. Try again.' });
@@ -198,7 +198,7 @@ export default function PostUnlockScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={s.root}>
-      <DropScreenHeader title="Link up" navigation={navigation} />
+      <DropScreenHeader title="Knock" navigation={navigation} />
 
       <ScrollView
         contentContainerStyle={s.body}
@@ -231,17 +231,17 @@ export default function PostUnlockScreen({ route, navigation }) {
 
         {/* Opening line + intent chips — what they read before deciding. */}
         <View style={s.pitchSection}>
-          <Text style={s.pitchLabel}>YOUR OPENING LINE</Text>
+          <Text style={s.pitchLabel}>LEAVE A MESSAGE (OPTIONAL)</Text>
           <TextInput
             value={pitch}
             onChangeText={(v) => setPitch(v.slice(0, MAX_PITCH))}
-            placeholder="Make them want to say yes…"
+            placeholder="Make them want to let you in…"
             placeholderTextColor={T.textMute}
             multiline
             maxLength={MAX_PITCH}
             style={s.pitchInput}
           />
-          <Text style={s.pitchCount}>{pitch.length}/{MAX_PITCH} · no numbers or handles, that comes after they accept</Text>
+          <Text style={s.pitchCount}>{pitch.length}/{MAX_PITCH} · no numbers or handles, save that for inside</Text>
           <View style={s.intentRow}>
             {INTENTS.map((i) => {
               const on = intents.includes(i.id);
@@ -284,7 +284,7 @@ export default function PostUnlockScreen({ route, navigation }) {
 
         <View style={s.priceRow}>
           <Flame size={rs(16)} color={T.primary} />
-          <Text style={s.priceText}>{UNLOCK_COST} coins</Text>
+          <Text style={s.priceText}>{UNLOCK_COST} coins, only if they let you in</Text>
         </View>
 
         <Text style={s.balanceText}>
@@ -302,11 +302,11 @@ export default function PostUnlockScreen({ route, navigation }) {
             >
               {unlocking
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={s.unlockBtnText}>Link up</Text>
+                : <Text style={s.unlockBtnText}>Knock</Text>
               }
             </TouchableOpacity>
             <Text style={s.chargeNote}>
-              {UNLOCK_COST} coins, only if they say yes. Free if they already linked up with you.
+              Free to knock. If {displayName || 'they'} lets you in, {UNLOCK_COST} coins leave your wallet automatically. Free if they already knocked on yours.
             </Text>
           </>
         ) : (

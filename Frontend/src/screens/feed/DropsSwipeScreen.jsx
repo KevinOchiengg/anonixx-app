@@ -150,7 +150,7 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
         >
           {heart ? <Text style={sw.linkUpHeart}>🖤</Text> : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
           <Text style={sw.linkUpBtnText} numberOfLines={1}>
-            Link up{name ? ' with ' : ''}{name ? <Text style={{ fontWeight: '900' }}>{name}</Text> : null}
+            Knock{name ? ' on ' : ''}{name ? <Text style={{ fontWeight: '900' }}>{name}</Text> : null}{name ? "'s door" : ''}
           </Text>
           <View style={sw.linkUpCostPill}>
             <Coins size={rs(12)} color="#ffc93c" />
@@ -1534,7 +1534,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
   const handleLinkUp = useCallback((post) => {
     if (!isAuthenticated) {
-      showToast({ type: 'warning', message: 'Sign in to link up.' });
+      showToast({ type: 'warning', message: 'Sign in to knock.' });
       return;
     }
     if (post.kind === 'hookup' && post.user_id) {

@@ -65,7 +65,7 @@ async def _room_capacity(host_user_id: str, db) -> dict:
 
 async def _is_unlocked_guest(host_user_id: str, guest_user_id: str, db) -> bool:
     conn = await db["drop_connections"].find_one({
-        "sender_id": host_user_id, "unlocker_id": guest_user_id,
+        "sender_id": host_user_id, "unlocker_id": guest_user_id, "removed_at": None,
     })
     return conn is not None
 
@@ -123,7 +123,7 @@ async def start_call(
     try:
         from app.sio import sio
         from app.api.v1.drops import send_push_notification
-        async for conn in db["drop_connections"].find({"sender_id": current_user_id}):
+        async for conn in db["drop_connections"].find({"sender_id": current_user_id, "removed_at": None}):
             asyncio.create_task(send_push_notification(
                 conn["unlocker_id"], "A call is live 📞", "Someone you linked up with just opened their room. Join in.",
                 db, {"url": f"/chat/{conn['_id']}"},

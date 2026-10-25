@@ -106,7 +106,7 @@ export default function LinkUpSheet({
       setSent(true);
     } catch (e) {
       if (e instanceof ApiError && e.code === "age_verification_required") { setAgeGate(true); return; }
-      setError(e instanceof ApiError && e.status === 402 ? "Not enough coins. Top up your wallet first." : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 402 ? "You need enough coins ready in case they let you in. Top up first." : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -122,11 +122,11 @@ export default function LinkUpSheet({
       <Sheet onClose={finish}>
         <div className="u-wait">
           <div className="u-pulse" />
-          <h3>Link up sent.</h3>
+          <h3>You knocked.</h3>
           <p className="u-copy">
-            {post.anonymous_name || "They"} sees your line first. Nothing&apos;s charged yet, you only pay if they say yes.
+            {post.anonymous_name || "They"} decides whether to let you in. Nothing&apos;s charged unless they do.
           </p>
-          <button className="u-cta" onClick={finish}>See my link ups</button>
+          <button className="u-cta" onClick={finish}>See my knocks</button>
           <button className="u-link-btn" onClick={() => { onClose(); router.push("/"); }}>Back to feed</button>
         </div>
       </Sheet>
@@ -139,19 +139,19 @@ export default function LinkUpSheet({
         <div className="u-avatar">
           {post.avatar_url ? <Image src={post.avatar_url} alt="" width={56} height={56} /> : name[0]?.toUpperCase() || "A"}
         </div>
-        <h3 className="u-name">{name}</h3>
+        <h3 className="u-name">Knock on {name}&apos;s door</h3>
         {post.content ? <p className="u-quote">&ldquo;{post.content}&rdquo;</p> : null}
         {ageGate ? <AgeGate compact onDone={() => setAgeGate(false)} /> : null}
         <div className="lu-pitch">
-          <label htmlFor="lu-pitch">Your opening line</label>
+          <label htmlFor="lu-pitch">Leave a message (optional)</label>
           <textarea
             id="lu-pitch"
             value={pitch}
             onChange={(e) => setPitch(e.target.value.slice(0, MAX_PITCH))}
-            placeholder="Make them want to say yes…"
+            placeholder="Make them want to let you in…"
             rows={2}
           />
-          <small>{pitch.length}/{MAX_PITCH} · no numbers or handles, that comes after they accept</small>
+          <small>{pitch.length}/{MAX_PITCH} · no numbers or handles, save that for inside</small>
           <div className="lu-chips">
             {INTENTS.map((i) => (
               <button type="button" key={i.id} className={intents.includes(i.id) ? "on" : ""} onClick={() => toggleIntent(i.id)}>
@@ -180,7 +180,7 @@ export default function LinkUpSheet({
 
         <div className="u-price">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s5 4 5 9a5 5 0 0 1-10 0c0-2 1-3 1-3s1 2 2 2c0-3 2-5 2-8z" /></svg>
-          {COST.linkUp} coins
+          {COST.linkUp} coins, only if they let you in
         </div>
         <div className="u-bal">Your balance: {balance} coin{balance === 1 ? "" : "s"}</div>
 
@@ -188,11 +188,14 @@ export default function LinkUpSheet({
 
         {canAfford ? (
           <>
-            <button className="u-cta" onClick={go} disabled={busy}>{busy ? "Sending…" : "Link up"}</button>
-            <p className="u-note">{COST.linkUp} coins, only if they say yes. Free if they already linked up with you.</p>
+            <button className="u-cta" onClick={go} disabled={busy}>{busy ? "Knocking…" : "Knock"}</button>
+            <p className="u-note">Free to knock. If {name} lets you in, {COST.linkUp} coins leave your wallet automatically. Free if they already knocked on yours.</p>
           </>
         ) : (
-          <Link href="/coins" className="u-cta alt">Top up your coins</Link>
+          <>
+            <p className="u-note">Knocking is free, but you need {COST.linkUp} coins ready in case they let you in.</p>
+            <Link href="/coins" className="u-cta alt">Top up your coins</Link>
+          </>
         )}
         <button className="u-link-btn" onClick={onClose}>Not now</button>
       </div>

@@ -93,7 +93,7 @@ const navigationRef = createNavigationContainerRef();
 
 // A tapped push lands where it points: the Accept button on a link up
 // accepts straight from the notification and opens the chat; a plain tap on
-// a link up opens the requests inbox; accepted / mutual pushes open the chat.
+// a Knock opens the requests inbox; a Let In opens their Room; mutual opens the chat.
 async function handleNotificationResponse(response) {
   const data = response?.notification?.request?.content?.data || {};
   const go = (name, params) => { if (navigationRef.isReady()) navigationRef.navigate(name, params); };
@@ -110,6 +110,9 @@ async function handleNotificationResponse(response) {
   }
   const chat = typeof data.url === 'string' && data.url.match(/^\/chat\/([^/?#]+)/);
   if (chat) return go('DropChat', { connectionId: chat[1] });
+  // Let In: the owner's Room, which plays the "You're inside" entrance.
+  const room = typeof data.url === 'string' && data.url.match(/^\/room\/([^/?#]+)/);
+  if (room) return go('Room', { userId: room[1] });
   if (data.type === 'linkup_request') return go('UnlockRequestsScreen');
   return undefined;
 }

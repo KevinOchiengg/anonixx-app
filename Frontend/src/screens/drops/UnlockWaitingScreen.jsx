@@ -162,16 +162,16 @@ export default function UnlockWaitingScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={s.root}>
-      <DropScreenHeader title="Link up" navigation={navigation} />
+      <DropScreenHeader title="Knock" navigation={navigation} />
 
       <View style={s.body}>
         {step === 'waiting' || step === 'resending' ? (
           <>
             <PulseLoader size={56} color={T.primary} />
-            <Text style={s.title}>Waiting for a response…</Text>
+            <Text style={s.title}>You knocked. Waiting at the door…</Text>
             <Text style={s.sub}>
-              {ownerAnonymousName || 'They'} can see your request. Nothing's
-              been charged yet — you'll only pay coins if they accept.
+              {ownerAnonymousName || 'They'} can see your knock. Nothing's
+              charged yet. Coins move only if they let you in.
             </Text>
             {!!confessionSnippet && (
               <Text style={s.snippet} numberOfLines={3}>&ldquo;{confessionSnippet}&rdquo;</Text>
@@ -183,7 +183,7 @@ export default function UnlockWaitingScreen({ route, navigation }) {
               activeOpacity={0.85}
               hitSlop={HIT_SLOP}
             >
-              <Text style={s.cancelBtnText}>Cancel request</Text>
+              <Text style={s.cancelBtnText}>Take back knock</Text>
             </TouchableOpacity>
           </>
         ) : step === 'declined' ? (
@@ -193,7 +193,7 @@ export default function UnlockWaitingScreen({ route, navigation }) {
               You can send another request anytime — no coins were spent.
             </Text>
             <TouchableOpacity style={s.retryBtn} onPress={handleResend} activeOpacity={0.88} hitSlop={HIT_SLOP}>
-              <Text style={s.retryBtnText}>Send another request</Text>
+              <Text style={s.retryBtnText}>Knock again</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} style={s.backLink}>
               <Text style={s.backLinkText}>Back to feed</Text>

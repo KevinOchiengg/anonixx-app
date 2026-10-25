@@ -126,7 +126,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
       });
       setSections(Array.from(grouped.values()));
     } catch {
-      showToast({ type: 'error', message: 'Could not load requests.' });
+      showToast({ type: 'error', message: 'Could not load knocks.' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -169,10 +169,10 @@ export default function UnlockRequestsScreen({ route, navigation }) {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast({ type: 'success', message: 'Accepted — chat started.' });
+        showToast({ type: 'success', message: "Let in. They're inside your Room." });
         removeRequest(requestId);
       } else {
-        showToast({ type: 'warning', message: data.detail || 'Could not accept right now.' });
+        showToast({ type: 'warning', message: data.detail || 'Could not let them in right now.' });
       }
     } catch {
       showToast({ type: 'error', message: 'Something went wrong.' });
@@ -221,13 +221,13 @@ export default function UnlockRequestsScreen({ route, navigation }) {
           .map((s) => (s.key !== sec.key ? s : { ...s, data: s.data.filter((r) => failedIds.has(r.id)) }))
           .filter((s) => s.data.length > 0));
         if (data.accepted_count > 0) {
-          showToast({ type: 'success', message: `Accepted ${data.accepted_count} — chats started.` });
+          showToast({ type: 'success', message: `Let in ${data.accepted_count}. They're inside.` });
         }
         if (data.failed?.length) {
-          showToast({ type: 'warning', message: `${data.failed.length} couldn't be accepted right now.` });
+          showToast({ type: 'warning', message: `${data.failed.length} couldn't be let in right now.` });
         }
       } else {
-        showToast({ type: 'error', message: 'Could not accept all right now.' });
+        showToast({ type: 'error', message: 'Could not let everyone in right now.' });
       }
     } catch {
       showToast({ type: 'error', message: 'Something went wrong.' });
@@ -245,7 +245,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
         activeOpacity={0.85}
         hitSlop={HIT_SLOP}
       >
-        <Text style={s.acceptAllText}>Accept All ({section.data.length})</Text>
+        <Text style={s.acceptAllText}>Let All In ({section.data.length})</Text>
       </TouchableOpacity>
     </View>
   ), [handleAcceptAll]);
@@ -282,7 +282,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
             <Text style={s.rowName}>{item.requester_anonymous_name}</Text>
           </View>
           <Text style={[s.rowPitch, !item.pitch && s.rowPitchEmpty]} numberOfLines={2}>
-            {item.pitch || 'wants to link up'}
+            {item.pitch || 'knocked on your door'}
           </Text>
           {!!item.intents?.length && (
             <View style={s.rowChips}>
@@ -303,7 +303,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
               <Text style={s.declineBtnText}>Decline</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.acceptBtn} onPress={() => handleAccept(item.id)} hitSlop={HIT_SLOP}>
-              <Text style={s.acceptBtnText}>Accept</Text>
+              <Text style={s.acceptBtnText}>Let In</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -313,13 +313,13 @@ export default function UnlockRequestsScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={s.root}>
-      <DropScreenHeader title="Requests" navigation={navigation} />
+      <DropScreenHeader title="Knocks" navigation={navigation} />
 
       {loading ? (
         <View style={s.centered}><ActivityIndicator color={T.primary} /></View>
       ) : sections.length === 0 ? (
         <View style={s.centered}>
-          <Text style={s.emptyText}>No link ups waiting. Post something for tonight and watch this fill up.</Text>
+          <Text style={s.emptyText}>No knocks yet. Post something for tonight and watch your door.</Text>
         </View>
       ) : (
         <SectionList

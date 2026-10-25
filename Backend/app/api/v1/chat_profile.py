@@ -22,6 +22,8 @@ from bson import ObjectId
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import debit_coins
+from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
+from app.utils.moderation import violates_policy, MODERATION_ERROR
 
 router = APIRouter(prefix="/chat-profile", tags=["Chat Profile"])
 
@@ -48,6 +50,30 @@ BACKGROUND_PATTERNS = {
     "crimson-fade", "ink-bloom",
 }
 
+# ── The Room's own look. Separate from background_pattern (the chat surface):
+# a theme is the palette the Room is painted in. Ids match
+# Web/lib/roomThemes.ts and Frontend/src/config/roomThemes.js.
+ROOM_THEMES = {
+    "midnight-blue", "velvet-burgundy", "dark-plum", "obsidian-gold", "smoky-emerald",
+    "obsidian-rose", "arctic-silver", "deep-ocean", "ember", "pure-noir",
+}
+DEFAULT_ROOM_THEME = "midnight-blue"
+# Accounts that picked a chat background before themes existed get the
+# closest theme instead of the default, so their Room keeps its mood.
+PATTERN_TO_THEME = {
+    "midnight-solid": "midnight-blue", "velvet-dots": "velvet-burgundy", "smoke-lines": "dark-plum",
+    "ember-glow": "ember", "obsidian-grid": "pure-noir", "rose-noise": "obsidian-rose",
+    "eclipse-mesh": "dark-plum", "static-haze": "arctic-silver", "crimson-fade": "velvet-burgundy",
+    "ink-bloom": "deep-ocean",
+}
+ROOM_STATUSES = {"open", "late", "quiet", "away"}
+# Who sees the gallery: everyone peeking through the window, only people the
+# owner has let in, or nobody but the owner. Letting someone in never widens
+# this on its own; the owner picks "inside" deliberately.
+GALLERY_VISIBILITY = {"window", "inside", "only_me"}
+MAX_INTRO_CHARS   = 160
+MAX_WELCOME_CHARS = 280
+
 # ── Video calling — see api/v1/drop_calls.py for the actual call session
 # endpoints. This is just the owner's standing preference + purchased room
 # size, read at call-start time.
@@ -67,6 +93,12 @@ class ChatProfileUpdate(BaseModel):
     profile_picture_url: Optional[str] = None
     welcome_sound:    Optional[str] = None
     call_mode:        Optional[str] = None   # "solo" | "multi"
+    room_theme:       Optional[str] = None
+    intro:            Optional[str] = None   # "" clears
+    welcome_message:  Optional[str] = None   # "" clears
+    room_status:      Optional[str] = None   # "" clears
+    gallery_visibility: Optional[str] = None
+    knocks_open:      Optional[bool] = None
 
 
 class CapacityUpgradeRequest(BaseModel):
@@ -77,6 +109,41 @@ class GalleryMediaInput(BaseModel):
     media_url:        str
     media_type:       str            # "image" | "video" | "gif"
     duration_seconds: Optional[float] = None
+
+
+def room_theme_of(doc: dict) -> str:
+    return doc.get("room_theme") or PATTERN_TO_THEME.get(doc.get("background_pattern") or "", DEFAULT_ROOM_THEME)
+
+
+def gallery_for(doc: dict, viewer_id: str, owner_id: str, inside: bool) -> list:
+    """The gallery as this viewer may see it. The one place visibility is enforced."""
+    if viewer_id == owner_id:
+        return doc.get("gallery", [])
+    vis = doc.get("gallery_visibility") or "window"
+    if vis == "window" or (vis == "inside" and inside):
+        return doc.get("gallery", [])
+    return []
+
+
+def _clean_text(raw: Optional[str], limit: int) -> Optional[str]:
+    text = (raw or "").strip()[:limit]
+    if not text:
+        return None
+    if contains_contact_info(text):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+    if violates_policy(text):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
+    return text
+
+
+async def is_blocked_between(db, a: str, b: str) -> bool:
+    """True if either account has blocked the other."""
+    if not (ObjectId.is_valid(a) and ObjectId.is_valid(b)):
+        return False
+    return await db["users"].count_documents({"$or": [
+        {"_id": ObjectId(a), "blocked_user_ids": b},
+        {"_id": ObjectId(b), "blocked_user_ids": a},
+    ]}) > 0
 
 
 def _sanitize(doc: dict, user: Optional[dict] = None) -> dict:
@@ -99,6 +166,12 @@ def _sanitize(doc: dict, user: Optional[dict] = None) -> dict:
         "call_mode":           call_mode,
         "max_guests":          max_guests,
         "purchased_slots":     doc.get("purchased_slots", 0),
+        "room_theme":          room_theme_of(doc),
+        "intro":               doc.get("intro"),
+        "welcome_message":     doc.get("welcome_message"),
+        "room_status":         doc.get("room_status"),
+        "gallery_visibility":  doc.get("gallery_visibility") or "window",
+        "knocks_open":         doc.get("knocks_open", True),
         "updated_at":          doc["updated_at"].isoformat() if doc.get("updated_at") else None,
     }
 
@@ -133,6 +206,15 @@ async def update_my_chat_profile(
     if data.call_mode and data.call_mode not in CALL_MODES:
         raise HTTPException(status_code=400, detail=f"call_mode must be one of: {', '.join(CALL_MODES)}")
 
+    if data.room_theme and data.room_theme not in ROOM_THEMES:
+        raise HTTPException(status_code=400, detail="Pick one of the Room themes.")
+
+    if data.room_status and data.room_status not in ROOM_STATUSES:
+        raise HTTPException(status_code=400, detail=f"room_status must be one of: {', '.join(ROOM_STATUSES)}")
+
+    if data.gallery_visibility and data.gallery_visibility not in GALLERY_VISIBILITY:
+        raise HTTPException(status_code=400, detail=f"gallery_visibility must be one of: {', '.join(GALLERY_VISIBILITY)}")
+
     update = {"updated_at": _now()}
     if data.background_pattern is not None:
         update["background_pattern"] = data.background_pattern
@@ -144,6 +226,18 @@ async def update_my_chat_profile(
         update["welcome_sound"] = data.welcome_sound
     if data.call_mode is not None:
         update["call_mode"] = data.call_mode
+    if data.room_theme is not None:
+        update["room_theme"] = data.room_theme
+    if data.intro is not None:
+        update["intro"] = _clean_text(data.intro, MAX_INTRO_CHARS)
+    if data.welcome_message is not None:
+        update["welcome_message"] = _clean_text(data.welcome_message, MAX_WELCOME_CHARS)
+    if data.room_status is not None:
+        update["room_status"] = data.room_status or None
+    if data.gallery_visibility is not None:
+        update["gallery_visibility"] = data.gallery_visibility
+    if data.knocks_open is not None:
+        update["knocks_open"] = data.knocks_open
 
     await db["chat_profiles"].update_one(
         {"user_id": current_user_id},
@@ -157,8 +251,11 @@ async def update_my_chat_profile(
         },
         upsert=True,
     )
-    doc = await db["chat_profiles"].find_one({"user_id": current_user_id})
-    return _sanitize(doc)
+    doc  = await db["chat_profiles"].find_one({"user_id": current_user_id})
+    user = await db["users"].find_one(
+        {"_id": ObjectId(current_user_id)}, {"avatar_url": 1, "anonymous_name": 1},
+    )
+    return _sanitize(doc, user)
 
 
 @router.post("/call-capacity")
@@ -302,7 +399,11 @@ async def get_room_preview(
     user = await db["users"].find_one({"_id": owner_oid}, {"avatar_url": 1, "anonymous_name": 1, "is_active": 1})
     if not user or user.get("is_active") is False:
         raise HTTPException(status_code=404, detail="Room not found.")
-    profile = _sanitize(await db["chat_profiles"].find_one({"user_id": user_id}) or {}, user)
+    # A block either way closes the Room completely, as if it didn't exist.
+    if user_id != current_user_id and await is_blocked_between(db, user_id, current_user_id):
+        raise HTTPException(status_code=404, detail="Room not found.")
+    raw_profile = await db["chat_profiles"].find_one({"user_id": user_id}) or {}
+    profile = _sanitize(raw_profile, user)
     now = _now()
 
     # The pinned post: the one they tapped through from, else their latest live
@@ -342,7 +443,7 @@ async def get_room_preview(
         connection = await db["drop_connections"].find_one({"$or": [
             {"sender_id": user_id, "unlocker_id": current_user_id},
             {"sender_id": current_user_id, "unlocker_id": user_id},
-        ]}, {"_id": 1})
+        ], "removed_at": None}, {"_id": 1})
     mine = await db["drop_unlock_requests"].find_one(
         {"requester_id": current_user_id, "target_id": post["id"], "status": {"$in": ["pending", "accepting"]}},
         {"_id": 1, "status": 1},
@@ -352,11 +453,23 @@ async def get_room_preview(
         {"_id": 1, "pitch": 1, "intents": 1, "target_id": 1, "media_url": 1, "media_type": 1},
     ) if user_id != current_user_id else None
 
+    # The gallery is filtered by the owner's visibility setting. A visitor is
+    # told how many pieces are kept back (never what they are), so a Knock is
+    # never sold on photos they won't be shown.
+    inside = bool(connection)
+    visible = gallery_for(raw_profile, current_user_id, user_id, inside)
+    room = {k: profile[k] for k in (
+        "background_pattern", "font_style", "profile_picture_url", "anonymous_name", "call_mode",
+        "room_theme", "intro", "room_status", "knocks_open", "gallery_visibility",
+    )}
+    room["gallery"] = visible
+    room["gallery_hidden"] = len(raw_profile.get("gallery", [])) - len(visible)
+    # The welcome note is for people inside (and the owner previewing), not the window.
+    room["welcome_message"] = profile["welcome_message"] if (inside or user_id == current_user_id) else None
     return {
         "user_id": user_id,
-        "room": {k: profile[k] for k in (
-            "background_pattern", "font_style", "profile_picture_url", "anonymous_name", "gallery", "call_mode",
-        )},
+        "room": room,
+        "inside": inside,
         "post": post,
         "connection_id": str(connection["_id"]) if connection else None,
         "my_request": {"id": str(mine["_id"]), "status": mine["status"]} if mine else None,
@@ -384,13 +497,16 @@ async def get_chat_profile(
             "$or": [
                 {"sender_id": user_id, "unlocker_id": current_user_id},
                 {"sender_id": current_user_id, "unlocker_id": user_id},
-            ]
+            ],
+            "removed_at": None,
         })
         if not connection:
-            raise HTTPException(status_code=403, detail="Unlock a drop from this person to view their profile.")
+            raise HTTPException(status_code=403, detail="Knock on this person's Room to see more.")
 
     doc  = await db["chat_profiles"].find_one({"user_id": user_id}) or {}
     user = await db["users"].find_one(
         {"_id": ObjectId(user_id)}, {"avatar_url": 1, "anonymous_name": 1},
     )
-    return _sanitize(doc, user)
+    out = _sanitize(doc, user)
+    out["gallery"] = gallery_for(doc, current_user_id, user_id, inside=True)
+    return out

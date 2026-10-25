@@ -2809,8 +2809,13 @@ async def _create_drop_connection(drop_id: str, drop: dict, unlocker_id: str, db
         "unlocker_id": unlocker_id
     })
     if existing_conn:
+        # A fresh Let In after the owner removed them reopens the same thread.
+        if existing_conn.get("removed_at"):
+            await db["drop_connections"].update_one(
+                {"_id": existing_conn["_id"]}, {"$set": {"removed_at": None, "removed_by": None}},
+            )
         # Update the unlock record with connection_id
-        await db["drop_unlocks"].update_one(
+        await db["drop_unlocks"].update_many(
             {"drop_id": drop_id, "unlocker_id": unlocker_id},
             {"$set": {"connection_id": str(existing_conn["_id"])}}
         )
@@ -2888,7 +2893,8 @@ async def get_drop_connections(
         "$or": [
             {"sender_id": current_user_id},
             {"unlocker_id": current_user_id}
-        ]
+        ],
+        "removed_at": None,
     }
     raw_connections = await db["drop_connections"].find(query).sort("last_message_at", -1).to_list(None)
     unread_counts = await get_unread_message_counts(db, current_user_id)
@@ -2964,6 +2970,8 @@ async def get_drop_messages(
 
     if current_user_id not in [conn["sender_id"], conn["unlocker_id"]]:
         raise HTTPException(status_code=403, detail="Access denied")
+    if conn.get("removed_at"):
+        raise HTTPException(status_code=403, detail="You're no longer inside this Room.")
 
     is_sender = conn["sender_id"] == current_user_id
     other_user_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
@@ -3018,6 +3026,9 @@ async def get_drop_messages(
     # The poster's themed chat surface — always the drop's *sender*, since
     # a chat_profile is reused across every unlocker who chats with them.
     chat_profile = await db["chat_profiles"].find_one({"user_id": conn["sender_id"]})
+    from app.api.v1.chat_profile import gallery_for, room_theme_of
+    # Being let in never shows a gallery the owner keeps to themself.
+    room_gallery = gallery_for(chat_profile, current_user_id, conn["sender_id"], inside=True) if chat_profile else []
 
     from app.api.v1.drop_calls import get_active_call_for_host
     active_call = await get_active_call_for_host(conn["sender_id"], db)
@@ -3032,7 +3043,7 @@ async def get_drop_messages(
     if not is_sender and chat_profile:
         shown_to = conn.get("welcome_shown_to", [])
         if current_user_id not in shown_to:
-            welcome_gallery = chat_profile.get("gallery", [])
+            welcome_gallery = room_gallery
             welcome_sound = chat_profile.get("welcome_sound", "soft-chime")
             await db["drop_connections"].update_one(
                 {"_id": ObjectId(connection_id)},
@@ -3058,8 +3069,10 @@ async def get_drop_messages(
             # Always available (not gated to first-open) so either side of the
             # chat can revisit it any time — see the gallery button in
             # DropChatScreen, distinct from the once-only welcome takeover.
-            "gallery":             chat_profile.get("gallery", []) if chat_profile else [],
+            "gallery":             room_gallery,
             "call_mode":           chat_profile.get("call_mode", "solo") if chat_profile else "solo",
+            "room_theme":          room_theme_of(chat_profile or {}),
+            "welcome_message":     (chat_profile or {}).get("welcome_message"),
         },
         "welcome_gallery": welcome_gallery,
         "welcome_sound": welcome_sound,
@@ -3123,6 +3136,8 @@ async def send_drop_message(
 
     if current_user_id not in [conn["sender_id"], conn["unlocker_id"]]:
         raise HTTPException(status_code=403, detail="Access denied")
+    if conn.get("removed_at"):
+        raise HTTPException(status_code=403, detail="You're no longer inside this Room.")
 
     # Reply — denormalise a small snapshot onto the new message rather than
     # joining at read time, so the quote still renders even if the original
@@ -3258,6 +3273,32 @@ async def delete_drop_message(
         )
 
     return {"deleted": True, "for_everyone": for_everyone}
+
+
+@router.post("/connections/{connection_id}/remove")
+async def remove_from_room(
+    connection_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """The Room owner shows someone who's inside the door. Only the owner (the
+    connection's sender) can do this. Every thread between the two of them
+    in this Room closes, messages are kept, and the visitor has to Knock (and
+    be let in, and pay) again to come back. No refund: they were let in."""
+    try:
+        conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
+    except Exception:
+        conn = None
+    if not conn:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    if conn["sender_id"] != current_user_id:
+        raise HTTPException(status_code=403, detail="Only the Room's owner can remove someone.")
+
+    result = await db["drop_connections"].update_many(
+        {"sender_id": current_user_id, "unlocker_id": conn["unlocker_id"], "removed_at": None},
+        {"$set": {"removed_at": now_utc(), "removed_by": current_user_id}},
+    )
+    return {"removed": True, "closed": result.modified_count}
 
 
 @router.get("/room/{host_user_id}/guests")
