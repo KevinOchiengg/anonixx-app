@@ -6,12 +6,18 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic, IcFlag,
-  IcCalendar, IcKanban, IcMenu, IcBell, IcClose, IcHome,
+  IcCalendar, IcKanban, IcMenu, IcBell, IcClose, IcHome, IcEye,
 } from "./adminicons";
 import "../../app/admin.css";
 
-const GROUPS: { title: string; items: { href: string; label: string; icon: React.ReactNode }[] }[] = [
-  { title: "Dashboard", items: [{ href: "/admin", label: "Overview", icon: <IcDash /> }] },
+const GROUPS: { title: string; items: { href: string; label: string; icon: React.ReactNode; superOnly?: boolean }[] }[] = [
+  {
+    title: "Dashboard",
+    items: [
+      { href: "/admin", label: "Overview", icon: <IcDash /> },
+      { href: "/admin/visitors", label: "Visitors", icon: <IcEye />, superOnly: true },
+    ],
+  },
   {
     title: "Create",
     items: [
@@ -154,7 +160,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             {GROUPS.map((g) => (
               <div key={g.title} className="adm-group">
                 <div className="adm-grouptitle">{g.title}</div>
-                {g.items.map((n) => {
+                {g.items.filter((n) => isSuper || !n.superOnly).map((n) => {
                   const b = badge(n.href);
                   return (
                     <Link key={n.href} href={n.href} className={active(n.href) ? "on" : ""} title={n.label}>

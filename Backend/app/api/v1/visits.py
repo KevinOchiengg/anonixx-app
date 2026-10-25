@@ -1,0 +1,425 @@
+"""
+Site visitors: first-party, anonymous analytics for the web app, so the
+founder can see who comes, from where, and what they look for, before
+anyone signs up.
+
+- POST /track            public; the web tracker (Web/lib/track.ts) sends
+                         batches of events. Sent as text/plain so the
+                         browser skips the CORS preflight and sendBeacon works.
+- GET  /admin/visitors   super admin only; the Visitors dashboard.
+- GET  /admin/visitors/{vid}  one visitor's journey.
+
+Privacy: a visitor is a random id the browser makes (localStorage), never
+tied to an account. No IP address, no full referrer URL (host only), no
+names. Search text is kept because it is the point (what people want), cut
+to 80 characters. Events expire after 180 days, visitor rows a year after
+the last visit. Bots and Do-Not-Track / Global Privacy Control browsers are
+skipped (DNT/GPC in the tracker itself).
+"""
+import json
+import re
+import time
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+from urllib.parse import urlparse
+
+from bson import ObjectId
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+
+from app.database import get_database
+from app.dependencies import require_super_admin
+from app.utils import geoip
+
+router = APIRouter(tags=["Visitors"])
+
+EVENTS = "site_events"
+VISITORS = "site_visitors"
+EVENT_TYPES = {"view", "leave", "click", "search", "signup", "login"}
+MAX_EVENTS_PER_BATCH = 25
+MAX_BODY_BYTES = 16_000
+ID_RE = re.compile(r"^[a-z0-9]{8,40}$")
+CC_RE = re.compile(r"^[A-Z]{2}$")
+DROP_PATH = re.compile(r"^/drop/([0-9a-f]{24})")
+BOT_RE = re.compile(
+    r"bot|crawl|spider|slurp|preview|headless|lighthouse|pagespeed|facebookexternalhit|"
+    r"whatsapp|telegram|discord|embedly|curl|wget|python-|httpx|axios|node-fetch|go-http",
+    re.I,
+)
+LIVE_MINUTES = 5
+
+# Per-IP budget so one script can't flood the collection. In memory: resets on a
+# restart, and Render runs a single instance, which is all this needs.
+RATE_WINDOW = 60
+RATE_MAX = 120
+_hits: dict[str, list[float]] = defaultdict(list)
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _rate_ok(ip: str) -> bool:
+    t = time.monotonic()
+    hits = [h for h in _hits[ip] if t - h < RATE_WINDOW]
+    if len(hits) >= RATE_MAX:
+        _hits[ip] = hits
+        return False
+    hits.append(t)
+    _hits[ip] = hits
+    if len(_hits) > 5000:   # forget idle addresses
+        for k in [k for k, v in _hits.items() if not v or t - v[-1] > RATE_WINDOW]:
+            _hits.pop(k, None)
+    return True
+
+
+def _device(ua: str) -> tuple[str, str]:
+    u = ua.lower()
+    if "ipad" in u or "tablet" in u:
+        device = "tablet"
+    elif "mobi" in u or "android" in u or "iphone" in u:
+        device = "mobile"
+    else:
+        device = "desktop"
+    if "edg/" in u:
+        browser = "Edge"
+    elif "opr/" in u or "opera" in u:
+        browser = "Opera"
+    elif "samsungbrowser" in u:
+        browser = "Samsung"
+    elif "firefox" in u or "fxios" in u:
+        browser = "Firefox"
+    elif "chrome" in u or "crios" in u:
+        browser = "Chrome"
+    elif "safari" in u:
+        browser = "Safari"
+    else:
+        browser = "Other"
+    return device, browser
+
+
+def _clip(v, n: int) -> Optional[str]:
+    if not isinstance(v, str):
+        return None
+    v = re.sub(r"\s+", " ", v).strip()
+    return v[:n] or None
+
+
+def _path(v) -> Optional[str]:
+    p = _clip(v, 200)
+    if not p or not p.startswith("/"):
+        return None
+    return p.split("?")[0].split("#")[0] or "/"
+
+
+def _ref_host(v) -> Optional[str]:
+    r = _clip(v, 300)
+    if not r:
+        return None
+    try:
+        host = (urlparse(r).hostname or "").lower()
+    except Exception:
+        return None
+    host = host[4:] if host.startswith("www.") else host
+    if not host or host.endswith("anonixx.com") or host in ("localhost", "127.0.0.1"):
+        return None
+    return host[:100]
+
+
+@router.post("/track", status_code=204, summary="Record anonymous site-visit events (web tracker)")
+async def track(request: Request, db=Depends(get_database)):
+    ua = request.headers.get("user-agent", "")
+    if not ua or BOT_RE.search(ua):
+        return Response(status_code=204)
+    raw = await request.body()
+    if len(raw) > MAX_BODY_BYTES:
+        return Response(status_code=204)
+    ip = geoip.client_ip(request)
+    if not _rate_ok(ip):
+        return Response(status_code=204)
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        return Response(status_code=204)
+    if not isinstance(body, dict):
+        return Response(status_code=204)
+    vid, sid = body.get("vid"), body.get("sid")
+    events = body.get("events")
+    if not (isinstance(vid, str) and ID_RE.match(vid) and isinstance(sid, str) and ID_RE.match(sid)):
+        return Response(status_code=204)
+    if not isinstance(events, list) or not events:
+        return Response(status_code=204)
+
+    cc = body.get("cc") if isinstance(body.get("cc"), str) and CC_RE.match(body["cc"]) else None
+    if not cc:
+        cc = await geoip.country_of(ip)
+    device, browser = _device(ua)
+    signed_in = bool(body.get("in"))
+    now = _now()
+
+    docs = []
+    for e in events[:MAX_EVENTS_PER_BATCH]:
+        if not isinstance(e, dict) or e.get("t") not in EVENT_TYPES:
+            continue
+        path = _path(e.get("p"))
+        if not path or path.startswith("/admin"):
+            continue
+        doc = {
+            "vid": vid, "sid": sid, "type": e["t"], "path": path,
+            "country": cc, "device": device, "browser": browser,
+            "signed_in": signed_in, "created_at": now,
+        }
+        if e["t"] == "view":
+            ref = _ref_host(e.get("r"))
+            if ref:
+                doc["ref"] = ref
+            utm = e.get("u") if isinstance(e.get("u"), dict) else {}
+            utm = {k: _clip(utm.get(k), 60) for k in ("source", "medium", "campaign")}
+            utm = {k: v.lower() for k, v in utm.items() if v}
+            if utm:
+                doc["utm"] = utm
+            if e.get("l"):
+                doc["landing"] = True
+        elif e["t"] == "leave":
+            ms = e.get("ms")
+            if not isinstance(ms, (int, float)) or ms < 0:
+                continue
+            doc["ms"] = int(min(ms, 30 * 60 * 1000))
+        elif e["t"] == "click":
+            target = _clip(e.get("k"), 60)
+            if not target:
+                continue
+            doc["target"] = target
+        elif e["t"] == "search":
+            q = _clip(e.get("q"), 80)
+            theme = _clip(e.get("th"), 40)
+            place = _clip(e.get("loc"), 80)
+            if not (q or theme or place):
+                continue
+            if q:
+                doc["q"] = q.lower()
+            if theme:
+                doc["theme"] = theme
+            if place:
+                doc["place"] = place
+            n = e.get("n")
+            if isinstance(n, int):
+                doc["results"] = n
+        docs.append(doc)
+    if not docs:
+        return Response(status_code=204)
+
+    await db[EVENTS].insert_many(docs)
+    views = sum(1 for d in docs if d["type"] == "view")
+    first_view = next((d for d in docs if d["type"] == "view"), None)
+    existing = await db[VISITORS].find_one({"_id": vid}, {"last_sid": 1})
+    inc = {"events": len(docs), "views": views}
+    if not existing or existing.get("last_sid") != sid:
+        inc["sessions"] = 1
+    on_insert = {"first_seen": now}
+    if first_view:
+        on_insert["first_path"] = first_view["path"]
+        if first_view.get("ref"):
+            on_insert["first_ref"] = first_view["ref"]
+        if first_view.get("utm"):
+            on_insert["first_utm"] = first_view["utm"]
+    update = {
+        "$setOnInsert": on_insert,
+        "$set": {"last_seen": now, "last_sid": sid, "last_path": docs[-1]["path"],
+                 "country": cc, "device": device, "browser": browser},
+        "$inc": inc,
+    }
+    if signed_in:
+        update["$set"]["signed_in"] = True
+    if any(d["type"] == "signup" for d in docs):
+        update["$set"]["signed_up_at"] = now
+    await db[VISITORS].update_one({"_id": vid}, update, upsert=True)
+    return Response(status_code=204)
+
+
+# ─── Admin ────────────────────────────────────────────────────────────────────
+
+def _top(rows, n=12):
+    return [{"key": r["_id"], "count": r["count"], **({"visitors": r["visitors"]} if "visitors" in r else {})}
+            for r in rows if r.get("_id")][:n]
+
+
+async def _group(db, match: dict, field: str, n=12, visitors=True):
+    group = {"_id": f"${field}", "count": {"$sum": 1}}
+    if visitors:
+        group["v"] = {"$addToSet": "$vid"}
+    pipe = [{"$match": {**match, field: {"$nin": [None, ""]}}}, {"$group": group}]
+    if visitors:
+        pipe.append({"$project": {"count": 1, "visitors": {"$size": "$v"}}})
+    pipe += [{"$sort": {"count": -1}}, {"$limit": n}]
+    return _top(await db[EVENTS].aggregate(pipe).to_list(n), n)
+
+
+@router.get("/admin/visitors", summary="Site visitors: traffic, sources, searches and interests (super admin)")
+async def visitors_overview(
+    days: int = Query(7, ge=1, le=180),
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    now = _now()
+    since = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    base = {"created_at": {"$gte": since}}
+    views_m = {**base, "type": "view"}
+
+    vids = await db[EVENTS].distinct("vid", base)
+    sessions = await db[EVENTS].aggregate([
+        {"$match": base},
+        {"$group": {"_id": "$sid", "views": {"$sum": {"$cond": [{"$eq": ["$type", "view"]}, 1, 0]}},
+                    "start": {"$min": "$created_at"}, "end": {"$max": "$created_at"}}},
+    ]).to_list(None)
+    n_sessions = len(sessions)
+    views = sum(s["views"] for s in sessions)
+    bounces = sum(1 for s in sessions if s["views"] <= 1)
+    durations = [(s["end"] - s["start"]).total_seconds() for s in sessions if s["views"] > 1]
+    returning = await db[VISITORS].count_documents({"_id": {"$in": vids}, "first_seen": {"$lt": since}}) if vids else 0
+    live_since = now - timedelta(minutes=LIVE_MINUTES)
+    live = await db[EVENTS].aggregate([
+        {"$match": {"created_at": {"$gte": live_since}}},
+        {"$sort": {"created_at": 1}},
+        {"$group": {"_id": "$vid", "path": {"$last": "$path"}, "country": {"$last": "$country"}, "device": {"$last": "$device"}}},
+    ]).to_list(200)
+
+    # Daily series, in UTC days.
+    daily = await db[EVENTS].aggregate([
+        {"$match": views_m},
+        {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
+                    "views": {"$sum": 1}, "v": {"$addToSet": "$vid"}}},
+    ]).to_list(None)
+    by_day = {d["_id"]: d for d in daily}
+    labels, s_visitors, s_views = [], [], []
+    for i in range(days):
+        day = (since + timedelta(days=i)).strftime("%Y-%m-%d")
+        labels.append(day[5:])
+        d = by_day.get(day)
+        s_visitors.append(len(d["v"]) if d else 0)
+        s_views.append(d["views"] if d else 0)
+
+    # Time on page, by path (from "leave" events).
+    dwell = await db[EVENTS].aggregate([
+        {"$match": {**base, "type": "leave"}},
+        # A page hidden and shown again sends more than one "leave": add them up per visit first.
+        {"$group": {"_id": {"sid": "$sid", "path": "$path"}, "ms": {"$sum": "$ms"}}},
+        {"$group": {"_id": "$_id.path", "avg": {"$avg": "$ms"}, "n": {"$sum": 1}}},
+        {"$match": {"n": {"$gte": 2}}},
+        {"$sort": {"avg": -1}}, {"$limit": 10},
+    ]).to_list(10)
+
+    # Drops people open: what content pulls them in.
+    drop_rows = await db[EVENTS].aggregate([
+        {"$match": {**views_m, "path": {"$regex": "^/drop/"}}},
+        {"$group": {"_id": "$path", "count": {"$sum": 1}, "v": {"$addToSet": "$vid"}}},
+        {"$sort": {"count": -1}}, {"$limit": 200},
+    ]).to_list(200)
+    ids = []
+    for r in drop_rows:
+        m = DROP_PATH.match(r["_id"])
+        if m:
+            ids.append(ObjectId(m.group(1)))
+    drops = {}
+    if ids:
+        async for d in db["drops"].find({"_id": {"$in": ids}}, {"confession": 1, "content": 1, "kind": 1, "mood_tag": 1, "category": 1}):
+            drops[str(d["_id"])] = d
+    top_drops, kinds, moods = [], defaultdict(int), defaultdict(int)
+    for r in drop_rows:
+        m = DROP_PATH.match(r["_id"])
+        d = drops.get(m.group(1)) if m else None
+        kind = (d or {}).get("kind") or "confession"
+        mood = (d or {}).get("mood_tag") or (d or {}).get("category")
+        kinds[kind] += r["count"]
+        if mood:
+            moods[mood] += r["count"]
+        if len(top_drops) < 10:
+            text = (d or {}).get("confession") or (d or {}).get("content") or ""
+            top_drops.append({
+                "id": m.group(1) if m else None, "views": r["count"], "visitors": len(r["v"]),
+                "kind": kind, "mood": mood,
+                "teaser": (text[:110] + "…") if len(text) > 110 else (text or "(deleted or media-only)"),
+            })
+
+    # Funnel: visitors → saw signup → signed up.
+    saw_signup = len(await db[EVENTS].distinct("vid", {**views_m, "path": {"$in": ["/signup", "/join"]}}))
+    signups = len(await db[EVENTS].distinct("vid", {**base, "type": "signup"}))
+    searchers = len(await db[EVENTS].distinct("vid", {**base, "type": "search"}))
+
+    zero = await db[EVENTS].aggregate([
+        {"$match": {**base, "type": "search", "q": {"$exists": True}, "results": 0}},
+        {"$group": {"_id": "$q", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}, {"$limit": 12},
+    ]).to_list(12)
+
+    return {
+        "days": days,
+        "summary": {
+            "visitors": len(vids),
+            "new_visitors": len(vids) - returning,
+            "returning_visitors": returning,
+            "sessions": n_sessions,
+            "views": views,
+            "pages_per_session": round(views / n_sessions, 1) if n_sessions else 0,
+            "bounce_rate": round(100 * bounces / n_sessions) if n_sessions else 0,
+            "avg_session_seconds": round(sum(durations) / len(durations)) if durations else 0,
+            "live_now": len(live),
+        },
+        "live": [{"vid": l["_id"], "path": l["path"], "country": l.get("country"), "device": l.get("device")} for l in live[:20]],
+        "series": {"labels": labels, "visitors": s_visitors, "views": s_views},
+        "pages": await _group(db, views_m, "path", 15),
+        "landing": await _group(db, {**views_m, "landing": True}, "path", 10),
+        "referrers": await _group(db, views_m, "ref", 10),
+        "campaigns": await _group(db, views_m, "utm.campaign", 10),
+        "sources": await _group(db, views_m, "utm.source", 10),
+        "countries": await _group(db, views_m, "country", 15),
+        "devices": await _group(db, views_m, "device", 5),
+        "browsers": await _group(db, views_m, "browser", 6),
+        "searches": await _group(db, {**base, "type": "search"}, "q", 20),
+        "search_themes": await _group(db, {**base, "type": "search"}, "theme", 8),
+        "search_places": await _group(db, {**base, "type": "search"}, "place", 10),
+        "zero_result_searches": [{"key": z["_id"], "count": z["count"]} for z in zero],
+        "clicks": await _group(db, {**base, "type": "click"}, "target", 15),
+        "dwell": [{"key": d["_id"], "seconds": round(d["avg"] / 1000), "count": d["n"]} for d in dwell],
+        "top_drops": top_drops,
+        "interest_kinds": sorted([{"key": k, "count": v} for k, v in kinds.items()], key=lambda x: -x["count"]),
+        "interest_moods": sorted([{"key": k, "count": v} for k, v in moods.items()], key=lambda x: -x["count"])[:10],
+        "funnel": {"visitors": len(vids), "searched": searchers, "saw_signup": saw_signup, "signed_up": signups},
+        "recent": [
+            {
+                "vid": v["_id"], "first_seen": v.get("first_seen"), "last_seen": v.get("last_seen"),
+                "country": v.get("country"), "device": v.get("device"), "browser": v.get("browser"),
+                "views": v.get("views", 0), "sessions": v.get("sessions", 0),
+                "first_path": v.get("first_path"), "first_ref": v.get("first_ref"),
+                "last_path": v.get("last_path"), "signed_up": bool(v.get("signed_up_at")),
+                "signed_in": bool(v.get("signed_in")),
+            }
+            async for v in db[VISITORS].find({"last_seen": {"$gte": since}}).sort("last_seen", -1).limit(30)
+        ],
+    }
+
+
+@router.get("/admin/visitors/{vid}", summary="One visitor's journey (super admin)")
+async def visitor_journey(
+    vid: str,
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    if not ID_RE.match(vid):
+        raise HTTPException(400, "Invalid visitor id")
+    v = await db[VISITORS].find_one({"_id": vid}, {"last_sid": 0})
+    if not v:
+        raise HTTPException(404, "Visitor not found")
+    events = await db[EVENTS].find(
+        {"vid": vid},
+        {"_id": 0, "vid": 0, "country": 0, "device": 0, "browser": 0},
+    ).sort("created_at", -1).limit(300).to_list(300)
+    v["vid"] = v.pop("_id")
+    return {"visitor": v, "events": events}
+
+
+async def ensure_indexes(db) -> None:
+    await db[EVENTS].create_index([("created_at", 1)], expireAfterSeconds=180 * 24 * 3600, background=True)
+    await db[EVENTS].create_index([("type", 1), ("created_at", -1)], background=True)
+    await db[EVENTS].create_index([("vid", 1), ("created_at", -1)], background=True)
+    await db[VISITORS].create_index([("last_seen", 1)], expireAfterSeconds=365 * 24 * 3600, background=True)

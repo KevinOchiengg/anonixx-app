@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, compact, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { trackSearch } from "@/lib/track";
 import { COUNTRIES, KENYA_COUNTIES } from "@/lib/locations";
 import BottomNav from "./BottomNav";
 import { Clock, Close, MapPin, SearchIcon } from "./feedicons";
@@ -81,10 +82,12 @@ export default function SearchPage() {
         if (mine !== seq.current) return;
         setResults(r.results || []);
         setTotal(r.total || 0);
+        trackSearch(trimmed, { theme, place: [l.estate, l.sub, l.county, l.country].filter(Boolean).join(", "), n: r.total || 0 });
       } catch {
         if (mine !== seq.current) return;
         setResults([]);
         setTotal(0);
+        trackSearch(trimmed, { theme, place: [l.estate, l.sub, l.county, l.country].filter(Boolean).join(", "), n: -1 });
       } finally {
         if (mine === seq.current) setLoading(false);
       }

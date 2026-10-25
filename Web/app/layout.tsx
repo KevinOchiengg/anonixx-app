@@ -13,6 +13,7 @@ import "./room.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";
 import OfflineBar from "@/components/OfflineBar";
+import VisitTracker from "@/components/VisitTracker";
 
 const ADSENSE = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
 
@@ -54,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthProvider>{children}</AuthProvider>
         <OfflineBar />
+        <VisitTracker />
         {ADSENSE ? (
           <Script
             async

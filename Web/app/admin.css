@@ -236,3 +236,25 @@
 .adm-stats span { font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
 .adm-stats b { color: var(--fg); font-weight: 800; margin-right: 2px; }
 .adm-stats .adm-eng { border-color: rgba(255,99,74,0.35); background: rgba(255,99,74,0.08); }
+
+/* visitors */
+.adm-bars { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.adm-bars li { position: relative; display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 9px; overflow: hidden; font-size: 13px; }
+.adm-bars li > i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--bar, var(--rose)) 18%, transparent); border-radius: 9px; }
+.adm-bars li > span { position: relative; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-bars li > b { position: relative; font-variant-numeric: tabular-nums; }
+.adm-bars li > small { position: relative; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.adm-funnel { display: grid; gap: 10px; }
+.adm-funnel div { display: grid; grid-template-columns: 120px 1fr 60px; align-items: center; gap: 10px; font-size: 13px; }
+.adm-funnel div > span:nth-child(2) { height: 12px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.adm-funnel div > span:nth-child(2) > i { display: block; height: 100%; background: var(--rose); border-radius: 99px; }
+.adm-funnel div > b { text-align: right; font-variant-numeric: tabular-nums; }
+.adm-live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.adm-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.18); }
+.adm-scroll { overflow-x: auto; }
+.adm-journey { display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.adm-journey li { display: grid; grid-template-columns: 70px 64px 1fr; gap: 10px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.adm-journey li small { color: var(--muted); }
+.adm-modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.55); }
+.adm-modal > div { width: min(640px, 100%); max-height: 86vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 12px; }
+.adm-linkbtn { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }

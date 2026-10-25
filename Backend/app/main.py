@@ -22,6 +22,7 @@ from app.api.v1 import support
 from app.api.v1 import whatsapp
 from app.api.v1 import public
 from app.api.v1 import notifications
+from app.api.v1 import visits
 from app.api.v1 import (
     auth,
     coins,
@@ -97,6 +98,7 @@ async def _ensure_indexes():
         await db["signup_fingerprints"].create_index(
             [("created_at", 1)], expireAfterSeconds=90 * 24 * 3600, background=True
         )
+        await visits.ensure_indexes(db)
         log.info("MongoDB indexes verified.")
     except Exception as exc:
         log.warning("Index creation skipped: %s", exc)
@@ -245,6 +247,7 @@ app.include_router(support.router, prefix=settings.API_V1_PREFIX)
 app.include_router(whatsapp.router, prefix=settings.API_V1_PREFIX)
 app.include_router(public.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
+app.include_router(visits.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

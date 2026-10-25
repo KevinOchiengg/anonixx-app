@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, getToken, setAdultMode, setToken, type AuthUser } from "./api";
+import { track } from "./track";
 
 type AuthResponse = { access_token: string; user: AuthUser };
 
@@ -74,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     accept(await api<AuthResponse>("/auth/login", { body: { email, password } }));
+    track("login");
   }, [accept]);
 
   const signup = useCallback(async (input: SignupInput) => {
@@ -82,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (input.gender) body.gender = input.gender;
     if (input.referral_code) body.referral_code = input.referral_code;
     accept(await api<AuthResponse>("/auth/register", { body }));
+    track("signup");
   }, [accept]);
 
   const googleLogin = useCallback(async (idToken: string, extra: GoogleExtra = {}): Promise<GoogleResult> => {
