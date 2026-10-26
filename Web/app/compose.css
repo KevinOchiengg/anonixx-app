@@ -101,3 +101,7 @@
 /* hookup guided form: "I'm 24 years old, looking for 30 to 35" */
 .gc-ages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 18px 0 6px; font-size: 17px; line-height: 1.4; }
 .gc-ages .hk-field { width: 64px; text-align: center; padding-left: 0; padding-right: 0; }
+/* Optional "I want / I don't want" lines on the hookup form's last question */
+.gc-clarity { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 15px; }
+.gc-clarity span { flex: 0 0 104px; }
+.gc-clarity .hk-field { flex: 1; min-width: 0; }

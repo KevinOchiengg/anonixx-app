@@ -20,6 +20,7 @@ from app.utils.notifications import send_push_notification as _notify
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
+from app.services.confession_writer import MONEY as CLARITY_MONEY
 from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode
 from app.utils.fingerprint import fingerprint_hash
 from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted, splice_promoted
@@ -144,8 +145,28 @@ class GuidedDetails(BaseModel):
     hosting: Optional[str] = None
     public_first: Optional[bool] = None
     tone: Optional[str] = None
+    want: Optional[str] = None             # optional clarity line, "what I want"
+    dont_want: Optional[str] = None        # optional clarity line, "what I don't"
     ai_generated: bool = False
     edited: bool = False
+
+
+# The two clarity lines are short free text shown with the hookup (not yet
+# rendered on the feed card), so they get the same gates as the confession.
+CLARITY_MAX = 80
+
+
+def _clean_clarity(text: Optional[str]) -> Optional[str]:
+    t = re.sub(r"\s+", " ", (text or "").strip())[:CLARITY_MAX] or None
+    if not t:
+        return None
+    if contains_contact_info(t):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+    if violates_policy(t):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
+    if CLARITY_MONEY.search(t):
+        raise HTTPException(status_code=400, detail="Leave money and gifts out of it. On Anonixx nobody pays for company.")
+    return t
 
 
 class HookupDetails(BaseModel):
@@ -173,6 +194,8 @@ def clean_guided(g: Optional["GuidedDetails"]) -> Optional[dict]:
         "hosting": g.hosting if g.hosting in HOOKUP_HOSTING else None,
         "public_first": bool(g.public_first),
         "tone": g.tone if g.tone in HOOKUP_TONES else None,
+        "want": _clean_clarity(g.want),
+        "dont_want": _clean_clarity(g.dont_want),
         "ai_generated": bool(g.ai_generated),
         "edited": bool(g.edited),
     }

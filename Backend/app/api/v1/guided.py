@@ -54,6 +54,8 @@ class GenerateRequest(BaseModel):
     secret: Optional[str] = Field(None, max_length=200)
     hosting: Optional[str] = None
     public_first: bool = False
+    want: Optional[str] = Field(None, max_length=80)        # optional clarity lines
+    dont_want: Optional[str] = Field(None, max_length=80)
     tone: str = "vulnerable"
     previous: Optional[List[str]] = None   # this session's earlier drafts
 
@@ -104,12 +106,14 @@ async def generate(
 
     custom = " ".join((data.craving_custom or "").split())
     secret = " ".join((data.secret or "").split())
-    for t in (area, custom, secret):
+    want = " ".join((data.want or "").split())
+    dont_want = " ".join((data.dont_want or "").split())
+    for t in (area, custom, secret, want, dont_want):
         if contains_contact_info(t):
             raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
         if violates_policy(t):
             raise HTTPException(status_code=400, detail=MODERATION_ERROR)
-    if writer.MONEY.search(f"{custom} {secret}"):
+    if writer.MONEY.search(f"{custom} {secret} {want} {dont_want}"):
         raise HTTPException(status_code=400, detail="Leave money and gifts out of it. On Anonixx nobody pays for company.")
 
     used = await _used_today(db, current_user_id)
@@ -130,6 +134,8 @@ async def generate(
         "secret": secret or None,
         "hosting": _HOSTING_WORDS.get(data.hosting) if data.hosting in HOOKUP_HOSTING else None,
         "meeting": meeting,
+        "want": want or None,
+        "dont_want": dont_want or None,
     }
 
     recent = await db["drops"].find(

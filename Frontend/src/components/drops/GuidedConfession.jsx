@@ -75,8 +75,11 @@ const EMPTY = {
   age: '', gender: null, traits: [],
   secret: '',
   hosting: null, publicFirst: false,
+  want: '', dontWant: '',
   sound: '',
 };
+// The optional "I want / I don't want" lines, same cap as the API.
+const CLARITY_MAX = 80;
 
 const digits = (v) => v.replace(/\D/g, '').slice(0, 2);
 const toggleIn = (list, v, max) => (list.includes(v) ? list.filter((x) => x !== v) : list.length < max ? [...list, v] : list);
@@ -257,6 +260,8 @@ export default function GuidedConfession({ navigation, onBack }) {
         secret: a.secret.trim() || null,
         hosting: a.hosting,
         public_first: a.publicFirst,
+        want: a.want.trim() || null,
+        dont_want: a.dontWant.trim() || null,
         tone: withTone,
         previous: drafts,
       });
@@ -302,6 +307,8 @@ export default function GuidedConfession({ navigation, onBack }) {
             traits: a.traits,
             hosting: a.hosting,
             public_first: a.publicFirst,
+            want: a.want.trim() || null,
+            dont_want: a.dontWant.trim() || null,
             tone: aiText ? tone : null,
             ai_generated: !!aiText,
             edited: !!aiText && body !== aiText.trim(),
@@ -433,6 +440,15 @@ export default function GuidedConfession({ navigation, onBack }) {
             <View style={[s.box, a.publicFirst && s.boxOn]}>{a.publicFirst && <Check size={rs(12)} color="#fff" strokeWidth={3} />}</View>
             <Text style={s.toggleText}>Somewhere public first</Text>
           </TouchableOpacity>
+          <Label optional>Say it plainly</Label>
+          <View style={s.clarityRow}>
+            <Text style={s.clarityText}>I want</Text>
+            <Field style={s.clarityField} value={a.want} onChangeText={(v) => set({ want: v.slice(0, CLARITY_MAX) })} placeholder="slow, then not so slow" accessibilityLabel="What you want" />
+          </View>
+          <View style={s.clarityRow}>
+            <Text style={s.clarityText}>I don't want</Text>
+            <Field style={s.clarityField} value={a.dontWant} onChangeText={(v) => set({ dontWant: v.slice(0, CLARITY_MAX) })} placeholder="anything serious" accessibilityLabel="What you don't want" />
+          </View>
           <Text style={s.hint}>Nobody pays anybody on Anonixx. Link up is how you meet.</Text>
         </View>
       );
@@ -639,6 +655,9 @@ const s = StyleSheet.create({
   box: { width: rs(20), height: rs(20), borderRadius: rs(6), borderWidth: 1.5, borderColor: T.borderStrong, alignItems: 'center', justifyContent: 'center' },
   boxOn: { backgroundColor: T.primary, borderColor: T.primary },
   toggleText: { color: T.text, fontFamily: 'DMSans-Regular', fontSize: FONT.md },
+  clarityRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  clarityText: { width: rs(100), color: T.text, fontFamily: 'DMSans-Regular', fontSize: FONT.md },
+  clarityField: { flex: 1 },
 
   card: { borderRadius: RADIUS.xl, borderWidth: 1, borderColor: T.primaryBorder, padding: SPACING.lg, gap: SPACING.md },
   cardKicker: { color: T.primary, fontFamily: 'DMSans-Bold', fontSize: FONT.xs, letterSpacing: 1.5 },

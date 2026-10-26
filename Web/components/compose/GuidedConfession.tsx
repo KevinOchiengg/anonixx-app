@@ -23,6 +23,7 @@ export const GUIDED_SAVE_KEY = "anonixx.drops.guided.v1";
 const MY_AGE_KEY = "anonixx.hookup.age";
 const SAVE_KEY = GUIDED_SAVE_KEY;
 const MAX = 500;
+const CLARITY_MAX = 80; // the optional "I want / I don't" lines, same cap as the API
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const CRAVINGS: [string, string][] = [["warmth", "Warmth"], ["attention", "Attention"], ["intimacy", "Intimacy"], ["chemistry", "Chemistry"], ["companionship", "Companionship"]];
@@ -51,6 +52,7 @@ type Answers = {
   age: string; gender: string | null; traits: string[];
   secret: string;
   hosting: string | null; publicFirst: boolean;
+  want: string; dontWant: string;
   sound: string;
 };
 const EMPTY: Answers = {
@@ -59,6 +61,7 @@ const EMPTY: Answers = {
   age: "", gender: null, traits: [],
   secret: "",
   hosting: null, publicFirst: false,
+  want: "", dontWant: "",
   sound: "",
 };
 
@@ -196,6 +199,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           secret: a.secret.trim() || null,
           hosting: a.hosting,
           public_first: a.publicFirst,
+          want: a.want.trim() || null,
+          dont_want: a.dontWant.trim() || null,
           tone: withTone,
           previous: drafts,
         },
@@ -243,6 +248,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
               traits: a.traits,
               hosting: a.hosting,
               public_first: a.publicFirst,
+              want: a.want.trim() || null,
+              dont_want: a.dontWant.trim() || null,
               tone: aiText ? tone : null,
               ai_generated: !!aiText,
               edited: !!aiText && body !== aiText.trim(),
@@ -346,6 +353,15 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           <label className="gc-check">
             <input type="checkbox" checked={a.publicFirst} onChange={(e) => set({ publicFirst: e.target.checked })} />
             Somewhere public first
+          </label>
+          <h3 className="gc-label">Say it plainly <span className="hk-opt">optional</span></h3>
+          <label className="gc-clarity">
+            <span>I want</span>
+            <input className="hk-field" maxLength={CLARITY_MAX} value={a.want} onChange={(e) => set({ want: e.target.value })} placeholder="slow, then not so slow" />
+          </label>
+          <label className="gc-clarity">
+            <span>I don&apos;t want</span>
+            <input className="hk-field" maxLength={CLARITY_MAX} value={a.dontWant} onChange={(e) => set({ dontWant: e.target.value })} placeholder="anything serious" />
           </label>
           <p className="hk-hint">Nobody pays anybody on Anonixx. Link up is how you meet.</p>
         </>
