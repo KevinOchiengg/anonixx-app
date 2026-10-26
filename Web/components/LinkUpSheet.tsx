@@ -38,6 +38,8 @@ export default function LinkUpSheet({
   const { user, refresh } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // Long confessions open at 6 lines; "Read all" shows the whole thing.
+  const [fullText, setFullText] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [clue, setClue] = useState<Clue | null>(null);
@@ -140,7 +142,14 @@ export default function LinkUpSheet({
           {post.avatar_url ? <Image src={post.avatar_url} alt="" width={56} height={56} /> : name[0]?.toUpperCase() || "A"}
         </div>
         <h3 className="u-name">Knock on {name}&apos;s door</h3>
-        {post.content ? <p className="u-quote">&ldquo;{post.content}&rdquo;</p> : null}
+        {post.content ? (
+          <>
+            <p className={`u-quote${fullText ? " full" : ""}`}>&ldquo;{post.content}&rdquo;</p>
+            {post.content.length > 220 ? (
+              <button type="button" className="u-readall" onClick={() => setFullText((v) => !v)}>{fullText ? "Show less" : "Read all"}</button>
+            ) : null}
+          </>
+        ) : null}
         {ageGate ? <AgeGate compact onDone={() => setAgeGate(false)} /> : null}
         <div className="lu-pitch">
           <label htmlFor="lu-pitch">Leave a message (optional)</label>

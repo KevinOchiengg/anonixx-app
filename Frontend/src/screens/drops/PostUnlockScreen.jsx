@@ -54,6 +54,9 @@ export default function PostUnlockScreen({ route, navigation }) {
   const displayText   = post ? post.content : linkupTarget?.preview_text;
 
   const [unlocking, setUnlocking] = useState(false);
+  // Long confessions open at 6 lines; "Read all" shows the whole thing.
+  const [fullText, setFullText] = useState(false);
+  const [clipped, setClipped] = useState(false);
   const [pitch, setPitch, clearPitch] = useDraft(targetId ? `linkup:${targetId}` : null, '');
   const [intents, setIntents] = useState([]);
   const [ageGate, setAgeGate] = useState(false);
@@ -218,9 +221,20 @@ export default function PostUnlockScreen({ route, navigation }) {
         <Text style={s.authorName}>{displayName || 'Anonymous'}</Text>
 
         {!!displayText && (
-          <Text style={s.confession} numberOfLines={6}>
-            &ldquo;{displayText}&rdquo;
-          </Text>
+          <>
+            <Text
+              style={[s.confession, clipped && { marginBottom: rp(4) }]}
+              numberOfLines={fullText ? undefined : 6}
+              onTextLayout={(e) => { if (!fullText && e.nativeEvent.lines.length >= 6) setClipped(true); }}
+            >
+              &ldquo;{displayText}&rdquo;
+            </Text>
+            {clipped && (
+              <TouchableOpacity onPress={() => setFullText((v) => !v)} hitSlop={HIT_SLOP} style={{ marginBottom: SPACING.lg }}>
+                <Text style={s.readAll}>{fullText ? 'Show less' : 'Read all'}</Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
 
         {ageGate && (
@@ -349,6 +363,7 @@ const s = StyleSheet.create({
     fontSize: FONT.md, color: T.textSecondary, textAlign: 'center',
     fontStyle: 'italic', lineHeight: FONT.md * 1.5, marginBottom: SPACING.lg,
   },
+  readAll: { fontSize: FONT.sm, fontWeight: '700', color: T.primary, textAlign: 'center' },
   copy: { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: FONT.sm * 1.6, marginBottom: SPACING.lg },
 
   pitchSection: { width: '100%', marginBottom: SPACING.lg, gap: rp(6) },

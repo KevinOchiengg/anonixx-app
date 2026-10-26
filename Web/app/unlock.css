@@ -166,3 +166,6 @@
 .u-gal-add { width: 92px; height: 92px; border-radius: 12px; border: 1px dashed var(--line); display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--rose); background: var(--surface); }
 .u-cap { background: var(--surface); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
 .u-cap button { align-self: flex-start; padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255, 99, 74, 0.4); color: var(--rose); font-weight: 600; font-size: 12px; }
+
+.u-quote.full { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.u-readall { align-self: center; margin: 4px 0 0; padding: 0; border: 0; background: none; color: var(--rose); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
