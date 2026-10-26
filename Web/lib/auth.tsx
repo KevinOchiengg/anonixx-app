@@ -9,13 +9,13 @@ export type SignupInput = {
   email: string;
   password: string;
   username?: string;
-  date_of_birth: string;
+  adult_confirmed: true;   // the "I'm 18 or older" tick; no date of birth is asked
   gender?: string;
   referral_code?: string;
 };
 
 export type GoogleExtra = {
-  date_of_birth?: string;
+  adult_confirmed?: boolean;
   username?: string;
   gender?: string;
   referral_code?: string;
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [accept]);
 
   const signup = useCallback(async (input: SignupInput) => {
-    const body: Record<string, unknown> = { email: input.email, password: input.password, date_of_birth: input.date_of_birth };
+    const body: Record<string, unknown> = { email: input.email, password: input.password, adult_confirmed: input.adult_confirmed };
     if (input.username) body.username = input.username;
     if (input.gender) body.gender = input.gender;
     if (input.referral_code) body.referral_code = input.referral_code;

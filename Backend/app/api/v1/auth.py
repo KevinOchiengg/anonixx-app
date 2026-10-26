@@ -47,7 +47,10 @@ class RegisterRequest(BaseModel):
     password:      str
     username:      Optional[str] = None
     referral_code: Optional[str] = None   # Optional referral code during signup
-    date_of_birth: date                   # Anonixx is 18+ only — enforced at registration
+    # Anonixx is 18+. Signup takes the "I'm 18 or older" tick (adult_confirmed);
+    # older clients still send a date of birth, which is checked if present.
+    date_of_birth:   Optional[date] = None
+    adult_confirmed: bool = False
     gender:        Optional[str] = None   # Optional: male | female | nonbinary | prefer_not_to_say
 
 class LoginRequest(BaseModel):
@@ -153,14 +156,31 @@ async def _check_chosen_name(db, chosen_name: str) -> None:
     if name_clash:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="That username is already taken")
 
+def _check_adult(dob: Optional[date], confirmed: bool) -> None:
+    """Signup needs the 18+ tick; a date of birth, if an older client sends one, must be 18+ too."""
+    if dob is not None and not _is_adult(dob):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Anonixx is for adults 18+")
+    if dob is None and not confirmed:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Confirm you're 18 or older to join Anonixx.")
+
+
+def _adult_fields(dob: Optional[date]) -> dict:
+    """How a new account records that it's 18+: the tick (self-attested), plus a DOB if given.
+    The age shown on a hookup card is asked when the post is made, not here."""
+    return {
+        "date_of_birth": dob.isoformat() if dob else None,
+        "age_verified":  True,
+        "age_attested":  "dob" if dob else "signup_tick",
+    }
+
+
 # ─── Endpoints ────────────────────────────────────────────────
 @router.post("/register", response_model=TokenResponse)
 async def register(data: RegisterRequest, request: Request, db=Depends(get_database)):
     if await db["users"].find_one({"email": data.email}):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
-    if not _is_adult(data.date_of_birth):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Anonixx is for adults 18+")
+    _check_adult(data.date_of_birth, data.adult_confirmed)
 
     # The username someone picks at signup IS their public anonymous name —
     # there's no separate identity-setup step anymore, so this is the only
@@ -186,9 +206,8 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
         "interests":      [],
         "coin_balance":   0,          # Start at 0; welcome bonus credited below
         "streak_count":   0,
-        "date_of_birth":  data.date_of_birth.isoformat(),
+        **_adult_fields(data.date_of_birth),
         "gender":         data.gender if data.gender in VALID_GENDERS else None,
-        "age_verified":   True,       # DOB above already proves 18+ at this point
         "blocked_user_ids": [],
         "created_at":     _now(),
         "updated_at":     _now(),
@@ -254,7 +273,8 @@ async def login(data: LoginRequest, db=Depends(get_database)):
 # ─── Google sign-in ───────────────────────────────────────────
 class GoogleAuthRequest(BaseModel):
     id_token:      str
-    date_of_birth: Optional[date] = None   # required only the first time (new account)
+    date_of_birth: Optional[date] = None   # older clients; new ones send adult_confirmed
+    adult_confirmed: bool = False          # the 18+ tick, required only the first time (new account)
     username:      Optional[str]  = None
     gender:        Optional[str]  = None
     referral_code: Optional[str]  = None
@@ -326,10 +346,9 @@ async def google_auth(data: GoogleAuthRequest, db=Depends(get_database)):
     if user:
         return _session(user, is_new=False)
 
-    if not data.date_of_birth:
+    if not data.date_of_birth and not data.adult_confirmed:
         return {"needs_profile": True, "email": email}
-    if not _is_adult(data.date_of_birth):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Anonixx is for adults 18+")
+    _check_adult(data.date_of_birth, data.adult_confirmed)
 
     chosen_name = (data.username or "").strip()
     if chosen_name:
@@ -351,9 +370,8 @@ async def google_auth(data: GoogleAuthRequest, db=Depends(get_database)):
         "interests":      [],
         "coin_balance":   0,
         "streak_count":   0,
-        "date_of_birth":  data.date_of_birth.isoformat(),
+        **_adult_fields(data.date_of_birth),
         "gender":         data.gender if data.gender in VALID_GENDERS else None,
-        "age_verified":   True,
         "blocked_user_ids": [],
         "created_at":     _now(),
         "updated_at":     _now(),

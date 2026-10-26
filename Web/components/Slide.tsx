@@ -61,8 +61,9 @@ function pickSound(sounds: Sound[] | undefined, post: Post): Sound | null {
 const HOSTING_TAG: Record<string, string> = { can_host: "can host", can_travel: "can travel", either: "host or travel" };
 function hookupTags(h: Post["hookup"]): string[] {
   if (!h) return [];
-  const who = h.looking_for === "woman" ? "into women" : h.looking_for === "man" ? "into men" : null;
-  const range = h.age_min || h.age_max ? ` ${h.age_min || 18}–${h.age_max || 99}` : "";
+  const wanted = !h.age_min && !h.age_max ? "" : h.age_min && h.age_min === h.age_max ? `${h.age_min}` : `${h.age_min || 18}–${h.age_max || 99}`;
+  const who = h.looking_for === "woman" ? "into women" : h.looking_for === "man" ? "into men" : wanted ? "looking for" : null;
+  const range = wanted ? ` ${wanted}` : "";
   return [
     h.age ? `${h.age}${h.gender && h.gender !== "other" ? ` · ${h.gender}` : ""}` : null,
     h.area || null,

@@ -19,6 +19,8 @@ import { useAuth } from "@/lib/auth";
 import AgeGate from "../AgeGate";
 
 export const GUIDED_SAVE_KEY = "anonixx.drops.guided.v1";
+// The poster's own age, remembered after their first hookup post so it's filled in next time.
+const MY_AGE_KEY = "anonixx.hookup.age";
 const SAVE_KEY = GUIDED_SAVE_KEY;
 const MAX = 500;
 
@@ -34,7 +36,7 @@ const HOSTING_TAG: Record<string, string> = { can_host: "can host", can_travel: 
 
 const STEPS = [
   { q: "What have you been craving lately?", sub: "No one sees this part. Just be honest." },
-  { q: "Who would you love to find?", sub: "Who, and where they can find you." },
+  { q: "Who would you love to find?", sub: "Your age, theirs, and where they can find you." },
   { q: "What makes you, you?", sub: "Pick up to three. Only what feels true." },
   { q: "Tell us something they wouldn't know about you.", sub: "A small, real thing. It's what makes yours different from everyone else's." },
   { q: "If the chemistry feels right, what's possible?", sub: "Only what you're comfortable with. You can change your mind later." },
@@ -66,20 +68,24 @@ const toggleIn = (list: string[], v: string, max: number) => (list.includes(v) ?
 function stepProblem(i: number, a: Answers): string {
   if (i === 0) return !a.craving || (a.craving === "custom" && !a.cravingCustom.trim()) ? "Pick one, or say it in your own words." : "";
   if (i === 1) {
-    if (!a.area.trim()) return "Add where you are.";
-    const lo = Number(a.ageMin), hi = Number(a.ageMax);
-    if ((a.ageMin && lo < 18) || (a.ageMax && hi < 18)) return "Everyone here is 18+, so start at 18.";
-    if (a.ageMin && a.ageMax && lo > hi) return "The youngest age is higher than the oldest.";
-    return "";
-  }
-  if (i === 2) {
     const age = Number(a.age);
     if (!a.age) return "Add your age.";
     if (age < 18) return "You have to be 18 or older to post here.";
     if (age > 99) return "Enter a real age.";
+    const lo = Number(a.ageMin), hi = Number(a.ageMax);
+    if ((a.ageMin && lo < 18) || (a.ageMax && hi < 18)) return "Everyone here is 18+, so start at 18.";
+    if (a.ageMin && a.ageMax && lo > hi) return "The first age is higher than the second.";
+    if (!a.area.trim()) return "Add where you are.";
   }
   return "";
 }
+
+// The age they want: one age ("30") or a range ("28–35"). One box filled = that exact age.
+const wantedRange = (a: Answers): [number | null, number | null] => {
+  const lo = a.ageMin ? Number(a.ageMin) : null;
+  const hi = a.ageMax ? Number(a.ageMax) : null;
+  return [lo ?? hi, hi ?? lo];
+};
 
 function Chips({ options, isOn, onPick, label }: { options: [string, string][]; isOn: (k: string) => boolean; onPick: (k: string) => void; label: string }) {
   return (
@@ -125,6 +131,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
       if (typeof saved?.aiText === "string") setAiText(saved.aiText);
       if (typeof saved?.tone === "string") setTone(saved.tone);
       if (Array.isArray(saved?.drafts)) setDrafts(saved.drafts.slice(-4));
+      const myAge = localStorage.getItem(MY_AGE_KEY);
+      if (myAge && /^\d{2}$/.test(myAge)) setA((cur) => (cur.age ? cur : { ...cur, age: myAge }));
     } catch { /* storage unavailable or corrupt */ }
     setReady(true);
     api<{ enabled: boolean; remaining: number }>("/guided/status")
@@ -181,8 +189,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           gender: a.gender,
           area: a.area.trim(),
           looking_for: a.lookingFor,
-          age_min: a.ageMin ? Number(a.ageMin) : null,
-          age_max: a.ageMax ? Number(a.ageMax) : null,
+          age_min: wantedRange(a)[0],
+          age_max: wantedRange(a)[1],
           connection: a.connection,
           traits: a.traits,
           secret: a.secret.trim() || null,
@@ -226,8 +234,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             ...(a.gender ? { gender: a.gender } : {}),
             area: a.area.trim(),
             looking_for: a.lookingFor,
-            age_min: a.ageMin ? Number(a.ageMin) : null,
-            age_max: a.ageMax ? Number(a.ageMax) : null,
+            age_min: wantedRange(a)[0],
+            age_max: wantedRange(a)[1],
             vibes: a.connection,
             guided: {
               craving: a.craving === "custom" ? null : a.craving,
@@ -246,7 +254,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           ...(a.sound ? { sound_id: a.sound } : {}),
         },
       });
-      try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+      try { localStorage.removeItem(SAVE_KEY); localStorage.setItem(MY_AGE_KEY, a.age); } catch { /* ignore */ }
       refresh();
       setDone(true);
     } catch (e) {
@@ -274,10 +282,12 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const writerOff = writer.enabled === false;
   const short = (user?.coin_balance ?? 0) < COST.post;
   const pickedSound = a.sound ? sounds?.find((x) => x.id === a.sound) : undefined;
+  const [wLo, wHi] = wantedRange(a);
+  const wanted = wLo == null ? "" : wLo === wHi ? ` ${wLo}` : ` ${wLo}–${wHi}`;
   const tags = [
     `${a.age || "—"}${a.gender && a.gender !== "other" ? ` · ${a.gender}` : ""}`,
     a.area.trim() || null,
-    `into ${a.lookingFor === "anyone" ? "anyone" : a.lookingFor === "woman" ? "women" : "men"}${a.ageMin || a.ageMax ? ` ${a.ageMin || 18}–${a.ageMax || 99}` : ""}`,
+    `into ${a.lookingFor === "anyone" ? "anyone" : a.lookingFor === "woman" ? "women" : "men"}${wanted}`,
     (a.hosting && HOSTING_TAG[a.hosting]) || null,
     a.publicFirst ? "public first" : null,
     pickedSound ? `♪ ${pickedSound.title}` : null,
@@ -297,12 +307,15 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
         <>
           <h3 className="gc-label">I&apos;m drawn to</h3>
           <Chips label="Looking for" options={LOOKING} isOn={(k) => a.lookingFor === k} onPick={(k) => set({ lookingFor: k })} />
-          <h3 className="gc-label">Aged <span className="hk-opt">optional</span></h3>
-          <div className="hk-range">
-            <input className="hk-field" inputMode="numeric" value={a.ageMin} onChange={(e) => set({ ageMin: digits(e.target.value) })} placeholder="18" aria-label="Youngest age" />
-            to
-            <input className="hk-field" inputMode="numeric" value={a.ageMax} onChange={(e) => set({ ageMax: digits(e.target.value) })} placeholder="99" aria-label="Oldest age" />
+          <div className="gc-ages">
+            <span>I&apos;m</span>
+            <input className="hk-field" inputMode="numeric" value={a.age} onChange={(e) => set({ age: digits(e.target.value) })} placeholder="24" aria-label="Your age" />
+            <span>years old, looking for</span>
+            <input className="hk-field" inputMode="numeric" value={a.ageMin} onChange={(e) => set({ ageMin: digits(e.target.value) })} placeholder="30" aria-label="The age you're looking for" />
+            <span>to</span>
+            <input className="hk-field" inputMode="numeric" value={a.ageMax} onChange={(e) => set({ ageMax: digits(e.target.value) })} placeholder="any" aria-label="Up to this age (optional)" />
           </div>
+          <p className="hk-hint">Your age shows on your card. Fill one box for one age, both for a range, or leave theirs empty for anyone 18+.</p>
           <h3 className="gc-label">Where they can find you</h3>
           <input className="hk-field" maxLength={60} value={a.area} onChange={(e) => set({ area: e.target.value })} placeholder="A neighbourhood or city" aria-label="Where you are" />
           <p className="hk-hint">Never your exact address.</p>
@@ -312,10 +325,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
       );
       case 2: return (
         <>
-          <div className="hk-you">
-            <input className="hk-field hk-age" inputMode="numeric" value={a.age} onChange={(e) => set({ age: digits(e.target.value) })} placeholder="Age" aria-label="Your age" />
-            <Chips label="I am" options={GENDERS} isOn={(k) => a.gender === k} onPick={(k) => set({ gender: a.gender === k ? null : k })} />
-          </div>
+          <h3 className="gc-label">I am <span className="hk-opt">optional</span></h3>
+          <Chips label="I am" options={GENDERS} isOn={(k) => a.gender === k} onPick={(k) => set({ gender: a.gender === k ? null : k })} />
           <h3 className="gc-label">I&apos;m <span className="hk-opt">optional · {a.traits.length}/3</span></h3>
           <Chips label="Traits" options={TRAITS} isOn={(k) => a.traits.includes(k)} onPick={(k) => set({ traits: toggleIn(a.traits, k, 3) })} />
         </>

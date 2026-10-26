@@ -36,7 +36,9 @@ class UpdateProfileRequest(BaseModel):
 
 
 class VerifyAgeRequest(BaseModel):
-    date_of_birth: date
+    # The 18+ tick (new clients) or a date of birth (older clients).
+    date_of_birth:   Optional[date] = None
+    adult_confirmed: bool = False
 
 
 class ReportUserRequest(BaseModel):
@@ -197,8 +199,9 @@ async def verify_age(
     db = Depends(get_database),
 ):
     """
-    One-time self-attested age check for accounts created before Anonixx
-    required a date of birth at signup. No-ops if already verified.
+    One-time self-attested 18+ check for accounts created before signup asked
+    for it: the "I'm 18 or older" tick, or a date of birth from older clients.
+    No-ops if already verified.
     """
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
@@ -207,16 +210,15 @@ async def verify_age(
     if user.get("age_verified"):
         return {"age_verified": True}
 
-    if not _is_adult(data.date_of_birth):
+    if data.date_of_birth is not None and not _is_adult(data.date_of_birth):
         raise HTTPException(status_code=400, detail="Anonixx is for adults 18+")
+    if data.date_of_birth is None and not data.adult_confirmed:
+        raise HTTPException(status_code=400, detail="Confirm you're 18 or older.")
 
-    await db["users"].update_one(
-        {"_id": ObjectId(current_user_id)},
-        {"$set": {
-            "date_of_birth": data.date_of_birth.isoformat(),
-            "age_verified":  True,
-        }},
-    )
+    fields = {"age_verified": True, "age_attested": "dob" if data.date_of_birth else "tick"}
+    if data.date_of_birth:
+        fields["date_of_birth"] = data.date_of_birth.isoformat()
+    await db["users"].update_one({"_id": ObjectId(current_user_id)}, {"$set": fields})
     return {"age_verified": True}
 
 

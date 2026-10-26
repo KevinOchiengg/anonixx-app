@@ -785,7 +785,13 @@ async def create_drop(
     if kind == "hookup" and not hookup_data:
         raise HTTPException(status_code=400, detail="Fill in your age and area for a hookup confession.")
     if kind == "hookup" and not user.get("age_verified") and not user.get("is_admin"):
-        raise HTTPException(status_code=403, detail=AGE_GATE_DETAIL)
+        # Accounts from before the 18+ tick: the age they just typed (clean_hookup
+        # already refused anything under 18) is their confirmation, so nobody is
+        # turned away after filling in the whole form.
+        await db["users"].update_one(
+            {"_id": user["_id"]},
+            {"$set": {"age_verified": True, "age_attested": "hookup_age"}},
+        )
 
     night = is_night_mode()
     price = GROUP_DROP_PRICE_USD if data.is_group else DROP_PRICE_USD

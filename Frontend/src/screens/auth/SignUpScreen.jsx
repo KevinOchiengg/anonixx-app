@@ -26,7 +26,7 @@ import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
-import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Gift, Cake, ArrowLeft, Camera } from 'lucide-react-native';
+import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Check, Gift, ArrowLeft, Camera } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import { THEME } from '../../utils/theme';
 import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT, normalizeNameSpaces } from '../../utils/anonymousName';
@@ -60,24 +60,8 @@ const GlowOrb = React.memo(() => <View style={styles.glowOrb} />);
 
 const INITIAL_FORM = {
   username: '', email: '', password: '', confirmPassword: '', referralCode: '',
-  dobDay: '', dobMonth: '', dobYear: '',
 };
 const MAX_REFERRAL_LENGTH = 20;
-const MINIMUM_AGE = 18;
-
-// Whole-years age from a Y/M/D triple, evaluated as of today — mirrors the
-// backend's _is_adult() in Backend/app/api/v1/auth.py.
-function calculateAge(year, month, day) {
-  const today = new Date();
-  const dob = new Date(year, month - 1, day);
-  let age = today.getFullYear() - dob.getFullYear();
-  const hasHadBirthdayThisYear =
-    today.getMonth() > dob.getMonth() ||
-    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
-  if (!hasHadBirthdayThisYear) age -= 1;
-  return age;
-}
-
 // Password strength checker
 function getPasswordStrength(password) {
   if (!password) return { score: 0, label: '', color: 'transparent' };
@@ -104,6 +88,9 @@ export default function SignUpScreen({ navigation }) {
   const [showPass, setShowPass]   = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [gender, setGender] = useState(null);
+  // "I'm 18 or older" — the only age question at signup. The age shown on a
+  // hookup card is asked when the hookup is written.
+  const [adult, setAdult] = useState(false);
 
   // Profile picture — optional; most users stay faceless on Anonixx
   const [avatarUri, setAvatarUri]       = useState(null);
@@ -177,26 +164,11 @@ export default function SignUpScreen({ navigation }) {
     else if (formData.password !== formData.confirmPassword)
                                                 e.confirmPassword = 'Passwords do not match';
 
-    const day   = parseInt(formData.dobDay, 10);
-    const month = parseInt(formData.dobMonth, 10);
-    const year  = parseInt(formData.dobYear, 10);
-    const dobComplete = formData.dobDay && formData.dobMonth && formData.dobYear;
-    if (!dobComplete) {
-      e.dob = 'Date of birth is required';
-    } else if (
-      !(day >= 1 && day <= 31) ||
-      !(month >= 1 && month <= 12) ||
-      !(year >= 1900 && year <= new Date().getFullYear()) ||
-      new Date(year, month - 1, day).getMonth() !== month - 1  // rejects e.g. Feb 31
-    ) {
-      e.dob = 'Enter a valid date';
-    } else if (calculateAge(year, month, day) < MINIMUM_AGE) {
-      e.dob = 'Anonixx is for adults 18+';
-    }
+    if (!adult) e.adult = "Confirm you're 18 or older";
 
     setErrors(e);
     return Object.keys(e).length === 0;
-  }, [formData]);
+  }, [formData, adult]);
 
   const handleSignUp = useCallback(async () => {
     if (!validate()) {
@@ -204,12 +176,11 @@ export default function SignUpScreen({ navigation }) {
       return;
     }
     try {
-      const dob = `${formData.dobYear}-${formData.dobMonth.padStart(2, '0')}-${formData.dobDay.padStart(2, '0')}`;
       const result = await dispatch(signup({
         username:      formData.username.trim(),
         email:         formData.email.trim().toLowerCase(),
         password:      formData.password,
-        date_of_birth: dob,
+        adult_confirmed: true,
         ...(gender ? { gender } : {}),
       })).unwrap();
 
@@ -286,7 +257,7 @@ export default function SignUpScreen({ navigation }) {
         showToast({ type: 'error', title: 'No Connection', message: 'Check your internet and try again.' });
       } else if (lower.includes('18+')) {
         showToast({ type: 'error', title: 'Adults only', message: 'Anonixx is for adults 18+.' });
-        setErrors((prev) => ({ ...prev, dob: 'Anonixx is for adults 18+' }));
+        setErrors((prev) => ({ ...prev, adult: 'Anonixx is for adults 18+' }));
       } else {
         showToast({ type: 'error', title: 'Signup Failed', message: 'Something went wrong. Please try again.' });
       }
@@ -532,59 +503,6 @@ export default function SignUpScreen({ navigation }) {
               {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
             </View>
 
-            {/* Date of Birth — Anonixx is 18+ only, enforced client + server side */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Date of Birth</Text>
-              <View style={[
-                styles.inputRow,
-                focused === 'dob'  && styles.inputRowFocused,
-                errors.dob         && styles.inputRowError,
-              ]}>
-                <Cake size={ICON.md} color={THEME.textSecondary} strokeWidth={2} style={styles.fieldIcon} />
-                <TextInput
-                  value={formData.dobDay}
-                  onChangeText={(v) => updateField('dobDay', v.replace(/[^0-9]/g, ''), 2)}
-                  onFocus={() => setFocused('dob')}
-                  onBlur={() => setFocused('')}
-                  placeholder="dd"
-                  placeholderTextColor={THEME.textSecondary}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  style={styles.dobInput}
-                />
-                <Text style={styles.dobSlash}>/</Text>
-                <TextInput
-                  value={formData.dobMonth}
-                  onChangeText={(v) => updateField('dobMonth', v.replace(/[^0-9]/g, ''), 2)}
-                  onFocus={() => setFocused('dob')}
-                  onBlur={() => setFocused('')}
-                  placeholder="mm"
-                  placeholderTextColor={THEME.textSecondary}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  style={styles.dobInput}
-                />
-                <Text style={styles.dobSlash}>/</Text>
-                <TextInput
-                  value={formData.dobYear}
-                  onChangeText={(v) => updateField('dobYear', v.replace(/[^0-9]/g, ''), 4)}
-                  onFocus={() => setFocused('dob')}
-                  onBlur={() => setFocused('')}
-                  onSubmitEditing={() => referralRef.current?.focus()}
-                  placeholder="yyyy"
-                  placeholderTextColor={THEME.textSecondary}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  returnKeyType="next"
-                  style={styles.dobInputYear}
-                />
-              </View>
-              {errors.dob
-                ? <Text style={styles.fieldError}>{errors.dob}</Text>
-                : <Text style={styles.fieldHint}>just for age checks — anonixx is 18+ only. never shown to anyone.</Text>
-              }
-            </View>
-
             {/* Gender (optional) */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Gender <Text style={styles.labelOptional}>(optional)</Text></Text>
@@ -636,6 +554,21 @@ export default function SignUpScreen({ navigation }) {
               </View>
             </View>
 
+            {/* 18+ and terms: one tick, no birthday */}
+            <TouchableOpacity
+              onPress={() => { setAdult((v) => !v); if (errors.adult) setErrors((prev) => ({ ...prev, adult: null })); }}
+              style={styles.adultRow}
+              activeOpacity={0.8}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: adult }}
+            >
+              <View style={[styles.adultBox, adult && styles.adultBoxOn, errors.adult && styles.inputRowError]}>
+                {adult ? <Check size={rs(14)} color="#fff" strokeWidth={3} /> : null}
+              </View>
+              <Text style={styles.adultText}>I'm 18 or older and I agree to the Terms of Service and Privacy Policy.</Text>
+            </TouchableOpacity>
+            {errors.adult ? <Text style={[styles.fieldError, { marginBottom: SPACING.sm }]}>{errors.adult}</Text> : null}
+
             {/* Submit */}
             <TouchableOpacity
               onPress={handleSignUp}
@@ -656,10 +589,6 @@ export default function SignUpScreen({ navigation }) {
                 <Text style={styles.loginTextBold}>Sign In</Text>
               </TouchableOpacity>
             </View>
-
-            <Text style={styles.termsText}>
-              By signing up, you agree to our Terms of Service and Privacy Policy
-            </Text>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -749,12 +678,6 @@ const styles = StyleSheet.create({
   fieldError:      { color: THEME.error, fontSize: rf(11), fontFamily: 'DMSans-SemiBold', marginTop: SPACING.xs, marginLeft: rp(4), fontWeight: '500' },
   fieldHint:       { color: THEME.textMuted, fontSize: rf(11), fontFamily: 'DMSans-Regular', marginTop: SPACING.xs, marginLeft: rp(4), lineHeight: rf(15) },
 
-  // Date of birth — DD / MM / YYYY
-  // rs(36) used to clip "dd"/"mm" — two characters at FONT.md barely fit
-  // that width before any input padding even eats into it.
-  dobInput:        { fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, width: rs(44), padding: 0, textAlign: 'center' },
-  dobInputYear:     { flex: 1, fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.text, height: INPUT_HEIGHT, padding: 0, textAlign: 'center' },
-  dobSlash:        { color: THEME.textSecondary, fontSize: FONT.md, fontFamily: 'DMSans-Regular', marginHorizontal: rp(4) },
 
   // Password strength
   strengthContainer: { flexDirection: 'row', alignItems: 'center', marginTop: SPACING.sm, gap: SPACING.sm },
@@ -762,6 +685,10 @@ const styles = StyleSheet.create({
   strengthBar:       { flex: 1, height: rh(3), borderRadius: rh(2) },
   strengthLabel:     { fontSize: rf(11), fontWeight: '700', fontFamily: 'DMSans-Bold', width: rs(48), textAlign: 'right' },
 
+  adultRow:         { flexDirection: 'row', alignItems: 'flex-start', gap: rp(10), marginTop: SPACING.xs, marginBottom: SPACING.sm },
+  adultBox:         { width: rs(22), height: rs(22), borderRadius: rs(6), borderWidth: 1.5, borderColor: THEME.borderStrong, alignItems: 'center', justifyContent: 'center', marginTop: rp(1) },
+  adultBoxOn:       { backgroundColor: THEME.primary, borderColor: THEME.primary },
+  adultText:        { flex: 1, fontSize: rf(13), fontFamily: 'DMSans-Regular', color: THEME.textSecondary, lineHeight: rf(19) },
   submitBtn:        { height: BUTTON_HEIGHT, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.primary, marginTop: SPACING.sm, marginBottom: SPACING.lg, shadowColor: THEME.primary, shadowOffset: { width: 0, height: rh(8) }, shadowOpacity: 0.45, shadowRadius: rs(20), elevation: 10 },
   submitBtnDisabled:{ opacity: 0.55, shadowOpacity: 0 },
   submitBtnText:    { color: '#fff', fontSize: FONT.lg, fontWeight: '700', fontFamily: 'DMSans-Bold', letterSpacing: rs(0.3) },

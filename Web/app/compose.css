@@ -97,3 +97,7 @@
 .cx-sound { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
 .cx-sound small { color: var(--muted); font-size: 12px; text-transform: capitalize; }
 .cx-hear { padding: 9px 12px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--rose); font-weight: 600; font-size: 12px; cursor: pointer; }
+
+/* hookup guided form: "I'm 24 years old, looking for 30 to 35" */
+.gc-ages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 18px 0 6px; font-size: 17px; line-height: 1.4; }
+.gc-ages .hk-field { width: 64px; text-align: center; padding-left: 0; padding-right: 0; }

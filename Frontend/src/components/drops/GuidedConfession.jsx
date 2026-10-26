@@ -39,6 +39,8 @@ import T from '../../utils/theme';
 const POST_COST = 3;
 export const GUIDED_SAVE_KEY = 'anonixx.drops.guided.v1';
 const SAVE_KEY = GUIDED_SAVE_KEY;
+// The poster's own age, remembered after their first hookup post so it's filled in next time.
+const MY_AGE_KEY = 'anonixx.hookup.age';
 const MAX_CHARS = 500;
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
@@ -53,7 +55,7 @@ const HOSTING_TAG = { can_host: 'can host', can_travel: 'can travel', either: 'h
 
 const STEPS = [
   { q: "What have you been craving lately?", sub: 'No one sees this part. Just be honest.' },
-  { q: 'Who would you love to find?', sub: 'Who, and where they can find you.' },
+  { q: 'Who would you love to find?', sub: 'Your age, theirs, and where they can find you.' },
   { q: 'What makes you, you?', sub: 'Pick up to three. Only what feels true.' },
   { q: "Tell us something they wouldn't know about you.", sub: 'A small, real thing. It is what makes yours different from everyone else\'s.' },
   { q: "If the chemistry feels right, what's possible?", sub: 'Only what you are comfortable with. You can change your mind later.' },
@@ -83,19 +85,28 @@ function stepProblem(i, a) {
   if (i === 0) return !a.craving || (a.craving === 'custom' && !a.cravingCustom.trim()) ? 'Pick one, or say it in your own words.' : '';
   if (i === 1) {
     if (!a.area.trim()) return 'Add where you are.';
-    const lo = Number(a.ageMin), hi = Number(a.ageMax);
-    if ((a.ageMin && lo < 18) || (a.ageMax && hi < 18)) return 'Everyone here is 18+, so start at 18.';
-    if (a.ageMin && a.ageMax && lo > hi) return 'The youngest age is higher than the oldest.';
-    return '';
-  }
-  if (i === 2) {
     const age = Number(a.age);
     if (!a.age) return 'Add your age.';
     if (age < 18) return 'You have to be 18 or older to post here.';
     if (age > 99) return 'Enter a real age.';
+    const lo = Number(a.ageMin), hi = Number(a.ageMax);
+    if ((a.ageMin && lo < 18) || (a.ageMax && hi < 18)) return 'Everyone here is 18+, so start at 18.';
+    if (a.ageMin && a.ageMax && lo > hi) return 'The first age is higher than the second.';
+    return '';
   }
   return '';
 }
+
+// The age they want: one age ("30") or a range ("28–35"). One box filled = that exact age.
+const wantedRange = (a) => {
+  const lo = a.ageMin ? Number(a.ageMin) : null;
+  const hi = a.ageMax ? Number(a.ageMax) : null;
+  return [lo ?? hi, hi ?? lo];
+};
+const wantedTag = (a) => {
+  const [lo, hi] = wantedRange(a);
+  return lo == null ? '' : lo === hi ? ` ${lo}` : ` ${lo}–${hi}`;
+};
 
 async function authedFetch(path, body) {
   const token = await AsyncStorage.getItem('token');
@@ -177,6 +188,8 @@ export default function GuidedConfession({ navigation, onBack }) {
         if (typeof saved?.aiText === 'string') setAiText(saved.aiText);
         if (typeof saved?.tone === 'string') setTone(saved.tone);
         if (Array.isArray(saved?.drafts)) setDrafts(saved.drafts.slice(-4));
+        const myAge = await AsyncStorage.getItem(MY_AGE_KEY);
+        if (myAge && /^\d{2}$/.test(myAge)) setA((cur) => (cur.age ? cur : { ...cur, age: myAge }));
       } catch { /* corrupt or missing: start fresh */ }
       setReady(true);
     })();
@@ -237,8 +250,8 @@ export default function GuidedConfession({ navigation, onBack }) {
         gender: a.gender,
         area: a.area.trim(),
         looking_for: a.lookingFor,
-        age_min: a.ageMin ? Number(a.ageMin) : null,
-        age_max: a.ageMax ? Number(a.ageMax) : null,
+        age_min: wantedRange(a)[0],
+        age_max: wantedRange(a)[1],
         connection: a.connection,
         traits: a.traits,
         secret: a.secret.trim() || null,
@@ -281,8 +294,7 @@ export default function GuidedConfession({ navigation, onBack }) {
           ...(a.gender ? { gender: a.gender } : {}),
           area: a.area.trim(),
           looking_for: a.lookingFor,
-          ...(a.ageMin ? { age_min: Number(a.ageMin) } : {}),
-          ...(a.ageMax ? { age_max: Number(a.ageMax) } : {}),
+          ...(wantedRange(a)[0] ? { age_min: wantedRange(a)[0], age_max: wantedRange(a)[1] } : {}),
           vibes: a.connection,
           guided: {
             craving: a.craving === 'custom' ? null : a.craving,
@@ -309,6 +321,7 @@ export default function GuidedConfession({ navigation, onBack }) {
       }
       if (!res.ok) throw new Error(detailText(data, `Server error ${res.status}`));
       await AsyncStorage.removeItem(SAVE_KEY);
+      AsyncStorage.setItem(MY_AGE_KEY, a.age).catch(() => {});
       showToast({ type: 'success', title: 'Dropped.', message: 'Someone out there is about to read your secret.' });
       dispatch(awardMilestone('first_drop'));
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
@@ -327,7 +340,7 @@ export default function GuidedConfession({ navigation, onBack }) {
   const tags = [
     `${a.age || '—'}${a.gender && a.gender !== 'other' ? ` · ${a.gender}` : ''}`,
     a.area.trim() || null,
-    `into ${a.lookingFor === 'anyone' ? 'anyone' : a.lookingFor === 'woman' ? 'women' : 'men'}${a.ageMin || a.ageMax ? ` ${a.ageMin || 18}–${a.ageMax || '99'}` : ''}`,
+    `into ${a.lookingFor === 'anyone' ? 'anyone' : a.lookingFor === 'woman' ? 'women' : 'men'}${wantedTag(a)}`,
     HOSTING_TAG[a.hosting] || null,
     a.publicFirst ? 'public first' : null,
   ].filter(Boolean);
@@ -356,12 +369,15 @@ export default function GuidedConfession({ navigation, onBack }) {
           <View style={s.chips}>
             {LOOKING.map(([k, l]) => <Chip key={k} label={l} active={a.lookingFor === k} onPress={() => set({ lookingFor: k })} />)}
           </View>
-          <Label optional>Aged</Label>
-          <View style={s.rangeRow}>
-            <Field style={s.rangeField} value={a.ageMin} onChangeText={(v) => set({ ageMin: digits(v) })} placeholder="18" keyboardType="number-pad" />
-            <Text style={s.rangeTo}>to</Text>
-            <Field style={s.rangeField} value={a.ageMax} onChangeText={(v) => set({ ageMax: digits(v) })} placeholder="99" keyboardType="number-pad" />
+          <View style={s.ages}>
+            <Text style={s.agesText}>I'm</Text>
+            <Field style={s.rangeField} value={a.age} onChangeText={(v) => set({ age: digits(v) })} placeholder="24" keyboardType="number-pad" accessibilityLabel="Your age" />
+            <Text style={s.agesText}>years old, looking for</Text>
+            <Field style={s.rangeField} value={a.ageMin} onChangeText={(v) => set({ ageMin: digits(v) })} placeholder="30" keyboardType="number-pad" accessibilityLabel="The age you're looking for" />
+            <Text style={s.agesText}>to</Text>
+            <Field style={s.rangeField} value={a.ageMax} onChangeText={(v) => set({ ageMax: digits(v) })} placeholder="any" keyboardType="number-pad" accessibilityLabel="Up to this age (optional)" />
           </View>
+          <Text style={s.hint}>Your age shows on your card. Fill one box for one age, both for a range, or leave theirs empty for anyone 18+.</Text>
           <Label>Where they can find you</Label>
           <Field
             icon={<MapPin size={rs(16)} color={T.textSecondary} />}
@@ -378,11 +394,9 @@ export default function GuidedConfession({ navigation, onBack }) {
       );
       case 2: return (
         <View style={s.group}>
-          <View style={s.youRow}>
-            <Field style={s.ageField} value={a.age} onChangeText={(v) => set({ age: digits(v) })} placeholder="Age" keyboardType="number-pad" />
-            <View style={[s.chips, { flex: 1 }]}>
-              {GENDERS.map(([k, l]) => <Chip key={k} label={l} active={a.gender === k} onPress={() => set({ gender: a.gender === k ? null : k })} />)}
-            </View>
+          <Label optional>I am</Label>
+          <View style={s.chips}>
+            {GENDERS.map(([k, l]) => <Chip key={k} label={l} active={a.gender === k} onPress={() => set({ gender: a.gender === k ? null : k })} />)}
           </View>
           <Label optional>{`I'm  ·  ${a.traits.length}/3`}</Label>
           <View style={s.chips}>
@@ -608,6 +622,8 @@ const s = StyleSheet.create({
   },
   fieldInput: { flex: 1, color: T.text, fontFamily: 'DMSans-Regular', fontSize: FONT.md, paddingVertical: rp(12) },
   rangeRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  ages: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm },
+  agesText: { color: T.text, fontFamily: 'DMSans-Regular', fontSize: FONT.md },
   rangeField: { width: rs(76) },
   rangeTo: { color: T.textSecondary, fontFamily: 'DMSans-Regular', fontSize: FONT.sm },
   youRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },

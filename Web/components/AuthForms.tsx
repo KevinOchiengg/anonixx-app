@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import GoogleButton, { GOOGLE_CLIENT_ID } from "./GoogleButton";
 import {
-  AuthHead, AuthShell, Field, IcCake, IcCheck, IcGift, IcLock, IcMail, IcUser,
+  AuthHead, AuthShell, Field, IcCheck, IcGift, IcLock, IcMail, IcUser,
   PasswordInput, StrengthMeter, SubmitButton,
 } from "./AuthUI";
 
@@ -41,42 +41,6 @@ function loginError(msg: string) {
   if (m.includes("not found") || m.includes("invalid") || m.includes("incorrect")) return "Incorrect email or password.";
   if (m.includes("network") || m.includes("fetch")) return "Check your internet and try again.";
   return msg || "Something went wrong. Please try again.";
-}
-
-type Dob = { d: string; m: string; y: string };
-type DobErr = string;
-
-function checkDob({ d, m, y }: Dob): DobErr {
-  if (!d || !m || !y) return "Date of birth is required";
-  const day = +d, month = +m, year = +y;
-  const date = new Date(year, month - 1, day);
-  if (!(day >= 1 && day <= 31) || !(month >= 1 && month <= 12) || !(year >= 1900 && year <= new Date().getFullYear()) || date.getMonth() !== month - 1) {
-    return "Enter a valid date";
-  }
-  const t = new Date();
-  let age = t.getFullYear() - year;
-  if (t.getMonth() < month - 1 || (t.getMonth() === month - 1 && t.getDate() < day)) age--;
-  return age < 18 ? "Anonixx is for adults 18+" : "";
-}
-const dobIso = ({ d, m, y }: Dob) => `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-
-/** dd / mm / yyyy, moving to the next box as each fills (like the app). */
-function DobField({ value, onChange, error }: { value: Dob; onChange: (v: Dob) => void; error?: string }) {
-  const mRef = useRef<HTMLInputElement>(null);
-  const yRef = useRef<HTMLInputElement>(null);
-  const num = (v: string, n: number) => v.replace(/\D/g, "").slice(0, n);
-  return (
-    <Field label="Date of birth" icon={<IcCake />} error={error} rowClass="au-dob" hint="Just for age checks. Anonixx is 18+ only, and this is never shown to anyone.">
-        <input inputMode="numeric" placeholder="dd" aria-label="Day" autoComplete="bday-day" value={value.d}
-          onChange={(e) => { const d = num(e.target.value, 2); onChange({ ...value, d }); if (d.length === 2) mRef.current?.focus(); }} />
-        <span>/</span>
-        <input ref={mRef} inputMode="numeric" placeholder="mm" aria-label="Month" autoComplete="bday-month" value={value.m}
-          onChange={(e) => { const m = num(e.target.value, 2); onChange({ ...value, m }); if (m.length === 2) yRef.current?.focus(); }} />
-        <span>/</span>
-        <input ref={yRef} className="yr" inputMode="numeric" placeholder="yyyy" aria-label="Year" autoComplete="bday-year" value={value.y}
-          onChange={(e) => onChange({ ...value, y: num(e.target.value, 4) })} />
-    </Field>
-  );
 }
 
 function GenderChips({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -140,7 +104,6 @@ function GoogleFinish({ hold, refCode, onBack }: { hold: GoogleHold; refCode: st
   const { googleLogin } = useAuth();
   const router = useRouter();
   const [username, setUsername] = useState("");
-  const [dob, setDob] = useState<Dob>({ d: "", m: "", y: "" });
   const [gender, setGender] = useState("");
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -153,14 +116,12 @@ function GoogleFinish({ hold, refCode, onBack }: { hold: GoogleHold; refCode: st
     const errs: Record<string, string> = {};
     const name = username.trim();
     if (name && !NAME_RE.test(name)) errs.username = "Letters, numbers, spaces, dots, hyphens, underscores or emoji, 3–30 characters.";
-    const de = checkDob(dob);
-    if (de) errs.dob = de;
     setErrors(errs);
     if (Object.keys(errs).length) return;
     setBusy(true);
     try {
       await googleLogin(hold.token, {
-        date_of_birth: dobIso(dob),
+        adult_confirmed: true,
         username: name || undefined,
         gender: gender || undefined,
         referral_code: refCode || undefined,
@@ -174,13 +135,12 @@ function GoogleFinish({ hold, refCode, onBack }: { hold: GoogleHold; refCode: st
 
   return (
     <AuthShell scroll>
-      <AuthHead title="One last thing" sub={`Signing up as ${hold.email}. Google doesn't tell us your age, and Anonixx is 18+.`} />
+      <AuthHead title="One last thing" sub={`Signing up as ${hold.email}. Pick a name and confirm you're 18+.`} />
       <form className="au-form" onSubmit={submit} noValidate>
         <Field label="Anonymous name" optional icon={<IcUser />} error={errors.username} hint="What everyone sees you as. Your Google name and photo are never shown. Skip it and we'll make one.">
           <input type="text" maxLength={30} autoComplete="off" placeholder="what should we call you?" value={username} onChange={(e) => setUsername(e.target.value.replace(/ {2,}/g, " "))} />
           {NAME_RE.test(username.trim()) ? <IcCheck /> : null}
         </Field>
-        <DobField value={dob} onChange={setDob} error={errors.dob} />
         <GenderChips value={gender} onChange={setGender} />
         <Terms agree={agree} setAgree={setAgree} />
         {error ? <div className="au-alert">{error}</div> : null}
@@ -253,7 +213,6 @@ export function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [dob, setDob] = useState<Dob>({ d: "", m: "", y: "" });
   const [gender, setGender] = useState("");
   const [refCode, setRefCode] = useState("");
   const [agree, setAgree] = useState(false);
@@ -285,8 +244,6 @@ export function SignupForm() {
     else if (password.length < 8) errs.password = "Minimum 8 characters";
     if (!confirm) errs.confirm = "Please confirm your password";
     else if (confirm !== password) errs.confirm = "Passwords do not match";
-    const de = checkDob(dob);
-    if (de) errs.dob = de;
     setErrors(errs);
     if (Object.keys(errs).length) { setError("Please fix the errors above."); return; }
     setBusy(true);
@@ -295,7 +252,7 @@ export function SignupForm() {
         email: em.toLowerCase(),
         password,
         username: name || undefined,
-        date_of_birth: dobIso(dob),
+        adult_confirmed: true,
         gender: gender || undefined,
         referral_code: refCode.trim() || undefined,
       });
@@ -313,7 +270,6 @@ export function SignupForm() {
         setErrors((p) => ({ ...p, username: msg }));
         setError(msg);
       } else if (m.includes("18+")) {
-        setErrors((p) => ({ ...p, dob: "Anonixx is for adults 18+" }));
         setError("Anonixx is for adults 18+.");
       } else {
         setError(m.includes("network") || m.includes("fetch") ? "Check your internet and try again." : msg || "Something went wrong. Please try again.");
@@ -345,7 +301,6 @@ export function SignupForm() {
         <Field label="Confirm password" icon={<IcLock />} error={errors.confirm}>
           <PasswordInput value={confirm} onChange={(v) => { setConfirm(v); clear("confirm"); }} placeholder="Re-enter your password" autoComplete="new-password" />
         </Field>
-        <DobField value={dob} onChange={(v) => { setDob(v); clear("dob"); }} error={errors.dob} />
         <GenderChips value={gender} onChange={setGender} />
         <Field label="Referral code" optional icon={<IcGift />}>
           <input type="text" autoComplete="off" maxLength={20} placeholder="e.g. ABC12XYZ" value={refCode}

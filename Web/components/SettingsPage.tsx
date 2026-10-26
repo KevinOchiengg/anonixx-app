@@ -18,7 +18,7 @@ function Inner() {
   const [name, setName] = useState(user?.anonymous_name || "");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
-  const [dob, setDob] = useState("");
+  const [adult, setAdult] = useState(false);
   const [delPw, setDelPw] = useState("");
   const [delOpen, setDelOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,7 +60,7 @@ function Inner() {
     e.preventDefault();
     say("");
     try {
-      await api("/users/me/verify-age", { body: { date_of_birth: dob } });
+      await api("/users/me/verify-age", { body: { adult_confirmed: true } });
       await refresh();
       say("Age confirmed. Mature posts are now available.");
     } catch (x) {
@@ -126,10 +126,11 @@ function Inner() {
 
       {!user.age_verified ? (
         <form className="form" onSubmit={verifyAge}>
-          <label className="field">Confirm you&apos;re 18+ to see mature posts
-            <input type="date" required value={dob} onChange={(e) => setDob(e.target.value)} />
+          <label className="check">
+            <input type="checkbox" required checked={adult} onChange={(e) => setAdult(e.target.checked)} />
+            <span>I&apos;m 18 or older. Show me mature posts.</span>
           </label>
-          <button className="btn ghost">Confirm age</button>
+          <button className="btn ghost" disabled={!adult}>Confirm</button>
         </form>
       ) : null}
 

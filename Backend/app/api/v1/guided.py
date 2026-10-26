@@ -86,11 +86,14 @@ async def generate(
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"age_verified": 1, "is_admin": 1})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if not user.get("age_verified") and not user.get("is_admin"):
-        raise HTTPException(status_code=403, detail=AGE_GATE_DETAIL)
-
     if data.age < 18 or data.age > 99:
         raise HTTPException(status_code=400, detail="You must be 18 or older to post a hookup confession.")
+    if not user.get("age_verified") and not user.get("is_admin"):
+        # Same as POST /drops: the age typed in the guided form confirms an older account.
+        await db["users"].update_one(
+            {"_id": user["_id"]},
+            {"$set": {"age_verified": True, "age_attested": "hookup_age"}},
+        )
     area = " ".join(data.area.split())
     if not area:
         raise HTTPException(status_code=400, detail="Add where you are.")
