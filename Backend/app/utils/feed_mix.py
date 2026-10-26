@@ -19,7 +19,8 @@ Cursor format:  "m=<iso>|<oid>;t=<iso>|<oid>;p=<n>"  (+ "l=", "g=", "q=" when lo
   q            -> position inside the local/global text pattern
 A legacy single cursor ("<iso>|<oid>") is read as both streams at that point.
 """
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 from typing import Optional
 
 from bson import ObjectId
@@ -178,6 +179,42 @@ def splice_promoted(page: list, promoted: list) -> list:
         out.insert(min(len(pinned) + slot, len(out)), d)
     out.extend(boosted[len(BOOST_SLOTS):])
     return out
+
+
+# Showcase: a first-time visitor's first page opens on a few of the best recent
+# drops instead of whatever happens to be newest. Picked at random from the top
+# of the pool, so different visitors (and the same one coming back) see different
+# strong drops. Ranked by interactions per view once a drop has enough views to
+# judge; until then by raw interactions.
+SHOWCASE_COUNT = 3
+SHOWCASE_POOL = 12
+SHOWCASE_DAYS = 14
+SHOWCASE_MIN_VIEWS = 20
+
+
+def _showcase_score(d: dict) -> tuple:
+    acts = (d.get("likes_count") or 0) + (d.get("thread_count") or 0) + (d.get("saves_count") or 0) + (d.get("unlock_count") or 0)
+    views = d.get("views_count") or 0
+    judged = views >= SHOWCASE_MIN_VIEWS
+    return (judged, acts / views if judged else acts, acts)
+
+
+async def fetch_showcase(db, base_query: dict, now: datetime) -> list:
+    since = now - timedelta(days=SHOWCASE_DAYS)
+    query = {"$and": [base_query, {"created_at": {"$gte": since}}]}
+    rows = await db["drops"].find(query).sort([("likes_count", -1), ("created_at", -1)]).limit(200).to_list(None)
+    # Something has to have happened on a drop for it to count as one of the best.
+    rows = [d for d in rows if _showcase_score(d)[2] > 0]
+    if not rows:
+        return []
+    pool = sorted(rows, key=_showcase_score, reverse=True)[:SHOWCASE_POOL]
+    return random.sample(pool, min(SHOWCASE_COUNT, len(pool)))
+
+
+def splice_showcase(page: list, showcase: list) -> list:
+    """Lead with the showcase drops, then the page without repeats of them."""
+    ids = {d["_id"] for d in showcase}
+    return list(showcase) + [d for d in page if d["_id"] not in ids]
 
 
 def reslot(page: list, shuffled: list) -> list:

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from app.database import get_database
 from app.api.v1.drops import batch_format_drops, live_filter
 from app.utils.content_mode import SAFE_FILTER
-from app.utils.feed_mix import fetch_mixed, not_promoted, fetch_promoted, splice_promoted
+from app.utils.feed_mix import fetch_mixed, not_promoted, fetch_promoted, splice_promoted, fetch_showcase, splice_showcase
 from app.tasks import scheduled_publisher
 from app.utils.countries import country_from_header
 
@@ -52,6 +52,9 @@ async def public_feed(
         db, {"$and": [query, not_promoted(now)]}, limit, cursor, country_from_header(x_country),
     )
     if not cursor:
+        # First page: pinned/boosted drops, then a rotating few of the best recent ones,
+        # so a newcomer's first look is strong content, not just the latest post.
+        page = splice_showcase(page, await fetch_showcase(db, {"$and": [query, not_promoted(now)]}, now))
         page = splice_promoted(page, await fetch_promoted(db, query, now))
 
     posts = [_public_post(p) for p in await batch_format_drops(page, None, db)]
