@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import { Badge, fmtDate } from "@/components/admin/bits";
+import AdminMedia from "@/components/admin/AdminMedia";
 
 type Ad = {
   id: string; title: string; media_url: string | null; media_type: string; link_url: string;
@@ -43,7 +44,7 @@ export default function AdminAds() {
               {ad.media_url && (ad.media_type === "image" || ad.media_type === "gif" || !ad.media_type) ? (
                 <Image src={ad.media_url} alt="" className="adm-cover" width={800} height={450} sizes="100vw" />
               ) : ad.media_url ? (
-                <a href={ad.media_url} target="_blank" rel="noopener noreferrer" className="adm-clip">{(ad.media_type || "media").toUpperCase()} attached — open</a>
+                <AdminMedia media={{ media_type: ad.media_type, media_url: ad.media_url, images: null, cover_url: null }} open />
               ) : null}
               <b>{ad.title}</b>
               <a href={ad.link_url} target="_blank" rel="noopener noreferrer nofollow" className="adm-clip small">{ad.link_url}</a>

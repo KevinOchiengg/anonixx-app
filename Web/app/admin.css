@@ -271,3 +271,6 @@
 .adm-media-audio { width: 100%; max-width: 360px; }
 .adm-media-photos { display: flex; gap: 8px; overflow-x: auto; max-width: 100%; }
 .adm-media-photos img { height: 160px; border-radius: 10px; object-fit: cover; display: block; }
+.adm-media-thumb { padding: 0; border: 0; background: none; cursor: zoom-in; flex: none; }
+.adm-modal > .adm-lightbox { width: auto; max-width: min(92vw, 900px); justify-items: center; }
+.adm-lightbox img { max-width: 100%; max-height: 75vh; border-radius: 12px; object-fit: contain; display: block; }

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
@@ -138,7 +139,7 @@ export default function AdminPosts() {
                           ? <button className="adm-btn" disabled={busy === d.id} onClick={() => promote(d.id, null)}>Stop {d.promo_kind === "pin" ? "pin" : "boost"}</button>
                           : <button className="adm-btn" disabled={busy === d.id} onClick={() => setPromoting({ id: d.id, kind: "pin", hours: 24 })}>Pin / boost</button>
                       ) : null}
-                      <a className="adm-btn" href={`/drop/${d.id}`} target="_blank" rel="noreferrer" title="Open the post as people see it">View post ↗</a>
+                      <Link className="adm-btn" href={`/drop/${d.id}`} title="Open the post as people see it">View post</Link>
                       <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>
                     </>
                   )}

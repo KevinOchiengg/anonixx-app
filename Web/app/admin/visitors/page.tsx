@@ -109,7 +109,7 @@ function PageDetail({ path, days, onClose, onPick }: { path: string; days: numbe
             <p className="muted small">{days === 1 ? "Today" : `Last ${days} days`}</p>
           </div>
           <div className="adm-chips">
-            <a href={path} target="_blank" rel="noreferrer" className="adm-btn">Open page ↗</a>
+            <Link href={path} className="adm-btn">Open page</Link>
             <button type="button" className="adm-btn" onClick={onClose}>Close</button>
           </div>
         </div>
@@ -289,7 +289,7 @@ export default function VisitorsPage() {
                   <li key={d.id || d.teaser}>
                     <span>
                       {d.id ? <button type="button" className="adm-linkbtn" onClick={() => pick(`/drop/${d.id}`)}>{d.teaser}</button> : d.teaser}
-                      {d.id ? <Link href={`/drop/${d.id}`} target="_blank" className="muted small" aria-label="Open drop"> ↗</Link> : null}
+                      {d.id ? <Link href={`/drop/${d.id}`} className="muted small" aria-label="Open drop"> open</Link> : null}
                       <small className="muted"> · {d.kind}{d.mood ? ` · ${d.mood}` : ""}</small>
                     </span>
                     <b>{d.views}</b><small>{d.visitors} ppl</small>

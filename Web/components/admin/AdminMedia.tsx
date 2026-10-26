@@ -39,6 +39,7 @@ function Clip({ src, poster }: { src: string; poster?: string | null }) {
  */
 export default function AdminMedia({ media, open: forceOpen = false }: { media: DropMedia; open?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [viewing, setViewing] = useState<number | null>(null);
   const { media_type: type, media_url: url, images, cover_url: cover } = media;
   const photos = images?.length ? images : type === "image" && url ? [url] : [];
   if (!url && !photos.length) return null;
@@ -61,11 +62,30 @@ export default function AdminMedia({ media, open: forceOpen = false }: { media: 
       {photos.length && type !== "video" ? (
         <div className="adm-media-photos">
           {photos.map((p, i) => (
-            <a key={p + i} href={p} target="_blank" rel="noreferrer"><img src={p} alt={`Photo ${i + 1}`} loading="lazy" /></a>
+            <button type="button" key={p + i} className="adm-media-thumb" onClick={() => setViewing(i)} aria-label={`View photo ${i + 1}`}>
+              <img src={p} alt={`Photo ${i + 1}`} loading="lazy" />
+            </button>
           ))}
         </div>
       ) : null}
       {!forceOpen ? <button type="button" className="adm-linkbtn small" onClick={() => setOpen(false)}>Hide</button> : null}
+      {viewing !== null && photos[viewing] ? (
+        <div className="adm-modal" onClick={() => setViewing(null)}>
+          <div className="adm-lightbox" onClick={(e) => e.stopPropagation()}>
+            <img src={photos[viewing]} alt={`Photo ${viewing + 1}`} />
+            <div className="adm-actions">
+              {photos.length > 1 ? (
+                <>
+                  <button type="button" className="adm-btn" onClick={() => setViewing((viewing + photos.length - 1) % photos.length)}>‹ Previous</button>
+                  <span className="muted small">{viewing + 1} / {photos.length}</span>
+                  <button type="button" className="adm-btn" onClick={() => setViewing((viewing + 1) % photos.length)}>Next ›</button>
+                </>
+              ) : null}
+              <button type="button" className="adm-btn" onClick={() => setViewing(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
