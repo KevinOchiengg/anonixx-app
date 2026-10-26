@@ -34,6 +34,15 @@ type Journey = {
   events: { type: string; path: string; created_at: string; q?: string; target?: string; ms?: number; ref?: string; results?: number }[];
 };
 
+type PageStats = {
+  path: string; days: number;
+  summary: { views: number; visitors: number; landings: number; avg_seconds: number; exit_rate: number };
+  series: { labels: string[]; visitors: number[]; views: number[] };
+  referrers: Row[]; countries: Row[]; devices: Row[]; clicks: Row[]; searches: Row[];
+  came_from: Row[]; went_to: Row[];
+  drop: { teaser: string; kind: string; mood: string | null; created_at: string | null } | null;
+};
+
 const RANGES = [1, 7, 30, 90] as const;
 
 const flag = (cc?: string | null) =>
@@ -49,7 +58,9 @@ const ago = (iso?: string | null) => {
   return m < 1 ? "now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
 };
 
-function Bars({ rows, color, label, empty }: { rows: Row[]; color?: string; label?: (k: string) => React.ReactNode; empty: string }) {
+function Bars({ rows, color, label, empty, onPick }: {
+  rows: Row[]; color?: string; label?: (k: string) => React.ReactNode; empty: string; onPick?: (k: string) => void;
+}) {
   if (!rows.length) return <p className="adm-empty">{empty}</p>;
   const max = Math.max(...rows.map((r) => r.count), 1);
   return (
@@ -57,12 +68,90 @@ function Bars({ rows, color, label, empty }: { rows: Row[]; color?: string; labe
       {rows.map((r) => (
         <li key={r.key}>
           <i style={{ width: `${(100 * r.count) / max}%` }} />
-          <span title={r.key}>{label ? label(r.key) : r.key}</span>
+          <span title={r.key}>
+            {onPick
+              ? <button type="button" className="adm-linkbtn" onClick={() => onPick(r.key)}>{label ? label(r.key) : r.key}</button>
+              : label ? label(r.key) : r.key}
+          </span>
           <b>{r.count}</b>
           {r.visitors !== undefined ? <small>{r.visitors} ppl</small> : null}
         </li>
       ))}
     </ul>
+  );
+}
+
+/** A page path that opens its own stats. */
+function PageLink({ path, onPick }: { path?: string | null; onPick: (p: string) => void }) {
+  if (!path) return <>—</>;
+  return <button type="button" className="adm-linkbtn" onClick={() => onPick(path)} title="See this page's stats">{path}</button>;
+}
+
+function PageDetail({ path, days, onClose, onPick }: { path: string; days: number; onClose: () => void; onPick: (p: string) => void }) {
+  const [d, setD] = useState<PageStats | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    setD(null);
+    setError("");
+    api<PageStats>(`/admin/visitors/page?path=${encodeURIComponent(path)}&days=${days}`)
+      .then((r) => { if (live) setD(r); })
+      .catch((e) => { if (live) setError((e as Error).message); });
+    return () => { live = false; };
+  }, [path, days]);
+
+  return (
+    <div className="adm-modal" onClick={onClose}>
+      <div className="adm-pagedetail" onClick={(e) => e.stopPropagation()}>
+        <div className="adm-panel-head">
+          <div>
+            <h3 className="adm-clip">{path}</h3>
+            <p className="muted small">{days === 1 ? "Today" : `Last ${days} days`}</p>
+          </div>
+          <div className="adm-chips">
+            <a href={path} target="_blank" rel="noreferrer" className="adm-btn">Open page ↗</a>
+            <button type="button" className="adm-btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+        {error ? <p className="err">{error}</p> : !d ? <p className="muted small">Loading…</p> : (
+          <>
+            {d.drop ? (
+              <p className="adm-note">“{d.drop.teaser}”<br /><small className="muted">{d.drop.kind}{d.drop.mood ? ` · ${d.drop.mood}` : ""}</small></p>
+            ) : null}
+            <div className="adm-kpis">
+              {([
+                ["Views", d.summary.views],
+                ["Visitors", d.summary.visitors],
+                ["Avg time", dur(d.summary.avg_seconds)],
+                ["Landed here first", d.summary.landings],
+                ["Left the site here", `${d.summary.exit_rate}%`],
+              ] as [string, string | number][]).map(([l, v]) => (
+                <div key={l} className="adm-kpi" style={{ "--k": "#3B82F6" } as React.CSSProperties}>
+                  <span className="v">{v}</span><span className="l">{l}</span>
+                </div>
+              ))}
+            </div>
+            <LineChart
+              labels={d.series.labels}
+              height={180}
+              series={[
+                { name: "Visitors", color: "#3B82F6", values: d.series.visitors },
+                { name: "Views", color: "#FF634A", values: d.series.views },
+              ]}
+            />
+            <div className="adm-pd-grid">
+              <div><h3>Came from</h3><Bars rows={d.came_from} color="#8B5CF6" empty="Mostly arrived here first." onPick={onPick} /></div>
+              <div><h3>Went next</h3><Bars rows={d.went_to} color="#34d399" empty="Nobody moved on yet." onPick={onPick} /></div>
+              <div><h3>Sites that sent people</h3><Bars rows={d.referrers} color="#34d399" empty="Direct visits only." /></div>
+              <div><h3>Clicked here</h3><Bars rows={d.clicks} color="#8B5CF6" empty="No key clicks yet." /></div>
+              <div><h3>Countries</h3><Bars rows={d.countries} color="#3B82F6" label={(k) => `${flag(k)} ${country(k)}`} empty="—" /></div>
+              <div><h3>Devices</h3><Bars rows={d.devices} color="#F59E0B" empty="—" /></div>
+              {d.searches.length ? <div><h3>Searched here</h3><Bars rows={d.searches} color="#8B5CF6" empty="" /></div> : null}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -72,6 +161,8 @@ export default function VisitorsPage() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Journey | null>(null);
+  const [page, setPage] = useState<string | null>(null);
+  const pick = (p: string) => { setOpen(null); setPage(p); };
 
   useEffect(() => {
     if (!isSuper) return;
@@ -124,7 +215,7 @@ export default function VisitorsPage() {
             {data.live.length ? (
               <ul className="adm-bars">
                 {data.live.slice(0, 6).map((l) => (
-                  <li key={l.vid}><span>{flag(l.country)} {l.path}</span><small>{l.device}</small></li>
+                  <li key={l.vid}><span>{flag(l.country)} <PageLink path={l.path} onPick={pick} /></span><small>{l.device}</small></li>
                 ))}
               </ul>
             ) : null}
@@ -197,7 +288,8 @@ export default function VisitorsPage() {
                 {data.top_drops.map((d) => (
                   <li key={d.id || d.teaser}>
                     <span>
-                      {d.id ? <Link href={`/drop/${d.id}`} target="_blank">{d.teaser}</Link> : d.teaser}
+                      {d.id ? <button type="button" className="adm-linkbtn" onClick={() => pick(`/drop/${d.id}`)}>{d.teaser}</button> : d.teaser}
+                      {d.id ? <Link href={`/drop/${d.id}`} target="_blank" className="muted small" aria-label="Open drop"> ↗</Link> : null}
                       <small className="muted"> · {d.kind}{d.mood ? ` · ${d.mood}` : ""}</small>
                     </span>
                     <b>{d.views}</b><small>{d.visitors} ppl</small>
@@ -212,8 +304,8 @@ export default function VisitorsPage() {
             {data.interest_moods.length ? <><h3>Moods</h3><Bars rows={data.interest_moods} color="#F59E0B" empty="" /></> : null}
           </div>
 
-          <div className="adm-panel w6"><h3>Top pages</h3><Bars rows={data.pages} empty="No page views yet." /></div>
-          <div className="adm-panel w6"><h3>Where they land first</h3><Bars rows={data.landing} empty="No visits yet." /></div>
+          <div className="adm-panel w6"><h3>Top pages</h3><Bars rows={data.pages} empty="No page views yet." onPick={pick} /></div>
+          <div className="adm-panel w6"><h3>Where they land first</h3><Bars rows={data.landing} empty="No visits yet." onPick={pick} /></div>
 
           <div className="adm-panel w4">
             <h3>Where they come from</h3>
@@ -238,7 +330,7 @@ export default function VisitorsPage() {
           </div>
           <div className="adm-panel w6">
             <h3>Where they stay longest</h3>
-            <Bars rows={data.dwell.map((d) => ({ key: d.key, count: d.seconds }))} color="#34d399" label={(k) => k} empty="Not enough visits yet." />
+            <Bars rows={data.dwell.map((d) => ({ key: d.key, count: d.seconds }))} color="#34d399" label={(k) => k} empty="Not enough visits yet." onPick={pick} />
             <p className="muted small">Average seconds on the page, while the tab is open.</p>
           </div>
 
@@ -257,11 +349,11 @@ export default function VisitorsPage() {
                         </td>
                         <td>{flag(v.country)} {country(v.country)}</td>
                         <td>{v.device} · {v.browser}</td>
-                        <td>{v.first_ref || "direct"}<br /><small className="muted">{v.first_path}</small></td>
+                        <td>{v.first_ref || "direct"}<br /><small><PageLink path={v.first_path} onPick={pick} /></small></td>
                         <td>{v.views}</td>
                         <td>{v.sessions}</td>
                         <td title={fmtDate(v.last_seen)}>{ago(v.last_seen)}</td>
-                        <td>{v.last_path}</td>
+                        <td><PageLink path={v.last_path} onPick={pick} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -291,8 +383,8 @@ export default function VisitorsPage() {
                   <span>
                     {e.type === "search" ? `“${e.q || ""}”${e.results === 0 ? " · nothing found" : ""}`
                       : e.type === "click" ? e.target
-                      : e.type === "leave" ? `${e.path} · ${dur(Math.round((e.ms || 0) / 1000))}`
-                      : e.path}
+                      : e.type === "leave" ? <><PageLink path={e.path} onPick={pick} /> · {dur(Math.round((e.ms || 0) / 1000))}</>
+                      : <PageLink path={e.path} onPick={pick} />}
                     {e.ref ? <small> · from {e.ref}</small> : null}
                   </span>
                 </li>
@@ -301,6 +393,8 @@ export default function VisitorsPage() {
           </div>
         </div>
       ) : null}
+
+      {page ? <PageDetail path={page} days={days} onClose={() => setPage(null)} onPick={setPage} /> : null}
     </>
   );
 }

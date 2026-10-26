@@ -399,6 +399,99 @@ async def visitors_overview(
     }
 
 
+@router.get("/admin/visitors/page", summary="One page's stats: traffic, sources, clicks, where people go next (super admin)")
+async def page_detail(
+    path: str = Query(..., min_length=1, max_length=200),
+    days: int = Query(7, ge=1, le=180),
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    path = _path(path)
+    if not path:
+        raise HTTPException(400, "Invalid path")
+    now = _now()
+    since = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    base = {"created_at": {"$gte": since}}
+    here = {**base, "path": path}
+    views_m = {**here, "type": "view"}
+
+    views = await db[EVENTS].count_documents(views_m)
+    vids = await db[EVENTS].distinct("vid", views_m)
+    landings = await db[EVENTS].count_documents({**views_m, "landing": True})
+
+    daily = await db[EVENTS].aggregate([
+        {"$match": views_m},
+        {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
+                    "views": {"$sum": 1}, "v": {"$addToSet": "$vid"}}},
+    ]).to_list(None)
+    by_day = {d["_id"]: d for d in daily}
+    labels, s_visitors, s_views = [], [], []
+    for i in range(days):
+        day = (since + timedelta(days=i)).strftime("%Y-%m-%d")
+        labels.append(day[5:])
+        d = by_day.get(day)
+        s_visitors.append(len(d["v"]) if d else 0)
+        s_views.append(d["views"] if d else 0)
+
+    dwell = await db[EVENTS].aggregate([
+        {"$match": {**here, "type": "leave"}},
+        {"$group": {"_id": "$sid", "ms": {"$sum": "$ms"}}},
+        {"$group": {"_id": None, "avg": {"$avg": "$ms"}}},
+    ]).to_list(1)
+
+    # Where people came from and went next, from the order of views in each visit.
+    sids = await db[EVENTS].distinct("sid", views_m)
+    came_from, went_to = defaultdict(int), defaultdict(int)
+    exits = 0
+    if sids:
+        trail = defaultdict(list)
+        async for e in db[EVENTS].find(
+            {"sid": {"$in": sids[:2000]}, "type": "view", **base}, {"sid": 1, "path": 1, "created_at": 1}
+        ).sort("created_at", 1):
+            trail[e["sid"]].append(e["path"])
+        for seq in trail.values():
+            for i, p in enumerate(seq):
+                if p != path:
+                    continue
+                if i > 0 and seq[i - 1] != path:
+                    came_from[seq[i - 1]] += 1
+                if i + 1 < len(seq):
+                    if seq[i + 1] != path:
+                        went_to[seq[i + 1]] += 1
+                else:
+                    exits += 1
+    top = lambda d, n=8: [{"key": k, "count": v} for k, v in sorted(d.items(), key=lambda x: -x[1])[:n]]
+
+    drop = None
+    m = DROP_PATH.match(path)
+    if m:
+        d = await db["drops"].find_one({"_id": ObjectId(m.group(1))}, {"confession": 1, "content": 1, "kind": 1, "mood_tag": 1, "created_at": 1})
+        if d:
+            text = d.get("confession") or d.get("content") or ""
+            drop = {"teaser": text[:200], "kind": d.get("kind") or "confession", "mood": d.get("mood_tag"), "created_at": d.get("created_at")}
+
+    return {
+        "path": path,
+        "days": days,
+        "summary": {
+            "views": views,
+            "visitors": len(vids),
+            "landings": landings,
+            "avg_seconds": round(dwell[0]["avg"] / 1000) if dwell and dwell[0].get("avg") else 0,
+            "exit_rate": round(100 * exits / views) if views else 0,
+        },
+        "series": {"labels": labels, "visitors": s_visitors, "views": s_views},
+        "referrers": await _group(db, views_m, "ref", 8),
+        "countries": await _group(db, views_m, "country", 8),
+        "devices": await _group(db, views_m, "device", 4),
+        "clicks": await _group(db, {**here, "type": "click"}, "target", 10),
+        "searches": await _group(db, {**here, "type": "search"}, "q", 10),
+        "came_from": top(came_from),
+        "went_to": top(went_to),
+        "drop": drop,
+    }
+
+
 @router.get("/admin/visitors/{vid}", summary="One visitor's journey (super admin)")
 async def visitor_journey(
     vid: str,
