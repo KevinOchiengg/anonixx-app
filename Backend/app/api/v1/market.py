@@ -36,6 +36,7 @@ from app.database import get_database
 from app.dependencies import get_current_user_id, require_admin, get_optional_user_id
 from app.utils.coin_service import debit_coins
 
+from app.dependencies import require_scope
 router = APIRouter(prefix="/market", tags=["Market"])
 
 
@@ -283,10 +284,10 @@ async def my_unlocks(
 
 # ─── Admin endpoints ──────────────────────────────────────────────────────────
 
-@router.post("/items", dependencies=[Depends(require_admin)])
+@router.post("/items", dependencies=[Depends(require_scope("content"))])
 async def create_market_item(
     data:     MarketItemCreate,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db            = Depends(get_database),
 ):
     """Admin: create a new market item."""
@@ -315,7 +316,7 @@ async def create_market_item(
     return _serialize(doc, full=True)
 
 
-@router.put("/items/{item_id}", dependencies=[Depends(require_admin)])
+@router.put("/items/{item_id}", dependencies=[Depends(require_scope("content"))])
 async def update_market_item(
     item_id: str,
     data:    MarketItemUpdate,
@@ -346,7 +347,7 @@ async def update_market_item(
     return _serialize(result, full=True)
 
 
-@router.delete("/items/{item_id}", dependencies=[Depends(require_admin)])
+@router.delete("/items/{item_id}", dependencies=[Depends(require_scope("content"))])
 async def archive_market_item(
     item_id: str,
     db        = Depends(get_database),
@@ -367,7 +368,7 @@ async def archive_market_item(
     return {"archived": True}
 
 
-@router.get("/admin/items", dependencies=[Depends(require_admin)])
+@router.get("/admin/items", dependencies=[Depends(require_scope("content"))])
 async def admin_list_all_items(
     db = Depends(get_database),
 ):

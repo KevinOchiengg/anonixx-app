@@ -81,6 +81,39 @@ function Bars({ rows, color, label, empty, onPick }: {
   );
 }
 
+type Best = { grid: number[][]; suggestions: { weekday: number; hour: number; visitors: number }[]; enough_data: boolean };
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** When visitors are on the site, by weekday and hour, in the admin's own time zone. */
+function BestTimes() {
+  const [d, setD] = useState<Best | null>(null);
+  useEffect(() => {
+    const tz = -new Date().getTimezoneOffset();
+    api<Best>(`/admin/insights/best-times?days=28&tz=${tz}`).then(setD).catch(() => {});
+  }, []);
+  if (!d) return null;
+  const max = Math.max(1, ...d.grid.flat());
+  return (
+    <div className="adm-panel">
+      <h3>When people are here</h3>
+      <p className="muted small">Visitors by weekday and hour over the last 4 weeks, in your time zone. Darker = busier. Schedule drops just before the busy hours.</p>
+      {!d.enough_data ? <p className="adm-empty">Not enough visits yet. This fills in as traffic grows.</p> : (
+        <>
+          <div className="adm-heat" role="img" aria-label="Visitors by weekday and hour">
+            <span />
+            {Array.from({ length: 24 }, (_, h) => <span key={h}>{h % 3 === 0 ? h : ""}</span>)}
+            {d.grid.map((row, wd) => [
+              <span key={`l${wd}`}>{DAYS[wd]}</span>,
+              ...row.map((n, h) => <i key={`${wd}-${h}`} style={{ "--v": n / max } as React.CSSProperties} title={`${DAYS[wd]} ${h}:00 · ${n} visitors`} />),
+            ])}
+          </div>
+          <p className="small">Busiest: {d.suggestions.slice(0, 3).map((s) => `${DAYS[s.weekday]} ${s.hour}:00`).join(" · ")}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** A page path that opens its own stats. */
 function PageLink({ path, onPick }: { path?: string | null; onPick: (p: string) => void }) {
   if (!path) return <>—</>;
@@ -277,6 +310,13 @@ export default function VisitorsPage() {
             <h3>Searched, found nothing</h3>
             <p className="muted small">Demand Anonixx doesn&apos;t meet yet: ideas for official drops.</p>
             <Bars rows={data.zero_result_searches} color="#ff5d6c" empty="Every search found something." />
+            {data.zero_result_searches.length ? (
+              <div className="adm-chips">
+                {data.zero_result_searches.slice(0, 6).map((z) => (
+                  <Link key={z.key} href={`/admin/post?topic=${encodeURIComponent(z.key)}`} className="adm-btn" title="Open the Post Studio with this topic">Draft “{z.key}”</Link>
+                ))}
+              </div>
+            ) : null}
             {data.search_themes.length ? <><h3>Themes picked</h3><Bars rows={data.search_themes} color="#FF6B8A" empty="" /></> : null}
             {data.search_places.length ? <><h3>Places searched</h3><Bars rows={data.search_places} color="#4FC3E8" empty="" /></> : null}
           </div>
@@ -333,6 +373,8 @@ export default function VisitorsPage() {
             <Bars rows={data.dwell.map((d) => ({ key: d.key, count: d.seconds }))} color="#34d399" label={(k) => k} empty="Not enough visits yet." onPick={pick} />
             <p className="muted small">Average seconds on the page, while the tab is open.</p>
           </div>
+
+          <BestTimes />
 
           <div className="adm-panel">
             <h3>Recent visitors</h3>

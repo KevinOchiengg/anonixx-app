@@ -14,6 +14,7 @@ import { API_URL, getToken, viewerCountry } from "./api";
 type Ev = Record<string, unknown> & { t: string; p: string };
 
 const VID_KEY = "anx_vid";
+const FIRST_KEY = "anx_first";   // first touch: where this browser first came from (sent with signup)
 const SID_KEY = "anx_sid";
 const SEEN_KEY = "anx_sid_at";
 const IDLE_MS = 30 * 60 * 1000;
@@ -49,6 +50,40 @@ function ids(): { vid: string; sid: string; fresh: boolean } | null {
   } catch {
     return null;   // storage blocked: don't track
   }
+}
+
+/** This browser's anonymous visitor id (null if storage is blocked). */
+export function visitorId(): string | null {
+  return ids()?.vid ?? null;
+}
+
+/** Remember the very first referrer / campaign / landing page, once per browser. */
+export function rememberFirstTouch(ref: string | undefined, utm: Record<string, string | null>) {
+  try {
+    if (localStorage.getItem(FIRST_KEY)) return;
+    let host = "";
+    try { host = ref ? new URL(ref).hostname.replace(/^www\./, "") : ""; } catch { /* bad referrer */ }
+    if (host.endsWith("anonixx.com")) host = "";
+    localStorage.setItem(FIRST_KEY, JSON.stringify({
+      ref: host || undefined,
+      utm_source: utm.source || undefined, utm_medium: utm.medium || undefined, utm_campaign: utm.campaign || undefined,
+      landing: location.pathname, at: Date.now(),
+    }));
+  } catch { /* storage blocked */ }
+}
+
+/** Where this person came from, for the signup request (POST /auth/register). */
+export function signupSource(): Record<string, string> {
+  const out: Record<string, string> = { platform: "web" };
+  try {
+    const first = JSON.parse(localStorage.getItem(FIRST_KEY) || "{}");
+    for (const k of ["ref", "utm_source", "utm_medium", "utm_campaign", "landing"]) {
+      if (typeof first[k] === "string" && first[k]) out[k] = first[k];
+    }
+    const vid = localStorage.getItem(VID_KEY);
+    if (vid) out.vid = vid;
+  } catch { /* storage blocked */ }
+  return out;
 }
 
 /** True when this page view starts a new session (it then carries referrer and UTM). */

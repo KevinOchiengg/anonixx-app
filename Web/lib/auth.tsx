@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, getToken, setAdultMode, setToken, type AuthUser } from "./api";
-import { track } from "./track";
+import { signupSource, track } from "./track";
 
 type AuthResponse = { access_token: string; user: AuthUser };
 
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [accept]);
 
   const signup = useCallback(async (input: SignupInput) => {
-    const body: Record<string, unknown> = { email: input.email, password: input.password, adult_confirmed: input.adult_confirmed };
+    const body: Record<string, unknown> = { email: input.email, password: input.password, adult_confirmed: input.adult_confirmed, signup_source: signupSource() };
     if (input.username) body.username = input.username;
     if (input.gender) body.gender = input.gender;
     if (input.referral_code) body.referral_code = input.referral_code;
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const googleLogin = useCallback(async (idToken: string, extra: GoogleExtra = {}): Promise<GoogleResult> => {
     const res = await api<AuthResponse | { needs_profile: true; email: string }>("/auth/google", {
-      body: { id_token: idToken, ...extra },
+      body: { id_token: idToken, ...extra, ...(extra.adult_confirmed ? { signup_source: signupSource() } : {}) },
     });
     if ("needs_profile" in res) return { status: "needs_profile", email: res.email };
     accept(res);

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { flush, startsSession, track, trackingAllowed } from "@/lib/track";
+import { flush, rememberFirstTouch, startsSession, track, trackingAllowed } from "@/lib/track";
 
 // Links worth knowing about when clicked: the doors into Anonixx.
 const KEY_PATHS = ["/signup", "/join", "/login", "/premium", "/coins", "/compose", "/whatsapp", "/search", "/market", "/vibe"];
@@ -39,6 +39,7 @@ export default function VisitTracker() {
     const fresh = startsSession();
     const q = new URLSearchParams(location.search);
     const utm = { source: q.get("utm_source"), medium: q.get("utm_medium"), campaign: q.get("utm_campaign") };
+    rememberFirstTouch(document.referrer || undefined, utm);
     track("view", fresh ? { l: 1, r: document.referrer || undefined, u: utm } : {});
     shown.current = { path, at: Date.now(), active: 0 };
   }, [path]);

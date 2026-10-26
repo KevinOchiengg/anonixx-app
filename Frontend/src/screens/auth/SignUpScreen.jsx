@@ -181,6 +181,7 @@ export default function SignUpScreen({ navigation }) {
         email:         formData.email.trim().toLowerCase(),
         password:      formData.password,
         adult_confirmed: true,
+        signup_source: { platform: Platform.OS },   // where they joined from (admin growth dashboard)
         ...(gender ? { gender } : {}),
       })).unwrap();
 

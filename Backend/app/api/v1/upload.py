@@ -7,6 +7,7 @@ import logging
 
 logger = logging.getLogger("uvicorn.error")
 
+from app.dependencies import require_scope
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 # No processing on this backend anymore (R2 is dumb storage), so these are
@@ -56,7 +57,7 @@ async def stream_status(_: str = Depends(get_current_user_id)):
 @router.post("/stream/tus", status_code=201)
 async def create_stream_upload(
     upload_length: int = Header(..., alias="Upload-Length"),
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
 ):
     """tus "creation" endpoint for the browser's uploader: reserves a one-time
     Stream upload and points the uploader at it via Location, so the file
@@ -73,7 +74,7 @@ async def create_stream_upload(
 
 
 @router.post("/stream/direct")
-async def create_stream_direct_upload(admin_id: str = Depends(require_admin)):
+async def create_stream_direct_upload(admin_id: str = Depends(require_scope("content"))):
     """Single-request upload URL (up to 200 MB) for the app, whose native file
     uploader posts the video as multipart field "file" straight to Stream."""
     if not stream.is_configured():

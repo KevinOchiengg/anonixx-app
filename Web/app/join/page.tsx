@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE_URL } from "@/lib/api";
+import ExpText from "@/components/ExpText";
 
 const DESCRIPTION =
   "Anonixx is the anonymous confession app. Say what you can't say out loud, stay hidden, and link up only if you both want to. 18+.";
@@ -54,7 +55,8 @@ export default function Join() {
   return (
     <main className="page legal join">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <h1>The anonymous confession app.</h1>
+      {/* A/B test "join_headline" on /admin/growth can swap this line; search engines see the default. */}
+      <h1><ExpText k="join_headline" fallback="The anonymous confession app." /></h1>
       <p>
         Say what you can&apos;t say out loud. Read what other people never would. Stay hidden the whole time, and link
         up only if you both want to.

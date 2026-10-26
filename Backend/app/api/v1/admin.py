@@ -10,6 +10,8 @@ from app.utils.coin_service import credit_coins
 from app.api.v1.drops import PROMO_KINDS, PROMO_HOURS
 from app.utils import stream
 
+from app.dependencies import require_scope
+from app.utils.audit import audit
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
@@ -195,7 +197,7 @@ async def get_user(
 @router.patch("/users/{user_id}/ban", summary="Toggle ban — sets is_active false/true")
 async def toggle_ban(
     user_id:  str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("moderation")),
     db=Depends(get_database),
 ):
     oid = await _guard_target(db, admin_id, user_id, "ban")
@@ -209,6 +211,7 @@ async def toggle_ban(
         {"_id": oid},
         {"$set": {"is_active": new_status, "updated_at": _now()}},
     )
+    await audit(db, admin_id, "user.ban_toggle", "user", user_id)
     return {
         "user_id":  user_id,
         "is_active": new_status,
@@ -219,7 +222,7 @@ async def toggle_ban(
 @router.patch("/users/{user_id}/verify", summary="Toggle verified badge")
 async def toggle_verify(
     user_id:  str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("moderation")),
     db=Depends(get_database),
 ):
     try:
@@ -236,6 +239,7 @@ async def toggle_verify(
         {"_id": oid},
         {"$set": {"is_verified": new_status, "updated_at": _now()}},
     )
+    await audit(db, admin_id, "user.verify_toggle", "user", user_id)
     return {"user_id": user_id, "is_verified": new_status}
 
 
@@ -256,6 +260,7 @@ async def toggle_admin_role(
         {"_id": oid},
         {"$set": {"is_admin": new_status, "updated_at": _now()}},
     )
+    await audit(db, admin_id, "user.admin_toggle", "user", user_id)
     return {"user_id": user_id, "is_admin": new_status}
 
 
@@ -274,6 +279,7 @@ async def delete_user(
     await db["refund_requests"].delete_many({"user_id": user_id})
     await db["users"].delete_one({"_id": oid})
 
+    await audit(db, admin_id, "user.delete", "user", user_id)
     return {"deleted": user_id, "drops_deleted": drops.deleted_count}
 
 
@@ -319,6 +325,7 @@ async def adjust_coins(
         })
 
     updated = await db["users"].find_one({"_id": oid}, {"coin_balance": 1})
+    await audit(db, admin_id, "user.coins", "user", user_id, {"amount": data.amount, "reason": data.reason})
     return {
         "user_id":     user_id,
         "adjustment":  data.amount,
@@ -332,7 +339,7 @@ async def adjust_coins(
 async def get_moderation_queue(
     skip:     int = Query(0,  ge=0),
     limit:    int = Query(20, ge=1, le=100),
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("moderation")),
     db=Depends(get_database),
 ):
     """
@@ -342,9 +349,11 @@ async def get_moderation_queue(
     """
     query  = {"moderation_status": {"$in": ["flagged", "hidden"]}}
     total  = await db["drops"].count_documents(query)
+    # Riskiest first (scored by app/tasks/admin_monitor.py -> services/risk_screen.py),
+    # unscored ones after, newest flag first within each.
     cursor = (
         db["drops"].find(query)
-        .sort("flagged_at", -1)
+        .sort([("risk_score", -1), ("flagged_at", -1)])
         .skip(skip)
         .limit(limit)
     )
@@ -361,9 +370,20 @@ async def get_moderation_queue(
             "moderation_status": d.get("moderation_status"),
             "flagged_at":        d["flagged_at"].isoformat() if d.get("flagged_at") else None,
             "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
+            "risk": {"score": d.get("risk_score"), "category": d.get("risk_category"),
+                     "reason": d.get("risk_reason"), "by": d.get("risk_by")} if d.get("risk_scored_at") else None,
         })
 
     return {"total": total, "skip": skip, "limit": limit, "drops": drops}
+
+
+@router.post("/moderation-queue/score", summary="Score flagged posts now instead of waiting for the monitor")
+async def score_queue_now(
+    admin_id: str = Depends(require_scope("moderation")),
+    db=Depends(get_database),
+):
+    from app.tasks.admin_monitor import score_flagged
+    return {"scored": await score_flagged(db, limit=25)}
 
 
 # How the admin Posts list can be ordered. "engagement" is interactions per view:
@@ -480,7 +500,7 @@ class AdminEditDropRequest(BaseModel):
 async def edit_admin_drop(
     drop_id:  str,
     data:     AdminEditDropRequest,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     text = data.confession.strip()
@@ -504,6 +524,7 @@ async def edit_admin_drop(
         {"_id": oid},
         {"$set": {"confession": text, "edited_at": _now(), "edited_by": admin_id}},
     )
+    await audit(db, admin_id, "drop.edit", "drop", drop_id)
     return {"drop_id": drop_id, "confession": text}
 
 
@@ -516,7 +537,7 @@ class PromoteRequest(BaseModel):
 async def promote_drop(
     drop_id:  str,
     data:     PromoteRequest,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     if data.kind not in PROMO_KINDS or data.hours not in PROMO_HOURS:
@@ -532,13 +553,14 @@ async def promote_drop(
         {"_id": oid},
         {"$set": {"promo_kind": data.kind, "promo_until": until, "promoted_by": admin_id}},
     )
+    await audit(db, admin_id, "drop.promote", "drop", drop_id)
     return {"drop_id": drop_id, "promo_kind": data.kind, "promo_until": until.isoformat()}
 
 
 @router.delete("/drops/{drop_id}/promote", summary="Stop pinning/boosting a post")
 async def unpromote_drop(
     drop_id:  str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     result = await db["drops"].update_one(
@@ -546,6 +568,7 @@ async def unpromote_drop(
     )
     if result.matched_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
+    await audit(db, admin_id, "drop.unpromote", "drop", drop_id)
     return {"drop_id": drop_id, "promo_kind": None}
 
 
@@ -606,7 +629,7 @@ def _scheduled_out(s: dict) -> dict:
 @router.post("/scheduled", summary="Schedule an admin drop to publish later")
 async def schedule_drop(
     data:     ScheduleRequest,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     from app.api.v1.drops import CreateDropRequest, clean_video_edit, MAX_CLIP_SECONDS
@@ -647,7 +670,7 @@ async def schedule_drop(
 @router.get("/scheduled/{schedule_id}", summary="One scheduled drop (the Post Studio polls this while a video finishes)")
 async def get_scheduled(
     schedule_id: str,
-    admin_id:    str = Depends(require_admin),
+    admin_id:    str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     from app.tasks.scheduled_publisher import publish_due_drops
@@ -662,7 +685,7 @@ async def get_scheduled(
 
 @router.get("/scheduled", summary="Upcoming scheduled drops, plus recent ones that published or failed")
 async def list_scheduled(
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     upcoming = await db["scheduled_drops"].find({"status": {"$in": ["processing", "pending", "publishing"]}}).sort("publish_at", 1).to_list(200)
@@ -674,7 +697,7 @@ async def list_scheduled(
 async def reschedule_drop(
     schedule_id: str,
     data:        RescheduleRequest,
-    admin_id:    str = Depends(require_admin),
+    admin_id:    str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     when = _check_publish_at(data.publish_at)
@@ -683,13 +706,14 @@ async def reschedule_drop(
     )
     if res.matched_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
+    await audit(db, admin_id, "scheduled.reschedule", "scheduled", schedule_id)
     return {"id": schedule_id, "publish_at": when.isoformat()}
 
 
 @router.post("/scheduled/{schedule_id}/publish-now", summary="Publish a scheduled drop immediately")
 async def publish_scheduled_now(
     schedule_id: str,
-    admin_id:    str = Depends(require_admin),
+    admin_id:    str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     from app.tasks.scheduled_publisher import publish_due_drops
@@ -701,13 +725,14 @@ async def publish_scheduled_now(
     if res.matched_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That drop isn't waiting to publish any more")
     await publish_due_drops(db)
+    await audit(db, admin_id, "scheduled.publish_now", "scheduled", schedule_id)
     return _scheduled_out(await db["scheduled_drops"].find_one({"_id": oid}))
 
 
 @router.delete("/scheduled/{schedule_id}", summary="Cancel a scheduled drop")
 async def cancel_scheduled(
     schedule_id: str,
-    admin_id:    str = Depends(require_admin),
+    admin_id:    str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     job = await db["scheduled_drops"].find_one_and_delete(
@@ -719,13 +744,14 @@ async def cancel_scheduled(
     s = job.get("stream") or {}
     await stream.delete_video(s.get("uid"))
     await stream.delete_video(s.get("clip_uid") or (job.get("drop") or {}).get("stream_uid"))
+    await audit(db, admin_id, "scheduled.cancel", "scheduled", schedule_id)
     return {"cancelled": schedule_id}
 
 
 @router.patch("/drops/{drop_id}/dismiss", summary="Clear a drop from the moderation queue without deleting it")
 async def dismiss_flagged_drop(
     drop_id:  str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("moderation")),
     db=Depends(get_database),
 ):
     try:
@@ -740,13 +766,14 @@ async def dismiss_flagged_drop(
     if result.matched_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
 
+    await audit(db, admin_id, "drop.dismiss", "drop", drop_id)
     return {"drop_id": drop_id, "moderation_status": "reviewed"}
 
 
 @router.delete("/drops/{drop_id}", summary="Force-delete a flagged drop (admin override, cascades)")
 async def force_delete_drop(
     drop_id:  str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("moderation")),
     db=Depends(get_database),
 ):
     try:
@@ -762,6 +789,7 @@ async def force_delete_drop(
     await db["drop_unlocks"].delete_many({"drop_id": drop_id})
     await db["drop_connections"].delete_many({"drop_id": drop_id})
 
+    await audit(db, admin_id, "drop.delete", "drop", drop_id)
     return {"deleted": drop_id}
 
 
@@ -769,7 +797,7 @@ async def force_delete_drop(
 
 @router.get("/revenue", summary="Revenue breakdown by payment method")
 async def get_revenue(
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("finance")),
     db=Depends(get_database),
 ):
     collections = await db.list_collection_names()
@@ -833,7 +861,7 @@ async def get_timeseries(
 async def list_coin_transactions(
     skip:     int = Query(0,  ge=0),
     limit:    int = Query(20, ge=1, le=100),
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("finance")),
     db=Depends(get_database),
 ):
     collections = await db.list_collection_names()

@@ -7,7 +7,10 @@ import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 type D = DropMedia & {
   id: string; sender_id: string | null; confession: string; media_type: string | null;
   report_count: number; moderation_status: string | null; flagged_at: string | null; created_at: string | null;
+  risk: { score: number; category: string; reason: string; by: "ai" | "rules" } | null;
 };
+
+const riskTone = (n: number) => (n >= 70 ? "hi" : n >= 40 ? "mid" : "lo");
 type Page = { total: number; skip: number; limit: number; drops: D[] };
 const LIMIT = 20;
 
@@ -44,8 +47,13 @@ export default function AdminModeration() {
 
   return (
     <>
-      <h2>Moderation queue</h2>
-      <p className="muted small">Posts flagged by reports or hidden for self-harm concern. Dismiss keeps the post up; delete removes it.</p>
+      <div className="adm-pagehead">
+        <div>
+          <h2>Moderation queue</h2>
+          <p className="muted small">Posts flagged by reports or hidden for self-harm concern, riskiest first. The risk score is an AI first read (or a rule-based guess when AI is off); you make the call. Dismiss keeps the post up; delete removes it.</p>
+        </div>
+        <button className="adm-btn" disabled={busy === "score"} onClick={async () => { setBusy("score"); try { await api("/admin/moderation-queue/score", { method: "POST" }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); } }}>{busy === "score" ? "Scoring…" : "Score now"}</button>
+      </div>
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted">Loading…</p> : data.drops.length === 0 ? <p className="muted">Nothing waiting. All clear.</p> : (
         <div className="adm-list">
@@ -55,7 +63,9 @@ export default function AdminModeration() {
                 <Badge tone={d.moderation_status === "hidden" ? "bad" : "warn"}>{d.moderation_status}</Badge>
                 <Badge tone="bad">{d.report_count} report{d.report_count === 1 ? "" : "s"}</Badge>
                 {d.media_type ? <Badge>{d.media_type}</Badge> : null}
+                {d.risk ? <span className={`adm-risk ${riskTone(d.risk.score)}`} title={d.risk.by === "ai" ? "AI screening" : "Rule-based estimate"}>risk {d.risk.score} · {d.risk.category.replace(/_/g, " ")}</span> : <span className="adm-risk">not scored yet</span>}
               </div>
+              {d.risk ? <p className="muted small">{d.risk.reason}</p> : null}
               <AdminMedia media={d} />
               <p className="adm-text">{d.confession || "[no text]"}</p>
               <div className="adm-foot">

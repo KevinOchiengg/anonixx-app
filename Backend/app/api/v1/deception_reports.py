@@ -30,6 +30,8 @@ from app.database import get_database
 from app.dependencies import get_current_user_id, require_admin
 from app.utils.notifications import send_push_notification
 
+from app.dependencies import require_scope
+from app.utils.audit import audit
 router = APIRouter(prefix="/deception-reports", tags=["Deception Reports"])
 
 
@@ -140,7 +142,7 @@ async def list_deception_reports(
     skip:     int = Query(0,  ge=0),
     limit:    int = Query(20, ge=1, le=100),
     status_filter: str = Query("pending", alias="status"),
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("moderation")),
     db = Depends(get_database),
 ):
     query = {"status": status_filter} if status_filter != "all" else {}
@@ -175,7 +177,7 @@ async def list_deception_reports(
 @router.post("/{report_id}/confirm", summary="Confirm a report — refunds, claws back, and strikes the poster")
 async def confirm_deception_report(
     report_id: str,
-    admin_id:  str = Depends(require_admin),
+    admin_id:  str = Depends(require_scope("moderation")),
     db = Depends(get_database),
 ):
     try:
@@ -279,6 +281,7 @@ async def confirm_deception_report(
         {"$set": {"status": "confirmed", "resolved_at": now_utc(), "resolved_by": admin_id}},
     )
 
+    await audit(db, admin_id, "deception.confirm", "deception_report", report_id)
     return {
         "report_id":       report_id,
         "status":          "confirmed",
@@ -292,7 +295,7 @@ async def confirm_deception_report(
 @router.post("/{report_id}/dismiss", summary="Dismiss a report — no side effects")
 async def dismiss_deception_report(
     report_id: str,
-    admin_id:  str = Depends(require_admin),
+    admin_id:  str = Depends(require_scope("moderation")),
     db = Depends(get_database),
 ):
     try:
@@ -307,4 +310,5 @@ async def dismiss_deception_report(
     if result.matched_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found or already resolved.")
 
+    await audit(db, admin_id, "deception.dismiss", "deception_report", report_id)
     return {"report_id": report_id, "status": "dismissed"}

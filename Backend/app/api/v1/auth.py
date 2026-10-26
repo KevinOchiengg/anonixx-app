@@ -52,6 +52,7 @@ class RegisterRequest(BaseModel):
     date_of_birth:   Optional[date] = None
     adult_confirmed: bool = False
     gender:        Optional[str] = None   # Optional: male | female | nonbinary | prefer_not_to_say
+    signup_source: Optional[dict] = None  # first touch: ref host, utm_*, landing page, visitor id, platform
 
 class LoginRequest(BaseModel):
     email:    EmailStr
@@ -164,6 +165,49 @@ def _check_adult(dob: Optional[date], confirmed: bool) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Confirm you're 18 or older to join Anonixx.")
 
 
+_SOURCE_KEYS = ("ref", "utm_source", "utm_medium", "utm_campaign", "landing", "vid", "platform")
+
+
+def _signup_source(raw: Optional[dict], referral_code: Optional[str]) -> dict:
+    """Where a new account came from, cleaned: short strings only, known keys only.
+    `channel` is the one label the dashboard groups by."""
+    src = {}
+    for k in _SOURCE_KEYS:
+        v = (raw or {}).get(k)
+        if isinstance(v, str) and v.strip():
+            src[k] = re.sub(r"\s+", " ", v.strip())[:120].lower() if k != "landing" else v.strip()[:120]
+    if src.get("utm_source"):
+        channel = src["utm_source"]
+    elif referral_code:
+        channel = "referral"
+    elif src.get("ref"):
+        channel = src["ref"]
+    elif src.get("platform") in ("ios", "android", "app"):
+        channel = "app"
+    else:
+        channel = "direct"
+    src["channel"] = channel[:60]
+    return src
+
+
+async def _record_fingerprint(db, request: Request, user_id: str) -> None:
+    """Hashed device id + IP of a new account, for spotting several accounts run by one
+    person (shown to admins as "linked accounts"). Hashes only; expires after 90 days."""
+    from app.utils.fingerprint import fingerprint_hash
+    from app.utils.geoip import client_ip
+    try:
+        device = request.headers.get("X-Device-Id") or ""
+        ip = client_ip(request)
+        await db["signup_fingerprints"].insert_one({
+            "user_id": user_id,
+            "device_hash": fingerprint_hash(device) if device else None,
+            "ip_hash": fingerprint_hash(ip) if ip and ip not in ("127.0.0.1", "::1", "testclient") else None,
+            "created_at": _now(),
+        })
+    except Exception:
+        pass
+
+
 def _adult_fields(dob: Optional[date]) -> dict:
     """How a new account records that it's 18+: the tick (self-attested), plus a DOB if given.
     The age shown on a hookup card is asked when the post is made, not here."""
@@ -208,6 +252,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
         "streak_count":   0,
         **_adult_fields(data.date_of_birth),
         "gender":         data.gender if data.gender in VALID_GENDERS else None,
+        "signup_source":  _signup_source(data.signup_source, data.referral_code),
         "blocked_user_ids": [],
         "created_at":     _now(),
         "updated_at":     _now(),
@@ -221,6 +266,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
             user["referred_by_user_id"] = str(referrer["_id"])
 
     await db["users"].insert_one(user)
+    await _record_fingerprint(db, request, str(user_id))
 
     await credit_coins(
         db          = db,
@@ -275,6 +321,7 @@ class GoogleAuthRequest(BaseModel):
     id_token:      str
     date_of_birth: Optional[date] = None   # older clients; new ones send adult_confirmed
     adult_confirmed: bool = False          # the 18+ tick, required only the first time (new account)
+    signup_source: Optional[dict] = None   # see RegisterRequest
     username:      Optional[str]  = None
     gender:        Optional[str]  = None
     referral_code: Optional[str]  = None
@@ -322,7 +369,7 @@ def _session(user: dict, **extra) -> dict:
 
 
 @router.post("/google")
-async def google_auth(data: GoogleAuthRequest, db=Depends(get_database)):
+async def google_auth(data: GoogleAuthRequest, request: Request, db=Depends(get_database)):
     """Sign in or sign up with a Google ID token.
 
     Existing Google or same-email accounts sign straight in. A brand-new person
@@ -372,6 +419,7 @@ async def google_auth(data: GoogleAuthRequest, db=Depends(get_database)):
         "streak_count":   0,
         **_adult_fields(data.date_of_birth),
         "gender":         data.gender if data.gender in VALID_GENDERS else None,
+        "signup_source":  {**_signup_source(data.signup_source, data.referral_code), "method": "google"},
         "blocked_user_ids": [],
         "created_at":     _now(),
         "updated_at":     _now(),
@@ -383,6 +431,7 @@ async def google_auth(data: GoogleAuthRequest, db=Depends(get_database)):
             user["referred_by_user_id"] = str(referrer["_id"])
 
     await db["users"].insert_one(user)
+    await _record_fingerprint(db, request, str(user_id))
     await credit_coins(
         db          = db,
         user_id     = str(user_id),

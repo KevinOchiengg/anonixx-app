@@ -23,6 +23,8 @@ from app.api.v1 import whatsapp
 from app.api.v1 import public
 from app.api.v1 import notifications
 from app.api.v1 import visits
+from app.api.v1 import admin_insights, agent_hub
+from app.tasks import admin_monitor
 from app.api.v1 import (
     auth,
     coins,
@@ -99,6 +101,13 @@ async def _ensure_indexes():
             [("created_at", 1)], expireAfterSeconds=90 * 24 * 3600, background=True
         )
         await visits.ensure_indexes(db)
+        await db["user_activity_days"].create_index([("user_id", 1), ("day", 1)], background=True)
+        await db["user_activity_days"].create_index([("day", 1)], background=True)
+        await db["admin_audit"].create_index([("created_at", -1)], background=True)
+        await db["admin_audit"].create_index([("target_id", 1), ("created_at", -1)], background=True)
+        await db["admin_alerts"].create_index([("type", 1), ("created_at", -1)], background=True)
+        await db["signup_fingerprints"].create_index([("user_id", 1)], background=True)
+        await db["drops"].create_index([("moderation_status", 1), ("risk_score", -1)], background=True)
         log.info("MongoDB indexes verified.")
     except Exception as exc:
         log.warning("Index creation skipped: %s", exc)
@@ -111,9 +120,11 @@ async def lifespan(app: FastAPI):
     await publisher_worker.start()          # start social publishing worker
     await drop_cleanup_worker.start()       # delete drops past their post-unlock grace
     await scheduled_publisher.start()       # publish admin drops scheduled for later
+    await admin_monitor.start()             # alerts, morning digest, risk scores for flagged posts
     geoip.start_loading()                   # local IP->country database for payment pricing (background)
     yield
     await scheduled_publisher.stop()
+    await admin_monitor.stop()
     await drop_cleanup_worker.stop()        # clean shutdown
     await publisher_worker.stop()
     await close_mongo_connection()
@@ -248,6 +259,8 @@ app.include_router(whatsapp.router, prefix=settings.API_V1_PREFIX)
 app.include_router(public.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(visits.router, prefix=settings.API_V1_PREFIX)
+app.include_router(admin_insights.router, prefix=settings.API_V1_PREFIX)
+app.include_router(agent_hub.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

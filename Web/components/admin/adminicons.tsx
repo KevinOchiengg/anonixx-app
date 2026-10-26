@@ -22,4 +22,7 @@ export const IcCheck = () => (<svg {...P}><path d="m5 12.5 4.5 4.5L19 7.5" /></s
 export const IcCoin = () => (<svg {...P}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9.5 9.5c.4-.9 1.3-1.4 2.5-1.4 1.5 0 2.5.7 2.5 1.8s-1 1.6-2.5 1.9-2.5.8-2.5 1.9 1 1.9 2.5 1.9c1.2 0 2.1-.5 2.5-1.4" /></svg>);
 export const IcTrendUp = () => (<svg {...P}><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>);
 export const IcEye = () => (<svg {...P}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></svg>);
+export const IcPulse = () => (<svg {...P}><path d="M3 12h4l2.5-6 5 12 2.5-6H21" /></svg>);
+export const IcBot = () => (<svg {...P}><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9.5 17h5" /></svg>);
+export const IcList = () => (<svg {...P}><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg>);
 export const IcHome = () => (<svg {...P}><path d="M4 11 12 4l8 7v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg>);

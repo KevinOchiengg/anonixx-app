@@ -32,6 +32,7 @@ from app.services.facebook_publisher  import facebook_publisher
 from app.services.instagram_publisher import instagram_publisher
 from app.services.telegram_publisher  import telegram_publisher
 
+from app.dependencies import require_scope
 router = APIRouter(prefix="/publisher", tags=["publisher"])
 
 
@@ -59,7 +60,7 @@ async def list_queue(
     limit:  int = Query(50, ge=1, le=200),
     skip:   int = Query(0,  ge=0),
     db      = Depends(get_database),
-    _       = Depends(require_admin),
+    _       = Depends(require_scope("content")),
 ):
     """List publisher queue entries, newest first."""
     query = {}
@@ -89,7 +90,7 @@ async def list_queue(
 async def get_queue_item(
     item_id: str,
     db       = Depends(get_database),
-    _        = Depends(require_admin),
+    _        = Depends(require_scope("content")),
 ):
     """Get full detail for a single queue entry."""
     try:
@@ -106,7 +107,7 @@ async def get_queue_item(
 async def retry_queue_item(
     item_id: str,
     db       = Depends(get_database),
-    _        = Depends(require_admin),
+    _        = Depends(require_scope("content")),
 ):
     """
     Reset a failed (or permanently failed) entry back to 'queued'
@@ -136,7 +137,7 @@ async def retry_queue_item(
 async def reject_queue_item(
     item_id: str,
     db       = Depends(get_database),
-    _        = Depends(require_admin),
+    _        = Depends(require_scope("content")),
 ):
     """Permanently reject an entry — it will never be posted."""
     try:
@@ -157,7 +158,7 @@ async def reject_queue_item(
 @router.get("/stats")
 async def publisher_stats(
     db = Depends(get_database),
-    _  = Depends(require_admin),
+    _  = Depends(require_scope("content")),
 ):
     """Aggregate queue counts by status — useful for a publisher dashboard."""
     pipeline = [{"$group": {"_id": "$status", "count": {"$sum": 1}}}]
@@ -178,7 +179,7 @@ async def publisher_stats(
 # ── Manual trigger ────────────────────────────────────────────────
 @router.post("/trigger")
 async def trigger_worker_batch(
-    _  = Depends(require_admin),
+    _  = Depends(require_scope("content")),
 ):
     """
     Manually fire one worker batch cycle.
@@ -193,7 +194,7 @@ async def trigger_worker_batch(
 @router.get("/tiktok/status/{publish_id}")
 async def get_tiktok_post_status(
     publish_id: str,
-    _           = Depends(require_admin),
+    _           = Depends(require_scope("content")),
 ):
     """
     Poll TikTok directly for the live publish status of a submitted post.

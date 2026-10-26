@@ -91,6 +91,17 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-opus-5-5"
 
+    # ADMIN DIGEST + ALERTS (app/tasks/admin_monitor.py). Hour in UTC for the morning
+    # summary email/push to super admins; 5 = 08:00 in East Africa.
+    ADMIN_DIGEST_HOUR_UTC: int = 5
+
+    # AGENT HUB (/admin/agents): reads the agents' reports from GitHub and writes the
+    # founder's approve / reject back. A fine-grained token with Contents read+write on
+    # the repo. Empty = the hub shows how to connect it.
+    GITHUB_TOKEN: str = ""
+    GITHUB_REPO: str = "KevinOchiengg/anonixx-app"
+    GITHUB_BRANCH: str = "main"
+
     # RESEND (email)
     RESEND_API_KEY: str = ""
     FROM_EMAIL: str = "Anonixx <noreply@anonixx.com>"

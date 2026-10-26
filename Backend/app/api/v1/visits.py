@@ -35,7 +35,8 @@ router = APIRouter(tags=["Visitors"])
 
 EVENTS = "site_events"
 VISITORS = "site_visitors"
-EVENT_TYPES = {"view", "leave", "click", "search", "signup", "login"}
+EVENT_TYPES = {"view", "leave", "click", "search", "signup", "login", "exp"}
+EXP_RE = re.compile(r"^[a-z0-9_]{3,40}$")
 MAX_EVENTS_PER_BATCH = 25
 MAX_BODY_BYTES = 16_000
 ID_RE = re.compile(r"^[a-z0-9]{8,40}$")
@@ -190,6 +191,11 @@ async def track(request: Request, db=Depends(get_database)):
             if not target:
                 continue
             doc["target"] = target
+        elif e["t"] == "exp":
+            key, variant = e.get("x"), _clip(e.get("v"), 20)
+            if not (isinstance(key, str) and EXP_RE.match(key) and variant):
+                continue
+            doc["exp"], doc["variant"] = key, variant
         elif e["t"] == "search":
             q = _clip(e.get("q"), 80)
             theme = _clip(e.get("th"), 40)

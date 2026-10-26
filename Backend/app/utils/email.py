@@ -117,3 +117,28 @@ def send_password_reset_otp(to_email: str, otp: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def send_admin_email(to_email: str, title: str, body: str, link: str = "/admin") -> bool:
+    """Alerts and the morning summary for super admins (app/tasks/admin_monitor.py)."""
+    if not settings.RESEND_API_KEY:
+        return False
+    _client()
+    from html import escape
+    url = f"https://anonixx.com{link if link.startswith('/') else '/admin'}"
+    html = f"""<div style="background:#0b0f18;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:520px;margin:0 auto;background:#151924;border:1px solid rgba(255,255,255,0.06);border-radius:16px;overflow:hidden;">
+    <div style="height:3px;background:#FF634A;"></div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 6px;color:#FF634A;font-size:11px;font-weight:800;letter-spacing:3px;">ANONIXX ADMIN</p>
+      <h1 style="margin:0 0 14px;color:#EAEAF0;font-size:22px;">{escape(title)}</h1>
+      <p style="margin:0 0 22px;color:#9A9AA3;font-size:15px;line-height:1.6;">{escape(body)}</p>
+      <a href="{url}" style="display:inline-block;background:#FF634A;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:12px;">Open the dashboard</a>
+    </div>
+  </div>
+</div>"""
+    try:
+        resend.Emails.send({"from": settings.FROM_EMAIL, "to": [to_email], "subject": title, "html": html})
+        return True
+    except Exception:
+        return False

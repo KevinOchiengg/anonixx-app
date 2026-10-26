@@ -16,6 +16,8 @@ from app.database import get_database
 from app.dependencies import require_admin
 from app.utils import r2_storage
 
+from app.dependencies import require_scope
+from app.utils.audit import audit
 router = APIRouter(prefix="/sounds", tags=["sounds"])
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -48,7 +50,7 @@ async def list_active_sounds(db=Depends(get_database)):
 
 
 @router.get("/admin")
-async def list_all_sounds(_: str = Depends(require_admin), db=Depends(get_database)):
+async def list_all_sounds(_: str = Depends(require_scope("content")), db=Depends(get_database)):
     docs = await db["sounds"].find({}).sort("created_at", -1).to_list(1000)
     return {"sounds": [_out(d) for d in docs]}
 
@@ -58,7 +60,7 @@ async def add_sound(
     file: UploadFile = File(...),
     title: str = Form(...),
     mood: str = Form("any"),
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     title = title.strip()[:80]
@@ -89,6 +91,7 @@ async def add_sound(
     }
     res = await db["sounds"].insert_one(doc)
     doc["_id"] = res.inserted_id
+    await audit(db, admin_id, "sound.create", "sound", None)
     return _out(doc)
 
 
@@ -102,7 +105,7 @@ class SoundPatch(BaseModel):
 async def edit_sound(
     sound_id: str,
     data: SoundPatch,
-    _: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     changes: dict = {}
@@ -125,13 +128,15 @@ async def edit_sound(
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Sound not found.")
+    await audit(db, admin_id, "sound.update", "sound", sound_id)
     return _out(doc)
 
 
 @router.delete("/admin/{sound_id}")
-async def delete_sound(sound_id: str, _: str = Depends(require_admin), db=Depends(get_database)):
+async def delete_sound(sound_id: str, admin_id: str = Depends(require_scope("content")), db=Depends(get_database)):
     doc = await db["sounds"].find_one_and_delete({"_id": _oid(sound_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Sound not found.")
     r2_storage.delete_by_url(doc.get("url"))
+    await audit(db, admin_id, "sound.delete", "sound", sound_id)
     return {"ok": True}

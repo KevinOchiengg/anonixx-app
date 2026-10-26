@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
@@ -94,7 +95,7 @@ export default function AdminUsers() {
               {data.users.map((u) => (
                 <tr key={u.id}>
                   <td>
-                    <b>{u.anonymous_name || u.username || "—"}</b>
+                    <Link href={`/admin/users/${u.id}`}><b>{u.anonymous_name || u.username || "—"}</b></Link>
                     <div className="muted small">{u.email}</div>
                   </td>
                   <td className="adm-chips">

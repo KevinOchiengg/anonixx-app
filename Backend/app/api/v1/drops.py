@@ -3609,7 +3609,7 @@ async def report_drop(
     # Bump the cached count on the drop doc.
     await db["drops"].update_one(
         {"_id": ObjectId(drop_id)},
-        {"$inc": {"report_count": 1}},
+        {"$inc": {"report_count": 1}, "$set": {"risk_scored_at": None}},
     )
 
     # Self-harm-concern → hide immediately, notify ops.

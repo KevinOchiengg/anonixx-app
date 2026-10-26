@@ -156,6 +156,7 @@ export async function api<T = unknown>(
   opts: { method?: string; body?: unknown } = {},
 ): Promise<T> {
   const headers: Record<string, string> = countryHeader();
+  if (path.startsWith("/auth/")) headers["X-Device-Id"] = getDeviceId();
   const token = getToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;

@@ -91,6 +91,22 @@ export default function PostStudio() {
 
   useEffect(() => {
     try { setName(localStorage.getItem("anonixx_post_as") || ""); } catch {}
+    // "Draft" on a search nobody found an answer for (Visitors page) brings its words here.
+    const topic = new URLSearchParams(window.location.search).get("topic");
+    if (topic) {
+      const t = topic.trim().toLowerCase().slice(0, 30);
+      if (t) setTags((l) => (l.includes(t) ? l : [...l, t]));
+      setText((cur) => cur || "");
+      setTopicNote(t);
+    }
+  }, []);
+  const [topicNote, setTopicNote] = useState("");
+  const [bestTimes, setBestTimes] = useState<{ weekday: number; hour: number; at_utc: string }[]>([]);
+  useEffect(() => {
+    const tz = -new Date().getTimezoneOffset();
+    api<{ suggestions: { weekday: number; hour: number; at_utc: string }[]; enough_data: boolean }>(`/admin/insights/best-times?days=28&tz=${tz}`)
+      .then((r) => setBestTimes(r.enough_data ? r.suggestions.slice(0, 3) : []))
+      .catch(() => {});
   }, []);
   useEffect(() => {
     try { localStorage.setItem("anonixx_post_as", name); } catch {}
@@ -536,6 +552,7 @@ export default function PostStudio() {
 
           <section className="ps-sec">
             <h3><i>3</i> Search keywords</h3>
+            {topicNote ? <p className="ps-help">People searched “{topicNote}” and found nothing. Write the drop they were looking for; the keyword is added.</p> : null}
             <p className="ps-help">When someone searches Anonixx, these words (and your caption) are what find this drop. Add what people would type.</p>
             <div className="ps-tags">
               {tags.map((t) => (
@@ -650,7 +667,19 @@ export default function PostStudio() {
                   <input type="datetime-local" value={laterAt} min={toLocalInput(new Date(Date.now() + 120000))} onChange={(e) => setLaterAt(e.target.value)} aria-label="Publish at" />
                 ) : null}
               </div>
-              {later ? <span>Evenings (8pm to midnight) are when the feed is busiest.{promo ? " The pin/boost clock starts when it goes live." : ""}</span> : null}
+              {later && bestTimes.length ? (
+                <div className="ps-seg" role="group" aria-label="Suggested times">
+                  {bestTimes.map((b) => {
+                    const at = new Date(b.at_utc);
+                    return (
+                      <button key={b.at_utc} type="button" onClick={() => setLaterAt(toLocalInput(at))} title="One of the busiest hours on the site">
+                        {at.toLocaleDateString(undefined, { weekday: "short" })} {at.toLocaleTimeString(undefined, { hour: "numeric" })}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {later ? <span>{bestTimes.length ? "Those are the busiest hours on the site lately." : "Evenings (8pm to midnight) are when the feed is busiest."}{promo ? " The pin/boost clock starts when it goes live." : ""}</span> : null}
             </div>
           </section>
         </div>

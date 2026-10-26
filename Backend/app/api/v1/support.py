@@ -16,6 +16,8 @@ from app.dependencies import get_current_user_id, require_admin, require_super_a
 from app.utils.coin_service import debit_coins
 from app.utils.notifications import send_push_notification
 
+from app.dependencies import require_scope
+from app.utils.audit import audit
 router = APIRouter(tags=["Support"])
 
 MAX_MESSAGE_LEN = 1000
@@ -192,7 +194,7 @@ async def my_refund_requests(
 async def list_conversations(
     skip:  int = Query(0,  ge=0),
     limit: int = Query(30, ge=1, le=100),
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("support")),
     db=Depends(get_database),
 ):
     pipeline = [
@@ -238,7 +240,7 @@ async def list_conversations(
 @router.get("/admin/support/conversations/{user_id}/messages", summary="One user's support thread")
 async def admin_get_thread(
     user_id: str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("support")),
     db=Depends(get_database),
 ):
     cursor = db["support_messages"].find({"user_id": user_id}).sort("created_at", 1).limit(500)
@@ -254,7 +256,7 @@ async def admin_get_thread(
 async def admin_reply(
     user_id: str,
     data: MessageBody,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("support")),
     db=Depends(get_database),
 ):
     try:
@@ -267,6 +269,7 @@ async def admin_reply(
     text = _clean_text(data.text)
     doc = await _post_message(db, user_id, "admin", text, admin_id=admin_id)
     await _notify_user(db, user_id, text)
+    await audit(db, admin_id, "support.reply", "user", user_id)
     return _serialize_message(doc)
 
 
@@ -277,7 +280,7 @@ async def list_refunds(
     status_filter: str = Query("pending", alias="status", pattern="^(pending|accepted|rejected|all)$"),
     skip:  int = Query(0,  ge=0),
     limit: int = Query(30, ge=1, le=100),
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("finance")),
     db=Depends(get_database),
 ):
     query = {} if status_filter == "all" else {"status": status_filter}
@@ -362,6 +365,7 @@ async def accept_refund(
     msg = "Your refund request was approved. The money will be returned to your original payment method."
     await _post_message(db, user_id, "admin", msg, admin_id=admin_id)
     await _notify_user(db, user_id, msg)
+    await audit(db, admin_id, "refund.accept", "refund", refund_id)
     return {"id": refund_id, "status": "accepted", "coins_clawed_back": clawback}
 
 
@@ -382,4 +386,5 @@ async def reject_refund(
     msg = "Your refund request was declined." + (f" Note: {data.note.strip()}" if (data.note or "").strip() else "")
     await _post_message(db, user_id, "admin", msg, admin_id=admin_id)
     await _notify_user(db, user_id, msg)
+    await audit(db, admin_id, "refund.reject", "refund", refund_id)
     return {"id": refund_id, "status": "rejected"}

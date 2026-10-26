@@ -22,6 +22,8 @@ from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id, require_admin
 from app.utils.coin_service import debit_coins, credit_coins
 
+from app.dependencies import require_scope
+from app.utils.audit import audit
 router = APIRouter(prefix="/ads", tags=["Feed Ads"])
 
 AD_COINS_PER_HOUR = 5
@@ -190,7 +192,7 @@ async def list_my_ads(
 
 @router.get("/admin/pending")
 async def list_pending_ads(
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db = Depends(get_database),
 ):
     cursor = db["feed_ads"].find({"status": "pending_review"}).sort("created_at", 1)
@@ -200,7 +202,7 @@ async def list_pending_ads(
 @router.patch("/admin/{ad_id}/approve")
 async def approve_ad(
     ad_id: str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db = Depends(get_database),
 ):
     try:
@@ -210,13 +212,14 @@ async def approve_ad(
     result = await db["feed_ads"].update_one({"_id": oid}, {"$set": {"status": "approved"}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Ad not found")
+    await audit(db, admin_id, "ad.approve", "ad", ad_id)
     return {"id": ad_id, "status": "approved"}
 
 
 @router.patch("/admin/{ad_id}/reject")
 async def reject_ad(
     ad_id: str,
-    admin_id: str = Depends(require_admin),
+    admin_id: str = Depends(require_scope("content")),
     db = Depends(get_database),
 ):
     try:
@@ -241,4 +244,5 @@ async def reject_ad(
         except ValueError:
             pass
 
+    await audit(db, admin_id, "ad.reject", "ad", ad_id)
     return {"id": ad_id, "status": "rejected", "refunded": coins_paid}
