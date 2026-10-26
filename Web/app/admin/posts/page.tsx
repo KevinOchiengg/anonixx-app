@@ -2,8 +2,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
+import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 
-type D = {
+type D = DropMedia & {
   id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string; confession_full: string | null;
   promo_kind: "pin" | "boost" | null; promo_until: string | null;
   media_type: string | null; report_count: number; moderation_status: string | null; created_at: string | null;
@@ -87,6 +88,7 @@ export default function AdminPosts() {
                 {d.report_count ? <Badge tone="bad">{d.report_count} report{d.report_count === 1 ? "" : "s"}</Badge> : null}
                 {d.moderation_status ? <Badge>{d.moderation_status}</Badge> : null}
               </div>
+              <AdminMedia media={d} open={editing?.id === d.id} />
               {editing?.id === d.id ? (
                 <textarea
                   className="adm-edit" rows={4} maxLength={500} autoFocus value={editing.text}
@@ -136,6 +138,7 @@ export default function AdminPosts() {
                           ? <button className="adm-btn" disabled={busy === d.id} onClick={() => promote(d.id, null)}>Stop {d.promo_kind === "pin" ? "pin" : "boost"}</button>
                           : <button className="adm-btn" disabled={busy === d.id} onClick={() => setPromoting({ id: d.id, kind: "pin", hours: 24 })}>Pin / boost</button>
                       ) : null}
+                      <a className="adm-btn" href={`/drop/${d.id}`} target="_blank" rel="noreferrer" title="Open the post as people see it">View post ↗</a>
                       <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>
                     </>
                   )}

@@ -356,6 +356,7 @@ async def get_moderation_queue(
             "sender_id":         d.get("sender_id"),
             "confession":        (d.get("confession") or "")[:200],
             "media_type":        d.get("media_type"),
+            **_media(d),
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
             "flagged_at":        d["flagged_at"].isoformat() if d.get("flagged_at") else None,
@@ -431,6 +432,7 @@ async def list_drops(
             "promo_kind":        d.get("promo_kind") if d.get("promo_until") and _aware(d["promo_until"]) > _now() else None,
             "promo_until":       _aware(d["promo_until"]).isoformat() if d.get("promo_until") else None,
             "media_type":        d.get("media_type"),
+            **_media(d),
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
             "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
@@ -448,6 +450,15 @@ async def list_drops(
         })
 
     return {"total": total, "skip": skip, "limit": limit, "sort": sort if sort in DROP_SORTS else "recent", "drops": drops}
+
+
+def _media(d: dict) -> dict:
+    """What a post shows (video, photos or voice note), so the dashboard can preview it."""
+    return {
+        "media_url": d.get("media_url"),
+        "images":    d.get("images") or None,
+        "cover_url": d.get("cover_url") or d.get("card_image_url"),
+    }
 
 
 def _aware(dt: datetime) -> datetime:

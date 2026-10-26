@@ -2,8 +2,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
+import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 
-type D = {
+type D = DropMedia & {
   id: string; sender_id: string | null; confession: string; media_type: string | null;
   report_count: number; moderation_status: string | null; flagged_at: string | null; created_at: string | null;
 };
@@ -55,6 +56,7 @@ export default function AdminModeration() {
                 <Badge tone="bad">{d.report_count} report{d.report_count === 1 ? "" : "s"}</Badge>
                 {d.media_type ? <Badge>{d.media_type}</Badge> : null}
               </div>
+              <AdminMedia media={d} />
               <p className="adm-text">{d.confession || "[no text]"}</p>
               <div className="adm-foot">
                 <span className="muted small">Flagged {fmtDate(d.flagged_at)}</span>
