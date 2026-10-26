@@ -29,8 +29,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Dimensions, FlatList, Image, Linking, Modal,
-  ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
+  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Linking, Modal,
+  Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
   TouchableWithoutFeedback, View, useWindowDimensions,
 } from 'react-native';
 import Svg, { Line, Polygon } from 'react-native-svg';
@@ -47,7 +47,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
   Bookmark, Coins, Eye, ExternalLink, Heart, Link2, MapPin, Menu, MessageCircle,
-  MoreHorizontal, Pause, Play, Search, Share2, ShieldCheck, X,
+  Pause, Play, Search, Share2, ShieldCheck, X,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -374,19 +374,24 @@ const AuthorProfileTrigger = ({ post, navigation, children }) => {
 // avatar sits in. The bottom-left name/timestamp is still its own
 // separate tap target too (see authorRow below), matching TikTok's own
 // behavior where both the pfp and the @username open the same profile.
-const RailAvatar = ({ post, navigation }) => (
+const RailAvatar = ({ post, navigation }) => {
+  // Same size and dark glass as the Like / Comment / Save / Share chips (RailIcon).
+  const { height: winH } = useWindowDimensions();
+  const chip = Math.max(36, Math.min(46, winH * 0.056));
+  return (
   <AuthorProfileTrigger post={post} navigation={navigation}>
-    <View style={sw.railAvatarRing}>
+    <View style={[sw.railAvatarRing, { width: chip, height: chip, borderRadius: chip / 2 }]}>
       {post.avatar_url ? (
         <Image source={{ uri: post.avatar_url }} style={sw.railAvatarImg} />
       ) : (
         <View style={sw.railAvatarFallback}>
-          <Text style={sw.railAvatarInitial}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
+          <Text style={[sw.railAvatarInitial, { fontSize: Math.round(chip * 0.42) }]}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
         </View>
       )}
     </View>
   </AuthorProfileTrigger>
-);
+  );
+};
 
 // ─── VIDEO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 // Covers for videos posted without one (older R2 uploads), made once per URL.
@@ -539,21 +544,23 @@ const VideoSlide = ({
     lastTap.current = now;
   };
 
-  // TikTok's other two video gestures, so nothing here needs learning:
-  // press and hold = 2x speed until released, and drag along the progress
-  // line at the bottom to scrub (the time shows big while dragging).
+  // Long-press opens the post's menu: 2x speed (stays on until switched off or the
+  // video scrolls away) and Report or block. There's no ⋯ on the rail. Dragging
+  // along the progress line at the bottom still scrubs.
   const [fast, setFast] = useState(false);
-  const startFast = () => {
-    if (!isPlaying) return;
-    player.playbackRate = 2;
-    setFast(true);
+  const setSpeed = (on) => {
+    player.playbackRate = on ? 2 : 1;
+    setFast(on);
   };
-  const endFast = () => {
-    if (!fast) return;
-    player.playbackRate = 1;
-    setFast(false);
+  useEffect(() => { if (!isActive && fast) setSpeed(false); }, [isActive]);
+  const openMenu = () => {
+    const canReport = !isOwnPost && !post.is_admin_drop;
+    Alert.alert('', undefined, [
+      { text: fast ? 'Normal speed' : 'Play at 2x', onPress: () => setSpeed(!fast) },
+      ...(canReport ? [{ text: 'Report or block', style: 'destructive', onPress: onMore }] : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
-  useEffect(() => { if (!isActive && fast) endFast(); }, [isActive]);
 
   const [scrubT, setScrubT] = useState(null);   // seconds into the clip while dragging
   const scrubWidth = useRef(1);
@@ -641,7 +648,7 @@ const VideoSlide = ({
           silently did nothing while taps near the letterboxed edges still
           worked. Rendering this touch layer after VideoView in the stack
           makes it the one that always receives the tap first, everywhere. */}
-      <TouchableWithoutFeedback onPress={handleTap} onLongPress={startFast} onPressOut={endFast} delayLongPress={350}>
+      <TouchableWithoutFeedback onPress={handleTap} onLongPress={openMenu} delayLongPress={450}>
         <View style={StyleSheet.absoluteFill} />
       </TouchableWithoutFeedback>
 
@@ -712,9 +719,6 @@ const VideoSlide = ({
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
               onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
             />
-            {!isOwnPost && !post.is_admin_drop && (
-              <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
-            )}
             <ViewsStat count={post.views_count} />
           </View>
 
@@ -814,7 +818,7 @@ const AudioSlide = ({
 
 
   return (
-    <View style={[ss.slide, { backgroundColor: THEME.background }]}>
+    <Pressable onLongPress={onMore} delayLongPress={450} style={[ss.slide, { backgroundColor: THEME.background }]}>
       <View style={as.bgAccent} />
       <View style={as.bgAccent2} />
 
@@ -834,9 +838,6 @@ const AudioSlide = ({
             tint="share" icon={<Share2 size={26} color="#fff" />} count={null}
             onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
           />
-          {!isOwnPost && !post.is_admin_drop && (
-            <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
-          )}
           <ViewsStat count={post.views_count} />
         </View>
       )}
@@ -879,7 +880,7 @@ const AudioSlide = ({
         <LiveChips post={post} isOwnPost={isOwnPost} />
         {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
       </View>
-    </View>
+    </Pressable>
   );
 };
 
@@ -1045,7 +1046,7 @@ const TextSlide = ({
       {isEnvelope && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,16,0.72)' }]} pointerEvents="none" />}
       {isEnvelope && <EnvelopeBackdrop top={envTop} />}
 
-      <TouchableWithoutFeedback onPress={handleTap}>
+      <TouchableWithoutFeedback onPress={handleTap} onLongPress={onMore} delayLongPress={450}>
         <View style={StyleSheet.absoluteFill}>
           {hasImage ? (
             imageList.length > 1 ? (
@@ -1102,9 +1103,6 @@ const TextSlide = ({
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
               onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
             />
-            {!isOwnPost && !post.is_admin_drop && (
-              <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
-            )}
             <ViewsStat count={post.views_count} />
           </View>
 
@@ -1176,7 +1174,7 @@ const PollSlide = ({
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
 
   return (
-    <View style={[ss.slide, { backgroundColor: t.bgTo }]}>
+    <Pressable onLongPress={onMore} delayLongPress={450} style={[ss.slide, { backgroundColor: t.bgTo }]}>
       <LinearGradient colors={[t.bgFrom, t.bgTo]} style={StyleSheet.absoluteFill} />
 
       <View style={sw.pollSlideCenter}>
@@ -1198,9 +1196,6 @@ const PollSlide = ({
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
               tint="save" count={savesCount} onPress={onSave} active={saved}
             />
-            {!isOwnPost && !post.is_admin_drop && (
-              <ActionBtn tint="more" icon={<MoreHorizontal size={26} color="#fff" />} count={null} onPress={onMore} />
-            )}
             <ViewsStat count={post.views_count} />
           </View>
 
@@ -1218,7 +1213,7 @@ const PollSlide = ({
           </View>
         </>
       )}
-    </View>
+    </Pressable>
   );
 };
 
@@ -1719,7 +1714,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       onComment: () => setCommentSheet({ visible: true, postId: item.id, isOwner: item.is_own_post }),
       isOwnPost: item.is_own_post || false,
       onLinkUp: () => handleLinkUp(item),
-      onMore: () => setReportPost(item),
+      onMore: () => { if (!item.is_own_post && !item.is_admin_drop) setReportPost(item); },
       navigation,
       headerHeight,
       chromeHidden,
@@ -2004,7 +1999,7 @@ const sw = StyleSheet.create({
   railAvatarRing: {
     width: rs(40), height: rs(40), borderRadius: rs(20),
     borderWidth: 2, borderColor: THEME.primary, overflow: 'hidden',
-    backgroundColor: THEME.avatarBg, marginBottom: rp(2),
+    backgroundColor: 'rgba(10,12,18,0.5)', marginBottom: rp(2),
   },
   railAvatarImg: { width: '100%', height: '100%' },
   railAvatarFallback: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },

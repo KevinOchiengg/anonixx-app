@@ -635,3 +635,8 @@
 /* no clear first sentence: the opening words in the serif (same size), flowing into the rest */
 .slide.has-media .cap-hook.inline { display: inline; margin: 0; line-height: 1.2; }
 .lu-heart { margin-right: 6px; font-size: 15px; line-height: 1; flex: none; }
+
+/* long-press post menu (Slide) */
+.post-menu { display: grid; }
+.post-menu .opt-row { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.post-menu .opt-row svg { width: 18px; height: 18px; }

@@ -9,7 +9,7 @@ import { allowMature, useMatureOk } from "@/lib/matureConsent";
 import VideoPlayer from "./VideoPlayer";
 import FitImage from "./FitImage";
 import { Bookmark, Comment, Heart, Share } from "./icons";
-import { Link2, More, SoundOff } from "./feedicons";
+import { Flag, Link2, SoundOff } from "./feedicons";
 import AudioWave from "./AudioWave";
 import AmbientSound from "./AmbientSound";
 import Sheet from "./Sheet";
@@ -73,6 +73,9 @@ function hookupTags(h: Post["hookup"]): string[] {
   ].filter((x): x is string => Boolean(x));
 }
 
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_SLOP = 10;
+
 export default function Slide({
   post, index, active, near, muted, sounds, headline,
   onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onProfile, onReport, onToast,
@@ -86,6 +89,12 @@ export default function Slide({
   const [burst, setBurst] = useState(0);
   const viewed = useRef(false);
   const lastTap = useRef(0);
+  // Long-press anywhere on the post opens its menu (report / block, and 2x on videos).
+  // There's no ⋯ button: fewer icons on the rail.
+  const [menu, setMenu] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const press = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const pressed = useRef(false);
 
   const mature = post.sensitivity === "mature" && !matureOk && !user?.age_verified;
 
@@ -299,8 +308,41 @@ export default function Slide({
     </div>
   ) : null;
 
+  useEffect(() => { if (!active) setSpeed(1); }, [active]);
+  const canReport = !post.is_admin_drop && !post.is_own_post;
+  function openMenu() {
+    if (videoSrc && !mature) { setMenu(true); return; }
+    if (canReport) (user ? onReport(post) : onGate("Sign in to report a post."));
+  }
+  function pressStart(e: React.PointerEvent) {
+    if (e.button > 0 || (e.target as Element).closest("button, a, input, textarea, select, .rail, .vp-bar, .vp-scrub")) return;
+    pressed.current = false;
+    const timer = window.setTimeout(() => {
+      press.current = null;
+      pressed.current = true;   // the release that follows isn't a tap
+      if (navigator.vibrate) navigator.vibrate(12);
+      openMenu();
+    }, LONG_PRESS_MS);
+    press.current = { timer, x: e.clientX, y: e.clientY };
+  }
+  function pressMove(e: React.PointerEvent) {
+    const p = press.current;
+    if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > LONG_PRESS_SLOP) pressEnd();
+  }
+  function pressEnd() {
+    if (press.current) window.clearTimeout(press.current.timer);
+    press.current = null;
+  }
+
   return (
     <article
+      onPointerDown={pressStart}
+      onPointerMove={pressMove}
+      onPointerUp={pressEnd}
+      onPointerCancel={pressEnd}
+      onPointerLeave={pressEnd}
+      onClickCapture={(e) => { if (pressed.current) { pressed.current = false; e.stopPropagation(); e.preventDefault(); } }}
+      onContextMenu={(e) => { if (press.current || pressed.current) e.preventDefault(); }}
       className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${textSlide && post.kind !== "hookup" ? " env" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
       data-idx={index}
       data-post={post.id}
@@ -336,6 +378,7 @@ export default function Slide({
               active={active && !mature}
               near={near}
               muted={muted || muteClip}
+              rate={speed}
             />
           ) : singleImage ? (
             <FitImage src={singleImage} alt={post.content.slice(0, 100)} priority={near} />
@@ -422,18 +465,24 @@ export default function Slide({
             <SoundOff />
           </button>
         ) : null}
-        {!post.is_admin_drop && !post.is_own_post ? (
-          <button
-            onClick={() => (user ? onReport(post) : onGate("Sign in to report a post."))}
-            aria-label="More options"
-            className="r-act r-more"
-          >
-            <More />
-          </button>
-        ) : null}
       </div>
 
       {canLinkUp && hasMedia ? linkBtn : null}
+
+      {menu ? (
+        <Sheet onClose={() => setMenu(false)}>
+          <div className="post-menu">
+            <button className="opt-row" onClick={() => { setSpeed((s) => (s === 1 ? 2 : 1)); setMenu(false); }}>
+              {speed === 1 ? "▶▶  Play at 2x" : "▶  Normal speed"}
+            </button>
+            {canReport ? (
+              <button className="opt-row" onClick={() => { setMenu(false); user ? onReport(post) : onGate("Sign in to report a post."); }}>
+                <Flag />  Report or block
+              </button>
+            ) : null}
+          </div>
+        </Sheet>
+      ) : null}
 
       {fullText ? (
         <Sheet onClose={() => setFullText(false)}>
