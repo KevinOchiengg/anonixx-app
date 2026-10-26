@@ -10,8 +10,14 @@ import { uploadFile } from "@/lib/upload";
 import { INTENTS, MAX_INTENTS, MAX_PITCH } from "@/lib/linkup";
 import AgeGate from "./AgeGate";
 import Sheet from "./Sheet";
+import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 
 const MAX_CLUE_VIDEO_SECONDS = 30;
+const MAX_PEEK = 3;
+
+// The host's door rule (Backend unlock_requests.py DOOR_COPY / door_for).
+type Door = { door_rule: "line" | "line_peek" | "voice"; door_copy: string; min_pitch: number; voice_seconds: [number, number];
+  my_room: { media_url: string; media_type: string }[] };
 
 type Clue = { file: File; kind: "image" | "video"; url: string; seconds: number };
 
@@ -46,12 +52,30 @@ export default function LinkUpSheet({
   const [pitch, setPitch, clearPitch] = useDraft(`linkup:${post.id}`, "");
   const [intents, setIntents] = useState<string[]>([]);
   const [ageGate, setAgeGate] = useState(false);
+  const [door, setDoor] = useState<Door | null>(null);
+  const [peek, setPeek] = useState<string[]>([]);
+  const [voice, setVoice] = useState<VoiceDraft>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const balance = user?.coin_balance ?? 0;
   const canAfford = balance >= COST.linkUp || !!user?.is_premium;
   const name = post.anonymous_name || "Anonymous";
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    api<Door>(`/unlock-requests/door/${post.id}`).then(setDoor).catch(() => {});
+  }, [post.id]);
+
+  // What this door still needs before the Knock can go.
+  const rule = door?.door_rule || "line_peek";
+  const minPitch = door?.min_pitch ?? 3;
+  const hasLine = pitch.trim().length >= minPitch;
+  const voiceOk = !!voice && voice.seconds >= (door?.voice_seconds?.[0] ?? 2);
+  const hasPeek = peek.length > 0 || !!clue || voiceOk;
+  const missing = rule === "voice" ? (voiceOk ? "" : "a voice note")
+    : rule === "line_peek" ? [!hasLine && "a line", !hasPeek && "a peek"].filter(Boolean).join(" and ")
+    : hasLine ? "" : "a line";
+  const togglePeek = (url: string) =>
+    setPeek((cur) => (cur.includes(url) ? cur.filter((x) => x !== url) : cur.length >= MAX_PEEK ? cur : [...cur, url]));
   useEffect(() => () => { if (clue) URL.revokeObjectURL(clue.url); }, [clue]);
 
   async function pick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -86,6 +110,17 @@ export default function LinkUpSheet({
       if (viaProfile) body.via_profile = true;
       if (pitch.trim()) body.pitch = pitch.trim();
       if (intents.length) body.intents = intents;
+      if (peek.length) body.peek_urls = peek;
+      if (voiceOk && voice) {
+        try {
+          body.voice_url = await uploadFile(voice.blob, "voice");
+        } catch {
+          setError("Could not upload your voice note. Try again.");
+          setBusy(false);
+          return;
+        }
+        body.voice_duration = Math.round(voice.seconds * 10) / 10;
+      }
       if (clue) {
         try {
           body.media_url = await uploadFile(clue.file, clue.kind);
@@ -152,7 +187,8 @@ export default function LinkUpSheet({
         ) : null}
         {ageGate ? <AgeGate compact onDone={() => setAgeGate(false)} /> : null}
         <div className="lu-pitch">
-          <label htmlFor="lu-pitch">Leave a message (optional)</label>
+          {door ? <p className="lu-door">{door.door_copy}</p> : null}
+          <label htmlFor="lu-pitch">{rule === "voice" ? "A line (optional)" : "Your line"}</label>
           <textarea
             id="lu-pitch"
             value={pitch}
@@ -170,6 +206,26 @@ export default function LinkUpSheet({
           </div>
         </div>
 
+        {rule !== "line" || (door?.my_room.length ?? 0) > 0 ? (
+          <div className="lu-peek">
+            <label>Show a peek <small>{rule === "line_peek" ? "pick from your Room, or add a photo or voice note below" : "optional"}</small></label>
+            {door && door.my_room.length ? (
+              <div className="lu-peek-grid">
+                {door.my_room.map((g) => (
+                  <button type="button" key={g.media_url} className={peek.includes(g.media_url) ? "on" : ""} onClick={() => togglePeek(g.media_url)}
+                    aria-pressed={peek.includes(g.media_url)} aria-label={g.media_type === "video" ? "Video from your Room" : "Photo from your Room"}>
+                    {g.media_type === "video" ? <video src={g.media_url} muted playsInline preload="metadata" /> : <img src={g.media_url} alt="" />}
+                    {peek.includes(g.media_url) ? <span className="lu-peek-on">✓</span> : null}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="u-hint">Your Room has no photos yet. <Link href="/chat-setup?tab=room">Add some</Link>, or attach one below.</p>
+            )}
+            <small className="u-hint">Only {name} sees what you pick, even if your Room is private. It arrives blurred until they tap, and disappears if they say no.</small>
+          </div>
+        ) : null}
+
         <div className="u-clue">
           <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={pick} />
           {clue ? (
@@ -181,10 +237,15 @@ export default function LinkUpSheet({
           ) : (
             <button type="button" className="u-clue-add" onClick={() => fileInput.current?.click()}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-              Add a photo or short clip (optional)
+              {rule === "line_peek" && !peek.length ? "Or add a photo or short clip" : "Add a photo or short clip (optional)"}
             </button>
           )}
           <p className="u-hint">A clue of who&apos;s asking. Keep it decent, reported clues get accounts restricted.</p>
+        </div>
+
+        <div className="lu-voice">
+          <label>{rule === "voice" ? "Your voice note" : "Or say it"} <small>5 to 15 seconds{rule === "voice" ? "" : ", optional"}</small></label>
+          <VoiceRecorder value={voice} onChange={setVoice} onError={setError} maxSeconds={15} />
         </div>
 
         <div className="u-price">
@@ -197,7 +258,8 @@ export default function LinkUpSheet({
 
         {canAfford ? (
           <>
-            <button className="u-cta" onClick={go} disabled={busy}>{busy ? "Knocking…" : "Knock"}</button>
+            {missing ? <p className="u-note lu-missing">This door needs {missing} first.</p> : null}
+            <button className="u-cta" onClick={go} disabled={busy || !!missing}>{busy ? "Knocking…" : "Knock"}</button>
             <p className="u-note">Free to knock. If {name} lets you in, {COST.linkUp} coins leave your wallet automatically. Free if they already knocked on yours.</p>
           </>
         ) : (

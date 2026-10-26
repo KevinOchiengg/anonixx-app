@@ -30,36 +30,11 @@ import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
 import { intentLabel } from '../../config/linkup';
-
-// Its own component so useVideoPlayer is only ever called once per row, not
-// conditionally inside renderItem — same pattern as DropChatScreen's
-// WelcomeGalleryPage. Tappable — a 40px muted loop is only enough to notice
-// *something* is there, not to actually judge who's asking; tapping opens
-// MediaPreviewModal below for the real look.
-function RequestMediaThumb({ mediaUrl, mediaType, onPress }) {
-  const isVideo = mediaType === 'video';
-  const player = useVideoPlayer(
-    isVideo ? { uri: mediaUrl } : null,
-    (p) => { p.loop = true; p.muted = true; p.play(); },
-  );
-
-  if (!mediaUrl) return null;
-
-  return (
-    <TouchableOpacity style={s.thumbWrap} onPress={onPress} activeOpacity={0.8}>
-      {isVideo ? (
-        <VideoView player={player} style={s.thumb} contentFit="cover" />
-      ) : (
-        <Image source={{ uri: mediaUrl }} style={s.thumb} />
-      )}
-    </TouchableOpacity>
-  );
-}
+import KnockClues from '../../components/rooms/KnockClues';
 
 // Full-size look at a request's attached clue — its own component (not
 // inline in the main screen) so its useVideoPlayer only ever exists while
-// actually open, instead of a second player idling per row alongside each
-// RequestMediaThumb's. Only mounted while previewMedia is set (see below),
+// actually open. Only mounted while previewMedia is set (see below),
 // so the source loads fresh on open and the player is torn down on close.
 function MediaPreviewModal({ media, onClose }) {
   const isVideo = media.type === 'video';
@@ -261,11 +236,6 @@ export default function UnlockRequestsScreen({ route, navigation }) {
           onPress={() => item.requester_id && navigation.navigate('Room', { userId: item.requester_id })}
         >
           <View style={s.rowInfo}>
-            <RequestMediaThumb
-              mediaUrl={item.media_url}
-              mediaType={item.media_type}
-              onPress={() => setPreviewMedia({ url: item.media_url, type: item.media_type })}
-            />
             {/* Who's asking — the same "resume before you decide" the
                 requester already gets when they see a drop's avatar before
                 sending the request. Falls back to an initial-letter circle
@@ -289,6 +259,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
               {item.intents.map((i) => <Text key={i} style={s.rowChip}>{intentLabel(i)}</Text>)}
             </View>
           )}
+          <KnockClues item={item} onOpenMedia={setPreviewMedia} />
           {thumbs.length > 0 && (
             <View style={s.rowThumbs}>
               {thumbs.map((g, k) => <Image key={k} source={{ uri: g.media_url }} style={s.rowThumb} />)}

@@ -19,7 +19,11 @@ function downsample(levels: number[]): number[] {
   return out;
 }
 
-export default function VoiceRecorder({ value, onChange, onError }: { value: VoiceDraft; onChange: (v: VoiceDraft) => void; onError: (m: string) => void }) {
+export default function VoiceRecorder({ value, onChange, onError, maxSeconds = MAX_VOICE_SECONDS }: {
+  value: VoiceDraft; onChange: (v: VoiceDraft) => void; onError: (m: string) => void;
+  /** Recording stops itself here (a Knock's voice note is 15s; compose allows 3 min). */
+  maxSeconds?: number;
+}) {
   const [rec, setRec] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [live, setLive] = useState<number[]>([]);
@@ -86,7 +90,7 @@ export default function VoiceRecorder({ value, onChange, onError }: { value: Voi
           setLive((l) => [...l.slice(-(BARS - 1)), lvl]);
           const sec = (Date.now() - started.current) / 1000;
           setElapsed(sec);
-          if (sec >= MAX_VOICE_SECONDS) {
+          if (sec >= maxSeconds) {
             if (recorder.state !== "inactive") recorder.stop();
             return;
           }
@@ -113,7 +117,7 @@ export default function VoiceRecorder({ value, onChange, onError }: { value: Voi
           return <i key={i} style={{ height: `${8 + Math.max(0, v) * 92}%` }} />;
         })}
       </div>
-      <div className="cx-timer">{fmt(rec ? elapsed : value?.seconds ?? 0)} <small>/ {fmt(MAX_VOICE_SECONDS)}</small></div>
+      <div className="cx-timer">{fmt(rec ? elapsed : value?.seconds ?? 0)} <small>/ {fmt(maxSeconds)}</small></div>
       {playUrl && !rec ? <audio src={playUrl} controls /> : null}
       <div className="row">
         {rec ? (

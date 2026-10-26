@@ -37,6 +37,14 @@ import {
   DEFAULT_ROOM_THEME, GALLERY_VISIBILITY, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
 } from '../../config/roomThemes';
 import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
+import KnockClues from '../../components/rooms/KnockClues';
+
+// What a Knock on this Room must carry (Backend chat_profile.py DOOR_RULES).
+const DOOR_RULES = [
+  { id: 'line_peek', label: 'A line + a peek', hint: 'They write a line and show something: from their Room, a photo or video, or a voice note.' },
+  { id: 'line', label: 'A line is enough', hint: 'Just a line about themselves. Fewer clues, more knocks.' },
+  { id: 'voice', label: 'A voice note', hint: '5 to 15 seconds of their voice. A strong clue without a face.' },
+];
 
 const TABS = [
   ['room', 'My Room'], ['knocks', 'Knocks'], ['inside', 'Inside'], ['appearance', 'Appearance'], ['privacy', 'Privacy'],
@@ -76,6 +84,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [roomStatus, setRoomStatus]           = useState('');
   const [galleryVisibility, setGalleryVisibility] = useState('window');
   const [knocksOpen, setKnocksOpen]           = useState(true);
+  const [doorRule, setDoorRule]               = useState('line_peek');
   const [knocks, setKnocks]                   = useState(null);
   const [inside, setInside]                   = useState(null);
   const [personBusy, setPersonBusy]           = useState(null);
@@ -112,6 +121,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setRoomStatus(data.room_status || '');
             setGalleryVisibility(data.gallery_visibility || 'window');
             setKnocksOpen(data.knocks_open !== false);
+            setDoorRule(data.door_rule || 'line_peek');
           }
         }
       } catch {
@@ -226,6 +236,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           room_status: roomStatus,
           gallery_visibility: galleryVisibility,
           knocks_open: knocksOpen,
+          door_rule: doorRule,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -237,7 +248,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
       setSaving(false);
     }
   }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeSound, callMode, intro, welcomeMessage, roomStatus,
-      galleryVisibility, knocksOpen, authHeaders, showToast]);
+      galleryVisibility, knocksOpen, doorRule, authHeaders, showToast]);
 
   // Applies straight away (the picker has its own Apply / Cancel).
   const handleApplyTheme = useCallback(async (id) => {
@@ -642,6 +653,8 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
                     <Text style={styles.personSub} numberOfLines={2}>
                       {k.pitch ? `“${k.pitch}”` : 'Just knocked'}{k.intents?.length ? ` · ${k.intents.map(intentLabel).join(', ')}` : ''}
                     </Text>
+                    {/* Videos open full size in the Knocks inbox. */}
+                    <KnockClues item={k} onOpenMedia={() => navigation.navigate('UnlockRequestsScreen')} />
                     <View style={styles.personActs}>
                       <TouchableOpacity style={styles.actBtn} onPress={() => navigation.navigate('Room', { userId: k.requester_id })}><Text style={styles.actText}>Peek</Text></TouchableOpacity>
                       <TouchableOpacity style={styles.actBtn} disabled={personBusy === k.id} onPress={() => handleKnock(k, false)}><Text style={styles.actText}>Decline</Text></TouchableOpacity>
@@ -717,6 +730,23 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
                 accessibilityLabel="Taking knocks"
               />
             </View>
+            <Text style={styles.sectionLabel}>What a knock must include</Text>
+            {DOOR_RULES.map((r) => (
+              <TouchableOpacity
+                key={r.id}
+                style={[styles.option, doorRule === r.id && styles.optionOn]}
+                onPress={() => setDoorRule(r.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: doorRule === r.id }}
+              >
+                <View style={[styles.radio, doorRule === r.id && styles.radioOn]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.optionTitle}>{r.label}</Text>
+                  <Text style={styles.optionHint}>{r.hint}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            <Text style={styles.info}>Photos and videos on a knock arrive blurred until you tap them, and disappear if you decline.</Text>
             <Text style={styles.info}>
               Your Room is only reachable from your posts. It doesn't show up in search. People you block can't see your Room or knock on it.
             </Text>

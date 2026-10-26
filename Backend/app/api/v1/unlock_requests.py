@@ -40,7 +40,7 @@ from app.utils.coin_service import debit_coins
 from app.api.v1.drops import _ensure_aware, send_push_notification, AGE_GATE_DETAIL
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
-from app.api.v1.chat_profile import gallery_for, is_blocked_between, room_theme_of
+from app.api.v1.chat_profile import door_rule_of, gallery_for, is_blocked_between, room_theme_of
 
 # Pending requests now carry their own clock. They used to inherit the
 # confession's expiry, but drops no longer expire until they're unlocked —
@@ -66,6 +66,18 @@ MAX_REQUEST_VIDEO_SECONDS = 30   # a quick clue, not a full drop-style upload
 # A link up is a pitch, not just a button: one line plus quick-intent chips, shown
 # to the poster before they accept (the sender's own Room goes along as their clue).
 MAX_PITCH_CHARS = 120
+MIN_PITCH_CHARS = 3
+MAX_PEEK_ITEMS = 3
+MIN_VOICE_SECONDS, MAX_VOICE_SECONDS = 2, 16    # "5 to 15 seconds", with some slack
+# What the host sees until they decide; cleared on decline / cancel / expiry so a
+# Knock's photos, video and voice don't stay with someone who said no.
+CLUE_CLEARED = {"media_url": None, "media_type": None, "media_duration": None,
+                "peek": [], "voice_url": None, "voice_duration": None}
+DOOR_COPY = {
+    "line": "This Room asks for a line about yourself.",
+    "line_peek": "This Room asks for a line and a peek: something from your Room, a photo or video, or a voice note.",
+    "voice": "This Room asks for a short voice note.",
+}
 INTENT_CHIPS = {"free-tonight", "can-host", "can-pick-up", "drinks-first", "just-talk", "nearby"}
 
 class CreateUnlockRequestBody(BaseModel):
@@ -81,6 +93,11 @@ class CreateUnlockRequestBody(BaseModel):
     media_duration: Optional[float] = None  # seconds, video only
     pitch: Optional[str] = None             # one line the poster reads before accepting
     intents: Optional[List[str]] = None     # from INTENT_CHIPS
+    # A peek: up to 3 items from the knocker's OWN Room gallery, shown to this host
+    # only (even if their gallery is otherwise private). By media_url.
+    peek_urls: Optional[List[str]] = None
+    voice_url: Optional[str] = None         # a 5-15s voice note, uploaded first like media
+    voice_duration: Optional[float] = None
     # Sent from the poster's profile/Room rather than the post itself — the only
     # way to link up on a regular confession, which has no Link up button.
     via_profile: bool = False
@@ -179,7 +196,7 @@ async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
         return {"error": "not_found"}
     if await is_blocked_between(db, owner_id, claimed["requester_id"]):
         await db["drop_unlock_requests"].update_one(
-            {"_id": request_oid}, {"$set": {"status": "declined", "responded_at": now_utc()}},
+            {"_id": request_oid}, {"$set": {"status": "declined", "responded_at": now_utc(), **CLUE_CLEARED}},
         )
         return {"error": "not_found"}
 
@@ -244,6 +261,8 @@ async def create_unlock_request(
     if pitch and violates_policy(pitch):
         raise HTTPException(status_code=400, detail=MODERATION_ERROR)
     intents = [i for i in dict.fromkeys(data.intents or []) if i in INTENT_CHIPS][:4]
+    if data.voice_url and not (MIN_VOICE_SECONDS <= (data.voice_duration or 0) <= MAX_VOICE_SECONDS):
+        raise HTTPException(status_code=400, detail="Voice notes on a Knock are 5 to 15 seconds.")
 
     requester = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if requester and not requester.get("age_verified") and not requester.get("is_admin"):
@@ -259,9 +278,28 @@ async def create_unlock_request(
         raise HTTPException(status_code=400, detail="That's your own Room.")
     if await is_blocked_between(db, owner_id, current_user_id):
         raise HTTPException(status_code=404, detail="Room not found.")
-    owner_room = await db["chat_profiles"].find_one({"user_id": owner_id}, {"knocks_open": 1}) or {}
+    owner_room = await db["chat_profiles"].find_one({"user_id": owner_id}, {"knocks_open": 1, "door_rule": 1}) or {}
     if owner_room.get("knocks_open") is False:
         raise HTTPException(status_code=403, detail="This Room isn't taking knocks right now.")
+
+    # The peek: only pieces of the knocker's own Room.
+    peek = []
+    if data.peek_urls:
+        mine = await db["chat_profiles"].find_one({"user_id": current_user_id}, {"gallery": 1}) or {}
+        by_url = {g.get("media_url"): g for g in mine.get("gallery", []) if g.get("media_url")}
+        for url in list(dict.fromkeys(data.peek_urls))[:MAX_PEEK_ITEMS]:
+            g = by_url.get(url)
+            if not g:
+                raise HTTPException(status_code=400, detail="A peek can only show things from your own Room.")
+            peek.append({"media_url": url, "media_type": g.get("media_type") or "image"})
+
+    # The host's door rule.
+    rule = door_rule_of(owner_room)
+    has_line = len(pitch or "") >= MIN_PITCH_CHARS
+    has_peek = bool(peek or data.media_url or data.voice_url)
+    ok = {"line": has_line, "line_peek": has_line and has_peek, "voice": bool(data.voice_url)}[rule]
+    if not ok:
+        raise HTTPException(status_code=400, detail={"code": "door_rule", "door_rule": rule, "message": DOOR_COPY[rule]})
     if doc.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
     if doc.get("kind") == "confession" and not data.via_profile:
@@ -334,6 +372,10 @@ async def create_unlock_request(
         "media_duration": data.media_duration,
         "pitch": pitch,
         "intents": intents,
+        "peek": peek,
+        "voice_url": data.voice_url,
+        "voice_duration": data.voice_duration if data.voice_url else None,
+        "door_rule": rule,
         "status": "pending",
         "connection_id": None,
         "created_at": now_utc(),
@@ -423,6 +465,70 @@ async def count_pending_incoming(db, user_id: str) -> int:
     })
 
 
+async def _signals(db, host_id: str, requester_ids: set) -> dict:
+    """Clues about a knocker that cost them nothing to give and are hard to fake:
+    account age, verified, how often other hosts let them in, how much they post,
+    confirmed deception, and whether they and the host like each other's drops."""
+    out: dict = {}
+    ids = [rid for rid in requester_ids if ObjectId.is_valid(rid)]
+    if not ids:
+        return out
+    now = now_utc()
+    users = {str(u["_id"]): u async for u in db["users"].find(
+        {"_id": {"$in": [ObjectId(i) for i in ids]}}, {"created_at": 1, "is_verified": 1, "deception_strikes": 1},
+    )}
+    decided = {}
+    async for row in db["drop_unlock_requests"].aggregate([
+        {"$match": {"requester_id": {"$in": ids}, "status": {"$in": ["accepted", "declined"]}, "mutual": {"$ne": True}}},
+        {"$group": {"_id": {"r": "$requester_id", "s": "$status"}, "n": {"$sum": 1}}},
+    ]):
+        decided.setdefault(row["_id"]["r"], {})[row["_id"]["s"]] = row["n"]
+    drops = {row["_id"]: row["n"] async for row in db["drops"].aggregate([
+        {"$match": {"sender_id": {"$in": ids}, "is_admin_drop": {"$ne": True}}},
+        {"$group": {"_id": "$sender_id", "n": {"$sum": 1}}},
+    ])}
+    for rid in ids:
+        u = users.get(rid, {})
+        d = decided.get(rid, {})
+        created = u.get("created_at")
+        age = (now - (created if created.tzinfo else created.replace(tzinfo=timezone.utc))).days if created else None
+        they_like_me = await db["drops"].count_documents({"sender_id": host_id, "liked_by": rid}, limit=1)
+        i_like_them = await db["drops"].count_documents({"sender_id": rid, "liked_by": host_id}, limit=1)
+        out[rid] = {
+            "account_age_days": age,
+            "verified": bool(u.get("is_verified")),
+            "let_in": d.get("accepted", 0),
+            "knocks_decided": d.get("accepted", 0) + d.get("declined", 0),
+            "drops": drops.get(rid, 0),
+            "deception_strikes": u.get("deception_strikes", 0),
+            "likes_you": bool(they_like_me),
+            "you_like_them": bool(i_like_them),
+        }
+    return out
+
+
+@router.get("/door/{target_id}")
+async def door_for(
+    target_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """What the Knock screen needs before sending: the host's door rule, and the
+    knocker's own Room pieces they can choose as a peek."""
+    target = await _resolve_target("drop", target_id, db)
+    owner_room = await db["chat_profiles"].find_one({"user_id": target["owner_id"]}, {"door_rule": 1}) or {}
+    mine = await db["chat_profiles"].find_one({"user_id": current_user_id}, {"gallery": 1}) or {}
+    rule = door_rule_of(owner_room)
+    return {
+        "door_rule": rule,
+        "door_copy": DOOR_COPY[rule],
+        "min_pitch": MIN_PITCH_CHARS,
+        "voice_seconds": [MIN_VOICE_SECONDS, MAX_VOICE_SECONDS - 1],
+        "my_room": [{"media_url": g.get("media_url"), "media_type": g.get("media_type") or "image"}
+                    for g in mine.get("gallery", []) if g.get("media_url")],
+    }
+
+
 @router.get("/incoming")
 async def list_incoming_requests(
     target_type: Optional[str] = Query(None),
@@ -461,9 +567,15 @@ async def list_incoming_requests(
             cp["gallery"] = gallery_for(cp, current_user_id, cp["user_id"], inside=False)
             requester_rooms[cp["user_id"]] = cp
 
+    signals = await _signals(db, current_user_id, requester_ids)
+
     requests = []
     for r in rows:
         requests.append({
+            "signals": signals.get(r.get("requester_id"), {}),
+            "peek": r.get("peek") or [],
+            "voice_url": r.get("voice_url"),
+            "voice_duration": r.get("voice_duration"),
             "id": str(r["_id"]),
             "target_type": r["target_type"],
             "target_id": r["target_id"],
@@ -534,7 +646,7 @@ async def get_request_status(
     if req["status"] == "pending" and _ensure_aware(req["expires_at"]) <= now_utc():
         flipped = await db["drop_unlock_requests"].find_one_and_update(
             {"_id": oid, "status": "pending"},
-            {"$set": {"status": "expired", "responded_at": now_utc()}},
+            {"$set": {"status": "expired", "responded_at": now_utc(), **CLUE_CLEARED}},
             return_document=True,
         )
         if flipped:
@@ -607,7 +719,7 @@ async def decline_unlock_request(
 
     req = await db["drop_unlock_requests"].find_one_and_update(
         {"_id": oid, "owner_id": current_user_id, "status": "pending"},
-        {"$set": {"status": "declined", "responded_at": now_utc()}},
+        {"$set": {"status": "declined", "responded_at": now_utc(), **CLUE_CLEARED}},
         return_document=True,
     )
     if not req:
@@ -634,7 +746,7 @@ async def cancel_unlock_request(
 
     req = await db["drop_unlock_requests"].find_one_and_update(
         {"_id": oid, "requester_id": current_user_id, "status": "pending"},
-        {"$set": {"status": "cancelled", "responded_at": now_utc()}},
+        {"$set": {"status": "cancelled", "responded_at": now_utc(), **CLUE_CLEARED}},
         return_document=True,
     )
     if not req:

@@ -42,7 +42,8 @@ const formatTime = (seconds) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export default function VoiceNoteRecorder({ onSend, disabled, compact, filled }) {
+// maxSeconds: recording stops and sends itself here (a Knock's voice note is 15s).
+export default function VoiceNoteRecorder({ onSend, disabled, compact, filled, maxSeconds = MAX_VOICE_NOTE_SECONDS }) {
   const { showToast } = useToast();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recState = useAudioRecorderState(recorder, 100);
@@ -155,8 +156,8 @@ export default function VoiceNoteRecorder({ onSend, disabled, compact, filled })
   useEffect(() => {
     if (!recording) return;
     const secs = (recState.durationMillis || 0) / 1000;
-    setElapsed(Math.min(MAX_VOICE_NOTE_SECONDS, secs));
-    if (secs >= MAX_VOICE_NOTE_SECONDS) finishRef.current?.();
+    setElapsed(Math.min(maxSeconds, secs));
+    if (secs >= maxSeconds) finishRef.current?.();
   }, [recState.durationMillis, recording]);
 
   const pan = useRef(
@@ -176,7 +177,7 @@ export default function VoiceNoteRecorder({ onSend, disabled, compact, filled })
     }),
   ).current;
 
-  const nearLimit = elapsed >= MAX_VOICE_NOTE_SECONDS - 5;
+  const nearLimit = elapsed >= maxSeconds - 5;
 
   return (
     <View style={styles.wrap}>

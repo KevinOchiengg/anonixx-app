@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { intentLabel } from "@/lib/linkup";
 import AppShell from "./AppShell";
+import KnockClues, { type KnockClue } from "./KnockClues";
 
 type Conn = {
   id: string;
@@ -20,7 +21,7 @@ type Conn = {
   last_message_is_own?: boolean;
   last_message_seen?: boolean;
 };
-type Req = {
+type Req = KnockClue & {
   id: string;
   target_type: string;
   target_id: string;
@@ -226,6 +227,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
                     <span className={`lr-pitch${r.pitch ? "" : " none"}`}>{r.pitch || "knocked on your door"}</span>
                     {r.intents?.length ? <span className="room-intents">{r.intents.map((i) => <i key={i}>{intentLabel(i)}</i>)}</span> : null}
                     {r.confession_snippet ? <span className="lr-on">on &ldquo;{r.confession_snippet}&rdquo;</span> : null}
+                    <KnockClues k={r} />
                     {thumbs.length ? (
                       <span className="lr-thumbs">
                         {thumbs.map((g, k) => (
@@ -309,7 +311,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
             return (
               <button className="u-story" key={r.id} onClick={() => router.push(`/room/${r.requester_id}`)}>
                 <span className="u-ring">
-                  <span>{clue ? <Image src={clue} alt="" width={58} height={58} /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}</span>
+                  <span>{clue ? <Image src={clue} alt="" width={58} height={58} className="kc-blur" /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}</span>
                 </span>
                 <small>{r.requester_anonymous_name || "Anonymous"}</small>
               </button>

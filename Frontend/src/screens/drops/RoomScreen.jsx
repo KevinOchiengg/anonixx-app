@@ -38,6 +38,7 @@ import { API_BASE_URL } from '../../config/api';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel, timeLeft } from '../../config/linkup';
 import { STARTERS, roomThemeById, statusLabel } from '../../config/roomThemes';
+import KnockClues from '../../components/rooms/KnockClues';
 
 const REPORT_REASONS = [
   ['abuse', 'Harassment or abuse'],
@@ -451,8 +452,8 @@ export default function RoomScreen({ route, navigation }) {
           {inc ? (
             <View style={[s.card, { backgroundColor: th.tint, borderColor: th.borderStrong }]}>
               <Text style={[s.label, { color: th.muted, marginBottom: rp(8) }]}>{name.toUpperCase()} KNOCKED ON YOUR DOOR</Text>
-              {!!inc.media_url && inc.media_type !== 'video' && <Image source={{ uri: inc.media_url }} style={s.pitchMedia} />}
               <Text style={[s.pitchText, { color: th.text }]}>{inc.pitch ? `“${inc.pitch}”` : 'No message, just the knock.'}</Text>
+              <KnockClues item={inc} onOpenMedia={(m) => setBig({ media_url: m.url, media_type: m.type })} />
               {!!inc.intents?.length && (
                 <View style={s.chips}>{inc.intents.map((i) => <Text key={i} style={[s.vibe, { borderColor: th.borderStrong, color: th.text }]}>{intentLabel(i)}</Text>)}</View>
               )}

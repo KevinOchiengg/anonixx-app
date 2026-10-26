@@ -23,6 +23,12 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { fetchBalance } from '../../store/slices/coinsSlice';
 import { uploadToR2 } from '../../utils/upload';
+import VoiceNoteRecorder from '../../components/common/VoiceNoteRecorder';
+
+const MAX_PEEK = 3;
+const MIN_PITCH = 3;
+const VOICE_MIN = 2;
+const VOICE_MAX = 15;
 import { INTENTS, MAX_INTENTS, MAX_PITCH } from '../../config/linkup';
 import AgeGate from '../../components/drops/AgeGate';
 import useDraft from '../../hooks/useDraft';
@@ -60,6 +66,10 @@ export default function PostUnlockScreen({ route, navigation }) {
   const [pitch, setPitch, clearPitch] = useDraft(targetId ? `linkup:${targetId}` : null, '');
   const [intents, setIntents] = useState([]);
   const [ageGate, setAgeGate] = useState(false);
+  // The host's door rule and the knocker's own Room pieces for a peek (GET /unlock-requests/door).
+  const [door, setDoor] = useState(null);
+  const [peek, setPeek] = useState([]);
+  const [voice, setVoice] = useState(null);   // { url, duration }
 
   const toggleIntent = useCallback((id) => {
     setIntents((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= MAX_INTENTS ? cur : [...cur, id]));
@@ -77,6 +87,30 @@ export default function PostUnlockScreen({ route, navigation }) {
   useEffect(() => {
     dispatch(fetchBalance());
   }, [dispatch]);
+
+  useEffect(() => {
+    if (targetType !== 'drop' || !targetId) return;
+    let live = true;
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests/door/${targetId}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok && live) setDoor(await res.json());
+      } catch { /* door stays unknown; the server still enforces it */ }
+    })();
+    return () => { live = false; };
+  }, [targetType, targetId]);
+
+  const rule = door?.door_rule || 'line_peek';
+  const hasLine = pitch.trim().length >= MIN_PITCH;
+  const voiceOk = !!voice && voice.duration >= VOICE_MIN;
+  const hasPeek = peek.length > 0 || !!mediaUri || voiceOk;
+  const missing = rule === 'voice' ? (voiceOk ? '' : 'a voice note')
+    : rule === 'line_peek' ? [!hasLine && 'a line', !hasPeek && 'a peek'].filter(Boolean).join(' and ')
+    : hasLine ? '' : 'a line';
+  const togglePeek = useCallback((url) => {
+    setPeek((cur) => (cur.includes(url) ? cur.filter((x) => x !== url) : cur.length >= MAX_PEEK ? cur : [...cur, url]));
+  }, []);
 
   const handlePickMedia = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -131,6 +165,8 @@ export default function PostUnlockScreen({ route, navigation }) {
       if (fromRoom || viaProfile) body.via_profile = true;
       if (pitch.trim()) body.pitch = pitch.trim();
       if (intents.length) body.intents = intents;
+      if (peek.length) body.peek_urls = peek;
+      if (voiceOk) { body.voice_url = voice.url; body.voice_duration = voice.duration; }
       if (mediaUri && mediaType) {
         try {
           const ext = mediaUri.split('?')[0].split('.').pop()?.toLowerCase() || '';
@@ -195,7 +231,7 @@ export default function PostUnlockScreen({ route, navigation }) {
     } finally {
       setUnlocking(false);
     }
-  }, [unlocking, targetType, targetId, displayName, pitch, intents, fromRoom, mediaUri, mediaType, mediaDuration, navigation, showToast, dispatch]);
+  }, [unlocking, targetType, targetId, displayName, pitch, intents, peek, voice, voiceOk, fromRoom, mediaUri, mediaType, mediaDuration, navigation, showToast, dispatch]);
 
   const canAfford = coinBalance >= UNLOCK_COST;
 
@@ -245,7 +281,8 @@ export default function PostUnlockScreen({ route, navigation }) {
 
         {/* Opening line + intent chips — what they read before deciding. */}
         <View style={s.pitchSection}>
-          <Text style={s.pitchLabel}>LEAVE A MESSAGE (OPTIONAL)</Text>
+          {!!door?.door_copy && <Text style={s.doorCopy}>{door.door_copy}</Text>}
+          <Text style={s.pitchLabel}>{rule === 'voice' ? 'A LINE (OPTIONAL)' : 'YOUR LINE'}</Text>
           <TextInput
             value={pitch}
             onChangeText={(v) => setPitch(v.slice(0, MAX_PITCH))}
@@ -268,7 +305,31 @@ export default function PostUnlockScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Optional clue — never required to unlock. */}
+        {/* A peek from their own Room: shown to this host only, blurred until they tap. */}
+        {(rule !== 'line' || (door?.my_room?.length ?? 0) > 0) && (
+          <View style={s.peekSection}>
+            <Text style={s.pitchLabel}>SHOW A PEEK {rule === 'line_peek' ? '' : '(OPTIONAL)'}</Text>
+            {door?.my_room?.length ? (
+              <View style={s.peekGrid}>
+                {door.my_room.map((g) => {
+                  const on = peek.includes(g.media_url);
+                  return (
+                    <TouchableOpacity key={g.media_url} onPress={() => togglePeek(g.media_url)} activeOpacity={0.85} style={[s.peekTile, on && s.peekTileOn]}>
+                      <Image source={{ uri: g.media_url }} style={s.peekImg} />
+                      {g.media_type === 'video' && <View style={s.mediaPlayBadge}><VideoIcon size={rs(12)} color="#fff" /></View>}
+                      {on && <View style={s.peekCheck}><Text style={s.peekCheckText}>✓</Text></View>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={s.mediaHint}>Your Room has no photos yet. Add some from Your Room, or attach one below.</Text>
+            )}
+            <Text style={s.mediaHint}>Only {displayName || 'they'} sees what you pick, even if your Room is private. It arrives blurred until they tap, and disappears if they say no.</Text>
+          </View>
+        )}
+
+        {/* Or a photo / clip just for this knock. */}
         <View style={s.mediaSection}>
           {mediaUri ? (
             <View style={s.mediaPreviewWrap}>
@@ -288,12 +349,31 @@ export default function PostUnlockScreen({ route, navigation }) {
           ) : (
             <TouchableOpacity style={s.mediaAddBtn} onPress={handlePickMedia} activeOpacity={0.85} hitSlop={HIT_SLOP}>
               <Camera size={rs(16)} color={T.primary} strokeWidth={2} />
-              <Text style={s.mediaAddText}>Add a photo or short clip (optional)</Text>
+              <Text style={s.mediaAddText}>{rule === 'line_peek' && !peek.length ? 'Or add a photo or short clip' : 'Add a photo or short clip (optional)'}</Text>
             </TouchableOpacity>
           )}
           <Text style={s.mediaHint}>
             A clue of who's asking. Keep it decent, reported clues get accounts restricted.
           </Text>
+        </View>
+
+        {/* Voice note: hold to record, 5 to 15 seconds. */}
+        <View style={s.voiceSection}>
+          <Text style={s.pitchLabel}>{rule === 'voice' ? 'YOUR VOICE NOTE' : 'OR SAY IT (OPTIONAL)'}</Text>
+          {voice ? (
+            <View style={s.voiceDone}>
+              <Text style={s.voiceDoneText}>Voice note · {Math.round(voice.duration)}s ✓</Text>
+              <TouchableOpacity onPress={() => setVoice(null)} hitSlop={HIT_SLOP}><X size={rs(16)} color={T.textSecondary} /></TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.voiceRow}>
+              <VoiceNoteRecorder maxSeconds={VOICE_MAX} onSend={(v) => {
+                if (v.duration < VOICE_MIN) { showToast({ type: 'warning', message: 'Hold a little longer: at least 5 seconds reads best.' }); return; }
+                setVoice({ url: v.url, duration: Math.min(v.duration, VOICE_MAX) });
+              }} />
+              <Text style={s.mediaHint}>Hold to record, up to 15 seconds.</Text>
+            </View>
+          )}
         </View>
 
         <View style={s.priceRow}>
@@ -310,7 +390,7 @@ export default function PostUnlockScreen({ route, navigation }) {
             <TouchableOpacity
               style={s.unlockBtn}
               onPress={handleUnlock}
-              disabled={unlocking}
+              disabled={unlocking || !!missing}
               activeOpacity={0.88}
               hitSlop={HIT_SLOP}
             >
@@ -319,6 +399,7 @@ export default function PostUnlockScreen({ route, navigation }) {
                 : <Text style={s.unlockBtnText}>Knock</Text>
               }
             </TouchableOpacity>
+            {!!missing && <Text style={s.missingText}>This door needs {missing} first.</Text>}
             <Text style={s.chargeNote}>
               Free to knock. If {displayName || 'they'} lets you in, {UNLOCK_COST} coins leave your wallet automatically. Free if they already knocked on yours.
             </Text>
@@ -367,6 +448,22 @@ const s = StyleSheet.create({
   copy: { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: FONT.sm * 1.6, marginBottom: SPACING.lg },
 
   pitchSection: { width: '100%', marginBottom: SPACING.lg, gap: rp(6) },
+  doorCopy: {
+    fontSize: FONT.sm, color: T.text, lineHeight: FONT.sm * 1.5, padding: rp(10), borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(255,99,74,0.10)', borderWidth: 1, borderColor: 'rgba(255,99,74,0.3)', marginBottom: rp(4),
+  },
+  peekSection: { width: '100%', marginBottom: SPACING.lg, gap: rp(8) },
+  peekGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
+  peekTile: { width: rs(72), height: rs(72), borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
+  peekTileOn: { borderColor: T.primary },
+  peekImg: { width: '100%', height: '100%' },
+  peekCheck: { position: 'absolute', top: rp(4), right: rp(4), width: rs(20), height: rs(20), borderRadius: rs(10), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  peekCheckText: { color: '#fff', fontSize: rf(12), fontWeight: '800' },
+  voiceSection: { width: '100%', marginBottom: SPACING.lg, gap: rp(8) },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: rp(10) },
+  voiceDone: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: rp(12), borderRadius: RADIUS.md, backgroundColor: T.surfaceAlt },
+  voiceDoneText: { color: T.text, fontSize: FONT.sm, fontWeight: '600' },
+  missingText: { color: T.primary, fontSize: FONT.sm, textAlign: 'center', marginTop: rp(8) },
   pitchLabel: { fontSize: rf(11), fontWeight: '700', color: T.textSecondary, letterSpacing: 0.8 },
   pitchInput: {
     width: '100%', minHeight: rs(64), borderRadius: RADIUS.md, backgroundColor: T.surfaceAlt,

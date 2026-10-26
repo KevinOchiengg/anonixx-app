@@ -12,6 +12,7 @@ import AppShell from "./AppShell";
 import AgeGate from "./AgeGate";
 import LinkUpSheet from "./LinkUpSheet";
 import Sheet from "./Sheet";
+import KnockClues, { type KnockClue } from "./KnockClues";
 
 type Hookup = { age: number; gender: string | null; area: string; looking_for: string | null; vibes: string[] } | null;
 type Preview = {
@@ -25,7 +26,7 @@ type Preview = {
   post: { id: string; kind: "hookup" | "confession" | null; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
   connection_id: string | null;
   my_request: { id: string; status: string } | null;
-  incoming_request: { id: string; pitch: string | null; intents: string[]; media_url: string | null; media_type: string | null } | null;
+  incoming_request: (KnockClue & { id: string; pitch: string | null; intents: string[]; media_url: string | null; media_type: string | null }) | null;
   linkup_cost: number;
 };
 
@@ -338,12 +339,8 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
           {inc ? (
             <section className="rm-card rm-pitch">
               <div className="rm-label"><span>{name} knocked on your door</span></div>
-              {inc.media_url ? (
-                inc.media_type === "video"
-                  ? <video src={inc.media_url} muted loop autoPlay playsInline />
-                  : <Image src={inc.media_url} alt="" width={300} height={300} style={{ height: "auto" }} />
-              ) : null}
               <p>{inc.pitch ? <>&ldquo;{inc.pitch}&rdquo;</> : "No message, just the knock."}</p>
+              <KnockClues k={inc} />
               {inc.intents.length ? <div className="room-intents">{inc.intents.map((i) => <i key={i}>{intentLabel(i)}</i>)}</div> : null}
             </section>
           ) : null}

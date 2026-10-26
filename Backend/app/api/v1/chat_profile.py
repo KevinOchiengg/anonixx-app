@@ -71,6 +71,18 @@ ROOM_STATUSES = {"open", "late", "quiet", "away"}
 # owner has let in, or nobody but the owner. Letting someone in never widens
 # this on its own; the owner picks "inside" deliberately.
 GALLERY_VISIBILITY = {"window", "inside", "only_me"}
+
+# Door rules: what a Knock on this Room must carry (enforced in unlock_requests.py).
+#   line       a line is enough
+#   line_peek  a line + a peek (something from their Room, a photo/video, or a voice note)
+#   voice      a voice note
+DOOR_RULES = {"line", "line_peek", "voice"}
+DEFAULT_DOOR_RULE = "line_peek"
+
+
+def door_rule_of(doc: dict) -> str:
+    rule = (doc or {}).get("door_rule")
+    return rule if rule in DOOR_RULES else DEFAULT_DOOR_RULE
 MAX_INTRO_CHARS   = 160
 MAX_WELCOME_CHARS = 280
 
@@ -99,6 +111,7 @@ class ChatProfileUpdate(BaseModel):
     room_status:      Optional[str] = None   # "" clears
     gallery_visibility: Optional[str] = None
     knocks_open:      Optional[bool] = None
+    door_rule:        Optional[str] = None   # see DOOR_RULES
 
 
 class CapacityUpgradeRequest(BaseModel):
@@ -172,6 +185,7 @@ def _sanitize(doc: dict, user: Optional[dict] = None) -> dict:
         "room_status":         doc.get("room_status"),
         "gallery_visibility":  doc.get("gallery_visibility") or "window",
         "knocks_open":         doc.get("knocks_open", True),
+        "door_rule":           door_rule_of(doc),
         "updated_at":          doc["updated_at"].isoformat() if doc.get("updated_at") else None,
     }
 
@@ -238,6 +252,10 @@ async def update_my_chat_profile(
         update["gallery_visibility"] = data.gallery_visibility
     if data.knocks_open is not None:
         update["knocks_open"] = data.knocks_open
+    if data.door_rule is not None:
+        if data.door_rule not in DOOR_RULES:
+            raise HTTPException(status_code=400, detail=f"door_rule must be one of: {', '.join(sorted(DOOR_RULES))}")
+        update["door_rule"] = data.door_rule
 
     await db["chat_profiles"].update_one(
         {"user_id": current_user_id},
@@ -450,8 +468,13 @@ async def get_room_preview(
     ) if post and user_id != current_user_id else None
     theirs = await db["drop_unlock_requests"].find_one(
         {"requester_id": user_id, "owner_id": current_user_id, "status": "pending", "expires_at": {"$gt": now}},
-        {"_id": 1, "pitch": 1, "intents": 1, "target_id": 1, "media_url": 1, "media_type": 1},
+        {"_id": 1, "pitch": 1, "intents": 1, "target_id": 1, "media_url": 1, "media_type": 1,
+         "peek": 1, "voice_url": 1, "voice_duration": 1},
     ) if user_id != current_user_id else None
+    their_signals = {}
+    if theirs:
+        from app.api.v1.unlock_requests import _signals
+        their_signals = (await _signals(db, current_user_id, {user_id})).get(user_id, {})
 
     # The gallery is filtered by the owner's visibility setting. A visitor is
     # told how many pieces are kept back (never what they are), so a Knock is
@@ -460,7 +483,7 @@ async def get_room_preview(
     visible = gallery_for(raw_profile, current_user_id, user_id, inside)
     room = {k: profile[k] for k in (
         "background_pattern", "font_style", "profile_picture_url", "anonymous_name", "call_mode",
-        "room_theme", "intro", "room_status", "knocks_open", "gallery_visibility",
+        "room_theme", "intro", "room_status", "knocks_open", "gallery_visibility", "door_rule",
     )}
     room["gallery"] = visible
     room["gallery_hidden"] = len(raw_profile.get("gallery", [])) - len(visible)
@@ -476,6 +499,8 @@ async def get_room_preview(
         "incoming_request": {
             "id": str(theirs["_id"]), "pitch": theirs.get("pitch"), "intents": theirs.get("intents") or [],
             "target_id": theirs.get("target_id"), "media_url": theirs.get("media_url"), "media_type": theirs.get("media_type"),
+            "peek": theirs.get("peek") or [], "voice_url": theirs.get("voice_url"), "voice_duration": theirs.get("voice_duration"),
+            "signals": their_signals,
         } if theirs else None,
         "linkup_cost": await unlock_cost_for(current_user_id, db),
     }

@@ -169,3 +169,35 @@
 
 .u-quote.full { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .u-readall { align-self: center; margin: 4px 0 0; padding: 0; border: 0; background: none; color: var(--rose); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+
+/* door rules + peek on the Knock sheet */
+.lu-door { margin: 0 0 8px; font-size: 13px; color: var(--fg); background: var(--rose-dim, rgba(255, 99, 74, 0.1)); border: 1px solid rgba(255, 99, 74, 0.3); border-radius: 10px; padding: 8px 10px; }
+.lu-peek, .lu-voice { display: grid; gap: 8px; width: 100%; margin: 6px 0 4px; text-align: left; }
+.lu-peek label, .lu-voice label { font-size: 13px; font-weight: 700; }
+.lu-peek label small, .lu-voice label small { font-weight: 400; color: var(--muted); }
+.lu-peek-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.lu-peek-grid button { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; padding: 0; border: 2px solid transparent; background: var(--card); cursor: pointer; }
+.lu-peek-grid button.on { border-color: var(--rose); }
+.lu-peek-grid img, .lu-peek-grid video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lu-peek-on { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--rose); color: #fff; font-size: 12px; display: grid; place-items: center; }
+.lu-missing { color: var(--rose); }
+
+/* Knock clues on the host side (KnockClues.tsx) */
+.kc { display: grid; gap: 8px; margin: 6px 0; }
+.kc-sig { display: flex; flex-wrap: wrap; gap: 6px; }
+.kc-sig i { font-style: normal; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--muted); }
+.kc-sig i.good { background: rgba(52, 211, 153, 0.14); color: #34d399; }
+.kc-sig i.bad { background: rgba(255, 93, 108, 0.16); color: #ff5d6c; }
+.kc-tiles { display: flex; gap: 8px; flex-wrap: wrap; }
+.kc-tile { position: relative; width: 92px; height: 120px; border-radius: 12px; overflow: hidden; background: #000; flex: none; }
+.kc-tile.open { width: 180px; height: 240px; }
+.kc.compact .kc-tile { width: 64px; height: 84px; }
+.kc.compact .kc-tile.open { width: 150px; height: 200px; }
+.kc-tile img, .kc-tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kc-tile:not(.open) img, .kc-tile:not(.open) video, .kc-blur { filter: blur(18px) saturate(0.6); transform: scale(1.15); }
+.kc-veil { position: absolute; inset: 0; display: grid; place-content: center; gap: 2px; border: 0; background: rgba(0, 0, 0, 0.25); color: #fff; cursor: pointer; font: inherit; }
+.kc-veil b { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.kc-veil small { font-size: 11px; opacity: 0.85; }
+.kc-voice { display: grid; gap: 4px; }
+.kc-voice small { font-size: 11px; color: var(--muted); }
+.kc-voice audio { width: 100%; max-width: 280px; height: 36px; }

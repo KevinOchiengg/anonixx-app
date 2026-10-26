@@ -21,6 +21,7 @@ import {
   DEFAULT_ROOM_THEME, GALLERY_VISIBILITY, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
 } from "@/lib/roomThemes";
 import AppShell from "./AppShell";
+import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
 
 type Profile = {
@@ -39,12 +40,20 @@ type Profile = {
   room_status?: string | null;
   gallery_visibility?: string;
   knocks_open?: boolean;
+  door_rule?: string;
 };
 
-type Knock = {
+type Knock = KnockClue & {
   id: string; requester_id: string; requester_anonymous_name: string; requester_avatar_url: string | null;
   pitch: string | null; intents: string[]; confession_snippet: string; created_at: string;
 };
+
+// What a Knock on this Room must carry (Backend chat_profile.py DOOR_RULES).
+const DOOR_RULES: { id: string; label: string; hint: string }[] = [
+  { id: "line_peek", label: "A line + a peek", hint: "They write a line and show something: from their Room, a photo or video, or a voice note." },
+  { id: "line", label: "A line is enough", hint: "Just a line about themselves. Fewer clues, more knocks." },
+  { id: "voice", label: "A voice note", hint: "5 to 15 seconds of their voice. A strong clue without a face." },
+];
 type Conn = {
   id: string; other_user_id: string; other_anonymous_name: string; other_avatar_url: string | null;
   is_sender: boolean; last_message: string | null; last_message_at: string;
@@ -98,6 +107,7 @@ function Inner() {
   const [status, setStatus] = useState("");
   const [visibility, setVisibility] = useState("window");
   const [knocksOpen, setKnocksOpen] = useState(true);
+  const [doorRule, setDoorRule] = useState("line_peek");
   const [knocks, setKnocks] = useState<Knock[] | null>(null);
   const [inside, setInside] = useState<Conn[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -121,6 +131,7 @@ function Inner() {
     setStatus(d.room_status || "");
     setVisibility(d.gallery_visibility || "window");
     setKnocksOpen(d.knocks_open !== false);
+    setDoorRule(d.door_rule || "line_peek");
   };
 
   useEffect(() => {
@@ -228,7 +239,7 @@ function Inner() {
         method: "PUT",
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic, welcome_sound: sound, call_mode: callMode,
-          intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen,
+          intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, door_rule: doorRule,
         },
       });
       apply(d);
@@ -432,6 +443,7 @@ function Inner() {
                   <div className="rs-person-t">
                     <b>{k.requester_anonymous_name || "Anonymous"}</b>
                     <small>{k.pitch ? `“${k.pitch}”` : "Just knocked"}{k.intents?.length ? ` · ${k.intents.map(intentLabel).join(", ")}` : ""}</small>
+                    <KnockClues k={k} compact />
                   </div>
                   <div className="rs-person-acts">
                     <Link href={`/room/${k.requester_id}`}>Peek</Link>
@@ -527,6 +539,17 @@ function Inner() {
               </span>
               <button type="button" role="switch" aria-checked={knocksOpen} aria-label="Taking knocks" className={`rs-switch${knocksOpen ? " on" : ""}`} onClick={() => setKnocksOpen(!knocksOpen)} />
             </div>
+
+            <p className="rs-h">What a knock must include</p>
+            <div className="rs-opts" role="radiogroup" aria-label="Door rule">
+              {DOOR_RULES.map((r) => (
+                <button key={r.id} type="button" role="radio" aria-checked={doorRule === r.id} className={`rs-opt${doorRule === r.id ? " on" : ""}`} onClick={() => setDoorRule(r.id)}>
+                  <i />
+                  <span><b>{r.label}</b><small>{r.hint}</small></span>
+                </button>
+              ))}
+            </div>
+            <p className="rs-info">Photos and videos on a knock arrive blurred until you tap them, and disappear if you decline.</p>
 
             <p className="rs-info">
               Your Room is only reachable from your posts. It doesn&apos;t show up in search. People you block can&apos;t see your Room or knock on it.
