@@ -1,3 +1,4 @@
+import logging
 import socketio
 from bson import ObjectId
 from fastapi import FastAPI
@@ -23,7 +24,7 @@ from app.api.v1 import whatsapp
 from app.api.v1 import public
 from app.api.v1 import notifications
 from app.api.v1 import visits
-from app.api.v1 import admin_insights, agent_hub
+from app.api.v1 import admin_insights, agent_hub, discover
 from app.tasks import admin_monitor
 from app.api.v1 import (
     auth,
@@ -108,6 +109,24 @@ async def _ensure_indexes():
         await db["admin_alerts"].create_index([("type", 1), ("created_at", -1)], background=True)
         await db["signup_fingerprints"].create_index([("user_id", 1)], background=True)
         await db["drops"].create_index([("moderation_status", 1), ("risk_score", -1)], background=True)
+        # Discover: Near (fresh Link Ups by place) and Stories (by kind, newest first).
+        await db["drops"].create_index([("kind", 1), ("live_until", 1), ("created_at", -1)], background=True)
+        await db["drops"].create_index(
+            [("location_detail.country", 1), ("location_detail.county", 1), ("kind", 1), ("created_at", -1)], background=True,
+        )
+        await db["drops"].create_index([("sender_id", 1), ("created_at", -1)], background=True)
+        await db["drops"].create_index([("topics", 1), ("created_at", -1)], background=True)
+        await db["drop_unlock_requests"].create_index([("owner_id", 1), ("created_at", -1)], background=True)
+        await db["discover_impressions"].create_index([("at", 1)], expireAfterSeconds=35 * 86400, background=True)
+        await db["discover_impressions"].create_index([("day", 1)], background=True)
+        await db["discover_stats"].create_index([("at", 1)], expireAfterSeconds=180 * 86400, background=True)
+        await db["users"].create_index([("blocked_user_ids", 1)], background=True)
+        # One account per email (checked live: no duplicates existed when this was added).
+        try:
+            await db["users"].create_index([("email", 1)], unique=True, background=True)
+        except Exception as exc:   # e.g. duplicates appeared: report, don't skip the rest
+            print(f"⚠️ users.email unique index not created: {exc}")
+        await db["chat_profiles"].create_index([("listing", 1), ("updated_at", -1)], background=True)
         log.info("MongoDB indexes verified.")
     except Exception as exc:
         log.warning("Index creation skipped: %s", exc)
@@ -129,6 +148,21 @@ async def lifespan(app: FastAPI):
     await publisher_worker.stop()
     await close_mongo_connection()
 
+
+# Search text never reaches the server logs: the access log keeps the path of
+# Discover and search requests but drops their query strings (q=, places, filters).
+_PRIVATE_QUERY_PATHS = ("/discover/", "/drops/search")
+
+
+class _RedactSearchQueries(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str) and "?" in args[2]                 and any(p in args[2] for p in _PRIVATE_QUERY_PATHS):
+            record.args = args[:2] + (args[2].split("?", 1)[0] + "?[redacted]",) + args[3:]
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_RedactSearchQueries())
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -261,6 +295,7 @@ app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(visits.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_insights.router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_hub.router, prefix=settings.API_V1_PREFIX)
+app.include_router(discover.router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

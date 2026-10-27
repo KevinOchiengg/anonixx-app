@@ -29,7 +29,7 @@ export type Post = {
   mood_tag: string | null;
   kind?: "hookup" | "confession" | null;
   hookup?: {
-    age: number; gender: string | null; area: string; looking_for: string | null; age_min: number | null; age_max: number | null; vibes: string[];
+    age: number; gender: string | null; area: string; looking_for: string | null; age_min: number | null; age_max: number | null; vibes: string[]; fresh_window?: string | null;
     guided?: { craving: string | null; traits: string[]; hosting: string | null; public_first: boolean; tone: string | null; ai_generated: boolean } | null;
   } | null;
   sensitivity: "general" | "mature";

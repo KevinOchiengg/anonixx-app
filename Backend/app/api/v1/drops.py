@@ -27,6 +27,8 @@ from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted
 from app.tasks import scheduled_publisher
 from app.utils import stream
 from app.utils.countries import country_from_header, known_country
+from app.utils.discovery import VISIBLE as DISCOVERY_VISIBLE, fresh as discovery_fresh
+from app.utils.search_lexicon import clean_topics, place_from_area
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
@@ -178,6 +180,7 @@ class HookupDetails(BaseModel):
     age_max: Optional[int] = None
     vibes: Optional[List[str]] = None
     guided: Optional[GuidedDetails] = None
+    fresh_window: Optional[str] = None   # tonight | weekend | week | flexible (see FRESH_WINDOWS)
 
 
 def clean_guided(g: Optional["GuidedDetails"]) -> Optional[dict]:
@@ -201,6 +204,23 @@ def clean_guided(g: Optional["GuidedDetails"]) -> Optional[dict]:
     }
 
 
+def hookup_place(hookup: Optional[dict], user: Optional[dict], x_country: Optional[str] = None) -> Optional[dict]:
+    """Structured place for a hookup post sent without one (see create_drop)."""
+    place = place_from_area((hookup or {}).get("area") or "")
+    if place:
+        return place
+    user = user or {}
+    if user.get("location_county") or user.get("location_country"):
+        return {
+            "country": known_country(user.get("location_country")) or user.get("location_country") or None,
+            "county": user.get("location_county") or None,
+            "sub_county": user.get("location_sub_county") or None,
+            "estate": None,
+        }
+    country = country_from_header(x_country) or known_country(user.get("detected_country"))
+    return {"country": country, "county": None, "sub_county": None, "estate": None} if country else None
+
+
 def clean_hookup(h: "HookupDetails") -> dict:
     if h.age < 18 or h.age > 99:
         raise HTTPException(status_code=400, detail="You must be 18 or older to post a hookup confession.")
@@ -220,7 +240,29 @@ def clean_hookup(h: "HookupDetails") -> dict:
         "age_max": hi,
         "vibes": [v for v in dict.fromkeys(h.vibes or []) if v in HOOKUP_VIBES][:4],
         "guided": clean_guided(h.guided),
+        "fresh_window": h.fresh_window if h.fresh_window in FRESH_WINDOWS else "tonight",
     }
+
+
+# Fresh windows: how long a hookup post stays discoverable (in the feed and in
+# Near). Only discovery ends with it; Rooms, accepted visitors, conversations
+# and charges live elsewhere and are never touched by a post running out.
+#   window: (first run, each renewal step, ceiling after posting)
+FRESH_WINDOWS = {
+    "tonight":  (timedelta(hours=12), timedelta(hours=12), timedelta(hours=48)),
+    "weekend":  (None,                timedelta(days=3),   timedelta(days=14)),
+    "week":     (timedelta(days=7),   timedelta(days=3),   timedelta(days=14)),
+    "flexible": (timedelta(days=7),   timedelta(days=3),   timedelta(days=14)),
+}
+
+
+def fresh_until(window: Optional[str], now: datetime) -> datetime:
+    """When a new hookup post in this window stops being discoverable."""
+    first = FRESH_WINDOWS.get(window or "tonight", FRESH_WINDOWS["tonight"])[0]
+    if first is None:   # weekend: through the end of the coming Sunday (UTC)
+        days = (6 - now.weekday()) % 7
+        return (now + timedelta(days=days)).replace(hour=23, minute=59, second=0, microsecond=0)
+    return now + first
 
 
 def ensure_linkable(drop: dict) -> None:
@@ -350,6 +392,8 @@ class CreateDropRequest(BaseModel):
     # notes) be found from the search bar even when it has little or no text.
     tags: Optional[List[str]] = None
     display_name: Optional[str] = None
+    # Author-picked moods/topics for Stories (utils/search_lexicon.STORY_TAGS), up to 3.
+    topics: Optional[List[str]] = None
 
 
 class ReactToDropRequest(BaseModel):
@@ -392,10 +436,8 @@ class ReportDropRequest(BaseModel):
 # poster's own opt-in choice (publisher_opt_in), not a theme restriction.
 VALID_THEMES = {"desire"}
 
-VALID_MOOD_TAGS = {
-    "longing", "restless", "tender", "bitter", "hopeful",
-    "ashamed", "dangerous", "quiet", "unsent", "reckless",
-}
+# Mood tags: see VALID_MOOD_TAGS in the FEED section (the one set compose,
+# search and affinity all use).
 
 VALID_INTENSITIES = {"soft", "heavy", "devastating"}
 
@@ -862,6 +904,16 @@ async def create_drop(
                 raise HTTPException(status_code=400, detail="Pick pin or boost, for 6 hours, 1, 3 or 7 days.")
             promo_until = now_utc() + timedelta(hours=data.promo_hours)
 
+    # Hookup posts are found in Near by place. The guided form only asks for a free-text
+    # area, so when no structured place was sent it comes from that area ("Westlands" ->
+    # Westlands, Nairobi, Kenya), else the poster's own profile area, else their country.
+    # This is also how travel works: an area somewhere else is found there, and the
+    # poster's profile location never changes.
+    if kind == "hookup" and not location_detail:
+        location_detail = hookup_place(hookup_data, user, x_country)
+        if location_detail:
+            location_display = ", ".join(v for v in (location_detail.get("sub_county"), location_detail.get("county"), location_detail.get("country")) if v)
+
     drop = {
         "_id": ObjectId(),
         "sender_id": current_user_id,
@@ -897,7 +949,7 @@ async def create_drop(
         "intent": data.intent if data.intent in VALID_INTENTS and data.intent != "the-exchange" else None,
         "kind": kind,
         "hookup": hookup_data,
-        "live_until": now_utc() + timedelta(hours=HOOKUP_LIVE_HOURS) if kind == "hookup" else None,
+        "live_until": fresh_until((hookup_data or {}).get("fresh_window"), now_utc()) if kind == "hookup" else None,
         "created_at": now_utc(),
 
         # ── Drop spec upgrade fields ──────────────────────────
@@ -940,6 +992,7 @@ async def create_drop(
         "poll":       poll_data,
         "font_style": font_style,
         "tags":       tags or None,
+        "topics":     (clean_topics(data.topics) or None) if kind != "hookup" else None,
 
         # ── Native social engagement (like/save/comment/view) ─
         "liked_by":     [],
@@ -1904,54 +1957,48 @@ def _weighted_shuffle_drops(drops: list, user_affinities: dict) -> list:
 async def batch_format_drops(drops: list, current_user_id: Optional[str], db) -> list:
     drop_ids     = [str(d["_id"]) for d in drops]
     drop_ids_obj = [d["_id"] for d in drops]
-
-    thread_counts = {}
-    async for item in db["drop_threads"].aggregate([
-        {"$match": {"drop_id": {"$in": drop_ids}}},
-        {"$group": {"_id": "$drop_id", "count": {"$sum": 1}}},
-    ]):
-        thread_counts[item["_id"]] = item["count"]
-
-    # "4 linked up" social proof on hookup posts: pending + accepted requests.
-    linkup_counts: dict[str, int] = {}
     hookup_ids = [str(d["_id"]) for d in drops if d.get("kind") == "hookup"]
-    if hookup_ids:
-        async for item in db["drop_unlock_requests"].aggregate([
-            {"$match": {"target_id": {"$in": hookup_ids}, "status": {"$in": ["pending", "accepting", "accepted"]}}},
-            {"$group": {"_id": "$target_id", "count": {"$sum": 1}}},
-        ]):
-            linkup_counts[item["_id"]] = item["count"]
-
-    saved_set = set()
-    liked_set = set()
-    voted_map: dict[str, int] = {}
-
     # Sender avatars — one batch lookup for the whole page, not one query
     # per drop. Admin drops are excluded on purpose: is_admin_drop's whole
     # point is that the real account behind it stays untraceable, and that
     # guarantee is separate from (and stricter than) the regular per-drop
     # identity reveal.
-    sender_ids = {
-        d.get("sender_id") for d in drops
-        if d.get("sender_id") and not d.get("is_admin_drop")
-    }
-    sender_avatars: dict[str, Optional[str]] = {}
-    if sender_ids:
-        valid_oids = [ObjectId(sid) for sid in sender_ids if ObjectId.is_valid(sid)]
-        async for u in db["users"].find({"_id": {"$in": valid_oids}}, {"avatar_url": 1}):
-            sender_avatars[str(u["_id"])] = u.get("avatar_url")
+    sender_oids = [
+        ObjectId(sid) for sid in {
+            d.get("sender_id") for d in drops
+            if d.get("sender_id") and not d.get("is_admin_drop")
+        } if ObjectId.is_valid(sid)
+    ]
 
-    if current_user_id:
-        async for s in db["saved_drops"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}):
-            saved_set.add(s["drop_id"])
+    # The page's lookups don't depend on each other, so they run together: one
+    # database round trip of waiting instead of six in a row.
+    async def counts(coll, pipeline):
+        return {item["_id"]: item["count"] async for item in db[coll].aggregate(pipeline)}
 
-        async for d in db["drops"].find(
-            {"_id": {"$in": drop_ids_obj}, "liked_by": current_user_id}, {"_id": 1}
-        ):
-            liked_set.add(str(d["_id"]))
+    async def none():
+        return []
 
-        async for v in db["drop_poll_votes"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}):
-            voted_map[v["drop_id"]] = v["option_index"]
+    (
+        thread_counts, linkup_counts, avatar_rows, saved_rows, liked_rows, vote_rows,
+    ) = await asyncio.gather(
+        counts("drop_threads", [
+            {"$match": {"drop_id": {"$in": drop_ids}}},
+            {"$group": {"_id": "$drop_id", "count": {"$sum": 1}}},
+        ]),
+        # "4 linked up" social proof on hookup posts: pending + accepted requests.
+        counts("drop_unlock_requests", [
+            {"$match": {"target_id": {"$in": hookup_ids}, "status": {"$in": ["pending", "accepting", "accepted"]}}},
+            {"$group": {"_id": "$target_id", "count": {"$sum": 1}}},
+        ]) if hookup_ids else asyncio.sleep(0, result={}),
+        db["users"].find({"_id": {"$in": sender_oids}}, {"avatar_url": 1}).to_list(None) if sender_oids else none(),
+        db["saved_drops"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}, {"drop_id": 1}).to_list(None) if current_user_id else none(),
+        db["drops"].find({"_id": {"$in": drop_ids_obj}, "liked_by": current_user_id}, {"_id": 1}).to_list(None) if current_user_id else none(),
+        db["drop_poll_votes"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}, {"drop_id": 1, "option_index": 1}).to_list(None) if current_user_id else none(),
+    )
+    sender_avatars: dict[str, Optional[str]] = {str(u["_id"]): u.get("avatar_url") for u in avatar_rows}
+    saved_set = {r["drop_id"] for r in saved_rows}
+    liked_set = {str(r["_id"]) for r in liked_rows}
+    voted_map: dict[str, int] = {v["drop_id"]: v["option_index"] for v in vote_rows}
 
     formatted = []
     for drop in drops:
@@ -2017,6 +2064,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "card_image_url":   drop.get("card_image_url"),
             "poll":             poll_out,
             "tags":             drop.get("tags") or None,
+            "topics":           drop.get("topics") or None,
             "thread_count":     thread_counts.get(did, 0),
             "views_count":      drop.get("views_count", 0),
             "saves_count":      drop.get("saves_count", 0),
@@ -2085,11 +2133,13 @@ async def get_drops_feed(
             get_behavioral_interests(current_user_id, db),
         )
 
-    blocked_ids = user_doc.get("blocked_user_ids", []) if user_doc else []
+    blocked_ids = list(user_doc.get("blocked_user_ids", []) if user_doc else [])
+    if current_user_id:
+        blocked_ids += [str(u["_id"]) async for u in db["users"].find({"blocked_user_ids": current_user_id}, {"_id": 1})]
 
     pool_query = {"sender_id": {"$nin": blocked_ids}} if blocked_ids else {}
     pool_query = apply_content_mode(pool_query, mature_allowed(x_content_mode, user_doc))
-    pool_query = {"$and": [pool_query, live_filter(now_utc())]} if pool_query else live_filter(now_utc())
+    pool_query = {"$and": [pool_query, discovery_fresh(now_utc()), DISCOVERY_VISIBLE]} if pool_query else {"$and": [discovery_fresh(now_utc()), DISCOVERY_VISIBLE]}
 
     loc_filter = build_feed_location_filter(
         {
@@ -2243,10 +2293,9 @@ async def search_drops(
     if loc_filter:
         base_filter = {"$and": [base_filter, loc_filter]} if base_filter else loc_filter
 
-    user_doc = None
-    if current_user_id and ObjectId.is_valid(current_user_id):
-        user_doc = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"age_verified": 1})
-    base_filter = apply_content_mode(base_filter, mature_allowed(x_content_mode, user_doc))
+    from app.utils.discovery import viewer_context, eligible
+    ctx = await viewer_context(db, current_user_id, x_content_mode)
+    base_filter = {"$and": ([base_filter] if base_filter else []) + eligible(ctx, now_utc())}
 
     sort_key = "likes_count" if filter == "popular" else "created_at"
 
@@ -2293,6 +2342,8 @@ async def get_my_drops(
             "saves_count":  drop.get("saves_count", 0),
             "created_at":   created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
             "edited_at":    drop["edited_at"].isoformat() if drop.get("edited_at") else None,
+            "kind":         drop.get("kind"),
+            "topics":       drop.get("topics") or [],
             "time_ago":     get_time_ago(created_at) if created_at else "",
         })
 
@@ -2316,7 +2367,7 @@ async def extend_hookup(
         oid = ObjectId(drop_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid drop ID.")
-    drop = await db["drops"].find_one({"_id": oid}, {"sender_id": 1, "kind": 1, "live_until": 1, "created_at": 1})
+    drop = await db["drops"].find_one({"_id": oid}, {"sender_id": 1, "kind": 1, "live_until": 1, "created_at": 1, "hookup.fresh_window": 1})
     if not drop:
         raise HTTPException(status_code=404, detail="Drop not found.")
     if drop["sender_id"] != current_user_id:
@@ -2324,17 +2375,20 @@ async def extend_hookup(
     if drop.get("kind") != "hookup":
         raise HTTPException(status_code=400, detail="Only hookup posts run on a timer.")
     now = now_utc()
-    ceiling = _aware(drop["created_at"]) + timedelta(hours=HOOKUP_MAX_LIVE_HOURS)
+    _, step, most = FRESH_WINDOWS.get((drop.get("hookup") or {}).get("fresh_window") or "tonight", FRESH_WINDOWS["tonight"])
+    ceiling = _aware(drop["created_at"]) + most
     base = max(now, _aware(drop["live_until"])) if drop.get("live_until") else now
     if base >= ceiling - timedelta(minutes=1):
-        raise HTTPException(status_code=400, detail=f"Hookup posts can run {HOOKUP_MAX_LIVE_HOURS} hours at most. Post a fresh one.")
-    live_until = min(base + timedelta(hours=HOOKUP_LIVE_HOURS), ceiling)
+        limit = f"{int(most.total_seconds() // 3600)} hours" if most < timedelta(days=3) else f"{most.days} days"
+        raise HTTPException(status_code=400, detail=f"This post can stay up {limit} at most. Post a fresh one.")
+    live_until = min(base + step, ceiling)
     await db["drops"].update_one({"_id": oid}, {"$set": {"live_until": live_until}})
     return {"live_until": live_until.isoformat()}
 
 
 class EditDropRequest(BaseModel):
-    content: str
+    content: Optional[str] = None
+    topics: Optional[List[str]] = None   # replaces the author's moods/topics; [] clears
 
 
 @router.patch("/{drop_id}")
@@ -2344,7 +2398,9 @@ async def edit_drop(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    if not data.content.strip():
+    if data.content is None and data.topics is None:
+        raise HTTPException(status_code=400, detail="Nothing to change.")
+    if data.content is not None and not data.content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty.")
 
     try:
@@ -2358,11 +2414,23 @@ async def edit_drop(
     if drop["sender_id"] != current_user_id:
         raise HTTPException(status_code=403, detail="You can only edit your own drops.")
 
-    await db["drops"].update_one(
-        {"_id": oid},
-        {"$set": {"confession": data.content.strip(), "edited_at": now_utc()}},
-    )
-    return {"message": "Drop updated."}
+    update: dict = {"edited_at": now_utc()}
+    if data.content is not None:
+        # Edits pass the same gates as a new post (they used to skip them, so a
+        # clean post could be edited into one carrying a phone number).
+        text = data.content.strip()
+        if contains_contact_info(text):
+            raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+        if violates_policy(text):
+            raise HTTPException(status_code=400, detail=MODERATION_ERROR)
+        update["confession"] = text
+        update["sensitivity"] = classify_sensitivity(text, marked_mature=drop.get("sensitivity") == "mature")
+    if data.topics is not None:
+        if drop.get("kind") == "hookup":
+            raise HTTPException(status_code=400, detail="Moods and topics are for confessions.")
+        update["topics"] = clean_topics(data.topics) or None
+    await db["drops"].update_one({"_id": oid}, {"$set": update})
+    return {"message": "Drop updated.", "topics": update.get("topics", drop.get("topics")) or []}
 
 
 @router.delete("/{drop_id}")

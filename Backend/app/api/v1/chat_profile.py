@@ -15,7 +15,7 @@ to a first-time unlocker as a swipeable takeover — see GET
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from bson import ObjectId
 
@@ -79,6 +79,44 @@ GALLERY_VISIBILITY = {"window", "inside", "only_me"}
 DOOR_RULES = {"line", "line_peek", "voice"}
 DEFAULT_DOOR_RULE = "line_peek"
 
+# Room listing in Discover (api/v1/discover.py):
+#   discoverable  shows in Near on its own
+#   limited       reachable through the owner's posts and links only (default)
+#   private       the owner stays out of Near entirely
+# Existing Rooms are "limited" until their owner chooses otherwise.
+LISTINGS = {"discoverable", "limited", "private"}
+DEFAULT_LISTING = "limited"
+
+# Availability, as people see it (never online status or last seen):
+#   open    taking new knocks
+#   break   not taking new knocks, optionally until a time (knocks_paused_until)
+#   hidden  listing "private": out of Near (knocks via posts follow the switch above)
+# A break never touches people already inside or their chats.
+BREAK_HOURS = {12, 72, 168}   # tonight, 3 days, a week; anything else = until switched back on
+
+
+def knocks_open_of(doc: Optional[dict], now: Optional[datetime] = None) -> bool:
+    """The one answer to "can someone knock right now?". A timed break ends by itself."""
+    doc = doc or {}
+    if doc.get("knocks_open", True) is not False:
+        return True
+    until = doc.get("knocks_paused_until")
+    if not until:
+        return False
+    until = until if until.tzinfo else until.replace(tzinfo=timezone.utc)
+    return until <= (now or _now())
+
+
+def availability_of(doc: Optional[dict], now: Optional[datetime] = None) -> str:
+    if (doc or {}).get("listing") == "private":
+        return "hidden"
+    return "open" if knocks_open_of(doc, now) else "break"
+
+
+def closed_query(now: datetime) -> dict:
+    """Mongo condition for chat_profiles not taking knocks right now (mirrors knocks_open_of)."""
+    return {"knocks_open": False, "$or": [{"knocks_paused_until": None}, {"knocks_paused_until": {"$gt": now}}]}
+
 
 def door_rule_of(doc: dict) -> str:
     rule = (doc or {}).get("door_rule")
@@ -112,6 +150,8 @@ class ChatProfileUpdate(BaseModel):
     gallery_visibility: Optional[str] = None
     knocks_open:      Optional[bool] = None
     door_rule:        Optional[str] = None   # see DOOR_RULES
+    listing:          Optional[str] = None   # see LISTINGS
+    break_hours:      Optional[int] = None   # with knocks_open=False: one of BREAK_HOURS, else until switched back
 
 
 class CapacityUpgradeRequest(BaseModel):
@@ -184,8 +224,11 @@ def _sanitize(doc: dict, user: Optional[dict] = None) -> dict:
         "welcome_message":     doc.get("welcome_message"),
         "room_status":         doc.get("room_status"),
         "gallery_visibility":  doc.get("gallery_visibility") or "window",
-        "knocks_open":         doc.get("knocks_open", True),
+        "knocks_open":         knocks_open_of(doc),
+        "availability":        availability_of(doc),
+        "break_until":         doc["knocks_paused_until"].isoformat() if not knocks_open_of(doc) and doc.get("knocks_paused_until") else None,
         "door_rule":           door_rule_of(doc),
+        "listing":             doc.get("listing") if doc.get("listing") in LISTINGS else DEFAULT_LISTING,
         "updated_at":          doc["updated_at"].isoformat() if doc.get("updated_at") else None,
     }
 
@@ -252,6 +295,19 @@ async def update_my_chat_profile(
         update["gallery_visibility"] = data.gallery_visibility
     if data.knocks_open is not None:
         update["knocks_open"] = data.knocks_open
+        if data.knocks_open is True:
+            update["knocks_paused_until"] = None
+        elif data.break_hours is not None:
+            update["knocks_paused_until"] = _now() + timedelta(hours=data.break_hours) if data.break_hours in BREAK_HOURS else None
+        else:
+            # Saving other settings while on a break keeps its end time; a new break has none.
+            cur = await db["chat_profiles"].find_one({"user_id": current_user_id}, {"knocks_open": 1, "knocks_paused_until": 1}) or {}
+            if knocks_open_of(cur):   # wasn't on a (running) break
+                update["knocks_paused_until"] = None
+    if data.listing is not None:
+        if data.listing not in LISTINGS:
+            raise HTTPException(status_code=400, detail=f"listing must be one of: {', '.join(sorted(LISTINGS))}")
+        update["listing"] = data.listing
     if data.door_rule is not None:
         if data.door_rule not in DOOR_RULES:
             raise HTTPException(status_code=400, detail=f"door_rule must be one of: {', '.join(sorted(DOOR_RULES))}")

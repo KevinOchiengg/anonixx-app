@@ -46,6 +46,13 @@ const DOOR_RULES = [
   { id: 'voice', label: 'A voice note', hint: '5 to 15 seconds of their voice. A strong clue without a face.' },
 ];
 
+// Where the Room shows in Discover (Backend chat_profile.py LISTINGS). Default "limited".
+const LISTINGS = [
+  { id: 'discoverable', label: 'Show my Room in Near', hint: 'People browsing your area can find your Room, even when you have no post up.' },
+  { id: 'limited', label: 'Only through my posts', hint: "People reach your Room from your posts. It isn't listed on its own." },
+  { id: 'private', label: 'Keep me out of Near', hint: "Your posts still show in the feed, but you won't appear in Near." },
+];
+
 const TABS = [
   ['room', 'My Room'], ['knocks', 'Knocks'], ['inside', 'Inside'], ['appearance', 'Appearance'], ['privacy', 'Privacy'],
 ];
@@ -84,7 +91,11 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [roomStatus, setRoomStatus]           = useState('');
   const [galleryVisibility, setGalleryVisibility] = useState('window');
   const [knocksOpen, setKnocksOpen]           = useState(true);
+  // A break's length, picked when knocks go off this visit (null = keep what the server has).
+  const [breakHours, setBreakHours]           = useState(null);
+  const [breakUntil, setBreakUntil]           = useState(null);
   const [doorRule, setDoorRule]               = useState('line_peek');
+  const [listing, setListing]                 = useState('limited');
   const [knocks, setKnocks]                   = useState(null);
   const [inside, setInside]                   = useState(null);
   const [personBusy, setPersonBusy]           = useState(null);
@@ -121,7 +132,10 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setRoomStatus(data.room_status || '');
             setGalleryVisibility(data.gallery_visibility || 'window');
             setKnocksOpen(data.knocks_open !== false);
+            setBreakUntil(data.break_until || null);
+            setBreakHours(null);
             setDoorRule(data.door_rule || 'line_peek');
+            setListing(data.listing || 'limited');
           }
         }
       } catch {
@@ -236,7 +250,9 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           room_status: roomStatus,
           gallery_visibility: galleryVisibility,
           knocks_open: knocksOpen,
+          ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}),
           door_rule: doorRule,
+          listing,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -248,7 +264,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
       setSaving(false);
     }
   }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeSound, callMode, intro, welcomeMessage, roomStatus,
-      galleryVisibility, knocksOpen, doorRule, authHeaders, showToast]);
+      galleryVisibility, knocksOpen, breakHours, doorRule, listing, authHeaders, showToast]);
 
   // Applies straight away (the picker has its own Apply / Cancel).
   const handleApplyTheme = useCallback(async (id) => {
@@ -719,17 +735,37 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.optionTitle}>Taking knocks</Text>
                 <Text style={styles.optionHint}>
-                  {knocksOpen ? 'Anyone 18+ who finds your post can knock.' : 'Nobody can knock. People already inside stay inside.'}
+                  {knocksOpen
+                    ? 'Anyone 18+ who finds your post can knock.'
+                    : breakUntil && breakHours === null
+                      ? `Taking a break until ${new Date(breakUntil).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}. People already inside stay inside.`
+                      : 'Taking a break. Nobody new can knock. People already inside stay inside.'}
                 </Text>
               </View>
               <Switch
                 value={knocksOpen}
-                onValueChange={setKnocksOpen}
+                onValueChange={(v) => { setKnocksOpen(v); setBreakHours(v ? null : 12); }}
                 trackColor={{ false: T.surfaceAlt, true: T.gold }}
                 thumbColor="#fff"
                 accessibilityLabel="Taking knocks"
               />
             </View>
+            {!knocksOpen && breakHours !== null && [[12, 'For tonight', 'Back on in 12 hours'], [72, 'For 3 days', 'Back on by itself'], [168, 'For a week', 'Back on by itself'], [0, 'Until I switch it back', 'Stays off']].map(([h, label, hint]) => (
+              <TouchableOpacity
+                key={h}
+                style={[styles.option, breakHours === h && styles.optionOn]}
+                onPress={() => setBreakHours(h)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: breakHours === h }}
+              >
+                <View style={[styles.radio, breakHours === h && styles.radioOn]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.optionTitle}>{label}</Text>
+                  <Text style={styles.optionHint}>{hint}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            <Text style={styles.info}>Open or on a break is about knocks only. Nobody sees when you're online.</Text>
             <Text style={styles.sectionLabel}>What a knock must include</Text>
             {DOOR_RULES.map((r) => (
               <TouchableOpacity
@@ -747,8 +783,24 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
               </TouchableOpacity>
             ))}
             <Text style={styles.info}>Photos and videos on a knock arrive blurred until you tap them, and disappear if you decline.</Text>
+            <Text style={styles.sectionLabel}>Where people find your Room</Text>
+            {LISTINGS.map((r) => (
+              <TouchableOpacity
+                key={r.id}
+                style={[styles.option, listing === r.id && styles.optionOn]}
+                onPress={() => setListing(r.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: listing === r.id }}
+              >
+                <View style={[styles.radio, listing === r.id && styles.radioOn]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.optionTitle}>{r.label}</Text>
+                  <Text style={styles.optionHint}>{r.hint}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
             <Text style={styles.info}>
-              Your Room is only reachable from your posts. It doesn't show up in search. People you block can't see your Room or knock on it.
+              Near shows your area (county and country), never your exact spot. Open or taking a break is about knocks, not whether you're online. People you block can't see your Room or knock on it.
             </Text>
           </>
         )}

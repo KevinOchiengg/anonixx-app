@@ -50,6 +50,15 @@ const CONNECTION = [['casual', 'Casual'], ['dating', 'Dating'], ['company', 'Com
 const GENDERS = [['woman', 'Woman'], ['man', 'Man'], ['other', 'Other']];
 const TRAITS = [['sweet', 'Sweet'], ['playful', 'Playful'], ['shy', 'Shy'], ['adventurous', 'Adventurous'], ['affectionate', 'Affectionate'], ['bold', 'Bold'], ['curious', 'Curious'], ['calm', 'Calm']];
 const HOSTING = [['can_host', 'I can host'], ['can_travel', "I'll come to you"], ['either', 'Either works'], ['decide', "Let's decide together"]];
+// How long the post stays findable in the feed and in Near (Backend FRESH_WINDOWS).
+// Running out only ends discovery: Rooms, chats and people already let in stay.
+const FRESH = [['tonight', 'Tonight'], ['weekend', 'This weekend'], ['week', 'This week'], ['flexible', 'No rush']];
+const FRESH_HINT = {
+  tonight: 'Up for 12 hours. You can add more, up to 2 days.',
+  weekend: 'Up until Sunday night.',
+  week: 'Up for 7 days.',
+  flexible: 'Up for 7 days. Renew it when it runs out.',
+};
 const TONES = [['vulnerable', 'Vulnerable'], ['playful', 'Playful'], ['mysterious', 'Mysterious'], ['direct', 'Direct']];
 const HOSTING_TAG = { can_host: 'can host', can_travel: 'can travel', either: 'host or travel' };
 
@@ -174,6 +183,7 @@ export default function GuidedConfession({ navigation, onBack }) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
   const [posting, setPosting] = useState(false);
+  const [fresh, setFresh] = useState('tonight');
   const [ageGate, setAgeGate] = useState(false);
   const [waitIx, setWaitIx] = useState(0);
   const [sounds, setSounds] = useState(null);
@@ -301,6 +311,7 @@ export default function GuidedConfession({ navigation, onBack }) {
           looking_for: a.lookingFor,
           ...(wantedRange(a)[0] ? { age_min: wantedRange(a)[0], age_max: wantedRange(a)[1] } : {}),
           vibes: a.connection,
+          fresh_window: fresh,
           guided: {
             craving: a.craving === 'custom' ? null : a.craving,
             craving_custom: a.craving === 'custom' ? a.cravingCustom.trim() : null,
@@ -392,7 +403,7 @@ export default function GuidedConfession({ navigation, onBack }) {
             onChangeText={(v) => set({ area: v.slice(0, 60) })}
             placeholder="A neighbourhood or city"
           />
-          <Text style={s.hint}>Never your exact address.</Text>
+          <Text style={s.hint}>A town or neighbourhood, like Westlands or Kisumu. That's where people browsing Near find you, even if you're visiting. Never your exact address, and your profile location doesn't change.</Text>
           <Label optional>What kind of connection</Label>
           <View style={s.chips}>
             {CONNECTION.map(([k, l]) => <Chip key={k} label={l} active={a.connection.includes(k)} onPress={() => set({ connection: toggleIn(a.connection, k, 3) })} />)}
@@ -512,6 +523,11 @@ export default function GuidedConfession({ navigation, onBack }) {
         </LinearGradient>
 
         {!!genError && <Text style={s.error}>{genError}</Text>}
+        <Text style={s.label}>Keep it up for</Text>
+        <View style={s.chips}>
+          {FRESH.map(([k, l]) => <Chip key={k} label={l} active={fresh === k} onPress={() => setFresh(k)} />)}
+        </View>
+        <Text style={s.hint}>{FRESH_HINT[fresh]} Your Room and chats stay either way.</Text>
         {writerOff && <Text style={s.hint}>Write it yourself. Your answers are saved above if you want to look back.</Text>}
 
         {!writerOff && writer.enabled !== null && (

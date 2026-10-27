@@ -9,6 +9,7 @@ import "./profile.css";
 import "./unlock.css";
 import "./call.css";
 import "./feedparity.css";
+import "./discover.css";
 import "./room.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";

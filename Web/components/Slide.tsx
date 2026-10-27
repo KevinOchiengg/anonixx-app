@@ -4,9 +4,9 @@ import { splitHook } from "@/lib/captionHook";
 import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { timeLeft } from "@/lib/linkup";
+import { FRESH_LABEL, hookupTags, timeLeft } from "@/lib/linkup";
 import { allowMature, useMatureOk } from "@/lib/matureConsent";
-import VideoPlayer from "./VideoPlayer";
+import VideoPlayer, { TAP_GAP } from "./VideoPlayer";
 import FitImage from "./FitImage";
 import { Bookmark, Comment, Heart, Share } from "./icons";
 import { Flag, Link2, SoundOff } from "./feedicons";
@@ -57,21 +57,6 @@ function pickSound(sounds: Sound[] | undefined, post: Post): Sound | null {
   return pool.length ? pool[hash(post.id) % pool.length] : null;
 }
 
-// Compact facts from a hookup post (age, area, who, hosting), so the confession never has to list them.
-const HOSTING_TAG: Record<string, string> = { can_host: "can host", can_travel: "can travel", either: "host or travel" };
-function hookupTags(h: Post["hookup"]): string[] {
-  if (!h) return [];
-  const wanted = !h.age_min && !h.age_max ? "" : h.age_min && h.age_min === h.age_max ? `${h.age_min}` : `${h.age_min || 18}–${h.age_max || 99}`;
-  const who = h.looking_for === "woman" ? "into women" : h.looking_for === "man" ? "into men" : wanted ? "looking for" : null;
-  const range = wanted ? ` ${wanted}` : "";
-  return [
-    h.age ? `${h.age}${h.gender && h.gender !== "other" ? ` · ${h.gender}` : ""}` : null,
-    h.area || null,
-    who ? who + range : null,
-    (h.guided?.hosting && HOSTING_TAG[h.guided.hosting]) || null,
-    h.guided?.public_first ? "public first" : null,
-  ].filter((x): x is string => Boolean(x));
-}
 
 const LONG_PRESS_MS = 450;
 const LONG_PRESS_SLOP = 10;
@@ -86,7 +71,7 @@ export default function Slide({
   const matureOk = useMatureOk();
   const [expanded, setExpanded] = useState(false);
   const [fullText, setFullText] = useState(false);
-  const [burst, setBurst] = useState(0);
+  const [burst, setBurst] = useState<{ id: number; x: number; y: number; rot: number } | null>(null);
   const viewed = useRef(false);
   const lastTap = useRef(0);
   // Long-press anywhere on the post opens its menu (report / block, and 2x on videos).
@@ -231,15 +216,15 @@ export default function Slide({
     }
   }
 
-  function mediaTap() {
+  // Double tap likes (never unlikes); each further quick tap adds a heart where it lands.
+  function mediaTap(e: React.MouseEvent<HTMLDivElement>) {
     const now = Date.now();
-    if (now - lastTap.current < 300) {
-      lastTap.current = 0;
-      setBurst((b) => b + 1);
+    if (now - lastTap.current < TAP_GAP) {
+      const box = e.currentTarget.getBoundingClientRect();
+      setBurst((b) => ({ id: (b?.id ?? 0) + 1, x: e.clientX - box.left, y: e.clientY - box.top, rot: Math.round(Math.random() * 40 - 20) }));
       if (!post.is_liked) like();
-    } else {
-      lastTap.current = now;
     }
+    lastTap.current = now;
   }
 
   async function save() {
@@ -291,7 +276,7 @@ export default function Slide({
     try {
       const r = await api<{ live_until: string }>(`/drops/${post.id}/extend`, { method: "POST" });
       onPatch(post.id, { live_until: r.live_until });
-      onToast("12 more hours. Your post stays up.");
+      onToast("More time added. Your post stays up.");
     } catch (e) {
       onToast((e as Error).message);
     }
@@ -301,10 +286,10 @@ export default function Slide({
   const tags = hookupTags(post.hookup);
   const liveChips = post.kind === "hookup" && (left || post.linkup_count || post.is_own_post || tags.length) ? (
     <div className="live-chips">
-      {left ? <span className="hot">Tonight · {left}</span> : post.live_until ? <span>Ended</span> : null}
+      {left ? <span className="hot">{FRESH_LABEL[post.hookup?.fresh_window || "tonight"] || "Tonight"} · {left}</span> : post.live_until ? <span>Ended</span> : null}
       {tags.map((t) => <span key={t}>{t}</span>)}
       {post.linkup_count ? <span>{post.linkup_count} linked up</span> : null}
-      {post.is_own_post && post.live_until ? <button onClick={extend}>+12h</button> : null}
+      {post.is_own_post && post.live_until ? <button onClick={extend}>{(post.hookup?.fresh_window || "tonight") === "tonight" ? "+12h" : "+3 days"}</button> : null}
     </div>
   ) : null;
 
@@ -349,7 +334,16 @@ export default function Slide({
     >
       {hasMedia ? (
         <div className="media" onClick={mediaTap}>
-          {burst ? <span key={burst} className="heart-burst" aria-hidden><Heart filled /></span> : null}
+          {burst ? (
+            <span
+              key={burst.id}
+              className="heart-burst"
+              style={{ left: burst.x, top: burst.y, ["--rot" as string]: `${burst.rot}deg` }}
+              aria-hidden
+            >
+              <Heart filled />
+            </span>
+          ) : null}
           {slides ? (
             <>
               <div

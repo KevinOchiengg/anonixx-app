@@ -1,3 +1,4 @@
+from pymongo.errors import DuplicateKeyError
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
@@ -265,7 +266,10 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
             user["referred_by"]         = data.referral_code.upper()
             user["referred_by_user_id"] = str(referrer["_id"])
 
-    await db["users"].insert_one(user)
+    try:
+        await db["users"].insert_one(user)
+    except DuplicateKeyError:   # two signups racing for one email (users.email is unique)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     await _record_fingerprint(db, request, str(user_id))
 
     await credit_coins(

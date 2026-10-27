@@ -7,9 +7,10 @@ import { normalizeKePhone } from "@/lib/phone";
 import AppShell from "./AppShell";
 import Sheet from "./Sheet";
 import "@/app/money.css";
+import TopicPicker, { topicLabel } from "./compose/TopicPicker";
 
 type Balance = { balance: number; estimated_kes: number; payout_rate_kes_per_coin: number; cash_out_available?: boolean };
-type Mine = { id: string; content: string; views_count: number; likes_count: number; time_ago: string };
+type Mine = { id: string; content: string; views_count: number; likes_count: number; time_ago: string; kind?: string | null; topics?: string[] };
 type Tx = { id: string; description?: string; reason?: string; amount: number };
 type Wd = { id: string; amount_coins: number; mpesa_number: string; estimated_kes: number; status: string };
 type Impact = { all_time?: { people_supported: number; responses_received: number; saves_received: number } };
@@ -61,6 +62,12 @@ function Inner() {
     if (!window.confirm("Delete this post?")) return;
     try { await api(`/drops/${id}`, { method: "DELETE" }); load(); } catch (e) { setErr((e as Error).message); }
   }
+  const [tagging, setTagging] = useState<{ id: string; topics: string[] } | null>(null);
+  async function saveTopics() {
+    if (!tagging) return;
+    try { await api(`/drops/${tagging.id}`, { method: "PATCH", body: { topics: tagging.topics } }); setTagging(null); load(); }
+    catch (e) { setErr((e as Error).message); }
+  }
   async function edit(p: Mine) {
     const next = window.prompt("Edit your post", p.content);
     if (next === null || !next.trim() || next === p.content) return;
@@ -99,6 +106,17 @@ function Inner() {
         <div key={p.id} className="tx" style={{ alignItems: "center" }}>
           <Link href={`/drop/${p.id}`} className="grow"><b>{teaser(p.content, 80)}</b><small className="muted">{compact(p.views_count)} views · {p.likes_count} likes · {p.time_ago}</small></Link>
           <button className="pill ghost" onClick={() => edit(p)}>Edit</button>
+          {p.kind !== "hookup" ? (
+            <button className="pill ghost" onClick={() => setTagging(tagging?.id === p.id ? null : { id: p.id, topics: p.topics || [] })}>
+              {p.topics?.length ? p.topics.map(topicLabel).join(", ") : "Add mood"}
+            </button>
+          ) : null}
+          {tagging?.id === p.id ? (
+            <div className="dash-topics">
+              <TopicPicker value={tagging.topics} onChange={(t) => setTagging({ id: p.id, topics: t })} />
+              <button className="pill" onClick={saveTopics}>Save</button>
+            </div>
+          ) : null}
           <button className="pill ghost" onClick={() => del(p.id)}>Delete</button>
         </div>
       ))}

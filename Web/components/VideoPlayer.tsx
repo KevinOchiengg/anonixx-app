@@ -24,6 +24,7 @@ type Props = {
 const PlayIcon = () => <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z" /></svg>;
 
 const KEY_JUMP = 5;
+export const TAP_GAP = 250;
 
 export default function VideoPlayer({ src, poster, active, near, muted, edit, rate = 1 }: Props) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -35,6 +36,10 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
   const [len, setLen] = useState(0);
   const scrubbing = useRef(false);
   const resume = useRef(false);
+  // TikTok's tap: a single tap waits TAP_GAP before pausing, so a double tap
+  // (a like, handled by Slide) never pauses the video.
+  const lastTap = useRef(0);
+  const tapTimer = useRef<number | null>(null);
   // Trimmed clips play (and loop) only their window; untrimmed ones use the whole file.
   const start = edit?.start ?? 0;
   const end = edit?.end ?? 0;
@@ -135,6 +140,17 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, start, end]);
 
+  function tap() {
+    const now = Date.now();
+    if (tapTimer.current) window.clearTimeout(tapTimer.current);
+    tapTimer.current = null;
+    if (now - lastTap.current >= TAP_GAP) {
+      tapTimer.current = window.setTimeout(() => { tapTimer.current = null; togglePlay(); }, TAP_GAP);
+    }
+    lastTap.current = now;
+  }
+  useEffect(() => () => { if (tapTimer.current) window.clearTimeout(tapTimer.current); }, []);
+
   function togglePlay() {
     const v = ref.current;
     if (!v) return;
@@ -191,7 +207,7 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
   return (
     <div
       className={`vp ${landscape ? "land" : "port"}`}
-      onClick={() => togglePlay()}
+      onClick={tap}
     >
       {landscape && poster ? <div className="vp-blur" style={{ backgroundImage: `url(${poster})` }} /> : null}
       <video

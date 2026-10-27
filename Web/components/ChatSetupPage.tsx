@@ -40,7 +40,9 @@ type Profile = {
   room_status?: string | null;
   gallery_visibility?: string;
   knocks_open?: boolean;
+  break_until?: string | null;
   door_rule?: string;
+  listing?: string;
 };
 
 type Knock = KnockClue & {
@@ -53,6 +55,12 @@ const DOOR_RULES: { id: string; label: string; hint: string }[] = [
   { id: "line_peek", label: "A line + a peek", hint: "They write a line and show something: from their Room, a photo or video, or a voice note." },
   { id: "line", label: "A line is enough", hint: "Just a line about themselves. Fewer clues, more knocks." },
   { id: "voice", label: "A voice note", hint: "5 to 15 seconds of their voice. A strong clue without a face." },
+];
+// Where the Room shows in Discover (Backend chat_profile.py LISTINGS). Default "limited".
+const LISTINGS: { id: string; label: string; hint: string }[] = [
+  { id: "discoverable", label: "Show my Room in Near", hint: "People browsing your area can find your Room, even when you have no post up." },
+  { id: "limited", label: "Only through my posts", hint: "People reach your Room from your posts. It isn't listed on its own." },
+  { id: "private", label: "Keep me out of Near", hint: "Your posts still show in the feed, but you won't appear in Near." },
 ];
 type Conn = {
   id: string; other_user_id: string; other_anonymous_name: string; other_avatar_url: string | null;
@@ -107,7 +115,11 @@ function Inner() {
   const [status, setStatus] = useState("");
   const [visibility, setVisibility] = useState("window");
   const [knocksOpen, setKnocksOpen] = useState(true);
+  // A break's length, picked when knocks go off this visit (null = keep what the server has).
+  const [breakHours, setBreakHours] = useState<number | null>(null);
+  const [breakUntil, setBreakUntil] = useState<string | null>(null);
   const [doorRule, setDoorRule] = useState("line_peek");
+  const [listing, setListing] = useState("limited");
   const [knocks, setKnocks] = useState<Knock[] | null>(null);
   const [inside, setInside] = useState<Conn[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -131,7 +143,10 @@ function Inner() {
     setStatus(d.room_status || "");
     setVisibility(d.gallery_visibility || "window");
     setKnocksOpen(d.knocks_open !== false);
+    setBreakUntil(d.break_until || null);
+    setBreakHours(null);
     setDoorRule(d.door_rule || "line_peek");
+    setListing(d.listing || "limited");
   };
 
   useEffect(() => {
@@ -239,7 +254,7 @@ function Inner() {
         method: "PUT",
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic, welcome_sound: sound, call_mode: callMode,
-          intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, door_rule: doorRule,
+          intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
         },
       });
       apply(d);
@@ -535,10 +550,27 @@ function Inner() {
             <div className="rs-toggle">
               <span>
                 <b>Taking knocks</b>
-                <small>{knocksOpen ? "Anyone 18+ who finds your post can knock." : "Nobody can knock. People already inside stay inside."}</small>
+                <small>
+                  {knocksOpen
+                    ? "Anyone 18+ who finds your post can knock."
+                    : breakUntil && breakHours === null
+                      ? `Taking a break until ${new Date(breakUntil).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}. People already inside stay inside.`
+                      : "Taking a break. Nobody new can knock. People already inside stay inside."}
+                </small>
               </span>
-              <button type="button" role="switch" aria-checked={knocksOpen} aria-label="Taking knocks" className={`rs-switch${knocksOpen ? " on" : ""}`} onClick={() => setKnocksOpen(!knocksOpen)} />
+              <button type="button" role="switch" aria-checked={knocksOpen} aria-label="Taking knocks" className={`rs-switch${knocksOpen ? " on" : ""}`} onClick={() => { setKnocksOpen(!knocksOpen); setBreakHours(knocksOpen ? 12 : null); }} />
             </div>
+            {!knocksOpen && breakHours !== null ? (
+              <div className="rs-opts" role="radiogroup" aria-label="Break length">
+                {([[12, "For tonight", "Back on in 12 hours"], [72, "For 3 days", "Back on by itself"], [168, "For a week", "Back on by itself"], [0, "Until I switch it back", "Stays off"]] as const).map(([h, label, hint]) => (
+                  <button key={h} type="button" role="radio" aria-checked={breakHours === h} className={`rs-opt${breakHours === h ? " on" : ""}`} onClick={() => setBreakHours(h)}>
+                    <i />
+                    <span><b>{label}</b><small>{hint}</small></span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <p className="rs-info">Open or on a break is about knocks only. Nobody sees when you&apos;re online.</p>
 
             <p className="rs-h">What a knock must include</p>
             <div className="rs-opts" role="radiogroup" aria-label="Door rule">
@@ -551,8 +583,17 @@ function Inner() {
             </div>
             <p className="rs-info">Photos and videos on a knock arrive blurred until you tap them, and disappear if you decline.</p>
 
+            <p className="rs-h">Where people find your Room</p>
+            <div className="rs-opts" role="radiogroup" aria-label="Room listing">
+              {LISTINGS.map((r) => (
+                <button key={r.id} type="button" role="radio" aria-checked={listing === r.id} className={`rs-opt${listing === r.id ? " on" : ""}`} onClick={() => setListing(r.id)}>
+                  <i />
+                  <span><b>{r.label}</b><small>{r.hint}</small></span>
+                </button>
+              ))}
+            </div>
             <p className="rs-info">
-              Your Room is only reachable from your posts. It doesn&apos;t show up in search. People you block can&apos;t see your Room or knock on it.
+              Near shows your area (county and country), never your exact spot. Open or taking a break is about knocks, not whether you&apos;re online. People you block can&apos;t see your Room or knock on it.
               Manage blocked people in <Link href="/blocked">Blocked</Link>.
             </p>
             {saveBar}

@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic, IcFlag,
-  IcCalendar, IcKanban, IcMenu, IcBell, IcClose, IcHome, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList,
+  IcCalendar, IcKanban, IcMenu, IcBell, IcClose, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList,
 } from "./adminicons";
 import "../../app/admin.css";
 
@@ -179,7 +179,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <div className="adm-backdrop" onClick={() => setOpen(false)} />
         <aside className="adm-side">
           <div className="adm-sidehead">
-            <Link href="/admin" className="adm-brand"><span className="mark">A</span><span className="word">Anonixx</span></Link>
+            <Link href="/" className="adm-brand" title="Home feed" aria-label="Anonixx home feed"><span className="mark">A</span><span className="word">Anonixx</span></Link>
             <button type="button" className="adm-iconbtn adm-only-mobile" onClick={() => setOpen(false)} aria-label="Close menu"><IcClose /></button>
           </div>
           <nav className="adm-sidenav" aria-label="Admin">
@@ -199,7 +199,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               </div>
             ))}
           </nav>
-          <Link href="/" className="adm-sidefoot" title="Back to Anonixx"><span className="ic"><IcHome /></span><span className="lb">Back to Anonixx</span></Link>
         </aside>
 
         <div className="adm-wrap">

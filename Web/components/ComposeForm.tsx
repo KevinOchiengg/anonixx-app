@@ -14,6 +14,7 @@ import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import PollEditor, { type PollDraft } from "./compose/PollEditor";
 import TagUser, { type Tagged } from "./compose/TagUser";
 import LocationFields, { type LocationDraft } from "./compose/LocationFields";
+import TopicPicker from "./compose/TopicPicker";
 import Sheet from "./Sheet";
 import GuidedConfession, { GUIDED_SAVE_KEY } from "./compose/GuidedConfession";
 import {
@@ -63,7 +64,8 @@ function Inner() {
   const [hint, setHint] = useState("");
   const [unsent, setUnsent] = useState(false);
   const [intent, setIntent] = useState<IntentId>("skeleton-in-the-closet");
-  const [sheet, setSheet] = useState<"mood" | "sound" | "tag" | "place" | "share" | null>(null);
+  const [sheet, setSheet] = useState<"mood" | "feeling" | "sound" | "tag" | "place" | "share" | null>(null);
+  const [topics, setTopics] = useState<string[]>([]);
   const [sounds, setSounds] = useState<Sound[] | null>(null);
   const [soundId, setSoundId] = useState("");
   const [hearing, setHearing] = useState("");
@@ -196,6 +198,7 @@ function Inner() {
           confession: text.trim() || undefined,
           intent,
           mood_tag: theme.mood,
+          ...(topics.length ? { topics } : {}),
           font_style: "bold-tease",
           sensitivity: "general",
           publisher_opt_in: shareOut,
@@ -271,6 +274,7 @@ function Inner() {
       act: () => { if (hasMedia) { media?.upload?.cancel(); setMedia(null); setMode("text"); } else pickMode("media"); } },
     { key: "sound", label: "Sound", icon: <IconMusic />, on: !!soundId, show: mode !== "voice", act: () => setSheet("sound") },
     { key: "mood", label: "Mood", icon: <IconSparkles />, on: false, show: true, act: () => setSheet("mood") },
+    { key: "feeling", label: topics.length ? `Feeling · ${topics.length}` : "Feeling", icon: <IconSparkles />, on: topics.length > 0, show: true, act: () => setSheet("feeling") },
     { key: "tag", label: "Tag", icon: <IconUserPlus />, on: !!tagged, show: true, act: () => setSheet("tag") },
     { key: "place", label: "Place", icon: <IconPin />, on: placed, show: true, act: () => setSheet("place") },
     { key: "voice", label: "Voice", icon: <IconMic />, on: mode === "voice", show: admin, act: () => pickMode("voice") },
@@ -380,6 +384,12 @@ function Inner() {
       {sheet === "tag" ? (
         <Sheet title="Tag someone" onClose={() => setSheet(null)} tall>
           <TagUser value={tagged} onChange={setTagged} hint={hint} onHint={setHint} />
+          <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
+        </Sheet>
+      ) : null}
+      {sheet === "feeling" ? (
+        <Sheet title="Mood and topic" onClose={() => setSheet(null)} tall>
+          <TopicPicker value={topics} onChange={setTopics} />
           <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
         </Sheet>
       ) : null}

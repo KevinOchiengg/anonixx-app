@@ -16,9 +16,9 @@ type Exp = {
   results: { variant: string; visitors: number; signups: number; rate: number }[];
 };
 
-const TABS = ["channels", "retention", "drops", "tests"] as const;
+const TABS = ["channels", "retention", "drops", "discover", "tests"] as const;
 type Tab = (typeof TABS)[number];
-const LABELS: Record<Tab, string> = { channels: "Where users come from", retention: "Who comes back", drops: "Drops that convert", tests: "A/B tests" };
+const LABELS: Record<Tab, string> = { channels: "Where users come from", retention: "Who comes back", drops: "Drops that convert", discover: "Discover", tests: "A/B tests" };
 
 const pctCell = (v: number | null) => (v == null ? <span className="muted">too new</span> : <b style={{ color: v >= 30 ? "#34d399" : v >= 15 ? "#F59E0B" : "#ff5d6c" }}>{v}%</b>);
 const money = (usd: number, kes: number) => [usd ? `$${usd.toFixed(2)}` : "", kes ? `KES ${kes.toLocaleString()}` : ""].filter(Boolean).join(" + ") || "—";
@@ -200,6 +200,56 @@ function Tests() {
   );
 }
 
+type DiscoverStats = {
+  days: number;
+  fairness: { impressions: number; owners_shown: number; top_10pct_share: number | null; top_owner_share: number | null; gini: number | null };
+  daily: { day: string; surface: string; requests: number; zero_rate: number; loose_rate: number; avg_ms: number; max_ms: number }[];
+};
+const pc = (n: number | null | undefined) => (n == null ? "—" : `${Math.round(n * 100)}%`);
+
+// Discover (Backend api/v1/discover.py /discover/admin/stats): is attention in Near
+// concentrating on a few people, and is search finding things? Daily counters only.
+function Discover() {
+  const [days, setDays] = useState(7);
+  const [d, setD] = useState<DiscoverStats | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    setD(null);
+    api<DiscoverStats>(`/discover/admin/stats?days=${days}`).then(setD).catch((e) => setErr((e as Error).message));
+  }, [days]);
+  const f = d?.fairness;
+  return (
+    <div className="adm-panel">
+      <h3>Discover</h3>
+      <p className="muted small">How Near spreads attention, and how often searches come back empty. Counted per day, with no searches or viewers stored.</p>
+      <div className="adm-tabs">{[7, 14, 30].map((n) => <button key={n} type="button" className={days === n ? "on" : ""} onClick={() => setDays(n)}>{n} days</button>)}</div>
+      {err ? <p className="err">{err}</p> : !d || !f ? <p className="muted small">Loading…</p> : (
+        <>
+          <div className="adm-scroll">
+            <table className="adm-table">
+              <thead><tr><th>Near cards shown</th><th>People shown</th><th>Top 10% got</th><th>Top person got</th><th>Spread (gini)</th></tr></thead>
+              <tbody><tr><td>{f.impressions}</td><td>{f.owners_shown}</td><td>{pc(f.top_10pct_share)}</td><td>{pc(f.top_owner_share)}</td><td>{f.gini ?? "—"}</td></tr></tbody>
+            </table>
+          </div>
+          <p className="muted small">Gini near 0 means attention is spread evenly; near 1 means a few people get it all. Watch it as Near grows.</p>
+          <div className="adm-scroll">
+            <table className="adm-table">
+              <thead><tr><th>Day</th><th>Where</th><th>Searches</th><th>Empty</th><th>Any-word fallback</th><th>Avg ms</th><th>Slowest</th></tr></thead>
+              <tbody>
+                {d.daily.length ? [...d.daily].reverse().map((r) => (
+                  <tr key={r.day + r.surface}>
+                    <td>{r.day}</td><td>{r.surface}</td><td>{r.requests}</td><td>{pc(r.zero_rate)}</td><td>{pc(r.loose_rate)}</td><td>{r.avg_ms}</td><td>{r.max_ms}</td>
+                  </tr>
+                )) : <tr><td colSpan={7} className="muted">Nothing yet. It fills in as people use Discover.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function GrowthPage() {
   const [tab, setTab] = useState<Tab>("channels");
   return (
@@ -207,7 +257,7 @@ export default function GrowthPage() {
       <div className="adm-pagehead"><div><h2>Growth</h2><p>Which channels bring people who stay, and what to make more of.</p></div></div>
       <div className="adm-tabs">{TABS.map((t) => <button key={t} type="button" className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{LABELS[t]}</button>)}</div>
       <div className="adm-list">
-        {tab === "channels" ? <Channels /> : tab === "retention" ? <Retention /> : tab === "drops" ? <Drops /> : <Tests />}
+        {tab === "channels" ? <Channels /> : tab === "retention" ? <Retention /> : tab === "drops" ? <Drops /> : tab === "discover" ? <Discover /> : <Tests />}
       </div>
     </>
   );

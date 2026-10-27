@@ -396,13 +396,19 @@ const RailAvatar = ({ post, navigation }) => {
 // ─── VIDEO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 // Covers for videos posted without one (older R2 uploads), made once per URL.
 const posterCache = new Map();
+// Double-tap window: a single tap on a video waits this long before pausing.
+const TAP_GAP = 250;
 
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const lastTap = useRef(null);
+  const tapTimer = useRef(null);
+  const likedRef = useRef(liked);
+  likedRef.current = liked;
   const [showHeart, setShowHeart] = useState(false);
+  const [heartAt, setHeartAt] = useState(null);   // { x, y, rot }: where the finger landed
   const heartScale = useRef(new Animated.Value(0)).current;
   const heartOpacity = useRef(new Animated.Value(1)).current;
   const likeScale = useRef(new Animated.Value(1)).current;
@@ -524,25 +530,31 @@ const VideoSlide = ({
     return () => clearTimeout(t);
   }, [isActive, playerStatus]);
 
-  // Single tap pauses/resumes directly — no intermediate "reveal a play
-  // button, then tap that" step. Double tap (within 280ms) likes instead,
-  // same disambiguation delay as before so a like's first tap is never
-  // mistaken for a pause.
-  const handleTap = () => {
+  // TikTok's tap: a single tap waits TAP_GAP before pausing, so the first tap
+  // of a double tap never pauses. A second tap inside the gap cancels the
+  // pause and likes; every further quick tap adds another heart where the
+  // finger lands. A double tap never unlikes.
+  const handleTap = (e) => {
     const now = Date.now();
-    if (lastTap.current && now - lastTap.current < 280) {
-      triggerHeart();
-      if (!liked) handleLikeWithAnim();
+    const { locationX, locationY } = e.nativeEvent;
+    if (lastTap.current && now - lastTap.current < TAP_GAP) {
+      clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      triggerHeart(locationX, locationY);
+      if (!likedRef.current) { likedRef.current = true; handleLikeWithAnim(); }
     } else {
-      lastTap.current = now;
-      setTimeout(() => {
-        if (Date.now() - lastTap.current >= 260) {
-          isPlaying ? player.pause() : player.play();
-        }
-      }, 290);
+      clearTimeout(tapTimer.current);
+      tapTimer.current = setTimeout(() => {
+        tapTimer.current = null;
+        playingRef.current ? player.pause() : player.play();
+      }, TAP_GAP);
     }
     lastTap.current = now;
   };
+  useEffect(() => {
+    if (!isActive) { clearTimeout(tapTimer.current); tapTimer.current = null; }
+  }, [isActive]);
+  useEffect(() => () => clearTimeout(tapTimer.current), []);
 
   // Long-press opens the post's menu: 2x speed (stays on until switched off or the
   // video scrolls away) and Report or block. There's no ⋯ on the rail. Dragging
@@ -608,7 +620,8 @@ const VideoSlide = ({
     onLike();
   };
 
-  const triggerHeart = () => {
+  const triggerHeart = (x, y) => {
+    setHeartAt(x == null ? null : { x, y, rot: Math.round(Math.random() * 40 - 20) });
     setShowHeart(true);
     heartScale.setValue(0);
     heartOpacity.setValue(1);
@@ -686,7 +699,14 @@ const VideoSlide = ({
       )}
 
       {showHeart && (
-        <Animated.View pointerEvents="none" style={[ss.heartBurst, { transform: [{ scale: heartScale }], opacity: heartOpacity }]}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            ss.heartBurst,
+            heartAt && { left: heartAt.x, top: heartAt.y },
+            { transform: [{ scale: heartScale }, { rotate: `${heartAt?.rot || 0}deg` }], opacity: heartOpacity },
+          ]}
+        >
           <Heart size={100} color={THEME.primary} fill={THEME.primary} />
         </Animated.View>
       )}

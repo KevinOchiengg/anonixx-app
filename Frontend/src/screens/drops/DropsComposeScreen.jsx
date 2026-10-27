@@ -42,6 +42,7 @@ import { streamEnabled, uploadToStream, queueDrop, STREAM_DIRECT_MAX_BYTES } fro
 import { countryHeader } from '../../utils/country';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
+import TopicPicker from '../../components/drops/TopicPicker';
 import GuidedConfession, { GUIDED_SAVE_KEY } from '../../components/drops/GuidedConfession';
 import { TAG_GROUPS, TOP_TAGS } from '../../config/adminTags';
 
@@ -396,6 +397,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [locationCounty, setLocationCounty] = useState('');
   const [locationSubCounty, setLocationSubCounty] = useState('');
   const [locationEstate, setLocationEstate] = useState('');
+  const [storyTopics, setStoryTopics] = useState([]);   // author's moods/topics (confessions only)
   const [fontStyle, setFontStyle] = useState('bold-tease'); // classic | sultry-script | bold-tease
 
   // ── Intensity + one-word hint (section 11) ────────────────────
@@ -732,6 +734,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         intent:     cardIntent,
         mood_tag:   moodTag,
         intensity,
+        ...(kind !== 'hookup' && storyTopics.length ? { topics: storyTopics } : {}),
         // Hint only makes sense when a specific user is tagged.
         ...(taggedUser && hintClean ? { recognition_hint: hintClean } : {}),
         // Tag a specific user AND still hit marketplace.
@@ -846,7 +849,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   }, [
     format, text, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, intensity, hint, taggedUser, publisherOptIn,
-    locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle,
+    locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, storyTopics,
     isAdmin, videoEdit, videoMeta, coverAt, soundId, muteOriginal, promo, promoHours, publishAt, tags,
     dispatch, navigation, showToast,
   ]);
@@ -1071,6 +1074,17 @@ export default function DropsComposeScreen({ navigation, route }) {
               <UserPlus size={rs(18)} color={taggedUser ? T.primary : T.textMute} />
             </ToolIcon>
 
+            {kind !== 'hookup' && (
+            <ToolIcon
+              active={storyTopics.length > 0}
+              onPress={() => { dismissToolbarHint(); setActiveSheet('feeling'); }}
+              label={storyTopics.length ? `Feeling · ${storyTopics.length}` : 'Feeling'}
+              a11yLabel="Mood and topic — helps people find it in Stories"
+            >
+              <Feather size={rs(18)} color={storyTopics.length ? T.primary : T.textMute} />
+            </ToolIcon>
+            )}
+
             <ToolIcon
               active={!!locationSummary}
               onPress={() => { dismissToolbarHint(); setActiveSheet('location'); }}
@@ -1238,6 +1252,11 @@ export default function DropsComposeScreen({ navigation, route }) {
               <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
             </View>
           )}
+        </OptionSheet>
+
+        {/* ── Mood / topic sheet ── */}
+        <OptionSheet visible={activeSheet === 'feeling'} title="Mood and topic" onClose={closeSheet}>
+          <TopicPicker value={storyTopics} onChange={setStoryTopics} />
         </OptionSheet>
 
         {/* ── Location sheet ── */}

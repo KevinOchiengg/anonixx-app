@@ -278,8 +278,9 @@ async def create_unlock_request(
         raise HTTPException(status_code=400, detail="That's your own Room.")
     if await is_blocked_between(db, owner_id, current_user_id):
         raise HTTPException(status_code=404, detail="Room not found.")
-    owner_room = await db["chat_profiles"].find_one({"user_id": owner_id}, {"knocks_open": 1, "door_rule": 1}) or {}
-    if owner_room.get("knocks_open") is False:
+    owner_room = await db["chat_profiles"].find_one({"user_id": owner_id}, {"knocks_open": 1, "knocks_paused_until": 1, "door_rule": 1}) or {}
+    from app.api.v1.chat_profile import knocks_open_of
+    if not knocks_open_of(owner_room):
         raise HTTPException(status_code=403, detail="This Room isn't taking knocks right now.")
 
     # The peek: only pieces of the knocker's own Room.

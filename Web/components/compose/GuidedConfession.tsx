@@ -33,6 +33,15 @@ const GENDERS: [string, string][] = [["woman", "Woman"], ["man", "Man"], ["other
 const TRAITS: [string, string][] = [["sweet", "Sweet"], ["playful", "Playful"], ["shy", "Shy"], ["adventurous", "Adventurous"], ["affectionate", "Affectionate"], ["bold", "Bold"], ["curious", "Curious"], ["calm", "Calm"]];
 const HOSTING: [string, string][] = [["can_host", "I can host"], ["can_travel", "I'll come to you"], ["either", "Either works"], ["decide", "Let's decide together"]];
 const TONES: [string, string][] = [["vulnerable", "Vulnerable"], ["playful", "Playful"], ["mysterious", "Mysterious"], ["direct", "Direct"]];
+// How long the post stays findable in the feed and in Near (Backend FRESH_WINDOWS).
+// Running out only ends discovery: Rooms, chats and people already let in stay.
+const FRESH: [string, string][] = [["tonight", "Tonight"], ["weekend", "This weekend"], ["week", "This week"], ["flexible", "No rush"]];
+const FRESH_HINT: Record<string, string> = {
+  tonight: "Up for 12 hours. You can add more, up to 2 days.",
+  weekend: "Up until Sunday night.",
+  week: "Up for 7 days.",
+  flexible: "Up for 7 days. Renew it when it runs out.",
+};
 const HOSTING_TAG: Record<string, string> = { can_host: "can host", can_travel: "can travel", either: "host or travel" };
 
 const STEPS = [
@@ -117,6 +126,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [posting, setPosting] = useState(false);
+  const [fresh, setFresh] = useState("tonight");
   const [error, setError] = useState("");
   const [ageGate, setAgeGate] = useState(false);
   const [waitIx, setWaitIx] = useState(0);
@@ -242,6 +252,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             age_min: wantedRange(a)[0],
             age_max: wantedRange(a)[1],
             vibes: a.connection,
+            fresh_window: fresh,
             guided: {
               craving: a.craving === "custom" ? null : a.craving,
               craving_custom: a.craving === "custom" ? a.cravingCustom.trim() : null,
@@ -325,7 +336,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           <p className="hk-hint">Your age shows on your card. Fill one box for one age, both for a range, or leave theirs empty for anyone 18+.</p>
           <h3 className="gc-label">Where they can find you</h3>
           <input className="hk-field" maxLength={60} value={a.area} onChange={(e) => set({ area: e.target.value })} placeholder="A neighbourhood or city" aria-label="Where you are" />
-          <p className="hk-hint">Never your exact address.</p>
+          <p className="hk-hint">A town or neighbourhood, like Westlands or Kisumu. That&apos;s where people browsing Near find you, even if you&apos;re visiting. Never your exact address, and your profile location doesn&apos;t change.</p>
           <h3 className="gc-label">What kind of connection <span className="hk-opt">optional</span></h3>
           <Chips label="Connection" options={CONNECTION} isOn={(k) => a.connection.includes(k)} onPick={(k) => set({ connection: toggleIn(a.connection, k, 3) })} />
         </>
@@ -410,6 +421,9 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
               <div className="gc-tags">{tags.map((t) => <span key={t}>{t}</span>)}</div>
             </div>
             {genError ? <p className="hk-missing">{genError}</p> : null}
+            <h3 className="gc-label">Keep it up for</h3>
+            <Chips label="Keep it up for" options={FRESH} isOn={(k) => fresh === k} onPick={setFresh} />
+            <p className="hk-hint">{FRESH_HINT[fresh]} Your Room and chats stay either way.</p>
             {writerOff ? <p className="hk-hint">Write it yourself. Your answers are saved if you want to step back.</p> : null}
             {!writerOff && writer.enabled !== null ? (
               <>

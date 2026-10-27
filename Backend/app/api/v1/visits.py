@@ -203,7 +203,11 @@ async def track(request: Request, db=Depends(get_database)):
             if not (q or theme or place):
                 continue
             if q:
-                doc["q"] = q.lower()
+                # Never the typed text: only the curated terms it matched
+                # (utils/search_lexicon), or "other words".
+                from app.utils.search_lexicon import parse
+                terms = [c["label"].lower() for c in parse(q)["chips"]]
+                doc["q"] = " · ".join(terms) if terms else "(other words)"
             if theme:
                 doc["theme"] = theme
             if place:
