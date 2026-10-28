@@ -1,4 +1,4 @@
-import { API_URL, getToken, viewerCountry } from "./api";
+import { API_URL, deviceTz, getToken, viewerCountry } from "./api";
 
 /** Anonymous visit tracking for the Visitors page. Random visitor id; sessions end after 30
  * idle minutes. Nothing is sent for Do Not Track, bots or admin pages. Batched as text/plain,
@@ -89,7 +89,7 @@ export function flush(beacon = false) {
   if (!queue.length) return;
   const i = ids();
   if (!i) { queue = []; return; }
-  const body = JSON.stringify({ vid: i.vid, sid: i.sid, cc: viewerCountry(), in: Boolean(getToken()), events: queue.splice(0, 25) });
+  const body = JSON.stringify({ vid: i.vid, sid: i.sid, cc: viewerCountry(), tz: deviceTz(), in: Boolean(getToken()), events: queue.splice(0, 25) });
   const url = `${API_URL}/track`;
   try {
     if (beacon && navigator.sendBeacon) {

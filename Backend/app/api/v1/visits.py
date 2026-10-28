@@ -20,6 +20,7 @@ from app.database import get_database
 from app.dependencies import require_super_admin
 from app.utils import geoip
 from app.utils.countries import NAME_BY_CODE, known_country
+from app.utils.user_tz import valid_tz
 
 router = APIRouter(tags=["Visitors"])
 
@@ -150,6 +151,7 @@ async def track(request: Request, db=Depends(get_database)):
         cc = await geoip.country_of(ip)
     device, browser = _device(ua)
     signed_in = bool(body.get("in"))
+    tz = valid_tz(body.get("tz"))
     now = _now()
 
     docs = []
@@ -235,6 +237,8 @@ async def track(request: Request, db=Depends(get_database)):
     }
     if signed_in:
         update["$set"]["signed_in"] = True
+    if tz:
+        update["$set"]["tz"] = tz
     if any(d["type"] == "signup" for d in docs):
         update["$set"]["signed_up_at"] = now
     await db[VISITORS].update_one({"_id": vid}, update, upsert=True)
@@ -432,7 +436,7 @@ async def live_now(admin_id: str = Depends(require_super_admin), db=Depends(get_
                     "searches": {"$addToSet": "$q"}}},
     ]).to_list(None)} if sids else {}
     people = {v["_id"]: v async for v in db[VISITORS].find(
-        {"_id": {"$in": [r["_id"] for r in rows]}}, {"first_seen": 1, "sessions": 1, "first_ref": 1, "signed_up_at": 1})}
+        {"_id": {"$in": [r["_id"] for r in rows]}}, {"first_seen": 1, "sessions": 1, "first_ref": 1, "signed_up_at": 1, "tz": 1})}
     drop_ids = {m.group(1) for s in visits.values() for p in s["paths"] if (m := DROP_PATH.match(p or ""))}
     drops = {}
     if drop_ids:
@@ -446,7 +450,7 @@ async def live_now(admin_id: str = Depends(require_super_admin), db=Depends(get_
         web.append({
             "vid": r["_id"], "path": r["path"], "country": r.get("country"), "device": r.get("device"), "browser": r.get("browser"),
             "signed_in": bool(r.get("signed_in")), "signed_up": bool(p.get("signed_up_at")),
-            "returning": (p.get("sessions") or 0) > 1, "came_from": p.get("first_ref"),
+            "returning": (p.get("sessions") or 0) > 1, "came_from": p.get("first_ref"), "tz": p.get("tz"),
             "since": _aware(s.get("start")), "pages": s.get("views", 0),
             "drops": [{"id": i, "teaser": _teaser(drops.get(i)), "kind": (drops.get(i) or {}).get("kind"),
                        "mood": (drops.get(i) or {}).get("mood_tag")} for i in opened[:5]],

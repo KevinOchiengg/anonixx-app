@@ -190,7 +190,7 @@ function PageDetail({ path, days, onClose, onPick }: { path: string; days: numbe
 
 type LiveWeb = {
   vid: string; path: string; country: string | null; device: string | null; browser: string | null;
-  signed_in: boolean; signed_up: boolean; returning: boolean; came_from: string | null; since: string | null; pages: number;
+  signed_in: boolean; signed_up: boolean; returning: boolean; came_from: string | null; tz: string | null; since: string | null; pages: number;
   drops: { id: string; teaser: string; kind: string | null; mood: string | null }[]; searches: string[];
 };
 type LiveApp = {
@@ -264,7 +264,7 @@ function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => void; on
                     <Badge tone={w.returning ? undefined : "ok"}>{w.returning ? "returning" : "first visit"}</Badge>
                   </div>
                 </td>
-                <td>{flag(w.country)} {country(w.country)}<br /><small className="muted">{w.device} · {w.browser}</small></td>
+                <td>{flag(w.country)} {country(w.country)}<br /><small className="muted">{w.device} · {w.browser}{theirTime(w.tz) ? <> · <span title={w.tz || ""}>{theirTime(w.tz)} there</span></> : null}</small></td>
                 <td>{onFor(w.since)}</td>
                 <td>
                   {w.pages} page{w.pages === 1 ? "" : "s"}<br /><small className="muted">from {w.came_from || "direct"}</small>
