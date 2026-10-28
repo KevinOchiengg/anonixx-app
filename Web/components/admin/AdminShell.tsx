@@ -8,6 +8,7 @@ import {
   IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic, IcFlag,
   IcCalendar, IcKanban, IcMenu, IcBell, IcClose, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList,
 } from "./adminicons";
+import { useKeepPlace } from "./keepPlace";
 import "../../app/admin.css";
 
 // `scope` = what the admin's role must cover (Backend/app/dependencies.py ADMIN_ROLES);
@@ -98,6 +99,7 @@ function GateLoader() {
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
   const path = usePathname() || "/admin";
+  useKeepPlace(path);
   const [state, setState] = useState<"checking" | "ok" | "denied">("checking");
   const [isSuper, setIsSuper] = useState(false);
   const [collapsed, setCollapsed] = useState(false);

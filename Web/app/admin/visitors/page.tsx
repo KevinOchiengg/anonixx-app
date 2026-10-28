@@ -339,6 +339,21 @@ export default function VisitorsPage() {
   const [page, setPage] = useState<string | null>(null);
   const pick = (p: string) => { setOpen(null); setPage(p); };
 
+  // Range and open page live in the URL, so Back from a drop or a user lands
+  // here with the same view (scroll is handled by the shell's useKeepPlace).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const d = Number(q.get("days"));
+    if ((RANGES as readonly number[]).includes(d)) setDays(d as (typeof RANGES)[number]);
+    if (q.get("page")) setPage(q.get("page"));
+  }, []);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    q.set("days", String(days));
+    if (page) q.set("page", page); else q.delete("page");
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}?${q}`);
+  }, [days, page]);
+
   useEffect(() => {
     if (!isSuper) return;
     let live = true;
