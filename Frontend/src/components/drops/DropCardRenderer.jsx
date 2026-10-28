@@ -1,16 +1,4 @@
-/**
- * DropCardRenderer.jsx
- *
- * The visual heart of Anonixx Drops.
- * Renders a confession card with four zones, dynamic variation, and 14 themes.
- *
- *   Zone 1 — Background (diagonal gradient, grain, ghost quote mark)
- *   Zone 2 — Confession text (Playfair Italic, auto-scaling, accent line)
- *   Zone 3 — Mood tag + optional emotional context
- *
- * Renders at card aspect (1:1 square) — scales to parent width.
- * Use <DropCardRenderer confession=... theme=... /> anywhere a card is needed.
- */
+/** A confession card (1:1): background, confession text, mood tag. Scales to its parent. */
 import React, { useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,9 +7,7 @@ import Svg, { Circle, Line } from 'react-native-svg';
 import { rf, rp, rs } from '../../utils/responsive';
 
 // ─── Themes ───────────────────────────────────────────────────
-// After Dark / Tier-2 themes have been removed entirely — every drop uses
-// the same base theme now. What used to be theme-based colors are now
-// driven by confession type instead (see CARD_INTENTS below).
+// One base theme; colours come from the confession type (CARD_INTENTS).
 export const DROP_THEMES = {
   'desire': {
     tier: 1,
@@ -34,21 +20,8 @@ export const DROP_THEMES = {
 };
 
 // ─── Confession types ──────────────────────────────────────────
-// The audience/nature a drop is written for — chosen at compose time
-// (DropsComposeScreen's "Confession Type" picker). It owns the card's whole
-// visual identity: palette + a distinct background pattern (see
-// CARD_PATTERNS below). When `intent` is passed to DropCardRenderer and
-// matches a key here, it overrides the theme-derived palette entirely.
-// Trimmed to the 3 broadest intents + General as the default catch-all —
-// Single Parent / Gay / Lesbian were cut in favor of covering the widest
-// range of "why someone opens the app" (casual / serious / just lonely)
-// rather than specific-audience recognition.
-// Kept in sync with VALID_INTENTS in Backend/app/api/v1/drops.py — same ids.
-// Key order here IS the picker's display order (CARD_INTENT_LIST below is
-// built straight off Object.entries), so reordering these reorders the UI.
-// Renamed 2026-09-10 from real-connection / general / no-strings /
-// generous-arrangement. Old ids may still exist on drops written before
-// this migration ran — see scripts/migrate_intent_ids.py.
+// Each sets the card's palette and pattern. Ids match VALID_INTENTS in drops.py; key order
+// is the picker's order. Older drops may use the pre-2026-09-10 ids.
 export const CARD_INTENTS = {
   'meet-me': {
     // Dating / serious relationship — actually looking for something
@@ -101,11 +74,7 @@ export const CARD_INTENTS = {
 
 export const CARD_INTENT_LIST = Object.entries(CARD_INTENTS).map(([id, v]) => ({ id, ...v }));
 
-// ─── Seeded PRNG ────────────────────────────────────────────────
-// mulberry32 — small, fast, deterministic from a numeric seed. Used to
-// place pattern elements so the same confession always renders the same
-// pattern (no flicker/reflow), while different confessions get visibly
-// different layouts within the same intent.
+// ─── Seeded PRNG (mulberry32): same confession, same pattern.
 const mulberry32 = (seed) => {
   let a = seed;
   return () => {
@@ -117,13 +86,7 @@ const mulberry32 = (seed) => {
 };
 
 // ─── Background patterns ────────────────────────────────────────
-// Each draws behind the confession text at low opacity, stroke-only (no
-// fill) so it reads as texture, not decoration competing with the words.
-// This is the thing a screenshot needs to stop a thumb mid-scroll — every
-// pattern is intent-specific, not a generic wash.
-// Exported so the compose screen's confession-type picker can render the
-// same texture in miniature — the tile previews the real card, rather than
-// standing in for it with an unrelated icon.
+// Faint stroke-only textures per confession type. Exported for the compose picker previews.
 export const CardPattern = React.memo(function CardPattern({ type, width, height, color, seed }) {
   if (!type || type === 'none') return null;
   const rand = mulberry32((seed >>> 0) || 1);
@@ -195,11 +158,7 @@ export const CardPattern = React.memo(function CardPattern({ type, width, height
   );
 });
 
-// ─── Card font styles ──────────────────────────────────────────
-// `fontFamily` names map to real loaded assets (see src/config/fonts.js,
-// wired up via useFonts() in App.js) — the fontStyle/fontWeight/
-// letterSpacing values below are kept alongside them as a second layer
-// of differentiation on top of the actual typeface change.
+// ─── Card font styles (families from src/config/fonts.js) ─────
 const CARD_FONT_STYLES = {
   'classic': {
     fontFamily:    'PlayfairDisplay-Italic',
@@ -221,15 +180,10 @@ const CARD_FONT_STYLES = {
   },
 };
 
-// ─── Text sizing ─────────────────────────────────────────────
-// Scales confession text based on length — the shorter the confession,
-// the bigger it breathes on the card.
+// ─── Text sizing: shorter confessions get bigger text.
 const getConfessionFontSize = (text, cardWidth) => {
   const len = text?.length || 0;
-  // Base sizes are at 1080px card width — scale proportionally to actual render width.
-  // Bumped up from 52/44/36/32 — the card's whole job is to be a bold,
-  // stop-the-scroll visual; the text is the one thing on it that has to
-  // carry that, so it needs more visual weight than a body-text size.
+  // Sizes are for a 1080px card, scaled to the real width.
   const scale = cardWidth / 1080;
   if (len < 80)        return Math.round(68 * scale);
   if (len < 160)       return Math.round(56 * scale);
@@ -237,9 +191,7 @@ const getConfessionFontSize = (text, cardWidth) => {
   return Math.round(40 * scale);
 };
 
-// ─── Dynamic variation ───────────────────────────────────────
-// Deterministic per-card variation from a seed (drop ID or confession hash).
-// Prevents visual fatigue across the feed without looking random.
+// ─── Per-card variation from a seed, so the feed doesn't look repetitive.
 const stringSeed = (s) => {
   let h = 0;
   for (let i = 0; i < (s || '').length; i++) {
@@ -255,20 +207,14 @@ const getVariation = (seed) => {
     textShiftY:       ((s % 40) - 20),           // ±20px
     moodAlign:        (s % 2) === 0 ? 'left' : 'center',
     accentHeight:     0.85 + ((s % 30) / 100),   // 85% to 115%
-    // Small positive jitter, not negative — the card clips overflow, so a
-    // negative top/left pushed the quote mark's top-left curl past the
-    // card edge and cut it off. Keeping both >= 0 keeps the glyph's
-    // characteristic shape fully visible while still varying its position.
+    // Offsets stay >= 0 so the quote mark isn't clipped.
     quoteTop:         6 + (s % 16),               // 6 to 21
     quoteLeft:         6 + (s % 12),               // 6 to 17
     rare,
   };
 };
 
-// Muted, looping, autoplaying — a silent live preview instead of a single
-// freeze-frame, so a video drop's media zone actually shows what was picked
-// instead of one thumbnail moment. No controls: this is a card preview, not
-// a player, so there's nothing to seek or unmute.
+// Muted looping preview of a video drop (no controls).
 const VideoPreviewBackground = React.memo(function VideoPreviewBackground({ uri, style }) {
   const player = useVideoPlayer(uri ? { uri } : null, (p) => {
     p.loop = true;
@@ -286,10 +232,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   moodTag         = 'longing',
   emotionalContext= null,         // "written at 2:14am" | "kept for 3 years"
   theme           = 'desire',
-  // Confession type — "meet-me" | "skeleton-in-the-closet" | "just-tonight" |
-  // "the-exchange". When set and recognized, fully overrides theme's palette
-  // and adds the intent's background pattern. `theme` is only the legacy
-  // fallback for drops created before intents existed.
+  // Confession type; overrides the theme palette and adds its pattern. `theme` is the old fallback.
   intent          = null,
   mediaUrl        = null,         // image/video background (overlay mode)
   mediaType       = 'image',      // 'image' | 'video' — how to render mediaUrl
@@ -302,16 +245,9 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
   onChangeText    = null,
   placeholder     = '',
   maxLength       = null,
-  // Card font style — "classic" | "sultry-script" | "bold-tease". Family
-  // names below are aspirational (no custom fonts are loaded anywhere in
-  // this app yet — see CARD_FONT_STYLES comment); the italic/weight/
-  // letter-spacing values are what actually render the difference today.
+  // Card font style: "classic" | "sultry-script" | "bold-tease".
   fontStyle       = 'classic',
-  // When the caller renders something flush against the card's bottom
-  // edge (DropsComposeScreen's toolbar, merged into the same rounded
-  // container), the card's own bottom corners need to be square — two
-  // independently-rounded corners stacked on top of each other leaves a
-  // sliver of the screen background showing through the gap between them.
+  // Square bottom corners when something sits flush below the card.
   flushBottom     = false,
 }) {
   const t = CARD_INTENTS[intent] || DROP_THEMES[theme] || DROP_THEMES['desire'];
@@ -323,13 +259,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
 
   const fontSize = getConfessionFontSize(confession, cardWidth);
 
-  // Compose, no media attached — the card can be a plain growing text
-  // field instead of a fixed square. It starts smaller than a full square
-  // (a couple of lines' worth) and grows taller as the confession does,
-  // same as any auto-expanding text box. A posted/finalized card (not
-  // editable) and any card with media both keep the fixed square — that
-  // shape only matters as a stable badge once there's an actual image or
-  // video to frame, or once the text is done changing.
+  // While composing text-only, the card grows with the text; otherwise it stays square.
   const isGrowingTextField = editable && !(layoutMode === 'split' && mediaUrl);
   const minTextFieldHeight = Math.round(cardWidth * 0.55);
 
@@ -410,12 +340,8 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
         flushBottom && styles.flushBottom,
       ]}
     >
-      {/* Decorative layer — glow, background pattern, ghost quote. Wrapped
-          in one pointerEvents="none" View rather than relying on each
-          native child (esp. the SVG pattern) to forward touch-passthrough
-          itself — that's what was silently eating taps meant for the
-          TextInput on every intent except "Skeleton In The Closet" (the only
-          one with pattern: 'none', so it had no SVG in the way). */}
+      {/* Decorative layer (glow, pattern, quote) in one pointerEvents="none" View, so it never
+          blocks taps on the TextInput. */}
       <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
         {/* Faint grain / glow overlay — rare variant gets stronger */}
         <View
@@ -425,9 +351,7 @@ const DropCardRenderer = React.memo(function DropCardRenderer({
           }]}
         />
 
-        {/* Confession-type background pattern — the thing that makes a
-            screenshot of this card instantly read as "this is about X"
-            before a single word is read. */}
+        {/* Confession-type background pattern. */}
         <CardPattern
           type={t.pattern}
           width={cardWidth}
@@ -545,10 +469,7 @@ const ConfessionBlock = React.memo(function ConfessionBlock({
       <View style={styles.confessionTextWrap}>
         {editable ? (
           <>
-            {/* Custom placeholder — deliberately its own style, not the
-                chosen fontStyle (which can be an extra-bold display face).
-                Playfair italic, regular weight, wide tracking: reads like
-                a quiet, quoted line rather than shouted card copy. */}
+            {/* Placeholder in its own quiet italic style, not the card font. */}
             {!text && !!placeholder && (
               <Text
                 pointerEvents="none"

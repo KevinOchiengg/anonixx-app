@@ -24,14 +24,10 @@ import { useAuth } from '../../context/AuthContext';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
 import useDraft from '../../hooks/useDraft';
 
-// @mentions — plain-text markup, mirrors MENTION_RE in
-// Backend/app/api/v1/drops.py. Parsed here purely for rendering (coral,
-// tappable spans); nothing structural is stored for it.
+// @mentions, same pattern as the backend (MENTION_RE).
 const MENTION_RE = /@([A-Za-z0-9_.]{2,30})/g;
 
-// Splits comment text into plain strings + tappable @mention spans. Nested
-// Text children inherit the parent <Text>'s style, so only the mention
-// spans need their own style passed in.
+// Splits text into plain strings and tappable @mentions.
 function renderMentionText(content, mentionStyle, onMentionPress) {
   if (!content) return null;
   const parts = [];
@@ -56,15 +52,9 @@ const { width: W, height: H } = Dimensions.get('window');
 
 const AVATAR_BG = '#1e2330';
 
-// Voice note playback — shared implementation, see VoiceWaveform.jsx for
-// why it resets the audio session before playing (this sheet also mounts
-// VoiceNoteRecorder just below).
+// Voice note playback (VoiceWaveform).
 
-// ─── Quick reaction row ───────────────────────────────────────
-// TikTok's own comment composer shows a thin row of one-tap reactions
-// directly above the keyboard the whole time you're typing — not behind
-// an extra button tap like the fuller EmojiPicker grid below. Tapping one
-// inserts it and keeps the keyboard up, exactly like TikTok's own.
+// ─── Quick reactions: one-tap emoji row above the keyboard while typing.
 const QUICK_REACTIONS = ['🔥', '❤️', '😂', '😍', '😭', '👏', '💯', '😮'];
 
 const QuickReactionRow = React.memo(({ onSelect }) => (
@@ -291,9 +281,7 @@ export const CommentBottomSheet = React.memo(({
   // '' or more once an "@" with no trailing space is in progress.
   const [mentionQuery,   setMentionQuery]   = useState(null);
   const [mentionResults, setMentionResults] = useState([]);
-  // Tapping an @mention in a posted comment resolves the username to a
-  // user id (comments only store plain text, no structured mention data)
-  // and opens the same profile sheet the rest of the feed uses.
+  // Tapping an @mention finds the user and opens their profile sheet.
   const [mentionProfile, setMentionProfile] = useState({ visible: false, userId: null, anonymousName: '' });
 
   const slideAnim    = useRef(new Animated.Value(H)).current;
@@ -316,10 +304,7 @@ export const CommentBottomSheet = React.memo(({
     }
   }, [visible]);
 
-  // ── Live thread — join this drop's comment room while the sheet is open,
-  // so new_comment/comment_liked broadcasts (see Backend/app/websockets/
-  // comments.py) reach everyone currently looking at it, not just whoever
-  // sent the request. ──────────────────────────────────────────────────
+  // ── Join this drop's comment room while open, for live comments. ──
   useEffect(() => {
     if (!visible || !postId) return;
     socketService.emit('join_drop_thread', { dropId: postId });
@@ -538,9 +523,7 @@ export const CommentBottomSheet = React.memo(({
     } catch {}
   }, [postId]);
 
-  // Owner-only, top-level only (enforced server-side too) — one pinned
-  // comment per drop, so pinning a new one locally unpins whichever was
-  // pinned before.
+  // One pinned comment per drop (owner only).
   const handlePin = useCallback(async (commentId, toPin) => {
     setComments(prev => prev.map(c => ({
       ...c,
@@ -555,10 +538,7 @@ export const CommentBottomSheet = React.memo(({
     } catch {}
   }, [postId]);
 
-  // ── @mention autocomplete ───────────────────────────────────────
-  // Simple heuristic (no cursor tracking): an active mention is whatever
-  // trails the last "@" in the text, as long as nothing after it is a
-  // space — same trigger Twitter/Instagram's compose boxes use.
+  // ── @mention autocomplete: the text after the last "@", if it has no space.
   const handleTextChange = useCallback((value) => {
     setText(value);
     const match = value.match(/(?:^|\s)@([A-Za-z0-9_.]{0,30})$/);
@@ -597,9 +577,7 @@ export const CommentBottomSheet = React.memo(({
     inputRef.current?.focus();
   }, []);
 
-  // Comments only store the mention as plain "@username" text, so tapping
-  // one resolves it to a user id on demand via the same search endpoint
-  // the autocomplete above uses, then opens the standard profile sheet.
+  // Mentions are plain text, so look the user up on tap, then open their profile.
   const handleMentionPress = useCallback(async (username) => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -730,22 +708,14 @@ export const CommentBottomSheet = React.memo(({
         style={[st.sheet, { transform: [{ translateY: slideAnim }] }]}
         {...pan.panHandlers}
       >
-        {/* Wraps the WHOLE sheet, not just the input bar — the sheet
-            itself is a fixed-height, bottom-anchored container (see
-            `sheet` style), so nothing shrinks it when the keyboard rises
-            unless something up here does. With this wrapping everything,
-            the list below (already flex: 1) shrinks to make room and the
-            input stays pinned above the keyboard instead of the keyboard
-            just covering whatever sits in that fixed bottom zone. */}
+        {/* Wraps the whole sheet so the list shrinks and the input stays above the keyboard. */}
         <KeyboardAvoidingView style={st.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {/* Handle */}
         <View style={st.handleRow}>
           <View style={st.handleBar} />
         </View>
 
-        {/* Header — centered count, plain-text sort toggle, close on the
-            right. No divider under it — TikTok's header blends straight
-            into the list instead of boxing itself off. */}
+        {/* Header: centred count, sort toggle, close. No divider. */}
         <View style={st.header}>
           <View style={st.headerSide} />
           <Text style={st.headerTitle} numberOfLines={1}>
@@ -826,8 +796,7 @@ export const CommentBottomSheet = React.memo(({
           />
         )}
 
-        {/* @mention autocomplete — floats right above the input, same spot
-            the emoji picker takes over */}
+        {/* @mention suggestions, just above the input. */}
         {mentionQuery !== null && mentionResults.length > 0 && (
           <View style={st.mentionDropdown}>
             {mentionResults.map(u => (
@@ -851,19 +820,14 @@ export const CommentBottomSheet = React.memo(({
           </View>
         )}
 
-        {/* Quick reactions — TikTok's own one-tap row above the keyboard,
-            there the whole time you're typing rather than behind an extra
-            button tap. Hidden while the fuller emoji grid or the mention
-            dropdown is showing so nothing fights for the same space. */}
+        {/* Quick reactions while typing; hidden when the emoji grid or mention list is open. */}
         {inputFocused && picker !== 'emoji' && !(mentionQuery !== null && mentionResults.length > 0) && (
           <QuickReactionRow
             onSelect={(e) => { setText((prev) => prev + e); inputRef.current?.focus(); }}
           />
         )}
 
-        {/* Input — shared ChatInputBar, same shell Link Up chat uses, so
-            composing a comment looks and behaves identically to composing
-            a message. paddingBottom respects the phone nav bar. */}
+        {/* Input: shared ChatInputBar. paddingBottom clears the nav bar. */}
         <ChatInputBar
           inputRef={inputRef}
           value={text}
@@ -961,8 +925,7 @@ const st = StyleSheet.create({
   emptyBody: { fontSize: 14, color: T.textMuted, textAlign: 'center', lineHeight: 21, fontFamily: 'PlayfairDisplay-Italic' },
   list:        { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 },
-  // ── TikTok-style flat comment row — no bubble, no border, coral is the
-  // only color difference from TikTok's own layout. ──────────────────
+  // ── Flat comment row: no bubble, no border. ─────────────────────
   commentItem:      { flexDirection: 'row', gap: 12, marginBottom: 22, alignItems: 'flex-start' },
   commentItemReply: { marginTop: 16, marginBottom: 0 },
   commentAvatar: {

@@ -336,7 +336,7 @@
   position: static; align-self: flex-start; margin-top: 24px; max-width: 100%;
 }
 
-/* ---------- TikTok-scale controls ---------- */
+/* ---------- Feed controls ---------- */
 :root { --nav-h: 66px; --rail-w: 64px; }
 .rail, .hasnav .rail { width: 56px; right: 4px; gap: 18px; }
 .rail svg, .rail button svg { width: 38px; height: 38px; }
@@ -357,7 +357,7 @@
 .slide.has-media .caption { display: flex; flex-direction: column; align-items: flex-start; }
 .slide.has-media .caption > .author { order: -1; margin: 0 0 8px; }
 
-/* ---------- comments: TikTok panel, anonixx coral ---------- */
+/* ---------- comments panel ---------- */
 .sheet-back:has(.cmt-sheet) { background: rgba(0, 0, 0, 0.55); }
 .cmt-sheet { padding: 0; height: 72%; border-radius: 16px 16px 0 0; border-top: 0; background: var(--surface); overflow: hidden; }
 .cmt-sheet .sheet-handle { display: none; }
@@ -600,7 +600,7 @@
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); animation: fastin 0.18s ease-out;
 }
 .vp-fast i { font-style: normal; font-size: 10px; letter-spacing: -2px; }
-/* scrubbing hides the caption and rail so the frame being searched for is visible, like TikTok */
+/* scrubbing hides the caption and rail so the frame being searched for is visible */
 .slide:has(.vp-scrub.on) .caption, .slide:has(.vp-scrub.on) .rail { opacity: 0; transition: opacity 0.15s; pointer-events: none; }
 @keyframes fastin { from { opacity: 0; transform: translateX(-50%) scale(0.85); } }
 

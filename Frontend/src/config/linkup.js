@@ -1,10 +1,4 @@
-/**
- * linkup.js
- *
- * Link up extras shared by PostUnlockScreen, RoomScreen and the requests
- * inbox. Ids match INTENT_CHIPS in Backend/app/api/v1/unlock_requests.py;
- * anything unknown is dropped server side.
- */
+/** Link up extras. Ids match INTENT_CHIPS in unlock_requests.py. */
 export const INTENTS = [
   { id: 'free-tonight', label: 'Free tonight' },
   { id: 'can-host',     label: 'Can host' },

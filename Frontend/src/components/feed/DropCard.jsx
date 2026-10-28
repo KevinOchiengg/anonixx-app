@@ -28,9 +28,7 @@ import ReportSheet from './ReportSheet';
 // tapping Link up is never a price surprise.
 const UNLOCK_COST = 6;
 
-// removeClippedSubviews unmounts/remounts cards as they scroll in and out
-// of the render window — without this, every remount of the same video
-// re-runs native thumbnail extraction from scratch.
+// Cache so remounted cards don't regenerate video thumbnails.
 const videoThumbnailCache = new Map();
 
 // ─── Double tap like ──────────────────────────────────────────
@@ -128,9 +126,7 @@ const ImageCarousel = React.memo(({ images }) => {
   );
 });
 
-// ─── Audio Player ─────────────────────────────────────────────
-// Shared implementation (see VoiceWaveform.jsx) — this card just wraps it
-// with its own pill background and an "audio confession" caption.
+// ─── Audio Player (VoiceWaveform with a pill background) ──────
 const AudioPlayer = React.memo(({ audioUrl }) => (
   <View style={styles.audioWrap}>
     <VoiceWaveform uri={audioUrl} />
@@ -317,10 +313,7 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edi
   );
 });
 
-// ─── Poll Card ────────────────────────────────────────────────
-// Exported — DropsSwipeScreen's full-screen poll slide reuses this exact
-// voting UI instead of duplicating it, so there's one voting
-// implementation, not two that can quietly drift apart.
+// ─── Poll Card (also used by DropsSwipeScreen) ────────────────
 export const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) => {
   const barAnims = useRef(poll.options.map(() => new Animated.Value(0))).current;
   const hasVoted  = poll.voted_option !== null && poll.voted_option !== undefined;
@@ -399,12 +392,8 @@ function DropCard({
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  // A real multi-image post (post.images, 2-9 photos picked at compose
-  // time) takes priority and renders every photo as its own slide. Falls
-  // back to the single-image pair below for everything else: media_url/
-  // media_type is the drop's PRIMARY content slot (an image drop's photo,
-  // or a voice drop's audio); image_url is a separate, optional supplement
-  // a poll or voice drop can carry alongside its primary content.
+  // Multi-image posts show every photo as a slide; otherwise media_url (main content)
+  // and image_url (optional extra photo).
   const images = useMemo(() => {
     if (Array.isArray(post.images) && post.images.length) return post.images;
     const arr = [];
@@ -514,9 +503,7 @@ function DropCard({
 
   const handleReport    = useCallback(() => { setMenuVisible(false); setReportVisible(true); }, []);
 
-  // Admin drops carry the real admin account's user_id/anonymous_name
-  // underneath the "Anonixx" display name — never open the profile sheet
-  // for them, or it'd deanonymize the account behind official content.
+  // Never open a profile for official drops (it would reveal the admin account).
   const handleProfilePress  = useCallback(() => {
     if (post.is_admin_drop) return;
     setProfileSheetVisible(true);
@@ -640,13 +627,7 @@ function DropCard({
               </View>
             </View>
 
-            {/* Link up — pay to open a chat with this drop's author. Its own
-                elevated row, not squeezed between icons, so the one action
-                that actually makes money reads as a decision, not a caption.
-                Hidden on your own drops — the backend rejects self-unlocks
-                anyway, but there's no reason to show a button that can only
-                ever fail. Also hidden on Anonixx's own official drops — no
-                real person behind them to link up with. */}
+            {/* Link up, on its own row. Hidden on your own drops and official drops. */}
             {!post.is_own_post && !post.is_admin_drop && post.kind !== 'confession' && (
               <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
                 {post.kind === 'hookup'
@@ -743,9 +724,7 @@ const styles = StyleSheet.create({
   videoViewsText:   { fontSize: rf(10), color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
   videoProgressWrap:   { position: 'absolute', bottom: 0, left: 0, right: 0, height: rs(22) },
   videoProgressSlider: { width: '100%', height: rs(22) },
-  // No card/background here on purpose — voice notes float bare like any
-  // other inline media, same as an image or video attachment does. Only
-  // actual chat text bubbles get a background container.
+  // Voice notes have no background, like other inline media.
   audioWrap:        { gap: rp(8), marginBottom: rp(14) },
   audioMetaText:    { fontSize: FONT.xs, color: T.textSecondary },
   actions:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: rp(2) },

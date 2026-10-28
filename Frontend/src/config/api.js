@@ -6,19 +6,11 @@ export const BACKENDS = {
 
 export const API_BASE_URL = BACKENDS.production;
 
-/**
- * Stripe publishable key (safe to expose in client code — it's public).
- * Replace with your live key before App Store submission:
- *   pk_test_...  →  pk_live_...
- * Or set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY in your .env file.
- */
+// Stripe publishable key (public). Set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY; use pk_live_ in production.
 export const STRIPE_PUBLISHABLE_KEY =
   process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? 'pk_test_REPLACE_WITH_YOUR_KEY';
 
-/**
- * Tenor GIF search key (safe to expose in client code — it's a public API key).
- * Set EXPO_PUBLIC_TENOR_API_KEY in your .env file to enable GIF search.
- */
+// Tenor GIF key (public). Set EXPO_PUBLIC_TENOR_API_KEY to enable GIF search.
 export const TENOR_API_KEY =
   process.env.EXPO_PUBLIC_TENOR_API_KEY ?? 'YOUR_TENOR_API_KEY';
 

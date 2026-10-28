@@ -50,9 +50,8 @@ type Props = {
 
 const realPosts = (list: (Post & { type?: string })[]) => list.filter((p) => p.id && p.type !== "divider");
 
-// When the feed runs out it keeps going on a shuffled replay of what's loaded: videos if
-// there are enough of them, else anything with media, else everything. A new round never
-// opens with the post that closed the last one.
+// Out of posts: replay a shuffle of what's loaded (videos, then any media, then all),
+// never starting a round with the post that ended the last one.
 const REPLAY_MIN = 3;
 function replayRound(posts: Post[], lastId: string | undefined): string[] {
   const videos = posts.filter((p) => p.video_url);
@@ -336,10 +335,8 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     return () => window.removeEventListener("keydown", onKey);
   }, [step]);
 
-  // Touch: the slide follows the finger, then snaps instantly on release (no glide).
-  // Native vertical panning is off for the feed (touch-action: pan-x in feedparity.css)
-  // so the browser's own snap animation never runs; sideways swipes still reach photo
-  // carousels. A flick or a drag past 15% of the screen moves one slide.
+  // Touch: the slide follows the finger and snaps instantly on release. Native vertical
+  // panning is off (feedparity.css); a flick or a 15% drag moves one slide.
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;

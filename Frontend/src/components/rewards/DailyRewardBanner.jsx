@@ -1,10 +1,4 @@
-/**
- * DailyRewardBanner.jsx
- * Compact streak + daily claim banner for home/wallet screens.
- *
- * Usage:
- *   <DailyRewardBanner />
- */
+/** Streak and daily-claim banner. */
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
@@ -76,10 +70,7 @@ export default React.memo(function DailyRewardBanner() {
     dispatch(fetchStreak());
   }, []);
 
-  // Runs the entrance animation whenever the banner actually becomes
-  // visible (see the canClaimToday guard below) rather than once on mount —
-  // it starts out unmounted while fetchStreak is still in flight, so a
-  // mount-only effect would finish silently off-screen and never be seen.
+  // Animate in when the banner appears (it mounts after the streak loads).
   useEffect(() => {
     if (!canClaimToday) return;
     slideY.setValue(-24);

@@ -1,15 +1,7 @@
 import type { CSSProperties } from "react";
 
-/**
- * Room themes: the palette one person's Room is painted in. Scoped to the
- * Room (via --rt-* custom properties on the Room's root), so the Anonixx
- * shell, nav and brand colours never change. Ids match the backend's
- * ROOM_THEMES (Backend/app/api/v1/chat_profile.py) and
- * Frontend/src/config/roomThemes.js.
- *
- * Contrast checked (WCAG): text and muted text are ≥ 6.9:1 on the surface,
- * and the bg colour used as label text on an accent button is ≥ 6.7:1.
- */
+/** Room colour themes, applied only inside a Room (--rt-* properties). Ids match the backend
+ * and the app. Text contrast is at least 6.7:1. */
 export type RoomTheme = {
   id: string;
   name: string;

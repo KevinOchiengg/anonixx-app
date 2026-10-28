@@ -1,10 +1,4 @@
-/**
- * AgeGate
- *
- * One-time 18+ confirmation, shown wherever the backend answers
- * age_verification_required (Rooms, posting a hookup, sending a link up).
- * One tick, like signup's 18+ confirmation; POST /users/me/verify-age.
- */
+/** One-time 18+ tick, shown when the backend says age_verification_required. */
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Check } from 'lucide-react-native';

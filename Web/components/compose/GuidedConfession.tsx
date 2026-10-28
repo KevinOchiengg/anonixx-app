@@ -1,16 +1,6 @@
 "use client";
-/**
- * The hookup half of /compose: five short questions asked one at a time, an
- * optional sound to play behind it, then a reveal where the AI writer (POST /guided/generate) turns the answers into a
- * confession the poster can re-tone, regenerate, edit and drop.
- *
- * Answers, the step and the confession draft (generated or hand-edited) are kept
- * in localStorage as they change, so going back a step, or leaving and coming
- * back, never loses them. If the writer is off or fails the
- * poster is told and writes it themselves; nothing is filled in from a template.
- * Posting goes through POST /drops (kind="hookup") with every usual check.
- * Mirrors Frontend/src/components/drops/GuidedConfession.jsx.
- */
+/** Guided hookup composer: five questions, optional sound, then the AI draft to edit and post.
+ * Progress is saved as it changes. Same as the app's GuidedConfession.jsx. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

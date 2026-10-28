@@ -1,16 +1,4 @@
-/**
- * ChatProfileSetupScreen.jsx — "Your Room", the owner's Room studio.
- *
- * Five tabs: My Room (picture, intro, status, welcome message, gallery,
- * welcome sound, calls), Knocks (who's at the door), Inside (people you've
- * let in: chat, Remove, Report, Block), Appearance (the ten Room themes with
- * preview + Apply/Cancel, name font, chat background) and Privacy (who sees
- * the gallery, whether the door takes knocks). Gallery visibility is
- * enforced server-side; see chat_profile.gallery_for.
- *
- * Reached from the palette icon in MessagesScreen's header and from
- * "Edit Room" in RoomScreen. Accepts { tab } as a route param.
- */
+/** "Your Room" studio. Tabs: My Room, Knocks, Inside, Appearance, Privacy. Accepts { tab }. */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
@@ -361,9 +349,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     ]);
   }, [post, showToast]);
 
-  // Buys slots immediately (real coins spent) rather than waiting for the
-  // main Save button, so the balance change and new cap are confirmed on
-  // the spot instead of silently bundled into an unrelated save.
+  // Buys call slots right away (separate from Save).
   const handleBuySlots = useCallback(async (addSlots) => {
     setBuyingSlots(true);
     try {
@@ -436,9 +422,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Profile picture — pulled from your account photo by default;
-            tap to set a different one just for chat. Falls back to your
-            first initial if you haven't set a photo anywhere. */}
+        {/* Room picture: your account photo by default, or set one just for the Room. */}
         <Text style={styles.sectionLabel}>Profile picture</Text>
         <TouchableOpacity onPress={handlePickProfilePicture} activeOpacity={0.85} style={styles.avatarWrap}>
           {profilePictureUrl ? (
@@ -609,8 +593,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Gallery — stacked vertically, one under another, the same way
-            they'll land as pre-shared media in the room itself. */}
+        {/* Gallery, in the order visitors will see it. */}
         <Text style={styles.sectionLabel}>On the walls ({gallery.length}/3)</Text>
         <Text style={styles.sectionHint}>
           Photos, GIFs or short videos. Who sees them is set in Privacy.

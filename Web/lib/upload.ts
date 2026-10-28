@@ -38,9 +38,7 @@ async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: num
   if (directBlocked) return { reason: "storage isn't reachable from this browser" };
   const type = (file.type || (kind === "image" ? "image/jpeg" : kind === "video" ? "video/mp4" : "audio/webm")).split(";")[0];
   let reason = "";
-  // Two tries: a connection that drops mid-file gets one more go before we push the
-  // whole thing through our server instead. Re-signed each time — a slow first try
-  // can outlive the 5-minute URL.
+  // Two direct tries (re-signed each time), then fall back to uploading through our server.
   for (let attempt = 0; attempt < 2; attempt++) {
     let s: { upload_url: string; public_url: string };
     try {
@@ -66,10 +64,7 @@ async function uploadDirect(file: Blob, kind: UploadKind, onProgress?: (pct: num
   return { reason };
 }
 
-// Phones can hand the browser a file it can't actually read — most often a video that
-// lives in Google Photos or another cloud app rather than on the phone itself. An upload
-// of such a file fails before a single byte is sent, which looks exactly like a dead
-// connection. Reading a little from both ends first tells the two apart.
+// Check the file is readable (e.g. not a cloud-only video) by reading a bit of both ends.
 const PROBE = 256 * 1024;
 
 export async function checkReadable(file: Blob): Promise<void> {

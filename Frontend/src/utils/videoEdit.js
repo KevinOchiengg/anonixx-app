@@ -1,12 +1,5 @@
-/**
- * videoEdit.js
- *
- * "Smart trim" + text overlays for a video drop — the same rules as the
- * website's Web/lib/videoEdit.ts and the backend's clean_video_edit
- * (Backend/app/api/v1/drops.py). The original is uploaded untouched; the
- * drop carries the window to play and the text laid over it. With Cloudflare
- * Stream switched on, the backend cuts that window out for real instead.
- */
+/** Smart trim and text overlays for video drops (same rules as the website and backend). The
+ * original is uploaded untouched; with Stream on, the backend cuts the window for real. */
 export const MAX_CLIP_SECONDS = 180;
 export const MIN_CLIP_SECONDS = 1;
 export const MAX_OVERLAYS = 5;

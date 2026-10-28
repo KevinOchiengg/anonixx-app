@@ -1,8 +1,5 @@
-// Splits a caption into its hook (the first sentence, or the first line if it breaks
-// sooner) and the rest. The hook is set in the brand serif on its own line, the rest in
-// plain sans. Every caption gets an opening: with no clear first sentence, a short
-// caption is all hook, and a longer one opens with its first few words in the serif,
-// inline, flowing straight into the rest.
+// Splits a caption into a hook (first sentence or line, in the serif) and the rest. Short
+// captions are all hook; long ones without a clear sentence open with a few words inline.
 const MIN = 8;
 const MAX = 140;
 const SHORT = 48;       // a caption this short is all hook

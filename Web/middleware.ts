@@ -1,11 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// Only the one publicly-reachable legacy host — not a wildcard on *.vercel.app, which
-// would also catch per-branch preview deployment URLs and make them unreachable for
-// testing. The project's new team-scoped alias (anonixx-anonixx1.vercel.app) sits behind
-// Vercel's own SSO gate and isn't publicly reachable, so it needs no redirect here.
-// anonixx.vercel.app (bare, no team suffix) belongs to an unrelated third-party project —
-// renaming this project did not grant us that name.
+// Redirect only the old public host. Not *.vercel.app, which would break preview deployments.
 const LEGACY_HOSTS = new Set(["anonixx-app.vercel.app"]);
 const CANONICAL_HOST = "anonixx.com";
 

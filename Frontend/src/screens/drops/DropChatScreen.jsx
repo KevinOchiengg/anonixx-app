@@ -1,17 +1,4 @@
-/**
- * DropChatScreen
- *
- * Anonymous chat for Drops connections.
- *
- * Rebuilt to match DropsComposeScreen design language:
- *   • shared `T` palette
- *   • DropScreenHeader with anonymous name
- *   • useToast (replaces Alert.alert)
- *   • responsive tokens (no hardcoded pixels)
- *   • PlayfairDisplay-Italic for anon names, confession banner
- *   • DMSans for chrome + message bodies
- *   • 320 ms entrance fade
- */
+/** Link Up chat between two connected people. */
 
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
@@ -56,9 +43,7 @@ import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
 import useDraft from '../../hooks/useDraft';
 
-// Real-time delivery (see new_message socket handling below) covers the
-// common case now — this is just a safety net for missed/dropped socket
-// events, so it can be far less frequent than the old 8s-only polling.
+// Fallback poll; messages normally arrive over the socket.
 const POLL_INTERVAL_MS = 25000;
 
 // ─── Quick emoji strip — toggled from the input bar's Smile icon ──
@@ -77,15 +62,12 @@ function formatDateLabel(isoString) {
   return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }
 
-// Cloudinary serves a poster frame for any video delivery URL by swapping
-// the file extension to an image format — no separate thumbnail upload.
+// Poster frame by swapping the extension to .jpg (only works for older Cloudinary videos).
 function videoPosterUrl(url) {
   return url ? url.replace(/\.\w+(\?.*)?$/, '.jpg$1') : url;
 }
 
-// Short label for the reply banner (the draft, client-side, before the
-// server computes its own copy of this same thing) — mirrors
-// _message_preview_text in Backend/app/api/v1/drops.py.
+// Short label for the reply banner (same as the backend's _message_preview_text).
 function messagePreviewLabel(item) {
   if (!item) return '';
   if (item.deleted) return 'This message was deleted';
@@ -95,11 +77,7 @@ function messagePreviewLabel(item) {
   return item.content || '';
 }
 
-// Same dedicated avatar palette as MessagesScreen's chat list — deliberately
-// not coral (the action color) or gold/violet (already mean coins/premium
-// and drop-type chats elsewhere) — kept as its own local copy rather than a
-// shared util, matching how each screen in this app already carries its own
-// copy of small helpers like this.
+// Avatar fallback colours (same as MessagesScreen).
 const AVATAR_COLORS = ['#C96F53', '#C97B84', '#D98E4A', '#B56576', '#A8674F'];
 function avatarColorFor(seed) {
   if (!seed) return AVATAR_COLORS[0];
@@ -116,9 +94,7 @@ const DateSeparator = React.memo(({ label }) => (
   </View>
 ));
 
-// ─── Typing indicator — an actual bubble in the thread (received-bubble
-// shape/shadow), not just the header's "typing…" subtitle — matches the
-// mockup, which shows three dots as its own message rather than plain text.
+// ─── Typing indicator: three dots as a received bubble.
 const TypingBubble = React.memo(() => {
   const dot1 = useRef(new Animated.Value(0.3)).current;
   const dot2 = useRef(new Animated.Value(0.3)).current;
@@ -149,10 +125,7 @@ const TypingBubble = React.memo(() => {
   );
 });
 
-// ─── Mood board — 33 procedurally-styled cards shown while waiting for a
-// first reply. Intentionally abstract (gradient + symbol, no photos) so it
-// can never be mistaken for the other person's real pictures — Anonixx
-// doesn't do real photos in the unlock flow at all, this is mood only.
+// ─── Mood board shown while waiting for a first reply. Abstract on purpose (never real photos).
 const MOOD_SYMBOLS = ['🔥', '😈', '💋', '🖤', '✨', '🌙', '⛓️', '🍒', '😏', '💦', '🌹'];
 const MOOD_GRADIENTS = [
   ['#2a0f18', '#14060a'],
@@ -194,9 +167,7 @@ const VoiceBubble = React.memo(({ item }) => (
   <VoiceWaveform uri={item.media_url} durationSeconds={item.duration_seconds} />
 ));
 
-// ─── Quoted reply block — sits above the real content, inside whichever
-// container that content itself uses (bubble, media, or the bare voice
-// wrap). Not shown at all for messages that aren't replies. ────────────
+// ─── Quoted reply, shown above a reply's content.
 const ReplyQuote = React.memo(({ replyTo, isOwn, otherName }) => (
   <View style={[s.replyQuote, isOwn && s.replyQuoteOwn]}>
     <View style={[s.replyQuoteBar, isOwn && s.replyQuoteBarOwn]} />
@@ -211,16 +182,11 @@ const ReplyQuote = React.memo(({ replyTo, isOwn, otherName }) => (
   </View>
 ));
 
-// ─── Message bubble ────────────────────────────────────────────
-// Swipe right (WhatsApp's own direction, regardless of which side the
-// bubble is on) to reply; long-press for reply/delete. Both call back up
-// to the screen rather than owning any state themselves, since replying
-// affects the input bar and deleting affects the whole message list.
+// ─── Message bubble: swipe right to reply, long-press for reply/delete.
 const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply, onLongPressMessage }) => {
   const isOwn = item.is_own;
   const swipeableRef = useRef(null);
-  // WhatsApp-style ticks — single = sent, double (accent-colored) = seen.
-  // Only ever shown on my own messages; nothing rendered on received ones.
+  // Ticks on my messages: single = sent, double (accent) = seen.
   const tick = isOwn ? (item.seen ? '✓✓' : '✓') : null;
 
   const handleSwipeableOpen = useCallback(() => {
@@ -255,9 +221,7 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
       </View>
     );
   } else if (item.media_type === 'voice' && item.media_url) {
-    // No bubble background here on purpose — voice notes float bare, the
-    // same way an image/video attachment does below (see mediaBubble).
-    // Only actual text messages get a background container.
+    // Voice notes have no bubble background.
     content = (
       <View style={s.voiceMessageWrap}>
         <VoiceBubble item={item} />
@@ -301,10 +265,7 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
       </GHTouchableOpacity>
     );
   } else {
-    // Own messages keep the time trailing inline with the text (matches the
-    // mockup's sent bubbles); received messages drop it onto its own
-    // right-aligned line below instead — matches the mockup's received
-    // bubbles, which never run time into the message itself.
+    // Sent: time inline. Received: time on its own line.
     content = (
       <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
         {isOwn ? (
@@ -366,9 +327,7 @@ const WelcomeGalleryPage = React.memo(({ item }) => {
   );
 });
 
-// ─── Welcome gallery takeover — up to 3 swipeable items (image/video/gif),
-// shown once per unlocker on first open, to entertain them if the host
-// isn't online yet ──
+// ─── Welcome gallery (up to 3 items), shown once to a new visitor.
 const WelcomeGalleryOverlay = React.memo(({ gallery, onDismiss }) => {
   const [page, setPage] = useState(0);
   const items = (gallery || []).filter((m) => m?.media_url).slice(0, 3);
@@ -485,7 +444,7 @@ export default function DropChatScreen({ route, navigation }) {
   const typingTimeoutRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
 
-  // ── Reply / delete — WhatsApp-style message actions ──────────
+  // ── Reply / delete ────────────────────────────────────────────
   const [replyingTo, setReplyingTo]     = useState(null); // full message being replied to, or null
   const [actionSheetItem, setActionSheetItem] = useState(null); // message long-pressed, for the reply/delete sheet
   const inputRef = useRef(null);
@@ -600,12 +559,7 @@ export default function DropChatScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Live delivery — the other party's message arrives over the socket
-  // the instant they send it (see emit_new_message in drops.py), instead
-  // of waiting for the next poll. Appended, not replaced, since a poll
-  // firing moments later re-fetches the full canonical list anyway and
-  // naturally reconciles — duplicate-by-id guard just covers the gap
-  // between the two. ─────────────────────────────────────────────────
+  // ── New messages over the socket (skipping ids we already have).
   useEffect(() => {
     const handleNewMessage = ({ connectionId: incomingId, message }) => {
       if (incomingId !== connectionId) return;
@@ -647,9 +601,7 @@ export default function DropChatScreen({ route, navigation }) {
     return () => socketService.off('messages_seen', handleMessagesSeen);
   }, [connectionId, socketService]);
 
-  // ── Delete-for-everyone going live — the other party just masked a
-  // message, so swap it for the placeholder now instead of waiting for
-  // the next poll (see emit_message_deleted in drops.py).
+  // ── A message deleted for everyone: show the placeholder now.
   useEffect(() => {
     const handleMessageDeleted = ({ connectionId: incomingId, messageId }) => {
       if (incomingId !== connectionId) return;
@@ -663,9 +615,7 @@ export default function DropChatScreen({ route, navigation }) {
     return () => socketService.off('message_deleted', handleMessageDeleted);
   }, [connectionId, socketService]);
 
-  // Throttled — the server relays this to the other party as user_typing
-  // (see the `typing` handler in events.py); at most once every 2s so
-  // every keystroke doesn't turn into a socket emit.
+  // Typing signal, at most every 2s.
   const handleTextChange = useCallback((value) => {
     setText(value);
     const now = Date.now();
@@ -698,9 +648,7 @@ export default function DropChatScreen({ route, navigation }) {
       );
       if (!res.ok) throw new Error();
       const sent = await res.json();
-      // Append straight from the POST response instead of refetching the
-      // whole thread — the message appears the instant this resolves,
-      // not after a second round-trip that reloads everything else too.
+      // Add the sent message from the response, no refetch.
       setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch {
@@ -743,10 +691,7 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [connectionId, showToast, replyingTo]);
 
-  // ── Media (photo/video) — same direct-to-R2 upload as voice notes,
-  //    just routed to the "image"/"video" folder. No watermark: that's
-  //    only for publicly-shared drop posts, not private messages
-  //    between two people (and R2 does no processing anyway). ──
+  // ── Photos and videos upload straight to R2 (no watermark in private chats).
   const uploadMedia = useCallback(async (uri, mediaType) => {
     const resourceType = mediaType === 'video' ? 'video' : 'image';
     const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
@@ -881,8 +826,7 @@ export default function DropChatScreen({ route, navigation }) {
   }, [isRecording, recordDuration, uploadVoice, sendVoiceMessage, showToast]);
 
   // ── Helpers ───────────────────────────────────────────────
-  // Inject a "Today" / "Yesterday" / date separator row whenever the day
-  // changes between consecutive messages.
+  // Add a date separator when the day changes.
   const messagesWithDates = useMemo(() => {
     const out = [];
     let lastLabel = null;
@@ -914,10 +858,7 @@ export default function DropChatScreen({ route, navigation }) {
     setActionSheetItem(item);
   }, []);
 
-  // ── Delete — "for me" just hides it from my own view (server-side
-  // filter, see get_drop_messages); "for everyone" masks the real content
-  // for both sides and replaces it with a placeholder, live for the other
-  // party via the message_deleted socket event below. ─────────────────
+  // ── Delete: "for me" hides it for you; "for everyone" replaces it for both, live.
   const handleDeleteMessage = useCallback(async (item, forEveryone) => {
     setActionSheetItem(null);
     setMessages(prev => (
@@ -1019,9 +960,7 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [callLoading, activeCall, navigation, showToast, connection]);
 
-  // Header call icons — host starts either flavor, guest joins whichever
-  // is live. No lock/paywall here, unlike ChatScreen's unlockedFeatures —
-  // every host's room supports both from the moment they unlock chat.
+  // Call icons: the host starts a call, guests join the live one.
   const handlePressAudio = useCallback(() => {
     if (connection?.is_sender) return handleStartCall(true);
     if (activeCall) return handleJoinCall(true);
@@ -1152,9 +1091,7 @@ export default function DropChatScreen({ route, navigation }) {
     );
   }, [connection, showToast]);
 
-  // Only the unlocker can file this — they're the one who actually paid
-  // coins to link up, so they're the one who can say it was a bait
-  // confession. An admin reviews before any refund/strike happens.
+  // Only the person who paid to link up can report it as fake; an admin reviews.
   const handleReportDeceptive = useCallback(() => {
     if (!connectionId) return;
     Alert.alert(
@@ -1231,10 +1168,7 @@ export default function DropChatScreen({ route, navigation }) {
     return connection.other_anonymous_name || 'Anonymous';
   }, [connection]);
 
-  // Header centre — small avatar (tappable into the gallery, same as the
-  // old profile row) + name, with "typing…" (live, socket-driven — see
-  // the user_typing handler above) taking over from the "online" line
-  // (connection.other_is_online) whenever the other party is composing.
+  // Header centre: avatar (opens gallery), name, and "typing…" or online status.
   const HeaderTitle = useMemo(() => (
     <TouchableOpacity
       style={s.headerTitleRow}
@@ -1291,9 +1225,7 @@ export default function DropChatScreen({ route, navigation }) {
         style={{ flex: 1 }}
       >
 
-      {/* Live-call status strip — the actual join/start controls now live
-          in the header (Phone/Video icons); this just tells guests the
-          room is occupied before they tap in. */}
+      {/* Live-call strip (join/start are in the header). */}
       {activeCall ? (
         <View style={s.liveStrip}>
           <View style={s.liveStripDot} />
@@ -1375,8 +1307,7 @@ export default function DropChatScreen({ route, navigation }) {
           </ScrollView>
         )}
 
-        {/* Reply banner — shows above the composer while replying to a
-            message; tapping X clears it without sending anything. */}
+        {/* Reply banner; X cancels the reply. */}
         {replyingTo && (
           <View style={s.replyBanner}>
             <View style={s.replyBannerBar} />
@@ -1394,11 +1325,7 @@ export default function DropChatScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Input — shared ChatInputBar shell (same one the comment sheet
-            uses). The trailing button stays screen-specific: it presses
-            and holds to record here (vs. comments' tap-only VoiceNoteRecorder
-            with slide-to-cancel), so it's built here and passed in rather
-            than owned by the shared component. */}
+        {/* Input: shared ChatInputBar with this screen's hold-to-record button. */}
         <ChatInputBar
           inputRef={inputRef}
           value={text}
@@ -1411,9 +1338,7 @@ export default function DropChatScreen({ route, navigation }) {
           emojiActive={showEmojiStrip}
           paddingBottom={insets.bottom + rp(8)}
           recordingContent={isRecording ? (
-            // Recording takes over the field itself — nothing to type while
-            // a voice note is being recorded, so the timer gets the space
-            // instead of squeezing in next to a dead input.
+            // While recording, the timer replaces the text field.
             <View style={s.recordingRow}>
               <Animated.View style={[s.recordDot, { opacity: recordPulse }]} />
               <Text style={s.recordDurationLabel}>
@@ -1423,10 +1348,7 @@ export default function DropChatScreen({ route, navigation }) {
             </View>
           ) : null}
           trailing={
-            // One button, two jobs — empty field: press and hold to record
-            // a voice note (mic); typed field: tap to send. Matches
-            // WhatsApp/Telegram's morph instead of two buttons competing
-            // for the same slot.
+            // Empty field: hold to record. Text typed: tap to send.
             <Pressable
               onPressIn={!text.trim() ? handleVoicePressIn : undefined}
               onPressOut={!text.trim() ? handleVoicePressOut : undefined}
@@ -1600,17 +1522,8 @@ const s = StyleSheet.create({
   safe:     { flex: 1, backgroundColor: T.background },
   centered: { justifyContent: 'center', alignItems: 'center' },
 
-  // Header title — small avatar + name + truthful online line, in place
-  // of the old full-width profile row.
-  //
-  // `flex: 1` is load-bearing: DropScreenHeader lays this out with
-  // justifyContent:'space-between' against the back button (~32px, fixed)
-  // and the right-side icon cluster (width varies with icon count). Without
-  // flex, this block's position comes from space-between's equal-gap math,
-  // which pulls it off-center by half the width difference between those
-  // two sides — and shifts again every time the icon count on the right
-  // changes. Flex anchors it flush after the back button instead, which is
-  // also how WhatsApp/Telegram/Messenger actually lay out a chat header.
+  // Header title: avatar, name, online line. flex: 1 keeps it next to the back button
+  // instead of shifting with the number of icons on the right.
   headerTitleRow: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8),
   },
@@ -1659,9 +1572,7 @@ const s = StyleSheet.create({
   },
   liveStripText: { fontSize: rf(11), fontWeight: '700', color: T.primary },
 
-  // Header call/menu icons — plain, unboxed icon buttons like the mockup;
-  // only an active call gets a highlighted pill, since that's real state
-  // worth calling out, not just decoration.
+  // Plain icon buttons; only an active call is highlighted.
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(14) },
   headerActionBtn: {
     width: rs(32), height: rs(32), alignItems: 'center', justifyContent: 'center',
@@ -1752,16 +1663,12 @@ const s = StyleSheet.create({
   },
   msgRow:    { flexDirection: 'row', marginBottom: rp(4) },
   msgRowOwn: { justifyContent: 'flex-end' },
-  // Photo/video message bubble — sharp bottom-right corner, same as every
-  // other message container in this chat (voice notes are the one
-  // exception — they have no container at all, see voiceMessageWrap).
+  // Photo/video bubble with a sharp bottom-right corner.
   mediaBubble: {
     maxWidth: '68%', borderRadius: RADIUS.lg, borderBottomRightRadius: rs(4),
     overflow: 'hidden',
   },
-  // Wraps the image + its overlay + its overlaid timestamp, so the
-  // bottom-right time stays pinned to the photo itself even once a reply
-  // quote is added as a sibling below it.
+  // Keeps the time pinned to the photo when a reply quote sits below it.
   mediaImageWrap: { position: 'relative' },
   mediaImage: {
     width: rs(220), height: rs(220), backgroundColor: T.surfaceAlt,
@@ -1777,9 +1684,7 @@ const s = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3,
   },
   mediaBubbleTimeOwn: { color: '#fff' },
-  // Sharp bottom-right corner instead of uniform rounding — every message
-  // container in this chat gets this (text bubbles, media, the typing
-  // bubble below), except voice notes, which have no container at all.
+  // Sharp bottom-right corner, like every message container except voice notes.
   bubble: {
     maxWidth:               '78%',
     borderRadius:           RADIUS.lg,
@@ -1827,8 +1732,7 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
   },
   bubbleTimeOwn: { color: 'rgba(255,255,255,0.65)' },
-  // Seen tick — the one place a sent message's status turns accent-colored
-  // instead of staying muted, same "seen" signal WhatsApp's blue ticks give.
+  // Seen tick, in the accent colour.
   tickSeen: { color: T.primary, fontFamily: 'DMSans-Bold' },
 
   // Swipe-to-reply — the icon revealed behind a bubble as it's dragged right.
@@ -1836,10 +1740,7 @@ const s = StyleSheet.create({
     width: rs(56), alignItems: 'center', justifyContent: 'center',
   },
 
-  // Quoted reply block sitting inside a bubble, above its own content.
-  // Own bubbles are solid coral, so the quote reads as a translucent white
-  // strip; received bubbles are dark/surface, so it reads as a coral tint —
-  // same accent-bar language WhatsApp/Telegram use for "this replies to X".
+  // Reply quote inside a bubble: white tint on my bubbles, coral tint on theirs.
   replyQuote: {
     flexDirection: 'row', alignItems: 'flex-start', gap: rp(6),
     backgroundColor: T.primaryDim,
@@ -1862,11 +1763,7 @@ const s = StyleSheet.create({
     marginTop: rp(1),
   },
   replyQuotePreviewOwn: { color: 'rgba(255,255,255,0.85)' },
-  // Same reply quote, but sitting on top of an image/video bubble instead
-  // of inside a text bubble — needs its own opaque backing so it stays
-  // readable over the photo underneath.
-  // Sits below the photo now (not layered on top of it), so it no longer
-  // needs an opaque backing of its own — ReplyQuote already carries one.
+  // Reply quote below a photo/video bubble.
   replyQuoteOnMedia: { padding: rp(6) },
 
   // "This message was deleted" placeholder — same bubble shape, muted
@@ -1948,9 +1845,7 @@ const s = StyleSheet.create({
   },
   moodCardSymbol: { fontSize: rf(22) },
 
-  // Input bar itself now lives in the shared <ChatInputBar> component —
-  // see components/common/ChatInputBar.jsx. What's left here is the quick
-  // emoji strip and the recording-row content passed into it.
+  // The input bar is <ChatInputBar>; this adds the emoji strip and recording row.
   emojiStrip: {
     borderTopWidth: 1, borderTopColor: T.border, backgroundColor: T.background,
   },

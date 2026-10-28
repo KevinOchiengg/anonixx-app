@@ -1,15 +1,5 @@
-/**
- * VideoEditorModal.jsx
- *
- * Trim + text-on-video + cover frame for an admin video drop — the app's
- * version of the website's Post Studio editor (Web/components/compose/
- * VideoEditor.tsx), with the same rules (utils/videoEdit.js). The preview is
- * a 9:16 frame laid out exactly like the feed, so text dragged here lands in
- * the same spot for viewers.
- *
- * Gestures use react-native-gesture-handler (wrapped in its own root view —
- * an RN Modal sits outside the app's root, where handlers wouldn't fire).
- */
+/** Trim, text and cover editor for admin video drops (same rules as the website's VideoEditor,
+ * utils/videoEdit.js). The 9:16 preview matches the feed. Has its own gesture root (Modal). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions,

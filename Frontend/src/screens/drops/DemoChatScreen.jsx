@@ -1,14 +1,4 @@
-/**
- * DemoChatScreen.jsx
- *
- * The "anonixx" row pinned at the top of MessagesScreen opens here — a
- * scripted, fully local walkthrough of what a real room looks like once
- * you've unlocked someone's confession: their own background, their own
- * welcome gallery, the same call icons / voice notes / room menu that
- * DropChatScreen renders for real connections. No backend calls, nothing
- * here is a real connection — it exists so the Messages tab is never just
- * a blank list for someone who hasn't unlocked anyone yet.
- */
+/** Local, scripted demo of a Room chat, opened from the pinned guide row. No backend calls. */
 import React, { useMemo, useState } from 'react';
 import {
   ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput, Modal,
@@ -32,9 +22,7 @@ const SCRIPT = [
   { type: 'text', text: "below is a taste of what a welcome gallery looks like. real ones are set by whoever you unlock." },
 ];
 
-// Fixed-height bars so the waveform reads as intentional, not random noise —
-// same idea as DropChatScreen's VoiceBubble, just without a real audio file
-// behind it (nothing in this screen is a real connection).
+// Fixed bar heights for the demo voice note.
 const DEMO_WAVE = [6, 12, 8, 16, 10, 14, 7, 11, 9, 15, 6, 10];
 
 // Same gradient+symbol placeholder language as DropChatScreen's mood board —

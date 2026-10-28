@@ -1,14 +1,4 @@
-/**
- * PulseLoader.jsx
- *
- * A warm, concentric heartbeat-style pulse used in place of the generic
- * native ActivityIndicator spinner across the app's core user-facing
- * moments (splash, drop landing, chat entry) — a plain spinner reads as
- * "please wait"; this reads closer to "something's about to happen."
- *
- * Not used in the admin panel — that's a utility surface, not part of the
- * product's intimacy framing, so it keeps the plain spinner.
- */
+/** Pulsing loader for key user moments (splash, drop, chat). Admin screens use a plain spinner. */
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
 import T from '../../utils/theme';

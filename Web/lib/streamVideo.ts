@@ -3,11 +3,8 @@ import { api, API_URL, ApiError, getToken } from "./api";
 import { checkReadable, CANCELLED } from "./upload";
 import type { VideoEdit } from "./videoEdit";
 
-// Video drops on Cloudflare Stream (Backend/app/utils/stream.py). The original goes
-// straight to Stream over tus, so a dropped connection resumes instead of starting over;
-// the backend then cuts the posted window out of it with the Anonixx watermark and
-// publishes the drop once the clip is ready. Off until the backend has Stream configured,
-// in which case callers keep uploading to R2.
+// Video drops via Cloudflare Stream: resumable tus upload, then the backend clips, watermarks
+// and publishes. Off until Stream is configured (R2 is used instead).
 
 let enabled: Promise<boolean> | null = null;
 export function streamEnabled(): Promise<boolean> {

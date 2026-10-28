@@ -1,13 +1,4 @@
-/**
- * marketSlice.js — Anonixx Mini Market state.
- *
- * State:
- *   items         { [id]: marketItem }   normalised cache
- *   feed          string[]               item IDs in feed order (for MarketScreen)
- *   loading       boolean
- *   unlocking     string | null          item id currently being unlocked
- *   error         string | null
- */
+/** Mini Market state: items (by id), feed (ids in order), loading, unlocking (id), error. */
 
 import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -129,9 +120,7 @@ export const { clearMarketError } = marketSlice.actions;
 
 // ─── Selectors ────────────────────────────────────────────────────────────────
 
-// Memoized — .map/.filter would otherwise build a new array reference on
-// every call, making useSelector think the value changed on every store
-// update even when feed/items didn't, causing needless rerenders.
+// Memoized so useSelector doesn't re-render on unrelated store changes.
 export const selectMarketFeed = createSelector(
   [(state) => state.market.feed, (state) => state.market.items],
   (feed, items) => feed.map((id) => items[id]).filter(Boolean),

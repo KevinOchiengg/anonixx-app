@@ -1,7 +1,4 @@
-// Tap-to-add keyword picks for official (admin) drops.
-// Source: reports/content/admin-tags.md (JSON block at the end).
-// App-only list. Web/lib/adminTags.ts has its own separate (founder-supplied) list;
-// the two are intentionally different and are not kept in step.
+// Tap-to-add keywords for official drops (from reports/content/admin-tags.md). The website has its own list.
 
 export const TAG_GROUPS = [
   { name: "Desire", tags: ["crush", "chemistry", "kinks", "fantasy", "tension", "forbidden", "temptation", "bi curious", "slow burn", "sapphic", "obsessed", "curious"] },

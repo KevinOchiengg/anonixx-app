@@ -1,12 +1,4 @@
-/**
- * DropsPollScreen.jsx
- *
- * Poll compose screen — hands off from DropsComposeScreen exactly like
- * DropsRecordScreen (Voice) does: tapping "Poll" in the format row
- * navigates here with { theme, moodTag, text, target_user_id }
- * carried over, and this screen owns the rest of the flow, including the
- * actual POST /drops.
- */
+/** Poll compose, opened from DropsComposeScreen with { theme, moodTag, text, target_user_id }. Posts the drop. */
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Switch,
@@ -326,9 +318,7 @@ const s = StyleSheet.create({
   addOptionBtn: { marginBottom: SPACING.md },
   addOptionText: { color: T.primary, fontSize: rf(12), fontWeight: '600' },
 
-  // Supporting photo attach — mirrors DropsComposeScreen's media pattern,
-  // just as a compact row instead of a corner button (this screen has no
-  // live card to overlay it on).
+  // Optional photo.
   attachRow: {
     flexDirection:     'row',
     alignItems:        'center',

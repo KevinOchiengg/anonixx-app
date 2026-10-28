@@ -984,7 +984,7 @@ async def vote_on_drop_poll(
 
 # ==================== LIKE / SAVE / THREAD / VIEW ====================
 
-MAX_VOICE_COMMENT_SECONDS = 30   # mirrors Circles' + the old posts comment voice notes
+MAX_VOICE_COMMENT_SECONDS = 30
 
 
 @router.post("/{drop_id}/like")
@@ -2275,8 +2275,7 @@ async def get_drop_connections(
             sort=[("created_at", -1)]
         )
 
-        # Same WhatsApp-style tick logic as get_drop_messages — only
-        # meaningful when the last message was mine to send.
+        # Seen tick, only when the last message is mine.
         other_last_read_at = conn.get("unlocker_last_read_at" if is_sender else "sender_last_read_at")
         last_message_is_own = bool(last_msg and last_msg["sender_id"] == current_user_id)
         last_message_seen = bool(

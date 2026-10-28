@@ -1,11 +1,4 @@
-/**
- * UnlockWaitingScreen
- *
- * Landing spot right after sending an unlock request — the owner hasn't
- * approved yet, so nothing's been charged. Socket-first for the accept/
- * decline hand-off (see Backend/app/websockets/unlock_requests.py), with a
- * polling fallback against GET /unlock-requests/{id}/status.
- */
+/** Waiting for the owner to answer a knock. Socket first, polling as fallback. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,

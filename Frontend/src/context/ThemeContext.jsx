@@ -1,13 +1,4 @@
-/**
- * ThemeContext.jsx
- *
- * Provides the active theme palette to any component that needs
- * to read colours at runtime (e.g. conditional dark/light styles).
- *
- * The app is dark-first. Light mode exists but is not yet exposed in the UI.
- * All static StyleSheets should import from utils/theme.js directly — this
- * context is only needed for values that change at runtime.
- */
+/** Theme palette at runtime. The app is dark-first; static styles import utils/theme.js. */
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { T } from '../utils/theme';

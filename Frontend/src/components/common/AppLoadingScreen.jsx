@@ -1,16 +1,4 @@
-/**
- * AppLoadingScreen.jsx
- *
- * The app's actual "splash" moment — shown both while fonts load (App.js)
- * and while AuthContext resolves the stored session (AppNavigator.jsx). One
- * component, reused in both spots, so it reads as one continuous loading
- * beat rather than two different blank flashes.
- *
- * Self-contained on purpose: no theme/redux/navigation context, since the
- * font-loading gap in App.js renders before any provider mounts. Custom
- * fonts may not be ready yet either — that's fine, it falls back to the
- * system font for the brief moment before Fraunces/DM Sans finish loading.
- */
+/** The splash shown while fonts and the session load. Uses no providers (it renders before them). */
 import React, { useEffect, useRef } from 'react';
 import {
   View, Text, Animated, StyleSheet, Dimensions, Easing, TouchableOpacity,
@@ -28,9 +16,7 @@ const STARS = Array.from({ length: 32 }, (_, i) => ({
   opacity: Math.random() * 0.5 + 0.08,
 }));
 
-// `hint` and `onRetry` let a long hold degrade in place instead of the app
-// looking frozen: silence first, then a quiet line, then a way out. Both are
-// optional — the boot-time callers pass neither.
+// Optional `hint` and `onRetry` for long waits: a quiet line, then a way out.
 export default function AppLoadingScreen({ hint = null, onRetry = null }) {
   const fade     = useRef(new Animated.Value(0)).current;
   const glow     = useRef(new Animated.Value(0)).current;

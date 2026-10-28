@@ -10,9 +10,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Anonixx** is a cross-platform anonymous mental health support app. It has two separate codebases:
-- `Frontend/` — React Native + Expo app (iOS, Android, Web)
-- `Backend/` — Python FastAPI backend
+**Anonixx** is an anonymous confession and connection app. Three codebases:
+- `Frontend/` — React Native + Expo app (Android, iOS)
+- `Web/` — Next.js website (feed, compose, Rooms, admin dashboard)
+- `Backend/` — Python FastAPI API
 
 ---
 
@@ -25,7 +26,14 @@ npm install
 npx expo start          # Start dev server (scan QR with Expo Go)
 npx expo run:android    # Run on Android emulator/device
 npx expo run:ios        # Run on iOS simulator/device
-npx expo start --web    # Run in browser
+```
+
+### Web (Next.js)
+```bash
+cd Web
+npm install
+npm run dev             # http://localhost:3000
+npx tsc --noEmit -p .   # Type-check
 ```
 
 ### Backend (FastAPI)
@@ -37,13 +45,6 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload   # Dev server at http://localhost:8000
 ```
 
-Run a single backend test:
-```bash
-cd Backend
-pytest tests/test_auth.py -v
-pytest tests/ -k "test_login" -v
-```
-
 ### Environment Setup
 - Copy `Backend/.env.example` → `Backend/.env` and fill in values
 - Frontend API URL is configured in `Frontend/.env`: set `API_URL` to your backend address (e.g. `http://192.168.x.x:8000/api/v1`)
@@ -52,47 +53,31 @@ pytest tests/ -k "test_login" -v
 
 ## Architecture
 
-### Frontend
+### Frontend (app)
 
-**State management:** Redux Toolkit for global state (auth, posts, dating, chat, coins). `AuthContext.jsx` also holds auth state — this is a dual pattern; Redux `authSlice` and `AuthContext` both exist and interact.
+- **State:** Redux Toolkit (`store/slices`: auth, coins, market) plus `AuthContext.jsx`. Both hold the current user; update both when it changes.
+- **Navigation:** React Navigation. `AppNavigator` (root stack, no login gate) wraps `TabNavigator` (routes Feed, Messages, Create, Requests, Profile; labelled Desires, Rooms, +, Requests, You); auth screens live under `AuthNav`.
+- **API:** mostly `fetch` with `API_BASE_URL` from `config/api.js`; the JWT is in AsyncStorage.
+- **Real-time:** Socket.IO via `SocketContext.jsx` / `services/socket.js`.
+- **Styling:** `StyleSheet` with tokens from `utils/theme.js` and sizes from `utils/responsive.js`.
+- **Screens:** `feed/` (full-screen swipe feed, search), `drops/` (compose, chat, Rooms, knocks, calls), `connect/` (messages), `market/`, `profile/`, `settings/`, `admin/`, `support/`.
 
-**Navigation:** React Navigation with three root navigators:
-- `AuthNavigator` — unauthenticated flow (Login, Signup, Onboarding)
-- `TabNavigator` — main app tabs
-- `AppNavigator` — wraps both, switches based on auth state
+### Web
 
-**API layer:** Axios client in `src/api/` with JWT interceptors. Token stored in AsyncStorage. Base URL from `Frontend/.env`.
-
-**Real-time:** Socket.IO client via `SocketContext.jsx` for chat and live events.
-
-**Styling:** NativeWind (Tailwind CSS for React Native). Use Tailwind class names via `className` prop.
-
-**Key screen groups:**
-- `screens/feed/` — main content feed with anonymous + authenticated posts
-- `screens/drops/` — confessions (Drops), surfaced inline in the main feed, with vibe scoring
-- `screens/circles/` — audio rooms (Agora-powered live sessions)
-- `screens/connect/` — anonymous profile connections
-- `screens/dating/` — swipe-based matching
+Next.js App Router in `Web/app`, components in `Web/components`, helpers in `Web/lib` (`api.ts`, `auth.tsx`). The admin dashboard is under `Web/app/admin`. Anonymous visit tracking: `Web/lib/track.ts`.
 
 ### Backend
 
-**All routes** are in `app/api/v1/` as individual router files, registered in `app/main.py`.
+- **Routes:** one router file per area in `app/api/v1/`, registered in `app/main.py`.
+- **Database:** MongoDB via Motor, connection in `app/database.py`. Database name `anonixx` (the old `anonispill` database is kept on the cluster as a rollback snapshot).
+- **Auth:** JWT HS256, 30-day access tokens, no refresh tokens. Auth dependencies in `app/dependencies.py`.
+- **Media:** Cloudflare R2 (`app/utils/r2_storage.py`, `app/api/v1/upload.py`); video drops can use Cloudflare Stream (`app/utils/stream.py`).
+- **Payments:** coins in `app/api/v1/coins.py`, premium in `app/api/v1/premium.py` (M-Pesa, Stripe, Google Play), prices by country in `geo_pricing.py`. All coin changes go through `app/utils/coin_service.py`.
+- **Calls:** Agora tokens for Room video calls in `app/api/v1/drop_calls.py`.
+- **Background tasks:** `app/tasks/` (social publisher, drop cleanup, scheduled drops, admin monitor).
 
-**Database:** MongoDB via Motor (async). Connection in `app/db/database.py`. Database name: `anonixx` (renamed from `anonispill`; the old database is still present on the cluster, untouched, as a rollback snapshot).
+### Key concepts
 
-**Auth:** JWT HS256 tokens. Access tokens: 30 min. Refresh tokens: 7 days. Auth dependency injected into protected routes.
-
-**Media uploads:** Cloudinary (images, audio, video) via `app/api/v1/upload.py`.
-
-**Payments:** Stripe, M-Pesa (Safaricom Daraja), PayPal — all in `app/api/v1/payments.py` with webhooks in `app/api/v1/webhooks.py`.
-
-**Real-time tokens:** Agora token generation in `app/api/v1/circles.py` for audio rooms.
-
-**Virtual currency:** Coins system tracked in `app/models/coin_transaction.py`, endpoints in `app/api/v1/coins.py`.
-
-### Key Cross-Cutting Concerns
-
-- Anonymous vs. authenticated posts are handled at the data model level — posts have an `is_anonymous` flag
-- The "Drops" feature: users post anonymous confessions (surfaced inline in the main feed, no standalone browse screen), others can pay coins to reveal the author's identity (vibe score system)
-- Circles are Agora-powered audio rooms with scheduled sessions, live participants, and a backend roster
+- **Drops:** anonymous posts (confessions, hookup posts, media). Official drops are posted by admins as "Anonixx".
+- **Rooms and Knocks:** each poster has a Room. Others Knock (free); coins move only when the owner Lets them In, which opens a Link Up chat (`unlock_requests.py`).
 - Deep links: `anonixx://drop/:dropId`

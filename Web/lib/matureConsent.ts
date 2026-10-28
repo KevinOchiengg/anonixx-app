@@ -1,10 +1,6 @@
 "use client";
-/**
- * One tap on a "Mature content" veil opens every mature post, not just that one.
- * The choice is remembered on this device (localStorage) and shared live across
- * all slides on the page, so the veil never comes back. Age-verified accounts
- * skip the veil entirely (see Slide.tsx).
- */
+/** One tap on a mature-content veil opens all mature posts, remembered on this device.
+ * Age-verified accounts never see the veil. */
 import { useSyncExternalStore } from "react";
 
 const KEY = "anonixx.mature.ok";

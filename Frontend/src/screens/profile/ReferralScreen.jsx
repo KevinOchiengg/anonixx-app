@@ -1,7 +1,4 @@
-/**
- * ReferralScreen.jsx
- * Invite friends, earn 30 coins per referral.
- */
+/** Invite friends: 30 coins per referral. */
 
 import React, {
   useCallback,

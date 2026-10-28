@@ -1,23 +1,6 @@
-/**
- * DropCallScreen.jsx
- *
- * Group video call for a chat interface's "room" — the host plus however
- * many guests their room currently allows (see ChatProfileSetupScreen's
- * solo/multi + capacity settings). Unlike the 1:1 CallScreen, everyone here
- * joins the same Agora channel symmetrically (Communication profile, all
- * publishers) — there's no broadcaster/audience split, host and guests are
- * peers on the stream. "Host" only matters for the leave-vs-end-for-everyone
- * button and the backend room-capacity check that happened before this
- * screen was ever reached.
- *
- * Navigation params (all already resolved by DropChatScreen's
- * start/join call handlers, which hit /drop-calls/start or /:id/join first):
- *   callId, channel, token, uid, appId, isHost, hostName, isAudioOnly
- *
- * isAudioOnly: the header's Phone icon vs. Video icon — joins with the
- * camera off by default, but it's just a starting state, not a locked
- * mode. Either side can flip to video mid-call with the toggle below.
- */
+/** Group video call in a Room. Everyone publishes (Agora Communication profile); the host can
+ * end it for all. Params: callId, channel, token, uid, appId, isHost, hostName, isAudioOnly
+ * (starts with camera off; video can be turned on). */
 import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
@@ -197,10 +180,7 @@ export default function DropCallScreen({ route, navigation }) {
     engineRef.current?.switchCamera();
   }, []);
 
-  // Anyone in the call can share their screen — same toggle for host and
-  // guests. Exact ScreenCaptureParameters shape can vary by platform/SDK
-  // build; this uses sane defaults and fails soft with a toast rather than
-  // crashing the call if the installed native module rejects them.
+  // Screen share for everyone; shows a toast if the device refuses.
   const toggleScreenShare = useCallback(async () => {
     try {
       if (!sharingScreen) {

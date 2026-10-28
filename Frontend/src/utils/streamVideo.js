@@ -1,14 +1,5 @@
-/**
- * streamVideo.js
- *
- * Video drops on Cloudflare Stream (Backend/app/utils/stream.py). The app
- * uses Stream's single-request upload — the native file uploader posts the
- * video as multipart field "file" straight to Cloudflare — then queues the
- * drop; the backend cuts the posted window out with the Anonixx watermark
- * and publishes it once the clip is ready. Off until the backend has Stream
- * configured, and limited to 200 MB per file; past either, callers keep
- * uploading to R2 with smart trim.
- */
+/** Video drops via Cloudflare Stream: one-request upload, then the backend clips, watermarks
+ * and publishes. Off until Stream is configured or for files over 200 MB (R2 is used instead). */
 import { File, UploadType } from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';

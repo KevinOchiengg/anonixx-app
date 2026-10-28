@@ -4,9 +4,8 @@ const W = 720;
 const H = 1280;
 const SIZE = { s: 0.046, m: 0.064, l: 0.088 } as const;
 
-// One frame of the clip, framed like the feed's 9:16 player (portrait fills it, landscape
-// is letterboxed), with the text overlays drawn on top: the poster and share preview then
-// match what people actually see. Works on local blob: URLs, so it runs before upload.
+// One frame of the clip in the feed's 9:16 framing with text overlays drawn on, for the poster
+// and share preview. Works on local files before upload.
 export async function captureCover(src: string, time: number, overlays: VideoOverlay[]): Promise<Blob> {
   const v = document.createElement("video");
   v.muted = true;

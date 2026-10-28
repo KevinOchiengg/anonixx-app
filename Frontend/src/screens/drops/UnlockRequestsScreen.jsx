@@ -1,18 +1,5 @@
-/**
- * UnlockRequestsScreen
- *
- * The owner's review inbox for pending "unlock my confession" requests.
- * Grouped by confession — each group gets its own Accept All, since
- * approval is scoped per-confession, never account-wide. Nothing here was
- * charged yet; Accept is the first moment coins actually move
- * (Backend/app/api/v1/unlock_requests.py::accept_unlock_request).
- *
- * Optional route params { targetType, targetId } pre-scope the list to one
- * confession (used by the push-notification deep link).
- *
- * Each row carries the sender's opening line, intent chips and their Room's
- * photos; tapping the row steps into their Room (RoomScreen) to decide there.
- */
+/** Knock inbox, grouped by confession with Accept All per group. Coins move only on accept.
+ * Optional { targetType, targetId } narrows it to one confession. Tapping a row opens their Room. */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image,
@@ -32,10 +19,7 @@ import { API_BASE_URL } from '../../config/api';
 import { intentLabel } from '../../config/linkup';
 import KnockClues from '../../components/rooms/KnockClues';
 
-// Full-size look at a request's attached clue — its own component (not
-// inline in the main screen) so its useVideoPlayer only ever exists while
-// actually open. Only mounted while previewMedia is set (see below),
-// so the source loads fresh on open and the player is torn down on close.
+// Full-size clue viewer, mounted only while open so its video player is freed on close.
 function MediaPreviewModal({ media, onClose }) {
   const isVideo = media.type === 'video';
   const player = useVideoPlayer(
@@ -236,10 +220,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
           onPress={() => item.requester_id && navigation.navigate('Room', { userId: item.requester_id })}
         >
           <View style={s.rowInfo}>
-            {/* Who's asking — the same "resume before you decide" the
-                requester already gets when they see a drop's avatar before
-                sending the request. Falls back to an initial-letter circle
-                for requesters without a photo set, same as the feed. */}
+            {/* Knocker's photo, else their initial. */}
             {item.requester_avatar_url ? (
               <Image source={{ uri: item.requester_avatar_url }} style={s.rowAvatar} />
             ) : (

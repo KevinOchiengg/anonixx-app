@@ -4,11 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import "@/app/auth.css";
 
-/**
- * Building blocks for the web auth screens, matching the app's
- * (Frontend/src/screens/auth/LoginScreen.jsx, SignUpScreen.jsx): starry
- * background, coral glow, ANONIXX mark, uppercase labels, icon inputs.
- */
+/** Web auth screen building blocks, matching the app's login and signup. */
 
 const S = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", viewBox: "0 0 24 24" } as const;
 export const IcMail = () => (<svg {...S}><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></svg>);

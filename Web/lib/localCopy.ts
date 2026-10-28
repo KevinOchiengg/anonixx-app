@@ -1,12 +1,5 @@
-// Android only lets a page read a picked file while the picker's permission lasts — and
-// Chrome can lose it a few minutes later (writing the caption, switching apps, the screen
-// locking), so a video that previewed fine fails at upload with zero bytes sent. Copying
-// the file the moment it's picked makes everything after that (preview, editor, cover,
-// upload) read our own copy instead.
-//
-// Small files are copied into memory; big ones are streamed into the origin-private file
-// system (on-device storage only this site can see), so a large video can't exhaust the
-// phone's memory. Old copies are cleared on the next pick.
+// Android can lose access to a picked file minutes later, so copy it right away: small files
+// into memory, big ones into on-device private storage. Old copies clear on the next pick.
 
 import { ApiError } from "./api";
 
@@ -72,9 +65,7 @@ export async function keepReadable(file: File): Promise<File> {
     const onDisk = await copyToDisk(file);
     if (onDisk) return onDisk;
   }
-  // Couldn't keep a copy (no on-device storage, or a big file that's too much to hold
-  // in memory). Never refuse a file that can actually be read: check it all reads, then
-  // carry on with the original — it stays readable as long as the post goes up soon.
+  // Couldn't copy: if the whole file reads fine, use the original.
   const stoppedAt = await readThrough(file);
   if (stoppedAt < 0) return file;
   const mb = Math.round(file.size / (1024 * 1024));

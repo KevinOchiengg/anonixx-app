@@ -122,9 +122,7 @@ export default function SignUpScreen({ navigation }) {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   }, [errors]);
 
-  // Picking happens locally — there's no auth token yet to upload with, so
-  // the file is only sent to R2 once signup succeeds and we have one (see
-  // handleSignUp).
+  // The picked photo is uploaded after signup (we need a token first).
   const pickAvatar = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -186,18 +184,12 @@ export default function SignUpScreen({ navigation }) {
       })).unwrap();
 
       await authContextLogin(result.token, result.user);
-      // The register response already carries the welcome-bonus balance —
-      // seed it into Redux immediately instead of leaving coins.balance at
-      // its initial 0 until some other screen happens to call
-      // fetchBalance(). Without this, the very first thing a new user
-      // sees is "0 coins" right after being told they got 1000.
+      // Set the coin balance (with the welcome bonus) from the response.
       if (result.user?.coin_balance != null) {
         dispatch(setBalance(result.user.coin_balance));
       }
 
-      // Optional picture — upload now that we actually have a token. Not
-      // blocking: a failure here shouldn't stop account creation, since
-      // the photo can always be added later from Edit Profile.
+      // Upload the optional photo; a failure doesn't block signup.
       if (avatarUri) {
         try {
           const cloudUrl = await uploadToR2(avatarUri, 'image', 'image/jpeg');
@@ -234,9 +226,7 @@ export default function SignUpScreen({ navigation }) {
 
       showToast({ type: 'success', title: 'Account created!', message: "Welcome to Anonixx 🌑" });
 
-      // Land straight in the main feed — there's no separate identity-setup
-      // step anymore. reset (not navigate) so signup/login screens aren't
-      // sitting underneath in the stack.
+      // Reset to the feed so auth screens aren't left underneath.
       setTimeout(() => {
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       }, 600);

@@ -9,8 +9,7 @@ type Props = {
   onRetry: () => void;
 };
 
-// The TikTok-style progress card: shown the moment a video is picked, while the
-// upload runs in the background and the post is being written.
+// Upload progress card, shown from the moment a video is picked while the post is written.
 export default function UploadCard({ up, onReplace, onCancel, onRetry }: Props) {
   const s = useBgUpload(up);
   if (!s) return null;

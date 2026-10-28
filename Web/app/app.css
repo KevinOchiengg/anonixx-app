@@ -193,7 +193,7 @@
 .hk-foot .muted { margin: 0; }
 .kind-tag { text-transform: uppercase; letter-spacing: 0.06em; }
 
-/* ── TikTok-style video slides ── */
+/* ── Video slides ── */
 .scroller { scroll-behavior: auto; }
 .slide.has-media { padding: 0; }
 .media img, .media video { object-fit: cover; }

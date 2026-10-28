@@ -1,15 +1,4 @@
-/**
- * locations.js
- *
- * Structured location data for Drops — country list + Kenya's 47 counties
- * (the app's primary market, per MPESA_COUNTRIES in geo_pricing.py).
- *
- * Only country and county/state are backed by a real fixed list — sub-county
- * and estate/neighborhood stay freeform text in the UI (Kenya alone has
- * ~300 sub-counties and thousands of estates; a hand-authored dataset for
- * that tier risks being wrong more often than it's right, so DropsComposeScreen
- * asks for those as plain text instead of pretending to offer an exhaustive list).
- */
+/** Countries and Kenya's 47 counties. Sub-county and area are free text. */
 
 // Kenya pinned first (primary market), then the rest of the M-Pesa footprint
 // (MPESA_COUNTRIES in geo_pricing.py), then the rest of the world A–Z.
@@ -170,9 +159,7 @@ export const COUNTRIES = [
   { code: 'ZW', name: 'Zimbabwe' },
 ];
 
-// Kenya's 47 counties — the only county/state level this app has real
-// structured data for (its primary market). Every other country falls
-// back to a freeform "State/Region" text field in the UI.
+// Kenya's counties. Other countries use a free-text region.
 export const KENYA_COUNTIES = [
   'Mombasa', 'Kwale', 'Kilifi', 'Tana River', 'Lamu', 'Taita-Taveta',
   'Garissa', 'Wajir', 'Mandera', 'Marsabit', 'Isiolo', 'Meru',

@@ -16,11 +16,7 @@ export function RoomMini({ theme, name, big = false }: { theme: string; name?: s
   );
 }
 
-/**
- * Pick a Room theme with a live preview. Nothing is saved until Apply;
- * Cancel puts the saved theme back. The saved theme stays marked so it's
- * always clear what visitors see right now.
- */
+/** Room theme picker with a live preview. Saved only on Apply; the saved theme stays marked. */
 export default function RoomThemePicker({
   saved, name, onApply,
 }: {

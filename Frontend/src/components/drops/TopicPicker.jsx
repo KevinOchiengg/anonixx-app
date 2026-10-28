@@ -1,8 +1,4 @@
-/**
- * TopicPicker — moods and topics an author can put on a confession
- * (Backend utils/search_lexicon MOODS + STORY_TOPICS, max MAX_TOPICS; mirrors
- * Web/components/compose/TopicPicker.tsx). Optional; helps people find it in Stories.
- */
+/** Optional moods/topics on a confession (up to MAX_TOPICS), for Stories. Same as the website's. */
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { rf, rp } from '../../utils/responsive';

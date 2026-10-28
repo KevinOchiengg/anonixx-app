@@ -106,10 +106,8 @@ export default function Slide({
   const chosen = post.sound && !audioSrc && !mature ? post.sound : null;
   const ambient = chosen || (textSlide && !mature ? pickSound(sounds, post) : null);
   const muteClip = Boolean(chosen?.mute_original);
-  // Captions on media read like TikTok's, in the Anonixx voice: the first sentence is a
-  // hook in the brand serif (up to two of its lines), then two lines of plain text ending
-  // "… more" inline as if part of the sentence. How much fits is measured on this screen,
-  // in a hidden copy of the caption at the same width, before paint so nothing jumps.
+  // Caption: a serif hook (up to two lines), then two lines ending in an inline "… more".
+  // What fits is measured from a hidden copy before paint.
   const textRef = useRef<HTMLElement>(null);
   const measureRef = useRef<HTMLParagraphElement>(null);
   const parts = useMemo(() => (hasMedia ? splitHook(post.content) : null), [hasMedia, post.content]);

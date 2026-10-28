@@ -1,10 +1,4 @@
-/**
- * AdminUsersScreen.jsx
- *
- * Search + moderate users: ban/unban, verify, grant/revoke admin, and a
- * manual coin credit/debit. All backed by existing app/api/v1/admin.py
- * endpoints — this screen is just the first UI ever built for them.
- */
+/** Find and manage users: ban, verify, admin rights, coin adjustments. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,

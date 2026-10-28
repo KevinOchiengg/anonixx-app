@@ -1,16 +1,4 @@
-/**
- * FeedAdCard.jsx
- * Sponsored/house ad injected between posts in the main feed,
- * styled to match the main feed's card language (see MarketCard.jsx).
- *
- * Renders whichever media type the creator picked (image/gif/video/audio —
- * see CreateAdScreen.jsx). Video autoplays muted+looped as a preview, same
- * spirit as a GIF; there's no inline audio player since the whole card is
- * already one tap target that takes you to the linked Drop.
- *
- * Usage:
- *   <FeedAdCard ad={ad} onPress={(ad) => ...} />
- */
+/** Ad between feed posts. Shows the ad's media (videos muted and looping); the whole card opens the linked drop. */
 import React from 'react';
 import {
   Image, Linking, StyleSheet, Text, TouchableOpacity, View,

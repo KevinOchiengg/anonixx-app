@@ -1,26 +1,5 @@
-/**
- * DropsRecordScreen.jsx
- *
- * Voice drop recorder — spec section 2 exact.
- *
- *   Recording view:
- *     • Red pulsing dot + timer "● 0:47 / 3:00"
- *     • Live waveform (coral) updates in real time
- *     • [■ Stop] [✕ Cancel] controls
- *     • Timer turns coral at 30 seconds remaining
- *     • Subtle pulse at 10 seconds remaining
- *     • Auto-stops at 3:00
- *     • Quiet prompt at bottom: "say it like nobody is listening."
- *
- *   Preview view (post-record):
- *     • Playback with final waveform
- *     • Scrub to seek
- *     • Speed picker: 0.75x · 1x · 1.5x
- *     • Three options: [Send] [Re-record] [Add text]
- *
- * Uses expo-audio hooks. Audio is uploaded via /upload/sign + Cloudinary video
- * endpoint (Cloudinary treats audio as the video resource type).
- */
+/** Voice drop recorder: record up to 3:00 with a live waveform (warns near the end), then
+ * preview with seek and speed, and send, re-record or add text. */
 import React, {
   useCallback, useEffect, useRef, useState,
 } from 'react';
@@ -248,9 +227,7 @@ export default function DropsRecordScreen({ navigation, route }) {
       setCapturedLevels(null);
       setElapsed(0);
       setRecordedUri(null);
-      // Previewing a take (togglePlay above) flips this back to false, so
-      // re-arm it before every recording — mirrors the mount effect above,
-      // which only ever runs once and isn't enough for a re-record.
+      // Re-enable recording mode before each take (preview turns it off).
       await AudioModule.setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
@@ -315,12 +292,7 @@ export default function DropsRecordScreen({ navigation, route }) {
       return;
     }
     try {
-      // Recording just happened on this same screen, which leaves the
-      // session's allowsRecording stuck true — previewing the clip you just
-      // recorded plays into that same recording-mode session otherwise,
-      // which routes to the earpiece on iOS and often fails outright on
-      // Android. Nothing here resets it after recording stops, so do it
-      // right before playback instead.
+      // Leave recording mode before playback, or audio goes to the earpiece / fails.
       await AudioModule.setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
     } catch {}
     if (playerStatus.currentTime >= (playerStatus.duration || 0) - 0.1) {
@@ -472,9 +444,7 @@ export default function DropsRecordScreen({ navigation, route }) {
         <View style={styles.contextStrip}>
           <View style={[styles.dot, { backgroundColor: accent }]} />
           <Text style={styles.contextText}>
-            {/* No .toLowerCase() — labels carry their own title-case
-                styling now (e.g. "Just Tonight"), forcing it would flatten
-                that. */}
+            {/* Labels keep their own casing. */}
             {themeObj.label} · {moodTag}
           </Text>
         </View>
@@ -650,8 +620,7 @@ export default function DropsRecordScreen({ navigation, route }) {
                 : 'Tap to start. Up to 3:00.'}
           </Text>
 
-          {/* Supporting photo — optional, supplements the voice note the
-              same way the compose screen's attach button supplements text. */}
+          {/* Optional photo. */}
           {hasRecording && (
             !imageUri ? (
               <TouchableOpacity style={styles.attachRow} onPress={handlePickImage} activeOpacity={0.85}>
@@ -796,9 +765,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   timerCritical: {
-    // The spec calls for a "subtle pulse" at <=10s; we signal it visually
-    // by a brighter accent color swap (already applied via isUrgent)
-    // plus a slight textShadow glow here.
+    // Under 10s: brighter colour plus a soft glow.
     textShadowColor:  'rgba(255,99,74,0.45)',
     textShadowRadius: 8,
     textShadowOffset: { width: 0, height: 0 },
@@ -936,9 +903,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Supporting photo attach — mirrors DropsPollScreen's compact row pattern
-  // (this screen's layout is centered controls, not a live card, so no
-  // corner-overlay button here either).
+  // Optional photo.
   attachRow: {
     flexDirection:     'row',
     alignItems:        'center',

@@ -1,27 +1,5 @@
-/**
- * DropsPublishScreen.jsx
- *
- * Anonixx Publisher — double-consent flow (spec section 16).
- *
- * A drop only leaves Anonixx (to IG / TikTok / the site) when the user
- * consents TWICE. The second screen is deliberately slower, italic, and
- * names the specific risk: "your words become public."
- *
- * Voice drops get an additional acknowledgement: the voice itself will
- * be heard outside Anonixx — we surface that explicitly.
- *
- * Flow:
- *   Step 1  → "Share this anonymously on our social pages?"          [Yes] [Keep private]
- *   Step 2  → "Last check. Your words become public."                [Publish]  [Keep inside Anonixx]
- *            (voice only) + "People outside Anonixx will hear your voice."
- *
- * On confirm the screen navigates back with route.params.onConfirmed()
- * called — the caller (DropsComposeScreen) actually POSTs.
- *
- * Backend-facing:
- *   POST /api/v1/drops/:id/publish   { format: 'voice' | 'text' | 'image' | 'video' }
- *   (or send publisher_opt_in: true when creating the drop — either path)
- */
+/** Two-step consent before a drop is shared on Anonixx's social pages (voice drops also confirm
+ * their voice will be heard). Calls route.params.onConfirmed(); the caller posts. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView,

@@ -1,6 +1,4 @@
-/**
- * ChangePasswordScreen — lock it down.
- */
+/** Change password. */
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,

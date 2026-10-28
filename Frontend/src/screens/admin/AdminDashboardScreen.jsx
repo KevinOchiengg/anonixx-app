@@ -1,11 +1,4 @@
-/**
- * AdminDashboardScreen.jsx
- *
- * Platform overview for admins — user/content counts, a revenue figure
- * that refreshes on a short poll (a "live" cash-flow feel without standing
- * up a new Socket.IO event path just for this), and entry points into
- * user management and the moderation queue.
- */
+/** Admin overview: counts, revenue (refreshed often), links to users and moderation. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,

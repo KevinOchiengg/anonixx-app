@@ -1,7 +1,4 @@
-/**
- * LegalScreen — Terms of Service, Privacy Policy, Community Guidelines.
- * Navigate here with: navigation.navigate('Legal', { type: 'terms' | 'privacy' | 'guidelines' })
- */
+/** Terms, privacy and community guidelines. navigate('Legal', { type: 'terms' | 'privacy' | 'guidelines' }) */
 import React, { useEffect, useRef } from 'react';
 import {
   Animated, StyleSheet, Text, TouchableOpacity, View,
@@ -81,7 +78,7 @@ const PRIVACY = {
     },
     {
       heading: '6. Third-Party Services',
-      body: 'We use Cloudinary for media storage, Agora for audio rooms, and Expo for push notifications. Each operates under their own privacy policies.',
+      body: 'We use Cloudflare for media storage, Agora for voice and video calls, and Expo for push notifications. Each operates under their own privacy policies.',
     },
     {
       heading: '7. Data Retention',

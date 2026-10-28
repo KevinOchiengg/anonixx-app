@@ -3,12 +3,8 @@ import { useEffect, useState } from "react";
 import { API_URL } from "./api";
 import { track, trackingAllowed, visitorId } from "./track";
 
-/**
- * A/B tests set up on /admin/growth. Each visitor gets one variant per test,
- * fixed by a hash of their anonymous visitor id, so they always see the same
- * one; showing it records an "exp" event, and the dashboard compares signups
- * per variant. Visitors who aren't tracked (Do Not Track etc.) see the fallback.
- */
+/** A/B tests from /admin/growth. Each visitor's variant is fixed by their visitor id; showing
+ * it records an "exp" event. Untracked visitors see the fallback. */
 type Exp = { key: string; variants: { id: string; value: string }[] };
 
 let cache: Promise<Exp[]> | null = null;

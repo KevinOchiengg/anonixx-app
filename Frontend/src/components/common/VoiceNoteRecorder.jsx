@@ -1,24 +1,5 @@
-/**
- * VoiceNoteRecorder.jsx
- * WhatsApp-style hold-to-record mic button for comment inputs.
- *
- *   press and hold  → starts recording
- *   slide left      → arms cancel ("release to cancel")
- *   release         → uploads and sends immediately, no preview step
- *   30s             → auto-stops and sends
- *
- * Renders as the mic button itself (drop it straight into an input row);
- * while recording it floats a status pill above the button with a pulsing
- * dot, the elapsed timer, and the slide-to-cancel hint.
- *
- * 30s is short enough that holding a finger down is comfortable, which is
- * why there's no WhatsApp-style "lock" gesture here — by the time locking
- * would be worth it, the recording has already hit the cap.
- *
- * Uploads via /upload/audio (not the direct-Cloudinary /upload/sign path
- * DropsRecordScreen uses) because it returns Cloudinary's reported
- * duration, which the caller sends back for server-side validation.
- */
+/** Hold-to-record mic for comments: hold to record, slide left to cancel, release to send
+ * (auto-sends at 30s). */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, Animated, Platform, PanResponder,
@@ -61,15 +42,8 @@ export default function VoiceNoteRecorder({ onSend, disabled, compact, filled, m
   const startRef     = useRef(null);
   const finishRef    = useRef(null);
 
-  // No mount-time permission request or audio-mode change here on purpose —
-  // this component can be mounted just by opening a comment sheet, without
-  // the user ever touching the mic. Doing either at mount time used to (a)
-  // ask for microphone access before there was any user intent to record,
-  // and (b) flip the *global* audio session to allowsRecording:true, which
-  // silently breaks playback everywhere else in the app (any AudioPlayer
-  // that doesn't explicitly reset it back to false) for as long as this
-  // component stays mounted. `start()` below already re-arms recording mode
-  // right before it's actually needed — that's the only place it belongs.
+  // No permission request or audio-mode change on mount: that would prompt before the user
+  // taps and break playback elsewhere. start() sets recording mode when needed.
 
   useEffect(() => {
     if (recording) {
@@ -232,9 +206,7 @@ const styles = StyleSheet.create({
   },
   micBtnActive: { backgroundColor: T.primary, borderColor: T.primary },
   micBtnCancel: { backgroundColor: T.danger, borderColor: T.danger },
-  // Solid coral circle, always — the same look Link Up chat's send button
-  // uses for both its mic and send states, so this reads as one button
-  // that swaps icons rather than a separate, quieter control next to it.
+  // Solid coral circle, matching the chat send button.
   micBtnFilled: {
     width: rs(44), height: rs(44), borderRadius: rs(22),
     backgroundColor: T.primary,
@@ -242,10 +214,7 @@ const styles = StyleSheet.create({
     shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 }, elevation: 4,
   },
-  // Icon-only variant for sitting inline among other plain icon buttons
-  // (e.g. next to the emoji/photo icons inside a text input) — no filled
-  // circle at rest so it doesn't compete with the button chrome around it,
-  // coral instead of muted gray so it still reads clearly on its own.
+  // Icon-only variant for use inside a text input.
   micBtnCompact: {
     width: rs(38), height: rs(38), borderRadius: rs(19),
     alignItems: 'center', justifyContent: 'center',

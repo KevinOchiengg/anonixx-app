@@ -1,7 +1,4 @@
-// Why a picked video won't open in the browser: reads the codec name stored inside the
-// file (MP4/MOV keep it as a four-letter code in the header, which may sit at either
-// end of the file) instead of guessing. Used only after the browser has already
-// failed to open the video.
+// After a video fails to open, read its codec from the file header to explain why.
 
 export type VideoCodec = "hevc" | "dolby" | "avc" | "av1" | "vp9" | "unknown";
 

@@ -1,12 +1,5 @@
-/**
- * AdminDeceptionReportsScreen.jsx
- *
- * Reports filed by unlockers who say a confession they paid to link up
- * with was fake/bait (GET /admin/deception-reports). Confirm refunds the
- * reporter's coins, claws back the poster's reward for that connection,
- * and strikes the poster — strike 2 suspends their posting for 7 days,
- * strike 3+ deactivates the account. Dismiss has no side effects.
- */
+/** Deception reports. Confirm refunds the reporter, claws back the reward and strikes the
+ * poster (2nd: 7-day posting ban, 3rd: account disabled). Dismiss does nothing else. */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,

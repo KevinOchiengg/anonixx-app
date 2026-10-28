@@ -1,18 +1,5 @@
-/**
- * Toast.jsx
- * Reusable toast notification system for Anonixx
- *
- * Usage:
- *   import { useToast, ToastProvider } from '../components/ui/Toast';
- *
- *   // 1. Wrap your app root with <ToastProvider>
- *   // 2. In any component:
- *   const { showToast } = useToast();
- *   showToast({ type: 'success', message: 'Drop created!' });
- *   showToast({ type: 'error', message: 'Something went wrong.' });
- *   showToast({ type: 'info', message: 'Loading your feed...' });
- *   showToast({ type: 'warning', message: 'Connection unstable.' });
- */
+/** Toasts. Wrap the app in <ToastProvider>, then: useToast().showToast({ type, message }).
+ * Types: success | error | info | warning. */
 
 import React, {
   createContext,

@@ -1,10 +1,4 @@
-/**
- * CoinsScreen.jsx — Wallet: balance, geo-aware top up, streak, transaction history.
- *
- * Payment routing:
- *   M-Pesa countries (KE/TZ/UG/RW/…) → M-Pesa sheet (primary) + Stripe sheet (secondary)
- *   All other countries               → Stripe sheet only
- */
+/** Wallet: balance, top up (M-Pesa + card in M-Pesa countries, card elsewhere), streak, history. */
 
 import React, {
   useCallback,

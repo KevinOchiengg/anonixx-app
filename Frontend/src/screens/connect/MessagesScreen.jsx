@@ -44,13 +44,7 @@ function formatChatTime(isoString) {
   return msgDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-// A dedicated palette for avatar-initial fallbacks — deliberately NOT the
-// app's own coral (that's the action color: send button, unread badges,
-// CTAs — an avatar rendering in it looks like something tappable/alerting)
-// and not gold/violet either, since those already mean something else here
-// (coins/premium, drop-type chats). These are warm riffs on coral's mood —
-// terracotta, dusty rose, amber, clay — without literally being it, so
-// avatars read as a distinct, calm identity layer of their own.
+// Avatar fallback colours: warm tones, distinct from coral (actions), gold and violet.
 const AVATAR_COLORS = ['#C96F53', '#C97B84', '#D98E4A', '#B56576', '#A8674F'];
 
 // Deterministic, not random — the same person gets the same color every
@@ -64,9 +58,7 @@ function avatarColorFor(seed) {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
-// Cloudinary serves a poster frame for any video delivery URL by swapping
-// the file extension to an image format — same trick DropChatScreen uses
-// for chat video bubbles, reused here for a video clue's story-avatar.
+// Poster frame for a video URL (swap the extension to an image).
 function videoPosterUrl(url) {
   return url ? url.replace(/\.\w+(\?.*)?$/, '.jpg$1') : url;
 }
@@ -100,10 +92,7 @@ const TypingDots = React.memo(() => {
   );
 });
 
-// ─── Pending unlock stories — people who've sent a Link Up request on one
-// of your confessions that you haven't answered yet. A tap opens their
-// mini profile (their clue media as a "resume" of sorts) to accept or
-// decline from; the leading "All" tile jumps to the full requests list. ──
+// ─── Unanswered knocks as stories; tap to review, "All" opens the full list. ──
 const PendingUnlockStory = React.memo(({ request, onPress }) => {
   const clueUri = request.media_url
     ? (request.media_type === 'video' ? videoPosterUrl(request.media_url) : request.media_url)
@@ -170,10 +159,7 @@ const RequestClueMedia = React.memo(({ mediaUrl, mediaType }) => {
   );
 });
 
-// ─── Unified Chat Card — plain avatar + a small presence dot (like the
-// mockup), not the gradient "story ring" treatment; two lines of info
-// (name+time, preview+badge) with a WhatsApp-style read tick on my own
-// last-sent message instead of a wall of status chips. ──────────────────
+// ─── Chat row: avatar with presence dot, name + time, preview + badge, and a read tick on my last message. ──
 const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
   const hasUnread = item.unread_count > 0;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -184,9 +170,7 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
 
   const handlePress = useCallback(() => onPress(item), [onPress, item]);
 
-  // Stable per-person gradient for the initial-fallback avatar — keyed on
-  // their id (falls back to name if that's ever missing) so it doesn't
-  // reshuffle on every refetch.
+  // Avatar gradient keyed on their id, so it stays the same.
   const avatarColor = useMemo(
     () => avatarColorFor(item.other_user_id || item.other_anonymous_name),
     [item.other_user_id, item.other_anonymous_name],
@@ -205,9 +189,7 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
         onPress={handlePress}
         activeOpacity={0.8}
       >
-        {/* Avatar — their real photo if they set one, otherwise a flat
-            per-person color with their initial, plus a small green dot
-            when they're online now */}
+        {/* Avatar: photo, else coloured initial; green dot when online. */}
         <View style={styles.chatAvatarWrap}>
           {item.other_avatar_url ? (
             <View style={styles.chatAvatar}>
@@ -263,12 +245,7 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
   );
 });
 
-// ─── Anonixx demo row — pinned above the real list so this tab is never
-// just a blank screen for someone who hasn't unlocked anyone yet. Not a
-// real chat: taps into DemoChatScreen, a fully local walkthrough. Built
-// from the exact same row styles as ChatCard so it reads as part of the
-// list rather than a separate banner — only the "· guide" tag and the 🌑
-// avatar give away that it isn't a real person. ─────────────────────────
+// ─── Pinned Anonixx guide row (opens DemoChatScreen), so the tab is never empty. ──
 const AnonixxDemoCard = React.memo(({ onPress }) => (
   <TouchableOpacity style={styles.chatCard} onPress={onPress} activeOpacity={0.85}>
     <View style={styles.chatAvatarWrap}>
@@ -310,9 +287,7 @@ export default function MessagesScreen({ navigation }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
 
-  // ── Load inbox — calls the live production endpoints in parallel ──
-  // /drops/connections   → Link Up chats (the only chat surface there is)
-  // /unlock-requests/incoming → confessions of mine other people want to unlock
+  // ── Load chats (/drops/connections) and knocks (/unlock-requests/incoming) in parallel.
   const loadInbox = useCallback(async () => {
     setLoading(true);
     try {
@@ -421,10 +396,7 @@ export default function MessagesScreen({ navigation }) {
 
   const handleOpenDemo = useCallback(() => navigation.navigate('DemoChat'), [navigation]);
 
-  // "+" in the header — Anonixx has no compose-to-anyone flow, so finding
-  // someone new to chat with means unlocking their drop first. That
-  // happens on the home feed, not in Messages, so jump tabs there instead
-  // of the "All" tile's destination (pending unlock requests you already have).
+  // "+": new chats start from the feed, so go there.
   const handleGoToFeed = useCallback(() => navigation.navigate('Feed'), [navigation]);
 
   // Header search icon toggles the search bar instead of it always sitting
@@ -447,10 +419,7 @@ export default function MessagesScreen({ navigation }) {
     [navigation],
   );
 
-  // Accept from inside the mini profile. Coins move on the requester's side
-  // only; accepting just spins up the connection and drops the owner
-  // straight into it, same landing DropChat gives the requester once *they*
-  // get accepted.
+  // Accept from the mini profile and open the new chat.
   const handleAcceptRequest = useCallback(async (request) => {
     setAcceptingIds((prev) => new Set(prev).add(request.id));
     try {
@@ -526,9 +495,7 @@ export default function MessagesScreen({ navigation }) {
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
-      {/* Header — hamburger + title on the left, search toggle + "+" on the
-          right, matching the mockup's layout instead of the old centered
-          wordmark/right-icon-cluster arrangement. */}
+      {/* Header: menu + title left; search + "+" right. */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.iconBtn} hitSlop={HIT_SLOP}>
@@ -547,18 +514,14 @@ export default function MessagesScreen({ navigation }) {
               ? <X size={rs(20)} color={T.textSecondary} strokeWidth={2} />
               : <Search size={rs(20)} color={T.textSecondary} strokeWidth={2} />}
           </TouchableOpacity>
-          {/* Anonixx has no blank "message anyone" compose screen — finding
-              someone new to chat with means unlocking their drop on the home
-              feed first, so "+" jumps there instead of opening an empty form. */}
+          {/* New chats start from the feed, so "+" goes there. */}
           <TouchableOpacity onPress={handleGoToFeed} style={styles.addBtn} hitSlop={HIT_SLOP}>
             <Plus size={rs(20)} color="#fff" strokeWidth={2.4} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Search — filters the list below by anon name, last message, or
-          confession text. Purely client-side over the already-loaded inbox.
-          Collapsed by default; the header icon toggles it open. */}
+      {/* Search the loaded chats by name, last message or confession. */}
       {searchOpen && (
         <View style={styles.searchWrap}>
           <View style={styles.searchBar}>
@@ -581,8 +544,7 @@ export default function MessagesScreen({ navigation }) {
         </View>
       )}
 
-      {/* Pending unlock requests — tap an avatar for their mini profile,
-          or "All" for the full list. Hidden entirely when no one's waiting. */}
+      {/* Waiting knocks; hidden when there are none. */}
       <PendingUnlockStories
         requests={pendingRequests}
         onOpenRequest={handleOpenRequestDetail}
@@ -605,8 +567,7 @@ export default function MessagesScreen({ navigation }) {
         ))}
       </View>
 
-      {/* Anonixx guide — always visible, so this tab is never a blank
-          screen before someone's unlocked their first real conversation. */}
+      {/* Anonixx guide row, always shown. */}
       {search.trim().length === 0 && (
         <View style={styles.demoWrap}>
           <AnonixxDemoCard onPress={handleOpenDemo} />
@@ -647,8 +608,7 @@ export default function MessagesScreen({ navigation }) {
 
       <HamburgerMenu visible={menuVisible} onClose={() => setMenuVisible(false)} navigation={navigation} />
 
-      {/* Mini profile — their clue media as a "resume", Accept/Decline
-          right there instead of blind-accepting from the avatar itself. */}
+      {/* Mini profile with their clues, and Accept / Decline. */}
       <Modal visible={!!detailRequest} transparent animationType="fade" onRequestClose={closeDetail}>
         <TouchableWithoutFeedback onPress={closeDetail}>
           <View style={styles.sheetBackdrop} />
@@ -845,9 +805,7 @@ const styles = StyleSheet.create({
   },
   chatCardUnread: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: RADIUS.md },
 
-  // Shadow lives on the wrap, not chatAvatar itself — chatAvatar clips its
-  // image to a circle with overflow:hidden, which on iOS clips a shadow
-  // defined on the same layer too.
+  // Shadow on the wrapper (overflow:hidden on the avatar clips it on iOS).
   chatAvatarWrap: {
     position: 'relative', flexShrink: 0,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
@@ -860,8 +818,7 @@ const styles = StyleSheet.create({
   },
   chatAvatarImage: { width: '100%', height: '100%' },
   chatAvatarInitial: { fontSize: rf(20), fontWeight: '800', color: '#fff' },
-  // Plain presence dot, bottom-right of the avatar — same spot WhatsApp
-  // uses, not a ring around the whole avatar.
+  // Presence dot at the avatar's bottom-right.
   onlineDot: {
     position: 'absolute', bottom: 0, right: 0,
     width: rs(13), height: rs(13), borderRadius: rs(7),

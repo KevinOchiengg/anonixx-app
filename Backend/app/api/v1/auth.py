@@ -64,7 +64,7 @@ class UpdateProfileRequest(BaseModel):
     username:       Optional[str]     = None
     email:          Optional[EmailStr]= None
     anonymous_name: Optional[str]     = None
-    avatar_url:     Optional[str]     = None   # Cloudinary URL for real photo
+    avatar_url:     Optional[str]     = None   # real photo URL
     bio:            Optional[str]     = None
 
 class TokenResponse(BaseModel):
@@ -629,7 +629,7 @@ async def update_profile(
         update["anonymous_name"]            = aname
         update["anonymous_name_changed_at"] = _now()
 
-    # ── Profile photo (Cloudinary URL) ───────────────────────
+    # ── Profile photo URL ─────────────────────────────────────
     if data.avatar_url is not None:
         update["avatar_url"] = data.avatar_url
 

@@ -30,11 +30,7 @@ class SocketService {
     }
   }
 
-  // ── Listener helpers ──────────────────────────────────────────────────────
-  // Generic on/off — used directly for presence + unlock-request events
-  // (see MessagesScreen). Named chat/call wrappers were removed along with
-  // the old Connect chat system; Link Up doesn't use realtime sockets for
-  // messaging or calls.
+  // ── Generic on/off listeners (presence, knock events).
 
   on(event, cb) {
     this.socket?.on(event, cb);

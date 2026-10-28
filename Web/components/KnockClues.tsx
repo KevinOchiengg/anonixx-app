@@ -1,12 +1,8 @@
 "use client";
 import { useState } from "react";
 
-/**
- * What a host sees on a Knock before opening the door: signals about the
- * knocker (free to give, hard to fake), their peek and photo/video (blurred
- * until the host taps, so nothing explicit lands unasked), and a voice note.
- * Fields come from GET /unlock-requests/incoming.
- */
+/** What a host sees on a Knock: signals about the knocker, their peek and photo/video
+ * (blurred until tapped), and voice note. */
 export type KnockSignals = {
   account_age_days: number | null; verified: boolean; let_in: number; knocks_decided: number;
   drops: number; deception_strikes: number; likes_you: boolean; you_like_them: boolean;

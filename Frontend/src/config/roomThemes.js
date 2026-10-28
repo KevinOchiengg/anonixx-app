@@ -1,14 +1,5 @@
-/**
- * roomThemes.js
- *
- * Room themes: the palette one person's Room is painted in. Applied only
- * inside the Room (RoomScreen, the theme picker), so the Anonixx app shell
- * keeps its own brand colours. Ids match Backend/app/api/v1/chat_profile.py
- * ROOM_THEMES and Web/lib/roomThemes.ts.
- *
- * Contrast checked (WCAG): text and muted text are ≥ 6.9:1 on the surface,
- * and the bg colour used as label text on an accent button is ≥ 6.7:1.
- */
+/** Room colour themes, used only inside a Room. Ids match chat_profile.py and Web/lib/roomThemes.ts.
+ * Text contrast is at least 6.7:1. */
 
 const t = (id, name, room, mood, bg, surface, accent, accent2, text, muted, accentRgb, accent2Rgb) => ({
   id, name, room, mood, bg, surface, accent, accent2, text, muted,

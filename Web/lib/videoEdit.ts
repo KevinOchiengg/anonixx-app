@@ -1,6 +1,5 @@
-// "Smart trim": the original video is uploaded untouched, and the post carries the window
-// to play plus the text laid over it. Every player (web + app) honours it, so nothing is
-// re-encoded and the text stays sharp and editable.
+// Smart trim: the video is uploaded untouched; the post carries the window to play and the
+// text overlays, which every player applies.
 
 export const MAX_CLIP_SECONDS = 180;
 export const MIN_CLIP_SECONDS = 1;

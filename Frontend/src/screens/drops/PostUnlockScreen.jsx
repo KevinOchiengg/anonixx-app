@@ -1,10 +1,4 @@
-/**
- * PostUnlockScreen
- *
- * "Link up" landing page for a calm-feed post — sends the author a request
- * to unlock (chat with) them. Nothing is charged here: coins only move once
- * the author accepts, via POST /unlock-requests (see UnlockWaitingScreen).
- */
+/** Link up: sends the author a request. Coins move only if they accept. */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView, TextInput,
@@ -39,21 +33,14 @@ const UNLOCK_COST = 6;
 const MAX_CLUE_VIDEO_SECONDS = 30;
 
 export default function PostUnlockScreen({ route, navigation }) {
-  // fromRoom: opened from RoomScreen's Link up — a sent request goes back to
-  // the Room (which shows "Link up sent") instead of resetting to the feed.
-  // viaProfile: opened from the poster's profile sheet. Either one is a profile
-  // link up, the only kind a regular confession accepts.
+  // fromRoom: return to the Room after sending. fromRoom or viaProfile = a profile link up
+  // (the only kind a regular confession accepts).
   const { post, linkupTarget, fromRoom, viaProfile } = route.params ?? {};
   const dispatch = useDispatch();
   const { showToast } = useToast();
   const coinBalance = useSelector((state) => state.coins.balance);
 
-  // A post carries its own id/name/content (it's actually always a drop —
-  // DropCard is the only caller passing `post`); a linkupTarget (e.g. a
-  // Circle comment) is a lighter shape — { target_type, target_id,
-  // anonymous_name, preview_text } — since there's no full object to hand
-  // over. Either way this screen just needs a target_type/target_id to
-  // send and a name/snippet to display.
+  // Either a full post or a light linkupTarget { target_type, target_id, anonymous_name, preview_text }.
   const targetType    = post ? 'drop' : (linkupTarget?.target_type || 'drop');
   const targetId      = post ? post.id : linkupTarget?.target_id;
   const displayName   = post ? post.anonymous_name : linkupTarget?.anonymous_name;
@@ -81,9 +68,7 @@ export default function PostUnlockScreen({ route, navigation }) {
   const [mediaThumb,    setMediaThumb]    = useState(null); // video poster frame
   const [mediaDuration, setMediaDuration] = useState(0);    // seconds, video only
 
-  // Redux coins.balance defaults to 0 and nothing else guarantees it's been
-  // fetched by the time someone lands here — without this, the screen shows
-  // a stale/zero balance until after the first successful unlock.
+  // Load the coin balance (it may not be fetched yet).
   useEffect(() => {
     dispatch(fetchBalance());
   }, [dispatch]);
@@ -191,9 +176,7 @@ export default function PostUnlockScreen({ route, navigation }) {
       });
       const data = await res.json();
 
-      // Already unlocked earlier — skip straight to the existing chat, no
-      // waiting screen needed since nothing's pending.
-      // Mutual: they'd already linked up with you, so it connects free.
+      // Already connected: open the chat. Mutual: connects free.
       if (res.ok && (data.already_unlocked || data.mutual) && data.connection_id) {
         if (data.mutual) showToast({ type: 'success', title: "It's mutual 🔥", message: "You both knocked. You're inside." });
         clearPitch();

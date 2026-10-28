@@ -1,13 +1,4 @@
-/**
- * theme.js
- * Single source of truth for all Anonixx design tokens.
- *
- * Usage:
- *   import T from '../../utils/theme';           // default export
- *   import { T, THEME } from '../../utils/theme'; // named — both are identical
- *
- *   style={{ color: T.text, backgroundColor: T.surface }}
- */
+/** Design tokens. import T from '../../utils/theme' (or { T, THEME }, the same object). */
 
 const palette = {
 
@@ -69,9 +60,7 @@ const palette = {
   goldBg:     'rgba(251,191,36,0.08)',
   goldBorder: 'rgba(251,191,36,0.30)',
 
-  // ─── Vivid purple — vibe-score tiers, accents ─────────────────────────────
-  // (was "Tier 2 / After Dark" before those themes were removed; it's just a
-  // colour now, with no content-tier meaning attached.)
+  // ─── Vivid purple: vibe-score tiers, accents ───────────────────────────────
   violet:       '#B36BFF',
   violetDim:    'rgba(179,107,255,0.08)',
   violetBorder: 'rgba(179,107,255,0.40)',

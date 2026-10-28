@@ -1,9 +1,4 @@
-/**
- * ForgotPasswordScreen — full reset flow in one screen.
- * Step 1: enter email → send OTP
- * Step 2: enter 6-digit code + new password → reset
- * Step 3: success → back to login
- */
+/** Password reset: email -> 6-digit code + new password -> done. */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,

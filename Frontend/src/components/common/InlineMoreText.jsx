@@ -1,17 +1,5 @@
-/**
- * InlineMoreText.jsx
- *
- * A caption that reads like TikTok's, in the Anonixx voice — same as the website's
- * feed (Web/components/Slide.tsx). With `hookStyle`, the first sentence is a hook in
- * the brand serif (up to two of its lines); then `lines` lines of plain text ending
- * "… more" inline, as if part of the sentence. Expanded, it shows everything with an
- * inline "less". Taps are handled by whatever wraps it (the whole caption toggles).
- *
- * How much fits is measured, not guessed from a character count: a hidden copy lays
- * out the full caption at the same width (onTextLayout reports each line), the hook
- * lines plus `lines` body lines are kept with room made for "… more", and the visible
- * text re-checks itself and trims a little more if the suffix still spilled over.
- */
+/** Caption with an optional serif hook line, then `lines` lines ending in an inline "… more"
+ * ("less" when open). What fits is measured from a hidden full layout. Same as Web Slide.tsx. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { splitHook } from '../../utils/captionHook';

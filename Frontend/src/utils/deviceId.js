@@ -2,9 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const STORAGE_KEY = 'anonixx_device_id'
 
-// Not cryptographically secure — doesn't need to be. This only fingerprints
-// the install for the signup welcome-bonus abuse check (see auth.py's
-// _welcome_bonus_for_signup), it's never used for anything security-sensitive.
+// Not secure, and doesn't need to be: only used to limit signup bonuses per install.
 function generateId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0

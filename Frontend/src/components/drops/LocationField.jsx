@@ -1,17 +1,4 @@
-/**
- * LocationField.jsx
- *
- * Structured location capture for Drops — Country → County/State →
- * Sub-county → Estate/Area, most-specific to least. Only country and
- * county are backed by a real fixed list (Kenya's 47 counties, the app's
- * primary market — see config/locations.js); sub-county and estate stay
- * freeform text everywhere, since no reliable exhaustive dataset exists
- * for either at that level of granularity.
- *
- * Every field is optional — this is a "where are you?" hint, not a
- * required field, matching how it worked before (a single freeform text
- * input) just with real structure now.
- */
+/** Optional location: country, county (fixed lists), sub-county and area (free text). */
 import React, { useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal, FlatList, StyleSheet,

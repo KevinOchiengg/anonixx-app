@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-// Text laid over a video drop ("smart trim" — see video_edit in Backend/app/api/v1/drops.py).
-// Positions are centres as 0–1 fractions of the frame and sizes are a share of its width,
-// matching the website's overlay layer so a caption sits in the same spot everywhere.
+// Text over a video drop. Positions are 0-1 centre fractions, sizes a share of width (same as the website).
 const SIZE = { s: 0.046, m: 0.064, l: 0.088 };
 
 const Overlay = ({ o, width, height }) => {

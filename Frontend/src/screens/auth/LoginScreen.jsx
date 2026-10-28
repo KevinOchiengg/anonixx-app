@@ -120,18 +120,14 @@ export default function LoginScreen({ navigation }) {
       }
 
       await authContextLogin(result.access_token, result.user);
-      // Seed the balance immediately from the login response instead of
-      // leaving coins.balance at Redux's initial 0 until some other
-      // screen happens to call fetchBalance() first.
+      // Set the coin balance from the login response.
       if (result.user?.coin_balance != null) {
         dispatch(setBalance(result.user.coin_balance));
       }
       showToast({ type: 'success', message: 'Welcome back 👋' });
 
       setTimeout(() => {
-        // Login is usually reached mid-flow (tapped "Link up", tried to
-        // comment, etc.) — pop back to wherever that was instead of
-        // resetting to the feed, so the pending action can resume there.
+        // Go back to where login was triggered, so the action can continue.
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {

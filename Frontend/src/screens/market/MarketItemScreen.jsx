@@ -1,9 +1,4 @@
-/**
- * MarketItemScreen.jsx
- * Anonixx Mini Market — single item with teaser + paywall + unlock flow.
- *
- * Route params: { itemId: string }
- */
+/** One market item: teaser, paywall and unlock. Params: { itemId } */
 
 import React, {
   useCallback,

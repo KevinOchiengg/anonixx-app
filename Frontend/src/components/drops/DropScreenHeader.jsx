@@ -1,21 +1,4 @@
-/**
- * DropScreenHeader.jsx
- *
- * Shared header used across every Drops / Connect surface.
- * Matches the reference pattern in DropsComposeScreen lines 562–573.
- *
- * Layout:
- *   [ back-chevron ]   [ Italic title ]   [ right action ]
- *
- * Usage:
- *   <DropScreenHeader title="Marketplace" navigation={navigation} />
- *
- *   <DropScreenHeader
- *     title="Vibe"
- *     navigation={navigation}
- *     right={<SomeIconButton />}
- *   />
- */
+/** Header for Drops screens: back, italic title, optional right action. */
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';

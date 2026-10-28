@@ -1,21 +1,5 @@
-/**
- * DropsComposeScreen.jsx
- *
- * The compose surface for Anonixx Drops.
- * Text is typed directly on the live card. Everything else — confession
- * type, media, tagging, location, voice, poll, publisher sharing — lives
- * behind a single row of icons under the card. Tapping one opens a small
- * bottom sheet for that one thing, then gets out of the way; nothing sits
- * permanently expanded on the page. The goal is that the screen always
- * reads as "write, then Drop" — every option is one tap away, but none
- * of them are in the way until asked for.
- *
- * Drops are rendered via <DropCardRenderer /> — this screen is only state,
- * composition and gating. All visual identity lives in the renderer.
- *
- * Backend-facing stubs are noted with // BACKEND: — safe to keep client-side
- * until those endpoints exist.
- */
+/** Compose a drop: type on the live card; extras (type, media, tag, location, voice, poll,
+ * sharing) open from the icon row below it. The card itself is <DropCardRenderer />. */
 import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
@@ -62,18 +46,12 @@ import T from '../../utils/theme';
 
 const SCREEN_W = Dimensions.get('window').width;
 
-// The compose card always renders in the 'desire' theme (see `theme`
-// below) — the toolbar merged onto its bottom edge uses that same theme's
-// darker gradient stop as its own background instead of the generic app
-// surface color, so it reads as the card's own footer rather than a
-// mismatched panel bolted underneath it.
+// The toolbar uses the card theme's dark gradient stop, so it reads as the card's footer.
 const TOOLBAR_BG = DROP_THEMES['desire'].bgTo;
 const CARD_W   = SCREEN_W - SPACING.md * 2;
 const MAX_CHARS = 500;
 
-// Videos of any length can be picked: past 3 minutes the editor opens cut to
-// the first 3:00 (utils/videoEdit.js), and the cut is applied at playback —
-// or for real by Cloudflare Stream once that's switched on.
+// Any video length can be picked; over 3 minutes the editor starts cut to 3:00.
 
 // Admin "Spotlight" extras — same options as the website's Post Studio.
 const PROMO_HOURS = [[6, '6 hours'], [24, '1 day'], [72, '3 days'], [168, '7 days']];
@@ -110,16 +88,7 @@ const POST_COST = 3;
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
 const HINT_MAX = 16;
 
-// ─── Per-intent opening lines ────────────────────────────────────
-// These only ever appear as the card's placeholder — the same mechanism
-// "Ask and you shall be given" already used, just written to match each
-// intent's own register instead of one generic line. Never inserted into
-// the text itself: they vanish the instant someone types, nothing about
-// a finished drop shows it started from a prompt, and the dangerous-edge
-// detector / coin-cost check / everything else runs on whatever the user
-// actually wrote, same as always. A shuffle button (top-right of the
-// card, visible only while the field is empty) cycles to another line
-// for the current intent so repeat visits don't always see the same one.
+// ─── Placeholder lines per confession type (never inserted into the text). Shuffle cycles them.
 const INTENT_PROMPTS = {
   'meet-me': [
     'I keep hoping the right person reads this—',
@@ -148,9 +117,7 @@ const INTENT_PROMPTS = {
 };
 const FALLBACK_PLACEHOLDER = 'Ask and you shall be given';
 
-// ─── Dangerous edge — words that indicate the drop is raw ───────
-// When a confession hits one of these, we prompt the user — not to stop them,
-// but to make sure they mean it. Copy is intentionally non-judgmental.
+// ─── Words that suggest a raw confession: we check the user means it, without judging.
 const EDGE_TRIGGERS = [
   /\bkill\b/i, /\bsuicide\b/i, /\bend it\b/i, /\bhate (myself|him|her|them)\b/i,
   /\bcheat(?:ed|ing)?\b/i, /\baffair\b/i, /\bleave (him|her|them)\b/i,
@@ -163,15 +130,10 @@ const detectEdge = (text) => {
   return null;
 };
 
-// ─── Confession type tile — used inside the "Confession Type" sheet.
-// Each tile renders the intent's *actual* gradient and background texture
-// in miniature, so picking one is a "does this look like me" decision
-// against the real thing — not an icon standing in for it. ─────────
+// ─── Confession type tile: a mini version of the real card look.
 const INTENT_TILE = rs(64);
 
-// Stable per-intent seed — the card seeds its texture off the confession
-// text, but a tile has no text, so it hashes its own id instead. Keeps each
-// tile's pattern fixed rather than reshuffling on every render.
+// Seed from the tile's id, so its pattern stays fixed.
 const intentSeed = (id) => {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
@@ -212,11 +174,7 @@ const IntentCard = React.memo(function IntentCard({ def, active, onPress }) {
   );
 });
 
-// ─── Toolbar icon — the row under the card. A small dot marks anything
-// that's actually set, so state never gets silently buried behind an icon. ─
-// A bare icon reads fine to someone who already knows the app — it reads
-// like a guess to everyone else. The label under each one is what makes
-// the row understandable on first look, no trial-and-error required.
+// ─── Toolbar icon with a label; a dot shows when it's set.
 const ToolIcon = React.memo(function ToolIcon({ children, active, onPress, label, a11yLabel }) {
   return (
     <TouchableOpacity
@@ -259,9 +217,7 @@ function OptionSheet({ visible, title, onClose, children }) {
   );
 }
 
-// ─── Hookup vs regular confession ──────────────────────────────
-// Hookups go through the guided flow (components/drops/GuidedConfession.jsx);
-// this screen composes regular confessions.
+// ─── Hookups use the guided flow (GuidedConfession.jsx); this screen is for regular confessions.
 function KindChooser({ onPick, onBack }) {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
@@ -316,10 +272,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     dispatch(fetchBalance());
   }, [dispatch]);
 
-  // Guests get sent straight to Login the moment they land here — composing
-  // a drop is a deliberate action, not a passive browse, so this checks on
-  // focus rather than waiting for a button press. Login has its own "Sign
-  // Up" link for anyone who doesn't have an account yet.
+  // Guests go to Login.
   useFocusEffect(
     useCallback(() => {
       if (!isAuthenticated) {
@@ -328,10 +281,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     }, [isAuthenticated, navigation])
   );
 
-  // ── Inspired-by handoff (from feed Drop button) ──────────────
-  // When a user taps the "drop" button on a feed confession card and
-  // escalates to "add media", we land here pre-filled with their seed
-  // text and a link back to the originating post.
+  // ── Pre-filled text and source post when opened from a feed card.
   const initialText      = route?.params?.initialText      || '';
   const inspiredByPostId = route?.params?.inspiredByPostId || null;
 
@@ -340,24 +290,15 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [text,     setText]     = useState(initialText);
   const [cardIntent, setCardIntent] = useState(DEFAULT_INTENT);
   const [kind, setKind] = useState(null); // null (choosing) | 'hookup' | 'confession'
-  // After Dark / Tier-2 themes have been removed — every drop uses the
-  // single remaining theme. External social publishing is gated purely by
-  // the "Share to Anonixx socials" toggle below, not by confession type.
+  // One theme for every drop. Sharing to socials is the toggle below.
   const theme = 'desire';
-  // Mood tag (the "· longing ·" line on the card) is derived the same way —
-  // each confession type has its own emotional register, so the tag should
-  // shift with it instead of sitting on one word regardless of what's picked.
+  // Mood tag follows the confession type.
   const moodTag = CARD_INTENTS[cardIntent]?.moodTag || 'longing';
-  // Which opening line from INTENT_PROMPTS[cardIntent] is showing —
-  // starts random per intent so two people opening compose don't see the
-  // exact same line every time, and cycles forward on shuffle-tap.
+  // Which placeholder line is showing (random start, shuffle moves on).
   const [promptIndex, setPromptIndex] = useState(() => Math.floor(Math.random() * 4));
   const [mediaUri, setMediaUri] = useState(null);
   const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
-  // Additional photos beyond mediaUri when the user picks more than one —
-  // together [mediaUri, ...extraImageUris] become the drop's `images`
-  // array, rendered as swipeable slides in the feed. Stays empty for the
-  // ordinary single photo/video/text drop.
+  // Extra photos; with mediaUri they become the drop's `images`.
   const [extraImageUris, setExtraImageUris] = useState([]);
   const [loading,  setLoading]  = useState(false);
 
@@ -383,16 +324,10 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Tag a specific user (optional — drop still hits marketplace) ─
   const [taggedUser, setTaggedUser] = useState(null);
 
-  // ── Publisher opt-in (section 16) ─────────────────────────────
-  // Default ON: eligible drops auto-post to Anonixx's social pages to help
-  // the poster get noticed. This is an opt-OUT toggle, not opt-in.
+  // ── Share to Anonixx socials: on by default (opt out).
   const [publisherOptIn, setPublisherOptIn] = useState(true);
 
-  // ── Feed-as-drops upgrade: location, font style ───────────────
-  // Poll now lives on its own screen (DropsPollScreen), same pattern as Voice.
-  // Structured location — country/county picked from a real list (Kenya's
-  // 47 counties, the app's primary market), sub-county/estate stay freeform
-  // since no reliable exhaustive dataset exists at that granularity.
+  // ── Location (country/county from lists, the rest free text) and font style.
   const [locationCountry, setLocationCountry] = useState('');
   const [locationCounty, setLocationCounty] = useState('');
   const [locationSubCounty, setLocationSubCounty] = useState('');
@@ -404,18 +339,14 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [intensity, setIntensity] = useState('heavy');
   const [hint,      setHint]      = useState('');   // single word, shown only when a user is tagged
 
-  // ── Unsent-restoration banner (section 5) ─────────────────────
-  // When a draft loads from storage we don't silently restore — we
-  // surface it so the user chooses to continue or discard.
+  // ── A saved draft is offered back (continue or discard), never restored silently.
   const [showUnsentBanner, setShowUnsentBanner] = useState(false);
 
   // ── Which bottom sheet is open — null | 'intent' | 'tag' | 'location' | 'more' ──
   const [activeSheet, setActiveSheet] = useState(null);
   const closeSheet = useCallback(() => setActiveSheet(null), []);
 
-  // ── One-time toolbar hint — the icon row has no explainer text on the
-  // page itself, so first-time visitors get a single dismissible line
-  // pointing at it instead. Shown once ever, then never again. ─────────
+  // ── One-time hint pointing at the toolbar.
   const [showToolbarHint, setShowToolbarHint] = useState(false);
   useEffect(() => {
     (async () => {
@@ -430,9 +361,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     AsyncStorage.setItem(TOOLBAR_HINT_KEY, '1').catch(() => {});
   }, []);
 
-  // Fresh opening line whenever the confession type changes, so switching
-  // intents doesn't leave an index pointing at a line from a differently-
-  // toned prompt list.
+  // New placeholder line when the confession type changes.
   useEffect(() => {
     setPromptIndex(Math.floor(Math.random() * 4));
   }, [cardIntent]);
@@ -507,9 +436,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
 
-  // ── Format change — media is independent of format now, so it's never
-  // cleared here. Voice and Poll both hand off to their own dedicated
-  // screen, same pattern for both ─
+  // ── Format change. Voice and Poll open their own screens; media is kept.
   const handleFormatChange = useCallback((f) => {
     setFormat(f);
     if (f === 'voice') {
@@ -526,10 +453,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     }
   }, [navigation, theme, moodTag, text, taggedUser]);
 
-  // ── Media pick — one picker, photos (one or several) or a single video.
-  // Picking more than one asset only makes sense for photos — a multi-
-  // image drop renders as swipeable slides in the feed (see `images` on
-  // CreateDropRequest, Backend/app/api/v1/drops.py); videos stay single. ─
+  // ── Media: one or more photos (shown as slides) or a single video.
   const handlePickMedia = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -566,9 +490,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         return;
       }
 
-      // Multiple selected — a mixed photo/video multi-select doesn't map
-      // to anything postable, so videos are silently dropped from the
-      // selection rather than blocking the whole pick.
+      // Several picked: keep the photos, drop any videos.
       const photoUris = result.assets.filter((a) => a.type !== 'video').map((a) => a.uri).slice(0, 9);
       if (photoUris.length < 2) {
         showToast({ type: 'warning', message: 'Pick at least 2 photos for a multi-photo drop.' });
@@ -654,10 +576,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     setShowUnsentBanner(false);
   }, []);
 
-  // ── Publisher toggle ──────────────────────────────────────────
-  // For voice drops turning ON publishing, route through the double-
-  // consent screen (section 16). For text/image/video, the single
-  // inline toggle is enough until the user taps Drop.
+  // ── Sharing toggle. Voice drops confirm on a separate screen first.
   const handlePublisherYes = useCallback(() => {
     if (format === 'voice') {
       navigation.navigate?.('DropsPublish', {
@@ -682,9 +601,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // Upload the picked photo/video to R2 first — without this,
-      // media_url never reaches the server and the drop silently posts
-      // as text-only.
+      // Upload the media to R2 before posting.
       let uploadedMediaUrl = null;
       let uploadedImageUrls = null;
       const isVideo = mediaKind === 'video' && !!mediaUri;
@@ -814,11 +731,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       const id   = data?.id;
       if (!id) throw new Error('No drop ID returned.');
 
-      // Anonixx Publisher (section 16): eligible drops (Tier-1, not tagged
-      // to a specific user, publisher_opt_in !== false) are now auto-queued
-      // for social by the server at creation time — no follow-up call
-      // needed. POST /drops/{id}/publish still exists as a manual re-trigger
-      // for drops that skipped auto-queue (e.g. tagged drops).
+      // The server queues eligible drops for socials automatically.
 
       // Clear draft
       await AsyncStorage.removeItem(DRAFT_KEY);
@@ -833,10 +746,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       });
       dispatch(awardMilestone('first_drop'));
 
-      // Land back in the main feed, not the individual drop page — the
-      // drop now shows up there as a genuine confession post (see
-      // create_drop's post-mirroring on the backend), so that's where the
-      // reaction should happen, not on a standalone landing screen.
+      // Back to the feed, where the new drop appears.
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err) {
       showToast({
@@ -931,20 +841,14 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* Guiding line above the card — tells a first-time (or just
-              blank-page-staring) user what's expected before they start
-              typing. Fades out once they've actually started writing, so
-              it doesn't linger as clutter once the card speaks for itself. */}
+          {/* Guiding line; fades once they start typing. */}
           {!text && (
             <Text style={s.composeGuide}>
               Say what you can't say out loud — nobody will know it's you.
             </Text>
           )}
 
-          {/* One-time hint — the icon row is part of the card itself now,
-              with no explainer text of its own, so first-time visitors get
-              pointed at it once. Taps anywhere on it (or on any icon below)
-              dismiss it for good. */}
+          {/* One-time toolbar hint; any tap dismisses it. */}
           {showToolbarHint && (
             <TouchableOpacity style={s.hintBubble} onPress={dismissToolbarHint} activeOpacity={0.85}>
               <Text style={s.hintBubbleText}>
@@ -954,23 +858,13 @@ export default function DropsComposeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
-          {/* Live card preview — type directly into the card itself, no
-              separate input box duplicating what it shows. The toolbar
-              is attached flush to the bottom, inside the same rounded,
-              clipped container, so the whole thing reads as one card —
-              confession zone on top, controls zone on the bottom — not a
-              card with a separate floating button-bar underneath it. */}
+          {/* Type straight into the card; the toolbar is attached below it as one card. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
             <DropCardRenderer
               confession={text}
               moodTag={moodTag}
               theme={theme}
-              // Compose card intentionally ignores cardIntent for its own
-              // look — picking a theme tags the drop (colors/search) but
-              // shouldn't make the typing surface jump palettes underneath
-              // you. `theme` above ('desire') is the one constant look;
-              // the feed still renders each posted drop in its real
-              // intent colors via DropCard/DropCardRenderer elsewhere.
+              // The compose card keeps one look; posted drops show their type's colours in the feed.
               intent={null}
               mediaUrl={mediaUri}
               mediaType={mediaKind || 'image'}
@@ -982,17 +876,11 @@ export default function DropsComposeScreen({ navigation, route }) {
               placeholder={placeholder}
               maxLength={MAX_CHARS}
               fontStyle={fontStyle}
-              // The toolbar sits flush against this card's bottom edge
-              // inside the same clipped container — square its bottom
-              // corners so there's no gap/seam between the two.
+              // Square bottom corners: the toolbar sits flush below.
               flushBottom
             />
 
-            {/* Shuffle to another opening line — only while the card is
-                still showing its placeholder (matches the same !text
-                condition the placeholder itself renders under), so it
-                disappears the moment someone starts writing their own
-                words instead of sitting there as leftover chrome. */}
+            {/* Shuffle the placeholder line (only while empty). */}
             {!text && !!intentPrompts && (
               <TouchableOpacity
                 style={s.shuffleBtn}
@@ -1005,11 +893,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               </TouchableOpacity>
             )}
 
-            {/* Toolbar — every optional extra lives here as one labeled
-                icon each. A dot marks anything already set. This replaces
-                the old always-open Format row, Confession Type section,
-                Details accordion and Location chip — same features, one
-                row, now built into the card instead of floating below it. */}
+            {/* Toolbar: one labelled icon per extra; a dot marks what's set. */}
             <View style={s.toolbar}>
             {isAdmin && (
             <ToolIcon
@@ -1104,10 +988,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             </ToolIcon>
             )}
 
-            {/* Polls are an official Anonixx feature, not a regular-user
-                confession format — kept scarce/credible in the feed
-                instead of every drop becoming a poll (enforced server-
-                side too; see create_drop in Backend/app/api/v1/drops.py). */}
+            {/* Polls are official-only (also enforced server-side). */}
             {isAdmin && (
               <ToolIcon
                 onPress={() => { dismissToolbarHint(); handleFormatChange('poll'); }}
@@ -1129,10 +1010,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           </Animated.View>
 
-          {/* Extra photos strip — shown once a multi-photo pick adds more
-              than the one already previewed on the card above. Each tile
-              removable on its own; removing all of them collapses back to
-              the ordinary single-photo drop. */}
+          {/* Extra photos, each removable. */}
           {extraImageUris.length > 0 && (
             <ScrollView
               horizontal
@@ -1320,8 +1198,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         <OptionSheet visible={activeSheet === 'spotlight'} title="Spotlight" onClose={closeSheet}>
           <Text style={s.sectionSubLabel}>Extras that make a drop stop the scroll and travel further.</Text>
 
-          {/* Keywords — what search matches this drop on (with the caption).
-              Same picks as the website's Post Studio (config/adminTags.js). */}
+          {/* Keywords search matches on (same picks as the website). */}
           <Text style={s.spotLabel}>Search keywords <Text style={s.spotCount}>{tags.length}/{MAX_TAGS}</Text></Text>
           {tags.length > 0 && (
             <View style={s.spotChips}>
@@ -1593,11 +1470,7 @@ const s = StyleSheet.create({
     marginBottom:  SPACING.sm,
   },
 
-  // Card preview — the toolbar renders as its second child (see JSX), and
-  // this container's own rounded corners + overflow:hidden are what make
-  // the icon row read as the card's own footer instead of a separate box
-  // floating under it. No alignItems override: default 'stretch' means
-  // the toolbar fills the exact same width as the card above it.
+  // Card + toolbar share one rounded, clipped container, so the toolbar reads as the card's footer.
   cardWrap: {
     borderRadius: rs(16),
     overflow:     'hidden',
@@ -1694,9 +1567,7 @@ const s = StyleSheet.create({
     lineHeight:    rf(16),
   },
 
-  // Toolbar — one labeled icon per optional extra
-  // No border/radius of its own — cardWrap's overflow:hidden + shared
-  // radius does the clipping, so this reads as the card's own footer.
+  // Toolbar: one labelled icon per extra (clipped by cardWrap).
   toolbar: {
     flexDirection:     'row',
     alignItems:        'flex-start',

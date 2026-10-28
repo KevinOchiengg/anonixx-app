@@ -1,27 +1,6 @@
 /**
- * responsive.js
- * Responsive scaling utility for Anonixx
- *
- * Usage:
- *   import { rs, rf, rp, SCREEN, isSmallDevice } from '../../utils/responsive';
- *
- *   // Scale a size (spacing, width, height)
- *   width: rs(24)        // 24 scaled to screen width
- *
- *   // Scale a font size
- *   fontSize: rf(16)     // 16 scaled + capped for readability
- *
- *   // Scale padding/margin (slightly less aggressive than rs)
- *   padding: rp(20)
- *
- *   // Raw screen dimensions
- *   SCREEN.width, SCREEN.height
- *
- *   // Device helpers
- *   isSmallDevice   — width <= 375 (iPhone SE, older Android)
- *   isMediumDevice  — width 376–414
- *   isLargeDevice   — width >= 415 (Pro Max, large Android)
- *   isTablet        — width >= 768
+ * Responsive sizes: rs() for sizes, rf() for fonts (capped), rp() for padding, SCREEN for
+ * dimensions, and isSmallDevice / isMediumDevice / isLargeDevice / isTablet.
  */
 
 import { Dimensions, PixelRatio } from 'react-native';
@@ -48,9 +27,7 @@ export function rh(size) {
   return Math.round(PixelRatio.roundToNearestPixel(size * scale));
 }
 
-// ─── Font scale (moderately responsive — avoid too-large text) ─
-// Floored so nothing on any screen, including small/narrow Android
-// devices, ever renders below a legible minimum.
+// ─── Font scale, with a readable minimum.
 const MIN_FONT_SIZE = 11;
 
 export function rf(size) {

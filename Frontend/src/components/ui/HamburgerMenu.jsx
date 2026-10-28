@@ -1,7 +1,4 @@
-/**
- * HamburgerMenu — full navigation + settings drawer.
- * All settings live here directly. No separate Settings screen needed.
- */
+/** Navigation and settings drawer. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated, Modal, ScrollView, StyleSheet, Switch,
@@ -116,10 +113,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
     setTimeout(() => confirmLogout(), 220);
   }, [onClose, confirmLogout]);
 
-  // A handful of rows here don't have a real setting behind them yet (no
-  // backend field, no screen) — tapping used to silently do nothing, which
-  // reads as broken. Saying so honestly beats either a dead button or
-  // quietly removing the row before there's a decision to build it out.
+  // Rows with nothing behind them yet say so, instead of doing nothing.
   const comingSoon = useCallback((label) => {
     showToast({ type: 'info', message: `${label} isn't available yet.` });
   }, [showToast]);
@@ -184,9 +178,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           {/* ── Chat ── */}
           <SectionHeader title="Chat" />
           <View style={sec.card}>
-            {/* This menu also mounts from the Feed tab, where ChatProfileSetup
-                isn't a sibling route — jump tabs explicitly rather than a
-                bare navigate() that only resolves within Messages' own stack. */}
+            {/* Navigate via the Messages tab (this menu also opens from Feed). */}
             <NavRow icon={Palette} label="Chat Appearance" onPress={() => go('Messages', { screen: 'ChatProfileSetup' })} />
           </View>
 

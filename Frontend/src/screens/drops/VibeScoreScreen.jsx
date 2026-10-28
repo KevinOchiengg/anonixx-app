@@ -1,16 +1,4 @@
-/**
- * VibeScoreScreen
- *
- * Your vibe score, tier, admirer count, confession streak, and event breakdown.
- *
- * Rebuilt to the DropsComposeScreen design language:
- *   • shared `T` palette
- *   • DropScreenHeader
- *   • responsive.js spacing + typography
- *   • PlayfairDisplay-Italic for score/tier/section titles, DMSans for chrome
- *   • 320 ms entrance fade
- *   • tier-specific color on the hero + roadmap preserved
- */
+/** Your vibe score, tier, admirers, streak and score history. */
 
 import React, {
   useState, useEffect, useRef, useCallback,

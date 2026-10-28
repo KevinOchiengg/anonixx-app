@@ -14,13 +14,9 @@ type Props = {
   rate?: number;
 };
 
-// Only the active slide plays; neighbours preload metadata; everything else is just a poster,
-// so memory stays flat no matter how far the viewer scrolls.
-// Controls are TikTok's, so nobody has to learn them: tap = pause/play, drag the bar at the
-// bottom to scrub. Speed (2x) is picked from the post's long-press menu (Slide) and comes
-// in as `rate`. On desktop ←/→ also jump 5s.
-// Phone-shaped videos fill the screen; anything else (square, 4:5, landscape) is shown
-// whole over a blurred copy, see lib/mediaFit.
+// Only the active slide plays; neighbours preload metadata; the rest show a poster.
+// Tap to pause/play, drag the bottom bar to scrub, 2x from the long-press menu (`rate`),
+// ←/→ jump 5s on desktop. Phone-shaped videos fill the screen; others sit over a blurred copy.
 const PlayIcon = () => <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z" /></svg>;
 
 const KEY_JUMP = 5;
@@ -36,17 +32,14 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
   const [len, setLen] = useState(0);
   const scrubbing = useRef(false);
   const resume = useRef(false);
-  // TikTok's tap: a single tap waits TAP_GAP before pausing, so a double tap
-  // (a like, handled by Slide) never pauses the video.
+  // A tap pauses after TAP_GAP, so a double tap (a like, in Slide) never pauses.
   const lastTap = useRef(0);
   const tapTimer = useRef<number | null>(null);
   // Trimmed clips play (and loop) only their window; untrimmed ones use the whole file.
   const start = edit?.start ?? 0;
   const end = edit?.end ?? 0;
 
-  // Cloudflare Stream videos are HLS manifests. Safari plays them natively; elsewhere
-  // hls.js is loaded on demand. Only the active slide fetches segments (Stream bills
-  // preloading as watch time); neighbours just sit on their poster.
+  // Stream videos are HLS: native in Safari, hls.js elsewhere. Only the active slide loads segments.
   const hls = src.includes(".m3u8");
   const hlsRef = useRef<{ startLoad(): void; stopLoad(): void; destroy(): void } | null>(null);
   const activeRef = useRef(active);

@@ -1,30 +1,10 @@
-/**
- * upload.js
- *
- * Single shared "upload this local file" helper — every screen that
- * attaches a photo/video/voice note used to hand-roll its own signed-
- * Cloudinary-upload boilerplate (request a signature, build FormData,
- * POST to a cloud_name/resource_type URL). Cloudflare R2's presigned-PUT
- * flow is simpler — sign, then PUT the raw file — so this consolidates it
- * into one place instead of the half-dozen near-identical copies that had
- * drifted apart across DropsComposeScreen, DropChatScreen,
- * CommentBottomSheet, DropsRecordScreen, DropsPollScreen, and
- * PostUnlockScreen.
- *
- * Direct-to-storage only (matches the old /upload/sign path) — the file
- * goes straight from the device to R2, never through our server. For the
- * handful of screens that instead post the file *to our backend* (which
- * then forwards it to R2 itself — CommentBottomSheet, ChatProfileSetup,
- * VoiceNoteRecorder), see `uploadViaBackend` below instead.
- */
+/** File uploads. uploadFile() sends straight to R2 with a presigned URL; uploadViaBackend()
+ * sends through our server. */
 import { File, UploadType } from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 
-// Same fixed map the backend uses (Backend/app/utils/r2_storage.py) —
-// kept here too only for naming the file we attach for backend-proxy
-// uploads; the direct-to-R2 path never needs a filename, just a
-// content-type header.
+// Content type to extension (same as the backend), for named backend uploads.
 const EXT_BY_CONTENT_TYPE = {
   'image/jpeg':      'jpg',
   'image/png':       'png',
@@ -41,14 +21,7 @@ async function authHeaders(json = false) {
   };
 }
 
-/**
- * Uploads a local file (by uri) straight to R2 and returns its public URL.
- *
- * @param {string} uri          Local file uri (from ImagePicker/recorder/etc).
- * @param {string} resourceType 'image' | 'video' | 'audio' | 'raw' — only
- *                              affects which folder it's stored under.
- * @param {string} contentType MIME type, e.g. 'image/jpeg'.
- */
+/** Upload a local file to R2; returns its public URL. resourceType picks the folder. */
 export async function uploadToR2(uri, resourceType, contentType) {
   const signRes = await fetch(`${API_BASE_URL}/api/v1/upload/sign`, {
     method:  'POST',
@@ -73,12 +46,7 @@ export async function uploadToR2(uri, resourceType, contentType) {
   return public_url;
 }
 
-/**
- * Posts a local file to one of our own backend proxy endpoints
- * (/upload/image, /upload/audio, /upload/video), which forwards it to R2
- * server-side. Used where the backend needs to see the file itself rather
- * than just handing out a presigned URL.
- */
+/** Upload a local file through our backend (/upload/image | audio | video). */
 export async function uploadViaBackend(uri, resourceType, contentType) {
   const ext = EXT_BY_CONTENT_TYPE[contentType] || 'bin';
   const form = new FormData();

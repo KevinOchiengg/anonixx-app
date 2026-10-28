@@ -1,32 +1,5 @@
-/**
- * DropsSwipeScreen.jsx
- *
- * The Feed tab's landing screen, and the only feed screen — every
- * confession (text, image, video, audio, poll) as one full-screen,
- * TikTok-style vertical swipe, instead of a scrollable list of cards. One
- * confession gets your full attention at a time; the next is a swipe away.
- * The old card-list feed (DropsFeedScreen) has been retired; everything it
- * did — market promo cards, house/sponsored ads, the daily-claim banner,
- * location-scoped feed, session limit — now happens here instead.
- *
- * Video and audio slides are ported from MediaFeedScreen.jsx (which already
- * proved this interaction pattern, just as a secondary destination reached
- * by tapping into a video). Text/image slides are full-bleed, same as
- * video — an attached image fills the whole slide with the confession as
- * a caption underneath (not a small graphic card floating on a black
- * background); a pure-text confession fills the slide with its own
- * intent/mood gradient and large centered auto-sized text instead. Poll
- * reuses DropCard's exported PollCard on that same gradient background so
- * there's one voting implementation, not two that can drift apart. Market
- * and ad slides reuse MarketCard/FeedAdCard, wrapped in a full-screen
- * surface with a pinned CTA underneath — the "TikTok shows a button on an
- * ad post" pattern applied to both.
- *
- * (MoodBalancer, also imported by the old feed, was already dead code
- * before this screen existed — its only producer, the old `posts` feature,
- * was removed in an earlier commit, so it never actually fired. Not
- * ported; nothing here regresses by leaving it out.)
- */
+/** The feed: every drop (text, image, video, audio, poll) as a full-screen vertical swipe, with
+ * market items and ads mixed in. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Linking, Modal,
@@ -73,10 +46,7 @@ import FitImage, { FitBackdrop } from '../../components/feed/FitImage';
 import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 
-// Matches the injection frequency in the old DropsFeedScreen.jsx — every
-// 7th drop gets a market slide, every 8th (DEFAULT_FEED_AD_FREQUENCY in
-// Backend/app/api/v1/ads.py) gets an ad slide. Independent moduli, same
-// as before — both can land on the same position.
+// Every 7th drop gets a market slide, every 8th an ad (they can coincide).
 const MARKET_FREQUENCY = 7;
 const FEED_AD_FREQUENCY = 8;
 
@@ -126,11 +96,8 @@ const fmtClock = (s) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
-// ─── Shared: Link Up button ─────────────────────────────────────
-// Same coin-gated CTA as DropCard.jsx's card-feed version (Link2 icon,
-// "Link up" label, coin-cost pill) — positioned like a TikTok ad's CTA,
-// pinned near the bottom of the slide instead of squeezed into a caption.
-// heart: hookup posts get the 🖤 version, the invitation the post was written for.
+// ─── Shared: Link Up button, pinned near the bottom of the slide.
+// heart: hookup posts get the 🖤 version.
 const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
   const glow = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -162,9 +129,7 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
   );
 });
 
-// ─── Shared: tonight chips on hookup posts ───────────────────────
-// Compact facts from the hookup block (age, area, who, hosting) ride in the same
-// row as the countdown, so the confession text never has to list them.
+// ─── Shared: hookup facts (age, area, who, hosting) next to the countdown.
 const HOSTING_TAG = { can_host: 'can host', can_travel: 'can travel', either: 'host or travel' };
 const hookupTags = (h) => {
   if (!h) return [];
@@ -179,9 +144,7 @@ const hookupTags = (h) => {
     h.guided?.public_first ? 'public first' : null,
   ].filter(Boolean);
 };
-// Hookup posts are live for 12h (Backend drops.py HOOKUP_LIVE_HOURS). The
-// countdown and link-up count make the window felt; the owner can buy
-// another 12h (POST /drops/{id}/extend, capped server side at 48h).
+// Hookup posts are live for 12h; the owner can extend (up to 48h).
 const LiveChips = ({ post, isOwnPost }) => {
   const [liveUntil, setLiveUntil] = useState(post.live_until);
   const { showToast } = useToast();
@@ -216,10 +179,7 @@ const LiveChips = ({ post, isOwnPost }) => {
   );
 };
 
-// ─── Shared: right action rail ───────────────────────────────────
-// Each rail action has its own colour: idle is a tinted outline on dark glass,
-// active fills with the stronger shade. The chip and icon scale with the
-// window height so five stacked actions still fit on short phones.
+// ─── Shared: right action rail. Each action has its own colour and scales with screen height.
 const RAIL_TINTS = {
   like:    { c: '#ff9d8c', ca: '#ff634a', bg: 'rgba(255,99,74,0.2)',  line: 'rgba(255,99,74,0.4)' },
   comment: { c: '#cdd5ff', ca: '#cdd5ff', bg: 'rgba(205,213,255,0.16)', line: 'rgba(205,213,255,0.32)' },
@@ -311,14 +271,7 @@ const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef, tint }) => 
   </TouchableOpacity>
 );
 
-// Small "N views" chip, matching the eye icon already used on the card-feed
-// video player (DropCard.jsx) — kept visible here too instead of dropping
-// the metric just because the layout changed.
-// TikTok never puts view counts next to the username — it treats views as
-// just another stat in the same right-side rail as Like/Comment/Save,
-// same icon-on-top/count-below shape, not a separate small floating
-// badge. This mirrors ActionBtn's exact visual weight but isn't
-// touchable — there's no action tied to tapping a view count.
+// View count in the rail (not tappable).
 const ViewsStat = React.memo(({ count }) => {
   if (!count) return null;
   const label = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
@@ -330,14 +283,8 @@ const ViewsStat = React.memo(({ count }) => {
   );
 });
 
-// Wraps a slide's avatar+name so tapping it opens the same anonymous
-// profile sheet DropCard.jsx already uses in the card feed — same
-// avatar-or-initial rendering, and Link Up lives there too as one of the
-// profile's own details, not just as the pinned button on the slide
-// itself. Never opens a profile for admin drops — is_admin_drop's whole
-// point is that the account behind it stays untraceable. An admin tapping
-// an Anonixx name is taken to the admin dashboard instead; for everyone
-// else that tap does nothing.
+// Tapping avatar or name opens the profile sheet. Never for official drops (admins go to
+// the dashboard instead).
 const AuthorProfileTrigger = ({ post, navigation, children }) => {
   const [visible, setVisible] = useState(false);
   const isAdminViewer = useSelector((state) => !!state.auth.user?.is_admin);
@@ -370,10 +317,7 @@ const AuthorProfileTrigger = ({ post, navigation, children }) => {
   );
 };
 
-// Top of the right rail, above Like — same position TikTok's own creator
-// avatar sits in. The bottom-left name/timestamp is still its own
-// separate tap target too (see authorRow below), matching TikTok's own
-// behavior where both the pfp and the @username open the same profile.
+// Author avatar at the top of the rail (the name below opens the same profile).
 const RailAvatar = ({ post, navigation }) => {
   // Same size and dark glass as the Like / Comment / Save / Share chips (RailIcon).
   const { height: winH } = useWindowDimensions();
@@ -419,12 +363,8 @@ const VideoSlide = ({
   const wasEverActive = useRef(false);
   const sourceLoaded = useRef(false);
 
-  // Loads with no source until this slide is on screen or right next to it
-  // (isNear) — TikTok's trick: the next video is already buffered, paused on
-  // its first frame, so a swipe lands on a picture instead of a black
-  // player. Further-out slides in the FlatList's window stay unloaded, so
-  // only ~3 decoders ever compete (loading every mounted slide made
-  // scrolling janky).
+  // Only the current and neighbouring slides load a source, so the next video is ready and
+  // only ~3 decoders run at once.
   const player = useVideoPlayer(null, (p) => { p.loop = true; p.muted = false; });
   const activeRef = useRef(isActive);
   activeRef.current = isActive;
@@ -530,10 +470,8 @@ const VideoSlide = ({
     return () => clearTimeout(t);
   }, [isActive, playerStatus]);
 
-  // TikTok's tap: a single tap waits TAP_GAP before pausing, so the first tap
-  // of a double tap never pauses. A second tap inside the gap cancels the
-  // pause and likes; every further quick tap adds another heart where the
-  // finger lands. A double tap never unlikes.
+  // A tap pauses after TAP_GAP; a second tap within it likes instead (and adds a heart).
+  // Double tap never unlikes.
   const handleTap = (e) => {
     const now = Date.now();
     const { locationX, locationY } = e.nativeEvent;
@@ -556,9 +494,7 @@ const VideoSlide = ({
   }, [isActive]);
   useEffect(() => () => clearTimeout(tapTimer.current), []);
 
-  // Long-press opens the post's menu: 2x speed (stays on until switched off or the
-  // video scrolls away) and Report or block. There's no ⋯ on the rail. Dragging
-  // along the progress line at the bottom still scrubs.
+  // Long-press opens the menu: 2x speed, report or block. Drag the bottom line to scrub.
   const [fast, setFast] = useState(false);
   const setSpeed = (on) => {
     player.playbackRate = on ? 2 : 1;
@@ -653,14 +589,7 @@ const VideoSlide = ({
       {!frameReady && poster ? (
         <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode={fillVideo ? 'cover' : 'contain'} pointerEvents="none" />
       ) : null}
-      {/* A separate top-most sibling, not a wrapper around VideoView —
-          expo-video's native surface (ExoPlayer/SurfaceView on Android)
-          can swallow touches over the actual video pixels even with
-          pointerEvents="none" on the view itself, which is why tapping
-          dead-center (where the video, not letterboxing, actually renders)
-          silently did nothing while taps near the letterboxed edges still
-          worked. Rendering this touch layer after VideoView in the stack
-          makes it the one that always receives the tap first, everywhere. */}
+      {/* Tap layer above VideoView: the native video surface can swallow taps otherwise. */}
       <TouchableWithoutFeedback onPress={handleTap} onLongPress={openMenu} delayLongPress={450}>
         <View style={StyleSheet.absoluteFill} />
       </TouchableWithoutFeedback>
@@ -678,8 +607,7 @@ const VideoSlide = ({
         </Text>
       )}
 
-      {/* Scrub bar sits under the chrome in the stack, so where the two
-          overlap at the very bottom the rail and Link up keep their taps. */}
+      {/* Scrub bar under the chrome, so the rail and Link up keep their taps. */}
       {videoDuration > 0 && !chromeHidden && (
         <GestureDetector gesture={scrubGesture}>
           <View style={ss.scrubHit} onLayout={(e) => { scrubWidth.current = e.nativeEvent.layout.width || 1; }}>
@@ -711,10 +639,7 @@ const VideoSlide = ({
         </Animated.View>
       )}
 
-      {/* Two-finger hold declutters down to header + raw video — every
-          gradient, the rail, the caption/link-up column, and the progress
-          line all drop out together so there's nothing left crowding it.
-          Scrubbing clears it too, so the frame being looked for is visible. */}
+      {/* Two-finger hold or scrubbing hides everything but the header and video. */}
       {!chromeHidden && scrubT === null && (
         <>
           <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
@@ -744,9 +669,7 @@ const VideoSlide = ({
 
           <View style={ss.bottomInfo}>
             <View style={ss.authorRow}>
-              {/* Avatar lives in the rail now (RailAvatar, above Like) — the
-                  same TikTok pattern of showing it once, not duplicated here.
-                  @name stays its own tap target, same as TikTok's username. */}
+              {/* The avatar is in the rail; the name here opens the same profile. */}
               <AuthorProfileTrigger post={post} navigation={navigation}>
                 <View style={ss.authorMeta}>
                   <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
@@ -904,11 +827,7 @@ const AudioSlide = ({
   );
 };
 
-// ─── IMAGE SLIDE CAROUSEL ───────────────────────────────────────────
-// A multi-image post's own horizontal swipe, nested inside the vertical
-// feed's swipe — same shape as Instagram/TikTok's photo-carousel posts:
-// swiping left/right pages through this post's own photos, swiping up/
-// down (the outer FlatList, untouched by this) moves to the next post.
+// ─── IMAGE CAROUSEL: swipe sideways through a post's photos; up/down moves between posts.
 const ImageSlideCarousel = React.memo(({ images }) => {
   const [index, setIndex] = useState(0);
   const onScrollEnd = useCallback((e) => {
@@ -938,17 +857,9 @@ const ImageSlideCarousel = React.memo(({ images }) => {
   );
 });
 
-// ─── TEXT SLIDE (new) ─────────────────────────────────────────────
-// Full-bleed, same as VideoSlide — an attached image fills the entire
-// slide with the confession as a caption underneath (identical shape to
-// a video's own caption). No image: the slide is filled edge-to-edge by
-// the confession's own intent/mood gradient, with the confession itself
-// as large, centered, auto-sized text — no small graphic card sitting on
-// top of a separate black background.
-// Sealed-letter backdrop for text-only confessions: a flap, two fold lines and
-// a coral wax seal, all sized from the live window so it holds up on small
-// phones, tablets and rotation. The flap height is returned so the text can
-// clear it.
+// ─── TEXT SLIDE ─────────────────────────────────────────────────
+// With an image: full-bleed image and caption. Without: a sealed-letter backdrop (sized from
+// the window) with big centred text. Returns the flap height so text clears it.
 const envelopeFlapHeight = (h) => Math.max(52, Math.min(140, h * 0.14));
 
 const EnvelopeBackdrop = ({ top }) => {
@@ -1021,11 +932,7 @@ const TextSlide = ({
   const envTop = headerHeight + rp(4);
   const envClear = isEnvelope ? envelopeFlapHeight(winH) * 0.55 + rp(18) : 0;
 
-  // Guaranteed-readable fallback for the no-image case's big centered
-  // text: adjustsFontSizeToFit below already shrinks to fit most
-  // confessions, but for one right at the 500-char compose ceiling it
-  // could still hit its numberOfLines cap before minimumFontScale saves
-  // it — this link always works regardless.
+  // "Read more" link in case very long text still doesn't fit.
   const isLong = (post.content?.length || 0) > 200;
 
 
@@ -1058,10 +965,7 @@ const TextSlide = ({
 
   return (
     <View style={[ss.slide, { backgroundColor: t.bgTo }]}>
-      {/* No image — the mood/intent color itself is the whole background,
-          full-bleed, same as it already was. With an image, it fills the
-          entire slide instead, same as VideoSlide's video layer — not a
-          small graphic card floating on top of it. */}
+      {/* Without an image the confession's colour is the background; with one, the image fills the slide. */}
       {!hasImage && <LinearGradient colors={[t.bgFrom, t.bgTo]} style={StyleSheet.absoluteFill} />}
       {isEnvelope && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,16,0.72)' }]} pointerEvents="none" />}
       {isEnvelope && <EnvelopeBackdrop top={envTop} />}
@@ -1077,13 +981,7 @@ const TextSlide = ({
               <FitImage uri={imageList[0]} style={StyleSheet.absoluteFill} />
             )
           ) : (
-            // paddingTop clears the opaque header panel (headerHeight),
-            // which otherwise sat on top of this box and cut off however
-            // many lines happened to land underneath it. paddingBottom is
-            // deliberately small — the old rp(140) reserved way more room
-            // than bottomInfo/rail actually need, which just biased the
-            // centered text upward and left dead space above the tab bar
-            // instead of the text sitting near true mid-screen.
+            // Top padding clears the header; bottom padding is small so the text sits near mid-screen.
             <View style={[sw.bigTextWrap, { paddingTop: headerHeight + rp(12) + envClear }]} pointerEvents="none">
               <Text
                 style={sw.bigTextConfession}
@@ -1136,13 +1034,7 @@ const TextSlide = ({
               </AuthorProfileTrigger>
             </View>
 
-            {/* Image posts show the confession as a caption below it, exactly
-                like a video's caption (same inline "... more/less", not a
-                modal) — the image is the primary visual, text is secondary.
-                No-image posts already show the confession as the big centered
-                text itself, so it isn't repeated here — just the escape hatch
-                for the rare case that's still too long to read comfortably at
-                its shrunk-to-fit size. */}
+            {/* Image posts show the confession as a caption below; text-only posts just get "read more". */}
             {hasImage && post.content ? (
               <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
                 <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} hookStyle={ss.captionHook} expanded={expanded} />
@@ -1237,9 +1129,7 @@ const PollSlide = ({
   );
 };
 
-// ─── Market slide ─────────────────────────────────────────────────
-// MarketCard itself unchanged — just centered on a full-screen dark
-// surface instead of sitting inline between confession cards.
+// ─── Market slide: MarketCard centred on a dark screen.
 const MarketSlide = ({ item, onPress }) => (
   <View style={[ss.slide, sw.promoSlide]}>
     <View style={sw.promoCenter}>
@@ -1248,10 +1138,7 @@ const MarketSlide = ({ item, onPress }) => (
   </View>
 );
 
-// ─── Ad slide ───────────────────────────────────────────────────
-// FeedAdCard unchanged, plus an explicit pinned CTA underneath — the
-// "TikTok shows a button on an ad post" pattern, matching LinkUpButton's
-// weight so an ad doesn't feel like an afterthought.
+// ─── Ad slide: FeedAdCard plus a pinned button below.
 const AdSlide = ({ ad, onPress }) => (
   <View style={[ss.slide, sw.promoSlide]}>
     <View style={sw.promoCenter}>
@@ -1270,41 +1157,17 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-  // Starting estimate only — height - tabBarHeight doesn't always match
-  // what the FlatList actually renders at (status bar insets, Android nav
-  // bar, rounding all nudge it slightly). snapToInterval/getItemLayout
-  // paging off that estimate instead of the real number is exactly what
-  // let the next slide peek in at the edge while the current one plays.
-  // onLayout below corrects it to the real measured height once mounted.
+  // Estimated slide height; onLayout replaces it with the measured one.
   const estimatedSlideHeight = height - tabBarHeight;
   const [listHeight, setListHeight] = useState(estimatedSlideHeight);
-  // Real footprint of the opaque header panel below — insets.top + its own
-  // paddingTop (rp(8)) + the icon row's height (rs(34)) + paddingBottom
-  // (rp(12)). TextSlide's centered confession needs this to know where the
-  // header actually stops covering content, instead of centering across
-  // the full slide and getting its top lines hidden underneath it.
+  // Height of the header (inset + padding + icon row), so text isn't hidden under it.
   const headerHeight = insets.top + rp(8) + rs(34) + rp(12);
   const dispatch = useDispatch();
   const marketFeed = useSelector(selectMarketFeed);
 
-  // ── Two-finger long-press to declutter ─────────────────────────
-  // Holding two fingers anywhere on the feed hides every overlay (rail,
-  // captions, gradients, the video progress line, the daily-claim banner)
-  // except the header, so a video/photo/confession can be looked at
-  // without icons and buttons crowding it — same idea as a chat app's
-  // "hold to peek". Chrome comes back the instant either finger lifts.
-  //
-  // Built on react-native-gesture-handler's native recognizer, not RN's
-  // legacy PanResponder — a first attempt with PanResponder never fired,
-  // because once ANY single-finger touch already claims the legacy
-  // responder (the FlatList's own scroll, or a slide's tap handler), RN's
-  // responder system doesn't re-run "should I become responder" just
-  // because a second finger joined mid-gesture. Gesture-handler recognizes
-  // pointer count natively, independent of whatever else is already
-  // tracking the first finger, so it actually sees the second finger land.
-  // LongPressGesture only exposes numberOfPointers() (an exact count) —
-  // not minPointers()/maxPointers(), which don't exist on this gesture
-  // and throw "is not a function" if called.
+  // ── Two-finger hold hides all overlays except the header; lifting a finger brings them back.
+  // Uses gesture-handler (PanResponder can't see a second finger join), with an exact
+  // numberOfPointers().
   const [chromeHidden, setChromeHidden] = useState(false);
   const chromeLongPress = useMemo(() => (
     Gesture.LongPress()
@@ -1442,9 +1305,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       const item = viewableItems[0];
       setActiveIndex(item.index);
       const it = item.item;
-      // Only real drops get view-tracked — market/ad/session-limit slides
-      // aren't drops, and POSTing their synthetic id to /drops/{id}/view
-      // would just fail (or worse, coincidentally collide with a real id).
+      // Only real drops are view-tracked.
       const postId = it && !it.__market && !it.__ad ? it.id : null;
       if (postId && !viewedRef.current.has(postId)) {
         viewedRef.current.add(postId);
@@ -1563,9 +1424,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     Linking.openURL(ad.link_url).catch(() => {});
   }, []);
 
-  // Out of new posts (no next page, or the server's session cap): keep going on a
-  // shuffled replay of what's loaded — videos if there are enough, else anything
-  // with media, else everything — so the swipe never hits a wall.
+  // Out of new posts: replay a shuffle of what's loaded (videos first, then any media, then all).
   const handleEndReached = useCallback(() => {
     if (loadingRef.current) return;
     if (hasMoreRef.current && !sessionLimitReached) { loadFeed(false); return; }
@@ -1588,10 +1447,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const getItemLayout = useCallback((_, index) => ({ length: listHeight, offset: listHeight * index, index }), [listHeight]);
   const keyExtractor = useCallback((item) => item.__replayKey || item.id, []);
 
-  // Same interleaving DropsFeedScreen used, just producing full-screen
-  // slide items instead of inline cards — every MARKET_FREQUENCY-th drop
-  // gets a market slide, every FEED_AD_FREQUENCY-th an ad slide (both can
-  // land on the same position, matching the original independent moduli).
+  // Mix in a market slide every MARKET_FREQUENCY drops and an ad every FEED_AD_FREQUENCY.
   const data = useMemo(() => {
     const base = linkedPost ? [linkedPost, ...posts.filter((p) => p.id !== linkedPost.id)] : posts;
     let out = base;
@@ -1616,13 +1472,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
     return replay.length ? [...out, ...replay] : out;
   }, [posts, linkedPost, marketFeed, feedAds, replay]);
 
-  // ── Swipe between slides: follows the finger, then snaps instantly ──
-  // Native paging (pagingEnabled / snapToInterval) always plays its own
-  // glide into place after the finger lifts, and neither platform lets that
-  // animation be skipped. So the list's own scrolling is off and this pan
-  // drives it: the slide tracks the finger while dragging, and on release
-  // it jumps straight to the next/previous slide (or back) with no glide.
-  // A flick or a drag past SNAP_DRAG of the screen moves one slide.
+  // ── Our own pan drives slide changes so a swipe snaps instantly (native paging always glides).
+  // A flick or a drag past SNAP_DRAG moves one slide.
   const SNAP_DRAG = 0.15;
   const SNAP_VELOCITY = 500;   // px/s
   // `from` is captured when the drag starts: activeIndex can flip to the next
@@ -1682,9 +1533,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     })();
   }, [linkedDropId, showToast]);
 
-  // TikTok-style prefetch: pull the next page while the viewer is still a few
-  // slides from the end, so the list never runs dry mid-swipe, and warm the
-  // image cache for the slides just ahead.
+  // Prefetch the next page a few slides before the end, and warm the image cache ahead.
   const PREFETCH_AHEAD = 4;
   useEffect(() => {
     if (data.length > 0 && activeIndex >= data.length - PREFETCH_AHEAD) handleEndReached();
@@ -1802,21 +1651,14 @@ export default function DropsSwipeScreen({ navigation, route }) {
         viewabilityConfig={viewabilityConfig}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.6}
-        // Tight window — TikTok itself only ever keeps the current slide
-        // (plus maybe the very next) actually alive. removeClippedSubviews
-        // unmounts native views once they're off-screen instead of just
-        // hiding them, which matters most here since it's the mounted
-        // instance count (not just what's visibly playing) that determines
-        // how many video decoders/buffers are competing at once.
+        // Small window, unmounting off-screen slides, so few video decoders run at once.
         removeClippedSubviews
         maxToRenderPerBatch={2}
         windowSize={5}
         initialNumToRender={2}
       />
 
-      {/* Header — a solid panel spanning the status bar down through the
-          icon row, same opaque-surface treatment as the bottom tab bar,
-          instead of icons floating directly over the video/card content. */}
+      {/* Solid header panel from the status bar to the icon row. */}
       <View style={[sw.header, { paddingTop: insets.top + rp(8) }]} pointerEvents="box-none">
         <Text style={sw.headerLogo}>anonixx</Text>
         <View style={sw.headerRight}>
@@ -1845,14 +1687,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* Daily-claim banner — a persistent overlay below the header rather
-          than its own slide (DailyRewardBanner already self-hides via
-          canClaimToday when there's nothing to claim, same as it did as
-          the old card feed's list header). Sits just below the header
-          panel — insets.top + its paddingTop (rp(8)) + the icon row's own
-          height (rs(34)) + paddingBottom (rp(12)), now that the header is
-          an opaque bar instead of floating icons with no real footprint
-          to clear. */}
+      {/* Daily-claim banner below the header (hides itself when nothing to claim). */}
       {isAuthenticated && !chromeHidden && (
         <View style={[sw.rewardBannerWrap, { top: insets.top + rp(8) + rs(34) + rp(12) }]} pointerEvents="box-none">
           <DailyRewardBanner />
@@ -1900,9 +1735,7 @@ const ss = StyleSheet.create({
   slide: { width, height: '100%', backgroundColor: '#000' },
   gradientTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, zIndex: 1 },
   gradientBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 340, zIndex: 1 },
-  // TikTok pins the rail's lowest icon almost flush with the tab bar, not
-  // floating well above it — bottom: 110 left a big dead gap under Views
-  // (the rail's last/lowest item). 14 sits it just above the bar instead.
+  // Rail sits just above the tab bar.
   rail: {
     position: 'absolute', right: 10, bottom: 14, width: 54, alignItems: 'center', gap: 16, zIndex: 10,
     paddingVertical: 10, borderRadius: 28, backgroundColor: 'rgba(10,12,20,0.42)',
@@ -1914,11 +1747,7 @@ const ss = StyleSheet.create({
   },
   actionBtn: { alignItems: 'center', gap: 5 },
   actionCount: { fontSize: 11, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
-  // Brought down to sit at roughly the same baseline as the rail (bottom:
-  // 14) now that it's no longer floating well above the tab bar — same
-  // TikTok-style close-to-the-bottom placement, just a touch higher since
-  // this column grows upward from author row + caption + Link Up button,
-  // where the rail is only ever one icon tall at its lowest point.
+  // Caption column sits near the bottom, level with the rail.
   bottomInfo: { position: 'absolute', bottom: 20, left: 16, right: 76, zIndex: 10 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   authorMeta: { flex: 1 },
@@ -1935,19 +1764,14 @@ const ss = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
   },
   moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
-  // TikTok's own feed progress indicator: a hairline, not a boxed slider
-  // with time labels and a draggable thumb (the feed doesn't support
-  // scrubbing at all — only the full-screen player does). Thin enough
-  // (3px) to sit inside the gap already open below the rail (bottom: 14)
-  // and bottomInfo (bottom: 20) without touching either.
+  // Progress shown as a 3px line between the rail and the caption.
   progressWrap: {
     position: 'absolute', bottom: 4, left: 0, right: 0, height: 3,
     backgroundColor: 'rgba(255,255,255,0.18)', zIndex: 10,
   },
   progressFill: { height: '100%', backgroundColor: THEME.primary },
-  // Drag-to-scrub: a taller invisible strip around the hairline catches the
-  // finger; while dragging the line thickens and grows a thumb, and the time
-  // shows big in the middle, like TikTok.
+  // Drag-to-scrub: a taller invisible strip catches the finger; while dragging, the line
+  // thickens, gets a thumb, and the time shows large in the middle.
   scrubHit: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 18, zIndex: 9 },
   progressWrapOn: { height: 6, bottom: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
   scrubThumb: {
@@ -2010,7 +1834,7 @@ const sw = StyleSheet.create({
   liveExtendText: { fontSize: rf(11), fontWeight: '800', color: '#3a2400' },
   rewardBannerWrap: { position: 'absolute', left: 0, right: 0, zIndex: 90 },
 
-  // Top of the right rail, above Like — TikTok's own creator-avatar spot.
+  // Author avatar at the top of the rail, above Like.
   railAvatarRing: {
     width: rs(40), height: rs(40), borderRadius: rs(20),
     borderWidth: 2, borderColor: THEME.primary, overflow: 'hidden',

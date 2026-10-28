@@ -124,17 +124,8 @@ export default function EditProfileScreen({ navigation }) {
     setNameStatus('checking');
     nameTimer.current = setTimeout(async () => {
       const controller = new AbortController();
-      // The production backend is a free-tier Render service that cold-
-      // starts after being idle — confirmed elsewhere to take 30-45s to
-      // wake up, not the few seconds this used to allow for. 6s meant
-      // anyone hitting a cold backend got aborted before it even
-      // responded, and — the real bug — the failure silently became
-      // nameStatus 'idle', which handleSave treats as "nothing to
-      // block on," not "the check never actually happened." So a failed
-      // check let Save through unchecked instead of stopping it, and the
-      // UI never told the user anything went wrong — it just looked
-      // permanently stuck on "Checking…" until they gave up or retried
-      // and (if the backend had woken up by then) it suddenly resolved.
+      // Allow up to 45s: the backend can take that long to wake from idle. A failed check is
+      // an error (blocks Save), not "idle".
       const timeout = setTimeout(() => controller.abort(), 45000);
       try {
         const token = await AsyncStorage.getItem('token');
@@ -159,10 +150,7 @@ export default function EditProfileScreen({ navigation }) {
     }, 400);
   }, [user?.anonymous_name]);
 
-  // Re-runs the same debounced check without the user needing to edit the
-  // text first — the only way to recover from an 'error' state before now
-  // was to retype something, which isn't obvious when the field already
-  // shows exactly the name you want.
+  // Re-run the name check without editing the text.
   const retryNameCheck = useCallback(() => {
     if (anonymousName) handleNameChange(anonymousName);
   }, [anonymousName, handleNameChange]);
@@ -226,9 +214,7 @@ export default function EditProfileScreen({ navigation }) {
       showToast({ type: 'info', message: 'Still checking name availability…' });
       return;
     }
-    // A failed/timed-out check used to silently fall back to 'idle',
-    // which this function treats as "nothing to block on" — letting Save
-    // through without the name ever actually being confirmed available.
+    // Don't save until the name is confirmed available.
     if (nameStatus === 'error') {
       showToast({ type: 'warning', message: 'Could not confirm that name is available. Try again.' });
       return;
@@ -274,11 +260,7 @@ export default function EditProfileScreen({ navigation }) {
         bio:            data.bio ?? user?.bio,
         gender,
       };
-      // AuthContext and Redux's auth slice both hold their own copy of
-      // "the current user" (a known dual pattern in this app) — screens
-      // reading from one never saw updates made only to the other. Update
-      // both here so a saved avatar/name change shows up everywhere,
-      // e.g. ProfileScreen reads from Redux, other screens from AuthContext.
+      // Update both AuthContext and Redux, which each hold the current user.
       updateUserProfile?.(freshFields);
       dispatch(updateReduxUser(freshFields));
       showToast({ type: 'success', message: "That's more like you." });

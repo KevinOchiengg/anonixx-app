@@ -3,10 +3,8 @@ import { useEffect, useState } from "react";
 import { uploadFile, CANCELLED } from "./upload";
 import { streamEnabled, uploadToStream } from "./streamVideo";
 
-// TikTok-style: a video starts uploading the moment it's picked, and the caption, trim
-// and cover are done while it goes up. Besides saving time, it reads the file while the
-// phone's permission is fresh (Android can withdraw it minutes later; see localCopy.ts).
-// Publishing just waits for wait(), so pressing Publish early is fine.
+// A video starts uploading as soon as it's picked, while the caption, trim and cover are done.
+// Publish waits for wait(), so pressing it early is fine.
 
 export type BgResult = { url: string } | { streamUid: string };
 export type BgState = {

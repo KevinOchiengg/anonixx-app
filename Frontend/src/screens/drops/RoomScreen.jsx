@@ -1,22 +1,8 @@
-/**
- * RoomScreen
- *
- * Someone's Room: their private space, painted in the theme they picked
- * (config/roomThemes.js). Anyone 18+ can peek through the window from an
- * avatar or a post: their name, picture, status, intro, the post they came
- * from, and whatever photos the owner shows through the window. Photos the
- * owner keeps for people inside show as veiled frames (a count, never the
- * images), and "only me" photos never appear at all.
- *
- * GET /chat-profile/{userId}/preview?drop_id= says where the viewer stands,
- * and the bottom bar follows it: Knock (free; coins move only on Let In),
- * knocked and waiting (take it back), a Knock this person sent *you* (Let In
- * / Decline right here), door closed, Edit Room on your own, or You're inside.
- * The first visit after a Let In plays the entrance: "You're inside", the
- * owner's welcome message, and optional openers that only fill the chat box.
- *
- * Route params: { userId, postId? }
- */
+/** Someone's Room, in their theme. Anyone 18+ can peek: name, picture, status, intro, the post
+ * they came from and the photos shown to visitors (others appear as a count). The bottom bar
+ * follows GET /chat-profile/{userId}/preview: Knock, waiting, their knock to you, closed,
+ * Edit Room, or inside. After a Let In, the first visit plays the entrance.
+ * Params: { userId, postId? } */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView,

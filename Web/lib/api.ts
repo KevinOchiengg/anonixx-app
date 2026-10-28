@@ -5,9 +5,7 @@ export const API_URL =(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000
 // tell Google the site lives on localhost.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://anonixx.com").replace(/\/$/, "");
 
-// Text-only drops shorter than this with no likes or replies are kept out of search (thin
-// pages). A photo or video is content in itself, so media drops always count.
-// Mirrors THIN_DROP_CHARS in Backend/app/api/v1/public.py.
+// Short text drops with no likes or replies stay out of search. Same as THIN_DROP_CHARS in public.py.
 export const THIN_DROP_CHARS = 80;
 export const isThinDrop = (p: Pick<Post, "content" | "likes_count" | "thread_count" | "media_type" | "images">) =>
   p.media_type !== "image" && p.media_type !== "video" && !p.images?.length &&

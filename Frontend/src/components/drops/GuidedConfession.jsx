@@ -1,20 +1,6 @@
-/**
- * GuidedConfession.jsx
- *
- * The hookup half of the compose screen: five short questions, asked one at a
- * time like a private conversation, an optional sound to play behind it, then a reveal where the AI writer
- * (POST /guided/generate) turns the answers into a confession the poster can
- * re-tone, regenerate, edit and drop.
- *
- * Answers, the step, and the confession draft (generated or hand-edited) are
- * saved to AsyncStorage as they change, so going back a step, or leaving and
- * coming back, never loses anything.
- * If the writer is off or fails, the poster is told and writes it themselves;
- * nothing is filled in from a template behind their back.
- *
- * Posting goes through POST /drops (kind="hookup") exactly like before, so the
- * age gate, coin cost, contact filter and moderation all still apply.
- */
+/** Guided hookup composer: five questions one at a time, optional sound, then the AI draft to
+ * edit and post. Progress is saved as it changes. If the writer is off, the poster writes it.
+ * Posts via POST /drops (kind="hookup") with all the usual checks. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Animated,

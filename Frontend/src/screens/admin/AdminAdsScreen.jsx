@@ -1,11 +1,4 @@
-/**
- * AdminAdsScreen.jsx
- *
- * Sponsored feed-ad submissions awaiting review (GET /ads/admin/pending) —
- * the main feed reaches everyone, so a human approves each one before it
- * goes live. Approve makes it visible immediately; reject refunds the
- * coins the buyer paid (see PATCH /ads/admin/{id}/approve|reject).
- */
+/** Sponsored ads waiting for review. Approve shows it now; reject refunds the buyer. */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image,

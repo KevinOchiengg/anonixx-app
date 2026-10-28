@@ -1,21 +1,5 @@
-/**
- * ChatInputBar.jsx
- *
- * Shared compose-bar shell — the pill (text field + attach + emoji) plus
- * the outer row that sits it next to a trailing action button. Used by
- * both Link Up chat (DropChatScreen) and the comment sheet
- * (CommentBottomSheet) so their composers stay visually identical without
- * hand-copying the same JSX and styles into every screen that needs one.
- *
- * What's deliberately NOT shared here: the trailing mic/send button's
- * behavior. Chat records voice notes with its own press-and-hold handlers
- * straight into screen state; comments delegate to VoiceNoteRecorder, a
- * self-contained component with its own slide-to-cancel gesture. Those are
- * genuinely different implementations, not just different styling — so the
- * caller passes its own button in as `trailing`. The `SendButton` below
- * covers the one trailing state that IS identical everywhere (typed text,
- * solid coral circle, Send icon) so screens don't re-style that either.
- */
+/** Shared compose bar (text field, attach, emoji) for chat and comments. The caller passes
+ * its own trailing button; SendButton is the common send state. */
 import React from 'react';
 import {
   View, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet,
@@ -86,9 +70,7 @@ export default function ChatInputBar({
   );
 }
 
-/** The one trailing-button state that's identical everywhere: typed text,
- * solid coral circle, Send icon. Sized to match VoiceNoteRecorder's
- * `filled` mic variant exactly, so nothing changes size mid-morph. */
+/** Send button: coral circle, same size as VoiceNoteRecorder's filled mic. */
 export function SendButton({ onPress, sending = false, disabled = false }) {
   return (
     <TouchableOpacity

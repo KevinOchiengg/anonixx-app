@@ -1,6 +1,4 @@
-// Crisis lines shown in Settings, picked by the viewer's country (anx_cc cookie).
-// Anywhere not listed gets the findahelpline.com directory. Keep in sync with
-// Frontend/src/config/helplines.js.
+// Crisis lines by the viewer's country; others get findahelpline.com. Keep in sync with the app.
 export type Helpline = { name: string; label: string; href: string };
 
 const BY_COUNTRY: Record<string, Helpline[]> = {

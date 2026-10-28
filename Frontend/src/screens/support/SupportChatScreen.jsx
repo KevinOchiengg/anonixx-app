@@ -1,9 +1,5 @@
-/**
- * SupportChatScreen — one screen for both sides of customer support.
- * With route.params.userId it's the admin view of that user's thread;
- * without, it's the signed-in user's own thread with Anonixx support
- * (plus a way to request a coin-purchase refund).
- */
+/** Support chat. With route.params.userId it's the admin view of that user's thread; otherwise
+ * your own thread (plus refund requests). */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,

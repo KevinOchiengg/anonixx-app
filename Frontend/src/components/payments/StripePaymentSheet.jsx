@@ -1,18 +1,4 @@
-/**
- * StripePaymentSheet.jsx
- * Geo-priced coin purchase via Stripe PaymentSheet.
- *
- * Prerequisites (run once before building for device):
- *   npx expo install @stripe/stripe-react-native
- *   Wrap App.js root with <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY} />
- *
- * Usage:
- *   <StripePaymentSheet
- *     visible={visible}
- *     onClose={() => setVisible(false)}
- *     packages={geoConfig.packages}   ← from fetchGeoConfig
- *   />
- */
+/** Buy coins by card (Stripe PaymentSheet), with country pricing. `packages` from fetchGeoConfig. */
 
 import React, {
   useCallback,

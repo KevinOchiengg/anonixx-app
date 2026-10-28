@@ -1,10 +1,4 @@
-/**
- * MpesaPaymentSheet.jsx
- * Bottom sheet for buying Anonixx Coins via M-Pesa STK Push.
- *
- * Usage:
- *   <MpesaPaymentSheet visible={visible} onClose={() => setVisible(false)} />
- */
+/** Buy coins with M-Pesa (STK push). */
 
 import React, {
   useCallback,

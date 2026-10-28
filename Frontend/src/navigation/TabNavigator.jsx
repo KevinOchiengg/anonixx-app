@@ -19,9 +19,7 @@ import DropsSwipeScreen from '../screens/feed/DropsSwipeScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SearchScreen from '../screens/feed/SearchScreen';
 
-// Drops — DropsCompose now lives at the root AppNavigator stack (reachable
-// from anywhere, incl. the Create tab button below); DropChat stays here
-// since Messages needs it directly.
+// DropsCompose lives in the root stack; DropChat stays here for Messages.
 import DropChatScreen from '../screens/drops/DropChatScreen';
 import DropCallScreen from '../screens/drops/DropCallScreen';
 import DemoChatScreen from '../screens/drops/DemoChatScreen';
@@ -40,13 +38,7 @@ const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 // ─── REQUESTS TAB ─────────────────────────────────────────────
-// Not an embedded stack like the other tabs — Link Up requests already has
-// a real home at the root AppNavigator level (UnlockRequestsScreen, with
-// its own back button and deep link). The tabPress listener below always
-// intercepts the press and pushes that screen instead of switching tabs,
-// same pattern as Create's guest redirect. This placeholder only exists as
-// a safety net for the rare case the tab becomes focused some other way
-// (e.g. a restored navigation state).
+// Tapping opens UnlockRequestsScreen in the root stack; this placeholder is only a fallback.
 function RequestsTabPlaceholder({ navigation }) {
   useEffect(() => {
     navigation.navigate('UnlockRequestsScreen');
@@ -103,12 +95,7 @@ const CustomTabBarButton = ({ children, onPress }) => (
 );
 
 // ─── FEED STACK ───────────────────────────────────────────────
-// FeedSwipe (DropsSwipeScreen) is the only feed screen now — a
-// full-screen, TikTok-style vertical swipe through every confession,
-// market promo, and ad. The old scrollable card list (DropsFeedScreen /
-// "FeedMain") and its own full-screen video/audio destination
-// (MediaFeedScreen / "MediaFeed") have both been retired and deleted —
-// DropsSwipeScreen absorbed everything they did.
+// FeedSwipe: full-screen vertical swipe through confessions, market items and ads.
 function FeedStack() {
   return (
     <Stack.Navigator initialRouteName="FeedSwipe" screenOptions={{ headerShown: false }}>
@@ -192,9 +179,7 @@ export default function TabNavigator() {
           tabBarButton: (props) => <CustomTabBarButton {...props} />,
         }}
         listeners={({ navigation }) => ({
-          // Guests get sent to Login the instant they tap Create, instead
-          // of the tab switching and DropsComposeScreen's own focus-effect
-          // guard bouncing them a beat later — same destination, no flash.
+          // Guests go straight to Login.
           tabPress: (e) => {
             if (!isAuthenticated) {
               e.preventDefault();

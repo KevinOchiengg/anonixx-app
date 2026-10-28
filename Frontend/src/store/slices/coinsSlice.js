@@ -189,10 +189,7 @@ export const fetchReferralCode = createAsyncThunk(
 
 // ─── Geo pricing thunks ───────────────────────────────────────────────────────
 
-/**
- * Fetches geo-aware payment config (country, tier, show_mpesa, packages).
- * Call on CoinsScreen mount. Result is cached in Redux state.
- */
+/** Payment config for the user's country (tier, M-Pesa, packages). */
 export const fetchGeoConfig = createAsyncThunk(
   'coins/fetchGeoConfig',
   async (_, { rejectWithValue }) => {
@@ -210,11 +207,7 @@ export const fetchGeoConfig = createAsyncThunk(
   }
 );
 
-/**
- * Creates a Stripe PaymentIntent and returns the client_secret for
- * @stripe/stripe-react-native's PaymentSheet.
- * The backend derives the correct PPP price from the user's IP.
- */
+/** Create a Stripe PaymentIntent; returns the client_secret for PaymentSheet. Price set server-side. */
 export const buyCoinsStripeIntent = createAsyncThunk(
   'coins/buyCoinsStripeIntent',
   async ({ packageId }, { rejectWithValue }) => {

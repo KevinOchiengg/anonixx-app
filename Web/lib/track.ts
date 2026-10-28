@@ -1,15 +1,8 @@
 import { API_URL, getToken, viewerCountry } from "./api";
 
-/**
- * Anonymous site-visit tracking for the super admin's Visitors page
- * (Backend/app/api/v1/visits.py). A visitor is a random id kept in
- * localStorage; a session ends after 30 idle minutes. Nothing here knows who
- * anyone is. Do Not Track / Global Privacy Control, automated browsers and
- * admin pages send nothing.
- *
- * Events are queued and sent in small batches as text/plain (no CORS
- * preflight), with sendBeacon when the tab is hidden so the last page counts.
- */
+/** Anonymous visit tracking for the Visitors page. Random visitor id; sessions end after 30
+ * idle minutes. Nothing is sent for Do Not Track, bots or admin pages. Batched as text/plain,
+ * with sendBeacon when the tab hides. */
 
 type Ev = Record<string, unknown> & { t: string; p: string };
 
@@ -116,11 +109,7 @@ export function track(t: string, data: Record<string, unknown> = {}) {
   }
 }
 
-/**
- * A search, recorded once the person stops typing for a moment, so "se",
- * "sec", "secr" don't each count. `n` is the result count (-1 if it failed):
- * searches with 0 results are what people want and don't find.
- */
+/** Record a search once typing pauses. `n` = result count (-1 on error). */
 export function trackSearch(q: string, extra: { theme?: string; place?: string; n?: number } = {}) {
   if (!trackingAllowed()) return;
   if (searchTimer !== null) window.clearTimeout(searchTimer);

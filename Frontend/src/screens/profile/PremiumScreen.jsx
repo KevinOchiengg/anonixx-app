@@ -20,12 +20,7 @@ import { API_BASE_URL } from '../../config/api'
 import T from '../../utils/theme'
 import { USE_PLAY_BILLING, buyPremium, fetchPremiumPrice, syncPremium, isCancelled } from '../../utils/playBilling'
 
-// Mirrors the real perk math in Backend/app/api/v1/drops.py (unlock_cost_for
-// / unlock_reward_for / grace_days_for) and the ad-free check in ads.py's
-// list_active_ads — this is what premium actually changes today. There is
-// no posting cap on either tier any more (see drops.py's deprecated
-// /daily-limit route), so "unlimited drops" isn't a premium perk — it's
-// just how the app works now.
+// What premium changes (matches drops.py perks and ads.py's ad-free check). Posting is unlimited for everyone.
 const FEATURES = [
   {
     icon: EyeOff,
@@ -44,9 +39,7 @@ const FEATURES = [
   },
 ]
 
-// Mirrors Backend/app/api/v1/premium.py PREMIUM_PLANS — used to render the
-// picker instantly; /premium/plans (fetched on mount) is the source of truth
-// for what actually gets charged.
+// Matches PREMIUM_PLANS in premium.py for instant display; /premium/plans is the source of truth.
 const FALLBACK_PLANS = [
   { id: 'monthly', label: '1 Month', kes: 999, usd_display: '$9.99', save: null },
 ]

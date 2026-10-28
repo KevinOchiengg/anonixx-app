@@ -1,7 +1,4 @@
-// Web build stub for @stripe/stripe-react-native.
-// That package imports React Native internals (codegenNativeCommands/Component)
-// that don't exist on web, so Metro can't bundle it for the web target.
-// Wired in via metro.config.js resolver.resolveRequest for platform === 'web'.
+// Web stub for @stripe/stripe-react-native, which can't bundle for web (see metro.config.js).
 
 function StripeProvider({ children }) {
   return children ?? null;

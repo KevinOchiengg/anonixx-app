@@ -1,7 +1,4 @@
-/**
- * MarketScreen.jsx
- * Anonixx Mini Market — staff-curated paid content list.
- */
+/** Mini Market: list of paid content. */
 
 import React, { useCallback, useEffect, useMemo } from 'react';
 import {

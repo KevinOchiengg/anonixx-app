@@ -1,16 +1,4 @@
-/**
- * ChatBackground.jsx
- *
- * Renders a curated background pattern (see config/patterns.js) behind
- * `children` — a LinearGradient base plus a procedural overlay (dots,
- * noise, diagonal lines, grid, or a soft glow). No image assets needed, so
- * it scales cleanly from a small setup-screen swatch to a full chat screen.
- *
- * Usage:
- *   <ChatBackground pattern="velvet-dots" style={{ flex: 1 }}>
- *     ...chat content...
- *   </ChatBackground>
- */
+/** A chat background pattern (config/patterns.js): gradient plus a drawn overlay, no images. */
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';

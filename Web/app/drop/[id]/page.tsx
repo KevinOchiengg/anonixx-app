@@ -86,8 +86,7 @@ export default async function DropPage({ params }: Params) {
       {videoLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoLd) }} /> : null}
       {/* The drop's own text is the page's h1 (Slide headline); a drop with no text still needs one. */}
       {post.content?.trim() ? null : <h1 className="sr-only">An anonymous confession on Anonixx</h1>}
-      {/* Only this drop is server-rendered, so every drop page's HTML is its own; the rest of the
-          feed loads in the browser (fillAfterStart). */}
+      {/* Only this drop is server-rendered; the rest of the feed loads in the browser. */}
       <Feed initialPosts={[post]} initialCursor={null} startId={post.id} fillAfterStart />
     </>
   );

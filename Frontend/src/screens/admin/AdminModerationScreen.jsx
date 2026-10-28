@@ -1,11 +1,4 @@
-/**
- * AdminModerationScreen.jsx
- *
- * Drops flagged (3+ reports) or auto-hidden (self-harm-concern) — the
- * queue existed server-side (GET /admin/moderation-queue) with nothing to
- * act on it until now. Dismiss clears the flag and keeps it live; delete
- * removes it and its unlock/connection records.
- */
+/** Flagged or auto-hidden drops. Dismiss keeps it live; delete removes it and its unlocks. */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,

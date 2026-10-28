@@ -1,15 +1,5 @@
-/**
- * patterns.js
- *
- * Curated chat-background patterns — each a gradient + an optional
- * procedural overlay (dots / noise / lines / grid / glow), no image assets
- * needed. Ids match Backend/app/api/v1/chat_profile.py BACKGROUND_PATTERNS;
- * rendering lives in components/chat/ChatBackground.jsx.
- *
- * Palette stays dark and moody on purpose — this is the surface someone
- * sees the moment they unlock an anonymous chat, so it leans into mystery/
- * intimacy rather than looking like a generic messaging app.
- */
+/** Chat background patterns: a gradient plus an optional overlay. Ids match chat_profile.py;
+ * drawn by components/chat/ChatBackground.jsx. */
 
 export const BACKGROUND_PATTERNS = [
   {

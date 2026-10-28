@@ -1,7 +1,5 @@
-// Tap-to-add keyword picks for official (admin) drops.
-// Founder-supplied, web-only list. It does NOT mirror Frontend/src/config/adminTags.js;
-// the app keeps its own list. Youth-coded, non-consent/hidden-cam/leaked and
-// step-family tags are deliberately excluded; do not add them.
+// Tap-to-add keywords for official drops (web list, separate from the app's).
+// Never add youth-coded, non-consent, hidden-cam, leaked or step-family tags.
 
 export type TagGroup = { name: string; tags: string[] };
 

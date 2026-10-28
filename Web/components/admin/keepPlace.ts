@@ -3,13 +3,8 @@ import { useEffect } from "react";
 
 const KEY = "adm:place:";
 
-/**
- * Brings the admin back to the spot they were at on a page after they open a
- * link and come back. Admin pages fetch their data after mounting, so the
- * browser's own restore runs while the page still says "Loading…" and lands at
- * the top; this waits until the page is tall enough again, then scrolls.
- * Per tab (sessionStorage), keyed by path.
- */
+/** Returns the admin to their scroll position on a page after they leave and come back,
+ * once the page's data has loaded. Per tab, by path. */
 export function useKeepPlace(path: string) {
   useEffect(() => {
     const key = KEY + path;

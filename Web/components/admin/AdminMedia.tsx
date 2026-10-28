@@ -32,11 +32,7 @@ function Clip({ src, poster }: { src: string; poster?: string | null }) {
   return <video ref={ref} className="adm-media-el" poster={poster || undefined} controls playsInline preload="metadata" />;
 }
 
-/**
- * What a post actually shows: its video, photos or voice note. Collapsed to a
- * small preview until opened (videos cost bandwidth), and opened straight away
- * when `open` is set (e.g. while the caption is being edited).
- */
+/** A post's video, photos or voice note, collapsed until opened (or open when `open` is set). */
 export default function AdminMedia({ media, open: forceOpen = false }: { media: DropMedia; open?: boolean }) {
   const [open, setOpen] = useState(false);
   const [viewing, setViewing] = useState<number | null>(null);

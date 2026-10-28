@@ -1,15 +1,4 @@
-/**
- * MarketCard.jsx
- * Native-feeling Anonixx Market promo card injected between confessions in the feed.
- *
- * Visual logic — "Locked Confession":
- *   Looks like a confession card but with a distinct gold border, EXCLUSIVE badge,
- *   teaser cutting off mid-sentence, blurred faux content below, and a single
- *   "Unlock for X coins →" CTA. Drives curiosity, not frustration.
- *
- * Usage:
- *   <MarketCard item={marketItem} onPress={(id) => nav.navigate('MarketItem', { itemId: id })} />
- */
+/** Market item in the feed: a "locked confession" with a gold border, teaser and unlock button. */
 
 import React, { useEffect, useRef } from 'react';
 import {

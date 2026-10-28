@@ -1,10 +1,4 @@
-/**
- * UnreadContext — bottom-nav badge counts (Messages, Requests).
- * Polls every 30 s while app is active; can be manually refreshed, and
- * refreshes immediately on unlock-request socket events for a snappier
- * Requests badge (Messages has no socket-driven refresh here — see
- * socket.js).
- */
+/** Bottom-nav badge counts. Polls every 30s, and refreshes on knock socket events. */
 import React, {
   createContext, useContext, useState, useEffect, useCallback, useRef,
 } from 'react';

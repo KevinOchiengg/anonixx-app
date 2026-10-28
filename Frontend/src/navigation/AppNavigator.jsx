@@ -6,10 +6,7 @@ import { API_BASE_URL } from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import AppLoadingScreen from '../components/common/AppLoadingScreen';
 
-// One loading moment, not two: fonts (App.js's useFonts) and the
-// AsyncStorage-backed auth check (AuthContext) both kick off on mount and
-// run in parallel — this screen stays up until whichever finishes last,
-// instead of showing the same screen twice back-to-back.
+// One loading screen until both fonts and the session check finish.
 function Loading() {
   return <AppLoadingScreen />;
 }
@@ -55,12 +52,9 @@ import TabNavigator from './TabNavigator';
 
 const Stack = createStackNavigator();
 
-// ─── Deep-link routing (spec section 17) ────────────────────────
-// Schemes:
-//   anonixx://drops/new           → DropsCompose
-//   anonixx://drops/voice         → DropsRecord
-//   anonixx://drops/publish       → DropsPublish
-//   anonixx://drops/poll          → DropsPoll
+// ─── Deep links ─────────────────────────────────────────────────
+//   anonixx://drops/new → DropsCompose     anonixx://drops/voice → DropsRecord
+//   anonixx://drops/publish → DropsPublish anonixx://drops/poll → DropsPoll
 const linking = {
   prefixes: [
     'anonixx://',
@@ -91,9 +85,8 @@ try { Notifications = require('expo-notifications'); } catch { /* not available 
 
 const navigationRef = createNavigationContainerRef();
 
-// A tapped push lands where it points: the Accept button on a link up
-// accepts straight from the notification and opens the chat; a plain tap on
-// a Knock opens the requests inbox; a Let In opens their Room; mutual opens the chat.
+// Push taps: Accept on a link up accepts and opens the chat; a Knock opens requests; a Let In
+// opens their Room; mutual opens the chat.
 async function handleNotificationResponse(response) {
   const data = response?.notification?.request?.content?.data || {};
   const go = (name, params) => { if (navigationRef.isReady()) navigationRef.navigate(name, params); };
@@ -137,9 +130,7 @@ export default function AppNavigator({ fontsReady }) {
   return (
     <NavigationContainer linking={linking} ref={navigationRef} onReady={onReady}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* No login/signup gate — guests (and new users) land straight on the
-            main feed. Auth screens stay reachable via "AuthNav" below for
-            whoever opts in later (e.g. Settings > Log In). */}
+        {/* No login gate: everyone lands on the feed; auth screens are under "AuthNav". */}
         {loading
           ? <Stack.Screen name="Splash" component={Loading} />
           : <Stack.Screen name="Main" component={TabNavigator} />

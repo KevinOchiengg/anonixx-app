@@ -1,16 +1,7 @@
 /**
- * useDraft — useState that survives leaving the screen.
- *
+ * useState that's saved (debounced) and restored by key, so unsent text survives leaving.
  *   const [text, setText, clearText] = useDraft(`comment:${postId}`, '');
- *
- * Whatever someone types is saved to AsyncStorage (debounced) under the key and
- * restored next time the same key mounts, so an unsent comment, message or post
- * is still there when they come back. A value equal to `initial` removes the
- * entry. Call the third item after a successful send to forget the draft.
- *
- * A null/undefined key turns saving off (e.g. while an id isn't known yet).
- * Drafts older than MAX_AGE are dropped. Never use this for passwords, codes or
- * payment details.
+ * A null key turns saving off; old drafts expire. Never use for passwords or payment details.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';

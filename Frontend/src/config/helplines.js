@@ -1,10 +1,4 @@
-/**
- * helplines.js
- *
- * Crisis lines shown in Settings, picked by the phone's region (deviceCountry).
- * Anywhere not listed gets the findahelpline.com directory. Keep in sync with
- * Web/lib/helplines.ts.
- */
+/** Crisis lines by the phone's region; others get findahelpline.com. Keep in sync with Web/lib/helplines.ts. */
 const BY_COUNTRY = {
   KE: [
     { name: 'Befrienders Kenya', label: '+254 722 178 177', href: 'tel:+254722178177' },

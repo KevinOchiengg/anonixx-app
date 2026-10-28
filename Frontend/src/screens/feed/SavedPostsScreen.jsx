@@ -1,6 +1,4 @@
-/**
- * SavedPostsScreen — thoughts worth returning to.
- */
+/** Saved posts. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,

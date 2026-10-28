@@ -1,26 +1,4 @@
-/**
- * TagUserSection.jsx
- *
- * "Tag Someone" UI used in DropsComposeScreen.
- *
- * Behaviour:
- *   1. On mount, fetches the user's recent drop-chat partners from
- *      GET /api/v1/drops/connections (up to 5 unique users).
- *      These appear as tappable avatar chips — one tap tags them instantly,
- *      no typing required.
- *
- *   2. Below the recent chips sits a live-search input that queries
- *      GET /api/v1/users/search?q=... with a 200ms debounce. Results
- *      appear in a floating dropdown; tapping a row tags them.
- *
- *   3. Once a user is tagged a confirmation strip replaces the dropdown.
- *      The parent receives the selected user via onTag / onClear callbacks.
- *
- * Props:
- *   taggedUser   — currently tagged user object (or null)
- *   onTag(user)  — called when user is selected
- *   onClear()    — called when tag is cleared
- */
+/** "Tag someone" on compose: recent chat partners as chips, plus search. Calls onTag / onClear. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,

@@ -1,13 +1,5 @@
-/**
- * KnockClues — what a host sees on a Knock before opening the door
- * (mirrors Web/components/KnockClues.tsx):
- *   - signals about the knocker (account age, verified, how often other hosts
- *     let them in, drops, confirmed deception, liking each other's drops);
- *   - their peek and photo/video, blurred until the host taps (nothing
- *     explicit lands unasked); a second tap opens it full size;
- *   - their voice note.
- * Fields come from GET /unlock-requests/incoming.
- */
+/** What a host sees on a Knock: signals about the knocker, their peek and photo/video (blurred
+ * until tapped), and voice note. Same as the website's. */
 import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Video as VideoIcon } from 'lucide-react-native';

@@ -1,11 +1,4 @@
-/**
- * RoomThemePicker
- *
- * The ten Room themes as miniature Rooms, with a larger live preview of
- * whichever one is picked. Nothing is saved until Apply; Cancel puts the
- * saved theme back. The saved theme keeps a "current" tag so it's always
- * clear what visitors see right now. Mirrors Web/components/RoomThemePicker.tsx.
- */
+/** Room theme picker: mini previews plus a large live one. Saved only on Apply. Same as the website's. */
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';

@@ -38,7 +38,6 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     # Long-lived (30 days): the app has no refresh-token flow.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Comma-separated emails of super admins (must also have is_admin=True).
     SUPER_ADMIN_EMAILS: str = ""
@@ -76,7 +75,7 @@ class Settings(BaseSettings):
     MPESA_ENVIRONMENT: str = "sandbox"  # sandbox | production
     MPESA_CALLBACK_URL: str = "http://localhost:8000/api/v1/payments/mpesa/callback"
 
-    # AGORA — used by Drop voice/video calls (app/api/v1/drop_calls.py), not Circles
+    # AGORA: voice/video calls (app/api/v1/drop_calls.py)
     AGORA_APP_ID: str = ""
     AGORA_APP_CERTIFICATE: str = ""
 

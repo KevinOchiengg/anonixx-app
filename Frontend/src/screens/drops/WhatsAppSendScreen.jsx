@@ -1,8 +1,4 @@
-/**
- * WhatsAppSendScreen — send a confession to one person's WhatsApp, anonymously.
- * Anonixx messages them from its own number and asks first; the confession is
- * only shown if they accept. The sender is never named.
- */
+/** Send a confession to someone's WhatsApp anonymously. They're asked first; the sender is never named. */
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,

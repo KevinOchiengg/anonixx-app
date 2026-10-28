@@ -1,12 +1,4 @@
-/**
- * AnonProfileSheet.jsx
- * Anonymous user profile — slides up to 80% of screen.
- * Full content always visible. No truncation. No cramping.
- *
- * Design: Like opening a letter from a stranger.
- * You know their energy before you know their name.
- * The aura color sets the entire atmosphere of the sheet.
- */
+/** Anonymous profile sheet (80% height). Their aura colour sets the sheet's mood. */
 import React, {
   useCallback, useEffect, useRef, useState,
 } from 'react';
@@ -17,9 +9,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, UserCheck, Crown, MapPin, Link2, Coins } from 'lucide-react-native';
 
-// Matches UNLOCK_COST in DropCard.jsx / PostUnlockScreen.jsx — same
-// coin-gated Link Up flow, just entered from the profile sheet instead of
-// the drop card directly.
+// Same Link Up cost as DropCard / PostUnlockScreen.
 const UNLOCK_COST = 6;
 import { API_BASE_URL } from '../../config/api';
 import {
@@ -111,10 +101,7 @@ export default function AnonProfileSheet({
         setError('Sign in to see who they are.');
         return;
       }
-      // Prefer the id route — anonymous names are randomly generated and not
-      // unique, so a name lookup can land on a different user entirely (and
-      // then is_self resolves against the wrong person). Fall back to the
-      // name route only when a card didn't give us an id.
+      // Look up by id (names aren't unique); by name only if there's no id.
       const url = userId
         ? `${API_BASE_URL}/api/v1/connect/profile/id/${encodeURIComponent(userId)}`
         : `${API_BASE_URL}/api/v1/connect/profile/${encodeURIComponent(anonymousName)}`;
@@ -141,10 +128,7 @@ export default function AnonProfileSheet({
     }
   }, [visible, anonymousName]);
 
-  // ── Link up — the only way to actually reach someone. Coin-gated on
-  // PostUnlockScreen itself; this just gets you there with either the post
-  // that opened this sheet, or a lightweight linkupTarget (e.g. a Circle
-  // comment) when there's no post object to hand over. ─────────
+  // ── Link up: opens PostUnlockScreen with the post (or a linkupTarget). ──
   const handleLinkUp = useCallback(() => {
     if (!post && !linkupTarget) return;
     closeSheet();
@@ -221,8 +205,7 @@ export default function AnonProfileSheet({
               bounces={false}
             >
 
-              {/* Avatar — their real photo if they set one, otherwise the
-                  first initial of their anonymous name. */}
+              {/* Avatar: their photo, else the name's first letter. */}
               <Animated.View style={[
                 styles.avatarCircle,
                 {
@@ -245,9 +228,7 @@ export default function AnonProfileSheet({
                 ]} />
               </Animated.View>
 
-              {/* Identity cluster — name, presence, chips and tier belong
-                  together, so they're grouped with tight internal spacing
-                  rather than each taking the parent's full section gap. */}
+              {/* Name, presence, chips and tier, grouped tightly. */}
               <View style={styles.headerBlock}>
                 <View style={styles.nameRow}>
                   <Text style={styles.name}>{profile.anonymous_name}</Text>
@@ -265,12 +246,7 @@ export default function AnonProfileSheet({
                   </View>
                 )}
 
-                {/* gender / location — age and "here for" (per-post mood,
-                    not a fixed trait) were dropped: age directly contradicted
-                    the signup DOB field's own promise ("never shown to
-                    anyone"), and the intent pill read as a personal identity
-                    label when it was really just whichever drop category
-                    they'd posted under most. */}
+                {/* Gender / location only (age is never shown). */}
                 <View style={styles.chipRow}>
                   {profile.gender && GENDER_BADGE[profile.gender] && (
                     <View style={[styles.chip, { borderColor: accentColor + '40' }]}>
@@ -290,8 +266,7 @@ export default function AnonProfileSheet({
                 </View>
               </View>
 
-              {/* Stats card — one bounded surface so the numbers read as a
-                  set instead of floating loose in the scroll. */}
+              {/* Stats card. */}
               <View style={styles.statsCard}>
                 <View style={styles.statsRow}>
                   <StatItem value={profile.confession_count ?? 0} label="drops" />
@@ -311,8 +286,7 @@ export default function AnonProfileSheet({
                 </Text>
               </View>
 
-              {/* Your own profile — you can't link up with yourself, so this
-                  becomes a preview of how everyone else sees you. */}
+              {/* Your own profile: a preview of how others see you. */}
               {profile.is_self ? (
                 <View style={styles.selfBlock}>
                   <Text style={styles.selfNote}>This is how others see you.</Text>
@@ -561,9 +535,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // Stats
-  // The card owns the surface; the row inside is just layout. Stats share
-  // the width evenly so 3 or 4 of them stay centred and don't overflow.
+  // Stats share the width evenly.
   statsCard: {
     width:             '100%',
     backgroundColor:   T.surfaceAlt,

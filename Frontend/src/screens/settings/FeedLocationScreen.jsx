@@ -1,15 +1,5 @@
-/**
- * FeedLocationScreen.jsx
- *
- * Lets a user set their home location and choose how tightly the main
- * feed is scoped to it — Everyone (off) / Country / Region / Neighborhood.
- * Reuses the same structured location capture Drops already use
- * (LocationField — country -> county -> sub_county -> estate) so the two
- * features share one mental model.
- *
- * Posts with no location of their own always still show, regardless of
- * scope — this only narrows the feed toward "home," it never empties it.
- */
+/** Set your home location and how tightly the feed follows it (off / country / region /
+ * neighbourhood). Posts without a location always show. */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Switch,
@@ -141,9 +131,7 @@ export default function FeedLocationScreen({ navigation }) {
 
       await updateUserProfile(body);
       showToast({ type: 'success', message: 'Feed location updated.' });
-      // Jump back to the feed itself (not just goBack) so it refetches
-      // with the new scope immediately, rather than showing a stale list
-      // until the user manually pulls to refresh.
+      // Go to the feed so it reloads with the new scope.
       navigation.navigate('Main', {
         screen: 'Feed',
         params: { screen: 'FeedSwipe', params: { refresh: Date.now() } },

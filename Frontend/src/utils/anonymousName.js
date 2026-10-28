@@ -1,12 +1,4 @@
-/**
- * Anonymous name format — shared by SignUpScreen and EditProfileScreen.
- * Mirrors Backend/app/api/v1/auth.py's _ANON_NAME_RE: letters, numbers,
- * dots, hyphens, underscores, and emoji.
- *
- * Built from code points rather than \u escapes since several emoji
- * ranges (pictographs, flags) sit outside the BMP and need surrogate
- * pairs — String.fromCodePoint handles that correctly with the 'u' flag.
- */
+/** Anonymous name format (same as the backend): letters, numbers, . - _ and emoji. */
 const codePointRange = (start, end) =>
   String.fromCodePoint(start) + '-' + String.fromCodePoint(end);
 

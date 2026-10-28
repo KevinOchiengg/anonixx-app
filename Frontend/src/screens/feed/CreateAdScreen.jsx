@@ -1,17 +1,5 @@
-/**
- * CreateAdScreen.jsx
- *
- * Buy an ad slot in the main feed — priced by how long it runs (see
- * POST /ads in the backend). Non-admins pay coins up front and wait for a
- * human to approve before it reaches the whole feed's audience; admins get
- * a free "house" ad that goes live immediately.
- *
- * The ad always points at one of the creator's own active Drops — tapping
- * it in the feed takes a viewer straight into the existing unlock flow for
- * that Drop, which is what actually lands them in the creator's chat
- * interface. No raw-URL field for regular users; if they have no active
- * Drop yet, they're sent to create one first.
- */
+/** Buy a feed ad, priced by duration. Members pay coins and wait for approval; admins post free.
+ * The ad always points at one of your active drops (no drop yet = make one first). */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Image, KeyboardAvoidingView, Platform,

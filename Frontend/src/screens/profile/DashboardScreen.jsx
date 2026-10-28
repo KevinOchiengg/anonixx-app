@@ -1,20 +1,4 @@
-/**
- * DashboardScreen.jsx
- *
- * The user's advanced dashboard, reachable from Profile ("You" tab) →
- * Dashboard. Everything here is real data pulled from endpoints that
- * mostly already existed but had no frontend: /posts/mine (new — added
- * alongside this screen), /impact/dashboard (built, never wired to any
- * UI), /coins/balance + /coins/transactions, and /coins/withdraw +
- * /coins/withdraw/history (the actual coins-to-cash mechanic — already
- * built server-side, this is its first UI).
- *
- * Sections:
- *   Overview   — coins, total views, total posts at a glance
- *   My Posts   — edit / delete your own posts
- *   Activity   — people supported, responses received, milestones
- *   Coins      — balance, transaction history, request a cash withdrawal
- */
+/** Your dashboard: overview, your posts (edit/delete), activity, and coins with cash withdrawal. */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,

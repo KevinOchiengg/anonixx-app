@@ -1,10 +1,4 @@
-/**
- * FitImage
- *
- * A feed photo that follows utils/mediaFit: phone-shaped photos fill the
- * slide, anything else (square, 4:5, landscape) is shown whole over a
- * blurred, darkened copy of itself instead of flat black bars.
- */
+/** Feed photo (utils/mediaFit): phone-shaped fills the slide; others sit whole over a blurred copy. */
 import React, { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { fillsFrame } from '../../utils/mediaFit';

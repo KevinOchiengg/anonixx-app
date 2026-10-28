@@ -1,13 +1,7 @@
-/**
- * SearchScreen — Discover (mirrors Web/components/SearchPage.tsx; Backend api/v1/discover.py).
- *   Near     fresh Link Ups and listed Rooms in a place you pick, one card per person.
- *            Adults only: the server opens it for age-verified viewers in full content
- *            mode, so in this (safe-mode) build it explains that instead of showing posts.
- *   Stories  confessions: latest, unanswered, trending, moods, topics, Surprise me.
- * Typed text is read on the server (English, Swahili, Sheng) into chips you can remove.
- * "Discover in" and recent searches stay on this device; browsing somewhere never
- * changes the location on your own posts.
- */
+/** Discover (same as Web SearchPage.tsx; backend discover.py). Near: fresh Link Ups and Rooms in
+ * a chosen place (age-verified, full mode only, so this build explains instead). Stories:
+ * confessions by latest, unanswered, trending, mood, topic. Place and recent searches stay on
+ * this device. */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, StatusBar,

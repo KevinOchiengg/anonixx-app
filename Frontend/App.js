@@ -57,10 +57,7 @@ export default function App() {
   const [fontsLoaded, fontError] = useFonts(FONT_MAP);
   const fontsReady = fontsLoaded || fontError;
 
-  // Providers mount immediately instead of waiting on fonts, so font-loading
-  // and the AuthContext token check (inside AppNavigator) run in parallel —
-  // one loading screen for however long the SLOWER of the two takes, not
-  // one screen per gate shown back-to-back.
+  // Providers mount right away so fonts and the session check load in parallel behind one splash.
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>

@@ -1,16 +1,8 @@
 "use client";
 /**
- * useDraft: useState that survives leaving the page.
- *
+ * useState that's saved (debounced) and restored by key, so unsent text survives leaving.
  *   const [text, setText, clearText] = useDraft(`comment:${postId}`, "");
- *
- * What someone types is saved to localStorage (debounced) under the key and
- * restored next time the same key mounts, so an unsent comment, message or post
- * is still there when they come back. A value equal to `initial` removes the
- * entry; call the third item after a successful send to forget the draft.
- * A null key turns saving off. Drafts older than MAX_AGE are dropped.
- * Never use this for passwords, codes or payment details.
- * Mirrors Frontend/src/hooks/useDraft.js.
+ * A null key turns saving off; old drafts expire. Never use for passwords or payment details.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 

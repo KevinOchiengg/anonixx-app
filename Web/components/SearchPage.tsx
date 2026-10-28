@@ -1,10 +1,7 @@
 "use client";
-// Discover: Anonixx search as a discovery engine (Backend api/v1/discover.py).
-//   Near     fresh Link Ups and listed Rooms in a place you pick. One card per person.
-//   Stories  confessions: latest, unanswered, trending, moods, topics, Surprise me.
-// Typed text is read on the server (English, Swahili, Sheng) into chips you can remove.
-// "Discover in" is where you browse; it's stored on this device and never changes the
-// location people see on your posts. Recent searches stay on this device too.
+// Discover (backend discover.py). Near: fresh Link Ups and Rooms in a chosen place. Stories:
+// confessions by latest, unanswered, trending, mood, topic. Place and recent searches stay on
+// this device and never change your posts' location.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
