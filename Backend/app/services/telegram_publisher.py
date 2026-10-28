@@ -1,21 +1,5 @@
-"""
-app/services/telegram_publisher.py
-
-Telegram channel publishing via the Bot API.
-
-Supported drop formats
-  text   → POST /sendMessage   (Markdown-enabled caption)
-  image  → POST /sendPhoto     (photo URL + caption)
-  video  → POST /sendVideo     (video URL + caption)
-
-Credentials
-  TELEGRAM_BOT_TOKEN  — token from @BotFather
-  TELEGRAM_CHANNEL_ID — the channel the bot posts into (e.g. "@anonixx" or "-100123456789")
-    How to get it:
-      1. Message @BotFather, /newbot, grab the token
-      2. Add the bot as an admin of the Anonixx channel
-      3. Use the channel's @username, or its numeric chat id if private
-"""
+"""Posts drops to the Anonixx Telegram channel (Bot API): text, image or video.
+Needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID (the bot must be a channel admin)."""
 
 import logging
 
@@ -30,15 +14,7 @@ API_BASE = "https://api.telegram.org"
 
 
 class TelegramPublisher:
-    """
-    Async wrapper around the Telegram Bot API for channel posts.
-
-    Usage:
-        from app.services.telegram_publisher import telegram_publisher
-
-        result = await telegram_publisher.post_text("I have a secret…")
-        # → {"message_id": 42}
-    """
+    """Telegram channel publishing client."""
 
     def __init__(self):
         self._timeout = httpx.Timeout(60.0)

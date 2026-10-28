@@ -1,24 +1,5 @@
-"""
-app/tasks/drop_cleanup.py
-
-Async background worker — deletes drops whose post-unlock grace window has
-passed, along with their comments/saves/views.
-
-Lifecycle rules this enforces (see drops.py's UNLOCKED_GRACE_DAYS):
-  • A drop with expires_at = None has never been unlocked. It never expires
-    and this worker never touches it.
-  • The first unlock sets expires_at = now + 7 days (14 for premium posters).
-    Once that passes, the drop and its social-engagement records are removed.
-
-What deliberately survives: drop_connections and drop_messages. People paid
-to open those chats, and the connection copies the confession text and names
-onto itself, so a conversation stays readable after its drop is gone.
-drop_unlocks rows also stay, as the payment receipt.
-
-Lifecycle
-  Started during FastAPI app startup (lifespan) as an asyncio background
-  task. Shuts down cleanly on app teardown.
-"""
+"""Deletes drops whose post-unlock grace period has passed, with their comments, saves and
+views. Never-unlocked drops are never deleted. Chats, messages and unlock receipts are kept."""
 
 import asyncio
 import logging
@@ -39,12 +20,6 @@ def _now() -> datetime:
 
 
 class DropCleanupWorker:
-    """
-        worker = DropCleanupWorker()
-        await worker.start()   # called in app lifespan startup
-        ...
-        await worker.stop()    # called in app lifespan shutdown
-    """
 
     def __init__(self):
         self._task:    asyncio.Task | None = None
@@ -80,15 +55,7 @@ class DropCleanupWorker:
         Returns how many drops were removed."""
         db = await get_database()
 
-        # Two independent guards, both required:
-        #   unlock_count > 0  — the product rule is "deleted a week after its
-        #     first unlock", so an un-unlocked drop is never eligible however
-        #     old it is. This also protects drops created under the previous
-        #     24h-expiry scheme, which still carry a long-past expires_at but
-        #     were never unlocked: without it, deploying this worker would
-        #     wipe them on its very first sweep.
-        #   $ne: None      — a null expires_at means the clock never started,
-        #     and Mongo sorts null below any date, so $lte alone would match.
+        # Only unlocked drops with a past expires_at (null means the clock never started).
         expired = await db["drops"].find(
             {
                 "expires_at":   {"$ne": None, "$lte": _now()},

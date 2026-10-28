@@ -1,17 +1,6 @@
-"""
-WhatsApp relay — send a confession to one person without revealing who sent it.
-
-Flow
-  1. Sender writes a confession + the recipient's WhatsApp number (POST /whatsapp/send).
-  2. Anonixx's own WhatsApp number sends the recipient a consent template that
-     contains NO confession text — only "someone sent you an anonymous message"
-     plus Accept / Decline / Block buttons.
-  3. Only if the recipient taps Accept (webhook) is the confession delivered.
-     Decline drops it; Block opts the number out of every future message.
-
-The sender's identity is never sent to WhatsApp. Opted-out numbers are silently
-treated as "declined" so a sender can't probe who has blocked Anonixx.
-"""
+"""Send a confession to someone's WhatsApp anonymously. They first get a consent message
+with no confession text (Accept / Decline / Block); it's delivered only on Accept. The
+sender is never revealed, and blocked numbers look like a decline."""
 import hashlib
 import hmac
 import logging
@@ -56,11 +45,7 @@ def _configured() -> bool:
 
 
 def normalize_phone(raw: str) -> Optional[str]:
-    """Return digits-only E.164 (no '+'), or None if it can't be a real number.
-
-    The country code is required (leading '+' or '00'). Guessing one would route
-    a local number to a stranger in another country.
-    """
+    """Digits-only E.164 number, or None. The country code is required, never guessed."""
     digits = re.sub(r"[^\d+]", "", raw or "")
     if digits.startswith("+"):
         digits = digits[1:]
@@ -172,9 +157,7 @@ async def send_anonymous_message(
     to_recipient_today = await db["whatsapp_messages"].count_documents(
         {"to_phone": phone, "created_at": {"$gte": day_ago}})
 
-    # The confession also goes live on Anonixx as an ordinary drop (same cost
-    # as posting one); the WhatsApp message links back to it. Raises 402 if
-    # the sender can't afford it, before anything is sent to WhatsApp.
+    # The confession also posts as a normal drop (same cost); 402 before anything is sent if short.
     drop = await create_drop(CreateDropRequest(confession=text), current_user_id, db)
 
     now = _now()

@@ -34,65 +34,37 @@ from app.websockets.chat import emit_new_message, emit_messages_seen, emit_messa
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
-# @mentions in comments — plain-text markup (no structured offsets stored),
-# parsed the same way both here (for notifying the mentioned user) and on
-# the client (for rendering them as tappable coral text). Matches the
-# character set actual usernames use in practice; doesn't need to be a
-# hard validation rule since a near-miss just means no notification fires.
+# @mentions in comments (plain text). The client parses them the same way.
 MENTION_RE = re.compile(r'@([A-Za-z0-9_.]{2,30})')
 
 DROP_PRICE_USD = 2.00
 GROUP_DROP_PRICE_USD = 3.00
 
-# Official drops — posted by an admin account (see admin.py's toggle_admin_role)
-# through the same compose screen everyone else uses. They fill the feed
-# before organic drops exist, carry the reserved "Anonixx" name (see
-# auth.py's RESERVED_ANON_NAMES) instead of the poster's real anonymous_name,
-# cost no coins to post, and can never be unlocked — there's no real person
-# behind them to Link Up with.
+# Official drops: posted by admins as "Anonixx", free to post, never unlockable.
 ADMIN_DROP_NAME = "Anonixx"
-# Drop lifecycle — drops do NOT expire on a timer. A drop stays live
-# indefinitely until someone unlocks it; the first unlock starts a grace
-# window, and once that passes tasks/drop_cleanup.py deletes the drop and
-# its mirrored feed post. Chats survive: drop_connections copies the
-# confession text onto itself, so conversations people paid for outlive it.
-# `expires_at: None` on a drop therefore means "never unlocked, never dies".
+# Drops don't expire on a timer. The first unlock starts a grace period, then
+# tasks/drop_cleanup.py deletes the drop. Chats keep a copy of the text.
 UNLOCKED_GRACE_DAYS = 7
 NIGHT_MODE_START = 22  # 10pm
 NIGHT_MODE_END = 3     # 3am
 
 # ── Economy ──────────────────────────────────────────────────────
-# Both sides of a drop pay, and Anonixx keeps the spread. The poster's
-# reward is a deliberately FLAT hook — a small "someone wanted you" payout
-# that's spendable in-app or withdrawable (see coins.py's /withdraw) —
-# NOT a cut of what the unlocker paid.
-#
-#   post    3 coins   → paid by the poster (free for premium)
-#   unlock  6 coins   → paid by the unlocker (free for premium)
-#   reward  none (disabled — see UNLOCK_REWARD_COINS)
+#   post    3 coins  (poster, free for premium)
+#   unlock  6 coins  (unlocker, free for premium)
+#   reward  none     (see UNLOCK_REWARD_COINS)
 DROP_POST_COST         = 3    # charged on BOTH /drops and /posts creation —
                               # charging only one leaves the other a free bypass
 UNLOCK_REWARD_COINS    = 0    # poster reward disabled for now; raise to re-enable. flat, replaces the old percentage share
 
 # ── Premium perks ────────────────────────────────────────────────
-# Premium's entire value proposition lives here (see api/v1/premium.py).
-# Which side of a transaction a perk applies to matters:
-#   • unlock cost → the UNLOCKER's premium status
-#   • reward      → the DROP OWNER's premium status
-#   • grace       → the POSTER's premium status, applied at first unlock
+# Unlock cost follows the unlocker's premium; reward and grace follow the poster's.
 PREMIUM_UNLOCK_COST          = 0    # vs COINS_UNLOCK_COST — premium unlocks are free
 PREMIUM_UNLOCK_REWARD_COINS  = 0    # vs UNLOCK_REWARD_COINS
 PREMIUM_UNLOCKED_GRACE_DAYS  = 14   # vs UNLOCKED_GRACE_DAYS (7)
 
 # ==================== REQUEST MODELS ====================
 
-# Confession type — the audience/nature a drop is written for. Chosen at
-# compose time (DropsComposeScreen's "Confession Type" picker) and drives the
-# card's whole visual identity (DropCardRenderer.jsx's CARD_INTENTS) — colors
-# and background pattern, not just a label. Kept in sync with CARD_INTENTS
-# there; don't rename an id on one side without the other.
-# Listed in the same order the compose picker shows them, so the two files
-# read side by side. Order is cosmetic here — this is a membership check.
+# Confession types. Keep in sync with CARD_INTENTS in DropCardRenderer.jsx.
 VALID_INTENTS = [
     "meet-me",                # "Meet Me"                — dating, real relationship
     "skeleton-in-the-closet", # "Skeleton In The Closet" — confessions, no specific audience, default
@@ -100,16 +72,9 @@ VALID_INTENTS = [
     "the-exchange",           # "The Exchange"           — paid/transactional arrangement, 18+
 ]
 
-# Renamed 2026-09-10 from real-connection / general / no-strings /
-# generous-arrangement. Old ids may still exist on drops written before
-# this migration ran — see scripts/migrate_intent_ids.py.
+# Older drops may still use the pre-2026-09-10 ids (scripts/migrate_intent_ids.py).
 
-# Display labels — mirrors CARD_INTENTS' `label` field in
-# DropCardRenderer.jsx exactly. Every label completes an implied "I want —",
-# which is the same ask the tagline makes. Ids stay frozen: they're written
-# onto every drop row, so renaming one is a migration, not a copy change.
-# These strings are display-only — nothing keys off them (see `here_for` /
-# `here_for_intent` in connect.py), so they're safe to reword freely.
+# Display labels (match CARD_INTENTS). Labels can change freely; ids can't.
 INTENT_LABELS = {
     "meet-me":                "Meet Me",
     "skeleton-in-the-closet": "Skeleton In The Closet",
@@ -129,9 +94,7 @@ class DropVoteRequest(BaseModel):
 HOOKUP_GENDERS = ("woman", "man", "other")
 HOOKUP_LOOKING = ("woman", "man", "anyone")
 HOOKUP_VIBES = ("company", "friendship", "dating", "casual", "discreet", "adventure")
-# Guided confession answers (see api/v1/guided.py). Stored on the drop's hookup
-# block so the feed can show hosting tags; the private "secret" answer is not
-# kept, it only lives in the confession text if the poster left it there.
+# Guided answers kept on the hookup block for feed tags. The private "secret" answer isn't stored.
 HOOKUP_CRAVINGS = ("warmth", "attention", "intimacy", "chemistry", "companionship")
 HOOKUP_TRAITS = ("sweet", "playful", "shy", "adventurous", "affectionate", "bold", "curious", "calm")
 HOOKUP_HOSTING = ("can_host", "can_travel", "either", "decide")
@@ -242,10 +205,8 @@ def clean_hookup(h: "HookupDetails") -> dict:
     }
 
 
-# Fresh windows: how long a hookup post stays discoverable (in the feed and in
-# Near). Only discovery ends with it; Rooms, accepted visitors, conversations
-# and charges live elsewhere and are never touched by a post running out.
-#   window: (first run, each renewal step, ceiling after posting)
+# How long a hookup post stays discoverable: (first run, renewal step, max). Only discovery
+# ends; Rooms and chats are untouched.
 FRESH_WINDOWS = {
     "tonight":  (timedelta(hours=12), timedelta(hours=12), timedelta(hours=48)),
     "weekend":  (None,                timedelta(days=3),   timedelta(days=14)),
@@ -263,10 +224,8 @@ def fresh_until(window: Optional[str], now: datetime) -> datetime:
     return now + first
 
 
-# "Smart trim": the original video is stored untouched and the drop carries the
-# window to play plus any text laid over it. Clients apply both at playback, so
-# nothing is re-encoded here (R2 is dumb storage — see app/utils/r2_storage.py).
-# Admin pin/boost (see utils/feed_mix.py for where promoted drops land).
+# Smart trim: the video is stored untouched; clients play the chosen window and text overlays.
+# Admin pin/boost (placement in utils/feed_mix.py).
 PROMO_KINDS = ("pin", "boost")
 PROMO_HOURS = (6, 24, 72, 168)
 
@@ -332,16 +291,10 @@ class CreateDropRequest(BaseModel):
     group_size: Optional[int] = None
     media_url: Optional[str] = None
     media_type: Optional[str] = None  # "image" | "video" | "voice"
-    # Supplemental photo — separate from media_url because media_url is
-    # already the PRIMARY content slot (the voice recording itself for
-    # voice drops). A poll or voice drop can carry this alongside its
-    # primary content; a text drop's photo still goes through media_url.
+    # Extra photo on a poll or voice drop (media_url holds the main content).
     image_url: Optional[str] = None
-    # Multi-image post — 2–10 already-uploaded R2 URLs, rendered client-side
-    # as swipeable slides (one post, several photos — e.g. an Instagram/
-    # TikTok-style carousel). media_url/media_type still get backfilled from
-    # images[0] below so every older consumer (notifications, OG preview,
-    # card_image_url) that only knows about a single image keeps working.
+    # Multi-image post: 2-10 photos shown as swipeable slides. images[0] is copied to media_url
+    # for single-image consumers.
     images: Optional[List[str]] = None
     target_user_id: Optional[str] = None  # private targeted drop
     intent: Optional[str] = None  # what the sender is open to
@@ -352,9 +305,7 @@ class CreateDropRequest(BaseModel):
     mood_tag: Optional[str] = None               # "longing", "restless", …
     intensity: Optional[str] = None              # "soft" | "heavy" | "devastating"
     recognition_hint: Optional[str] = None       # one word, directed drops only
-    # Share anonymously on Anonixx social. Tri-state: None/omitted = default
-    # (auto-queued for eligible drops), True = explicit opt-in, False =
-    # explicit opt-out — lets a client distinguish "didn't ask" from "said no."
+    # Share to Anonixx socials: None = default (auto), True = opt in, False = opt out.
     publisher_opt_in: Optional[bool] = None
     duration_seconds: Optional[float] = None     # voice drops
     waveform_data: Optional[List[float]] = None  # voice drops
@@ -370,10 +321,7 @@ class CreateDropRequest(BaseModel):
     promo_kind: Optional[str] = None             # "pin" | "boost"
     promo_hours: Optional[int] = None
 
-    # Feed-as-drops upgrade — structured location, most-specific to least.
-    # Only country + county are backed by a real fixed list client-side
-    # (Kenya's 47 counties); sub_county/estate are freeform text everywhere
-    # since no reliable exhaustive dataset exists for either.
+    # Location, most to least specific. Country and county come from fixed lists; the rest is free text.
     location_country:    Optional[str] = None   # e.g. "Kenya"
     location_county:     Optional[str] = None   # e.g. "Nairobi" (or state/region for non-Kenya)
     location_sub_county: Optional[str] = None   # e.g. "Westlands"
@@ -401,11 +349,7 @@ class ReportDropRequest(BaseModel):
 
 # ==================== SPEC CONSTANTS ====================
 
-# Drop themes — mirrors DROP_THEMES in the frontend (DropCardRenderer.jsx).
-# After Dark / Tier-2 themes have been removed entirely — every drop is
-# treated the same regardless of confession type; only external social
-# publishing (Facebook/Telegram/etc.) is gated, and that's purely the
-# poster's own opt-in choice (publisher_opt_in), not a theme restriction.
+# Drop themes (match DROP_THEMES in DropCardRenderer.jsx). Sharing to socials is the poster's choice.
 VALID_THEMES = {"desire"}
 
 # Mood tags: see VALID_MOOD_TAGS in the FEED section (the one set compose,
@@ -445,9 +389,7 @@ def now_utc() -> datetime:
 
 
 def _is_premium_active(user: dict) -> bool:
-    """True while a purchased plan is still running — see api/v1/premium.py.
-    `premium_active` is a legacy field some older accounts may still carry;
-    `is_premium` alone (no premium_until) is treated as never-expiring."""
+    """True while a premium plan is running. `is_premium` without premium_until never expires."""
     if not user.get("is_premium") and not user.get("premium_active"):
         return False
     until = user.get("premium_until")
@@ -484,9 +426,7 @@ async def unlock_cost_for(user_id: str, db) -> int:
 
 
 async def unlock_reward_for(owner_id: str, db) -> int:
-    """Flat coins the drop's owner earns per unlock — premium doubles it.
-    Deliberately not a percentage of what the unlocker paid: this is an
-    engagement reward, not a revenue split."""
+    """Flat coins the owner earns per unlock (doubled for premium)."""
     return PREMIUM_UNLOCK_REWARD_COINS if await is_premium_user_id(owner_id, db) else UNLOCK_REWARD_COINS
 
 
@@ -515,13 +455,7 @@ def get_time_ago(dt: datetime) -> str:
 
 
 async def update_vibe_score(user_id: str, action: str, db):
-    """
-    Vibe score events:
-    - card_created: +2
-    - card_unlocked: +5 (someone paid to connect with you)
-    - reaction_received: +1
-    - streak_day: +2
-    """
+    """Vibe score points: card_created +2, card_unlocked +5, reaction_received +1, streak_day +2."""
     weights = {
         "card_created": 2,
         "card_unlocked": 5,
@@ -576,14 +510,7 @@ async def send_push_notification(user_id: str, title: str, body: str, db, data: 
 # ==================== HELPERS ============================
 
 def _media_preview_url(media_url: Optional[str], media_type: Optional[str]) -> Optional[str]:
-    """
-    Returns a static image URL suitable for og:image.
-    - Images: use the URL as-is.
-    - Videos: R2 does no transforms (unlike Cloudinary before it), so there's
-      no way to derive a poster frame from the raw video URL — None until
-      the teaser-card pipeline (app/services/card_generator.py) or a client
-      upload (PATCH /{drop_id}/card-image) supplies a real preview image.
-    """
+    """Static image for og:image: the image itself, or None for videos until a card exists."""
     if not media_url:
         return None
     if media_type == "image":
@@ -670,9 +597,7 @@ async def create_drop(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Polls are an official Anonixx feature, not a regular-user confession
-    # format — keeps them scarce/credible in the feed instead of every
-    # drop becoming a poll.
+    # Polls are official-only, to keep them rare in the feed.
     if data.poll and not user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Polls can only be posted by Anonixx.")
 
@@ -711,9 +636,7 @@ async def create_drop(
         if parts:
             recognition_hint = parts[0].lower()[:16]
 
-    # Publisher opt-in — the only gate on external social publishing (Facebook/
-    # Telegram/etc.) is the poster's own choice. Defaults True (auto-queue)
-    # unless the client explicitly opted out.
+    # Sharing to socials is the poster's choice; on unless they opted out.
     publisher_opt_in = (data.publisher_opt_in is not False)
 
     kind = data.kind if data.kind in ("hookup", "confession") else None
@@ -721,9 +644,7 @@ async def create_drop(
     if kind == "hookup" and not hookup_data:
         raise HTTPException(status_code=400, detail="Fill in your age and area for a hookup confession.")
     if kind == "hookup" and not user.get("age_verified") and not user.get("is_admin"):
-        # Accounts from before the 18+ tick: the age they just typed (clean_hookup
-        # already refused anything under 18) is their confirmation, so nobody is
-        # turned away after filling in the whole form.
+        # Older accounts without the 18+ tick: the age they just entered (18+) confirms it.
         await db["users"].update_one(
             {"_id": user["_id"]},
             {"$set": {"age_verified": True, "age_attested": "hookup_age"}},
@@ -775,11 +696,8 @@ async def create_drop(
                 raise HTTPException(status_code=400, detail="Pick pin or boost, for 6 hours, 1, 3 or 7 days.")
             promo_until = now_utc() + timedelta(hours=data.promo_hours)
 
-    # Hookup posts are found in Near by place. The guided form only asks for a free-text
-    # area, so when no structured place was sent it comes from that area ("Westlands" ->
-    # Westlands, Nairobi, Kenya), else the poster's own profile area, else their country.
-    # This is also how travel works: an area somewhere else is found there, and the
-    # poster's profile location never changes.
+    # Place for Near: from the typed area, else the poster's profile area, else their country.
+    # Posting from somewhere else is found there; the profile location doesn't change.
     if kind == "hookup" and not location_detail:
         location_detail = hookup_place(hookup_data, user, x_country)
         if location_detail:
@@ -791,10 +709,7 @@ async def create_drop(
         "sender_anonymous_name": admin_name if is_admin_drop else user.get("anonymous_name", "Anonymous"),
         "is_admin_drop": is_admin_drop,
         "confession": data.confession.strip() if data.confession else None,
-        # A multi-image post backfills the single-media fields from its
-        # first photo so every older consumer that only knows media_url/
-        # media_type (notifications, OG preview, card_image_url below)
-        # still has something to show.
+        # Copy the first photo to media_url/media_type for single-image consumers.
         "media_url": (images_data[0] if images_data else data.media_url) or None,
         "media_type": ("image" if images_data else data.media_type) or None,
         "image_url": data.image_url or None,
@@ -802,9 +717,7 @@ async def create_drop(
         "is_group": data.is_group,
         "group_size": data.group_size if data.is_group else None,
         "price": price,
-        # No countdown at creation — the drop stays live until somebody
-        # unlocks it, and only then does the grace clock start (see
-        # _complete_unlock). None here means "never unlocked, never dies".
+        # No expiry until the first unlock (see _complete_unlock).
         "expires_at": None,
         "is_active": True,
         "is_night_mode": night,
@@ -854,9 +767,7 @@ async def create_drop(
         # Feed-as-drops upgrade
         "location":        location_display,   # joined display string, e.g. "Kilimani, Westlands, Nairobi, Kenya"
         "location_detail": location_detail,    # {country, county, sub_county, estate} — used for filtering
-        # Country the local-first feed matches this drop on (utils/feed_mix.py): the
-        # location the author picked, else where they are. Official drops stay global
-        # unless explicitly targeted.
+        # Country the local feed matches on: the picked location, else the author's. Official drops stay global.
         "feed_country": known_country((location_detail or {}).get("country")) or (None if is_admin_drop else (
             country_from_header(x_country) or known_country(user.get("location_country")) or known_country(user.get("detected_country"))
         )),
@@ -873,11 +784,8 @@ async def create_drop(
         "views_count":  0,
     }
 
-    # Posting costs coins — charged after all validation above, so a rejected
-    # drop never takes someone's balance. Mirrored in posts.py's create_post;
-    # charging only one route would leave the other a free bypass.
-    # Admin drops are official filler content, not paid for by the admin.
-    # Regular confessions are free to post; only hookup (and untyped) drops pay.
+    # Charge after validation, so a rejected drop costs nothing. Admin drops and regular
+    # confessions are free; hookup drops pay.
     post_cost = 0 if is_admin_drop or kind == "confession" else DROP_POST_COST
     if post_cost and not await is_premium_user_id(current_user_id, db):
         try:
@@ -897,11 +805,7 @@ async def create_drop(
     await db["drops"].insert_one(drop)
     drop_id_str = str(drop["_id"])
 
-    # ── Auto-queue for Anonixx social publishing ────────────────
-    # Eligible drops (not privately targeted, not already flagged,
-    # not explicitly opted out) queue for cross-posting immediately — no
-    # manual "Publish" tap needed. POST /{drop_id}/publish still works as a
-    # manual re-trigger for drops that skipped auto-queue (e.g. targeted).
+    # ── Auto-queue for Anonixx socials (unless targeted, flagged or opted out).
     if (
         publisher_opt_in
         and not data.target_user_id
@@ -913,9 +817,7 @@ async def create_drop(
             {"$set": {"published_at": drop["published_at"]}},
         )
 
-        # Blurred teaser card — the growth hook for social. Best-effort:
-        # if generation/upload fails, publishing still proceeds using
-        # whatever card_image_url already exists (poster-frame or None).
+        # Blurred teaser card for socials. If it fails, publishing goes ahead without it.
         teaser_image_url = None
         try:
             from app.services.card_generator import generate_teaser_card, upload_teaser_card
@@ -1081,10 +983,6 @@ async def vote_on_drop_poll(
 
 
 # ==================== LIKE / SAVE / THREAD / VIEW ====================
-# Native social engagement for drops — ported from the old posts.py, which
-# used to be reached indirectly via a mirrored "posts" document every drop
-# created on itself. That mirror is gone (see create_drop) — these endpoints
-# are now the real, direct thing.
 
 MAX_VOICE_COMMENT_SECONDS = 30   # mirrors Circles' + the old posts comment voice notes
 
@@ -1106,9 +1004,7 @@ async def like_drop(
     if current_user_id in liked_by:
         return {"message": "Already liked", "liked": True, "likes_count": drop.get("likes_count", 0)}
 
-    # $addToSet (not $push) so a duplicate/racing request never double-counts
-    # the same user, and find_one_and_update returns the drop's real
-    # post-increment count instead of guessing pre_fetch_count + 1.
+    # $addToSet so a repeated request never counts the same user twice.
     updated = await db["drops"].find_one_and_update(
         {"_id": ObjectId(drop_id)},
         {"$addToSet": {"liked_by": current_user_id}, "$inc": {"likes_count": 1}},
@@ -1297,9 +1193,7 @@ async def add_to_drop_thread(
             db,
         )
 
-    # @mentions — notify anyone tagged in the comment text. Case-insensitive
-    # single query covers every mention at once rather than one lookup per
-    # name. Self-mentions are silently skipped (no point notifying yourself).
+    # Notify @mentioned users (one query; self-mentions skipped).
     mentioned_usernames = set(MENTION_RE.findall(content)) if content else set()
     if mentioned_usernames:
         pattern = "|".join(re.escape(n) for n in mentioned_usernames)
@@ -1335,10 +1229,7 @@ async def add_to_drop_thread(
         response["voice_url"] = voice_url
         response["voice_duration"] = voice_duration
 
-    # Broadcast to everyone else with this drop's comment sheet open right
-    # now — same shape as the HTTP response minus the request-local
-    # "message" field, plus user_id/parent_id so receiving clients can
-    # tell it apart from their own optimistic entry and nest replies.
+    # Push the new comment to everyone with this drop's comments open.
     broadcast = {k: v for k, v in response.items() if k != "message"}
     broadcast["user_id"] = current_user_id
     if parent_id:
@@ -1398,9 +1289,7 @@ async def get_drop_thread(
             top.append(by_id[tid])
 
     top.sort(key=lambda x: x["created_at"], reverse=True)
-    # Pinned comment (owner-only, top-level only — see pin_drop_comment)
-    # always floats to the very top, ahead of whatever sort the client
-    # applies on top of this.
+    # The pinned comment always comes first.
     pinned = [c for c in top if c["pinned"]]
     if pinned:
         top = pinned + [c for c in top if not c["pinned"]]
@@ -1471,9 +1360,7 @@ async def pin_drop_comment(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Drop owner only, top-level comments only — one pinned comment per
-    drop, mirrors TikTok. Pinning a new one silently replaces whichever
-    was pinned before."""
+    """Pin a top-level comment (owner only). Replaces any earlier pin."""
     try:
         drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
     except Exception:
@@ -1533,20 +1420,8 @@ async def view_drop(
     db = Depends(get_database),
 ):
     try:
-        # A "viewer" is either a signed-in user or, for guests, the app's
-        # per-install device ID (already sent on every request — see
-        # deviceId.js on the frontend — for the signup-bonus fingerprint
-        # cap). Hashing the device ID keeps this collection consistent
-        # with what drop_views already stores for real users (an opaque
-        # key, never a directly-identifying value at rest). Whichever key
-        # we land on, `drop_views`' unique (drop_id, user_id) index means
-        # a repeat visit just updates viewed_at without inserting a new
-        # document — upserted_id tells us whether this was genuinely a
-        # new viewer, so views_count only grows for those. Previously it
-        # incremented on every call regardless, so re-opening the same
-        # drop repeatedly inflated it as if each open were a different
-        # person; guests with no identity at all still don't get deduped,
-        # since there's no header to key off in that case.
+        # One view per viewer: signed-in user id, or a hashed device id for guests.
+        # Guests with no device id aren't deduplicated.
         viewer_key = None
         if current_user_id:
             viewer_key = current_user_id
@@ -1571,9 +1446,7 @@ async def view_drop(
                 return_document=ReturnDocument.AFTER,
             )
 
-        # Report the current count back either way — including on a
-        # deduped repeat view — so the client can sync its display to
-        # the real number instead of assuming its own increment happened.
+        # Always return the real count so the client can sync.
         if drop is None:
             drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
         return {"status": "success", "views_count": drop.get("views_count", 0) if drop else 0}
@@ -1583,15 +1456,7 @@ async def view_drop(
 
 
 # ==================== FEED ====================
-# Native main-feed algorithm — ported from the old posts.py get_calm_feed,
-# which used to serve the main feed by reading the "posts" documents every
-# drop silently mirrored itself into. Adapted to read `drops` directly:
-# drops don't have posts' `topics` array, just a single `mood_tag` (one of
-# VALID_MOOD_TAGS below), so behavioural affinity keys off that instead.
-# posts' heavy/light emotional-pacing interleave doesn't have a real analog
-# here — that was built around posts' mental-health-specific topic taxonomy
-# (grief, spiraling, etc.), and none of drops' four mood tags map onto it
-# without inventing a fake mapping, so it's intentionally not ported.
+# Main feed. Personalised by the viewer's mood_tag affinity.
 
 VALID_MOOD_TAGS = {"longing", "untold", "horny", "discreet"}
 
@@ -1699,11 +1564,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
     drop_ids     = [str(d["_id"]) for d in drops]
     drop_ids_obj = [d["_id"] for d in drops]
     hookup_ids = [str(d["_id"]) for d in drops if d.get("kind") == "hookup"]
-    # Sender avatars — one batch lookup for the whole page, not one query
-    # per drop. Admin drops are excluded on purpose: is_admin_drop's whole
-    # point is that the real account behind it stays untraceable, and that
-    # guarantee is separate from (and stricter than) the regular per-drop
-    # identity reveal.
+    # Sender avatars in one query. Admin drops excluded so the real account stays hidden.
     sender_oids = [
         ObjectId(sid) for sid in {
             d.get("sender_id") for d in drops
@@ -1772,9 +1633,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
         created_at_iso = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
         formatted.append({
             "id":               did,
-            # Never leak the real admin account id behind an official drop —
-            # the whole point of ADMIN_DROP_NAME is that it's not traceable
-            # to a person, and there's no unlock path to justify exposing it.
+            # Never expose the admin account behind an official drop.
             "user_id":          None if drop.get("is_admin_drop") else drop.get("sender_id"),
             "content":          confession,
             "anonymous_name":   drop.get("sender_anonymous_name"),
@@ -1798,9 +1657,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "promo_kind":       drop.get("promo_kind") if drop.get("promo_until") and _aware(drop["promo_until"]) > now_utc() else None,
             "audio_url":        drop.get("media_url") if drop.get("media_type") == "voice" else None,
             "image_url":        drop.get("image_url"),
-            # Multi-image posts — ordered list the client renders as swipeable
-            # slides. None/empty for every other drop, where media_url alone
-            # (or no media at all) remains the whole story.
+            # Multi-image posts: the photos in order.
             "images":           drop.get("images") or None,
             "card_image_url":   drop.get("card_image_url"),
             "poll":             poll_out,
@@ -1894,12 +1751,8 @@ async def get_drops_feed(
     if loc_filter:
         pool_query = {"$and": [pool_query, loc_filter]} if pool_query else loc_filter
 
-    # Mixed feed: MEDIA_RUN media drops, then one text confession, repeating.
-    # Each kind is paged newest-first with its own position inside `cursor`
-    # (see utils/feed_mix.py) — none skipped, none repeated. Affinity ordering
-    # only reorders within a kind, so the rhythm stays intact.
-    # Local first: the viewer's own pick in settings wins, else where the client says
-    # they are (remembered, for requests that don't say), unless they've turned it off.
+    # Mixed feed: MEDIA_RUN media drops, then one text confession, repeating. Each kind pages
+    # separately (utils/feed_mix.py). Local first, using the viewer's country unless turned off.
     detected = country_from_header(x_country)
     if detected and user_doc and user_doc.get("detected_country") != detected:
         await db["users"].update_one({"_id": user_doc["_id"]}, {"$set": {"detected_country": detected}})
@@ -1920,10 +1773,7 @@ async def get_drops_feed(
     formatted_drops = await batch_format_drops(drops, current_user_id, db)
 
     final_feed = []
-    # Same generic relationship/sex-ed divider beats posts.py used — not
-    # posts-specific copy, reused verbatim. Kept short on purpose — this
-    # renders as a single centered line (FeedDivider.jsx, numberOfLines=1)
-    # between drop lines, so anything longer wraps or gets clipped.
+    # Short divider lines between drops (shown on one line).
     divider_texts = [
         "consent isn't a mood killer.",
         "'not tonight' is a full sentence.",
@@ -2205,9 +2055,8 @@ async def delete_drop(
 
 COINS_UNLOCK_COST         = 6    # coins required to unlock a drop
 
-# Hookup posts are "tonight" posts: live for HOOKUP_LIVE_HOURS, extendable in the
-# same steps up to HOOKUP_MAX_LIVE_HOURS after posting. Past live_until they leave
-# the feed and can't be linked up with — the countdown is what makes people act.
+# Hookup posts are live for HOOKUP_LIVE_HOURS, extendable up to HOOKUP_MAX_LIVE_HOURS.
+# After that they leave the feed and can't be linked up with.
 HOOKUP_LIVE_HOURS = 12
 HOOKUP_MAX_LIVE_HOURS = 48
 
@@ -2237,16 +2086,12 @@ ORIGIN_AUTHOR_UNLOCK_COST = 3    # discounted rate for the author of the inspiri
 # ==================== POLL UNLOCK STATUS ====================
 
 
-# Approximate coins-per-dollar rate (from the Tier-1 "starter" package: 3
-# coins / $0.99). Only used to record a cash unlock's coin-equivalent on the
-# unlock row — the poster's reward is flat and no longer derived from it.
+# Approx. coins per dollar (3 coins / $0.99), to record a cash unlock's coin value.
 CASH_TO_COIN_RATE = 3 / 0.99
 
 
 async def _credit_reward(drop: dict, coin_equivalent: int, db):
-    """Credit the drop owner their flat reward for someone unlocking them.
-    Fixed regardless of what the unlocker paid —
-    a hook, not a revenue split."""
+    """Credit the owner their flat unlock reward."""
     reward = await unlock_reward_for(drop["sender_id"], db)
     if reward <= 0:
         return
@@ -2271,12 +2116,7 @@ async def _complete_unlock(
     drop_id: str, unlocker_id: str, drop: dict, method: str, db,
     coin_equivalent: Optional[int] = None, amount_charged: Optional[float] = None,
 ):
-    """Shared unlock completion logic.
-
-    `amount_charged` should be the actual geo-priced amount the unlocker paid
-    (see get_drop_unlock_price) — falls back to the drop's flat creation-time
-    price only for the coins path, where no cash changed hands.
-    """
+    """Finish an unlock. `amount_charged` is what the unlocker actually paid."""
     if coin_equivalent is None:
         cash_price = drop.get("price", DROP_PRICE_USD)
         coin_equivalent = round(cash_price * CASH_TO_COIN_RATE)
@@ -2297,13 +2137,7 @@ async def _complete_unlock(
         {"$inc": {"unlock_count": 1}}
     )
 
-    # First unlock starts the deletion clock. The `expires_at: None` filter is
-    # what makes this fire once and only once — a second unlock finds the
-    # field already set and doesn't extend the window, so the drop can't be
-    # kept alive indefinitely by a trickle of unlocks. (None also matches a
-    # missing field, so drops predating this field behave the same.)
-    # Regular confessions never start it: they're only reached through a
-    # profile link up, and that shouldn't delete the confession itself.
+    # The first unlock starts the deletion clock, once only. Regular confessions never start it.
     if drop.get("kind") != "confession":
         grace_days = await grace_days_for(drop["sender_id"], db)
         await db["drops"].update_one(
@@ -2373,11 +2207,7 @@ async def _create_drop_connection(drop_id: str, drop: dict, unlocker_id: str, db
 # ==================== DROP CHAT ====================
 
 async def get_unread_message_counts(db, user_id: str) -> dict:
-    """Unread message count per connection_id (str) for this user's own chats.
-
-    A connection's own *_last_read_at defaults to its created_at when unset
-    (nothing read yet), so a brand-new connection starts fully unread.
-    """
+    """Unread message count per connection for this user. New connections start unread."""
     conns = await db["drop_connections"].find({
         "$or": [{"sender_id": user_id}, {"unlocker_id": user_id}]
     }).to_list(None)
@@ -2421,9 +2251,7 @@ async def get_drop_connections(
     raw_connections = await db["drop_connections"].find(query).sort("last_message_at", -1).to_list(None)
     unread_counts = await get_unread_message_counts(db, current_user_id)
 
-    # Batch-fetch the other participant's current avatar_url — read live
-    # rather than relying on the connection's denormalised name snapshot,
-    # since a photo can be added/changed anytime after the connection formed.
+    # The other person's current avatar (it can change after connecting).
     other_ids = set()
     for conn in raw_connections:
         is_sender = conn["sender_id"] == current_user_id
@@ -2497,16 +2325,12 @@ async def get_drop_messages(
 
     is_sender = conn["sender_id"] == current_user_id
     other_user_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
-    # The *other* party's last-read timestamp — what decides whether one of
-    # MY OWN messages has been seen (WhatsApp-style tick). Their own read
-    # field, not mine.
+    # The other person's last read time, which decides if my messages show as seen.
     other_last_read_at = conn.get("unlocker_last_read_at" if is_sender else "sender_last_read_at")
 
     messages = []
     async for msg in db["drop_messages"].find(
-        # "Delete for me" hides it from just this viewer — everyone else in
-        # the conversation still sees it normally, so this is a query
-        # filter, not a flag the frontend has to interpret.
+        # Hide messages this viewer deleted for themselves.
         {"connection_id": connection_id, "deleted_for": {"$ne": current_user_id}}
     ).sort("created_at", 1):
         is_own = msg["sender_id"] == current_user_id
@@ -2533,10 +2357,7 @@ async def get_drop_messages(
             "created_at": msg["created_at"].isoformat(),
         })
 
-    # Viewing the thread marks it read — this endpoint is polled every 25s
-    # (plus on open) while the chat screen is open, so this doubles as the
-    # read-receipt. Also pushed live to the other party so their sent-
-    # message ticks update immediately instead of waiting on their own poll.
+    # Opening (and polling) the thread marks it read; the other side is told live.
     read_field = "sender_last_read_at" if is_sender else "unlocker_last_read_at"
     seen_at = now_utc()
     await db["drop_connections"].update_one(
@@ -2557,9 +2378,7 @@ async def get_drop_messages(
 
     from app.websockets.events import is_user_online
 
-    # Show the welcome gallery (all of it, up to 3 items) + play the welcome
-    # sound once per unlocker, the first time they open this connection —
-    # never to the sender viewing their own chat.
+    # Welcome gallery and sound, once per unlocker on first open.
     welcome_gallery = []
     welcome_sound = None
     if not is_sender and chat_profile:
@@ -2588,9 +2407,7 @@ async def get_drop_messages(
             "font_style":          chat_profile.get("font_style", "clean-regular") if chat_profile else "clean-regular",
             "profile_picture_url": chat_profile.get("profile_picture_url") if chat_profile else None,
             "welcome_sound":       chat_profile.get("welcome_sound", "soft-chime") if chat_profile else "soft-chime",
-            # Always available (not gated to first-open) so either side of the
-            # chat can revisit it any time — see the gallery button in
-            # DropChatScreen, distinct from the once-only welcome takeover.
+            # Always available, so either side can open the gallery any time.
             "gallery":             room_gallery,
             "call_mode":           chat_profile.get("call_mode", "solo") if chat_profile else "solo",
             "room_theme":          room_theme_of(chat_profile or {}),
@@ -2616,9 +2433,7 @@ def _message_preview_text(content: str, media_type: Optional[str]) -> str:
 
 
 def _reply_payload_for(reply_to: Optional[dict], viewer_id: str) -> Optional[dict]:
-    """Shapes a stored reply-to snapshot for one specific viewer — `is_own`
-    depends on who's looking, so it can't be baked into the stored snapshot
-    itself."""
+    """A reply quote as seen by one viewer (`is_own` depends on who's looking)."""
     if not reply_to:
         return None
     return {
@@ -2661,11 +2476,7 @@ async def send_drop_message(
     if conn.get("removed_at"):
         raise HTTPException(status_code=403, detail="You're no longer inside this Room.")
 
-    # Reply — denormalise a small snapshot onto the new message rather than
-    # joining at read time, so the quote still renders even if the original
-    # later gets deleted-for-me by one side (it's just hidden from *their*
-    # view, not actually gone) or, if deleted-for-everyone, is masked the
-    # same way the original row itself is.
+    # Store a snapshot of the replied-to message so the quote survives deletes.
     reply_to = None
     if reply_to_id:
         try:
@@ -2706,9 +2517,7 @@ async def send_drop_message(
     other_id = conn["unlocker_id"] if current_user_id == conn["sender_id"] else conn["sender_id"]
     sender_name = conn["sender_anonymous_name"] if current_user_id == conn["sender_id"] else conn["unlocker_anonymous_name"]
 
-    # Live push — same shape get_drop_messages returns per message, so the
-    # chat screen can append this straight into its list. is_own is always
-    # False here since this only ever reaches the *other* party.
+    # Push the new message to the other person.
     await emit_new_message(other_id, connection_id, {
         "id":               str(msg["_id"]),
         "content":          content,
@@ -2753,17 +2562,8 @@ async def delete_drop_message(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """
-    Two different things WhatsApp calls "delete", both supported:
-      - for_everyone=False (default): hides it from just this viewer —
-        `deleted_for` is a per-user set, so the other party's view is
-        untouched.
-      - for_everyone=True: only the original sender may do this. Content is
-        masked (not removed) for both sides and replaced with a "This
-        message was deleted" placeholder, mirroring WhatsApp's own
-        behaviour and pushed live so the other party doesn't have to wait
-        for their next poll to see it disappear.
-    """
+    """Delete a message. Default hides it for you only. for_everyone (sender only) replaces it
+    with "This message was deleted" for both sides, live."""
     for_everyone = bool(data.get("for_everyone"))
 
     try:
@@ -2803,10 +2603,8 @@ async def remove_from_room(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """The Room owner shows someone who's inside the door. Only the owner (the
-    connection's sender) can do this. Every thread between the two of them
-    in this Room closes, messages are kept, and the visitor has to Knock (and
-    be let in, and pay) again to come back. No refund: they were let in."""
+    """The Room owner removes a visitor. Their threads close (messages kept); they must knock
+    and pay again to return. No refund."""
     try:
         conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
     except Exception:
@@ -2829,9 +2627,7 @@ async def list_room_guests(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Everyone who's unlocked this host — the roster behind the 3-dot menu's
-    guest list. Only the host or one of their own unlockers can see it (same
-    exposure as a live group call already gives guests of each other)."""
+    """Everyone connected with this host. Visible to the host and their connections."""
     is_host = current_user_id == host_user_id
     if not is_host and not await db["drop_connections"].find_one(
         {"sender_id": host_user_id, "unlocker_id": current_user_id}
@@ -2920,14 +2716,7 @@ async def publish_drop(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """
-    Final consent for a drop to leave Anonixx and appear on the
-    Anonixx Publisher social pages. The client only calls this after
-    two explicit confirmations (DropsPublishScreen steps 1 + 2).
-
-    Publishing is gated purely by the poster's own consent — there are no
-    content tiers restricting it.
-    """
+    """Publish a drop to Anonixx's social pages (after the poster confirms twice)."""
     if not data.confirmed:
         raise HTTPException(status_code=400, detail="Explicit confirmation required")
 
@@ -2999,14 +2788,8 @@ async def report_drop(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """
-    Flag a drop for review. One report per user per drop; 3 unique reports
-    flip the drop to `moderation_status: flagged` so it's hidden from the
-    marketplace while ops reviews it.
-
-    Self-harm-concern reports bypass the threshold — we hide immediately
-    and surface support resources to the reporter.
-    """
+    """Report a drop. One report per user; 3 reports flag it. Self-harm reports hide it at once
+    and show the reporter support resources."""
     reason = (data.reason or "").strip().lower()
     if reason not in VALID_REPORT_REASONS:
         raise HTTPException(

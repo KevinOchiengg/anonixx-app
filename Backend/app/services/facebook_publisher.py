@@ -1,23 +1,5 @@
-"""
-app/services/facebook_publisher.py
-
-Facebook Page Publishing via the Meta Graph API v21.0.
-
-Supported drop formats
-  text   → POST /{page_id}/feed         (message only)
-  image  → POST /{page_id}/photos       (url + caption)
-  video  → POST /{page_id}/videos       (file_url + description)
-
-Credentials
-  FACEBOOK_PAGE_ID           — numeric ID of the Anonixx Facebook Page
-  FACEBOOK_PAGE_ACCESS_TOKEN — long-lived Page Access Token
-    How to get it:
-      1. Create a Meta app at https://developers.facebook.com
-      2. Add the "Pages" product
-      3. Grant permissions: pages_manage_posts  pages_read_engagement
-      4. Generate a Page Access Token via Graph API Explorer
-      5. Exchange for a long-lived token (never expires if refreshed within 60 days)
-"""
+"""Posts drops to the Anonixx Facebook Page (Graph API v21.0): text, image or video.
+Needs FACEBOOK_PAGE_ID and a long-lived FACEBOOK_PAGE_ACCESS_TOKEN."""
 
 import logging
 from typing import Optional
@@ -33,15 +15,7 @@ GRAPH_API_BASE = "https://graph.facebook.com/v21.0"
 
 
 class FacebookPublisher:
-    """
-    Async wrapper around Meta Graph API page publishing endpoints.
-
-    Usage:
-        from app.services.facebook_publisher import facebook_publisher
-
-        result = await facebook_publisher.post_text("I have a secret…")
-        # → {"post_id": "123456789_987654321"}
-    """
+    """Facebook Page publishing client."""
 
     def __init__(self):
         self._timeout = httpx.Timeout(60.0)  # video uploads can be slow
@@ -90,14 +64,7 @@ class FacebookPublisher:
         drop_link:  Optional[str] = None,
         drop_id:    Optional[str] = None,
     ) -> dict:
-        """
-        Post an image drop to the Facebook Page.
-        Facebook fetches the image from the Cloudinary URL.
-
-        When `drop_link` is given, this is a blurred teaser card (not the
-        drop's real photo) — the caption stays teaser-safe (no confession
-        text) and points at the real drop instead of the generic site.
-        """
+        """Post an image. With `drop_link` it's a teaser card: no confession text, links to the drop."""
         self._require_configured()
 
         caption = (
@@ -124,10 +91,7 @@ class FacebookPublisher:
         video_url:  str,
         confession: str = "",
     ) -> dict:
-        """
-        Post a video drop to the Facebook Page.
-        Facebook fetches the video from the Cloudinary URL.
-        """
+        """Post a video (Facebook fetches it from the URL)."""
         self._require_configured()
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:

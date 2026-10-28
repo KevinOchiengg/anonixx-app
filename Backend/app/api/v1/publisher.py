@@ -1,22 +1,4 @@
-"""
-app/api/v1/publisher.py
-
-Publisher admin endpoints — manage the social publishing queue.
-
-Queue-management routes are admin-only (require_admin). /health is a plain
-authenticated read so any logged-in client can check which platforms are
-configured.
-
-Routes
-  GET  /publisher/queue              [admin] list queue with optional status filter
-  GET  /publisher/queue/{id}         [admin] single item detail
-  POST /publisher/queue/{id}/retry   [admin] reset a failed entry back to "queued"
-  POST /publisher/queue/{id}/reject  [admin] permanently reject an entry
-  GET  /publisher/stats              [admin] aggregate counts by status
-  POST /publisher/trigger            [admin] manually fire one worker batch
-  GET  /publisher/tiktok/status/{publish_id}  [admin] poll TikTok for a post's live status
-  GET  /publisher/health             [auth]  which platforms are configured
-"""
+"""Social publishing queue: list, stats and manual trigger (admin), plus which platforms are set up."""
 
 from datetime import datetime, timezone
 from typing import Optional
@@ -112,21 +94,14 @@ async def publisher_stats(
 async def trigger_worker_batch(
     _  = Depends(require_scope("content")),
 ):
-    """
-    Manually fire one worker batch cycle.
-    Useful for testing or when you need to flush the queue immediately
-    without waiting for the next poll interval.
-    """
+    """Run one publishing batch now."""
     await publisher_worker.process_batch()
     return {"message": "Worker batch triggered. Check /publisher/queue for results."}
 
 
 @router.get("/health")
 async def publisher_health(_= Depends(get_current_user_id)):
-    """
-    Show which social platforms are currently configured and ready.
-    Useful to verify credentials are set before going live.
-    """
+    """Which social platforms have credentials set."""
     return {
         "tiktok":    tiktok_publisher.is_configured(),
         "facebook":  facebook_publisher.is_configured(),

@@ -205,14 +205,8 @@ APP_STORE_URL  = "https://apps.apple.com/app/anonixx"
 
 @app.get("/drop/{drop_id}", response_class=HTMLResponse)
 async def drop_landing(drop_id: str):
-    """
-    Public https landing page for a single drop — the link embedded in
-    social captions (Facebook, etc). Opens the app via the anonixx:// deep
-    link if installed, otherwise falls back to the store listing. Carries
-    only a teased snippet + the teaser card image for the link preview,
-    never the full confession — matches the same privacy stance as the
-    social teaser cards themselves.
-    """
+    """Public landing page for one drop (shared on socials): opens the app if installed, else
+    the store. Shows only a teaser, never the full confession."""
     import html as _html
     from app.database import get_database
     from app.services.card_generator import _tease

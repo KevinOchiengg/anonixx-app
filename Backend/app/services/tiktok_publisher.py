@@ -1,20 +1,5 @@
-"""
-app/services/tiktok_publisher.py
-
-TikTok Content Posting API v2 client for the Anonixx brand account.
-
-Supported drop formats
-  text   → TikTok text post   POST /v2/post/publish/content/init/  (media_type=TEXT)
-  image  → TikTok photo post  POST /v2/post/publish/content/init/  (media_type=PHOTO, PULL_FROM_URL)
-  video  → TikTok video post  POST /v2/post/publish/video/init/    (PULL_FROM_URL)
-
-Token
-  Long-lived OAuth 2.0 access token for the Anonixx TikTok business account.
-  Obtain via: https://developers.tiktok.com/doc/login-kit-web
-  Required scopes: video.publish  video.upload
-
-TikTok pulls media directly from the Cloudinary URL — no local re-upload needed.
-"""
+"""Posts drops to the Anonixx TikTok account (Content Posting API v2): text, photo or video,
+pulled from the media URL. Needs an access token with video.publish and video.upload."""
 
 import logging
 
@@ -32,15 +17,7 @@ PRIVACY_LEVEL   = "PUBLIC_TO_EVERYONE"
 
 # ── Client ───────────────────────────────────────────────────────
 class TikTokPublisher:
-    """
-    Thin async wrapper around TikTok's Content / Video Posting APIs.
-
-    Usage:
-        from app.services.tiktok_publisher import tiktok_publisher
-
-        result = await tiktok_publisher.post_text("I have a secret…")
-        # → {"publish_id": "v_pub_url~...", "status": "PROCESSING_UPLOAD"}
-    """
+    """TikTok publishing client."""
 
     def __init__(self):
         self._timeout = httpx.Timeout(30.0)
@@ -97,11 +74,7 @@ class TikTokPublisher:
         video_url:  str,
         confession: str = "",
     ) -> dict:
-        """
-        Post a video drop.
-        TikTok pulls the video directly from the Cloudinary URL
-        (PULL_FROM_URL) — no local download or re-upload required.
-        """
+        """Post a video (pulled from its URL)."""
         self._require_configured()
 
         payload = {
@@ -133,10 +106,7 @@ class TikTokPublisher:
         image_url:  str,
         confession: str = "",
     ) -> dict:
-        """
-        Post an image drop as a TikTok photo post.
-        TikTok pulls the image from the Cloudinary URL.
-        """
+        """Post an image as a photo post."""
         self._require_configured()
 
         payload = {
@@ -169,12 +139,7 @@ class TikTokPublisher:
 
     # ── Status Check ──────────────────────────────────────────────
     async def get_post_status(self, publish_id: str) -> dict:
-        """
-        Poll TikTok for the final publish status of a submitted post.
-
-        Returns one of:
-            PROCESSING_UPLOAD | SEND_TO_USER_INBOX | FAILED | PUBLISHED
-        """
+        """Publish status of a post: PROCESSING_UPLOAD | SEND_TO_USER_INBOX | FAILED | PUBLISHED."""
         self._require_configured()
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:

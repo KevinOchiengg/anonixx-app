@@ -1,20 +1,7 @@
-"""
-app/services/confession_writer.py
-
-Turns a guided hookup confession's answers into a short first-person confession.
-
-The writing is done by Claude (Anthropic API). There is deliberately no template
-fallback: if the API key is missing or a call fails, the caller gets a
-WriterUnavailable / WriterFailed and tells the user, who can write it themselves.
-
-Variety comes from three places, none of them fixed text:
-  1. an opening approach picked at random per call (_OPENINGS),
-  2. the openings of recent AI confessions on the platform, passed as "don't start like these",
-  3. the user's own earlier drafts in this session, passed as "write something different".
-
-Every result is checked with the same contact/moderation filters as a typed post,
-plus a money filter: posters never ask for payment (see linkup pricing notes in drops.py).
-"""
+"""Writes a short first-person confession from guided answers, using Claude. No template
+fallback: if the API is unavailable the user is told and can write it themselves. Results
+are varied (random opening, avoid recent openings) and pass the same filters as typed posts,
+plus a no-payment-requests filter."""
 
 import json
 import random

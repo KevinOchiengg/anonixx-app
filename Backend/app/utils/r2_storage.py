@@ -1,28 +1,5 @@
-"""
-r2_storage.py — Cloudflare R2 (S3-compatible object storage) helpers.
-
-Replaces Cloudinary as the media backend. Cloudinary is a media-processing
-service that actively scans uploads for policy violations — it disabled
-uploads for this account entirely after a single explicit test clip
-("action is disabled for <cloud_name>"), which isn't viable for an app
-whose whole premise is anonymous, unfiltered confessions between adults.
-R2 is dumb object storage: no scanning, no transformations, no opinions
-about content — just a bucket and a CDN in front of it.
-
-Two upload shapes, same as the Cloudinary setup before it:
-  - Direct-from-client: `presign_put()` hands the client a short-lived
-    signed PUT URL; the file goes straight from the device to R2, never
-    through our server. Used for anything a user attaches directly
-    (drop media, chat attachments, unlock clues).
-  - Server-side proxy: `upload_bytes()` for the handful of endpoints that
-    receive the file as a multipart upload and forward it themselves
-    (comment images, chat profile photos, voice notes recorded in-app).
-
-No watermarking and no server-reported audio/video duration — both were
-Cloudinary transformations with no R2 equivalent (R2 doesn't process
-anything). Duration, where it matters, comes from the client's own
-already-tracked recording/playback state instead.
-"""
+"""Cloudflare R2 storage. Clients upload directly with presign_put(); a few endpoints upload
+server-side with upload_bytes(). R2 does no processing (no watermark, no duration)."""
 import uuid
 import logging
 from typing import Optional
@@ -43,10 +20,7 @@ _FOLDER_BY_RESOURCE_TYPE = {
     "raw":   "files",
 }
 
-# Content-type → extension. Deliberately a fixed small map (not
-# mimetypes.guess_extension) — that stdlib function is unreliable for the
-# handful of container types voice/video recording actually produces
-# (e.g. it doesn't recognize "audio/m4a" at all).
+# Content type to file extension (fixed map; mimetypes misses types like audio/m4a).
 _EXT_BY_CONTENT_TYPE = {
     "image/jpeg":      "jpg",
     "image/jpg":       "jpg",
@@ -122,9 +96,7 @@ def presign_put(key: str, content_type: str, expires_in: int = 300) -> str:
 
 
 def upload_bytes(data: bytes, resource_type: str, content_type: str) -> str:
-    """Server-side proxy upload — for endpoints that receive the file
-    themselves (multipart form) rather than handing out a presigned URL.
-    Returns the public URL."""
+    """Upload bytes from the server under a random key. Returns the public URL."""
     key = build_key(resource_type, content_type)
     _client().put_object(
         Bucket=settings.R2_BUCKET_NAME,
@@ -136,10 +108,7 @@ def upload_bytes(data: bytes, resource_type: str, content_type: str) -> str:
 
 
 def upload_bytes_at(key: str, data: bytes, content_type: str) -> str:
-    """Server-side proxy upload to an explicit, caller-chosen key — for the
-    rare case that should overwrite a stable slot on repeat uploads (e.g. a
-    drop's teaser card) rather than get a fresh random key each time like
-    `upload_bytes` does."""
+    """Upload bytes to a fixed key, overwriting what's there (e.g. a teaser card)."""
     _client().put_object(
         Bucket=settings.R2_BUCKET_NAME,
         Key=key,
@@ -150,9 +119,7 @@ def upload_bytes_at(key: str, data: bytes, content_type: str) -> str:
 
 
 def delete_by_url(url: Optional[str]):
-    """Best-effort cleanup — takes a public URL (as stored on a document)
-    and removes the underlying object. Silent no-op on any failure; this
-    is always a secondary cleanup step, never the primary operation."""
+    """Delete the object behind a public URL. Never raises."""
     if not url or not settings.R2_PUBLIC_URL:
         return
     prefix = settings.R2_PUBLIC_URL.rstrip("/") + "/"

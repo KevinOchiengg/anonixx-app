@@ -1,30 +1,6 @@
-"""
-app/services/instagram_publisher.py
-
-Instagram Publishing via the Instagram Graph API (Meta Graph API v21.0).
-
-Requirements
-  - Instagram Business or Creator account linked to the Anonixx Facebook Page
-  - The same Page Access Token used for Facebook works here
-
-Supported drop formats
-  image  → single photo post
-  video  → Reel (REELS media type — highest reach on IG)
-  text   → NOT SUPPORTED by Instagram (raises PlatformSkipped)
-           Instagram has no text-only post endpoint; all posts require media.
-
-Two-step flow (same for image and video)
-  1. Create a media container → returns creation_id
-  2. For video: poll container status until FINISHED (max ~60 s)
-  3. Publish the container  → returns ig_post_id
-
-Credentials
-  INSTAGRAM_ACCOUNT_ID       — numeric IG Business/Creator account ID
-    How to find it:
-      GET /{facebook_page_id}?fields=instagram_business_account&access_token=...
-      → { "instagram_business_account": { "id": "12345678" } }
-  FACEBOOK_PAGE_ACCESS_TOKEN — same long-lived token used for Facebook
-"""
+"""Posts drops to the Anonixx Instagram account (Graph API v21.0): images, and videos as Reels.
+Text-only isn't possible (raises PlatformSkipped). Create a container, wait for video
+processing, then publish. Needs INSTAGRAM_ACCOUNT_ID and the Facebook Page token."""
 
 import asyncio
 import logging
@@ -46,18 +22,7 @@ class PlatformSkipped(Exception):
 
 
 class InstagramPublisher:
-    """
-    Async wrapper around the Instagram Graph API publishing flow.
-
-    Usage:
-        from app.services.instagram_publisher import instagram_publisher
-
-        result = await instagram_publisher.post_image(image_url, "secret")
-        # → {"post_id": "17841400...", "status": "posted"}
-
-        # Text drops are not supported — catch PlatformSkipped
-        from app.services.instagram_publisher import PlatformSkipped
-    """
+    """Instagram publishing client."""
 
     def __init__(self):
         self._timeout = httpx.Timeout(60.0)
@@ -86,10 +51,7 @@ class InstagramPublisher:
 
     # ── Text Post — not supported ─────────────────────────────────
     async def post_text(self, confession: str) -> dict:
-        """
-        Instagram does not support text-only posts.
-        Raises PlatformSkipped so the worker records 'skipped' rather than 'failed'.
-        """
+        """Text-only posts aren't supported: raises PlatformSkipped (recorded as skipped)."""
         raise PlatformSkipped(
             "Instagram does not support text-only posts. "
             "Drop was posted to other configured platforms."
@@ -113,10 +75,7 @@ class InstagramPublisher:
         video_url:  str,
         confession: str = "",
     ) -> dict:
-        """
-        Post a video drop as an Instagram Reel.
-        Polls until the container is FINISHED before publishing.
-        """
+        """Post a video as a Reel, once processing finishes."""
         self._require_configured()
 
         creation_id = await self._create_video_container(video_url, confession)
@@ -176,10 +135,7 @@ class InstagramPublisher:
 
     # ── Step 2: poll until video container is ready ───────────────
     async def _wait_for_video_ready(self, creation_id: str):
-        """
-        Poll the container status until FINISHED or ERROR.
-        Raises RuntimeError if it never finishes within the timeout window.
-        """
+        """Wait for a media container to finish. RuntimeError on timeout."""
         for attempt in range(VIDEO_STATUS_MAX_POLLS):
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 res = await client.get(

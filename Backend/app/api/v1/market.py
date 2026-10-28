@@ -1,30 +1,5 @@
-"""
-market.py — Anonixx Mini Market
-
-Staff-curated paid content marketplace.
-
-Concept:
-  Admins / staff post exclusive content (videos, stories, intel, etc.).
-  Each item has a free teaser shown in the feed and on social media.
-  Users pay coins to unlock the full content — once unlocked, it's theirs forever.
-
-Collections:
-  market_items     — content listings (admin-controlled)
-  market_unlocks   — per-user unlock records (idempotent)
-
-Deep link:
-  anonixx://market/:item_id  → MarketItemScreen
-
-Endpoints:
-  GET    /market/items                 list published items (teasers only)
-  GET    /market/items/{id}            single item — full if unlocked, teaser otherwise
-  POST   /market/items                 admin: create item
-  PUT    /market/items/{id}            admin: edit item
-  DELETE /market/items/{id}            admin: archive item (soft-delete)
-  POST   /market/items/{id}/unlock     debit coins, grant access
-  GET    /market/items/{id}/unlock-status   has the current user unlocked this?
-  GET    /market/my-unlocks            current user's unlock history
-"""
+"""Mini Market: admin-posted paid content. Each item has a free teaser; members unlock the
+full content with coins, once, forever."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -84,10 +59,7 @@ async def _user_has_unlocked(db, user_id: Optional[str], item_id: str) -> bool:
 
 
 def _serialize(item: dict, *, full: bool) -> dict:
-    """
-    Always returns title, teaser, media_url, price.
-    Full content + video_url are only returned when `full=True` (i.e. unlocked).
-    """
+    """Item for clients. Full content and video only when `full` (unlocked)."""
     out = {
         "id":          str(item["_id"]),
         "title":       item["title"],
@@ -159,10 +131,7 @@ async def get_market_item(
     current_user_id: Optional[str] = Depends(get_optional_user_id),
     db                              = Depends(get_database),
 ):
-    """
-    Returns the item. Full content is included only if the caller has already unlocked it.
-    Increments view count once per call.
-    """
+    """One item, full if the caller unlocked it. Counts a view."""
     try:
         oid = ObjectId(item_id)
     except Exception:
@@ -186,10 +155,7 @@ async def unlock_market_item(
     current_user_id: str = Depends(get_current_user_id),
     db                  = Depends(get_database),
 ):
-    """
-    Charge the user `price_coins` and record the unlock. Idempotent —
-    if already unlocked, returns the full item without re-charging.
-    """
+    """Unlock an item for coins. Already unlocked = no charge."""
     try:
         oid = ObjectId(item_id)
     except Exception:

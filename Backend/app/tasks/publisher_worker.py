@@ -1,41 +1,6 @@
-"""
-app/tasks/publisher_worker.py
-
-Async background worker — processes `publisher_queue` and dispatches
-approved drops to every configured social platform simultaneously:
-  • TikTok    (app/services/tiktok_publisher.py)
-  • Facebook  (app/services/facebook_publisher.py)
-  • Instagram (app/services/instagram_publisher.py)
-  • Telegram  (app/services/telegram_publisher.py)
-
-Lifecycle
-  Started during FastAPI app startup (lifespan) as an asyncio background task.
-  Polls every POLL_INTERVAL_SECONDS. Shuts down cleanly on app teardown.
-
-Per-platform dispatch rules
-  If a blurred teaser card exists (app/services/card_generator.py), Facebook/
-  Instagram/Telegram always post that image instead of the raw content —
-  it also solves Instagram's "no text-only posts" limitation. TikTok always
-  posts the native asset since its content model needs real video/photo.
-  text   → TikTok ✓  Facebook ✓ (teaser)  Instagram ✓ (teaser)  Telegram ✓ (teaser)
-  image  → TikTok ✓  Facebook ✓  Instagram ✓  Telegram ✓
-  video  → TikTok ✓  Facebook ✓  Instagram ✓ (posted as Reel)  Telegram ✓
-
-Overall queue status after processing
-  "posted"   — at least one platform succeeded, none failed
-  "partial"  — at least one platform succeeded, at least one failed
-  "failed"   — ALL platforms failed              → retried with backoff
-  "failed_permanent" — all platforms failed after MAX_RETRIES attempts
-
-Per-platform results are stored under `platforms` key in the queue document:
-  {
-    "tiktok":    { "status": "posted",   "publish_id": "v_pub~..." },
-    "facebook":  { "status": "posted",   "post_id": "123_456" },
-    "instagram": { "status": "skipped",  "reason": "text-only..." }
-    -- or on failure --
-    "tiktok":    { "status": "failed",   "error": "..." },
-  }
-"""
+"""Publishes queued drops to TikTok, Facebook, Instagram and Telegram at the same time.
+Facebook, Instagram and Telegram post the teaser card when there is one; TikTok posts the
+real media. Queue status: posted | partial | failed (retried) | failed_permanent."""
 
 import asyncio
 import logging
@@ -63,14 +28,6 @@ def _now() -> datetime:
 
 # ── Worker class ─────────────────────────────────────────────────
 class PublisherWorker:
-    """
-    Manages the publisher background task.
-
-        worker = PublisherWorker()
-        await worker.start()   # called in app lifespan startup
-        ...
-        await worker.stop()    # called in app lifespan shutdown
-    """
 
     def __init__(self):
         self._task:    asyncio.Task | None = None
@@ -105,10 +62,7 @@ class PublisherWorker:
 
     # ── Batch (also exposed to /publisher/trigger) ────────────────
     async def process_batch(self):
-        """
-        Fetch up to BATCH_SIZE eligible queue entries and dispatch each
-        as an independent asyncio task.
-        """
+        """Dispatch up to BATCH_SIZE queued drops, each as its own task."""
         db  = await get_database()
         now = _now()
 
@@ -213,21 +167,11 @@ class PublisherWorker:
         self,
         entry: dict,
     ) -> tuple[dict, dict]:
-        """
-        Try all configured platforms concurrently.
-
-        Returns
-            platform_results  dict  — platforms that succeeded or were skipped
-            platform_errors   dict  — platforms that raised an error
-        """
+        """Post to every configured platform at once. Returns (results, errors) per platform."""
         media_type   = (entry.get("media_type") or "text").lower()
         confession   = entry.get("confession") or ""
         media_url    = entry.get("media_url")
-        # Blurred teaser card (app/services/card_generator.py) — when present,
-        # Facebook/Instagram/Telegram post this branded image instead of the
-        # raw content, regardless of the drop's original media_type. TikTok
-        # keeps posting the native video/photo asset — its content model
-        # doesn't fit a static teaser image.
+        # Facebook/Instagram/Telegram post the teaser card when there is one.
         teaser_url   = entry.get("teaser_image_url")
 
         # Build coroutines for each configured platform.

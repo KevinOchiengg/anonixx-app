@@ -1,12 +1,5 @@
-"""
-Guided hookup confessions: the AI writer behind the step-by-step composer.
-
-POST /guided/generate  answers + tone -> a confession draft the poster can edit
-GET  /guided/status    whether the writer is on, and how many drafts are left today
-
-Posting still goes through POST /drops (kind="hookup"), which re-runs every
-check, so nothing generated here reaches the feed without the normal gates.
-"""
+"""AI writer for guided hookup posts: answers + tone -> an editable draft. Posting still goes
+through POST /drops and all its checks."""
 
 from datetime import timedelta
 from typing import List, Optional

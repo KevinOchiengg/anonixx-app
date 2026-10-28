@@ -1,18 +1,5 @@
-"""
-IP -> country for payment pricing (app/api/v1/geo_pricing.py: M-Pesa or card,
-and which price tier).
-
-Looked up in a local copy of DB-IP's free "IP to Country Lite" database
-(CC BY 4.0 — credited on the privacy page), downloaded once at startup and
-kept for the month. No external call per request, no rate limit, and fine
-for commercial use — unlike ip-api.com's free tier this replaced (45 lookups
-a minute shared by every user behind this server, non-commercial only, and
-every miss used to price the user as American and hide M-Pesa).
-
-Until the database is ready (first seconds after a cold start) or if the
-download fails, it falls back to ip-api.com, then to the country the client
-reports (X-Country: the browser's Vercel geolocation / the phone's region).
-"""
+"""IP to country for pricing, from a local DB-IP Lite database (CC BY 4.0) refreshed monthly.
+Until it's loaded, falls back to ip-api.com, then the client's X-Country."""
 import asyncio
 import gzip
 import logging
@@ -130,9 +117,7 @@ async def country_of(ip: str) -> Optional[str]:
 
 
 async def request_country(request, use_hint: bool = False, local_default: str = "KE") -> Optional[str]:
-    """Country for a request from its IP. With use_hint, a lookup miss falls back to
-    the client's own X-Country — only for choices it can't abuse (showing M-Pesa),
-    never for what someone is charged."""
+    """Country for a request. use_hint allows the client's X-Country only for display choices, never prices."""
     ip = client_ip(request)
     if ip in LOCAL_IPS:
         return local_default   # local development

@@ -1,17 +1,6 @@
-"""
-api/v1/ads.py — Main-feed ads.
-
-Two kinds, one collection (feed_ads):
-  house      — admin/AI-bot only, free, auto-approved. Anonixx's own promos.
-  sponsored  — any member can buy a slot, priced by how long it runs
-               (same per-hour coin rate as Circles ads). Goes to
-               "pending_review" first — unlike a circle's own audience,
-               the main feed reaches everyone, so a human approves it
-               before it's shown. Rejected requests are refunded.
-
-Expiry is enforced the same way as Circles ads: a read-time filter plus
-opportunistic delete, no scheduler required.
-"""
+"""Main-feed ads. "house" ads are Anonixx promos (admin, free); "sponsored" ads are bought
+by members per hour, reviewed before showing, and refunded if rejected. Expired ads are
+filtered out on read."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
@@ -39,10 +28,7 @@ class AdCreate(BaseModel):
     title:          str
     media_url:      Optional[str] = None
     media_type:     str = "image"          # "image" | "video" | "gif" | "audio"
-    # Point the ad at one of your own Drops instead of a raw URL — the tap
-    # takes a viewer straight into the existing unlock flow for that Drop,
-    # which is what actually gets them into your chat interface. link_url
-    # stays available as a fallback (admin/house ads only need it).
+    # An ad can point at one of your own drops (opens its Link Up) or, for house ads, a URL.
     drop_id:        Optional[str] = None
     link_url:       Optional[str] = None
     duration_hours: int
@@ -67,9 +53,7 @@ async def list_my_drops_for_ad(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Feeds the Drop picker in CreateAdScreen — only *your own*, still-active
-    Drops are valid ad targets, so a viewer who taps the ad lands somewhere
-    that's actually still unlockable."""
+    """Your own active drops, the only valid ad targets."""
     cursor = db["drops"].find(
         {"sender_id": current_user_id, "is_active": True, "expires_at": {"$gt": now_utc()}},
         {"confession": 1, "media_type": 1, "created_at": 1},

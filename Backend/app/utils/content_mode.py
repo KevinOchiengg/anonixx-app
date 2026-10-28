@@ -1,14 +1,6 @@
-"""
-Two content modes.
-
-  safe — Play/App Store build, guests, crawlers. `mature` posts are absent.
-  full — web, logged-in and age-verified only. `mature` posts are included
-         (clients blur them until tapped).
-
-The mode comes from the X-Content-Mode header, but the server only honours
-"full" for an age-verified signed-in user, so a guest or a forged header
-can never unlock mature content.
-"""
+"""Content modes. safe: app store builds, guests, crawlers (no mature posts). full: web,
+signed-in and age-verified only (mature posts, blurred until tapped). "full" from the
+X-Content-Mode header is only honoured for age-verified users."""
 import re
 from typing import Optional
 

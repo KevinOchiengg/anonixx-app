@@ -1,19 +1,5 @@
-"""
-Watches Anonixx for the founder: alerts when something breaks or spikes, a
-morning summary, and AI risk scores for newly flagged posts.
-
-Every CHECK_EVERY seconds while the server is up:
-  - alerts (rows in `admin_alerts`, pushed and emailed to super admins), each
-    type at most once per COOLDOWN:
-      no_signups        no new accounts in 24h after a week that had some
-      payments_failing  purchases failing or stuck pending
-      publisher_failing social auto-posts failing
-      scheduled_failed  a scheduled drop failed to publish
-      reports_spike     many posts flagged within an hour
-      traffic_spike     visits well above normal (good news, but worth knowing)
-  - the daily digest at ADMIN_DIGEST_HOUR_UTC, once per day
-  - risk scores for flagged drops that don't have one yet (services/risk_screen)
-"""
+"""Background monitor: alerts super admins about failures and spikes (each type at most once
+per COOLDOWN), sends a daily digest, and scores newly flagged posts for risk."""
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone

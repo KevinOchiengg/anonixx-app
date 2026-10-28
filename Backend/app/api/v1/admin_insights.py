@@ -1,20 +1,4 @@
-"""
-Admin insights: the numbers and tools that tell the founder whether Anonixx is
-working, beyond the overview.
-
-  Growth      /admin/insights/channels       signups, posters, actives, payers and revenue by signup channel
-              /admin/insights/retention      weekly cohorts: back on day 1, week 2, month 2
-              /admin/insights/drop-conversions  drops that turned visitors into signups (super admin)
-              /admin/insights/best-times     when visitors are on the site, as a weekday x hour grid
-  Money       /admin/insights/money          payers, conversion, ARPPU, coins issued vs spent, refunds
-  System      /admin/health                  workers, queues, payments, config switches
-              /admin/alerts                  problems the monitor found (app/tasks/admin_monitor.py)
-  People      /admin/users/{id}/full         one user, everything: posts, reports, money, devices, notes
-              /admin/users/{id}/taste        what they love to see: moods, kinds, top drops (super admin)
-              /admin/users/{id}/role|notes   admin role (super admin) and private notes
-              /admin/audit                   who did what (super admin)
-  Testing     /admin/experiments             A/B tests; /experiments/active is the public side
-"""
+"""Admin insights: growth, money, system health, per-user views, audit log and A/B tests."""
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone

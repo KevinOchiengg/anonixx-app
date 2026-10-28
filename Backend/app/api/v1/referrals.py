@@ -1,12 +1,4 @@
-"""
-api/v1/referrals.py — Referral code generation and conversion.
-
-Flow:
-  1. GET  /referrals/my-code   — get (or generate) your unique referral code
-  2. POST /referrals/apply     — new user applies a code during onboarding
-  3. POST /referrals/complete  — called after onboarding finishes → credits both parties
-  4. GET  /referrals/stats     — see your referral history
-"""
+"""Referrals: get your code, apply a code at signup, credit both sides when onboarding ends."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -87,10 +79,7 @@ async def apply_referral_code(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    """
-    Called during onboarding when a new user enters a referral code.
-    Records the referral but does NOT credit yet — credit happens at /complete.
-    """
+    """Record a referral code at signup. Coins are credited later, at /complete."""
     code = body.code.strip().upper()
 
     # Can't refer yourself
@@ -127,11 +116,7 @@ async def complete_referral(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    """
-    Called once when a referred user completes onboarding (interest selection).
-    Credits both the referrer (30 coins) and the referred user (10 bonus coins).
-    Idempotent — safe to call multiple times.
-    """
+    """Credit the referrer (30) and the new user (10) after onboarding. Safe to repeat."""
     user = await db.users.find_one(
         {"_id": ObjectId(current_user_id)},
         {"referred_by_user_id": 1, "referral_completed": 1},

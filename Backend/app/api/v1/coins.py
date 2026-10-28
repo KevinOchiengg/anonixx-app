@@ -1,12 +1,4 @@
-"""
-api/v1/coins.py — Coin balance, transactions, and M-Pesa top-up.
-
-Packages (KES → coins):
-  Starter  50  →  55   (5 short of Connect Unlock — nudges to Popular)
-  Popular  100 → 120
-  Value    250 → 350
-  Power    500 → 800
-"""
+"""Coin balance, transactions, purchases and withdrawals."""
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -74,9 +66,7 @@ class WithdrawRequest(BaseModel):
 
 MIN_WITHDRAWAL_COINS = 100
 
-# Cash out pays to M-Pesa by hand, so it's Kenya only. The client's X-Country
-# hint is used only when the IP can't be placed; the payout number must be
-# Kenyan either way.
+# Cash out is paid to M-Pesa by hand, so Kenya only.
 CASH_OUT_COUNTRIES = {"KE"}
 
 
@@ -93,14 +83,8 @@ def kenyan_mpesa_number(raw: str) -> Optional[str]:
         d = "254" + d
     return d if d.startswith("254") and len(d) == 12 else None
 
-# Coins-to-cash payout rate, shown to users as an estimate before they
-# withdraw. Derived from the "Popular" package's KES rate (100 KES / 120
-# coins ≈ 0.833 KES/coin) discounted by the same 80% payout share Circles
-# already uses for creator payouts (CREATOR_CUT in circles.py) — i.e. users
-# get roughly what a creator keeps elsewhere in the app, not the raw
-# purchase-side rate. This is a placeholder pending an explicit finance/ops
-# sign-off on the real payout economics; nothing here is charged or paid
-# automatically — every /withdraw request still goes through manual review.
+# Estimated KES per coin for withdrawals (Popular package rate x 80%). Every withdrawal is
+# still reviewed by hand.
 PAYOUT_RATE_KES_PER_COIN = 0.65
 
 
@@ -122,9 +106,7 @@ async def get_coin_balance(
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     balance = user.get("coin_balance", 0)
-    # Spendable vs cashable are different numbers — estimated_kes quotes the
-    # earned subset only, so the withdraw screen never dangles a figure the
-    # user can't actually take out.
+    # Only earned coins can be cashed out, so estimated_kes covers those alone.
     earned = user.get("withdrawable_coins", 0)
     return {
         "balance": balance,
@@ -163,10 +145,7 @@ async def spend_coins(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    """
-    Deduct coins for a specific action (connect unlock, drop reveal, circle entry, etc.).
-    Returns the new balance.  Raises 402 if balance is insufficient.
-    """
+    """Spend coins on an action. Returns the new balance; 402 if not enough."""
     amount = SPEND_COSTS.get(data.reason)
     if amount is None:
         raise HTTPException(status_code=400, detail="Unknown spend reason.")
@@ -194,14 +173,7 @@ async def request_withdrawal(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    """
-    Queue a cash withdrawal for coins earned via drop-unlock revenue share.
-    Coins are debited immediately, the request lands in `withdrawal_requests`
-    as "pending", and an admin pays it out manually (no automated M-Pesa B2C
-    integration exists yet). If a request is later rejected, the coins
-    should be credited back via `credit_coins(reason="withdrawal_request")`
-    — that reversal path is an admin-tool follow-up, not built here.
-    """
+    """Request a cash withdrawal of earned coins. Coins are taken now; an admin pays out by hand."""
     if data.amount_coins < MIN_WITHDRAWAL_COINS:
         raise HTTPException(status_code=400, detail=f"Minimum withdrawal is {MIN_WITHDRAWAL_COINS} coins.")
     if not await cash_out_available(request):
@@ -210,9 +182,7 @@ async def request_withdrawal(
     if not mpesa_number:
         raise HTTPException(status_code=400, detail="Enter a Kenyan M-Pesa number.")
 
-    # Only EARNED coins are cashable. Without this, the signup bonus would be
-    # free money for anyone willing to register throwaway accounts, and
-    # purchased coins would be a card-fraud laundering path.
+    # Only earned coins: bonus and bought coins can't be cashed out (abuse and fraud).
     user = await db.users.find_one(
         {"_id": ObjectId(current_user_id)}, {"withdrawable_coins": 1}
     )
@@ -397,15 +367,8 @@ async def buy_coins_stripe_create_intent(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    """
-    Creates a Stripe PaymentIntent for a coin package purchase.
-    Price is determined server-side from the user's IP (PPP tiers) —
-    the client cannot manipulate the amount.
-
-    Returns { client_secret, payment_intent_id, amount, currency, coins }
-    The frontend passes client_secret to Stripe's PaymentSheet.
-    Coins are credited via the /buy/stripe/webhook once payment succeeds.
-    """
+    """Create a Stripe PaymentIntent for a coin package. Price is set server-side by country;
+    coins are credited by the webhook once payment succeeds."""
     from app.api.v1.geo_pricing import (
         pricing_country, tier_for, STRIPE_PRICES, _PACKAGES_BASE,
     )
@@ -476,12 +439,7 @@ async def buy_coins_stripe_webhook(
     stripe_signature: Optional[str] = Header(None, alias="stripe-signature"),
     db                = Depends(get_database),
 ):
-    """
-    Stripe posts here when a payment_intent.succeeded / failed event fires.
-    Register this URL in your Stripe dashboard:
-        https://anonixx-app.onrender.com/api/v1/coins/buy/stripe/webhook
-    Events to enable: payment_intent.succeeded  payment_intent.payment_failed
-    """
+    """Stripe webhook: payment_intent.succeeded / payment_failed."""
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe not configured.")
 
@@ -551,14 +509,7 @@ async def verify_iap_purchase(
     current_user_id: str = Depends(get_current_user_id),
     db                  = Depends(get_database),
 ):
-    """
-    Server-side validation of an Apple App Store or Google Play in-app purchase.
-    Credits the matching coin package atomically. Idempotent — replaying the
-    same transaction_id will return the original credit without double-paying.
-
-    Required to comply with Apple/Google policy: digital goods sold inside the
-    iOS/Android app MUST flow through the platform's IAP (StoreKit / Play Billing).
-    """
+    """Verify an App Store / Play purchase and credit its coins once (idempotent by transaction_id)."""
     from app.utils.iap_validator import verify_apple_receipt, verify_google_purchase
 
     if data.platform not in ("ios", "android"):

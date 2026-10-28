@@ -1,22 +1,9 @@
-"""
-Site visitors: first-party, anonymous analytics for the web app, so the
-founder can see who comes, from where, and what they look for, before
-anyone signs up.
+"""Anonymous website analytics: POST /track (from Web/lib/track.ts) and the super-admin
+Visitors, Live and country views.
 
-- POST /track            public; the web tracker (Web/lib/track.ts) sends
-                         batches of events. Sent as text/plain so the
-                         browser skips the CORS preflight and sendBeacon works.
-- GET  /admin/visitors   super admin only; the Visitors dashboard.
-- GET  /admin/visitors/{vid}  one visitor's journey.
-- GET  /admin/live       super admin; who is here now: site visitors + app users.
-- GET  /admin/insights/country-tastes  super admin; drop opens by country.
-
-Privacy: a visitor is a random id the browser makes (localStorage), never
-tied to an account. No IP address, no full referrer URL (host only), no
-names. Search text is kept because it is the point (what people want), cut
-to 80 characters. Events expire after 180 days, visitor rows a year after
-the last visit. Bots and Do-Not-Track / Global Privacy Control browsers are
-skipped (DNT/GPC in the tracker itself).
+Privacy: a visitor is a random browser id, never tied to an account. No IPs, referrer host
+only, search text reduced to known terms. Events kept 180 days, visitors a year. Bots and
+Do-Not-Track browsers are skipped.
 """
 import json
 import re

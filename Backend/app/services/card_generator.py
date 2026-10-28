@@ -1,21 +1,5 @@
-"""
-app/services/card_generator.py
-
-Server-side teaser card generator — the "blurred teaser" growth hook.
-
-Auto-posting to social needs SOMETHING visual for every drop (Instagram
-can't post text-only at all; Facebook/Telegram engagement drops without an
-image). Rather than post the raw content, this renders a small branded
-card: the confession is teased/cut mid-thought, and any attached image or
-video thumbnail is Gaussian-blurred behind the text with a
-lock icon — the unblur becomes the click-through hook.
-
-This is a simplified, server-side approximation of
-Frontend/src/components/drops/DropCardRenderer.jsx's visual language (all
-3 curated theme gradients) — not a pixel-perfect port. Uses Pillow's
-built-in scalable default font so no font asset needs to be bundled or
-linked.
-"""
+"""Teaser card for social posts: the confession cut mid-thought over a blurred image with a
+lock, so people click through. Rendered with Pillow."""
 
 import io
 import logging
@@ -96,18 +80,13 @@ async def _fetch_thumbnail(url: str) -> Optional[Image.Image]:
 
 
 async def generate_teaser_card(drop: dict) -> bytes:
-    """
-    Render a blurred/teased social teaser card for a drop.
-    Returns JPEG bytes.
-    """
+    """Render a drop's teaser card. Returns JPEG bytes."""
     theme = drop.get("theme") or "desire"
     _, _, text_color = _THEME_GRADIENTS.get(theme, _DEFAULT_GRADIENT)
 
     card = _gradient_background(theme)
 
-    # Blurred media backdrop, if the drop has a preview image (poster frame
-    # for videos, direct URL for images) — this is the "blur the content"
-    # curiosity-gap hook.
+    # Blurred background from the drop's image or video frame, if any.
     preview_url = drop.get("card_image_url")
     if preview_url:
         thumb = await _fetch_thumbnail(preview_url)
@@ -148,11 +127,7 @@ async def generate_teaser_card(drop: dict) -> bytes:
 
 
 def upload_teaser_card(image_bytes: bytes, drop_id: str) -> Optional[str]:
-    """Upload the generated teaser JPEG to R2, return its public URL.
-
-    Keyed by drop_id (not a random key like other R2 uploads) so a
-    re-publish overwrites the same object instead of orphaning the old one.
-    """
+    """Upload the teaser card to R2 under the drop id (re-publishing overwrites it)."""
     if not r2_storage.is_configured():
         return None
     try:

@@ -1,14 +1,4 @@
-"""
-activity.py
-
-Helpers for emitting real-time activity events to users.
-Call these from API route handlers to drive the frontend loading system.
-
-Events emitted:
-  profile_viewed          → target user learns someone viewed their profile
-  high_activity_detected  → user is told the space is busy
-  message_locked          → user is told a message is behind a paywall
-"""
+"""Real-time activity events: profile_viewed, high_activity_detected."""
 
 from app.sio import sio
 

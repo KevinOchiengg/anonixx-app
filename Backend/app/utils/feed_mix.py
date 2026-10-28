@@ -1,23 +1,9 @@
-"""
-Interleaves the two kinds of drops in the feed: media drops (video / photo /
-voice, posted by admins) and text confessions (posted by users). The feed
-shows MEDIA_RUN media drops, then one text confession, and repeats. Each
-stream is paged newest-first with its own position, carried in one cursor,
-so nothing is skipped or repeated. When one stream runs dry the other fills
-the remaining slots.
+"""Feed mixing: MEDIA_RUN media drops, then one text confession, repeating. Each stream pages
+separately in one cursor, so nothing is skipped or repeated. With a known country, text slots
+take LOCAL_RUN local confessions per global one; either side fills in when the other runs out.
 
-Local first: when the viewer's country is known, the text stream is split in
-two — confessions from their country ("l") and from everywhere else ("g") —
-and text slots take LOCAL_RUN local ones for every global one. Nothing is
-filtered out: when local runs dry, global fills in (and vice versa). Media
-drops are mostly Anonixx's own, aimed by explicit location targeting, so
-they stay one stream.
-
-Cursor format:  "m=<iso>|<oid>;t=<iso>|<oid>;p=<n>"  (+ "l=", "g=", "q=" when local first)
-  m= / t= / l= / g= omitted -> that stream has not started; "END" -> exhausted
-  p            -> position inside the repeating media/text pattern
-  q            -> position inside the local/global text pattern
-A legacy single cursor ("<iso>|<oid>") is read as both streams at that point.
+Cursor: "m=<iso>|<oid>;t=<iso>|<oid>;p=<n>" (+ "l=", "g=", "q=" when local first).
+A missing key = not started, "END" = exhausted.
 """
 import random
 from datetime import datetime, timedelta
@@ -152,10 +138,7 @@ async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str], c
     return rows, (_encode(nxt) if has_more else None), has_more
 
 
-# ── Promoted drops (admin pin / boost) ──────────────────────────
-# While a drop's promo_until is in the future it's taken out of the normal
-# streams (so it's never shown twice) and placed on the first page instead:
-# pinned drops at the very top, boosted ones a few slots down.
+# ── Promoted drops: pinned ones at the top of page one, boosted a few slots down.
 MAX_PROMOTED = 4
 BOOST_SLOTS = (2, 5)
 
@@ -181,11 +164,7 @@ def splice_promoted(page: list, promoted: list) -> list:
     return out
 
 
-# Showcase: a first-time visitor's first page opens on a few of the best recent
-# drops instead of whatever happens to be newest. Picked at random from the top
-# of the pool, so different visitors (and the same one coming back) see different
-# strong drops. Ranked by interactions per view once a drop has enough views to
-# judge; until then by raw interactions.
+# Showcase: a first-time visitor's first page starts with a random few of the best recent drops.
 SHOWCASE_COUNT = 3
 SHOWCASE_POOL = 12
 SHOWCASE_DAYS = 14

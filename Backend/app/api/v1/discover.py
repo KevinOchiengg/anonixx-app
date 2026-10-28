@@ -1,30 +1,10 @@
-"""
-discover.py: the Search & Discovery engine. Two surfaces:
+"""Search and discovery.
 
-  NEAR     fresh Link Ups (hookup posts) and discoverable Rooms, by coarse
-           place: close by (sub-county), my area (county), my country, or
-           anywhere. One card per Room owner.
-  STORIES  general confessions: latest, unanswered, trending, by topic/mood,
-           keyword, and Surprise me.
+NEAR: fresh Link Ups and discoverable Rooms by place (close by, area, country, anywhere).
+STORIES: confessions by latest, unanswered, trending, topic, mood or keyword.
 
-Privacy rules this file keeps:
-  - places are the text levels people chose themselves (country > county >
-    sub-county); estates are never used to filter, coordinates don't exist;
-  - no result counts and no distances, only a cursor and `has_more`;
-  - a strict place filter is never widened silently: when a level is missing
-    the response says so (`needs_place`) and the client offers a wider scope;
-  - how often one viewer can hop between places is rate limited, so repeated
-    narrow queries can't be used to pin someone down;
-  - every query is built on utils/discovery.eligible (moderation, blocks both
-    ways, content mode, discovery window).
-
-Room listing (chat_profiles.listing): "discoverable" Rooms show in Near on their
-own; "limited" (the default) only through their owner's Link Ups; "private"
-keeps the owner out of Near entirely. Knock state (knocks_open) is separate and
-says nothing about being online.
-
-Typed text is parsed by utils/search_lexicon (English, Swahili, Sheng) into
-editable chips; nothing is sent to an outside service.
+Privacy: only places people chose; no counts or distances; a narrow filter is never widened
+silently; place hopping is rate limited; every query goes through utils/discovery.eligible.
 """
 import base64
 import hashlib
@@ -62,9 +42,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# ── responsiveness (Near ranking) ──
-# Only reorders owners within one page of results; never hides anyone, never
-# shown to clients, and owners with no history are treated as fine.
+# ── Near ranking: reorders owners within a page by responsiveness; never hides anyone.
 RESPONSE_WINDOW_DAYS = 30
 OVERLOAD_PENDING = 8      # this many knocks waiting: let others be seen first for now
 SLOW_MIN_KNOCKS = 6       # need this much history before "rarely answers" can apply
@@ -109,10 +87,7 @@ def rank_tier(open_now: bool, sig: Optional[dict]) -> int:
     return 0
 
 
-# ── measurement (exposure fairness + search quality) ──
-# Daily counters only: how often each owner is shown in Near (35 days), and per
-# surface how many requests, empty results, any-word fallbacks and how long they took.
-# No queries, no viewer ids.
+# ── Measurement: daily counters only (exposure per owner, request/empty/latency per surface).
 async def _record(db, surface: str, owners: list, n_results: int, loose: bool, ms: float) -> None:
     import asyncio
     now = _now()

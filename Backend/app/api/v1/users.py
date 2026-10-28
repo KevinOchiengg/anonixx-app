@@ -135,9 +135,7 @@ async def register_push_token(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Not content-feature-specific — just happens to live here now. Used by
-    every push notification sender (drops, circles, unlocks, etc.) to find a
-    user's Expo push token."""
+    """A user's Expo push token, for every push sender."""
     await db["push_tokens"].update_one(
         {"user_id": current_user_id},
         {"$set": {"token": data.token, "updated_at": _now()}},
@@ -198,11 +196,7 @@ async def verify_age(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """
-    One-time self-attested 18+ check for accounts created before signup asked
-    for it: the "I'm 18 or older" tick, or a date of birth from older clients.
-    No-ops if already verified.
-    """
+    """One-time 18+ confirmation for accounts made before signup asked for it."""
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -293,11 +287,7 @@ async def report_user(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """
-    Report a person directly (distinct from reporting a specific Drop/post
-    via POST /drops/{drop_id}/report). Feeds the admin dashboard's per-user
-    report_count (GET /admin/users/{user_id}).
-    """
+    """Report a person (not a post). Counted on the admin user page."""
     reason = (data.reason or "").strip().lower()
     if reason not in VALID_REPORT_REASONS:
         raise HTTPException(
@@ -332,10 +322,7 @@ async def moderation_history(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """
-    Drops the current user posted that have been flagged or hidden by
-    moderation — powers Settings > "Report & Moderation History".
-    """
+    """The caller's drops that moderation flagged or hid (Settings > moderation history)."""
     cursor = db["drops"].find(
         {
             "sender_id": current_user_id,
@@ -361,11 +348,7 @@ async def search_users(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """
-    Search users by username OR anonymous_name for anonymous drop targeting.
-    Returns id + username + anonymous_name only — no email, no sensitive data.
-    Excludes the requester themselves.
-    """
+    """Find users by username or anonymous name for targeting a drop. Returns ids and names only."""
     q = q.strip()
     if not q:
         return {"users": []}

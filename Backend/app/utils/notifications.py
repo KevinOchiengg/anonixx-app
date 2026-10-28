@@ -1,8 +1,4 @@
-"""
-app/utils/notifications.py
-Push notification utility — sends via Expo Push Notifications API.
-Uses push tokens stored in the push_tokens collection by AuthContext.
-"""
+"""Expo push notifications, using tokens in the push_tokens collection."""
 import asyncio
 import json
 import httpx
@@ -147,20 +143,7 @@ async def send_push_notification(
     title_override: Optional[str] = None,
     body_override: Optional[str] = None,
 ) -> bool:
-    """
-    Send a push notification to a user.
-
-    Args:
-        user_id: MongoDB user ID string
-        template_key: Key from TEMPLATES dict
-        db: Motor database instance
-        extra_data: Additional data to merge into notification data payload
-        title_override: Override the template title
-        body_override: Override the template body
-
-    Returns:
-        True if sent successfully, False otherwise
-    """
+    """Send TEMPLATES[template_key] to a user (title/body can be overridden). True if sent."""
     template = TEMPLATES.get(template_key)
     if not template:
         logger.error(f"Unknown notification template: {template_key}")

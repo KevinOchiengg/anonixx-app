@@ -1,12 +1,5 @@
-"""
-api/v1/rewards.py — Daily claim, streak tracking, milestone awards.
-
-Anti-abuse guards (all server-side):
-  1. Account must be ≥ 7 days old
-  2. 22-hour cooldown between claims (not calendar day — allows timezone flex)
-  3. Monthly cap of 28 claims per user
-  4. Streak logic: consecutive 22–48 hr windows keep streak alive; gap > 48hr resets
-"""
+"""Daily rewards, streaks and milestones. Accounts must be 7+ days old; 22h between claims;
+max 28 claims a month; a gap over 48h resets the streak."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -28,10 +21,7 @@ STREAK_RESET_HRS   = 48     # Gap that resets streak
 MONTHLY_CLAIM_CAP  = 28     # Max claims per calendar month
 
 STREAK_MILESTONES = {
-    # Tuned to stay a retention hook, not a coin faucet — milestones alone
-    # used to add up to 390 coins by day 100 (13 free unlocks on top of the
-    # daily-claim base); ~60% cut across the board keeps the celebration
-    # without meaningfully denting the incentive to buy coins.
+    # Kept small so rewards encourage return visits without replacing buying coins.
     7:   5,    # Bonus coins at day 7
     14:  10,
     30:  20,
@@ -78,12 +68,7 @@ class MilestoneRequest(BaseModel):
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _compute_streak(last_claim_at: Optional[datetime], current_streak: int, now: datetime) -> int:
-    """
-    Returns the new streak count after a successful claim.
-    - No previous claim → streak = 1
-    - Last claim was 22–48 hours ago → streak += 1
-    - Last claim was > 48 hours ago → streak resets to 1
-    """
+    """New streak after a claim: +1 if the last claim was 22-48h ago, else back to 1."""
     if not last_claim_at:
         return 1
     hours_since = (now - _as_utc(last_claim_at)).total_seconds() / 3600
@@ -255,11 +240,7 @@ async def award_milestone(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    """
-    Award a one-time milestone bonus.
-    Called from within the app when user completes the milestone action.
-    Idempotent — awarding the same key twice is a no-op.
-    """
+    """Award a one-time milestone bonus (repeat calls do nothing)."""
     key = body.milestone_key
     if key not in ONE_TIME_MILESTONES:
         raise HTTPException(status_code=400, detail="Unknown milestone.")

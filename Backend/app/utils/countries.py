@@ -1,13 +1,5 @@
-"""
-Country detection for the local-first feed (app/utils/feed_mix.py).
-
-Clients send the viewer's country as an ISO 3166 alpha-2 code in the
-X-Country header — the website from Vercel's IP geolocation, the app from
-the phone's region setting. Drops and profiles store countries by *name*
-(the same list the location pickers use: Web/lib/locations.ts,
-Frontend/src/config/locations.js), so codes are translated to those names.
-Codes for countries outside that list are ignored.
-"""
+"""Country codes (X-Country header) to the country names drops and profiles store.
+Unknown codes are ignored."""
 import re
 from typing import Optional
 

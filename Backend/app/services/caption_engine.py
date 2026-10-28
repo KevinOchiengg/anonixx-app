@@ -1,19 +1,5 @@
-"""
-app/services/caption_engine.py
-
-Anonixx Social Caption Engine
-──────────────────────────────
-Generates platform-native, psychologically compelling captions for confession
-drops published to TikTok, Facebook, and Instagram.
-
-Design rules
-  1. The hook is NEVER a brand announcement — it creates intrigue first.
-  2. Every post rotates through multiple hook variants so the account
-     never sounds robotic to the algorithm or the audience.
-  3. Each platform gets a format tuned to how users actually read there.
-  4. The confession text is the PAYOFF — the hook earns it.
-  5. The brand/CTA only appears at the end, in the form of intrigue, not a pitch.
-"""
+"""Captions for drops posted to Anonixx's social accounts: an intrigue hook (rotated), the
+confession, then a short call to action, formatted per platform."""
 
 import hashlib
 from typing import Literal
@@ -21,10 +7,7 @@ from typing import Literal
 # ── Platform type ────────────────────────────────────────────────────────────
 Platform = Literal["tiktok", "facebook", "instagram", "telegram"]
 
-# ── Opening hooks (rotate — never the same line twice in a row) ───────────────
-# Used for every drop regardless of content — there's no per-category hook
-# variation anymore (the `category` field was dropped from the data model
-# entirely; it had no compose-screen UI and its only consumer was this file).
+# ── Opening hooks (rotated) ───────────────────────────────────────────────────
 _GENERIC_EMOJI = "💬"
 
 _GENERIC_HOOKS: list[str] = [
@@ -100,11 +83,7 @@ _IG_TAGS_POOL: list[str] = [
 # ── Selector helpers ──────────────────────────────────────────────────────────
 
 def _pick(items: list[str], seed: str) -> str:
-    """
-    Deterministically pick from a list using a content-derived seed,
-    so the same confession always gets the same variant (idempotent retries),
-    but different confessions get different variants.
-    """
+    """Pick from a list by a seed, so the same confession always gets the same variant."""
     h = int(hashlib.md5(seed.encode()).hexdigest(), 16)
     return items[h % len(items)]
 
@@ -116,17 +95,7 @@ def _hook(seed: str) -> str:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def build_caption(confession: str, platform: Platform) -> str:
-    """
-    Build a platform-native caption for a confession drop.
-
-    Args:
-        confession: The raw confession text.
-        platform:   One of "tiktok", "facebook", "instagram", "telegram".
-
-    Returns:
-        A fully formatted caption string, truncated to the platform's character
-        limit.
-    """
+    """Caption for `platform` ("tiktok", "facebook", "instagram", "telegram"), within its length limit."""
     confession = (confession or "").strip()
     hook       = _hook(confession)
 
@@ -144,14 +113,7 @@ def build_caption(confession: str, platform: Platform) -> str:
 
 
 def build_teaser_caption(link: str, seed: str) -> str:
-    """
-    Facebook-only caption to accompany a blurred teaser CARD (not the raw
-    drop content). The card image already carries the tease — repeating the
-    full confession in the caption text underneath it would spoil the exact
-    curiosity gap the card exists to create. `seed` should be the drop_id
-    (not the confession) so the hook rotates without ever touching the
-    actual text.
-    """
+    """Facebook caption for a teaser card: hook only, no confession text. `seed` is the drop id."""
     hook    = _hook(seed)
     fb_hook = hook[0].upper() + hook[1:] if hook else hook
     body = (
@@ -166,18 +128,7 @@ def build_teaser_caption(link: str, seed: str) -> str:
 # ── Platform formatters ───────────────────────────────────────────────────────
 
 def _tiktok_caption(confession: str, hook: str) -> str:
-    """
-    TikTok format — maximum 2200 characters.
-
-    Structure:
-        [hook — lower case, single line, no period OR with period if it's a statement]
-        [blank line]
-        [confession in quotes]
-        [blank line]
-        [CTA]
-        [blank line]
-        [hashtags]
-    """
+    """TikTok: hook, quoted confession, CTA, hashtags (max 2200 chars)."""
     cta  = _pick(_TIKTOK_CTAS, confession[-20:])
     body = (
         f"{hook}\n\n"
@@ -189,18 +140,7 @@ def _tiktok_caption(confession: str, hook: str) -> str:
 
 
 def _facebook_caption(confession: str, hook: str) -> str:
-    """
-    Facebook format — up to 63k chars, but we keep it digestible.
-
-    Structure:
-        [hook — sentence case]
-        [blank line]
-        [confession in quotes with emoji framing]
-        [blank line]
-        [CTA with brand context]
-        [blank line]
-        [2-3 core hashtags only — FB doesn't reward hashtag spam]
-    """
+    """Facebook: hook, quoted confession, CTA, 2-3 hashtags."""
     cta     = _pick(_FACEBOOK_CTAS, confession[-20:])
     # Capitalise first letter of the hook for FB's more editorial feel
     fb_hook = hook[0].upper() + hook[1:] if hook else hook
@@ -214,20 +154,7 @@ def _facebook_caption(confession: str, hook: str) -> str:
 
 
 def _instagram_caption(confession: str, hook: str) -> str:
-    """
-    Instagram format — maximum 2200 characters.
-
-    Structure:
-        [hook — all lower case, poetic line rhythm]
-        [blank line]
-        [confession — indented with em-dash, no quotes]
-        [blank line]
-        [minimalist CTA]
-        [blank line]
-        ·
-        [blank line]
-        [hashtag block — below the fold on 'more']
-    """
+    """Instagram: lower-case hook, confession, short CTA, hashtags below the fold (max 2200 chars)."""
     cta  = _pick(_INSTAGRAM_CTAS, confession[-20:])
     tags = _pick(_IG_TAGS_POOL,   confession[:30])
 
@@ -243,12 +170,7 @@ def _instagram_caption(confession: str, hook: str) -> str:
 
 
 def _telegram_caption(confession: str, hook: str) -> str:
-    """
-    Telegram format — long captions are fine (up to ~1024 for media, ~4096
-    for text messages), closer in spirit to the Facebook formatter than
-    TikTok's hashtag-heavy style. No hashtag spam — Telegram audiences read
-    channels more like a newsletter.
-    """
+    """Telegram: hook, confession, CTA; no hashtags."""
     cta = _pick(_TELEGRAM_CTAS, confession[-20:])
     tg_hook = hook[0].upper() + hook[1:] if hook else hook
     body = (

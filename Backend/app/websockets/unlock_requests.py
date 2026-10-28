@@ -1,15 +1,4 @@
-"""
-unlock_requests.py
-
-Real-time events for the confession unlock request/approval flow —
-mirrors activity.py's per-user room emit pattern.
-
-Events emitted:
-  unlock_request_received   → owner learns someone wants to unlock their confession
-  unlock_request_accepted   → requester learns the owner accepted (waiting screen -> chat)
-  unlock_request_declined   → requester learns the owner declined
-  unlock_request_cancelled  → owner learns the requester withdrew
-"""
+"""Real-time knock events: unlock_request_received, _accepted, _declined, _cancelled."""
 
 from app.sio import sio
 

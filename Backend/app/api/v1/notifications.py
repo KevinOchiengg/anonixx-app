@@ -1,10 +1,4 @@
-"""
-notifications.py — bottom-nav badge counts.
-
-One aggregate endpoint so the client can refresh all tab badges (Messages,
-Requests) in a single round trip instead of two. Each count is computed by
-its own domain module (drops/unlock_requests) and just summed up here.
-"""
+"""Bottom-nav badge counts (Messages, Requests) in one call."""
 
 from fastapi import APIRouter, Depends
 

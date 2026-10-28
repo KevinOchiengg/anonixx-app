@@ -1,10 +1,4 @@
-"""
-api/v1/sounds.py — Ambient sounds for text confessions.
-
-Admins drop audio files (mp3 / m4a, up to 5 MB each); each gets a title and a
-mood. Files live in R2, details in the `sounds` collection. Everyone can read
-the active list; the clients pick one per confession by its mood.
-"""
+"""Ambient sounds for text confessions. Admins upload them (R2) with a mood; clients pick one by mood."""
 from datetime import datetime, timezone
 from typing import Optional
 

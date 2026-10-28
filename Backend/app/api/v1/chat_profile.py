@@ -1,18 +1,5 @@
-"""
-api/v1/chat_profile.py — Per-poster customizable chat interface.
-
-One `chat_profiles` doc per user (the drop poster), reused across every
-unlocker who chats with them: background pattern, font, profile picture,
-and a media gallery (max 3 items — image/video/gif). None of this
-is visible to a viewer until they've actually unlocked a drop and a
-`drop_connections` doc exists between the two of them — that's what
-`GET /chat-profile/{user_id}` enforces.
-
-The gallery doubles as the welcome set: all of it (up to 3 items) is shown
-to a first-time unlocker as a swipeable takeover — see GET
-/drops/connections/{id}/messages in drops.py, which reads this profile's
-`gallery` directly rather than a single "featured" item.
-"""
+"""Each poster's Room: theme, font, picture, gallery (up to 3 items), door rules and call
+settings. The full profile is only visible to people connected with them."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
@@ -29,10 +16,7 @@ router = APIRouter(prefix="/chat-profile", tags=["Chat Profile"])
 
 MAX_GALLERY_ITEMS = 3
 
-# Curated real fonts — ids are semantic (not tied to a literal font name) so
-# swapping the underlying asset later doesn't invalidate saved profiles.
-# See Frontend/src/config/fonts.js CHAT_FONT_OPTIONS for the id → fontFamily
-# mapping actually rendered client-side.
+# Font ids (rendered by Frontend/src/config/fonts.js CHAT_FONT_OPTIONS).
 FONT_STYLES = {
     "clean-regular", "soft-medium", "confident-semibold", "bold-statement",
     "elegant-serif", "elegant-italic", "playful-script", "whisper-italic",
@@ -40,18 +24,14 @@ FONT_STYLES = {
 # Played once for an unlocker on their first open of the chat — see
 # Frontend/src/config/sounds.js for the id → asset mapping.
 WELCOME_SOUNDS = {"soft-chime", "warm-bell", "gentle-hum", "silence"}
-# Curated backgrounds — see Frontend/src/config/patterns.js for how each id
-# renders (gradient + overlay shapes). Purely a client-side render spec, so
-# the backend only needs to validate membership.
+# Background ids (rendered by Frontend/src/config/patterns.js).
 BACKGROUND_PATTERNS = {
     "midnight-solid", "velvet-dots", "smoke-lines", "ember-glow",
     "obsidian-grid", "rose-noise", "eclipse-mesh", "static-haze",
     "crimson-fade", "ink-bloom",
 }
 
-# ── The Room's own look. Separate from background_pattern (the chat surface):
-# a theme is the palette the Room is painted in. Ids match
-# Web/lib/roomThemes.ts and Frontend/src/config/roomThemes.js.
+# Room colour themes. Ids match Web/lib/roomThemes.ts and Frontend/src/config/roomThemes.js.
 ROOM_THEMES = {
     "midnight-blue", "velvet-burgundy", "dark-plum", "obsidian-gold", "smoky-emerald",
     "obsidian-rose", "arctic-silver", "deep-ocean", "ember", "pure-noir",
@@ -66,31 +46,19 @@ PATTERN_TO_THEME = {
     "ink-bloom": "deep-ocean",
 }
 ROOM_STATUSES = {"open", "late", "quiet", "away"}
-# Who sees the gallery: everyone peeking through the window, only people the
-# owner has let in, or nobody but the owner. Letting someone in never widens
-# this on its own; the owner picks "inside" deliberately.
+# Who sees the gallery: everyone, only people let in, or only the owner.
 GALLERY_VISIBILITY = {"window", "inside", "only_me"}
 
-# Door rules: what a Knock on this Room must carry (enforced in unlock_requests.py).
-#   line       a line is enough
-#   line_peek  a line + a peek (something from their Room, a photo/video, or a voice note)
-#   voice      a voice note
+# Door rules: what a Knock must include. line | line_peek (line + photo/video/voice) | voice
 DOOR_RULES = {"line", "line_peek", "voice"}
 DEFAULT_DOOR_RULE = "line_peek"
 
-# Room listing in Discover (api/v1/discover.py):
-#   discoverable  shows in Near on its own
-#   limited       reachable through the owner's posts and links only (default)
-#   private       the owner stays out of Near entirely
-# Existing Rooms are "limited" until their owner chooses otherwise.
+# Listing in Discover: discoverable (shows in Near) | limited (via posts/links, default) | private
 LISTINGS = {"discoverable", "limited", "private"}
 DEFAULT_LISTING = "limited"
 
-# Availability, as people see it (never online status or last seen):
-#   open    taking new knocks
-#   break   not taking new knocks, optionally until a time (knocks_paused_until)
-#   hidden  listing "private": out of Near (knocks via posts follow the switch above)
-# A break never touches people already inside or their chats.
+# Availability: open | break (no new knocks, optionally until a time) | hidden.
+# Never shows online status, and a break doesn't affect existing chats.
 BREAK_HOURS = {12, 72, 168}   # tonight, 3 days, a week; anything else = until switched back on
 
 
@@ -123,9 +91,7 @@ def door_rule_of(doc: dict) -> str:
 MAX_INTRO_CHARS   = 160
 MAX_WELCOME_CHARS = 280
 
-# ── Video calling — see api/v1/drop_calls.py for the actual call session
-# endpoints. This is just the owner's standing preference + purchased room
-# size, read at call-start time.
+# ── Video calls: the owner's call mode and room size (sessions live in drop_calls.py).
 CALL_MODES        = {"solo", "multi"}
 FREE_GUEST_CAP     = 4    # every "multi" room starts with this many slots, free
 MAX_GUEST_CAP      = 12   # hard ceiling regardless of how many slots are bought
@@ -199,12 +165,7 @@ async def is_blocked_between(db, a: str, b: str) -> bool:
 
 
 def _sanitize(doc: dict, user: Optional[dict] = None) -> dict:
-    """
-    `user` is the owner's account doc. profile_picture_url falls back to
-    their account-level avatar_url when they haven't set a picture
-    specifically for the chat interface — anonymous_name is included so the
-    client can fall back further, to a first initial, if neither exists.
-    """
+    """Public view of a Room. Picture falls back to the account avatar."""
     call_mode  = doc.get("call_mode") or "solo"
     max_guests = 1 if call_mode == "solo" else FREE_GUEST_CAP + doc.get("purchased_slots", 0)
     user = user or {}
@@ -337,9 +298,7 @@ async def upgrade_call_capacity(
     current_user_id:  str = Depends(get_current_user_id),
     db                = Depends(get_database),
 ):
-    """Spend coins to permanently raise this account's video-call room size
-    beyond the free 4 guests, up to MAX_GUEST_CAP. Only matters in "multi"
-    call_mode — solo rooms stay capped at 1 regardless of purchases."""
+    """Buy a bigger video-call room (above the free 4 guests, up to MAX_GUEST_CAP)."""
     if data.add_slots <= 0:
         raise HTTPException(status_code=400, detail="add_slots must be positive.")
 
@@ -449,17 +408,8 @@ async def get_room_preview(
     current_user_id:  str = Depends(get_current_user_id),
     db                = Depends(get_database),
 ):
-    """
-    The locked Room: what anyone (signed in, 18+) sees before linking up —
-    the person's theme, font, picture and 3-item gallery, plus their live
-    hookup post pinned at the top (the one they came from, via drop_id, else
-    their latest). Everything that lets you talk stays behind the link up;
-    the full profile above remains connection-only.
-
-    Also tells the viewer where they stand: already connected (open the
-    chat), their own pending link up, or a link up this person sent *them*
-    (they're reviewing it from the sender's Room, with Accept / Decline).
-    """
+    """The locked Room anyone 18+ sees before linking up: theme, picture, gallery and their
+    pinned post, plus where the viewer stands (connected, pending, or invited)."""
     from app.api.v1.drops import unlock_cost_for, _aware, AGE_GATE_DETAIL
 
     viewer = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"age_verified": 1, "is_admin": 1})
@@ -479,9 +429,7 @@ async def get_room_preview(
     profile = _sanitize(raw_profile, user)
     now = _now()
 
-    # The pinned post: the one they tapped through from, else their latest live
-    # hookup, else their latest regular confession. A confession has no Link up
-    # button of its own, so the Room is where you link up off one.
+    # Pinned post: the one they came from, else their latest hookup post, else latest confession.
     post_doc = None
     real = {"sender_id": user_id, "is_active": True, "is_admin_drop": {"$ne": True}}
     if drop_id and ObjectId.is_valid(drop_id):
@@ -531,9 +479,7 @@ async def get_room_preview(
         from app.api.v1.unlock_requests import _signals
         their_signals = (await _signals(db, current_user_id, {user_id})).get(user_id, {})
 
-    # The gallery is filtered by the owner's visibility setting. A visitor is
-    # told how many pieces are kept back (never what they are), so a Knock is
-    # never sold on photos they won't be shown.
+    # Hidden gallery items are counted (never shown) so visitors know something is kept back.
     inside = bool(connection)
     visible = gallery_for(raw_profile, current_user_id, user_id, inside)
     room = {k: profile[k] for k in (
@@ -567,11 +513,7 @@ async def get_chat_profile(
     current_user_id:  str = Depends(get_current_user_id),
     db                = Depends(get_database),
 ):
-    """
-    Only visible to a participant of an existing drop_connections doc with
-    this user — a connection only exists post-unlock, which is what gates
-    the profile picture/gallery/theme behind a paid unlock.
-    """
+    """Full Room profile, only for people connected with this user."""
     if user_id != current_user_id:
         connection = await db["drop_connections"].find_one({
             "$or": [

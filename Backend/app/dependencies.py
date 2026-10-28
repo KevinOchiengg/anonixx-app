@@ -94,9 +94,7 @@ async def require_admin(
 
 
 # ─── Daily activity (retention) ─────────────────────────────────
-# One row per user per UTC day they used the app (any signed-in request), in
-# `user_activity_days`. It's what the retention table on the admin dashboard
-# counts. Written in the background, once per user per day per server process.
+# One `user_activity_days` row per user per UTC day they used the app.
 _seen_today: set = set()
 _seen_day = ""
 
@@ -128,9 +126,7 @@ def mark_active(db, user_id: str) -> None:
 
 
 # ─── Admin roles ─────────────────────────────────────────────────
-# users.admin_role narrows what an admin may do. Missing = "admin" (everything a
-# non-super admin could always do), so existing admins keep their access.
-# Super admins can do everything regardless of role.
+# users.admin_role limits what an admin can do; missing = "admin". Super admins can do everything.
 ADMIN_ROLES = {
     "admin":     {"*"},
     "moderator": {"moderation", "support"},

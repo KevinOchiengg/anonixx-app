@@ -1,28 +1,5 @@
-"""
-api/v1/premium.py — Anonixx Premium subscription purchase.
-
-Perks (all defined and enforced in drops.py — see the PREMIUM_* constants
-and the unlock_cost_for / unlock_reward_for / grace_days_for helpers):
-  • Unlocks and posting are free             (keyed on the UNLOCKER / POSTER)
-  • Unlocked drops survive 14 days instead
-    of 7 before cleanup deletes them         (keyed on the POSTER)
-  • Ad-free feed                             (GET /ads/active returns [])
-
-Drops no longer expire on a timer: one stays live indefinitely until its
-first unlock, which is what starts the grace window above.
-
-The old "unlimited Drops per day" perk is gone — that cap was removed and
-posting is unlimited for everyone now.
-
-Mirrors the coin-purchase pattern in coins.py exactly:
-  M-Pesa  — STK push, poll status, Safaricom callback credits on success.
-  Stripe  — create a PaymentIntent, client confirms via native PaymentSheet,
-            webhook grants premium on payment_intent.succeeded.
-
-A renewal extends from the current premium_until if it's still in the
-future, rather than from "now" — buying more time never costs you time
-you already paid for.
-"""
+"""Premium purchase (M-Pesa, Stripe, Google Play). Perks live in drops.py: free posting and
+unlocks, longer grace after unlock, no ads. Renewals extend from the current end date."""
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
@@ -197,11 +174,7 @@ async def buy_premium_stripe_create_intent(
     current_user_id: str = Depends(get_current_user_id),
     db               = Depends(get_database),
 ):
-    """
-    Returns { client_secret, payment_intent_id, amount, currency, plan }.
-    The frontend passes client_secret to Stripe's native PaymentSheet.
-    Premium is granted via /premium/stripe/webhook once payment succeeds.
-    """
+    """Create a Stripe PaymentIntent for premium; the webhook grants it on success."""
     plan = _PLAN_MAP.get(data.plan_id)
     if not plan:
         raise HTTPException(status_code=400, detail="Invalid plan.")
@@ -253,11 +226,7 @@ async def premium_stripe_webhook(
     stripe_signature: Optional[str] = Header(None, alias="stripe-signature"),
     db                = Depends(get_database),
 ):
-    """
-    Register this URL in your Stripe dashboard:
-        https://anonixx-app.onrender.com/api/v1/premium/stripe/webhook
-    Events to enable: payment_intent.succeeded  payment_intent.payment_failed
-    """
+    """Stripe webhook: payment_intent.succeeded / payment_failed."""
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe not configured.")
 
@@ -310,10 +279,7 @@ async def verify_premium_iap(
     current_user_id: str = Depends(get_current_user_id),
     db                  = Depends(get_database),
 ):
-    """
-    Google Play subscription check. Safe to call repeatedly (on purchase and on
-    app start): premium_until is set to the store's expiry, never shortened.
-    """
+    """Check a Google Play subscription. Safe to repeat; never shortens premium_until."""
     from app.utils.iap_validator import verify_google_subscription
 
     if data.product_id != PREMIUM_IAP_PRODUCT_ID:

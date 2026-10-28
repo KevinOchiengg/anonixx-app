@@ -1,19 +1,6 @@
-"""
-Agent hub: the agent team's reports on the admin dashboard, and one-click
-Approve / Reject for the content scout's drafts.
-
-The reports live in the GitHub repo (reports/**), written by the scheduled
-agents, so the hub reads and writes them through the GitHub contents API
-(GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH in settings). The backend's own
-deploy doesn't include reports/.
-
-Approving a draft does what the posting manager does by hand: it schedules the
-drop through the normal /admin/scheduled path (as "Anonixx", at its suggested
-time, or 10 minutes from now if that's passed) and writes `status: scheduled`
-and `scheduled_id:` back into the draft. Rejecting writes `status: rejected`.
-A decision is recorded in `agent_decisions` first, so a draft is never
-scheduled twice even if the GitHub write fails.
-"""
+"""Agent hub: shows the agents' reports (read from GitHub, reports/**) and lets an admin
+approve or reject content drafts. Approving schedules the drop and marks the draft;
+the decision is saved first so a draft is never scheduled twice."""
 import base64
 import re
 from datetime import datetime, timedelta, timezone

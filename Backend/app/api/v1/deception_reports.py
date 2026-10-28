@@ -1,25 +1,6 @@
-"""
-app/api/v1/deception_reports.py — refund + strike system for deceptive
-hookup confessions.
-
-Problem: someone pays coins to Link Up with a confession's author, only to
-find it was a joke/bait. The unlock cost alone doesn't stop this — the
-poster still earns their flat reward per unlock regardless of whether the
-confession was honest, so a higher price only raises the payout for
-successfully deceiving people.
-
-Fix: accountability after the fact, not a bigger toll up front.
-  1. Only someone who actually linked up (drop_connections.unlocker_id) can
-     file a report — no reporting a stranger's confession from the outside.
-  2. An admin reviews and confirms/dismisses (report_drop's auto-hide-at-3
-     pattern doesn't apply here — a false "deceptive" claim has real money
-     and account-standing consequences for the other person, so it needs a
-     human, not a threshold).
-  3. On confirm: refund the unlocker's coins, claw back the poster's reward
-     for that specific connection, and strike the poster. Strikes escalate:
-     2nd strike = 7-day posting suspension, 3rd+ = account deactivated
-     (is_active=False — now actually enforced, see dependencies.py).
-"""
+"""Reports of deceptive hookup posts. Only someone who linked up can report; an admin
+reviews. If confirmed: refund the reporter, claw back the poster's reward and add a strike
+(2nd = 7-day posting ban, 3rd = account disabled)."""
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from typing import Optional
@@ -55,12 +36,7 @@ async def file_deception_report(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """
-    Report a Link Up connection as deceptive. Only the person who actually
-    unlocked it (paid coins, has skin in the game) can file this — not a
-    generic "report this confession" button reachable by anyone scrolling
-    the feed.
-    """
+    """Report a Link Up as deceptive. Only the person who paid to link up can file it."""
     try:
         conn_oid = ObjectId(data.connection_id)
     except Exception:
@@ -104,9 +80,7 @@ async def file_deception_report(
 # ==================== ADMIN REVIEW ====================
 
 async def _find_transaction_amount(db, user_id: str, target_id: str, reasons: list, key: str) -> Optional[int]:
-    """Looks up the exact coin amount from the original transaction record —
-    unlock pricing varies (geo/premium discounts), so this reads history
-    rather than recomputing today's rate."""
+    """What the unlocker actually paid, read from their transaction history."""
     tx = await db["coin_transactions"].find_one({
         "user_id": user_id,
         "reason":  {"$in": reasons},
@@ -200,10 +174,7 @@ async def confirm_deception_report(
             body_override=f"The confession you reported was confirmed deceptive. {refund_amount} coins are back in your balance.",
         )
 
-    # ── Claw back the poster's reward for this connection ───────────────
-    # Punitive — allowed to take the balance negative, unlike a normal
-    # spend, since the poster shouldn't be able to dodge it by spending
-    # the reward before review finishes.
+    # ── Claw back the poster's reward (may go negative, so it can't be dodged by spending it).
     clawback_amount = await _find_transaction_amount(
         db, sender_id, drop_id, ["drop_unlock_reward"], "drop_id",
     )

@@ -1,11 +1,4 @@
-"""
-app/utils/location.py
-
-Shared structured-location helpers — used by Drops (compose-time location
-capture) and Posts (location-scoped feed filtering). Kept in one place so
-both features agree on structure: country -> county -> sub_county -> estate,
-most-specific to least.
-"""
+"""Location helpers: country > county > sub_county > estate."""
 import re
 from typing import Optional
 
@@ -15,9 +8,7 @@ LOCATION_LEVELS = ["country", "county", "sub_county", "estate"]
 
 
 def build_location(country, county, sub_county, estate):
-    """Turns the 4 structured location inputs into (structured dict, display
-    string) — most-specific to least, e.g. "Kilimani, Westlands, Nairobi,
-    Kenya". Returns (None, None) if every part is empty."""
+    """(structured dict, display string) from the 4 location parts, or (None, None) if empty."""
     parts = {
         "country":    (country or "").strip()[:MAX_LOCATION_PART_LEN] or None,
         "county":     (county or "").strip()[:MAX_LOCATION_PART_LEN] or None,
@@ -33,17 +24,8 @@ def build_location(country, county, sub_county, estate):
 
 
 def build_feed_location_filter(user_location: Optional[dict], scope: Optional[str]) -> Optional[dict]:
-    """
-    Builds a Mongo filter fragment that scopes the feed pool to posts whose
-    location matches the user's own location down to `scope`'s granularity.
-
-    Posts with no location of their own are always included — most existing
-    posts predate structured location, and excluding them would make a
-    freshly-scoped feed look empty/broken rather than just "smaller."
-
-    Returns None when no filtering should apply: scope is off/unset, or the
-    user hasn't set their own location at the requested granularity.
-    """
+    """Feed filter matching the user's location at `scope`. Posts without a location are always
+    included. None when scope is off or the user has no location at that level."""
     if not scope or scope == "off" or scope not in LOCATION_LEVELS:
         return None
 
@@ -72,12 +54,7 @@ def build_location_search_filter(
     sub_county: Optional[str] = None,
     estate: Optional[str] = None,
 ) -> Optional[dict]:
-    """Builds a Mongo filter for an explicit "search by location" request —
-    unlike build_feed_location_filter (which deliberately still includes
-    location-less posts so a user's own passively-scoped feed never looks
-    empty), this requires a match at every level the caller actually
-    supplied, since here the user is deliberately asking for a specific
-    place. Returns None if no level was given."""
+    """Filter for an explicit location search: must match every level given. None if none given."""
     match = {}
     for level, val in (
         ("country", country), ("county", county),

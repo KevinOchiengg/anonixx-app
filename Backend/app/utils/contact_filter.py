@@ -1,20 +1,5 @@
-"""
-contact_filter.py — blocks phone numbers, emails, and social/messaging
-handles from post/drop/comment text at submission time.
-
-Anonixx's whole business model runs on paid unlocks (Link Up) to actually
-reach someone — if a confession's text already contains their number,
-email, or Instagram/Snap/WhatsApp handle, the unlock is worthless. This is
-a hard reject, not a redact: silently stripping the contact info would let
-the post through looking fine while quietly breaking whatever the poster
-meant to say. Chat messages after unlock are exempt — the whole point of
-paying to unlock is to actually be able to exchange this stuff.
-
-Not airtight by design — a determined user can still spell digits out as
-words, split a number across two posts, or put it in an image. This raises
-the bar for casual sharing without false-positiving on ordinary text (dates,
-prices, drop ids); it isn't meant to catch everything.
-"""
+"""Rejects phone numbers, emails and social handles in posts and comments (not in chats),
+so contact only happens through Link Up. Catches casual sharing, not every trick."""
 import re
 
 _CONTACT_INFO_PATTERNS = [
@@ -43,9 +28,7 @@ CONTACT_INFO_ERROR = (
 
 
 def contains_contact_info(text) -> bool:
-    """True if `text` contains something that looks like a phone number,
-    email, or social/messaging handle (including simple word-obfuscated
-    email variants)."""
+    """True if the text looks like it contains a phone number, email or social handle."""
     if not text:
         return False
     return any(p.search(text) for p in _CONTACT_INFO_PATTERNS)

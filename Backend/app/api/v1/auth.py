@@ -36,8 +36,7 @@ def _is_adult(dob: date) -> bool:
 
 
 # ─── Models ───────────────────────────────────────────────────
-# Free coins every new user starts with, to learn how Anonixx works before
-# paying. NOT withdrawable — see WITHDRAWABLE_REASONS in utils/coin_service.py.
+# Free starter coins. Not withdrawable (see WITHDRAWABLE_REASONS in utils/coin_service.py).
 WELCOME_BONUS = 33
 
 VALID_GENDERS = {'male', 'female', 'nonbinary', 'prefer_not_to_say'}
@@ -116,13 +115,7 @@ def generate_anonymous_name() -> str:
 
 
 async def generate_unique_anonymous_name(db, attempts: int = 12) -> str:
-    """Anonymous name that isn't already taken.
-
-    The pool is only 12 x 12 x 900 = 129,600 names, so by the birthday
-    paradox duplicates become likely at a few hundred users — and a shared
-    name means one person's profile can resolve to another's. Retry a few
-    times, then widen the number range so this can't fail outright.
-    """
+    """A random anonymous name that isn't taken. Retries, then widens the number range."""
     for _ in range(attempts):
         name = generate_anonymous_name()
         if not await db["users"].find_one({"anonymous_name": name}, {"_id": 1}):
@@ -226,11 +219,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
 
     _check_adult(data.date_of_birth, data.adult_confirmed)
 
-    # The username someone picks at signup IS their public anonymous name —
-    # there's no separate identity-setup step anymore, so this is the only
-    # chance to enforce the same rules update_profile applies to a later
-    # anonymous_name change (format, profanity, case-insensitive uniqueness
-    # against both fields, since the two are the same value from here on).
+    # The signup username is the public anonymous name, so apply the same rules as a later rename.
     chosen_name = (data.username or "").strip()
     if chosen_name:
         await _check_chosen_name(db, chosen_name)
@@ -373,13 +362,8 @@ def _session(user: dict, **extra) -> dict:
 
 @router.post("/google")
 async def google_auth(data: GoogleAuthRequest, request: Request, db=Depends(get_database)):
-    """Sign in or sign up with a Google ID token.
-
-    Existing Google or same-email accounts sign straight in. A brand-new person
-    gets `needs_profile` until they send a date of birth: Google doesn't share
-    one and Anonixx is 18+. Their Google name and photo are never used; the
-    public identity is a name they pick, or a random one.
-    """
+    """Sign in or up with a Google ID token. New users get `needs_profile` until they give a
+    date of birth (18+). Their Google name and photo are never used."""
     info  = await _verify_google_token(data.id_token)
     sub   = info["sub"]
     email = info["email"].strip().lower()
@@ -511,9 +495,7 @@ def _premium_running(user: dict) -> bool:
 
 
 # ─── Anonymous name helpers ───────────────────────────────────
-# Letters/numbers/./-/_ plus common emoji ranges (pictographs, misc symbols,
-# dingbats, flags) and the joiner/variation-selector code points that make
-# compound emoji (e.g. flags, skin tones) render as one glyph.
+# Letters, numbers, . - _ and emoji (including joiners, so flags and skin tones work).
 _ANON_CHARS = (
     r'[a-zA-Z0-9._\-'
     r'\U0001F300-\U0001FAFF'   # symbols & pictographs (incl. extended-A)
@@ -581,11 +563,7 @@ async def update_profile(
     current_user_id: str = Depends(get_current_user_id),
     db=Depends(get_database),
 ):
-    """
-    Unified profile update.
-    Handles username, email, anonymous_name (with cooldown + uniqueness),
-    avatar_url (real photo), and preset avatar emoji/color.
-    """
+    """Update username, email, anonymous name (cooldown + unique), photo or preset avatar."""
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -758,10 +736,7 @@ def _hash_otp(otp: str) -> str:
 
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_database)):
-    """
-    Always returns 200 regardless of whether the email exists
-    to prevent account enumeration attacks.
-    """
+    """Always 200, so nobody can tell whether an email is registered."""
     user = await db["users"].find_one({"email": data.email})
     if user:
         otp     = _generate_otp()

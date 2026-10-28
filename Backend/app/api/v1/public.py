@@ -1,8 +1,4 @@
-"""
-Public, unauthenticated read API for the website (Web/) — server-rendered
-pages, the sitemap and the guest feed. Only `general` posts are ever served
-here; `mature` posts need a signed-in, age-verified user via /drops/*.
-"""
+"""Public read API for the website (no login). Only `general` posts."""
 from datetime import datetime, timezone
 from typing import Optional
 

@@ -1,7 +1,4 @@
-"""
-email.py — Resend-powered transactional email for Anonixx.
-All templates are intentionally minimal and on-brand.
-"""
+"""Transactional email via Resend."""
 import resend
 from app.config import settings
 
@@ -11,10 +8,7 @@ def _client() -> None:
 
 
 def send_password_reset_otp(to_email: str, otp: str) -> bool:
-    """
-    Send a 6-digit OTP for password recovery.
-    Returns True on success, False on failure (caller decides how to handle).
-    """
+    """Send a 6-digit password reset code. Returns True if sent."""
     _client()
 
     html = f"""

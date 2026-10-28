@@ -1,27 +1,6 @@
-"""
-geo_pricing.py — IP Geolocation + PPP Pricing Config
-
-GET /geo/config  →  {
-    country_code, tier, show_mpesa, show_stripe, packages
-}
-
-Package shape per item:
-  { id, coins, label, tag,
-    display_price,           ← what to show the user
-    kes?,                    ← only if is_mpesa_country
-    stripe_amount,           ← USD cents (for Stripe PaymentIntent)
-    stripe_currency,         ← "usd"
-    stripe_display }         ← "$1.99"
-
-Pricing tiers:
-  Tier 1 (developed):  USD at full price   ($0.99 / $1.99 / $3.99 / $6.99)
-  Tier 2 (emerging):   USD at PPP discount ($0.49 / $0.99 / $1.99 / $3.49)
-  Tier 3 (M-Pesa):     KES via M-Pesa      (KES 50 / 100 / 250 / 500)
-                        USD via Stripe card (Tier 2 USD as fallback)
-
-IP lookup: local DB-IP country database (app/utils/geoip.py) — no per-request
-external call or rate limit.
-"""
+"""Prices by country. GET /geo/config returns the tier, which payment methods to show, and
+the coin packages. Tier 1: full USD; Tier 2: discounted USD; Tier 3: KES via M-Pesa (card as
+fallback). Country comes from the local IP database (utils/geoip.py)."""
 
 from fastapi import APIRouter, Request, Depends
 from app.dependencies import get_current_user_id
@@ -76,11 +55,7 @@ MPESA_PRICES: dict[str, int] = {
 }
 
 # ─── Drop-unlock pricing ───────────────────────────────────────────────────
-# Cash price to unlock a drop's identity — same PPP tiers as the coin
-# packages above. Tier 3 (M-Pesa) gets its own hand-picked KES price, not a
-# raw FX conversion of the USD figure (that's what DROP_PRICE_USD /
-# GROUP_DROP_PRICE_USD in drops.py used to do, charging the same number
-# worldwide).
+# Same tiers as the coin packages; Tier 3 has its own KES prices.
 DROP_UNLOCK_USD_CENTS: dict[str, dict[int, int]] = {
     "single": {1: 200, 2: 99},    # $2.00 tier 1 / $0.99 tier 2
     "group":  {1: 300, 2: 149},   # $3.00 tier 1 / $1.49 tier 2
@@ -92,10 +67,7 @@ DROP_UNLOCK_KES: dict[str, int] = {
 
 
 def get_drop_unlock_price(tier: int, is_mpesa_country: bool, is_group: bool = False) -> dict:
-    """Geo-aware drop-unlock price, mirroring build_packages()'s PPP tiers.
-
-    Returns { usd, usd_cents, kes? } — `kes` only present for M-Pesa countries.
-    """
+    """Unlock price for this country: { usd, usd_cents, kes? }."""
     kind        = "group" if is_group else "single"
     stripe_tier = min(tier, 2)      # Tier 3 (M-Pesa) falls back to tier-2 USD, same as coins
     usd_cents   = DROP_UNLOCK_USD_CENTS[kind][stripe_tier]
@@ -125,9 +97,7 @@ def build_packages(tier: int, is_mpesa_country: bool) -> list[dict]:
 
 
 # ─── Request → country → tier ─────────────────────────────────────────────────
-# One place for every price decision (packages shown here, the card charge in
-# coins.py, drop unlocks in drops.py), so what's shown is what's charged.
-# Country comes from the local IP database in app/utils/geoip.py.
+# Every price decision goes through here, so what's shown is what's charged.
 
 # Countries not in TIER_MAP, or a visitor who can't be placed at all, get the
 # emerging-market tier — the same for the price shown and the price charged.
@@ -150,12 +120,7 @@ async def get_geo_config(
     request: Request,
     current_user_id: str = Depends(get_current_user_id),
 ):
-    """
-    Returns geo-aware payment config for the requesting user.
-
-    Reads X-Forwarded-For so it works correctly behind Render / Cloudflare.
-    Safe to call on every CoinsScreen mount — response is cheap and fast.
-    """
+    """Payment config for the caller's country."""
     country     = await pricing_country(request)
     tier        = tier_for(country)
     # M-Pesa may also show on the client's own country hint when the IP can't be

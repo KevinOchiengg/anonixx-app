@@ -1,10 +1,4 @@
-"""
-Admin audit log: who did what, to what, and when.
-
-Every destructive or money-moving admin action calls `audit(...)`. Rows live in
-`admin_audit` and are shown to the super admin on /admin/audit. Writing a row
-never blocks or breaks the action itself.
-"""
+"""Admin audit log (`admin_audit`). Writing a row never breaks the action itself."""
 import logging
 from datetime import datetime, timezone
 from typing import Optional

@@ -1,14 +1,6 @@
-"""
-AI pre-screening for the moderation queue.
-
-When a drop is flagged by reports (or hidden for a self-harm concern), Claude
-reads the text and the report reasons and gives it a risk score (0-100), a
-category and a one-line reason, so the worst items sit at the top of
-/admin/moderation. It only ranks; a human still decides every item.
-
-Same client setup as the confession writer (ANTHROPIC_API_KEY / ANTHROPIC_MODEL).
-Without a key, or if the call fails, a simple rule-based score stands in.
-"""
+"""AI risk score (0-100), category and reason for flagged drops, so the worst sit at the top
+of the moderation queue. Ranking only; a human decides. Falls back to simple rules without
+an API key."""
 import json
 import logging
 

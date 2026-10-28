@@ -14,9 +14,7 @@ class User(BaseModel):
     # Anonymous identity
     anonymous_name: Optional[str] = None
 
-    # Profile — a real photo if the user chose to set one; no avatar photo
-    # shown otherwise (the client falls back to the first initial of
-    # anonymous_name).
+    # Optional real photo; otherwise clients show the name's first letter.
     display_name: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -42,24 +40,18 @@ class User(BaseModel):
     premium_plan: Optional[str] = None       # "monthly" | "quarterly" | "yearly" — see api/v1/premium.py
     premium_until: Optional[datetime] = None  # None + is_premium=True means never-expiring
 
-    # ✅ NEW: Age verification + safety
-    # Self-attested date of birth, required at signup — Anonixx is 18+ only.
-    # age_verified is set True at signup once date_of_birth proves adulthood.
+    # Age: date of birth at signup (18+ only); age_verified once it proves adulthood.
     date_of_birth: Optional[date] = None
     age_verified: bool = False
     is_premium: bool = False
     premium_until: Optional[str] = None
     blocked_user_ids: List[str] = []
 
-    # Deceptive-confession strikes — see api/v1/deception_reports.py. Strike
-    # 2 suspends posting for 7 days; strike 3+ deactivates the account
-    # (is_active=False, same field the admin ban toggle uses).
+    # Deception strikes: 2nd = 7-day posting ban, 3rd = account disabled.
     deception_strikes: int = 0
     posting_suspended_until: Optional[datetime] = None
 
-    # Coins. `coin_balance` is everything spendable in-app; `withdrawable_coins`
-    # is the earned subset that may be cashed out (signup bonus and purchased
-    # coins never count) — see WITHDRAWABLE_REASONS in utils/coin_service.py.
+    # coin_balance is all spendable coins; withdrawable_coins is the earned part that can be cashed out.
     coin_balance: int = 100
     withdrawable_coins: int = 0
 

@@ -1,18 +1,6 @@
-"""
-Search lexicon: turns a typed query in English, Swahili or Sheng into
-structured discovery filters, without any AI call (queries never leave the
-server).
-
-  "dem wa Kisumu"           -> surface near, gender woman, county Kisumu
-  "stories za heartbreak"   -> surface stories, topic heartbreak
-  "jamaa Nairobi tonight"   -> surface near, gender man, county Nairobi, fresh tonight
-
-Every match comes back as a chip the client shows and the user can remove,
-so a wrong guess is one tap away from being undone. Words that matched
-nothing stay in `keyword` and are searched as plain text. Slang is curated
-here, one meaning per entry; ambiguous words ("bae", "sponsor") are left out
-on purpose.
-"""
+"""Turns a typed search (English, Swahili, Sheng) into filters, with no AI call.
+e.g. "dem wa Kisumu" -> near, woman, Kisumu. Each match is a removable chip; unmatched words
+are searched as text. Ambiguous slang is left out on purpose."""
 import re
 from typing import Optional
 
@@ -120,8 +108,7 @@ VARIANTS = {
     "nrb": "nairobi", "nai": "nairobi", "kisumo": "kisumu",
 }
 
-# Words with more than one everyday meaning. They never become a filter on their
-# own; the client offers them as a one-tap suggestion instead.
+# Ambiguous words: offered as a one-tap suggestion, never applied on their own.
 #   word -> (chip kind, value, label)
 AMBIGUOUS = {
     "mama": ("topic", "family", "Family"), "baba": ("topic", "family", "Family"),
@@ -180,9 +167,8 @@ def _phrases(text: str, n_max: int = 4) -> list:
 
 
 def parse(query: str) -> dict:
-    """Structured reading of a query. Longest phrases win; each word is used once.
-    `chips` are applied filters (removable); `suggest` are ambiguous readings the
-    user can tap to apply; `keyword` is what's left to search as text."""
+    """Parse a query (longest phrases first). Returns chips (applied), suggest (tap to apply)
+    and keyword (left over, searched as text)."""
     text = normalize(query)
     words = text.split()
     used = [False] * len(words)
@@ -294,9 +280,7 @@ def topic_regex(topic: Optional[str]) -> Optional[str]:
     return r"\b(?:" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + r")\b"
 
 
-# ── suggestions ──
-# Starter phrases shown while typing. Curated, never built from posts or people,
-# so a suggestion can't reveal that someone or something exists.
+# ── suggestions: curated starter phrases, never built from real posts or people.
 STARTERS = {
     "near": ["dem wa Nairobi", "jamaa Mombasa tonight", "msupa Kisumu", "women this weekend", "men tonight",
              "can host Nairobi", "manzi Nakuru"],
@@ -368,9 +352,7 @@ _COUNTRY_NAMES = _countries()
 
 
 def place_from_area(area: str) -> Optional[dict]:
-    """A structured place from the free-text area on a hookup post ("Westlands",
-    "Kisumu CBD", "Kampala"), or None. A town or neighbourhood we know becomes the
-    sub-county; nothing finer (no estates, no coordinates)."""
+    """A structured place from a hookup post's free-text area (down to sub-county), or None."""
     text = normalize(area)
     if not text:
         return None

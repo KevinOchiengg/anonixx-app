@@ -1,9 +1,4 @@
-"""Hard-reject text that Google Play and basic safety rules forbid.
-
-A blocklist is a floor, not a moderator: it catches the obvious cases at
-submission time. Everything else is handled by user reports (auto-hide at
-REPORT_THRESHOLD) and manual review.
-"""
+"""Blocklist for text that store rules and basic safety forbid. Reports and review handle the rest."""
 import re
 
 _MINOR = r"(?:child(?:ren)?|kid|kids|minor|minors|underage|under\s*age|toddler|infant|baby|preteen|pre-teen|schoolgirl|schoolboy|school\s*girl|school\s*boy|loli(?:ta)?|shota|teen\s*girl|teen\s*boy|\b(?:[0-9]|1[0-7])\s*(?:yo|y/o|yr\s*old|years?\s*old|year-old))"

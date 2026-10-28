@@ -1,18 +1,6 @@
-"""
-Publishes admin drops that were scheduled for later.
-
-A scheduled drop lives in `scheduled_drops` (the create payload, media
-already uploaded) until its time comes, then goes through the normal
-create_drop path — so notifications, the socials queue and the teaser card
-all happen at the real publish moment, not when it was written.
-
-Two things drive it: a loop that checks every minute while the server is
-up, and a nudge from feed requests (`nudge`). The second matters on a host
-that sleeps when idle (Render free tier): the first visitor after the
-scheduled time wakes the server, and their feed load publishes what's due.
-Each drop is claimed atomically (pending -> publishing) before it's
-created, so overlapping runs never publish it twice.
-"""
+"""Publishes scheduled admin drops when due, through the normal create_drop path. Runs every
+minute and is also nudged by feed requests (the host sleeps when idle). Each drop is
+claimed atomically, so it's never published twice."""
 import asyncio
 import logging
 import time

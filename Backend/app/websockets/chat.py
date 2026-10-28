@@ -1,23 +1,5 @@
-"""
-chat.py
-
-Real-time events for Link Up DM chat (drop_connections / drop_messages).
-
-Unlike drop comment threads (room-per-drop, any number of viewers), a DM
-is always between exactly two known users — so this targets the other
-party's personal room directly (f"user_{user_id}", already joined on
-socket connect, see app/websockets/events.py) instead of a room scoped to
-the conversation. No join/leave events needed on the client side.
-
-Events emitted:
-  new_message      → the other party in a Link Up chat received a message
-  messages_seen    → the other party just read up to some point in the chat
-                      (drives the sent-message "seen" tick going live/blue
-                      without waiting for that party's own next poll)
-  message_deleted  → a message was deleted for everyone — the other party
-                      needs to swap it for the "deleted" placeholder live,
-                      not just on their next poll
-"""
+"""Real-time Link Up chat events, sent to the other person's user_{id} room:
+new_message, messages_seen, message_deleted."""
 
 from app.sio import sio
 

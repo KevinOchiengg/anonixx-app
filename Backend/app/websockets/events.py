@@ -1,13 +1,4 @@
-"""
-Socket.IO event handlers. Presence (connect/disconnect) plus room join/
-leave for drop comment threads. The old chat-room events (join_chat/
-leave_chat/messages_read/user_typing) tied to the now-removed
-connect_messages system were deleted long ago — Link Up's DropChatScreen
-now gets live messages a different way: emit_new_message
-(app/websockets/chat.py) targets the recipient's personal user_{id} room
-directly, since a DM only ever has two known participants and doesn't
-need a per-conversation room the way comment threads do.
-"""
+"""Socket.IO handlers: presence, comment-thread rooms and chat typing."""
 
 from datetime import datetime, timezone
 
@@ -99,10 +90,7 @@ def online_users() -> dict[str, datetime]:
     return {u: _online_since.get(u) for u in _online_users}
 
 
-# ─── Drop comment threads ──────────────────────────────────────────────────
-# Room-per-drop, joined only while a client has that drop's comment sheet
-# open — keeps new_comment/comment_liked broadcasts (app/websockets/
-# comments.py) scoped to people actually looking at the thread right now.
+# ─── Drop comment threads: joined while a drop's comments are open ─────────
 
 @sio.event
 async def join_drop_thread(sid: str, data: dict):
@@ -118,12 +106,7 @@ async def leave_drop_thread(sid: str, data: dict):
         await sio.leave_room(sid, f"drop_{drop_id}")
 
 
-# ─── Link Up DM typing ──────────────────────────────────────────────────────
-# Client -> server: "I'm typing in this chat." Relayed as user_typing to the
-# other party's personal room. MessagesScreen (chat list) has listened for
-# user_typing since before this handler existed — this is what actually
-# starts firing it; DropChatScreen (the open conversation) also listens,
-# filtering by connectionId since a user can have more than one open chat.
+# ─── Chat typing: relayed to the other person as user_typing ───────────────
 
 @sio.event
 async def typing(sid: str, data: dict):

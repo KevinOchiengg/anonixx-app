@@ -1,9 +1,4 @@
-"""
-Customer support — user<->admin chat and coin-purchase refund requests.
-
-One conversation per user (support_messages.user_id). Any admin can reply;
-refund decisions are super-admin only (they move money).
-"""
+"""Support chat (one conversation per user) and refund requests (super admin decides)."""
 from datetime import datetime, timezone
 from typing import Optional
 

@@ -1,32 +1,6 @@
-"""
-unlock_requests.py — owner-approval gate in front of confession unlocks.
-
-Unlocking a confession (drop) used to be instant: pay coins, get a chat
-connection, no say from the confession's owner. This module turns it into
-a request the owner must Accept (or Accept All, per-confession) before any
-coins move and before a chat connection exists.
-
-Data model — one row per attempt in `drop_unlock_requests`:
-    target_type   "drop" — kept as an explicit field (rather than assumed)
-                          since a prior version of this module also
-                          supported "circle_comment" targets; the field
-                          stays so historical rows still read correctly.
-    target_id, owner_id, requester_id, requester_anonymous_name,
-    confession_snippet, payment_method ("coins" only for now — see
-    create_unlock_request), status ("pending"|"accepting"|"accepted"|
-    "declined"|"cancelled"|"expired"), connection_id, created_at,
-    responded_at, expires_at
-
-In the product this is a Knock on someone's Room: free to send, the owner
-Lets In or Declines, and the visitor's coins move only on Let In.
-
-Resolved rows are kept (not deleted) so a decline isn't a dead end — the
-requester can send a fresh request later, and the owner's review screen
-keeps a little history. No coin escrow exists: nothing is charged until
-accept. Sending checks the visitor can cover the cost right now, and accept
-re-checks atomically (debit_coins only succeeds if the balance covers it),
-so a Let In can never overdraw or double-charge.
-"""
+"""Knocks: a request to get into someone's Room. Free to send; the owner Lets In or Declines,
+and coins move only on Let In (re-checked atomically, so no overdraw or double charge).
+Resolved knocks are kept so people can knock again later."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -42,10 +16,7 @@ from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
 from app.api.v1.chat_profile import door_rule_of, gallery_for, is_blocked_between, room_theme_of
 
-# Pending requests now carry their own clock. They used to inherit the
-# confession's expiry, but drops no longer expire until they're unlocked —
-# without this a request nobody answered would sit in an owner's inbox
-# forever.
+# Unanswered knocks expire on their own after this many days.
 REQUEST_EXPIRY_DAYS = 7
 from app.websockets.unlock_requests import (
     emit_unlock_request_received,
@@ -84,10 +55,7 @@ class CreateUnlockRequestBody(BaseModel):
     target_type: str            # "drop" — the only target type now
     target_id: str
     payment_method: str = "coins"
-    # Optional — a photo or short video the requester chooses to attach so
-    # the owner has some idea who they'd be accepting. Never required to
-    # unlock; uploaded client-side via the existing /upload/sign flow first,
-    # this just carries the resulting URL.
+    # Optional photo/video so the owner has an idea who's knocking.
     media_url: Optional[str] = None
     media_type: Optional[str] = None       # "image" | "video"
     media_duration: Optional[float] = None  # seconds, video only
@@ -111,12 +79,7 @@ class AcceptAllBody(BaseModel):
 # ==================== HELPERS ====================
 
 async def _resolve_target(target_type: str, target_id: str, db) -> dict:
-    """Returns {doc, owner_id, target_expires_at, confession_snippet}.
-
-    `target_expires_at` is None for anything that never expires — which is
-    every drop until its first unlock, and every plain feed post. It is NOT
-    the request's own expiry; see REQUEST_EXPIRY_DAYS for that.
-    """
+    """{doc, owner_id, target_expires_at, confession_snippet}. target_expires_at is None if it never expires."""
     if target_type != "drop":
         raise HTTPException(status_code=400, detail="target_type must be 'drop'.")
 
@@ -141,9 +104,7 @@ async def _create_connection_for_target(target_type: str, target_id: str, target
 
 
 async def _charge_and_complete(req: dict, target_doc: dict, db) -> str:
-    """The actual coins-move-now step, run only once a request is accepted.
-    Raises ValueError on insufficient coins — caller reverts the request to
-    pending rather than losing or auto-declining it."""
+    """Charge and connect for an accepted knock. Raises ValueError if coins are short (knock goes back to pending)."""
     target_type  = req["target_type"]
     target_id    = req["target_id"]
     requester_id = req["requester_id"]
@@ -184,9 +145,8 @@ async def _charge_and_complete(req: dict, target_doc: dict, db) -> str:
 
 
 async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
-    """Atomically claims one pending request, charges it, and completes the
-    unlock. Returns {error: None, connection_id} on success, or
-    {error: "not_found"|"payment_failed", reason?}."""
+    """Claim, charge and complete one pending knock atomically.
+    Returns {error: None, connection_id} or {error: "not_found"|"payment_failed", reason?}."""
     claimed = await db["drop_unlock_requests"].find_one_and_update(
         {"_id": request_oid, "owner_id": owner_id, "status": "pending", "expires_at": {"$gt": now_utc()}},
         {"$set": {"status": "accepting"}},
@@ -241,9 +201,7 @@ async def create_unlock_request(
     if data.target_type != "drop":
         raise HTTPException(status_code=400, detail="target_type must be 'drop'.")
     if data.payment_method != "coins":
-        # Stripe/M-Pesa need an off-session charge design (SetupIntent, SCA
-        # fallback) that doesn't exist yet — reject cleanly instead of
-        # shipping a half-working delayed charge.
+        # Only coins for now; card/M-Pesa charges on accept aren't supported.
         raise HTTPException(status_code=501, detail="Only coin unlocks are supported right now.")
 
     if data.media_url:
@@ -403,9 +361,7 @@ async def create_unlock_request(
 
 
 async def _try_mutual(data, doc, owner_id, requester_id, requester_name, pitch, intents, db) -> Optional[dict]:
-    """If the poster already has a pending link up to the requester, accept both
-    sides free. No coins move and no poster reward is credited (two accounts
-    shouldn't be able to farm rewards off each other)."""
+    """Both sides knocked on each other: connect them free (no coins, no reward)."""
     reverse = await db["drop_unlock_requests"].find_one_and_update(
         {"owner_id": requester_id, "requester_id": owner_id, "status": "pending", "expires_at": {"$gt": now_utc()}},
         {"$set": {"status": "accepting"}},
@@ -467,9 +423,8 @@ async def count_pending_incoming(db, user_id: str) -> int:
 
 
 async def _signals(db, host_id: str, requester_ids: set) -> dict:
-    """Clues about a knocker that cost them nothing to give and are hard to fake:
-    account age, verified, how often other hosts let them in, how much they post,
-    confirmed deception, and whether they and the host like each other's drops."""
+    """Hard-to-fake clues about a knocker: account age, verified, let-in rate, posts,
+    confirmed deception, and mutual likes with the host."""
     out: dict = {}
     ids = [rid for rid in requester_ids if ObjectId.is_valid(rid)]
     if not ids:
@@ -537,9 +492,7 @@ async def list_incoming_requests(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """The owner's inbox. Pass both target_type + target_id to scope to one
-    confession (drives the per-confession Accept All button); omit both for
-    everything, grouped client-side by target_id."""
+    """The owner's knock inbox, optionally for one confession (target_type + target_id)."""
     query = {"owner_id": current_user_id, "status": "pending"}
     if target_type and target_id:
         query["target_type"] = target_type
@@ -547,10 +500,7 @@ async def list_incoming_requests(
 
     rows = await db["drop_unlock_requests"].find(query).sort([("target_id", 1), ("created_at", 1)]).to_list(length=None)
 
-    # Same "resume before you accept" logic as the feed avatar — the owner
-    # deciding whether to accept should see who's asking, not just a name,
-    # same as the requester already sees the drop's own avatar before
-    # sending the request. One batch lookup for the whole inbox.
+    # Knocker avatars in one query, so the owner sees who's asking.
     requester_ids = {r["requester_id"] for r in rows if r.get("requester_id")}
     requester_avatars: dict[str, Optional[str]] = {}
     requester_rooms: dict[str, dict] = {}
@@ -630,9 +580,7 @@ async def get_request_status(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Poll target for the waiting screen — sockets are primary, this is the
-    fallback. Also the entire expiry mechanism: a stale pending row is only
-    ever flipped to "expired" lazily, right here, on read."""
+    """Knock status for the waiting screen (sockets are primary). Also expires stale knocks."""
     try:
         oid = ObjectId(request_id)
     except Exception:
@@ -681,9 +629,7 @@ async def accept_all_unlock_requests(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Approves everyone currently waiting on ONE confession — scoped to
-    target_id, never account-wide. Never aborts the batch on one failure
-    (e.g. a requester who spent their coins elsewhere in the meantime)."""
+    """Let in everyone waiting on one confession. One failure doesn't stop the rest."""
     pending = []
     async for r in db["drop_unlock_requests"].find({
         "target_type": data.target_type, "target_id": data.target_id,

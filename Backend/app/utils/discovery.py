@@ -1,16 +1,5 @@
-"""
-Shared eligibility for every discovery surface (api/v1/discover.py, the old
-/drops/search, and the logged-in feed).
-
-One place decides what a viewer may be shown:
-  - the post is active and not flagged/hidden by moderation;
-  - a hookup's discovery window (live_until) hasn't run out;
-  - content mode (mature posts only for age-verified viewers in "full" mode);
-  - blocks in BOTH directions: people I blocked, and people who blocked me.
-
-Search projections or caches never replace this; endpoints build their query
-from `eligible(...)` and authoritative checks still run when content opens.
-"""
+"""What a viewer may be shown, for every discovery surface: active and not moderated, still
+in its discovery window, allowed by content mode, and no blocks either way."""
 from datetime import datetime
 from typing import Optional
 

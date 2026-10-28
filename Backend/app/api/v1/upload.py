@@ -10,10 +10,7 @@ logger = logging.getLogger("uvicorn.error")
 from app.dependencies import require_scope
 router = APIRouter(prefix="/upload", tags=["upload"])
 
-# No processing on this backend anymore (R2 is dumb storage), so these are
-# the only real guard against an oversized attachment — see the module
-# docstring in app/utils/r2_storage.py for why there's no duration/watermark
-# handling to guard on top of them.
+# Upload size limits (R2 does no processing, so these are the only guard).
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 MAX_VIDEO_BYTES = 50 * 1024 * 1024
@@ -59,10 +56,8 @@ async def create_stream_upload(
     upload_length: int = Header(..., alias="Upload-Length"),
     admin_id: str = Depends(require_scope("content")),
 ):
-    """tus "creation" endpoint for the browser's uploader: reserves a one-time
-    Stream upload and points the uploader at it via Location, so the file
-    itself goes straight to Cloudflare (resumable), never through this server.
-    Only admins post video drops."""
+    """tus upload start: reserves a Cloudflare Stream upload so the browser sends the file
+    straight there. Admins only."""
     if not stream.is_configured():
         raise HTTPException(status_code=503, detail="Video uploads to Stream aren't switched on yet.")
     try:

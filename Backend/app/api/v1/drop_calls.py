@@ -1,22 +1,6 @@
-"""
-api/v1/drop_calls.py — Group video calls inside a poster's chat interface.
-
-A "room": the poster (host) starts a call; anyone who has unlocked a chat
-with them can join as a guest, up to their room's capacity (see
-chat_profile.py CALL_MODES / FREE_GUEST_CAP / call-capacity purchases).
-Solo-mode hosts are capped at 1 guest no matter what they've purchased.
-
-Everyone who joins — host and guests alike — publishes camera + mic and can
-toggle screen-share; there's no broadcaster/audience split like Circles.
-Agora's Communication profile (same as the 1:1 CallScreen) handles that
-symmetry natively, just with more than two participants in the channel.
-
-Signaling is best-effort real-time (a socket event on start/join/leave) with
-polling as the real guarantee — DropChatScreen already polls
-GET /drops/connections/{id}/messages every few seconds, and that response
-carries `active_call` so a guest finds out even if they missed the socket
-event.
-"""
+"""Group video calls in a poster's Room. The host starts a call; connected guests join up to
+the room size. Everyone shares camera and mic. Start/join/leave is pushed over the socket,
+and the chat poll carries `active_call` as a fallback."""
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone
@@ -116,9 +100,7 @@ async def start_call(
     uid   = _uid_for(current_user_id)
     token = _generate_token(channel, uid)
 
-    # Best-effort nudge to everyone who could join — polling is the real
-    # guarantee (see module docstring), this just makes it feel instant for
-    # anyone already online.
+    # Instant nudge to anyone online; the chat poll is the fallback.
     try:
         from app.sio import sio
         from app.api.v1.drops import send_push_notification

@@ -1,13 +1,4 @@
-"""
-app/api/v1/connect.py
-Anonymous Profile — the sheet shown when tapping someone's anonymous name.
-
-The old free "Connect" request/chat/call/reveal system that used to live in
-this file (and the connect_chats/connect_requests/connect_messages
-collections it wrote to) has been removed. The only way to actually reach
-someone is Link Up (coins → unlock_requests.py / drops.py → drop_connections
-→ DropChatScreen) — this file now only serves the read-only profile view.
-"""
+"""Anonymous profile: the read-only sheet shown when tapping someone's name."""
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -34,14 +25,7 @@ async def get_anonymous_profile_by_id(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """
-    Same profile as the by-name route, resolved by user id.
-
-    Preferred over the name lookup: anonymous_name is randomly generated and
-    not unique, so looking a profile up by name can land on the wrong person
-    (and make is_self resolve incorrectly). Clients that have the id — every
-    feed card does — should use this.
-    """
+    """Profile by user id (preferred: names aren't unique)."""
     try:
         user = await db["users"].find_one({"_id": ObjectId(user_id)})
     except Exception:
@@ -57,12 +41,7 @@ async def get_anonymous_profile(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database)
 ):
-    """
-    Get a user's anonymous profile by name.
-
-    Kept for already-installed app builds. Prefer /profile/id/{user_id} —
-    anonymous names aren't unique, so this can resolve to the wrong user.
-    """
+    """Profile by name, for older app builds. Prefer /profile/id/{user_id}."""
     user = await get_user_by_anonymous_name(anonymous_name, db)
 
     if not user:
@@ -101,9 +80,7 @@ async def _build_anonymous_profile(user: dict, current_user_id: str, db) -> dict
     vibe_doc = await db["vibe_scores"].find_one({"user_id": target_id}, {"events": 1})
     reactions_received = ((vibe_doc or {}).get("events", {}) or {}).get("reaction_received", 0)
 
-    # Location is deliberately coarse — county + country only. Anonixx users
-    # set sub-county and estate for feed scoping, but showing that on a public
-    # profile would narrow an "anonymous" poster down to a neighbourhood.
+    # County + country only, never anything that narrows someone to a neighbourhood.
     location = ", ".join(
         v for v in [user.get("location_county"), user.get("location_country")]
         if v and str(v).strip()

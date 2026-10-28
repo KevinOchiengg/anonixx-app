@@ -36,10 +36,7 @@ class Settings(BaseSettings):
         "your-super-secret-key-change-in-production-at-least-32-characters-long"
     )
     JWT_ALGORITHM: str = "HS256"
-    # No refresh-token flow is actually wired up client-side (the app only
-    # ever stores this one token), so it has to survive a whole real session
-    # on its own — 30 min was causing every authenticated action to start
-    # silently failing with 401 mid-session. 30 days instead.
+    # Long-lived (30 days): the app has no refresh-token flow.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
@@ -97,9 +94,7 @@ class Settings(BaseSettings):
     # summary email/push to super admins; 5 = 08:00 in East Africa.
     ADMIN_DIGEST_HOUR_UTC: int = 5
 
-    # AGENT HUB (/admin/agents): reads the agents' reports from GitHub and writes the
-    # founder's approve / reject back. A fine-grained token with Contents read+write on
-    # the repo. Empty = the hub shows how to connect it.
+    # AGENT HUB: GitHub token with Contents read+write, to read reports and save decisions.
     GITHUB_TOKEN: str = ""
     GITHUB_REPO: str = "KevinOchiengg/anonixx-app"
     GITHUB_BRANCH: str = "main"
@@ -109,20 +104,14 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = "Anonixx <noreply@anonixx.com>"
 
     # ── SOCIAL PUBLISHER ──────────────────────────────────────────
-    # TikTok — long-lived OAuth 2.0 access token for the Anonixx brand account
-    # Obtain via: https://developers.tiktok.com/doc/login-kit-web
-    # Required scopes: video.publish  video.upload
+    # TikTok access token (scopes: video.publish, video.upload)
     TIKTOK_ACCESS_TOKEN: str = "your-tiktok-access-token-here"
 
-    # Facebook Page — long-lived Page Access Token
-    # Obtain via: https://developers.facebook.com/tools/explorer
-    # Required permissions: pages_manage_posts  pages_read_engagement
+    # Facebook Page access token (pages_manage_posts, pages_read_engagement)
     FACEBOOK_PAGE_ID:           str = "your-facebook-page-id-here"
     FACEBOOK_PAGE_ACCESS_TOKEN: str = "your-facebook-page-access-token-here"
 
-    # Instagram Business Account (linked to the Facebook Page above)
-    # Find it: GET /{page_id}?fields=instagram_business_account&access_token=...
-    # Uses the same FACEBOOK_PAGE_ACCESS_TOKEN — no separate token needed
+    # Instagram business account linked to the Facebook Page (uses the same token)
     INSTAGRAM_ACCOUNT_ID: str = "your-instagram-account-id-here"
 
     # Telegram — Bot API token + the Anonixx channel it posts into

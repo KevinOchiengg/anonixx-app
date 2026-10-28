@@ -27,9 +27,7 @@ class CoinAdjustRequest(BaseModel):
 
 
 async def _guard_target(db, admin_id: str, target_id: str, action: str) -> ObjectId:
-    """Validate a target user for a destructive action: valid id, exists,
-    not yourself, never a super admin, and only a super admin may act on
-    another admin."""
+    """Check a target user: exists, not yourself, never a super admin; only a super admin may act on an admin."""
     if target_id == admin_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Cannot {action} yourself")
     try:
@@ -321,11 +319,7 @@ async def get_moderation_queue(
     admin_id: str = Depends(require_scope("moderation")),
     db=Depends(get_database),
 ):
-    """
-    Reporting a Drop (POST /drops/{drop_id}/report) auto-flags it at 3
-    reports, or hides it immediately for self-harm-concern — but until now
-    nothing ever surfaced that queue for a human to actually act on.
-    """
+    """Drops auto-flagged or hidden by user reports, waiting for review."""
     query  = {"moderation_status": {"$in": ["flagged", "hidden"]}}
     total  = await db["drops"].count_documents(query)
     # Riskiest first (scored by app/tasks/admin_monitor.py -> services/risk_screen.py),
@@ -365,10 +359,8 @@ async def score_queue_now(
     return {"scored": await score_flagged(db, limit=25)}
 
 
-# How the admin Posts list can be ordered. "engagement" is interactions per view:
-# (likes + comments + saves + link ups) / views, so a small post that lands well
-# can outrank a big one that people scroll past. Posts under ENGAGEMENT_MIN_VIEWS
-# rank after the rest, so 1 like on 1 view doesn't top the list at 100%.
+# Posts list sort orders. "engagement" = (likes + comments + saves + link ups) / views;
+# posts under ENGAGEMENT_MIN_VIEWS rank last so 1 like on 1 view doesn't top the list.
 ENGAGEMENT_MIN_VIEWS = 20
 DROP_SORTS = {
     "recent":     {"created_at": -1},
@@ -552,13 +544,8 @@ async def unpromote_drop(
 
 
 # ─── Scheduled drops ──────────────────────────────────────────
-# The Post Studio uploads the media straight away and parks the create
-# payload here; app/tasks/scheduled_publisher.py publishes it on time.
-#
-# Video drops on Cloudflare Stream come through here too, even when posted
-# "now": the job sits in status "processing" while Stream encodes, cuts and
-# watermarks the clip (app/utils/stream.py), then turns "pending" and
-# publishes at publish_at — or straight away when none was given.
+# Stored here and published on time by tasks/scheduled_publisher.py. Stream videos wait
+# in "processing" while Cloudflare encodes them, then publish.
 
 MAX_SCHEDULE_DAYS = 60
 MIN_STREAM_CLIP = 1

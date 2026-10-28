@@ -1,20 +1,6 @@
-"""
-Cloudflare Stream — where video drops live once it's configured.
-
-Flow for one video (see app/tasks/scheduled_publisher.py for who drives it):
-  1. The browser uploads the original straight to Stream over tus
-     (resumable). Our backend only hands out the one-time upload URL, so the
-     API token never leaves the server.
-  2. When the original is ready we cut the posted window out of it with the
-     clip API, stamping the Anonixx watermark on the way. Every video goes
-     through this step, trimmed or not: it's the one place the watermark and
-     the 3-minute cap are applied.
-  3. When the clip is ready the original is deleted (Stream bills per stored
-     minute) and the drop is published with the clip's HLS manifest.
-
-Until CF_ACCOUNT_ID / CF_STREAM_TOKEN are set, is_configured() is False and
-the clients keep uploading to R2 exactly as before.
-"""
+"""Cloudflare Stream for video drops. The browser uploads the original over tus; we clip the
+posted window with the watermark and 3-minute cap; then delete the original and publish the
+clip. Off until CF_ACCOUNT_ID / CF_STREAM_TOKEN are set (videos go to R2)."""
 import base64
 import logging
 from typing import Optional
@@ -65,9 +51,7 @@ async def create_tus_upload(upload_length: int) -> tuple[str, str]:
 
 
 async def create_direct_upload() -> tuple[str, str]:
-    """One-time basic (single POST, multipart field "file") upload URL, for
-    clients without a tus library — the app. Stream caps these at 200 MB.
-    Returns (upload_url, video_uid)."""
+    """One-time basic upload URL for the app (max 200 MB). Returns (upload_url, video_uid)."""
     async with httpx.AsyncClient(timeout=20) as client:
         r = await client.post(_url("/direct_upload"), headers=_auth(), json={"maxDurationSeconds": MAX_UPLOAD_SECONDS})
     if r.status_code >= 300:

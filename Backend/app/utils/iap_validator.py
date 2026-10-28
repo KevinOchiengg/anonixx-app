@@ -1,25 +1,5 @@
-"""
-iap_validator.py — Apple App Store + Google Play receipt validation.
-
-Both platforms require server-side verification of in-app purchases.
-NEVER trust client-reported success — always validate the receipt server-side.
-
-Apple flow:
-  Client receives base64 receipt → sends to backend → backend POSTs to Apple's
-  verifyReceipt endpoint → Apple returns parsed receipt + status.
-  status == 0  →  valid
-
-Google Play flow:
-  Client receives purchaseToken → sends to backend with productId + packageName
-  → backend calls Android Publisher API (purchases.products.get) using a
-  service-account JWT → Google returns purchase state.
-  purchaseState == 0  →  purchased
-
-Required env (set in Backend/.env):
-  APPLE_SHARED_SECRET           — App Store Connect → Manage In-App Purchases → Master Shared Secret
-  GOOGLE_PLAY_PACKAGE_NAME      — e.g. com.anonixx.app
-  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON — full JSON of the service account, OR path to file
-"""
+"""Server-side App Store and Google Play purchase checks. Never trust the client.
+Env: APPLE_SHARED_SECRET, GOOGLE_PLAY_PACKAGE_NAME, GOOGLE_PLAY_SERVICE_ACCOUNT_JSON."""
 
 from __future__ import annotations
 
@@ -45,14 +25,8 @@ async def verify_apple_receipt(
     receipt_data: str,
     expected_product_id: Optional[str] = None,
 ) -> dict:
-    """
-    Verifies a base64-encoded App Store receipt. Returns:
-        { valid: bool, product_id: str|None, transaction_id: str|None, raw: dict, error: str|None }
-
-    Auto-handles the sandbox-vs-production retry per Apple's docs.
-    Pass `expected_product_id` to enforce that the receipt matches the
-    product the client claims to have purchased.
-    """
+    """Verify an App Store receipt (retries sandbox automatically).
+    Returns { valid, product_id, transaction_id, raw, error }."""
     shared_secret = getattr(settings, "APPLE_SHARED_SECRET", "") or ""
     if not shared_secret:
         return {"valid": False, "error": "APPLE_SHARED_SECRET not configured."}
@@ -182,11 +156,7 @@ async def verify_google_purchase(
     product_id:   str,
     purchase_token: str,
 ) -> dict:
-    """
-    Verifies a Google Play in-app purchase token via the Android Publisher API.
-    Returns:
-        { valid, product_id, transaction_id, raw, error }
-    """
+    """Verify a Google Play purchase token. Returns { valid, product_id, transaction_id, raw, error }."""
     creds = _get_google_credentials()
     if not creds:
         return {"valid": False, "error": "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not configured."}
@@ -225,11 +195,8 @@ async def verify_google_purchase(
 
 
 async def verify_google_subscription(package_name: str, purchase_token: str) -> dict:
-    """
-    Verifies a Play subscription via purchases.subscriptionsv2. Returns
-    { valid, product_id, transaction_id, expiry (aware datetime|None), raw, error }.
-    Active and in-grace-period subscriptions count as valid.
-    """
+    """Verify a Play subscription (active or in grace = valid).
+    Returns { valid, product_id, transaction_id, expiry, raw, error }."""
     from datetime import datetime
 
     creds = _get_google_credentials()
