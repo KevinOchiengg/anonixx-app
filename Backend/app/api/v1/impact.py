@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_database
 from app.dependencies import get_current_user_id
@@ -15,7 +15,7 @@ async def get_impact_dashboard(
     """Get user's impact dashboard - how they've helped others"""
     
     # Get time ranges
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     

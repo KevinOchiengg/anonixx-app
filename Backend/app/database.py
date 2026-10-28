@@ -1,3 +1,4 @@
+from datetime import timezone
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.config import settings
 from typing import Optional
@@ -12,7 +13,10 @@ db = Database()
 
 
 async def connect_to_mongo():
-    db.client = AsyncIOMotorClient(settings.MONGODB_URL)
+    db.client = AsyncIOMotorClient(
+        # Dates come back as UTC with a time zone, so apps show them in local time.
+        settings.MONGODB_URL, tz_aware=True, tzinfo=timezone.utc,
+    )
     db.db = db.client[settings.DATABASE_NAME]
     try:
         await db.client.admin.command("ping")
