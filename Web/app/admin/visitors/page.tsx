@@ -218,10 +218,9 @@ function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => void; on
   if (!d) return null;
   return (
     <div className="adm-panel">
-      <div className="adm-panel-head">
-        <h3>Live now: <span className="adm-live">{d.app_total + d.web.length}</span></h3>
-        <p className="muted small">{d.app_total} in the app · {d.web.length} on the website (last {d.minutes} min). Refreshes every 15s.</p>
-      </div>
+      <div className="adm-label">Right now</div>
+      <div className="adm-big"><span className="adm-live">{d.app_total + d.web.length}</span></div>
+      <p className="muted small">{d.app_total} in the app · {d.web.length} on the website in the last {d.minutes} minutes. Refreshes every 15s.</p>
 
       <h3>In the app</h3>
       {d.app.length ? (
@@ -384,20 +383,9 @@ export default function VisitorsPage() {
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted small">Loading…</p> : (
         <div className="adm-dash">
-          <div className="adm-panel w4">
-            <div className="adm-label">Right now</div>
-            <div className="adm-big"><span className="adm-live">{s?.live_now ?? 0}</span></div>
-            <p className="muted small">on the site in the last 5 minutes</p>
-            {data.live.length ? (
-              <ul className="adm-bars">
-                {data.live.slice(0, 6).map((l) => (
-                  <li key={l.vid}><span>{flag(l.country)} <PageLink path={l.path} onPick={pick} /></span><small>{l.device}</small></li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+          <LivePanel onJourney={openJourney} onPick={pick} />
 
-          <div className="w8">
+          <div>
             <div className="adm-kpis">
               {kpis.map((k) => (
                 <div key={k.label} className="adm-kpi" style={{ "--k": k.color } as React.CSSProperties}>
@@ -444,8 +432,6 @@ export default function VisitorsPage() {
             ) : null}
             <p className="muted small">Signups counted from the website only.</p>
           </div>
-
-          <LivePanel onJourney={openJourney} onPick={pick} />
 
           <div className="adm-panel w6">
             <h3>What they search for</h3>
