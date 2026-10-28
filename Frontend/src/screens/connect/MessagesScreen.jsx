@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { Inbox, Menu, Plus, Search, X } from 'lucide-react-native';
+import { Inbox, Menu, Palette, Plus, Search, X } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
@@ -509,6 +509,14 @@ export default function MessagesScreen({ navigation }) {
           )}
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ChatProfileSetup')}
+            style={styles.editRoomBtn}
+            hitSlop={HIT_SLOP}
+          >
+            <Palette size={rs(14)} color={T.text} strokeWidth={2} />
+            <Text style={styles.editRoomText}>Edit Room</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={toggleSearch} style={styles.iconBtn} hitSlop={HIT_SLOP}>
             {searchOpen
               ? <X size={rs(20)} color={T.textSecondary} strokeWidth={2} />
@@ -688,6 +696,12 @@ const styles = StyleSheet.create({
     width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center',
     borderRadius: rs(18), backgroundColor: 'rgba(255,255,255,0.04)',
   },
+  editRoomBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(5), height: rs(32),
+    paddingHorizontal: rp(11), borderRadius: rs(16),
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+  },
+  editRoomText: { color: T.text, fontSize: rf(12), fontWeight: '600' },
   addBtn: {
     width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center',
     borderRadius: rs(18), backgroundColor: T.primary,

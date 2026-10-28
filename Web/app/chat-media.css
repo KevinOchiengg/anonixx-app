@@ -10,3 +10,6 @@
 .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; animation: recpulse 1s infinite; }
 @keyframes recpulse { 50% { opacity: 0.3; } }
 .bubble audio { max-width: 100%; }
+.msg-reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.msg-reactions button { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.25); color: #fff; border: 1px solid transparent; }
+.msg-reactions button.mine { border-color: var(--rose); }

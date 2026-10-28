@@ -1,4 +1,5 @@
-/** Link Up chat between two connected people. */
+/** Link Up chat between two connected people: inside card, reactions, view-once media,
+ * voice notes, replies, calls. */
 
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
@@ -21,7 +22,7 @@ import {
 import {
   Send, X, Video, Phone, MoreVertical,
   Mic, Play, Settings, Flag, ShieldOff, Users, AlertTriangle,
-  Reply, Trash2,
+  Reply, Trash2, Lock, Eye,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -42,6 +43,7 @@ import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
 import useDraft from '../../hooks/useDraft';
+import { intentLabel } from '../../config/linkup';
 
 // Fallback poll; messages normally arrive over the socket.
 const POLL_INTERVAL_MS = 25000;
@@ -77,6 +79,30 @@ function messagePreviewLabel(item) {
   return item.content || '';
 }
 
+// Reactions (same set the backend accepts). Double-tap a message for the first one.
+const REACTIONS = ['🔥', '😈', '💋', '🥵', '😂', '🖤'];
+
+// Openers for an empty chat, by side.
+const OPENERS_GUEST = [
+  'What made you post this?',
+  'Tell me the part you left out 😏',
+  'Where are you tonight?',
+  'What would you do if I was there right now?',
+];
+const OPENERS_HOST = [
+  'You knocked. So what caught you?',
+  'Be honest. What did you think when I let you in? 😈',
+  'Tell me something you would never post.',
+  'Where are you right now?',
+];
+
+function sinceLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+
 // Avatar fallback colours (same as MessagesScreen).
 const AVATAR_COLORS = ['#C96F53', '#C97B84', '#D98E4A', '#B56576', '#A8674F'];
 function avatarColorFor(seed) {
@@ -87,6 +113,86 @@ function avatarColorFor(seed) {
   }
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
+
+// ─── Top of the thread: who let who in, when, and the knock that did it.
+const InsideCard = React.memo(({ connection, otherName }) => {
+  if (!connection) return null;
+  const guest = !connection.is_sender;
+  const since = sinceLabel(connection.inside_since);
+  return (
+    <LinearGradient
+      colors={['rgba(255,99,74,0.16)', 'rgba(251,191,36,0.06)']}
+      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+      style={s.insideCard}
+    >
+      <View style={s.insideKickerRow}>
+        <Lock size={rs(11)} color={T.gold} strokeWidth={2.4} />
+        <Text style={s.insideKicker}>{guest ? "YOU'RE INSIDE" : 'INSIDE YOUR ROOM'}</Text>
+      </View>
+      <Text style={s.insideTitle}>
+        {guest ? `${otherName || 'They'} let you in` : `${otherName || 'They'} knocked and you let them in`}
+        {since ? <Text style={s.insideSince}>{`  ·  ${since}`}</Text> : null}
+      </Text>
+      {!!connection.knock_pitch && (
+        <Text style={s.insidePitch}>
+          {guest ? 'Your knock: ' : 'Their knock: '}
+          <Text style={s.insidePitchQuote}>&ldquo;{connection.knock_pitch}&rdquo;</Text>
+        </Text>
+      )}
+      {!!connection.knock_intents?.length && (
+        <View style={s.insideChips}>
+          {connection.knock_intents.map((i) => <Text key={i} style={s.insideChip}>{intentLabel(i)}</Text>)}
+        </View>
+      )}
+      <Text style={s.insideFoot}>Only the two of you can see this chat.</Text>
+    </LinearGradient>
+  );
+});
+
+// ─── Reactions under a message; tap one to add or take back yours.
+const ReactionRow = React.memo(({ item, onReact }) => {
+  if (!item.reactions?.length) return null;
+  return (
+    <View style={[s.reactionRow, item.is_own && s.reactionRowOwn]}>
+      {item.reactions.map((r) => (
+        <TouchableOpacity
+          key={r.emoji}
+          style={[s.reactionPill, r.mine && s.reactionPillMine]}
+          onPress={() => onReact?.(item, r.emoji)}
+          hitSlop={HIT_SLOP}
+          activeOpacity={0.8}
+        >
+          <Text style={s.reactionEmoji}>{r.emoji}</Text>
+          {r.count > 1 && <Text style={s.reactionCount}>{r.count}</Text>}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+});
+
+// ─── View-once photo/video: sealed until opened, then gone for the receiver.
+const ViewOnceBubble = React.memo(({ item, onOpen, onLongPress }) => {
+  const isOwn = item.is_own;
+  const kind = item.media_type === 'video' ? 'video' : 'photo';
+  let label;
+  if (isOwn) label = item.opened ? `View-once ${kind} · opened` : `View-once ${kind} · not opened yet`;
+  else label = item.opened ? `${kind[0].toUpperCase()}${kind.slice(1)} opened` : `Tap to open · view once`;
+  const sealed = !isOwn && !item.opened;
+  return (
+    <GHTouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => sealed && onOpen?.(item)}
+      onLongPress={onLongPress}
+      style={[s.viewOnce, sealed && s.viewOnceSealed, isOwn && s.viewOnceOwn]}
+    >
+      {item.opened || isOwn
+        ? <Eye size={rs(16)} color={isOwn ? '#fff' : T.textMute} strokeWidth={2} />
+        : <Lock size={rs(16)} color={T.gold} strokeWidth={2.2} />}
+      <Text style={[s.viewOnceText, sealed && s.viewOnceTextSealed, isOwn && { color: '#fff' }]}>{label}</Text>
+      <Text style={[s.viewOnceTime, isOwn && { color: 'rgba(255,255,255,0.65)' }]}>{item.time_ago}</Text>
+    </GHTouchableOpacity>
+  );
+});
 
 const DateSeparator = React.memo(({ label }) => (
   <View style={s.dateSeparatorRow}>
@@ -183,9 +289,21 @@ const ReplyQuote = React.memo(({ replyTo, isOwn, otherName }) => (
 ));
 
 // ─── Message bubble: swipe right to reply, long-press for reply/delete.
-const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply, onLongPressMessage }) => {
+const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply, onLongPressMessage, onReact, onOpenViewOnce }) => {
   const isOwn = item.is_own;
   const swipeableRef = useRef(null);
+  const lastTapRef = useRef(0);
+
+  // Double-tap a message to react with the first reaction.
+  const handleTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280 && !item.deleted) {
+      lastTapRef.current = 0;
+      onReact?.(item, REACTIONS[0], true);
+    } else {
+      lastTapRef.current = now;
+    }
+  }, [item, onReact]);
   // Ticks on my messages: single = sent, double (accent) = seen.
   const tick = isOwn ? (item.seen ? '✓✓' : '✓') : null;
 
@@ -220,6 +338,8 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
         </Text>
       </View>
     );
+  } else if (item.view_once) {
+    content = <ViewOnceBubble item={item} onOpen={onOpenViewOnce} onLongPress={handleLongPress} />;
   } else if (item.media_type === 'voice' && item.media_url) {
     // Voice notes have no bubble background.
     content = (
@@ -299,10 +419,11 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
       leftThreshold={44}
       enabled={!item.deleted}
     >
-      <GHPressable onLongPress={handleLongPress} delayLongPress={350}>
+      <GHPressable onPress={handleTap} onLongPress={handleLongPress} delayLongPress={350}>
         <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
           {content}
         </View>
+        <ReactionRow item={item} onReact={onReact} />
       </GHPressable>
     </Swipeable>
   );
@@ -414,14 +535,19 @@ const ChatMediaViewer = React.memo(({ media, onClose }) => {
 });
 
 // ─── Empty chat ────────────────────────────────────────────────
-const EmptyChat = React.memo(() => (
-  <View style={s.emptyChat}>
-    <Text style={s.emptyChatEmoji}>👋</Text>
-    <Text style={s.emptyChatText}>
-      Say hi — you're both anonymous. Break the ice.
-    </Text>
+const EmptyChat = React.memo(({ connection, otherName, onPickOpener }) => (
+  <ScrollView contentContainerStyle={s.emptyChat} keyboardShouldPersistTaps="handled">
+    <InsideCard connection={connection} otherName={otherName} />
+    <Text style={s.emptyChatText}>You're both anonymous. Say the first thing.</Text>
+    <View style={s.openers}>
+      {(connection?.is_sender ? OPENERS_HOST : OPENERS_GUEST).map((line) => (
+        <TouchableOpacity key={line} style={s.opener} onPress={() => onPickOpener?.(line)} activeOpacity={0.8}>
+          <Text style={s.openerText}>{line}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
     <MoodBoard />
-  </View>
+  </ScrollView>
 ));
 
 // ─── Main Screen ───────────────────────────────────────────────
@@ -615,6 +741,24 @@ export default function DropChatScreen({ route, navigation }) {
     return () => socketService.off('message_deleted', handleMessageDeleted);
   }, [connectionId, socketService]);
 
+  // ── Reactions and view-once opens from the other side, live.
+  useEffect(() => {
+    const handleReaction = ({ connectionId: incomingId, messageId, reactions }) => {
+      if (incomingId !== connectionId) return;
+      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, reactions } : m)));
+    };
+    const handleOpened = ({ connectionId: incomingId, messageId }) => {
+      if (incomingId !== connectionId) return;
+      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, opened: true } : m)));
+    };
+    socketService.on('message_reaction', handleReaction);
+    socketService.on('message_opened', handleOpened);
+    return () => {
+      socketService.off('message_reaction', handleReaction);
+      socketService.off('message_opened', handleOpened);
+    };
+  }, [connectionId, socketService]);
+
   // Typing signal, at most every 2s.
   const handleTextChange = useCallback((value) => {
     setText(value);
@@ -698,7 +842,7 @@ export default function DropChatScreen({ route, navigation }) {
     return uploadToR2(uri, resourceType, mimeType);
   }, []);
 
-  const sendMediaMessage = useCallback(async (mediaUrl, mediaType) => {
+  const sendMediaMessage = useCallback(async (mediaUrl, mediaType, viewOnce = false) => {
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
     try {
@@ -712,7 +856,7 @@ export default function DropChatScreen({ route, navigation }) {
             Authorization:  `Bearer ${token}`,
           },
           body: JSON.stringify({
-            media_url: mediaUrl, media_type: mediaType,
+            media_url: mediaUrl, media_type: mediaType, view_once: viewOnce,
             ...(replyToId && { reply_to_id: replyToId }),
           }),
         },
@@ -740,10 +884,22 @@ export default function DropChatScreen({ route, navigation }) {
 
       const asset = result.assets[0];
       const mediaType = asset.type === 'video' ? 'video' : 'image';
+      // View once: they can open it a single time, then it's gone for them.
+      const viewOnce = await new Promise((resolve) => Alert.alert(
+        mediaType === 'video' ? 'Send this video' : 'Send this photo',
+        'View once lets them open it a single time. After that it is gone for them.',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+          { text: 'View once', onPress: () => resolve(true) },
+          { text: 'Send', onPress: () => resolve(false) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(null) },
+      ));
+      if (viewOnce === null) return;
       setMediaUploading(true);
       const url = await uploadMedia(asset.uri, mediaType);
       setMediaUploading(false);
-      if (url) await sendMediaMessage(url, mediaType);
+      if (url) await sendMediaMessage(url, mediaType, viewOnce);
     } catch (e) {
       setMediaUploading(false);
       showToast({ type: 'error', message: e?.message || 'Could not send media.' });
@@ -896,6 +1052,62 @@ export default function DropChatScreen({ route, navigation }) {
     );
   }, [handleDeleteMessage]);
 
+  // React: same emoji again takes it back. Updated here first, then saved.
+  const handleReact = useCallback(async (item, emoji, fromDoubleTap = false) => {
+    setActionSheetItem(null);
+    const mine = item.reactions?.find((r) => r.mine);
+    // A double tap only adds; it never takes a reaction back.
+    if (fromDoubleTap && mine?.emoji === emoji) return;
+    const next = (item.reactions || [])
+      .map((r) => (r.mine ? { ...r, count: r.count - 1, mine: false } : r))
+      .filter((r) => r.count > 0);
+    if (mine?.emoji !== emoji) {
+      const row = next.find((r) => r.emoji === emoji);
+      if (row) { row.count += 1; row.mine = true; } else next.push({ emoji, count: 1, mine: true });
+    }
+    setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, reactions: next } : m)));
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(
+        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages/${item.id}/react`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ emoji }),
+        },
+      );
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, reactions: data.reactions } : m)));
+    } catch {
+      loadMessages(true);
+    }
+  }, [connectionId, loadMessages]);
+
+  const handleOpenViewOnce = useCallback(async (item) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(
+        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages/${item.id}/open`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+      );
+      const data = await res.json().catch(() => ({}));
+      setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, opened: true } : m)));
+      if (!res.ok || !data.media_url) {
+        showToast({ type: 'info', message: data.detail || 'Already opened.' });
+        return;
+      }
+      setViewerMedia({ media_url: data.media_url, media_type: data.media_type });
+    } catch {
+      showToast({ type: 'error', message: 'Could not open it. Try again.' });
+    }
+  }, [connectionId, showToast]);
+
+  const handlePickOpener = useCallback((line) => {
+    setText(line);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, [setText]);
+
   const otherName = connection?.other_anonymous_name;
 
   const renderMessage = useCallback(
@@ -909,9 +1121,11 @@ export default function DropChatScreen({ route, navigation }) {
           otherName={otherName}
           onReply={handleReply}
           onLongPressMessage={handleLongPressMessage}
+          onReact={handleReact}
+          onOpenViewOnce={handleOpenViewOnce}
         />
       ),
-    [bubbleFontFamily, handleMediaPress, otherName, handleReply, handleLongPressMessage],
+    [bubbleFontFamily, handleMediaPress, otherName, handleReply, handleLongPressMessage, handleReact, handleOpenViewOnce],
   );
   const keyExtractor  = useCallback((item) => item.id, []);
 
@@ -1263,7 +1477,7 @@ export default function DropChatScreen({ route, navigation }) {
       >
         <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
           {messages.length === 0 ? (
-            <EmptyChat />
+            <EmptyChat connection={connection} otherName={otherName} onPickOpener={handlePickOpener} />
           ) : (
             <FlatList
               ref={flatListRef}
@@ -1277,6 +1491,7 @@ export default function DropChatScreen({ route, navigation }) {
               initialNumToRender={14}
               maxToRenderPerBatch={10}
               windowSize={10}
+              ListHeaderComponent={<InsideCard connection={connection} otherName={otherName} />}
               ListFooterComponent={isOtherTyping ? <TypingBubble /> : null}
               onContentSizeChange={() =>
                 flatListRef.current?.scrollToEnd({ animated: false })
@@ -1472,6 +1687,21 @@ export default function DropChatScreen({ route, navigation }) {
         >
           <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
             <View style={s.modalHandle} />
+            <View style={s.sheetReactions}>
+              {REACTIONS.map((e) => {
+                const mine = actionSheetItem?.reactions?.some((r) => r.mine && r.emoji === e);
+                return (
+                  <TouchableOpacity
+                    key={e}
+                    style={[s.sheetReactionBtn, mine && s.sheetReactionBtnMine]}
+                    onPress={() => actionSheetItem && handleReact(actionSheetItem, e)}
+                    hitSlop={HIT_SLOP}
+                  >
+                    <Text style={s.sheetReactionEmoji}>{e}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <TouchableOpacity
               style={s.menuAction}
               onPress={() => handleReply(actionSheetItem)}
@@ -1802,14 +2032,68 @@ const s = StyleSheet.create({
     backgroundColor: T.textMute,
   },
 
+  // Inside card (top of the thread)
+  insideCard: {
+    alignSelf: 'stretch', borderRadius: RADIUS.lg, padding: rp(14), marginBottom: SPACING.md,
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.28)', gap: rp(6),
+  },
+  insideKickerRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
+  insideKicker: { fontFamily: 'DMSans-Bold', fontSize: rf(9.5), color: T.gold, letterSpacing: 1.8 },
+  insideTitle: { fontFamily: 'DMSans-Bold', fontSize: FONT.md, color: T.text },
+  insideSince: { fontFamily: 'DMSans-Regular', fontSize: FONT.xs, color: T.textMute },
+  insidePitch: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textSec, lineHeight: rf(19) },
+  insidePitchQuote: { fontFamily: 'PlayfairDisplay-Italic', color: T.text },
+  insideChips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(5) },
+  insideChip: {
+    fontSize: rf(10.5), color: T.text, borderWidth: 1, borderColor: T.primaryBorder,
+    paddingHorizontal: rp(8), paddingVertical: rp(2), borderRadius: 999, overflow: 'hidden',
+  },
+  insideFoot: { fontFamily: 'DMSans-Italic', fontSize: rf(10.5), color: T.textMute },
+
+  // Reactions
+  reactionRow: { flexDirection: 'row', gap: rp(4), marginTop: rp(-2), marginBottom: rp(4), marginLeft: rp(6) },
+  reactionRowOwn: { justifyContent: 'flex-end', marginLeft: 0, marginRight: rp(6) },
+  reactionPill: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(3),
+    paddingHorizontal: rp(7), paddingVertical: rp(2), borderRadius: 999,
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
+  },
+  reactionPillMine: { borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
+  reactionEmoji: { fontSize: rf(13) },
+  reactionCount: { fontFamily: 'DMSans-Bold', fontSize: rf(10), color: T.textSec },
+  sheetReactions: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: rp(10), paddingHorizontal: rp(4) },
+  sheetReactionBtn: { width: rs(44), height: rs(44), borderRadius: rs(22), alignItems: 'center', justifyContent: 'center', backgroundColor: T.surfaceAlt },
+  sheetReactionBtnMine: { backgroundColor: T.primaryDim, borderWidth: 1, borderColor: T.primaryBorder },
+  sheetReactionEmoji: { fontSize: rf(22) },
+
+  // View once
+  viewOnce: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(8), maxWidth: '78%',
+    paddingVertical: rp(10), paddingHorizontal: rp(12), borderRadius: RADIUS.lg, borderBottomRightRadius: rs(4),
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
+  },
+  viewOnceSealed: { borderColor: 'rgba(251,191,36,0.45)', backgroundColor: 'rgba(251,191,36,0.08)' },
+  viewOnceOwn: { backgroundColor: T.primary, borderColor: T.primary },
+  viewOnceText: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textSec, flexShrink: 1 },
+  viewOnceTextSealed: { fontFamily: 'DMSans-Bold', color: T.gold },
+  viewOnceTime: { fontFamily: 'DMSans-Italic', fontSize: rf(10), color: T.textMute },
+
+  // Empty chat openers
+  openers: { alignSelf: 'stretch', gap: rp(8), marginTop: SPACING.md },
+  opener: {
+    alignSelf: 'flex-start', paddingHorizontal: rp(14), paddingVertical: rp(9),
+    borderRadius: RADIUS.lg, borderBottomLeftRadius: rs(4),
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.primaryBorder,
+  },
+  openerText: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.text },
+
   // Empty
   emptyChat: {
-    flex:           1,
+    flexGrow:       1,
     alignItems:     'center',
     justifyContent: 'center',
-    padding:        SPACING.xl,
+    padding:        SPACING.lg,
   },
-  emptyChatEmoji: { fontSize: rf(40), marginBottom: SPACING.md },
   emptyChatText: {
     fontFamily:    'DMSans-Italic',
     fontSize:      FONT.md,

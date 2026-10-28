@@ -25,7 +25,12 @@ type Msg = {
   time_ago: string;
   duration_seconds?: number | null;
   reply_to?: { id: string; preview: string; media_type: string | null; is_own: boolean } | null;
+  view_once?: boolean;
+  opened?: boolean;
+  reactions?: { emoji: string; count: number; mine: boolean }[];
 };
+
+const REACTIONS = ["🔥", "😈", "💋", "🥵", "😂", "🖤"];
 type Conn = { other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean };
 type ActiveCall = { id: string; guest_count: number; max_guests: number };
 type Profile = { background_pattern: string; font_style: string; profile_picture_url: string | null; gallery: GalleryItem[] };
@@ -74,6 +79,7 @@ function Inner({ id }: { id: string }) {
   const [callBusy, setCallBusy] = useState(false);
   const roomRef = useRef<CallInfo | null>(null);
   const [sel, setSel] = useState<string | null>(null);
+  const [once, setOnce] = useState<GalleryItem | null>(null);
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
   const [recording, setRecording] = useState(false);
   const [secs, setSecs] = useState(0);
@@ -122,6 +128,8 @@ function Inner({ id }: { id: string }) {
     so.on("new_message", refresh);
     so.on("messages_seen", refresh);
     so.on("message_deleted", refresh);
+    so.on("message_reaction", refresh);
+    so.on("message_opened", refresh);
     so.on("user_typing", (d: { connectionId?: string }) => {
       if (d?.connectionId !== id) return;
       setTyping(true);
@@ -306,6 +314,27 @@ function Inner({ id }: { id: string }) {
     }
   }
 
+  async function react(m: Msg, emoji: string) {
+    setSel(null);
+    try {
+      await api(`/drops/connections/${id}/messages/${m.id}/react`, { body: { emoji } });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  // View once: opens a single time, then it's gone for the receiver.
+  async function openOnce(m: Msg) {
+    try {
+      const r = await api<{ media_url: string; media_type: string }>(`/drops/connections/${id}/messages/${m.id}/open`, { method: "POST" });
+      setOnce(r);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    await load();
+  }
+
   async function block() {
     if (!conn?.other_user_id) return;
     if (!window.confirm("Block this person? You won't see each other's posts.")) return;
@@ -386,6 +415,7 @@ This conversation closes for both of you. They'd have to knock again.`)) return;
       {room ? <CallRoom info={room} onClose={() => { openRoom(null); load(); }} /> : null}
       {welcome.length ? <GalleryOverlay items={welcome} title="Swipe to see more · tap × to start chatting" onClose={() => setWelcome([])} /> : null}
       {gallery && profile?.gallery?.length ? <GalleryOverlay items={profile.gallery} onClose={() => setGallery(false)} /> : null}
+      {once ? <GalleryOverlay items={[once]} title="View once · gone when you close it" onClose={() => setOnce(null)} /> : null}
       {conn?.confession ? <div className="chat-origin">“{conn.confession}”</div> : null}
       <div className="chat-log">
         {msgs.map((m) => (
@@ -394,13 +424,26 @@ This conversation closes for both of you. They'd have to knock again.`)) return;
               <div className="reply-quote">{m.reply_to.is_own ? "You" : "Them"}: {m.reply_to.preview || m.reply_to.media_type}</div>
             ) : null}
             {m.deleted ? <em>Message deleted</em> : null}
-            {!m.deleted && m.media_type === "image" && m.media_url ? <Image src={m.media_url} alt="" width={400} height={400} style={{ height: "auto" }} sizes="80vw" /> : null}
-            {!m.deleted && m.media_type === "video" && m.media_url ? <video src={m.media_url} controls preload="metadata" playsInline onClick={(e) => e.stopPropagation()} /> : null}
-            {!m.deleted && m.media_type === "voice" && m.media_url ? <audio src={m.media_url} controls preload="none" onClick={(e) => e.stopPropagation()} /> : null}
+            {!m.deleted && m.view_once ? (
+              m.is_own ? <em>🔒 View-once {m.media_type === "video" ? "video" : "photo"} · {m.opened ? "opened" : "not opened yet"}</em>
+              : m.opened ? <em>Opened</em>
+              : <button type="button" className="pill" onClick={(e) => { e.stopPropagation(); openOnce(m); }}>🔒 Tap to open · view once</button>
+            ) : null}
+            {!m.deleted && !m.view_once && m.media_type === "image" && m.media_url ? <Image src={m.media_url} alt="" width={400} height={400} style={{ height: "auto" }} sizes="80vw" /> : null}
+            {!m.deleted && !m.view_once && m.media_type === "video" && m.media_url ? <video src={m.media_url} controls preload="metadata" playsInline onClick={(e) => e.stopPropagation()} /> : null}
+            {!m.deleted && !m.view_once && m.media_type === "voice" && m.media_url ? <audio src={m.media_url} controls preload="none" onClick={(e) => e.stopPropagation()} /> : null}
             {!m.deleted && m.content ? <span>{m.content}</span> : null}
             <small>{m.time_ago}{m.is_own && m.seen ? " · seen" : ""}</small>
+            {m.reactions?.length ? (
+              <div className="msg-reactions" onClick={(e) => e.stopPropagation()}>
+                {m.reactions.map((r) => (
+                  <button key={r.emoji} className={r.mine ? "mine" : ""} onClick={() => react(m, r.emoji)}>{r.emoji}{r.count > 1 ? ` ${r.count}` : ""}</button>
+                ))}
+              </div>
+            ) : null}
             {sel === m.id ? (
               <div className="msg-actions" onClick={(e) => e.stopPropagation()}>
+                {REACTIONS.map((e) => <button key={e} onClick={() => react(m, e)}>{e}</button>)}
                 <button onClick={() => { setReplyTo(m); setSel(null); }}>Reply</button>
                 <button onClick={() => removeMsg(m, false)}>Delete for me</button>
                 {m.is_own ? <button onClick={() => removeMsg(m, true)}>Delete for everyone</button> : null}

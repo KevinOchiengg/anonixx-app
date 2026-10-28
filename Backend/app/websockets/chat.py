@@ -1,5 +1,5 @@
 """Real-time Link Up chat events, sent to the other person's user_{id} room:
-new_message, messages_seen, message_deleted."""
+new_message, messages_seen, message_deleted, message_reaction, message_opened."""
 
 from app.sio import sio
 
@@ -26,3 +26,7 @@ async def emit_message_deleted(other_user_id: str, connection_id: str, message_i
         {"connectionId": connection_id, "messageId": message_id},
         room=f"user_{other_user_id}",
     )
+
+
+async def emit_chat_event(other_user_id: str, event: str, payload: dict):
+    await sio.emit(event, payload, room=f"user_{other_user_id}")

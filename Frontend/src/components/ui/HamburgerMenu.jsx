@@ -179,7 +179,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           <SectionHeader title="Chat" />
           <View style={sec.card}>
             {/* Navigate via the Messages tab (this menu also opens from Feed). */}
-            <NavRow icon={Palette} label="Chat Appearance" onPress={() => go('Messages', { screen: 'ChatProfileSetup' })} />
+            <NavRow icon={Palette} label="Your Room" onPress={() => go('Messages', { screen: 'ChatProfileSetup' })} />
           </View>
 
           {/* ── Content ── */}

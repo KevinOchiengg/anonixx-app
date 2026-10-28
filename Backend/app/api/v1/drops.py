@@ -30,7 +30,7 @@ from app.utils.search_lexicon import clean_topics, place_from_area
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
-from app.websockets.chat import emit_new_message, emit_messages_seen, emit_message_deleted
+from app.websockets.chat import emit_new_message, emit_messages_seen, emit_message_deleted, emit_chat_event
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
 
@@ -2336,15 +2336,20 @@ async def get_drop_messages(
         deleted_for_everyone = bool(msg.get("deleted_for_everyone"))
 
         reply_payload = _reply_payload_for(msg.get("reply_to"), current_user_id)
+        # View-once media stays hidden from the receiver until they open it, and after.
+        hide_media = deleted_for_everyone or (msg.get("view_once") and not is_own)
 
         messages.append({
             "id": str(msg["_id"]),
             # A deleted-for-everyone message keeps its row (so the thread
             # doesn't jump around) but never leaks its real content again.
             "content":         "" if deleted_for_everyone else msg["content"],
-            "media_url":       None if deleted_for_everyone else msg.get("media_url"),
+            "media_url":       None if hide_media else msg.get("media_url"),
             "media_type":      None if deleted_for_everyone else msg.get("media_type"),
             "duration_seconds": None if deleted_for_everyone else msg.get("duration_seconds"),
+            "view_once":       bool(msg.get("view_once")),
+            "opened":          bool(msg.get("opened_at")),
+            "reactions":       _reactions_out(msg, current_user_id),
             "deleted":         deleted_for_everyone,
             "reply_to":        reply_payload,
             "sender_id": msg["sender_id"],
@@ -2377,6 +2382,10 @@ async def get_drop_messages(
 
     from app.websockets.events import is_user_online
 
+    # The knock that opened this chat, for the "inside" card at the top.
+    knock = await db["drop_unlock_requests"].find_one(
+        {"connection_id": connection_id}, {"pitch": 1, "intents": 1, "responded_at": 1})
+
     # Welcome gallery and sound, once per unlocker on first open.
     welcome_gallery = []
     welcome_sound = None
@@ -2400,6 +2409,10 @@ async def get_drop_messages(
             "host_user_id": conn["sender_id"],
             "other_user_id": other_user_id,
             "other_is_online": is_user_online(other_user_id),
+            "inside_since": conn["created_at"].isoformat() if conn.get("created_at") else None,
+            "message_count": conn.get("message_count", 0),
+            "knock_pitch": (knock or {}).get("pitch"),
+            "knock_intents": (knock or {}).get("intents") or [],
         },
         "chat_profile": {
             "background_pattern": chat_profile.get("background_pattern", "midnight-solid") if chat_profile else "midnight-solid",
@@ -2418,9 +2431,11 @@ async def get_drop_messages(
     }
 
 
-def _message_preview_text(content: str, media_type: Optional[str]) -> str:
+def _message_preview_text(content: str, media_type: Optional[str], view_once: bool = False) -> str:
     """Short label for a message — used both for push notification bodies
     and for the quoted snippet shown when another message replies to it."""
+    if view_once and media_type in ("image", "video"):
+        return "🔒 View-once " + ("photo" if media_type == "image" else "video")
     if media_type == "voice":
         return "🎙 Voice note"
     if media_type == "image":
@@ -2454,6 +2469,7 @@ async def send_drop_message(
     media_url  = data.get("media_url")
     media_type = data.get("media_type")   # "voice" | "image" | "video"
     reply_to_id = data.get("reply_to_id")
+    view_once  = bool(data.get("view_once")) and media_type in ("image", "video") and bool(media_url)
 
     if not content and not media_url:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -2490,7 +2506,7 @@ async def send_drop_message(
                 "sender_id":  replied["sender_id"],
                 "preview":    (
                     "This message was deleted" if replied.get("deleted_for_everyone")
-                    else _message_preview_text(replied.get("content", ""), replied.get("media_type"))
+                    else _message_preview_text(replied.get("content", ""), replied.get("media_type"), bool(replied.get("view_once")))
                 ),
                 "media_type": None if replied.get("deleted_for_everyone") else replied.get("media_type"),
             }
@@ -2504,6 +2520,7 @@ async def send_drop_message(
         "media_type": media_type,
         "duration_seconds": data.get("duration_seconds"),
         "reply_to": reply_to,
+        "view_once": view_once,
         "created_at": now_utc()
     }
     await db["drop_messages"].insert_one(msg)
@@ -2520,9 +2537,12 @@ async def send_drop_message(
     await emit_new_message(other_id, connection_id, {
         "id":               str(msg["_id"]),
         "content":          content,
-        "media_url":        media_url,
+        "media_url":        None if view_once else media_url,
         "media_type":       media_type,
         "duration_seconds": msg["duration_seconds"],
+        "view_once":        view_once,
+        "opened":           False,
+        "reactions":        [],
         "sender_id":        current_user_id,
         "is_own":           False,
         "deleted":          False,
@@ -2531,7 +2551,7 @@ async def send_drop_message(
         "created_at":       msg["created_at"].isoformat(),
     })
 
-    notify_body = _message_preview_text(content, media_type)
+    notify_body = _message_preview_text(content, media_type, view_once)
     await send_push_notification(
         other_id,
         f"{sender_name} sent a message 💬",
@@ -2546,6 +2566,9 @@ async def send_drop_message(
         "media_url": media_url,
         "media_type": media_type,
         "duration_seconds": msg["duration_seconds"],
+        "view_once": view_once,
+        "opened": False,
+        "reactions": [],
         "deleted": False,
         "reply_to": _reply_payload_for(reply_to, current_user_id),
         "time_ago": "just now",
@@ -2594,6 +2617,82 @@ async def delete_drop_message(
         )
 
     return {"deleted": True, "for_everyone": for_everyone}
+
+
+REACTION_EMOJIS = {"🔥", "😈", "💋", "🥵", "😂", "🖤"}
+
+
+def _reactions_out(msg: dict, viewer_id: str) -> list:
+    """[{emoji, count, mine}] from the per-user {user_id: emoji} map."""
+    counts: dict = {}
+    for uid, emoji in (msg.get("reactions") or {}).items():
+        row = counts.setdefault(emoji, {"emoji": emoji, "count": 0, "mine": False})
+        row["count"] += 1
+        row["mine"] = row["mine"] or uid == viewer_id
+    return list(counts.values())
+
+
+async def _chat_message(db, connection_id: str, message_id: str, user_id: str):
+    try:
+        conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
+        msg = await db["drop_messages"].find_one({"_id": ObjectId(message_id), "connection_id": connection_id})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if not conn or not msg or msg.get("deleted_for_everyone"):
+        raise HTTPException(status_code=404, detail="Message not found")
+    if user_id not in [conn["sender_id"], conn["unlocker_id"]]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if conn.get("removed_at"):
+        raise HTTPException(status_code=403, detail="You're no longer inside this Room.")
+    other_id = conn["unlocker_id"] if user_id == conn["sender_id"] else conn["sender_id"]
+    return msg, other_id
+
+
+@router.post("/connections/{connection_id}/messages/{message_id}/react")
+async def react_to_message(
+    connection_id: str,
+    message_id: str,
+    data: dict,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Set your reaction on a message; an empty or repeated emoji removes it."""
+    msg, other_id = await _chat_message(db, connection_id, message_id, current_user_id)
+    emoji = data.get("emoji") or ""
+    if emoji and emoji not in REACTION_EMOJIS:
+        raise HTTPException(status_code=400, detail="Unsupported reaction.")
+    current = (msg.get("reactions") or {}).get(current_user_id)
+    key = f"reactions.{current_user_id}"
+    if not emoji or emoji == current:
+        update = {"$unset": {key: ""}}
+    else:
+        update = {"$set": {key: emoji}}
+    msg = await db["drop_messages"].find_one_and_update(
+        {"_id": msg["_id"]}, update, return_document=True)
+    await emit_chat_event(other_id, "message_reaction", {
+        "connectionId": connection_id, "messageId": message_id,
+        "reactions": _reactions_out(msg, other_id),
+    })
+    return {"reactions": _reactions_out(msg, current_user_id)}
+
+
+@router.post("/connections/{connection_id}/messages/{message_id}/open")
+async def open_view_once(
+    connection_id: str,
+    message_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """The receiver opens a view-once photo or video. Works once; the sender is told."""
+    msg, other_id = await _chat_message(db, connection_id, message_id, current_user_id)
+    if not msg.get("view_once") or msg["sender_id"] == current_user_id:
+        raise HTTPException(status_code=400, detail="Not a view-once message.")
+    claimed = await db["drop_messages"].find_one_and_update(
+        {"_id": msg["_id"], "opened_at": None}, {"$set": {"opened_at": now_utc()}})
+    if not claimed:
+        raise HTTPException(status_code=410, detail="Already opened.")
+    await emit_chat_event(other_id, "message_opened", {"connectionId": connection_id, "messageId": message_id})
+    return {"media_url": msg.get("media_url"), "media_type": msg.get("media_type")}
 
 
 @router.post("/connections/{connection_id}/remove")
