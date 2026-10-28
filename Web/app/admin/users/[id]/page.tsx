@@ -24,7 +24,82 @@ type Full = {
   history: { action: string; admin_id: string; details: Record<string, unknown>; created_at: string | null }[];
 };
 
-const ROLES: [string, string][] = [["admin", "Admin: everything"], ["moderator", "Moderator: reports, bans, support"], ["finance", "Finance: money, refunds, support"], ["content", "Content: posting, scheduling, sounds, ads"]];
+type Row = { key: string; count: number };
+type Taste = {
+  days: number;
+  totals: { view: number; vote: number; react: number; save: number; like: number };
+  kinds: Row[]; moods: Row[]; media: Row[]; reactions: Row[]; all_time_moods: Row[];
+  top_drops: { id: string; score: number; kind: string; mood: string | null; teaser: string; did: string[] }[];
+};
+
+const DID: Record<string, string> = { like: "liked", save: "saved", react: "reacted", vote: "voted", view: "opened" };
+
+function Mix({ rows }: { rows: Row[] }) {
+  if (!rows.length) return <p className="adm-empty">—</p>;
+  const total = rows.reduce((n, r) => n + r.count, 0) || 1;
+  return (
+    <ul className="adm-bars">
+      {rows.map((r) => (
+        <li key={r.key}><i style={{ width: `${(100 * r.count) / total}%` }} /><span>{r.key}</span><b>{Math.round((100 * r.count) / total)}%</b></li>
+      ))}
+    </ul>
+  );
+}
+
+/** What this person loves to see: built from what they open, like, save, react and vote on (not what they post). */
+function TastePanel({ id }: { id: string }) {
+  const [days, setDays] = useState(90);
+  const [t, setT] = useState<Taste | null>(null);
+  useEffect(() => { api<Taste>(`/admin/users/${id}/taste?days=${days}`).then(setT).catch(() => setT(null)); }, [id, days]);
+  if (!t) return null;
+  const n = t.totals;
+  const any = n.view + n.like + n.save + n.react + n.vote > 0;
+  return (
+    <div className="adm-panel">
+      <div className="adm-panel-head">
+        <div>
+          <h3>Taste</h3>
+          <p className="muted small">What they love to see, from what they open, like, save, react and vote on. Likes count most, opens least. Their own posts don&apos;t count.</p>
+        </div>
+        <div className="adm-seg-sm">
+          {[30, 90, 365].map((r) => <button key={r} type="button" className={days === r ? "on" : ""} onClick={() => setDays(r)}>{r === 365 ? "1y" : `${r}d`}</button>)}
+        </div>
+      </div>
+      {!any ? <p className="adm-empty">They haven&apos;t opened or liked anyone&apos;s drops in this period.</p> : (
+        <div className="adm-dash">
+          <div className="w3">
+            <dl className="adm-kv">
+              <dt>Opened</dt><dd>{n.view}</dd>
+              <dt>Liked</dt><dd>{n.like}</dd>
+              <dt>Saved</dt><dd>{n.save}</dd>
+              <dt>Reacted</dt><dd>{n.react}</dd>
+              <dt>Voted</dt><dd>{n.vote}</dd>
+            </dl>
+          </div>
+          <div className="w3"><h3>Moods</h3><Mix rows={t.moods} /></div>
+          <div className="w3"><h3>Kinds</h3><Mix rows={t.kinds} /><h3>Format</h3><Mix rows={t.media} /></div>
+          <div className="w3">
+            {t.reactions.length ? <><h3>Reactions they give</h3><Mix rows={t.reactions} /></> : null}
+            {t.all_time_moods.length ? <><h3>All-time mood pull</h3><Mix rows={t.all_time_moods} /></> : null}
+          </div>
+          <div className="adm-panel">
+            <h3>Drops they loved most</h3>
+            <ul className="adm-bars">
+              {t.top_drops.map((p) => (
+                <li key={p.id}>
+                  <span><Link href={`/drop/${p.id}`}>{p.teaser}</Link><small className="muted"> · {p.kind}{p.mood ? ` · ${p.mood}` : ""}</small></span>
+                  <small>{p.did.map((k) => DID[k]).join(", ")}</small>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ROLES: [string, string][] =[["admin", "Admin: everything"], ["moderator", "Moderator: reports, bans, support"], ["finance", "Finance: money, refunds, support"], ["content", "Content: posting, scheduling, sounds, ads"]];
 
 export default function UserPage() {
   const { id } = useParams<{ id: string }>();
@@ -122,6 +197,8 @@ export default function UserPage() {
             </table>
           </div>
         ) : null}
+
+        {isSuper ? <TastePanel id={u.id} /> : null}
 
         <div className="adm-panel w7">
           <h3>Posts</h3>

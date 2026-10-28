@@ -10,6 +10,7 @@ working, beyond the overview.
   System      /admin/health                  workers, queues, payments, config switches
               /admin/alerts                  problems the monitor found (app/tasks/admin_monitor.py)
   People      /admin/users/{id}/full         one user, everything: posts, reports, money, devices, notes
+              /admin/users/{id}/taste        what they love to see: moods, kinds, top drops (super admin)
               /admin/users/{id}/role|notes   admin role (super admin) and private notes
               /admin/audit                   who did what (super admin)
   Testing     /admin/experiments             A/B tests; /experiments/active is the public side
@@ -498,6 +499,80 @@ async def user_full(user_id: str, admin_id: str = Depends(require_admin), db=Dep
         "linked_accounts": linked,
         "history": [{"action": h.get("action"), "admin_id": h.get("admin_id"), "details": {k: s(v) for k, v in (h.get("details") or {}).items()},
                      "created_at": _iso(h.get("created_at"))} for h in history],
+    }
+
+
+# What one user consumes, not what they post: the drops they open, react to,
+# like, save and vote on, weighted by how much each says about taste.
+TASTE_WEIGHTS = {"view": 1, "vote": 1, "react": 2, "save": 2, "like": 3}
+
+
+@router.get("/admin/users/{user_id}/taste", summary="What one user loves to see: kinds, moods, top drops (super admin)")
+async def user_taste(
+    user_id: str,
+    days: int = Query(90, ge=7, le=365),
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    _oid(user_id)
+    since = _now() - timedelta(days=days)
+    acts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    reactions: dict[str, int] = defaultdict(int)
+
+    async for v in db["drop_views"].find({"user_id": user_id, "viewed_at": {"$gte": since}}, {"drop_id": 1}).sort("viewed_at", -1).limit(1000):
+        acts[v["drop_id"]]["view"] += 1
+    async for r in db["drop_reactions"].find({"reactor_id": user_id, "updated_at": {"$gte": since}}, {"drop_id": 1, "reaction": 1}).limit(500):
+        acts[r["drop_id"]]["react"] += 1
+        if r.get("reaction"):
+            reactions[r["reaction"]] += 1
+    async for s in db["saved_drops"].find({"user_id": user_id, "created_at": {"$gte": since}}, {"drop_id": 1}).limit(500):
+        acts[s["drop_id"]]["save"] += 1
+    async for p in db["drop_poll_votes"].find({"user_id": user_id, "created_at": {"$gte": since}}, {"drop_id": 1}).limit(500):
+        acts[p["drop_id"]]["vote"] += 1
+    async for d in db["drops"].find({"liked_by": user_id, "created_at": {"$gte": since}}, {"_id": 1}).limit(500):
+        acts[str(d["_id"])]["like"] += 1
+
+    ids = [ObjectId(i) for i in acts if ObjectId.is_valid(i)]
+    drops = {}
+    if ids:
+        async for d in db["drops"].find({"_id": {"$in": ids}}, {"confession": 1, "content": 1, "kind": 1, "mood_tag": 1, "category": 1, "media_type": 1, "sender_id": 1}):
+            drops[str(d["_id"])] = d
+
+    kinds, moods, media = defaultdict(int), defaultdict(int), defaultdict(int)
+    scored = []
+    for did, a in acts.items():
+        d = drops.get(did)
+        if not d or d.get("sender_id") == user_id:
+            continue
+        score = sum(TASTE_WEIGHTS[k] * n for k, n in a.items())
+        kinds[d.get("kind") or "confession"] += score
+        mood = d.get("mood_tag") or d.get("category")
+        if mood:
+            moods[mood] += score
+        media[d.get("media_type") or "text"] += score
+        scored.append((score, did, d, a))
+    scored.sort(key=lambda x: -x[0])
+
+    aff = await db["user_affinities"].find_one({"user_id": user_id}) or {}
+    rows = lambda m: sorted([{"key": k, "count": v} for k, v in m.items()], key=lambda x: -x["count"])
+    totals = defaultdict(int)
+    for _, _, _, a in scored:
+        for k, n in a.items():
+            totals[k] += n
+    return {
+        "days": days,
+        "totals": {k: totals.get(k, 0) for k in TASTE_WEIGHTS},
+        "kinds": rows(kinds),
+        "moods": rows(moods)[:8],
+        "media": rows(media),
+        "reactions": rows(reactions),
+        "all_time_moods": rows(aff.get("affinities") or {}),
+        "top_drops": [{
+            "id": did, "score": score, "kind": d.get("kind") or "confession",
+            "mood": d.get("mood_tag") or d.get("category"),
+            "teaser": ((d.get("confession") or d.get("content") or "")[:110]) or f"[{d.get('media_type') or 'media'}]",
+            "did": sorted(a.keys(), key=lambda k: -TASTE_WEIGHTS[k]),
+        } for score, did, d, a in scored[:10]],
     }
 
 

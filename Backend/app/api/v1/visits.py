@@ -8,6 +8,8 @@ anyone signs up.
                          browser skips the CORS preflight and sendBeacon works.
 - GET  /admin/visitors   super admin only; the Visitors dashboard.
 - GET  /admin/visitors/{vid}  one visitor's journey.
+- GET  /admin/live       super admin; who is here now: site visitors + app users.
+- GET  /admin/insights/country-tastes  super admin; drop opens by country.
 
 Privacy: a visitor is a random id the browser makes (localStorage), never
 tied to an account. No IP address, no full referrer URL (host only), no
@@ -30,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from app.database import get_database
 from app.dependencies import require_super_admin
 from app.utils import geoip
+from app.utils.countries import NAME_BY_CODE, known_country
 
 router = APIRouter(tags=["Visitors"])
 
@@ -58,6 +61,10 @@ _hits: dict[str, list[float]] = defaultdict(list)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _aware(dt):
+    return dt if dt is None or dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _rate_ok(ip: str) -> bool:
@@ -407,6 +414,148 @@ async def visitors_overview(
             async for v in db[VISITORS].find({"last_seen": {"$gte": since}}).sort("last_seen", -1).limit(30)
         ],
     }
+
+
+def _teaser(d) -> str:
+    text = (d or {}).get("confession") or (d or {}).get("content") or ""
+    return (text[:90] + "…") if len(text) > 90 else (text or "(deleted or media-only)")
+
+
+@router.get("/admin/live", summary="Who is here right now: site visitors and app users (super admin)")
+async def live_now(admin_id: str = Depends(require_super_admin), db=Depends(get_database)):
+    """Site visitors stay anonymous (a browser id, never an account); app users
+    are signed in over the socket, so they come with their account."""
+    from app.websockets.events import online_users
+
+    now = _now()
+    rows = await db[EVENTS].aggregate([
+        {"$match": {"created_at": {"$gte": now - timedelta(minutes=LIVE_MINUTES)}}},
+        {"$sort": {"created_at": 1}},
+        {"$group": {"_id": "$vid", "sid": {"$last": "$sid"}, "path": {"$last": "$path"}, "country": {"$last": "$country"},
+                    "device": {"$last": "$device"}, "browser": {"$last": "$browser"}, "signed_in": {"$max": "$signed_in"},
+                    "last": {"$last": "$created_at"}}},
+        {"$sort": {"last": -1}}, {"$limit": 50},
+    ]).to_list(50)
+    sids = [r["sid"] for r in rows]
+    visits = {s["_id"]: s for s in await db[EVENTS].aggregate([
+        {"$match": {"sid": {"$in": sids}, "created_at": {"$gte": now - timedelta(hours=6)}}},
+        {"$group": {"_id": "$sid", "start": {"$min": "$created_at"},
+                    "views": {"$sum": {"$cond": [{"$eq": ["$type", "view"]}, 1, 0]}},
+                    "paths": {"$addToSet": "$path"},
+                    "searches": {"$addToSet": "$q"}}},
+    ]).to_list(None)} if sids else {}
+    people = {v["_id"]: v async for v in db[VISITORS].find(
+        {"_id": {"$in": [r["_id"] for r in rows]}}, {"first_seen": 1, "sessions": 1, "first_ref": 1, "signed_up_at": 1})}
+    drop_ids = {m.group(1) for s in visits.values() for p in s["paths"] if (m := DROP_PATH.match(p or ""))}
+    drops = {}
+    if drop_ids:
+        async for d in db["drops"].find({"_id": {"$in": [ObjectId(i) for i in drop_ids]}}, {"confession": 1, "content": 1, "kind": 1, "mood_tag": 1}):
+            drops[str(d["_id"])] = d
+    web = []
+    for r in rows:
+        s = visits.get(r["sid"], {})
+        p = people.get(r["_id"], {})
+        opened = [m.group(1) for x in s.get("paths", []) if (m := DROP_PATH.match(x or ""))]
+        web.append({
+            "vid": r["_id"], "path": r["path"], "country": r.get("country"), "device": r.get("device"), "browser": r.get("browser"),
+            "signed_in": bool(r.get("signed_in")), "signed_up": bool(p.get("signed_up_at")),
+            "returning": (p.get("sessions") or 0) > 1, "came_from": p.get("first_ref"),
+            "since": _aware(s.get("start")), "pages": s.get("views", 0),
+            "drops": [{"id": i, "teaser": _teaser(drops.get(i)), "kind": (drops.get(i) or {}).get("kind"),
+                       "mood": (drops.get(i) or {}).get("mood_tag")} for i in opened[:5]],
+            "searches": [q for q in s.get("searches", []) if q][:5],
+        })
+
+    online = online_users()
+    oids = [ObjectId(u) for u in online if ObjectId.is_valid(u)]
+    users = {str(u["_id"]): u async for u in db["users"].find({"_id": {"$in": oids}}, {
+        "anonymous_name": 1, "username": 1, "created_at": 1, "is_premium": 1, "is_admin": 1,
+        "location_country": 1, "gender": 1, "coin_balance": 1})} if oids else {}
+    paid = {}
+    if oids:
+        async for p in db["coin_purchases"].aggregate([
+            {"$match": {"status": "completed", "user_id": {"$in": list(online)}}},
+            {"$group": {"_id": "$user_id", "n": {"$sum": 1}}},
+        ]):
+            paid[p["_id"]] = p["n"]
+    app = []
+    code_of = {v: k for k, v in NAME_BY_CODE.items()}
+    for uid, since in online.items():
+        u = users.get(uid)
+        if not u:
+            continue
+        seen = await db["drop_views"].count_documents({"user_id": uid, "viewed_at": {"$gte": since}}) if since else 0
+        app.append({
+            "user_id": uid, "name": u.get("anonymous_name") or u.get("username"),
+            "country": known_country(u.get("location_country")) or u.get("location_country"),
+            "cc": code_of.get(known_country(u.get("location_country")) or ""),
+            "gender": u.get("gender"), "joined": _aware(u.get("created_at")), "since": since,
+            "is_new": bool(u.get("created_at") and _aware(u["created_at"]) > now - timedelta(days=7)),
+            "premium": bool(u.get("is_premium")), "admin": bool(u.get("is_admin")),
+            "purchases": paid.get(uid, 0), "coins": u.get("coin_balance", 0), "drops_seen": seen,
+        })
+    app.sort(key=lambda a: a["since"] or now)
+    return {"minutes": LIVE_MINUTES, "web": web, "app": app[:100], "app_total": len(app)}
+
+
+@router.get("/admin/insights/country-tastes", summary="What each country opens: kinds and moods (super admin)")
+async def country_tastes(
+    days: int = Query(30, ge=1, le=180),
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    """Drop opens by country, from both sides: website visitors (IP country) and
+    app users (their profile country). Counted per drop open."""
+    since = _now() - timedelta(days=days)
+    opens: list[tuple[str, str, str]] = []   # (country, drop_id, source)
+
+    async for r in db[EVENTS].aggregate([
+        {"$match": {"type": "view", "created_at": {"$gte": since}, "path": {"$regex": "^/drop/"}, "country": {"$nin": [None, ""]}}},
+        {"$group": {"_id": {"c": "$country", "p": "$path"}, "n": {"$sum": 1}}},
+    ]):
+        m = DROP_PATH.match(r["_id"]["p"])
+        if m:
+            opens += [(NAME_BY_CODE.get(r["_id"]["c"], r["_id"]["c"]), m.group(1), "web")] * r["n"]
+
+    views = await db["drop_views"].find(
+        {"viewed_at": {"$gte": since}, "user_id": {"$not": {"$regex": "^device:"}}}, {"drop_id": 1, "user_id": 1},
+    ).sort("viewed_at", -1).limit(20000).to_list(None)
+    uids = {ObjectId(v["user_id"]) for v in views if ObjectId.is_valid(v["user_id"])}
+    where = {str(u["_id"]): known_country(u.get("location_country")) or (u.get("location_country") or "").strip().title() or None
+             async for u in db["users"].find({"_id": {"$in": list(uids)}}, {"location_country": 1})} if uids else {}
+    opens += [(where[v["user_id"]], v["drop_id"], "app") for v in views if where.get(v["user_id"])]
+
+    ids = {d for _, d, _ in opens if ObjectId.is_valid(d)}
+    drops = {}
+    if ids:
+        async for d in db["drops"].find({"_id": {"$in": [ObjectId(i) for i in ids]}}, {"confession": 1, "content": 1, "kind": 1, "mood_tag": 1, "category": 1}):
+            drops[str(d["_id"])] = d
+
+    by = defaultdict(lambda: {"opens": 0, "web": 0, "app": 0, "kinds": defaultdict(int), "moods": defaultdict(int), "drops": defaultdict(int)})
+    for c, did, src in opens:
+        d = drops.get(did)
+        if not d:
+            continue
+        b = by[c]
+        b["opens"] += 1
+        b[src] += 1
+        b["kinds"][d.get("kind") or "confession"] += 1
+        mood = d.get("mood_tag") or d.get("category")
+        if mood:
+            b["moods"][mood] += 1
+        b["drops"][did] += 1
+
+    rows = lambda m, n: [{"key": k, "count": v} for k, v in sorted(m.items(), key=lambda x: -x[1])[:n]]
+    code_of = {v: k for k, v in NAME_BY_CODE.items()}
+    out = []
+    for c, b in sorted(by.items(), key=lambda x: -x[1]["opens"])[:25]:
+        top = max(b["drops"], key=b["drops"].get)
+        out.append({
+            "country": c, "cc": code_of.get(c), "opens": b["opens"], "web": b["web"], "app": b["app"],
+            "kinds": rows(b["kinds"], 4), "moods": rows(b["moods"], 4),
+            "top_drop": {"id": top, "opens": b["drops"][top], "teaser": _teaser(drops[top])},
+        })
+    return {"days": days, "countries": out}
 
 
 @router.get("/admin/visitors/page", summary="One page's stats: traffic, sources, clicks, where people go next (super admin)")

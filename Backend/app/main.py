@@ -58,6 +58,11 @@ async def _ensure_indexes():
         await db["drop_views"].create_index(
             [("drop_id", 1), ("user_id", 1)], unique=True, background=True
         )
+        # One user's views/reactions/likes, for the admin Taste panel.
+        await db["drop_views"].create_index([("user_id", 1), ("viewed_at", -1)], background=True)
+        await db["drop_views"].create_index([("viewed_at", -1)], background=True)
+        await db["drop_reactions"].create_index([("reactor_id", 1), ("updated_at", -1)], background=True)
+        await db["drops"].create_index([("liked_by", 1)], background=True)
         await db["drop_messages"].create_index(
             [("connection_id", 1), ("created_at", -1)], background=True
         )

@@ -9,6 +9,8 @@ directly, since a DM only ever has two known participants and doesn't
 need a per-conversation room the way comment threads do.
 """
 
+from datetime import datetime, timezone
+
 from bson import ObjectId
 
 from app.sio import sio
@@ -27,6 +29,9 @@ _sid_to_user: dict[str, str] = {}
 
 # Currently online user IDs
 _online_users: set[str] = set()
+
+# user_id → when their current stretch online began (admin Live panel)
+_online_since: dict[str, datetime] = {}
 
 # Threshold for high-activity signal
 _HIGH_ACTIVITY_THRESHOLD = 5
@@ -51,6 +56,7 @@ async def connect(sid: str, environ: dict, auth: dict):
 
     _sid_to_user[sid] = user_id
     _online_users.add(user_id)
+    _online_since.setdefault(user_id, datetime.now(timezone.utc))
 
     # Personal room so the server can reach this user directly
     await sio.enter_room(sid, f"user_{user_id}")
@@ -71,8 +77,11 @@ async def connect(sid: str, environ: dict, auth: dict):
 @sio.event
 async def disconnect(sid: str):
     user_id = _sid_to_user.pop(sid, None)
+    if user_id and user_id in _sid_to_user.values():
+        return  # still connected from another tab or device
     if user_id:
         _online_users.discard(user_id)
+        _online_since.pop(user_id, None)
         # Notify all other users this person went offline
         await sio.emit(
             "user_offline",
@@ -83,6 +92,11 @@ async def disconnect(sid: str):
 def is_user_online(user_id: str) -> bool:
     """Check if a user currently has an active socket connection."""
     return user_id in _online_users
+
+
+def online_users() -> dict[str, datetime]:
+    """Everyone connected right now, with when they came online."""
+    return {u: _online_since.get(u) for u in _online_users}
 
 
 # ─── Drop comment threads ──────────────────────────────────────────────────

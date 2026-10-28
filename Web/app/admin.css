@@ -143,6 +143,7 @@
   .adm-dash .w5 { grid-column: span 5; }
   .adm-dash .w4 { grid-column: span 4; }
   .adm-dash .w6 { grid-column: span 6; }
+  .adm-dash .w3 { grid-column: span 3; }
 }
 .adm-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 14px; align-content: start; }
 .adm-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
