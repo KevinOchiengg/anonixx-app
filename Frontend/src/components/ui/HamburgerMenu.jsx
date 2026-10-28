@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated, Linking, Modal, ScrollView, StyleSheet, Switch,
+  Animated, Modal, ScrollView, StyleSheet, Switch,
   Text, TouchableOpacity, TouchableWithoutFeedback, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -115,12 +115,6 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
     onClose();
     setTimeout(() => confirmLogout(), 220);
   }, [onClose, confirmLogout]);
-
-  const openLink = useCallback((url) => {
-    Linking.openURL(url).catch(() => {
-      showToast({ type: 'error', message: 'Could not open link.' });
-    });
-  }, [showToast]);
 
   // A handful of rows here don't have a real setting behind them yet (no
   // backend field, no screen) — tapping used to silently do nothing, which

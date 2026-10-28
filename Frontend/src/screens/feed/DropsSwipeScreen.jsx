@@ -1320,8 +1320,6 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [feedAds, setFeedAds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [sessionPosts, setSessionPosts] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
   const [replay, setReplay] = useState([]);   // shuffled re-runs once the feed is exhausted (handleEndReached)
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1378,7 +1376,6 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
       if (data.message === 'session_limit') {
         setSessionLimitReached(true);
-        setHasMore(data.has_more);
         return;
       }
 
@@ -1416,8 +1413,6 @@ export default function DropsSwipeScreen({ navigation, route }) {
       sessionPostsRef.current = data.session_posts;
       cursorRef.current = data.next_cursor || null;
       hasMoreRef.current = !!data.has_more;
-      setSessionPosts(data.session_posts);
-      setHasMore(data.has_more);
     } catch {
       setLoadError(true);
     } finally {

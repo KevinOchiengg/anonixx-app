@@ -12,11 +12,8 @@ export const IcMusic = () => (<svg {...P}><path d="M9 18V6l11-2v12" /><circle cx
 export const IcFlag = () => (<svg {...P}><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></svg>);
 export const IcCalendar = () => (<svg {...P}><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M8 3v4M16 3v4M3.5 10h17" /></svg>);
 export const IcKanban = () => (<svg {...P}><rect x="3.5" y="3.5" width="5" height="17" rx="1.8" /><rect x="10" y="3.5" width="5" height="11" rx="1.8" /><rect x="16.5" y="3.5" width="4" height="7" rx="1.8" /></svg>);
-export const IcGear = () => (<svg {...P}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>);
 export const IcMenu = () => (<svg {...P}><path d="M4 7h16M4 12h16M4 17h10" /></svg>);
 export const IcBell = () => (<svg {...P}><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>);
-export const IcSun = () => (<svg {...P}><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>);
-export const IcMoon = () => (<svg {...P}><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" /></svg>);
 export const IcClose = () => (<svg {...P}><path d="M6 6l12 12M18 6 6 18" /></svg>);
 export const IcCheck = () => (<svg {...P}><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>);
 export const IcCoin = () => (<svg {...P}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9.5 9.5c.4-.9 1.3-1.4 2.5-1.4 1.5 0 2.5.7 2.5 1.8s-1 1.6-2.5 1.9-2.5.8-2.5 1.9 1 1.9 2.5 1.9c1.2 0 2.1-.5 2.5-1.4" /></svg>);
@@ -25,4 +22,3 @@ export const IcEye = () => (<svg {...P}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21
 export const IcPulse = () => (<svg {...P}><path d="M3 12h4l2.5-6 5 12 2.5-6H21" /></svg>);
 export const IcBot = () => (<svg {...P}><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9.5 17h5" /></svg>);
 export const IcList = () => (<svg {...P}><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg>);
-export const IcHome = () => (<svg {...P}><path d="M4 11 12 4l8 7v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg>);

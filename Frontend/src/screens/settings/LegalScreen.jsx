@@ -4,11 +4,11 @@
  */
 import React, { useEffect, useRef } from 'react';
 import {
-  Animated, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  Animated, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
-import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { rs, rf, rp, rh, SPACING, FONT, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
 
 // ─── Document content (module-level, Rule 5) ──────────────────

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Dimensions, Image, Modal, ScrollView,
+  ActivityIndicator, Animated, Image, Modal, ScrollView,
   Share, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -24,7 +24,6 @@ import VideoOverlays from '../common/VideoOverlays';
 import { CommentBottomSheet } from './CommentBottomSheet';
 import ReportSheet from './ReportSheet';
 
-const { width: W, height: H } = Dimensions.get('window');
 // Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
 // tapping Link up is never a price surprise.
 const UNLOCK_COST = 6;
@@ -102,7 +101,6 @@ const ImageCarousel = React.memo(({ images }) => {
     });
   }, [containerWidth, images]);
 
-  const cardHeight = imgHeights[activeIndex] ?? rs(240);
 
   if (!images?.length) return null;
   return (

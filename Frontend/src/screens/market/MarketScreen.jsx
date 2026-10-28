@@ -36,7 +36,6 @@ import {
   rf,
   rp,
   rs,
-  RADIUS,
 } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 

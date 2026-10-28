@@ -21,8 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight, Lock, Sparkles } from 'lucide-react-native';
+import { ChevronRight, Lock } from 'lucide-react-native';
 
 import { rf, rp, rs } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';

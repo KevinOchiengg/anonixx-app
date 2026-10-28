@@ -245,32 +245,6 @@ async def unlock_market_item(
     }
 
 
-@router.get("/my-unlocks")
-async def my_unlocks(
-    current_user_id: str = Depends(get_current_user_id),
-    db                  = Depends(get_database),
-):
-    """Items the current user has paid to unlock — for a 'My Library' screen."""
-    unlocks = await db.market_unlocks.find(
-        {"user_id": current_user_id},
-    ).sort("unlocked_at", -1).to_list(None)
-
-    if not unlocks:
-        return {"items": []}
-
-    item_ids = [ObjectId(u["item_id"]) for u in unlocks]
-    items    = await db.market_items.find({"_id": {"$in": item_ids}}).to_list(None)
-    by_id    = {str(it["_id"]): it for it in items}
-
-    return {
-        "items": [
-            _serialize(by_id[u["item_id"]], full=True)
-            for u in unlocks
-            if u["item_id"] in by_id
-        ],
-    }
-
-
 # ─── Admin endpoints ──────────────────────────────────────────────────────────
 
 @router.post("/items", dependencies=[Depends(require_scope("content"))])

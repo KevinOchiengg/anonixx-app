@@ -184,4 +184,3 @@ export const KENYA_COUNTIES = [
   'Homa Bay', 'Migori', 'Kisii', 'Nyamira', 'Nairobi',
 ];
 
-export const isKenya = (countryCode) => countryCode === 'KE';

@@ -300,7 +300,7 @@ export default function MpesaPaymentSheet({ visible, onClose, packages }) {
   const dispatch   = useDispatch();
   const { showToast } = useToast();
 
-  const { paymentStatus, pendingCheckoutId, paymentLoading, balance } =
+  const { paymentStatus, paymentLoading, balance } =
     useSelector((state) => state.coins);
 
   const [selectedPackage, setSelectedPackage] = useState('popular');

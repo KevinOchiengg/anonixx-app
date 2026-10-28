@@ -8,14 +8,14 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDispatch } from 'react-redux';
 
 import { T } from '../../utils/colorTokens';
-import { rs, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
+import { rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import PulseLoader from '../../components/common/PulseLoader';
 import { useToast } from '../../components/ui/Toast';

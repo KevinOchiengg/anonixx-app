@@ -80,7 +80,6 @@ export default function DropCallScreen({ route, navigation }) {
   const [joined, setJoined]         = useState(false);
   const [micMuted, setMicMuted]     = useState(false);
   const [camOff, setCamOff]         = useState(!!isAudioOnly);
-  const [frontCam, setFrontCam]     = useState(true);
   const [sharingScreen, setSharingScreen] = useState(false);
   const [remoteUids, setRemoteUids] = useState([]);
 
@@ -196,7 +195,6 @@ export default function DropCallScreen({ route, navigation }) {
 
   const switchCamera = useCallback(() => {
     engineRef.current?.switchCamera();
-    setFrontCam((f) => !f);
   }, []);
 
   // Anyone in the call can share their screen — same toggle for host and

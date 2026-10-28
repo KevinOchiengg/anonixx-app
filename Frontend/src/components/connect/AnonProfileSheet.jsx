@@ -22,13 +22,12 @@ import { X, UserCheck, Crown, MapPin, Link2, Coins } from 'lucide-react-native';
 // the drop card directly.
 const UNLOCK_COST = 6;
 import { API_BASE_URL } from '../../config/api';
-import { useToast } from '../ui/Toast';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
 import T from '../../utils/theme';
 
-const { height: H, width: W } = Dimensions.get('window');
+const { height: H } = Dimensions.get('window');
 
 // ─── Static data ──────────────────────────────────────────────
 const GENDER_BADGE = {
@@ -49,7 +48,6 @@ const StatItem = React.memo(({ value, label }) => (
 export default function AnonProfileSheet({
   visible, anonymousName, userId, post, linkupTarget, onClose, navigation,
 }) {
-  const { showToast }  = useToast();
   const [profile,      setProfile]      = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);

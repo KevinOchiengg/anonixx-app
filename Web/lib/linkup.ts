@@ -51,4 +51,3 @@ export function timeLeft(iso?: string | null, now = Date.now()): string | null {
   return h >= 48 ? `${Math.floor(h / 24)}d left` : `${h}h left`;
 }
 
-export const isEnded = (iso?: string | null, now = Date.now()) => !!iso && !(parse(iso) - now > 0);

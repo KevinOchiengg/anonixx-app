@@ -62,7 +62,3 @@ export default function useDraft(key, initial) {
   return [value, set, clear];
 }
 
-/** Whether a draft exists for `key` (for "pick up where you left off" choices). */
-export async function hasDraft(key) {
-  try { return !!(await AsyncStorage.getItem(PREFIX + key)); } catch { return false; }
-}

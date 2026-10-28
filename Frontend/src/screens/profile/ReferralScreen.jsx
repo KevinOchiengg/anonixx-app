@@ -36,7 +36,7 @@ import { useDispatch, useSelector } from 'react-redux';
 
 import { fetchReferralCode, fetchReferralStats } from '../../store/slices/coinsSlice';
 import { useToast } from '../../components/ui/Toast';
-import { HIT_SLOP, BUTTON_HEIGHT, rf, rp, rs, SCREEN } from '../../utils/responsive';
+import { HIT_SLOP, BUTTON_HEIGHT, rf, rp, rs } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 
 // ─── Static perks list ────────────────────────────────────────
@@ -153,11 +153,6 @@ export default function ReferralScreen({ navigation }) {
       showToast({ type: 'error', message: 'Could not open share sheet.' });
     }
   }, [shareLink, showToast]);
-
-  const copyIconColor = copiedAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [THEME.textSub, '#22c55e'],
-  });
 
   const statsData = useMemo(() => [
     { id: 'refs',   label: 'Friends referred', value: totalReferred,       color: THEME.purple },

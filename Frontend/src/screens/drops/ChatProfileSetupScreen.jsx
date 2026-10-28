@@ -83,7 +83,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [welcomeSound, setWelcomeSound]       = useState('soft-chime');
   const [callMode, setCallMode]               = useState('solo');
   const [maxGuests, setMaxGuests]             = useState(1);
-  const [purchasedSlots, setPurchasedSlots]   = useState(0);
   const [buyingSlots, setBuyingSlots]         = useState(false);
   const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
   const [intro, setIntro]                     = useState('');
@@ -125,7 +124,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setWelcomeSound(data.welcome_sound || 'soft-chime');
             setCallMode(data.call_mode || 'solo');
             setMaxGuests(data.max_guests || 1);
-            setPurchasedSlots(data.purchased_slots || 0);
             setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
             setIntro(data.intro || '');
             setWelcomeMessage(data.welcome_message || '');
@@ -377,7 +375,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
       const data = await res.json();
       if (res.ok) {
         setMaxGuests(data.max_guests);
-        setPurchasedSlots(data.purchased_slots);
         showToast({ type: 'success', message: `Room size is now ${data.max_guests} guests — ${data.coins_spent} coins spent.` });
       } else if (res.status === 402) {
         showToast({ type: 'warning', message: data.detail || 'Not enough coins.' });

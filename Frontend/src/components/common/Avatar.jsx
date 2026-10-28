@@ -1,7 +1,6 @@
 import React from 'react';
 import { Image, View, Text, StyleSheet } from 'react-native';
 import T from '../../utils/theme';
-import { rs } from '../../utils/responsive';
 
 // Real photo if the user set one, otherwise the first initial of their
 // name — no emoji/preset avatars.

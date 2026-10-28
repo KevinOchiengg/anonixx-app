@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, COST, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -152,7 +151,6 @@ function Inner() {
   function pickMode(m: Mode) {
     setMode(mode === m ? "text" : m);
   }
-  const short = (user?.coin_balance ?? 0) < COST.post;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

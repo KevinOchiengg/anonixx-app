@@ -24,7 +24,6 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { awardMilestone } from '../../store/slices/coinsSlice';
 import { uploadToR2 } from '../../utils/upload';
-import { DROP_THEMES, CARD_INTENTS } from '../../components/drops/DropCardRenderer';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import T from '../../utils/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -52,7 +51,6 @@ export default function DropsPollScreen({ navigation, route }) {
 
   // Confession type owns the palette (same as the compose preview and the
   // rendered card) — theme is the legacy fallback and is always 'desire' now.
-  const themeObj = CARD_INTENTS[cardIntent] || DROP_THEMES[theme] || DROP_THEMES['desire'];
 
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions,  setPollOptions]  = useState(['', '']);

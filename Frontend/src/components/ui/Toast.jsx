@@ -28,7 +28,6 @@ import {
   Animated,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,7 +40,6 @@ import {
 } from 'lucide-react-native';
 import { THEME } from '../../utils/theme';
 
-const { width } = Dimensions.get('window');
 
 const TOAST_CONFIG = {
   success: {

@@ -30,7 +30,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Search, User, X } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
-import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { API_BASE_URL } from '../../config/api';
 
 // ─── Recent avatar chip ───────────────────────────────────────

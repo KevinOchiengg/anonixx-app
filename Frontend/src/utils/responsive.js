@@ -31,8 +31,6 @@ const BASE_WIDTH  = 390;
 const BASE_HEIGHT = 844;
 
 // ─── Live screen dimensions ────────────────────────────────────
-let { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 export const SCREEN = {
   get width()  { return Dimensions.get('window').width; },
   get height() { return Dimensions.get('window').height; },
@@ -123,6 +121,3 @@ export const ICON = {
 export const INPUT_HEIGHT  = rh(52);
 export const BUTTON_HEIGHT = rh(54);
 
-// ─── Percentage of screen ─────────────────────────────────────
-export const wp = (percent) => (SCREEN.width  * percent) / 100;
-export const hp = (percent) => (SCREEN.height * percent) / 100;

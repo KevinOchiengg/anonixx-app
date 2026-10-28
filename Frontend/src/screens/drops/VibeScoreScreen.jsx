@@ -13,7 +13,7 @@
  */
 
 import React, {
-  useState, useEffect, useRef, useCallback, useMemo,
+  useState, useEffect, useRef, useCallback,
 } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,

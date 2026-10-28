@@ -4,7 +4,6 @@
  * State:
  *   items         { [id]: marketItem }   normalised cache
  *   feed          string[]               item IDs in feed order (for MarketScreen)
- *   myUnlocks     string[]               item IDs the current user has unlocked
  *   loading       boolean
  *   unlocking     string | null          item id currently being unlocked
  *   error         string | null
@@ -76,21 +75,6 @@ export const unlockMarketItem = createAsyncThunk(
   }
 );
 
-export const fetchMyUnlocks = createAsyncThunk(
-  'market/fetchMyUnlocks',
-  async (_, { rejectWithValue }) => {
-    try {
-      const headers = await authHeaders();
-      const res     = await fetch(`${API_BASE_URL}/api/v1/market/my-unlocks`, { headers });
-      const data    = await res.json();
-      if (!res.ok) return rejectWithValue(data);
-      return data;
-    } catch (e) {
-      return rejectWithValue({ detail: 'Network error' });
-    }
-  }
-);
-
 // ─── Slice ────────────────────────────────────────────────────────────────────
 
 const marketSlice = createSlice({
@@ -98,7 +82,6 @@ const marketSlice = createSlice({
   initialState: {
     items:     {},     // { [id]: item }
     feed:      [],     // ordered item IDs for MarketScreen
-    myUnlocks: [],     // ordered item IDs of unlocked items
     loading:   false,
     unlocking: null,   // id of item currently being unlocked
     error:     null,
@@ -137,19 +120,7 @@ const marketSlice = createSlice({
       .addCase(unlockMarketItem.fulfilled, (state, action) => {
         state.unlocking = null;
         const it = action.payload.item;
-        if (it) {
-          state.items[it.id] = it;
-          if (!state.myUnlocks.includes(it.id)) {
-            state.myUnlocks.unshift(it.id);
-          }
-        }
-      })
-
-      // fetchMyUnlocks
-      .addCase(fetchMyUnlocks.fulfilled, (state, action) => {
-        const ids = action.payload.items.map((it) => it.id);
-        action.payload.items.forEach((it) => { state.items[it.id] = it; });
-        state.myUnlocks = ids;
+        if (it) state.items[it.id] = it;
       });
   },
 });

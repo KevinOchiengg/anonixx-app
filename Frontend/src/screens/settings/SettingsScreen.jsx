@@ -1,17 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated, Linking, ScrollView, StyleSheet, Switch,
+  Animated, Linking, StyleSheet, Switch,
   Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft, Bell, BookOpen, ChevronRight, Database,
   Eye, FileText, Globe, HelpCircle, Lock, MapPin,
   Monitor, ShieldAlert, Smartphone, User, Volume2, Zap, Trash2, Palette, Shield,
 } from 'lucide-react-native';
-import { rs, rf, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { rs, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';

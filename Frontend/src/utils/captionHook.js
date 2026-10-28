@@ -10,7 +10,6 @@
 const MIN = 8;
 const MAX = 140;
 const SHORT = 48;       // a caption this short is all hook
-const OPEN_WORDS = 4;   // otherwise the inline opening is up to this many words (the {0,3} below)…
 const OPEN_MAX = 40;    // …or up to a comma / dash within this many characters
 
 function opening(t) {

@@ -30,9 +30,6 @@ export const User = () => (
 export const Flame = ({ filled = false }: { filled?: boolean }) => (
   <svg {...base} fill={filled ? "currentColor" : "none"}><path d="M12 2c1 4 5 6 5 11a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-6 1-10z" /></svg>
 );
-export const Chats = ({ filled = false }: { filled?: boolean }) => (
-  <svg {...base} fill={filled ? "currentColor" : "none"}><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z" /></svg>
-);
 export const Door = ({ filled = false }: { filled?: boolean }) => (
   <svg {...base} fill="none"><path d="M13 4h5a1 1 0 0 1 1 1v15" /><path d="M3 20h18" /><path d="M13 3.5 6 5v15h7z" fill={filled ? "currentColor" : "none"} /><circle cx="10.5" cy="12.5" r="0.6" fill={filled ? "#0b0f18" : "currentColor"} /></svg>
 );

@@ -133,83 +133,6 @@ export const fetchReferralStats = createAsyncThunk(
 
 // ─── International payment thunks ─────────────────────────────────────────────
 
-/**
- * Stripe coin purchase.
- * Sends { package_id, payment_method_id } to the backend.
- * Backend creates + confirms a Stripe PaymentIntent and credits coins on success.
- *
- * TODO: Before going live, integrate @stripe/stripe-react-native:
- *   1. npm install @stripe/stripe-react-native
- *   2. Wrap App in <StripeProvider publishableKey={STRIPE_PK} />
- *   3. In InternationalPaymentSheet, replace card TextInputs with <CardField />
- *      and use useStripe().createPaymentMethod() to get a real payment_method_id.
- */
-export const buyCoinsWithStripe = createAsyncThunk(
-  'coins/buyCoinsWithStripe',
-  async ({ packageId, paymentMethodId }, { rejectWithValue }) => {
-    try {
-      const headers = await authHeaders();
-      const res     = await fetch(`${API_BASE_URL}/api/v1/coins/buy/stripe`, {
-        method:  'POST',
-        headers,
-        body:    JSON.stringify({ package_id: packageId, payment_method_id: paymentMethodId }),
-      });
-      const data = await res.json();
-      if (!res.ok) return rejectWithValue(data);
-      return data; // { status, coins, new_balance }
-    } catch (e) {
-      return rejectWithValue({ detail: 'Network error' });
-    }
-  }
-);
-
-/**
- * PayPal coin purchase — step 1: create order.
- * Returns { order_id, approval_url } from backend.
- * Frontend opens approval_url in WebBrowser, then calls capturePayPalPayment.
- */
-export const buyCoinsWithPayPal = createAsyncThunk(
-  'coins/buyCoinsWithPayPal',
-  async ({ packageId }, { rejectWithValue }) => {
-    try {
-      const headers = await authHeaders();
-      const res     = await fetch(`${API_BASE_URL}/api/v1/coins/buy/paypal`, {
-        method:  'POST',
-        headers,
-        body:    JSON.stringify({ package_id: packageId }),
-      });
-      const data = await res.json();
-      if (!res.ok) return rejectWithValue(data);
-      return data; // { order_id, approval_url }
-    } catch (e) {
-      return rejectWithValue({ detail: 'Network error' });
-    }
-  }
-);
-
-/**
- * PayPal coin purchase — step 2: capture order after user approval.
- * Called with the orderId + payerId extracted from the redirect URL.
- */
-export const capturePayPalPayment = createAsyncThunk(
-  'coins/capturePayPalPayment',
-  async ({ orderId, payerId }, { rejectWithValue }) => {
-    try {
-      const headers = await authHeaders();
-      const res     = await fetch(`${API_BASE_URL}/api/v1/coins/capture/paypal`, {
-        method:  'POST',
-        headers,
-        body:    JSON.stringify({ order_id: orderId, payer_id: payerId }),
-      });
-      const data = await res.json();
-      if (!res.ok) return rejectWithValue(data);
-      return data; // { status, coins, new_balance }
-    } catch (e) {
-      return rejectWithValue({ detail: 'Network error' });
-    }
-  }
-);
-
 export const spendCoins = createAsyncThunk(
   'coins/spendCoins',
   async ({ reason, description }, { rejectWithValue }) => {
@@ -455,35 +378,6 @@ const coinsSlice = createSlice({
       .addCase(buyCoinsStripeIntent.rejected, (state) => { state.paymentLoading = false; })
       .addCase(buyCoinsStripeIntent.fulfilled, (state) => { state.paymentLoading = false; })
 
-      // buyCoinsWithStripe (legacy direct-confirm flow — kept for backward compat)
-      .addCase(buyCoinsWithStripe.pending,  (state) => { state.paymentLoading = true; })
-      .addCase(buyCoinsWithStripe.rejected, (state) => { state.paymentLoading = false; })
-      .addCase(buyCoinsWithStripe.fulfilled, (state, action) => {
-        state.paymentLoading = false;
-        state.paymentStatus  = 'completed';
-        if (action.payload.new_balance != null) {
-          state.balance = action.payload.new_balance;
-        }
-      })
-
-      // buyCoinsWithPayPal (create order — no balance change yet)
-      .addCase(buyCoinsWithPayPal.pending,  (state) => { state.paymentLoading = true; })
-      .addCase(buyCoinsWithPayPal.rejected, (state) => { state.paymentLoading = false; })
-      .addCase(buyCoinsWithPayPal.fulfilled, (state) => {
-        state.paymentLoading = false;
-        // Order created — wait for capture before marking complete
-      })
-
-      // capturePayPalPayment
-      .addCase(capturePayPalPayment.pending,  (state) => { state.paymentLoading = true; })
-      .addCase(capturePayPalPayment.rejected, (state) => { state.paymentLoading = false; })
-      .addCase(capturePayPalPayment.fulfilled, (state, action) => {
-        state.paymentLoading = false;
-        state.paymentStatus  = 'completed';
-        if (action.payload.new_balance != null) {
-          state.balance = action.payload.new_balance;
-        }
-      });
   },
 });
 
@@ -493,6 +387,5 @@ export const {
   clearPaymentState,
   setBalance,
 } = coinsSlice.actions;
-
 
 export default coinsSlice.reducer;

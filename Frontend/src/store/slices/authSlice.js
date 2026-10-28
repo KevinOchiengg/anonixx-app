@@ -67,20 +67,6 @@ export const signup = createAsyncThunk(
   },
 );
 
-export const fetchProfile = createAsyncThunk(
-  'auth/fetchProfile',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await authAPI.getCurrentUser();
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data || { detail: 'Failed to fetch profile' }
-      );
-    }
-  },
-);
-
 export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
   async (profileData, { rejectWithValue }) => {
@@ -189,22 +175,6 @@ const authSlice = createSlice({
           action.payload?.detail ||
           action.payload?.message ||
           'Signup failed';
-      })
-
-      // ── Fetch Profile ────────────────────────────────────────
-      .addCase(fetchProfile.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchProfile.fulfilled, (state, action) => {
-        state.loading         = false;
-        state.user            = action.payload;
-        state.isAuthenticated = true;
-      })
-      .addCase(fetchProfile.rejected, (state) => {
-        state.loading         = false;
-        state.isAuthenticated = false;
-        state.user            = null;
-        state.token           = null;
       })
 
       // ── Update Profile ───────────────────────────────────────

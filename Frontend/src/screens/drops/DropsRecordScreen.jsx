@@ -22,7 +22,7 @@
  * endpoint (Cloudinary treats audio as the video resource type).
  */
 import React, {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useRef, useState,
 } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
@@ -169,7 +169,6 @@ export default function DropsRecordScreen({ navigation, route }) {
 
   // ── Animations ────────────────────────────────────────────────
   const redPulse    = useRef(new Animated.Value(0)).current;
-  const urgentPulse = useRef(new Animated.Value(0)).current;
   const heartbeat   = useRef(new Animated.Value(1)).current;
 
   // Red dot pulses during recording
