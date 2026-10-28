@@ -212,7 +212,7 @@ const RailIcon = ({ icon, tint, active }) => {
 
 const PlayBadge = () => {
   const { height: winH } = useWindowDimensions();
-  const size = Math.max(60, Math.min(76, winH * 0.095));
+  const size = Math.max(84, Math.min(108, winH * 0.12));
   const ring = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.timing(ring, { toValue: 1, duration: 1800, useNativeDriver: true }));
@@ -220,7 +220,7 @@ const PlayBadge = () => {
     return () => loop.stop();
   }, [ring]);
   return (
-    <View style={[ss.pauseBadge, { width: size, height: size, borderRadius: size / 2 }]} pointerEvents="none">
+    <View style={[ss.pauseBadge, { width: size, height: size, borderRadius: size / 2, marginTop: -size / 2 }]} pointerEvents="none">
       <Animated.View
         style={{
           position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2,
@@ -234,7 +234,7 @@ const PlayBadge = () => {
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', paddingLeft: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' }}
       >
-        <Play size={Math.round(size * 0.4)} color="#fff" fill="#fff" />
+        <Play size={Math.round(size * 0.44)} color="#fff" fill="#fff" />
       </LinearGradient>
     </View>
   );
@@ -1704,7 +1704,7 @@ const ss = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
   pauseBadge: {
-    position: 'absolute', top: '45%', alignSelf: 'center', alignItems: 'center', justifyContent: 'center', zIndex: 9,
+    position: 'absolute', top: '50%', alignSelf: 'center', alignItems: 'center', justifyContent: 'center', zIndex: 9,
     shadowColor: '#ff634a', shadowOpacity: 0.55, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8,
   },
   actionBtn: { alignItems: 'center', gap: 5 },
