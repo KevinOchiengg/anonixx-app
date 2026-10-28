@@ -260,6 +260,27 @@ async def delete_user(
     return {"deleted": user_id, "drops_deleted": drops.deleted_count}
 
 
+@router.patch("/users/{user_id}/admin", summary="Grant or revoke admin role")
+async def toggle_admin_role(
+    user_id:  str,
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    oid = await _guard_target(db, admin_id, user_id, "change the admin role of")
+
+    user = await db["users"].find_one({"_id": oid}, {"is_admin": 1})
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    new_status = not user.get("is_admin", False)
+    await db["users"].update_one(
+        {"_id": oid},
+        {"$set": {"is_admin": new_status, "updated_at": _now()}},
+    )
+    await audit(db, admin_id, "user.admin_toggle", "user", user_id)
+    return {"user_id": user_id, "is_admin": new_status}
+
+
 @router.post("/users/{user_id}/coins", summary="Manually credit or debit coins (positive = credit, negative = debit)")
 async def adjust_coins(
     user_id:  str,
