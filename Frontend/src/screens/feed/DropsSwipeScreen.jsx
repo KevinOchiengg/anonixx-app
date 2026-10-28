@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Linking, Modal,
-  Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
-  TouchableWithoutFeedback, View, useWindowDimensions,
+  ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
+  View, useWindowDimensions,
 } from 'react-native';
 import Svg, { Line, Polygon } from 'react-native-svg';
 import * as VideoThumbnails from 'expo-video-thumbnails';
@@ -32,6 +32,7 @@ import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useToast } from '../../components/ui/Toast';
 import ReportSheet from '../../components/feed/ReportSheet';
+import { HeartBursts, useDoubleTapLike } from '../../components/feed/DoubleTapLike';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { getDeviceId } from '../../utils/deviceId';
@@ -340,21 +341,12 @@ const RailAvatar = ({ post, navigation }) => {
 // ─── VIDEO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 // Covers for videos posted without one (older R2 uploads), made once per URL.
 const posterCache = new Map();
-// Double-tap window: a single tap on a video waits this long before pausing.
-const TAP_GAP = 250;
-
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
-  const lastTap = useRef(null);
-  const tapTimer = useRef(null);
   const likedRef = useRef(liked);
   likedRef.current = liked;
-  const [showHeart, setShowHeart] = useState(false);
-  const [heartAt, setHeartAt] = useState(null);   // { x, y, rot }: where the finger landed
-  const heartScale = useRef(new Animated.Value(0)).current;
-  const heartOpacity = useRef(new Animated.Value(1)).current;
   const likeScale = useRef(new Animated.Value(1)).current;
   const [expanded, setExpanded] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
@@ -470,30 +462,6 @@ const VideoSlide = ({
     return () => clearTimeout(t);
   }, [isActive, playerStatus]);
 
-  // A tap pauses after TAP_GAP; a second tap within it likes instead (and adds a heart).
-  // Double tap never unlikes.
-  const handleTap = (e) => {
-    const now = Date.now();
-    const { locationX, locationY } = e.nativeEvent;
-    if (lastTap.current && now - lastTap.current < TAP_GAP) {
-      clearTimeout(tapTimer.current);
-      tapTimer.current = null;
-      triggerHeart(locationX, locationY);
-      if (!likedRef.current) { likedRef.current = true; handleLikeWithAnim(); }
-    } else {
-      clearTimeout(tapTimer.current);
-      tapTimer.current = setTimeout(() => {
-        tapTimer.current = null;
-        playingRef.current ? player.pause() : player.play();
-      }, TAP_GAP);
-    }
-    lastTap.current = now;
-  };
-  useEffect(() => {
-    if (!isActive) { clearTimeout(tapTimer.current); tapTimer.current = null; }
-  }, [isActive]);
-  useEffect(() => () => clearTimeout(tapTimer.current), []);
-
   // Long-press opens the menu: 2x speed, report or block. Drag the bottom line to scrub.
   const [fast, setFast] = useState(false);
   const setSpeed = (on) => {
@@ -556,19 +524,14 @@ const VideoSlide = ({
     onLike();
   };
 
-  const triggerHeart = (x, y) => {
-    setHeartAt(x == null ? null : { x, y, rot: Math.round(Math.random() * 40 - 20) });
-    setShowHeart(true);
-    heartScale.setValue(0);
-    heartOpacity.setValue(1);
-    Animated.parallel([
-      Animated.spring(heartScale, { toValue: 1, friction: 3, useNativeDriver: true }),
-      Animated.sequence([
-        Animated.delay(400),
-        Animated.timing(heartOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
-      ]),
-    ]).start(() => setShowHeart(false));
-  };
+  // A tap pauses or plays; a double tap likes (never unlikes) and drops a heart where the
+  // finger landed. Quick extra taps keep adding hearts.
+  const { gesture: tapGesture, hearts, removeHeart, cancelPending } = useDoubleTapLike({
+    onSingle: () => { playingRef.current ? player.pause() : player.play(); },
+    onDoubleLike: () => { if (!likedRef.current) { likedRef.current = true; handleLikeWithAnim(); } },
+    onLong: openMenu,
+  });
+  useEffect(() => { if (!isActive) cancelPending(); }, [isActive, cancelPending]);
 
 
   return (
@@ -590,9 +553,9 @@ const VideoSlide = ({
         <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode={fillVideo ? 'cover' : 'contain'} pointerEvents="none" />
       ) : null}
       {/* Tap layer above VideoView: the native video surface can swallow taps otherwise. */}
-      <TouchableWithoutFeedback onPress={handleTap} onLongPress={openMenu} delayLongPress={450}>
-        <View style={StyleSheet.absoluteFill} />
-      </TouchableWithoutFeedback>
+      <GestureDetector gesture={tapGesture}>
+        <View style={StyleSheet.absoluteFill} collapsable={false} />
+      </GestureDetector>
 
       <VideoOverlays overlays={post.video_edit?.overlays} />
 
@@ -626,18 +589,7 @@ const VideoSlide = ({
         </View>
       )}
 
-      {showHeart && (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            ss.heartBurst,
-            heartAt && { left: heartAt.x, top: heartAt.y },
-            { transform: [{ scale: heartScale }, { rotate: `${heartAt?.rot || 0}deg` }], opacity: heartOpacity },
-          ]}
-        >
-          <Heart size={100} color={THEME.primary} fill={THEME.primary} />
-        </Animated.View>
-      )}
+      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
 
       {/* Two-finger hold or scrubbing hides everything but the header and video. */}
       {!chromeHidden && scrubT === null && (
@@ -752,6 +704,15 @@ const AudioSlide = ({
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
 
+  // Double tap on any empty part of the slide likes it; hold for the menu.
+  const likedRef = useRef(liked);
+  likedRef.current = liked;
+  const { gesture: tapGesture, hearts, removeHeart } = useDoubleTapLike({
+    onSingle: null,
+    onDoubleLike: () => { if (!likedRef.current) { likedRef.current = true; onLike(); } },
+    onLong: onMore,
+  });
+
   const activeBar = Math.floor(progress * 48);
   const bars = Array.from({ length: 48 }, (_, i) => ({
     h: Math.sin(i * 0.55) * 20 + Math.cos(i * 0.3) * 10 + 28,
@@ -761,9 +722,13 @@ const AudioSlide = ({
 
 
   return (
-    <Pressable onLongPress={onMore} delayLongPress={450} style={[ss.slide, { backgroundColor: THEME.background }]}>
+    <View style={[ss.slide, { backgroundColor: THEME.background }]}>
       <View style={as.bgAccent} />
       <View style={as.bgAccent2} />
+
+      <GestureDetector gesture={tapGesture}>
+        <View style={StyleSheet.absoluteFill} collapsable={false} />
+      </GestureDetector>
 
       {!chromeHidden && (
         <View style={ss.rail}>
@@ -785,8 +750,8 @@ const AudioSlide = ({
         </View>
       )}
 
-      <View style={as.center}>
-        <View style={as.authorRow}>
+      <View style={as.center} pointerEvents="box-none">
+        <View style={as.authorRow} pointerEvents="box-none">
           <AuthorProfileTrigger post={post} navigation={navigation}>
             <View>
               <Text style={as.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
@@ -801,17 +766,17 @@ const AudioSlide = ({
           </TouchableOpacity>
         ) : null}
 
-        <View style={as.waveformWrap}>
+        <View style={as.waveformWrap} pointerEvents="none">
           {bars.map((bar, i) => (
             <View key={i} style={[as.bar, { height: bar.h }, bar.played ? as.barPlayed : as.barUnplayed, bar.current && as.barGlow]} />
           ))}
         </View>
 
-        <View style={as.progressTrack}>
+        <View style={as.progressTrack} pointerEvents="none">
           <Animated.View style={[as.progressFill, { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
         </View>
 
-        <View style={as.timeRow}>
+        <View style={as.timeRow} pointerEvents="none">
           <Text style={as.timeText}>{formatTime(position)}</Text>
           <Text style={as.timeText}>{duration > 0 ? formatTime(duration) : '--:--'}</Text>
         </View>
@@ -823,7 +788,9 @@ const AudioSlide = ({
         <LiveChips post={post} isOwnPost={isOwnPost} />
         {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
       </View>
-    </Pressable>
+
+      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
+    </View>
   );
 };
 
@@ -914,11 +881,9 @@ const TextSlide = ({
       trackPlayer.pause();
     }
   }, [track, isActive, trackMuted, trackPlayer]);
-  const [showHeart, setShowHeart] = useState(false);
-  const heartScale = useRef(new Animated.Value(0)).current;
-  const heartOpacity = useRef(new Animated.Value(1)).current;
   const likeScale = useRef(new Animated.Value(1)).current;
-  const lastTap = useRef(null);
+  const likedRef = useRef(liked);
+  likedRef.current = liked;
   const [expanded, setExpanded] = useState(false);
   const [fullTextVisible, setFullTextVisible] = useState(false);
 
@@ -944,24 +909,12 @@ const TextSlide = ({
     onLike();
   };
 
-  const triggerHeart = () => {
-    setShowHeart(true);
-    heartScale.setValue(0);
-    heartOpacity.setValue(1);
-    Animated.parallel([
-      Animated.spring(heartScale, { toValue: 1, friction: 3, useNativeDriver: true }),
-      Animated.sequence([Animated.delay(400), Animated.timing(heartOpacity, { toValue: 0, duration: 500, useNativeDriver: true })]),
-    ]).start(() => setShowHeart(false));
-  };
-
-  const handleTap = () => {
-    const now = Date.now();
-    if (lastTap.current && now - lastTap.current < 280) {
-      triggerHeart();
-      if (!liked) handleLikeWithAnim();
-    }
-    lastTap.current = now;
-  };
+  // Double tap likes (never unlikes) with a heart where the finger landed; hold for the menu.
+  const { gesture: tapGesture, hearts, removeHeart } = useDoubleTapLike({
+    onSingle: null,
+    onDoubleLike: () => { if (!likedRef.current) { likedRef.current = true; handleLikeWithAnim(); } },
+    onLong: onMore,
+  });
 
   return (
     <View style={[ss.slide, { backgroundColor: t.bgTo }]}>
@@ -970,8 +923,8 @@ const TextSlide = ({
       {isEnvelope && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,16,0.72)' }]} pointerEvents="none" />}
       {isEnvelope && <EnvelopeBackdrop top={envTop} />}
 
-      <TouchableWithoutFeedback onPress={handleTap} onLongPress={onMore} delayLongPress={450}>
-        <View style={StyleSheet.absoluteFill}>
+      <GestureDetector gesture={tapGesture}>
+        <View style={StyleSheet.absoluteFill} collapsable={false}>
           {hasImage ? (
             imageList.length > 1 ? (
               <ImageSlideCarousel images={imageList} />
@@ -994,13 +947,9 @@ const TextSlide = ({
             </View>
           )}
         </View>
-      </TouchableWithoutFeedback>
+      </GestureDetector>
 
-      {showHeart && (
-        <Animated.View pointerEvents="none" style={[ss.heartBurst, { transform: [{ scale: heartScale }], opacity: heartOpacity }]}>
-          <Heart size={100} color="#fff" fill="#fff" />
-        </Animated.View>
-      )}
+      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
 
       {!chromeHidden && (
         <>
@@ -1084,12 +1033,24 @@ const PollSlide = ({
   onComment, commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
+  // Double tap on any empty part of the slide likes it; hold for the menu.
+  const likedRef = useRef(liked);
+  likedRef.current = liked;
+  const { gesture: tapGesture, hearts, removeHeart } = useDoubleTapLike({
+    onSingle: null,
+    onDoubleLike: () => { if (!likedRef.current) { likedRef.current = true; onLike(); } },
+    onLong: onMore,
+  });
 
   return (
-    <Pressable onLongPress={onMore} delayLongPress={450} style={[ss.slide, { backgroundColor: t.bgTo }]}>
+    <View style={[ss.slide, { backgroundColor: t.bgTo }]}>
       <LinearGradient colors={[t.bgFrom, t.bgTo]} style={StyleSheet.absoluteFill} />
 
-      <View style={sw.pollSlideCenter}>
+      <GestureDetector gesture={tapGesture}>
+        <View style={StyleSheet.absoluteFill} collapsable={false} />
+      </GestureDetector>
+
+      <View style={sw.pollSlideCenter} pointerEvents="box-none">
         <PollCard poll={post.poll} postId={post.id} isAuthenticated={isAuthenticated} onVote={onVote} />
       </View>
 
@@ -1125,7 +1086,8 @@ const PollSlide = ({
           </View>
         </>
       )}
-    </Pressable>
+      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
+    </View>
   );
 };
 
@@ -1790,7 +1752,6 @@ const ss = StyleSheet.create({
   },
   fastText: { color: '#fff', fontSize: FONT.sm, fontWeight: '800' },
   videoLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  heartBurst: { position: 'absolute', top: '50%', left: '50%', marginLeft: -50, marginTop: -50, zIndex: 100 },
 });
 
 const as = StyleSheet.create({
