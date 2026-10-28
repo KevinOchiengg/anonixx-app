@@ -8,7 +8,6 @@ import json
 import httpx
 import logging
 from typing import Optional
-from bson import ObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -238,27 +237,3 @@ async def send_push_notification(
         return False
 
 
-async def send_push_to_many(
-    user_ids: list[str],
-    template_key: str,
-    db,
-    extra_data: Optional[dict] = None,
-) -> dict:
-    """
-    Send the same notification to multiple users.
-    Returns dict with success/failure counts.
-    """
-    results = {"sent": 0, "failed": 0, "skipped": 0}
-
-    for user_id in user_ids:
-        token = await get_push_token(user_id, db)
-        if not token:
-            results["skipped"] += 1
-            continue
-        success = await send_push_notification(user_id, template_key, db, extra_data)
-        if success:
-            results["sent"] += 1
-        else:
-            results["failed"] += 1
-
-    return results

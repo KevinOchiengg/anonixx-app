@@ -9,7 +9,6 @@ someone is Link Up (coins → unlock_requests.py / drops.py → drop_connections
 → DropChatScreen) — this file now only serves the read-only profile view.
 """
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Optional
 from datetime import datetime, timezone
 from bson import ObjectId
 

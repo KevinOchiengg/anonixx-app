@@ -88,11 +88,6 @@ class User(BaseModel):
         }
 
 
-class UserInDB(User):
-    """User model as stored in database"""
-    pass
-
-
 class UserResponse(BaseModel):
     """User response model (without sensitive data)"""
     id: str

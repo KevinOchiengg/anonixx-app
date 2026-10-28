@@ -12,7 +12,6 @@ can never unlock mature content.
 import re
 from typing import Optional
 
-SENSITIVITIES = {"general", "mature"}
 
 # Anything the filter matches is auto-marked `mature`. Deliberately conservative:
 # a false positive only hides a post from the app/SEO surfaces.

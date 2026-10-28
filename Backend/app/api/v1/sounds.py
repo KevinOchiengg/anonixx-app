@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.database import get_database
-from app.dependencies import require_admin
 from app.utils import r2_storage
 
 from app.dependencies import require_scope

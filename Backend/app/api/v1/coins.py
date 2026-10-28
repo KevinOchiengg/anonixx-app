@@ -187,12 +187,6 @@ async def spend_coins(
     return {"new_balance": new_balance, "spent": amount, "reason": data.reason}
 
 
-@router.get("/costs")
-async def get_spend_costs():
-    """Returns the coin cost for each action — used by the frontend to display prices."""
-    return {"costs": SPEND_COSTS}
-
-
 @router.post("/withdraw")
 async def request_withdrawal(
     request:         Request,
@@ -549,23 +543,6 @@ async def buy_coins_stripe_webhook(
 
 
 # ─── IAP: Apple / Google Play receipt verification ───────────────────────────
-
-@router.get("/iap/products")
-async def list_iap_products():
-    """
-    Returns the canonical Apple/Google product IDs alongside each coin package.
-    The frontend uses this to match StoreKit/Play Billing SKUs back to packages.
-    """
-    return {
-        "products": [
-            {
-                **pkg,
-                "ios_product_id":     IAP_PRODUCT_IDS[pkg["id"]],
-                "android_product_id": IAP_PRODUCT_IDS[pkg["id"]],
-            }
-            for pkg in COIN_PACKAGES
-        ],
-    }
 
 
 @router.post("/buy/iap/verify")

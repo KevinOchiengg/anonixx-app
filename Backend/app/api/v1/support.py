@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.database import get_database
-from app.dependencies import get_current_user_id, require_admin, require_super_admin
+from app.dependencies import get_current_user_id, require_super_admin
 from app.utils.coin_service import debit_coins
 from app.utils.notifications import send_push_notification
 

@@ -31,10 +31,3 @@ async def emit_high_activity(user_id: str, online_count: int = 0):
     )
 
 
-async def emit_message_locked(user_id: str, chat_id: str | None = None):
-    """Notify *user_id* that a message in *chat_id* is locked."""
-    await sio.emit(
-        "message_locked",
-        {"chatId": chat_id},
-        room=f"user_{user_id}",
-    )

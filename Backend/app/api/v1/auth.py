@@ -1,11 +1,11 @@
 from pymongo.errors import DuplicateKeyError
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime, timedelta, timezone, date
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+from jose import jwt
 from bson import ObjectId
 import secrets
 import httpx
@@ -22,7 +22,6 @@ from app.utils.email import send_password_reset_otp
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 pwd_context   = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/token")
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -679,8 +678,6 @@ async def update_profile(
         "avatar_url":     refreshed.get("avatar_url"),
         "bio":            refreshed.get("bio"),
     }
-
-
 
 
 @router.put("/gender")

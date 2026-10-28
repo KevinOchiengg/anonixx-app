@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 
 from app.database import get_database
-from app.dependencies import get_current_user_id, require_admin
+from app.dependencies import get_current_user_id
 from app.utils.notifications import send_push_notification
 
 from app.dependencies import require_scope
@@ -99,26 +99,6 @@ async def file_deception_report(
     await db["deception_reports"].insert_one(report)
 
     return {"id": str(report["_id"]), "status": "pending"}
-
-
-@router.get("/mine")
-async def get_my_deception_reports(
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    """Reports the current user has filed, with their current status."""
-    reports = []
-    async for r in db["deception_reports"].find(
-        {"reporter_id": current_user_id}
-    ).sort("created_at", -1).limit(50):
-        reports.append({
-            "id":           str(r["_id"]),
-            "connection_id": r["connection_id"],
-            "status":       r["status"],
-            "created_at":   r["created_at"].isoformat(),
-            "resolved_at":  r["resolved_at"].isoformat() if r.get("resolved_at") else None,
-        })
-    return {"reports": reports}
 
 
 # ==================== ADMIN REVIEW ====================

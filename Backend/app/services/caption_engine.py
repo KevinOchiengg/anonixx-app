@@ -16,7 +16,6 @@ Design rules
 """
 
 import hashlib
-import random
 from typing import Literal
 
 # ── Platform type ────────────────────────────────────────────────────────────

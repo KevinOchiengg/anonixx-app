@@ -17,7 +17,6 @@ TikTok pulls media directly from the Cloudinary URL — no local re-upload neede
 """
 
 import logging
-from typing import Optional
 
 import httpx
 

@@ -1,6 +1,6 @@
 from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File
-from app.dependencies import get_current_user_id, require_admin
+from app.dependencies import get_current_user_id
 from app.utils import r2_storage, stream
 from pydantic import BaseModel
 import logging

@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.database import get_database
 from app.dependencies import get_current_user_id, require_admin
@@ -85,75 +85,6 @@ async def list_queue(
     }
 
 
-# ── Single item ───────────────────────────────────────────────────
-@router.get("/queue/{item_id}")
-async def get_queue_item(
-    item_id: str,
-    db       = Depends(get_database),
-    _        = Depends(require_scope("content")),
-):
-    """Get full detail for a single queue entry."""
-    try:
-        doc = await db["publisher_queue"].find_one({"_id": ObjectId(item_id)})
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid item ID.")
-    if not doc:
-        raise HTTPException(status_code=404, detail="Queue item not found.")
-    return _fmt(doc)
-
-
-# ── Force retry ───────────────────────────────────────────────────
-@router.post("/queue/{item_id}/retry")
-async def retry_queue_item(
-    item_id: str,
-    db       = Depends(get_database),
-    _        = Depends(require_scope("content")),
-):
-    """
-    Reset a failed (or permanently failed) entry back to 'queued'
-    so the worker will pick it up on the next cycle.
-    """
-    try:
-        oid = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid item ID.")
-
-    result = await db["publisher_queue"].update_one(
-        {"_id": oid, "status": {"$in": ["failed", "failed_permanent", "rejected"]}},
-        {"$set": {
-            "status":        "queued",
-            "retry_count":   0,
-            "next_retry_at": None,
-            "error":         None,
-        }},
-    )
-    if result.modified_count == 0:
-        raise HTTPException(status_code=400, detail="Item is not in a retryable state.")
-    return {"message": "Item reset to queued. Worker will pick it up shortly."}
-
-
-# ── Reject ────────────────────────────────────────────────────────
-@router.post("/queue/{item_id}/reject")
-async def reject_queue_item(
-    item_id: str,
-    db       = Depends(get_database),
-    _        = Depends(require_scope("content")),
-):
-    """Permanently reject an entry — it will never be posted."""
-    try:
-        oid = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid item ID.")
-
-    result = await db["publisher_queue"].update_one(
-        {"_id": oid, "status": {"$nin": ["posted"]}},
-        {"$set": {"status": "rejected", "rejected_at": _now()}},
-    )
-    if result.modified_count == 0:
-        raise HTTPException(status_code=400, detail="Item cannot be rejected (already posted or not found).")
-    return {"message": "Entry rejected and will not be published."}
-
-
 # ── Stats ─────────────────────────────────────────────────────────
 @router.get("/stats")
 async def publisher_stats(
@@ -188,26 +119,6 @@ async def trigger_worker_batch(
     """
     await publisher_worker.process_batch()
     return {"message": "Worker batch triggered. Check /publisher/queue for results."}
-
-
-# ── Platform status checks ────────────────────────────────────────
-@router.get("/tiktok/status/{publish_id}")
-async def get_tiktok_post_status(
-    publish_id: str,
-    _           = Depends(require_scope("content")),
-):
-    """
-    Poll TikTok directly for the live publish status of a submitted post.
-
-    publish_id is stored in publisher_queue.platforms.tiktok.publish_id
-
-    Possible statuses: PROCESSING_UPLOAD | SEND_TO_USER_INBOX | FAILED | PUBLISHED
-    """
-    try:
-        result = await tiktok_publisher.get_post_status(publish_id)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-    return result
 
 
 @router.get("/health")

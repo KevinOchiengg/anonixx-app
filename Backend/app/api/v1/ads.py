@@ -19,7 +19,7 @@ from typing import Optional
 from bson import ObjectId
 
 from app.database import get_database
-from app.dependencies import get_current_user_id, get_optional_user_id, require_admin
+from app.dependencies import get_current_user_id, get_optional_user_id
 from app.utils.coin_service import debit_coins, credit_coins
 
 from app.dependencies import require_scope
@@ -28,7 +28,6 @@ router = APIRouter(prefix="/ads", tags=["Feed Ads"])
 
 AD_COINS_PER_HOUR = 5
 MAX_AD_HOURS      = 24 * 14
-DEFAULT_FEED_AD_FREQUENCY = 8   # one ad every N posts — admin-configurable via /admin/ads/frequency
 AD_MEDIA_TYPES    = {"image", "video", "gif", "audio"}
 
 
@@ -176,15 +175,6 @@ async def list_active_ads(
         "expires_at": {"$gt": now},
     }).sort("created_at", -1).limit(limit)
 
-    return {"ads": [format_ad(a) async for a in cursor]}
-
-
-@router.get("/mine")
-async def list_my_ads(
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    cursor = db["feed_ads"].find({"created_by": current_user_id}).sort("created_at", -1)
     return {"ads": [format_ad(a) async for a in cursor]}
 
 

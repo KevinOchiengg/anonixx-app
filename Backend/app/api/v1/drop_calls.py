@@ -19,7 +19,6 @@ event.
 """
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional
 from bson import ObjectId

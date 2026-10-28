@@ -33,7 +33,7 @@ from typing import Optional, List
 from bson import ObjectId
 
 from app.database import get_database
-from app.dependencies import get_current_user_id, require_admin, get_optional_user_id
+from app.dependencies import get_current_user_id, get_optional_user_id
 from app.utils.coin_service import debit_coins
 
 from app.dependencies import require_scope
@@ -245,17 +245,6 @@ async def unlock_market_item(
     }
 
 
-@router.get("/items/{item_id}/unlock-status")
-async def market_unlock_status(
-    item_id:         str,
-    current_user_id: str = Depends(get_current_user_id),
-    db                  = Depends(get_database),
-):
-    """Quick check — has the current user already unlocked this item?"""
-    unlocked = await _user_has_unlocked(db, current_user_id, item_id)
-    return {"is_unlocked": unlocked}
-
-
 @router.get("/my-unlocks")
 async def my_unlocks(
     current_user_id: str = Depends(get_current_user_id),
@@ -368,10 +357,3 @@ async def archive_market_item(
     return {"archived": True}
 
 
-@router.get("/admin/items", dependencies=[Depends(require_scope("content"))])
-async def admin_list_all_items(
-    db = Depends(get_database),
-):
-    """Admin: list all items including drafts and archived ones."""
-    items = await db.market_items.find({}).sort("created_at", -1).to_list(None)
-    return {"items": [_serialize(it, full=True) for it in items]}

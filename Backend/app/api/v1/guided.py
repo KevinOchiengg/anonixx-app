@@ -15,10 +15,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.v1.drops import (
-    AGE_GATE_DETAIL, HOOKUP_CRAVINGS, HOOKUP_HOSTING, HOOKUP_TONES,
-    HOOKUP_TRAITS, HOOKUP_VIBES, now_utc,
-)
+from app.api.v1.drops import HOOKUP_CRAVINGS, HOOKUP_HOSTING, HOOKUP_TONES, HOOKUP_TRAITS, HOOKUP_VIBES, now_utc
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.services import confession_writer as writer

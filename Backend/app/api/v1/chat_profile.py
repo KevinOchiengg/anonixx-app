@@ -28,7 +28,6 @@ from app.utils.moderation import violates_policy, MODERATION_ERROR
 router = APIRouter(prefix="/chat-profile", tags=["Chat Profile"])
 
 MAX_GALLERY_ITEMS = 3
-MIN_VIDEO_DURATION_FOR_LONGFORM = 60  # seconds — the "at least one ≥60s video" allowance, not enforced as a hard minimum on every item
 
 # Curated real fonts — ids are semantic (not tied to a literal font name) so
 # swapping the underlying asset later doesn't invalidate saved profiles.

@@ -32,7 +32,6 @@ from app.api.v1 import (
     upload,
     users,
     impact,
-    rituals,
     connect,
     premium,
 )
@@ -277,7 +276,6 @@ app.include_router(premium.router, prefix=settings.API_V1_PREFIX)
 app.include_router(upload.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
 app.include_router(impact.router, prefix=settings.API_V1_PREFIX)
-app.include_router(rituals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connect.router, prefix=settings.API_V1_PREFIX)
 app.include_router(geo_pricing.router,   prefix=settings.API_V1_PREFIX)
 app.include_router(market.router,        prefix=settings.API_V1_PREFIX)

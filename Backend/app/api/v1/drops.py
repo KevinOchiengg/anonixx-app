@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta, timezone
@@ -16,7 +15,6 @@ from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id
 from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
-from app.utils.notifications import send_push_notification as _notify
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
@@ -265,12 +263,6 @@ def fresh_until(window: Optional[str], now: datetime) -> datetime:
     return now + first
 
 
-def ensure_linkable(drop: dict) -> None:
-    """Regular confessions are read-only; only hookup (or older untyped) posts can be linked up."""
-    if drop.get("kind") == "confession":
-        raise HTTPException(status_code=400, detail="This is a regular confession. It can't be linked up.")
-
-
 # "Smart trim": the original video is stored untouched and the drop carries the
 # window to play plus any text laid over it. Clients apply both at playback, so
 # nothing is re-encoded here (R2 is dumb storage — see app/utils/r2_storage.py).
@@ -396,26 +388,6 @@ class CreateDropRequest(BaseModel):
     topics: Optional[List[str]] = None
 
 
-class ReactToDropRequest(BaseModel):
-    reaction: str  # text reaction per spec section 8 (e.g. "That hit me.")
-
-
-class MpesaUnlockRequest(BaseModel):
-    phone_number: str  # format: 2547XXXXXXXX
-
-
-class StripeUnlockRequest(BaseModel):
-    payment_method_id: str
-
-
-class RenewDropRequest(BaseModel):
-    drop_id: str
-
-
-class CardImageRequest(BaseModel):
-    card_image_url: str
-
-
 class PublishDropRequest(BaseModel):
     # Double-consent publish flow — the frontend always sends confirmed=True
     # on the final tap of DropsPublishScreen step 2.
@@ -524,13 +496,6 @@ async def grace_days_for(user_id: str, db) -> int:
     return PREMIUM_UNLOCKED_GRACE_DAYS if await is_premium_user_id(user_id, db) else UNLOCKED_GRACE_DAYS
 
 
-def is_expired(expires_at: Optional[datetime]) -> bool:
-    """A drop with no expires_at has never been unlocked and never dies."""
-    if expires_at is None:
-        return False
-    return _ensure_aware(expires_at) < now_utc()
-
-
 def is_night_mode() -> bool:
     hour = now_utc().hour
     return hour >= NIGHT_MODE_START or hour < NIGHT_MODE_END
@@ -547,24 +512,6 @@ def get_time_ago(dt: datetime) -> str:
     if diff < 2592000:  return f"{diff // 604800}w ago"
     if diff < 31536000: return f"{diff // 2592000} months ago"
     return dt.strftime("%b %Y")
-
-
-def get_time_left(expires_at: Optional[datetime]) -> Optional[str]:
-    """None means the drop has never been unlocked, so nothing is counting
-    down — callers render no timer at all rather than a fake one."""
-    if expires_at is None:
-        return None
-    delta = _ensure_aware(expires_at) - now_utc()
-    if delta.total_seconds() <= 0:
-        return "expired"
-    days = delta.days
-    if days >= 1:
-        return f"{days}d left"
-    hours = int(delta.total_seconds() // 3600)
-    minutes = int((delta.total_seconds() % 3600) // 60)
-    if hours > 0:
-        return f"{hours}h {minutes}m left"
-    return f"{minutes}m left"
 
 
 async def update_vibe_score(user_id: str, action: str, db):
@@ -624,82 +571,6 @@ async def send_push_notification(user_id: str, title: str, body: str, db, data: 
             )
     except Exception as e:
         print(f"⚠️ Push notification failed: {e}")
-
-
-async def trigger_mpesa_stk(
-    phone: str, amount: float, account_ref: str, description: str,
-    amount_kes: Optional[int] = None,
-) -> dict:
-    """
-    Trigger M-Pesa STK Push. Returns { success, checkout_request_id, error }
-
-    `amount` is USD, converted to KES via a flat approximate FX rate below —
-    kept for callers that don't yet have a real geo price.
-    Pass `amount_kes` instead to charge an exact, already-geo-priced KES
-    figure (see get_drop_unlock_price in geo_pricing.py) and skip that
-    approximation.
-    """
-    try:
-        import base64
-        from datetime import datetime as dt
-
-        timestamp = dt.now().strftime("%Y%m%d%H%M%S")
-        shortcode = settings.MPESA_SHORTCODE
-        passkey = settings.MPESA_PASSKEY
-        password = base64.b64encode(f"{shortcode}{passkey}{timestamp}".encode()).decode()
-
-        # Select correct Safaricom base URL based on environment
-        mpesa_base = (
-            "https://sandbox.safaricom.co.ke"
-            if settings.MPESA_ENVIRONMENT == "sandbox"
-            else "https://api.safaricom.co.ke"
-        )
-
-        # Get access token
-        async with httpx.AsyncClient() as client:
-            auth_res = await client.get(
-                f"{mpesa_base}/oauth/v1/generate?grant_type=client_credentials",
-                auth=(settings.MPESA_CONSUMER_KEY, settings.MPESA_CONSUMER_SECRET),
-                timeout=10.0
-            )
-            token_data   = auth_res.json()
-            access_token = token_data.get("access_token")
-            if not access_token:
-                print(f"⚠️ M-Pesa access token failed | status={auth_res.status_code} body={token_data}")
-                return {"success": False, "error": "Failed to get M-Pesa access token"}
-
-            stk_res = await client.post(
-                f"{mpesa_base}/mpesa/stkpush/v1/processrequest",
-                headers={"Authorization": f"Bearer {access_token}"},
-                json={
-                    "BusinessShortCode": shortcode,
-                    "Password": password,
-                    "Timestamp": timestamp,
-                    "TransactionType": "CustomerPayBillOnline",
-                    "Amount": amount_kes if amount_kes is not None else int(amount * 130),  # USD to KES approx
-                    "PartyA": phone,
-                    "PartyB": shortcode,
-                    "PhoneNumber": phone,
-                    "CallBackURL": f"{settings.BASE_URL}/api/v1/drops/mpesa/callback",
-                    "AccountReference": account_ref,
-                    "TransactionDesc": description,
-                },
-                timeout=15.0
-            )
-            data = stk_res.json()
-            print(f"📲 STK Push response | status={stk_res.status_code} body={data}")
-            if data.get("ResponseCode") == "0":
-                return {"success": True, "checkout_request_id": data.get("CheckoutRequestID")}
-            safaricom_error = (
-                data.get("errorMessage")
-                or data.get("ResponseDescription")
-                or "STK push failed"
-            )
-            return {"success": False, "error": safaricom_error, "raw": data}
-
-    except Exception as e:
-        print(f"⚠️ M-Pesa STK error: {e}")
-        return {"success": False, "error": str(e)}
 
 
 # ==================== HELPERS ============================
@@ -1205,137 +1076,8 @@ async def vote_on_drop_poll(
 
 # ==================== CARD IMAGE ====================
 
-@router.patch("/{drop_id}/card-image")
-async def set_card_image(
-    drop_id: str,
-    data: CardImageRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    """Attach a card-image URL to an existing drop (owner only)."""
-    if not ObjectId.is_valid(drop_id):
-        raise HTTPException(status_code=400, detail="Invalid drop ID")
-    result = await db["drops"].update_one(
-        {"_id": ObjectId(drop_id), "sender_id": current_user_id},
-        {"$set": {"card_image_url": data.card_image_url}},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Drop not found or not yours")
-    return {"ok": True}
-
 
 # ==================== REACT (pre-payment) ====================
-
-@router.post("/{drop_id}/react")
-async def react_to_drop(
-    drop_id: str,
-    data: ReactToDropRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """
-    Send exactly one text-reaction per user per drop (spec section 8).
-    If the user already reacted, the new reaction *replaces* the old one —
-    the frontend treats it as a toggle.
-
-    Reactions must be one of the six canonical spec lines in VALID_REACTIONS.
-    """
-    reaction = data.reaction.strip()
-    if reaction not in VALID_REACTIONS:
-        raise HTTPException(
-            status_code=400,
-            detail="Reaction must be one of the six spec lines.",
-        )
-
-    try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except Exception:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if drop["sender_id"] == current_user_id:
-        raise HTTPException(status_code=400, detail="Cannot react to your own drop")
-
-    if is_expired(drop.get("expires_at")):
-        raise HTTPException(status_code=400, detail="This drop has expired")
-
-    # Atomic upsert: one reaction per user per drop. If one exists we rotate
-    # the counts so the old reaction is decremented and the new one bumped.
-    existing = await db["drop_reactions"].find_one({
-        "drop_id": drop_id,
-        "reactor_id": current_user_id,
-    })
-
-    prev_reaction = existing.get("reaction") if existing else None
-    if prev_reaction == reaction:
-        # Idempotent — no-op.
-        return {"message": "Already sent", "reaction": reaction}
-
-    await db["drop_reactions"].update_one(
-        {"drop_id": drop_id, "reactor_id": current_user_id},
-        {
-            "$set": {
-                "drop_id":     drop_id,
-                "reactor_id":  current_user_id,
-                "reaction":    reaction,
-                "updated_at":  now_utc(),
-            },
-            "$setOnInsert": {"created_at": now_utc()},
-        },
-        upsert=True,
-    )
-
-    # Keep the per-reaction counts on the drop doc in sync.
-    inc = {f"reaction_counts.{reaction}": 1}
-    if prev_reaction and prev_reaction in VALID_REACTIONS:
-        inc[f"reaction_counts.{prev_reaction}"] = -1
-    await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": inc})
-
-    # Notify sender on milestone counts — only for a fresh first-time reaction.
-    if not existing:
-        reaction_total = await db["drop_reactions"].count_documents({"drop_id": drop_id})
-        if reaction_total in (1, 5, 10, 25, 50):
-            await send_push_notification(
-                drop["sender_id"],
-                "Someone reacted to your confession",
-                f'"{reaction}" — {reaction_total} so far. People are feeling it.',
-                db,
-            )
-        await update_vibe_score(drop["sender_id"], "reaction_received", db)
-
-    return {"message": "Reaction sent", "reaction": reaction}
-
-
-@router.delete("/{drop_id}/react")
-async def unreact_to_drop(
-    drop_id: str,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database),
-):
-    """
-    Remove the current user's reaction on this drop ("take it back" in the UI).
-    Silent-idempotent: returns 200 even if no reaction existed.
-    """
-    try:
-        ObjectId(drop_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    existing = await db["drop_reactions"].find_one_and_delete({
-        "drop_id":    drop_id,
-        "reactor_id": current_user_id,
-    })
-    if existing:
-        prev = existing.get("reaction")
-        if prev in VALID_REACTIONS:
-            await db["drops"].update_one(
-                {"_id": ObjectId(drop_id)},
-                {"$inc": {f"reaction_counts.{prev}": -1}},
-            )
-
-    return {"message": "Reaction withdrawn"}
 
 
 # ==================== LIKE / SAVE / THREAD / VIEW ====================
@@ -1854,7 +1596,6 @@ async def view_drop(
 VALID_MOOD_TAGS = {"longing", "untold", "horny", "discreet"}
 
 _drop_count_cache: dict = {"value": 0, "ts": 0.0}
-_DROP_COUNT_TTL = 120   # refresh every 2 minutes
 
 
 async def get_behavioral_interests(user_id: str, db) -> dict:
@@ -2483,333 +2224,17 @@ AGE_GATE_DETAIL = {
 }
 ORIGIN_AUTHOR_UNLOCK_COST = 3    # discounted rate for the author of the inspiring post
 
-@router.post("/{drop_id}/unlock/coins")
-async def unlock_drop_coins(
-    drop_id:         str,
-    current_user_id: str = Depends(get_current_user_id),
-    db               = Depends(get_database),
-):
-    """
-    Unlock a drop by spending coins.
-    Atomically debits 30 coins and creates the chat connection.
-    """
-    try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except Exception:
-        raise HTTPException(status_code=404, detail="Drop not found.")
-
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found.")
-    if drop["sender_id"] == current_user_id:
-        raise HTTPException(status_code=400, detail="Cannot unlock your own drop.")
-    if drop.get("is_admin_drop"):
-        raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
-    ensure_linkable(drop)
-    if is_expired(drop.get("expires_at")):
-        raise HTTPException(status_code=400, detail="This drop has expired.")
-
-    # Idempotent: already unlocked?
-    existing = await db["drop_unlocks"].find_one({
-        "drop_id": drop_id, "unlocker_id": current_user_id,
-    })
-    if existing:
-        connection_id = existing.get("connection_id") or await _create_drop_connection(drop_id, drop, current_user_id, db)
-        return {"already_unlocked": True, "connection_id": connection_id}
-
-    # Origin-author discount — if this drop was inspired by a post that belongs
-    # to the current user, they pay a reduced rate (10 coins instead of 30).
-    # Their confession sparked the drop, so they get rewarded — but Anonixx
-    # still earns from the connection.
-    is_origin_author = False
-    origin_post_id = drop.get("inspired_by_post_id")
-    if origin_post_id:
-        try:
-            origin_post = await db["posts"].find_one({"_id": ObjectId(origin_post_id)})
-            if origin_post and origin_post.get("user_id") == current_user_id:
-                is_origin_author = True
-        except Exception:
-            pass
-
-    # Origin-author rate already beats the premium rate, so it wins outright
-    # rather than stacking — the cheaper of the two applies either way.
-    cost = (
-        ORIGIN_AUTHOR_UNLOCK_COST if is_origin_author
-        else await unlock_cost_for(current_user_id, db)
-    )
-
-    # Debit coins (raises ValueError on insufficient balance). Premium: free.
-    try:
-        if cost > 0:
-            await debit_coins(
-                db          = db,
-                user_id     = current_user_id,
-                amount      = cost,
-                reason      = "drop_reveal",
-                description = (
-                    "Unlocked a drop inspired by your confession"
-                    if is_origin_author else
-                    "Unlocked a drop confession"
-                ),
-                meta        = {"drop_id": drop_id, "origin_author": is_origin_author},
-            )
-    except ValueError as e:
-        if "Insufficient" in str(e):
-            needed = cost
-            raise HTTPException(
-                status_code=402,
-                detail=f"Not enough coins. You need {needed} coins to unlock."
-            )
-        raise HTTPException(status_code=404, detail="User not found.")
-
-    # Complete unlock + create chat
-    unlock_method = "origin_author_discounted" if is_origin_author else "coins"
-    await _complete_unlock(drop_id, current_user_id, drop, unlock_method, db, coin_equivalent=cost)
-    connection_id = await _create_drop_connection(drop_id, drop, current_user_id, db)
-
-    return {
-        "unlocked":          True,
-        "connection_id":     connection_id,
-        "coins_spent":       cost,
-        "origin_author":     is_origin_author,
-    }
-
 
 # ==================== UNLOCK — M-PESA ====================
-
-@router.post("/{drop_id}/unlock/mpesa")
-async def unlock_drop_mpesa(
-    drop_id: str,
-    data: MpesaUnlockRequest,
-    request: Request,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if drop["sender_id"] == current_user_id:
-        raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
-
-    if drop.get("is_admin_drop"):
-        raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
-    ensure_linkable(drop)
-
-    if is_expired(drop.get("expires_at")):
-        raise HTTPException(status_code=400, detail="This drop has expired")
-
-    # Already unlocked?
-    existing = await db["drop_unlocks"].find_one({
-        "drop_id": drop_id,
-        "unlocker_id": current_user_id
-    })
-    if existing:
-        raise HTTPException(status_code=400, detail="Already unlocked")
-
-    # M-Pesa is a Kenya-region payment method regardless of the caller's
-    # resolved IP tier (diaspora users on Kenyan numbers included), so this
-    # always uses the M-Pesa/PPP KES price — not a raw FX conversion of the
-    # flat USD figure like the old DROP_PRICE_USD did.
-    from app.api.v1.geo_pricing import get_drop_unlock_price
-    price_info = get_drop_unlock_price(tier=3, is_mpesa_country=True, is_group=bool(drop.get("is_group")))
-    kes_price  = price_info["kes"]
-    coin_equivalent = round(price_info["usd"] * CASH_TO_COIN_RATE)
-
-    result = await trigger_mpesa_stk(
-        phone=data.phone_number,
-        amount=price_info["usd"],
-        amount_kes=kes_price,
-        account_ref=f"DROP_{drop_id[:8].upper()}",
-        description="Anonixx Drop Unlock"
-    )
-
-    if not result["success"]:
-        raise HTTPException(status_code=402, detail=result.get("error", "Payment failed"))
-
-    # Store pending unlock — coin_equivalent travels with it so the M-Pesa
-    # callback credits the drop owner's revenue share off what was actually
-    # charged (geo-priced), not the flat creation-time price.
-    await db["drop_unlock_pending"].update_one(
-        {"drop_id": drop_id, "unlocker_id": current_user_id},
-        {"$set": {
-            "drop_id": drop_id,
-            "unlocker_id": current_user_id,
-            "checkout_request_id": result["checkout_request_id"],
-            "amount_kes": kes_price,
-            "coin_equivalent": coin_equivalent,
-            "created_at": now_utc()
-        }},
-        upsert=True
-    )
-
-    return {
-        "message": "STK push sent. Enter your M-Pesa PIN to unlock.",
-        "checkout_request_id": result["checkout_request_id"],
-        "amount_kes": kes_price,
-    }
 
 
 # ==================== UNLOCK — STRIPE ====================
 
-@router.post("/{drop_id}/unlock/stripe")
-async def unlock_drop_stripe(
-    drop_id: str,
-    data: StripeUnlockRequest,
-    request: Request,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if drop["sender_id"] == current_user_id:
-        raise HTTPException(status_code=400, detail="Cannot unlock your own drop")
-
-    if drop.get("is_admin_drop"):
-        raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
-    ensure_linkable(drop)
-
-    if is_expired(drop.get("expires_at")):
-        raise HTTPException(status_code=400, detail="This drop has expired")
-
-    existing = await db["drop_unlocks"].find_one({
-        "drop_id": drop_id,
-        "unlocker_id": current_user_id
-    })
-    if existing:
-        raise HTTPException(status_code=400, detail="Already unlocked")
-
-    # Geo-price the same way coins.py's Stripe flow does — resolve the
-    # caller's country from IP (never trust a client-supplied country) and
-    # charge the matching PPP tier instead of a flat $2/$3 worldwide.
-    from app.api.v1.geo_pricing import pricing_country, tier_for, get_drop_unlock_price
-    tier        = tier_for(await pricing_country(request))
-    price_info  = get_drop_unlock_price(tier, is_mpesa_country=False, is_group=bool(drop.get("is_group")))
-
-    try:
-        import stripe
-        stripe.api_key = settings.STRIPE_SECRET_KEY
-
-        intent = stripe.PaymentIntent.create(
-            amount=price_info["usd_cents"],
-            currency="usd",
-            payment_method=data.payment_method_id,
-            confirm=True,
-            metadata={"drop_id": drop_id, "unlocker_id": current_user_id, "geo_tier": str(tier)},
-            automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
-        )
-
-        if intent.status == "succeeded":
-            coin_equivalent = round(price_info["usd"] * CASH_TO_COIN_RATE)
-            await _complete_unlock(
-                drop_id, current_user_id, drop, "stripe", db,
-                coin_equivalent=coin_equivalent, amount_charged=price_info["usd"],
-            )
-            connection_id = await _create_drop_connection(drop_id, drop, current_user_id, db)
-            return {
-                "message": "Unlocked! You can now chat.",
-                "connection_id": connection_id,
-                "sender_anonymous_name": drop["sender_anonymous_name"],
-            }
-        else:
-            raise HTTPException(status_code=402, detail="Payment not completed")
-
-    except Exception as e:
-        raise HTTPException(status_code=402, detail=str(e))
-
 
 # ==================== M-PESA CALLBACK ====================
 
-@router.post("/mpesa/callback")
-async def mpesa_callback(payload: dict, db = Depends(get_database)):
-    """
-    Called by Safaricom after STK push completes.
-    Completes the unlock if payment succeeded.
-    """
-    try:
-        stk = payload.get("Body", {}).get("stkCallback", {})
-        result_code = stk.get("ResultCode")
-        checkout_request_id = stk.get("CheckoutRequestID")
-
-        if result_code != 0:
-            print(f"⚠️ M-Pesa payment failed: {stk.get('ResultDesc')}")
-            return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-        # Find pending unlock
-        pending = await db["drop_unlock_pending"].find_one({
-            "checkout_request_id": checkout_request_id
-        })
-        if not pending:
-            return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-        drop_id = pending["drop_id"]
-        unlocker_id = pending["unlocker_id"]
-
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-        if not drop:
-            return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
-        # Already completed?
-        existing = await db["drop_unlocks"].find_one({
-            "drop_id": drop_id,
-            "unlocker_id": unlocker_id
-        })
-        if not existing:
-            await _complete_unlock(
-                drop_id, unlocker_id, drop, "mpesa", db,
-                coin_equivalent=pending.get("coin_equivalent"),
-                amount_charged=pending.get("amount_kes"),
-            )
-            await _create_drop_connection(drop_id, drop, unlocker_id, db)
-
-        # Clean up pending
-        await db["drop_unlock_pending"].delete_one({"checkout_request_id": checkout_request_id})
-
-        # Notify unlocker
-        await send_push_notification(
-            unlocker_id,
-            "Payment confirmed 🔓",
-            "You've unlocked the confession. Start chatting now.",
-            db
-        )
-
-    except Exception as e:
-        print(f"⚠️ M-Pesa callback error: {e}")
-
-    return {"ResultCode": 0, "ResultDesc": "Accepted"}
-
 
 # ==================== POLL UNLOCK STATUS ====================
-
-@router.get("/{drop_id}/unlock/status")
-async def poll_unlock_status(
-    drop_id: str,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    """Poll after M-Pesa STK push to check if payment completed."""
-    unlock = await db["drop_unlocks"].find_one({
-        "drop_id": drop_id,
-        "unlocker_id": current_user_id
-    })
-
-    if unlock:
-        return {
-            "unlocked": True,
-            "connection_id": unlock.get("connection_id"),
-            "sender_anonymous_name": unlock.get("sender_anonymous_name"),
-        }
-
-    return {"unlocked": False}
 
 
 # Approximate coins-per-dollar rate (from the Tier-1 "starter" package: 3
@@ -3430,48 +2855,6 @@ async def list_room_guests(
 
 # ==================== RENEW DROP ====================
 
-@router.post("/{drop_id}/renew")
-async def renew_drop(
-    drop_id: str,
-    current_user_id: str = Depends(get_current_user_id),
-    db = Depends(get_database)
-):
-    try:
-        drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
-    except:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if not drop:
-        raise HTTPException(status_code=404, detail="Drop not found")
-
-    if drop["sender_id"] != current_user_id:
-        raise HTTPException(status_code=403, detail="Not your drop")
-
-    # Only unlocked drops have a clock to renew. A never-unlocked drop is
-    # already live indefinitely, so there's nothing to extend.
-    if drop.get("expires_at") is None:
-        raise HTTPException(
-            status_code=400,
-            detail="This drop isn't counting down — it stays live until someone unlocks it.",
-        )
-
-    grace_days = await grace_days_for(current_user_id, db)
-    new_expiry = now_utc() + timedelta(days=grace_days)
-    await db["drops"].update_one(
-        {"_id": ObjectId(drop_id)},
-        {"$set": {
-            "expires_at": new_expiry,
-            "is_active": True,
-            "is_night_mode": is_night_mode()
-        }}
-    )
-
-    return {
-        "message": f"Drop renewed for another {grace_days} days 🔥",
-        "expires_at": new_expiry.isoformat(),
-        "time_left": get_time_left(new_expiry),
-    }
-
 
 # ==================== VIBE SCORE ====================
 
@@ -3526,23 +2909,6 @@ def _next_tier(score: int) -> int:
 
 
 # ==================== DAILY LIMIT (removed) ====================
-
-@router.get("/daily-limit", deprecated=True)
-async def get_daily_limit(current_user_id: str = Depends(get_current_user_id)):
-    """
-    Deprecated — there is no posting cap any more. Kept only so already-
-    installed app builds keep working: they read `unlimited` off this
-    response, and a 404 here would make them fall back to their own local
-    3/day counter and stay capped. Safe to delete once those builds have
-    rolled over.
-    """
-    return {
-        "unlimited": True,
-        "used":      0,
-        "limit":     None,
-        "left":      None,
-        "resets_at": None,
-    }
 
 
 # ==================== PUBLISH (section 16) ====================
