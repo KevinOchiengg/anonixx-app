@@ -1,9 +1,10 @@
-/** Knock inbox, grouped by confession with Accept All per group. Coins move only on accept.
- * Optional { targetType, targetId } narrows it to one confession. Tapping a row opens their Room. */
+/** Knocks: Received (grouped by confession, Let All In per group; coins move only on accept)
+ * and Sent (your own knocks and what happened to them). Optional { targetType, targetId }
+ * narrows Received to one confession; { inTab } when shown as the Requests tab. */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image,
-  SectionList, RefreshControl, Modal,
+  SectionList, FlatList, RefreshControl, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +16,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/respons
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
+import { useUnread } from '../../context/UnreadContext';
 import { API_BASE_URL } from '../../config/api';
 import { intentLabel } from '../../config/linkup';
 import KnockClues from '../../components/rooms/KnockClues';
@@ -47,15 +49,18 @@ function MediaPreviewModal({ media, onClose }) {
 }
 
 export default function UnlockRequestsScreen({ route, navigation }) {
-  const { targetType, targetId } = route.params ?? {};
+  const { targetType, targetId, inTab } = route.params ?? {};
   const { showToast } = useToast();
   const { socketService } = useSocket();
+  const { refreshUnread } = useUnread() || {};
 
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyIds, setBusyIds] = useState(new Set());
   const [previewMedia, setPreviewMedia] = useState(null);
+  const [view, setView] = useState('in');   // 'in' = received, 'sent' = your knocks
+  const [sent, setSent] = useState([]);
 
   const load = useCallback(async () => {
     try {
@@ -63,10 +68,13 @@ export default function UnlockRequestsScreen({ route, navigation }) {
       const qs = targetType && targetId
         ? `?target_type=${encodeURIComponent(targetType)}&target_id=${encodeURIComponent(targetId)}`
         : '';
-      const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests/incoming${qs}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = { Authorization: `Bearer ${token}` };
+      const [res, sentRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v1/unlock-requests/incoming${qs}`, { headers }),
+        fetch(`${API_BASE_URL}/api/v1/unlock-requests/sent`, { headers }).catch(() => null),
+      ]);
       const data = await res.json();
+      if (sentRes?.ok) setSent((await sentRes.json())?.requests || []);
       const requests = data?.requests || [];
 
       const grouped = new Map();
@@ -93,18 +101,19 @@ export default function UnlockRequestsScreen({ route, navigation }) {
   }, [targetType, targetId, showToast]);
 
   useEffect(() => { load(); }, [load]);
+  // Keep the tab badge in step as knocks are let in or declined.
+  useEffect(() => { refreshUnread?.(); }, [sections, refreshUnread]);
+  // As a tab it stays mounted, so refresh each time it's opened.
+  useEffect(() => navigation.addListener('focus', load), [navigation, load]);
 
   // Live updates — a fresh request or a withdrawn one just triggers a refetch
   // rather than hand-patching local groups, which keeps grouping correct.
   useEffect(() => {
     if (!socketService) return;
     const handleChange = () => load();
-    socketService.on?.('unlock_request_received', handleChange);
-    socketService.on?.('unlock_request_cancelled', handleChange);
-    return () => {
-      socketService.off?.('unlock_request_received', handleChange);
-      socketService.off?.('unlock_request_cancelled', handleChange);
-    };
+    const events = ['unlock_request_received', 'unlock_request_cancelled', 'unlock_request_accepted', 'unlock_request_declined'];
+    events.forEach((e) => socketService.on?.(e, handleChange));
+    return () => events.forEach((e) => socketService.off?.(e, handleChange));
   }, [socketService, load]);
 
   const onRefresh = useCallback(() => {
@@ -263,12 +272,92 @@ export default function UnlockRequestsScreen({ route, navigation }) {
     );
   }, [busyIds, handleAccept, handleDecline, navigation]);
 
+  const handleCancel = useCallback(async (requestId) => {
+    setBusyIds((prev) => new Set(prev).add(requestId));
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests/${requestId}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) load();
+      else showToast({ type: 'error', message: 'Could not take it back right now.' });
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong.' });
+    } finally {
+      setBusyIds((prev) => { const s = new Set(prev); s.delete(requestId); return s; });
+    }
+  }, [load, showToast]);
+
+  const renderSent = useCallback(({ item }) => {
+    const isBusy = busyIds.has(item.id);
+    const [title, note] = {
+      pending:  ['Waiting at their door…', "Nothing's charged yet. Coins move only if they let you in."],
+      accepted: ["You're inside.", 'They let you in. Your chat is open.'],
+      declined: ["They're not up for it right now", 'No coins were spent. You can knock again anytime.'],
+      expired:  ['This knock expired', 'They never answered. No coins were spent.'],
+    }[item.status] || [item.status, ''];
+    return (
+      <View style={s.sentRow}>
+        {!!item.confession_snippet && (
+          <Text style={s.sectionTitle} numberOfLines={2}>&ldquo;{item.confession_snippet}&rdquo;</Text>
+        )}
+        <Text style={[s.rowName, item.status === 'accepted' && { color: T.primary }]}>{title}</Text>
+        {!!note && <Text style={s.sentNote}>{note}</Text>}
+        {isBusy ? (
+          <ActivityIndicator color={T.primary} size="small" style={{ alignSelf: 'flex-start' }} />
+        ) : (
+          <View style={s.rowActions}>
+            {item.status === 'accepted' && !!item.connection_id && (
+              <TouchableOpacity style={s.acceptBtn} onPress={() => navigation.navigate('DropChat', { connectionId: item.connection_id })} hitSlop={HIT_SLOP}>
+                <Text style={s.acceptBtnText}>Open chat</Text>
+              </TouchableOpacity>
+            )}
+            {item.status === 'pending' && (
+              <TouchableOpacity style={s.declineBtn} onPress={() => handleCancel(item.id)} hitSlop={HIT_SLOP}>
+                <Text style={s.declineBtnText}>Take back knock</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  }, [busyIds, handleCancel, navigation]);
+
+  const pendingSent = sent.filter((r) => r.status === 'pending').length;
+  const received = sections.reduce((n, sec) => n + sec.data.length, 0);
+  const refresh = <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />;
+
   return (
-    <SafeAreaView style={s.root}>
-      <DropScreenHeader title="Knocks" navigation={navigation} />
+    <SafeAreaView style={s.root} edges={inTab ? ['top'] : undefined}>
+      <DropScreenHeader title="Knocks" navigation={navigation} hideBack={inTab} />
+
+      {!targetId && (
+        <View style={s.segs}>
+          {[['in', `Received${received ? ` · ${received}` : ''}`], ['sent', `Sent${pendingSent ? ` · ${pendingSent}` : ''}`]].map(([key, label]) => (
+            <TouchableOpacity key={key} style={[s.seg, view === key && s.segOn]} onPress={() => setView(key)} activeOpacity={0.85}>
+              <Text style={[s.segText, view === key && s.segTextOn]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {loading ? (
         <View style={s.centered}><ActivityIndicator color={T.primary} /></View>
+      ) : view === 'sent' ? (
+        sent.length === 0 ? (
+          <View style={s.centered}>
+            <Text style={s.emptyText}>You haven't knocked on anyone yet. Find a confession you can't stop thinking about.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={sent}
+            keyExtractor={(item) => item.id}
+            renderItem={renderSent}
+            contentContainerStyle={s.listContent}
+            refreshControl={refresh}
+          />
+        )
       ) : sections.length === 0 ? (
         <View style={s.centered}>
           <Text style={s.emptyText}>No knocks yet. Post something for tonight and watch your door.</Text>
@@ -281,9 +370,7 @@ export default function UnlockRequestsScreen({ route, navigation }) {
           renderSectionHeader={renderSectionHeader}
           contentContainerStyle={s.listContent}
           stickySectionHeadersEnabled={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />
-          }
+          refreshControl={refresh}
         />
       )}
 
@@ -351,6 +438,16 @@ const s = StyleSheet.create({
     backgroundColor: T.primary,
   },
   acceptBtnText: { color: '#fff', fontSize: FONT.xs, fontWeight: '700' },
+  segs: { flexDirection: 'row', gap: rp(8), paddingHorizontal: SPACING.md, paddingTop: rp(4) },
+  seg: { paddingHorizontal: rp(14), paddingVertical: rp(7), borderRadius: 999, borderWidth: 1, borderColor: T.border },
+  segOn: { backgroundColor: T.primary, borderColor: T.primary },
+  segText: { color: T.textSecondary, fontSize: FONT.xs, fontWeight: '600' },
+  segTextOn: { color: '#fff' },
+  sentRow: {
+    gap: rp(6), paddingHorizontal: rp(14), paddingVertical: rp(12),
+    backgroundColor: T.surfaceAlt, borderRadius: RADIUS.md, marginBottom: rp(8),
+  },
+  sentNote: { color: T.textSecondary, fontSize: FONT.xs, lineHeight: FONT.xs * 1.4 },
 
   previewBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.94)',

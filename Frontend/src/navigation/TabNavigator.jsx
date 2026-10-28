@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import {
@@ -24,6 +23,7 @@ import DropChatScreen from '../screens/drops/DropChatScreen';
 import DropCallScreen from '../screens/drops/DropCallScreen';
 import DemoChatScreen from '../screens/drops/DemoChatScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
+import UnlockRequestsScreen from '../screens/drops/UnlockRequestsScreen';
 import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
 
 // Messages
@@ -36,15 +36,6 @@ import { THEME } from '../utils/theme';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
-
-// ─── REQUESTS TAB ─────────────────────────────────────────────
-// Tapping opens UnlockRequestsScreen in the root stack; this placeholder is only a fallback.
-function RequestsTabPlaceholder({ navigation }) {
-  useEffect(() => {
-    navigation.navigate('UnlockRequestsScreen');
-  }, [navigation]);
-  return null;
-}
 
 // ─── TAB BAR ICON ─────────────────────────────────────────────
 const TabBarIcon = ({ route, focused, badgeCount }) => {
@@ -190,12 +181,16 @@ export default function TabNavigator() {
       />
       <Tab.Screen
         name="Requests"
-        component={RequestsTabPlaceholder}
+        component={UnlockRequestsScreen}
+        initialParams={{ inTab: true }}
         options={{ tabBarLabel: 'Requests' }}
         listeners={({ navigation }) => ({
+          // Guests go straight to Login.
           tabPress: (e) => {
-            e.preventDefault();
-            navigation.navigate('UnlockRequestsScreen');
+            if (!isAuthenticated) {
+              e.preventDefault();
+              navigation.navigate('AuthNav', { screen: 'Login' });
+            }
           },
         })}
       />

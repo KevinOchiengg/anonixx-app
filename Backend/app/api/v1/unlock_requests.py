@@ -560,13 +560,18 @@ async def list_sent_requests(
     """The requester's own requests — lets the waiting screen recover state
     after an app restart or a missed socket event."""
     requests = []
+    now = now_utc()
     async for r in db["drop_unlock_requests"].find({"requester_id": current_user_id}) \
             .sort("created_at", -1).limit(50):
+        status = r["status"]
+        if status == "pending" and _ensure_aware(r["expires_at"]) <= now:
+            status = "expired"
         requests.append({
             "id": str(r["_id"]),
             "target_type": r["target_type"],
             "target_id": r["target_id"],
-            "status": r["status"],
+            "confession_snippet": r.get("confession_snippet", ""),
+            "status": status,
             "connection_id": r.get("connection_id"),
             "created_at": r["created_at"].isoformat(),
             "expires_at": r["expires_at"].isoformat(),
