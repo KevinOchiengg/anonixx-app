@@ -1,5 +1,5 @@
 from pymongo.errors import DuplicateKeyError
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -14,6 +14,7 @@ import re
 import random
 
 from app.database import get_database
+from app.utils.user_tz import save_tz
 from app.config import settings
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import credit_coins
@@ -461,9 +462,12 @@ async def login_for_access_token(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(
+    tz: Optional[str] = Query(None, max_length=64),
     current_user_id: str = Depends(get_current_user_id),
     db=Depends(get_database),
 ):
+    if tz:
+        await save_tz(db, current_user_id, tz)
     user = await db["users"].find_one({"_id": ObjectId(current_user_id)})
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")

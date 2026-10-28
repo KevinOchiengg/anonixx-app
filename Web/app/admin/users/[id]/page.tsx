@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
-import { Badge, fmtDate } from "@/components/admin/bits";
+import { Badge, fmtDate, theirTime } from "@/components/admin/bits";
 
 type Full = {
   user: {
     id: string; email: string; name: string | null; username: string | null; avatar_url: string | null; created_at: string | null; last_login: string | null;
     is_active: boolean; is_admin: boolean; admin_role: string | null; is_super_admin: boolean; is_premium: boolean; is_verified: boolean;
-    coin_balance: number; gender: string | null; age_attested: string | null; signup_source: Record<string, string>; referred_by: string | null;
+    coin_balance: number; gender: string | null; tz: string | null; age_attested: string | null; signup_source: Record<string, string>; referred_by: string | null;
     strikes: number; notes: string;
   };
   counts: { drops: number; knocks_sent: number; knocks_received: number; reports_against: number; reports_made: number; days_active_30d: number };
@@ -158,6 +158,7 @@ export default function UserPage() {
             {u.referred_by ? <><dt>Referred by code</dt><dd>{u.referred_by}</dd></> : null}
             <dt>Coins</dt><dd>{u.coin_balance}</dd>
             <dt>Gender</dt><dd>{u.gender || "—"}</dd>
+            <dt>Their time</dt><dd>{theirTime(u.tz) ? `${theirTime(u.tz)} (${u.tz})` : "—"}</dd>
             <dt>18+ confirmed by</dt><dd>{u.age_attested === "signup_tick" ? "signup tick" : u.age_attested === "hookup_age" ? "age on a hookup post" : u.age_attested === "dob" ? "date of birth" : u.age_attested || "—"}</dd>
           </dl>
         </div>

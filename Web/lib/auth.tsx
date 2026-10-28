@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, getToken, setAdultMode, setToken, type AuthUser } from "./api";
+import { api, deviceTz, getToken, setAdultMode, setToken, type AuthUser } from "./api";
 import { signupSource, track } from "./track";
 
 type AuthResponse = { access_token: string; user: AuthUser };
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     if (!getToken()) { setUser(null); return; }
     try {
-      const me = await api<Omit<AuthUser, "coin_balance" | "is_admin" | "avatar_url">>("/auth/me");
+      const me = await api<Omit<AuthUser, "coin_balance" | "is_admin" | "avatar_url">>(`/auth/me?tz=${encodeURIComponent(deviceTz() || "")}`);
       const bal = await api<{ balance: number }>("/coins/balance").catch(() => null);
       setAdultMode(Boolean(me.age_verified));
       // Older backends omit is_admin from /auth/me; /admin/me answers either way.

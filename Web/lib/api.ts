@@ -235,3 +235,8 @@ export function getDeviceId(): string {
     return "";
   }
 }
+
+/** This device's time zone (e.g. "Europe/Paris"), so admins can see the user's local time. */
+export function deviceTz(): string | null {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; }
+}

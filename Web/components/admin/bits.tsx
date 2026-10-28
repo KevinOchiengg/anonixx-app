@@ -2,6 +2,12 @@
 
 export const fmtDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
 
+/** The time right now in a user's zone, e.g. "2:14 am", or null if unknown. */
+export function theirTime(tz?: string | null): string | null {
+  if (!tz) return null;
+  try { return new Date().toLocaleTimeString(undefined, { timeZone: tz, hour: "numeric", minute: "2-digit" }); } catch { return null; }
+}
+
 export function Pager({
   skip, limit, total, onSkip,
 }: { skip: number; limit: number; total: number; onSkip: (n: number) => void }) {

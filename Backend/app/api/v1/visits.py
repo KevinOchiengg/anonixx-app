@@ -457,7 +457,7 @@ async def live_now(admin_id: str = Depends(require_super_admin), db=Depends(get_
     oids = [ObjectId(u) for u in online if ObjectId.is_valid(u)]
     users = {str(u["_id"]): u async for u in db["users"].find({"_id": {"$in": oids}}, {
         "anonymous_name": 1, "username": 1, "created_at": 1, "is_premium": 1, "is_admin": 1,
-        "location_country": 1, "gender": 1, "coin_balance": 1})} if oids else {}
+        "location_country": 1, "gender": 1, "coin_balance": 1, "tz": 1})} if oids else {}
     paid = {}
     if oids:
         async for p in db["coin_purchases"].aggregate([
@@ -476,7 +476,7 @@ async def live_now(admin_id: str = Depends(require_super_admin), db=Depends(get_
             "user_id": uid, "name": u.get("anonymous_name") or u.get("username"),
             "country": known_country(u.get("location_country")) or u.get("location_country"),
             "cc": code_of.get(known_country(u.get("location_country")) or ""),
-            "gender": u.get("gender"), "joined": _aware(u.get("created_at")), "since": since,
+            "gender": u.get("gender"), "tz": u.get("tz"), "joined": _aware(u.get("created_at")), "since": since,
             "is_new": bool(u.get("created_at") and _aware(u["created_at"]) > now - timedelta(days=7)),
             "premium": bool(u.get("is_premium")), "admin": bool(u.get("is_admin")),
             "purchases": paid.get(uid, 0), "coins": u.get("coin_balance", 0), "drops_seen": seen,

@@ -463,7 +463,7 @@ async def user_full(user_id: str, admin_id: str = Depends(require_admin), db=Dep
             "avatar_url": u.get("avatar_url"), "created_at": _iso(u.get("created_at")), "last_login": _iso(u.get("last_login")),
             "is_active": u.get("is_active", True), "is_admin": bool(u.get("is_admin")), "admin_role": u.get("admin_role") or ("admin" if u.get("is_admin") else None),
             "is_super_admin": is_super_admin_user(u), "is_premium": bool(u.get("is_premium")), "is_verified": bool(u.get("is_verified")),
-            "coin_balance": u.get("coin_balance", 0), "gender": u.get("gender"), "age_attested": u.get("age_attested"),
+            "coin_balance": u.get("coin_balance", 0), "gender": u.get("gender"), "tz": u.get("tz"), "age_attested": u.get("age_attested"),
             "signup_source": u.get("signup_source") or {}, "referred_by": u.get("referred_by"),
             "strikes": u.get("deception_strikes") or u.get("strikes") or 0, "notes": u.get("admin_notes") or "",
         },

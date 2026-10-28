@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
-import { Badge, fmtDate } from "@/components/admin/bits";
+import { Badge, fmtDate, theirTime } from "@/components/admin/bits";
 import { LineChart } from "@/components/admin/charts";
 
 type Row = { key: string; count: number; visitors?: number };
@@ -194,7 +194,7 @@ type LiveWeb = {
   drops: { id: string; teaser: string; kind: string | null; mood: string | null }[]; searches: string[];
 };
 type LiveApp = {
-  user_id: string; name: string | null; country: string | null; cc: string | null; gender: string | null; joined: string | null;
+  user_id: string; name: string | null; country: string | null; cc: string | null; gender: string | null; tz: string | null; joined: string | null;
   since: string | null; is_new: boolean; premium: boolean; admin: boolean; purchases: number; coins: number; drops_seen: number;
 };
 type Live = { minutes: number; web: LiveWeb[]; app: LiveApp[]; app_total: number };
@@ -238,7 +238,7 @@ function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => void; on
                     {a.admin ? <Badge tone="warn">admin</Badge> : null}
                   </div>
                 </td>
-                <td>{flag(a.cc)} {a.country || "Unknown"}</td>
+                <td>{flag(a.cc)} {a.country || "Unknown"}{theirTime(a.tz) ? <><br /><small className="muted" title={a.tz || ""}>{theirTime(a.tz)} there</small></> : null}</td>
                 <td>{onFor(a.since)}</td>
                 <td>{a.drops_seen}</td>
                 <td title={fmtDate(a.joined)}>{ago(a.joined)}</td>

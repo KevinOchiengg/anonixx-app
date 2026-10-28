@@ -8,6 +8,7 @@ from app.sio import sio
 from app.database import db as _db_holder
 from app.core.jwt import decode_token
 from app.websockets.activity import emit_high_activity
+from app.utils.user_tz import save_tz
 
 
 def _db():
@@ -48,6 +49,10 @@ async def connect(sid: str, environ: dict, auth: dict):
     _sid_to_user[sid] = user_id
     _online_users.add(user_id)
     _online_since.setdefault(user_id, datetime.now(timezone.utc))
+    try:
+        await save_tz(_db(), user_id, (auth or {}).get("tz"))
+    except Exception:
+        pass
 
     # Personal room so the server can reach this user directly
     await sio.enter_room(sid, f"user_{user_id}")

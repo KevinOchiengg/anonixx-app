@@ -2,6 +2,11 @@ import io from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 
+// Device time zone, so admins can see the user's local time.
+const deviceTz = () => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; }
+};
+
 class SocketService {
   constructor() {
     this.socket = null;
@@ -13,7 +18,7 @@ class SocketService {
     const token = await AsyncStorage.getItem('token');
 
     this.socket = io(API_BASE_URL, {
-      auth:                { token },
+      auth:                { token, tz: deviceTz() },
       transports:          ['websocket'],
       reconnection:        true,
       reconnectionDelay:   1500,
