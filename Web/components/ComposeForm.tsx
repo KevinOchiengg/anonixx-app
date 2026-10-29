@@ -15,6 +15,7 @@ import TagUser, { type Tagged } from "./compose/TagUser";
 import LocationFields, { type LocationDraft } from "./compose/LocationFields";
 import TopicPicker from "./compose/TopicPicker";
 import Sheet from "./Sheet";
+import { DEFAULT_DROP_FONT, DROP_FONTS, DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 import GuidedConfession, { GUIDED_SAVE_KEY } from "./compose/GuidedConfession";
 import {
   IconImages, IconSparkles, IconUserPlus, IconPin, IconMic, IconPoll, IconShare, IconShuffle, IconX, IconWarn, IconMusic,
@@ -63,6 +64,8 @@ function Inner() {
   const [hint, setHint] = useState("");
   const [unsent, setUnsent] = useState(false);
   const [intent, setIntent] = useState<IntentId>("skeleton-in-the-closet");
+  const [font, setFont] = useState<string>(DEFAULT_DROP_FONT);
+  const fontIx = Math.max(0, DROP_FONTS.findIndex((f) => f.id === font));
   const [sheet, setSheet] = useState<"mood" | "feeling" | "sound" | "tag" | "place" | "share" | null>(null);
   const [topics, setTopics] = useState<string[]>([]);
   const [sounds, setSounds] = useState<Sound[] | null>(null);
@@ -197,7 +200,7 @@ function Inner() {
           intent,
           mood_tag: theme.mood,
           ...(topics.length ? { topics } : {}),
-          font_style: "bold-tease",
+          font_style: font,
           sensitivity: "general",
           publisher_opt_in: shareOut,
           ...(place.country.trim() ? { location_country: place.country.trim() } : {}),
@@ -271,6 +274,9 @@ function Inner() {
     { key: "photo", label: hasMedia ? "Remove" : "Photo", icon: hasMedia ? <IconX /> : <IconImages />, on: mode === "media", show: admin,
       act: () => { if (hasMedia) { media?.upload?.cancel(); setMedia(null); setMode("text"); } else pickMode("media"); } },
     { key: "sound", label: "Sound", icon: <IconMusic />, on: !!soundId, show: mode !== "voice", act: () => setSheet("sound") },
+    // Text drops: each tap moves to the next font, shown live in the box.
+    { key: "font", label: DROP_FONTS[fontIx].label, icon: <span style={{ ...dropFontStyle(font), fontSize: 15 }}>Aa</span>, on: font !== DEFAULT_DROP_FONT, show: !hasMedia && mode === "text",
+      act: () => setFont(DROP_FONTS[(fontIx + 1) % DROP_FONTS.length].id) },
     { key: "mood", label: "Mood", icon: <IconSparkles />, on: false, show: true, act: () => setSheet("mood") },
     { key: "feeling", label: topics.length ? `Feeling · ${topics.length}` : "Feeling", icon: <IconSparkles />, on: topics.length > 0, show: true, act: () => setSheet("feeling") },
     { key: "tag", label: "Tag", icon: <IconUserPlus />, on: !!tagged, show: true, act: () => setSheet("tag") },
@@ -304,8 +310,10 @@ function Inner() {
         {mode === "voice" ? <div className="cx-zone"><VoiceRecorder value={voice} onChange={setVoice} onError={setError} /></div> : null}
         {mode === "poll" ? <div className="cx-zone"><PollEditor value={poll} onChange={setPoll} /></div> : null}
         <div className="cx-write">
+          <link rel="stylesheet" href={DROP_FONTS_HREF} precedence="default" />
           <textarea
             ref={area_}
+            style={mode === "text" ? dropFontStyle(font) : undefined}
             rows={mode === "text" ? 4 : 2}
             maxLength={MAX}
             value={text}

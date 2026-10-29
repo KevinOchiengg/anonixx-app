@@ -38,7 +38,7 @@ import { API_BASE_URL } from '../../config/api';
 import { getDeviceId } from '../../utils/deviceId';
 import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
-import { CARD_INTENTS, DROP_THEMES } from '../../components/drops/DropCardRenderer';
+import { CARD_INTENTS, CARD_FONT_STYLES, DROP_THEMES } from '../../components/drops/DropCardRenderer';
 import VideoOverlays from '../../components/common/VideoOverlays';
 import InlineMoreText from '../../components/common/InlineMoreText';
 import { countryHeader } from '../../utils/country';
@@ -860,6 +860,12 @@ const EnvelopeBackdrop = ({ top }) => {
   );
 };
 
+// The poster's chosen font for a text drop; older drops (no font_style) keep the default look.
+const fontOf = (id) => {
+  const f = id && CARD_FONT_STYLES[id];
+  return f ? { fontFamily: f.fontFamily, fontStyle: f.fontStyle, letterSpacing: f.letterSpacing } : null;
+};
+
 const TextSlide = ({
   post, onLike, liked, likesCount, savesCount, onSave, saved, onComment, commentCount,
   isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false, isActive = false,
@@ -939,7 +945,7 @@ const TextSlide = ({
             // Top padding clears the header; bottom padding is small so the text sits near mid-screen.
             <View style={[sw.bigTextWrap, { paddingTop: headerHeight + rp(12) + envClear }]} pointerEvents="none">
               <Text
-                style={sw.bigTextConfession}
+                style={[sw.bigTextConfession, fontOf(post.font_style)]}
                 numberOfLines={14}
                 adjustsFontSizeToFit
                 minimumFontScale={0.4}

@@ -158,8 +158,9 @@ export const CardPattern = React.memo(function CardPattern({ type, width, height
   );
 });
 
-// ─── Card font styles (families from src/config/fonts.js) ─────
-const CARD_FONT_STYLES = {
+// ─── Card font styles (families from src/config/fonts.js). Ids match FONT_STYLES in drops.py
+// and Web/lib/dropFonts.ts; the poster picks one for a text drop. ─────
+export const CARD_FONT_STYLES = {
   'classic': {
     fontFamily:    'PlayfairDisplay-Italic',
     fontStyle:     'italic',
@@ -178,7 +179,29 @@ const CARD_FONT_STYLES = {
     fontWeight:    '800',
     letterSpacing: 0.6,
   },
+  'clean': {
+    fontFamily:    'DMSans-SemiBold',
+    fontStyle:     'normal',
+    fontWeight:    '600',
+    letterSpacing: 0.2,
+  },
+  'elegant': {
+    fontFamily:    'PlayfairDisplay-Regular',
+    fontStyle:     'normal',
+    fontWeight:    '400',
+    letterSpacing: 0.3,
+  },
 };
+
+// Picker order and names.
+export const CARD_FONT_LIST = [
+  { id: 'classic',       label: 'Classic' },
+  { id: 'sultry-script', label: 'Sultry' },
+  { id: 'bold-tease',    label: 'Bold' },
+  { id: 'clean',         label: 'Clean' },
+  { id: 'elegant',       label: 'Elegant' },
+];
+export const DEFAULT_CARD_FONT = 'classic';
 
 // ─── Text sizing: shorter confessions get bigger text.
 const getConfessionFontSize = (text, cardWidth) => {

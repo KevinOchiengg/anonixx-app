@@ -25,6 +25,7 @@ export type Post = {
   avatar_url: string | null;
   is_admin_drop: boolean;
   mood_tag: string | null;
+  font_style?: string | null;   // text drops: the poster's font (lib/dropFonts.ts)
   kind?: "hookup" | "confession" | null;
   hookup?: {
     age: number; gender: string | null; area: string; looking_for: string | null; age_min: number | null; age_max: number | null; vibes: string[]; fresh_window?: string | null;

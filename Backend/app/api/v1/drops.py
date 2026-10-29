@@ -327,7 +327,7 @@ class CreateDropRequest(BaseModel):
     location_sub_county: Optional[str] = None   # e.g. "Westlands"
     location_estate:     Optional[str] = None   # e.g. "Kilimani"
     poll:       Optional[DropPollInput] = None   # optional attached poll
-    font_style: Optional[str] = None             # "classic" | "sultry-script" | "bold-tease"
+    font_style: Optional[str] = None             # one of FONT_STYLES
     # Admin-only search keywords: lets Anonixx content (polls, photos, voice
     # notes) be found from the search bar even when it has little or no text.
     tags: Optional[List[str]] = None
@@ -359,7 +359,10 @@ VALID_INTENSITIES = {"soft", "heavy", "devastating"}
 
 # Card-text font presets — style composition on the two font families the app
 # already ships (PlayfairDisplay / DMSans), not new font assets.
-FONT_STYLES = {"classic", "sultry-script", "bold-tease"}
+FONT_STYLES = {"classic", "sultry-script", "bold-tease", "clean", "elegant"}
+# Before this, compose saved "bold-tease" on every drop without asking, so only drops from
+# then on show their font_style; older ones keep the default look.
+FONT_PICKER_SINCE = datetime(2026, 10, 29, tzinfo=timezone.utc)
 
 # Section 8 — six text reactions. Anything else is rejected.
 VALID_REACTIONS = {
@@ -1640,6 +1643,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "avatar_url":       sender_avatars.get(drop.get("sender_id")),
             "is_admin_drop":    drop.get("is_admin_drop", False),
             "mood_tag":         drop.get("mood_tag"),
+            "font_style":       drop.get("font_style") if drop.get("created_at") and _aware(drop["created_at"]) >= FONT_PICKER_SINCE else None,
             "theme":            drop.get("theme"),
             "intent":           drop.get("intent"),
             "kind":             drop.get("kind"),

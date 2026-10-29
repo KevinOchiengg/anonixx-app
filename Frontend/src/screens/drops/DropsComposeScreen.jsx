@@ -40,7 +40,7 @@ import { awardMilestone, fetchBalance } from '../../store/slices/coinsSlice';
 import { uploadToR2 } from '../../utils/upload';
 
 import DropCardRenderer, {
-  CARD_INTENTS, CARD_INTENT_LIST, CardPattern, DROP_THEMES,
+  CARD_INTENTS, CARD_INTENT_LIST, CardPattern, DROP_THEMES, CARD_FONT_LIST, CARD_FONT_STYLES, DEFAULT_CARD_FONT,
 } from '../../components/drops/DropCardRenderer';
 import T from '../../utils/theme';
 
@@ -333,7 +333,11 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [locationSubCounty, setLocationSubCounty] = useState('');
   const [locationEstate, setLocationEstate] = useState('');
   const [storyTopics, setStoryTopics] = useState([]);   // author's moods/topics (confessions only)
-  const [fontStyle, setFontStyle] = useState('bold-tease'); // classic | sultry-script | bold-tease
+  const [fontStyle, setFontStyle] = useState(DEFAULT_CARD_FONT); // an id from CARD_FONT_LIST
+  const fontIdx = Math.max(0, CARD_FONT_LIST.findIndex((f) => f.id === fontStyle));
+  const nextFont = useCallback(() => {
+    setFontStyle(CARD_FONT_LIST[(fontIdx + 1) % CARD_FONT_LIST.length].id);
+  }, [fontIdx]);
 
   // ── Intensity + one-word hint (section 11) ────────────────────
   const [intensity, setIntensity] = useState('heavy');
@@ -395,7 +399,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               if (typeof d.cardIntent === 'string' && d.cardIntent !== 'the-exchange' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
               if (typeof d.hint     === 'string') setHint(d.hint);
-              if (typeof d.fontStyle === 'string') setFontStyle(d.fontStyle);
+              if (typeof d.fontStyle === 'string' && CARD_FONT_STYLES[d.fontStyle]) setFontStyle(d.fontStyle);
               if (typeof d.publisherOptIn === 'boolean') setPublisherOptIn(d.publisherOptIn);
               if (d.taggedUser && typeof d.taggedUser === 'object') setTaggedUser(d.taggedUser);
               if (d.location && typeof d.location === 'object') {
@@ -939,6 +943,18 @@ export default function DropsComposeScreen({ navigation, route }) {
               a11yLabel="Add a sound that plays behind your confession"
             >
               <Music size={rs(18)} color={soundId ? T.primary : T.textMute} />
+            </ToolIcon>
+            )}
+
+            {/* Font for text drops: each tap moves to the next one, shown live on the card. */}
+            {!mediaUri && (
+            <ToolIcon
+              active={fontStyle !== DEFAULT_CARD_FONT}
+              onPress={() => { dismissToolbarHint(); nextFont(); }}
+              label={CARD_FONT_LIST[fontIdx].label}
+              a11yLabel="Change the font of your confession"
+            >
+              <Text style={[s.fontGlyph, { fontFamily: CARD_FONT_STYLES[fontStyle].fontFamily }]}>Aa</Text>
             </ToolIcon>
             )}
 
@@ -1584,6 +1600,7 @@ const s = StyleSheet.create({
     gap:            rp(3),
     paddingVertical: rp(2),
   },
+  fontGlyph: { fontSize: rf(15), color: T.primary },
   toolIconGlyph: {
     width:          rs(36),
     height:         rs(36),

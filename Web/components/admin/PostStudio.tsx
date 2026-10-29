@@ -306,7 +306,7 @@ export default function PostStudio() {
           ...(name.trim() ? { display_name: name.trim() } : {}),
           // the API needs some text on every drop; a poll's question stands in for a caption
           confession: text.trim() || (format === "poll" ? question.trim() : undefined),
-          font_style: "bold-tease",
+          font_style: "classic",
           ...(tags.length ? { tags } : {}),
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: share,

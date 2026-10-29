@@ -314,7 +314,7 @@ export default function GuidedConfession({ navigation, onBack }) {
         theme: 'desire',
         mood_tag: 'longing',
         sensitivity: 'mature',
-        font_style: 'bold-tease',
+        font_style: 'classic',
         publisher_opt_in: true,
         ...(a.sound ? { sound_id: a.sound } : {}),
       });

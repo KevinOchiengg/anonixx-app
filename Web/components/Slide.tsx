@@ -13,6 +13,7 @@ import { Flag, Link2, SoundOff } from "./feedicons";
 import AudioWave from "./AudioWave";
 import AmbientSound from "./AmbientSound";
 import Sheet from "./Sheet";
+import { DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 
 type Props = {
   post: Post;
@@ -380,11 +381,13 @@ export default function Slide({
 
       <div className={hasMedia ? "caption" : "text-body"} style={{ position: "relative", zIndex: 2 }}>
         {post.promo_kind === "pin" ? <span className="pin-tag">pinned</span> : null}
+        {textSlide && post.font_style ? <link rel="stylesheet" href={DROP_FONTS_HREF} precedence="default" /> : null}
         {post.content ? (
           <Text
             ref={textRef as React.RefObject<HTMLParagraphElement>}
             // until measured, CSS clamps it so the first paint never overflows
             className={`confession${hasMedia && short === undefined ? " clamp" : ""}${textSlide ? " clamp-text" : ""}`}
+            style={textSlide ? dropFontStyle(post.font_style) : undefined}
             onClick={mediaLong ? () => toggleCaption() : undefined}
           >
             {mediaLong && short && !expanded ? (
