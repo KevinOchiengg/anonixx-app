@@ -1160,7 +1160,12 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [menuVisible, setMenuVisible] = useState(false);
 
   const [likeMap, setLikeMap] = useState({});
+  // Latest like / save state for the handlers, so a tap never acts on a stale copy.
+  const likeMapRef = useRef(likeMap);
+  likeMapRef.current = likeMap;
   const [saveMap, setSaveMap] = useState({});
+  const saveMapRef = useRef(saveMap);
+  saveMapRef.current = saveMap;
   const [saveCounts, setSaveCounts] = useState({});
   const [commentCounts, setCommentCounts] = useState({});
   const [reportPost, setReportPost] = useState(null);
@@ -1308,9 +1313,11 @@ export default function DropsSwipeScreen({ navigation, route }) {
       navigation.navigate('AuthNav', { screen: 'Login' });
       return;
     }
-    const current = likeMap[postId] || { liked: false, count: 0 };
+    const current = likeMapRef.current[postId] || { liked: false, count: 0 };
     const newLiked = !current.liked;
-    setLikeMap((prev) => ({ ...prev, [postId]: { liked: newLiked, count: newLiked ? current.count + 1 : current.count - 1 } }));
+    const nextState = { liked: newLiked, count: Math.max(0, current.count + (newLiked ? 1 : -1)) };
+    likeMapRef.current = { ...likeMapRef.current, [postId]: nextState };
+    setLikeMap((prev) => ({ ...prev, [postId]: nextState }));
     try {
       const token = await AsyncStorage.getItem('token');
       await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/like`, {
@@ -1320,7 +1327,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     } catch {
       setLikeMap((prev) => ({ ...prev, [postId]: current }));
     }
-  }, [isAuthenticated, likeMap, navigation, showToast]);
+  }, [isAuthenticated, navigation, showToast]);
 
   const handleSave = useCallback(async (postId) => {
     if (!isAuthenticated) {
@@ -1328,7 +1335,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
       navigation.navigate('AuthNav', { screen: 'Login' });
       return;
     }
-    const wasSaved = saveMap[postId];
+    const wasSaved = saveMapRef.current[postId];
+    saveMapRef.current = { ...saveMapRef.current, [postId]: !wasSaved };
     setSaveMap((prev) => ({ ...prev, [postId]: !wasSaved }));
     setSaveCounts((prev) => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) + (wasSaved ? -1 : 1)) }));
     try {
@@ -1341,7 +1349,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       setSaveMap((prev) => ({ ...prev, [postId]: wasSaved }));
       setSaveCounts((prev) => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) + (wasSaved ? 1 : -1)) }));
     }
-  }, [isAuthenticated, saveMap, navigation, showToast]);
+  }, [isAuthenticated, navigation, showToast]);
 
   const handleVote = useCallback(async (postId, optionIndex) => {
     if (!isAuthenticated) {
@@ -1609,6 +1617,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
         data={data}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        // Slides on screen re-render when likes / saves / counts change, not just on new data.
+        extraData={renderItem}
         scrollEnabled={false}   // feedPan above drives it, so slides snap with no glide
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
