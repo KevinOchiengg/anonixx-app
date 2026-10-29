@@ -556,7 +556,7 @@ export default function GuidedConfession({ navigation, onBack }) {
   const onReveal = step === REVEAL;
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right', 'bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={s.header}>
           <TouchableOpacity onPress={back} hitSlop={HIT_SLOP} accessibilityLabel="Back">
             <ChevronLeft size={rs(24)} color={T.text} />

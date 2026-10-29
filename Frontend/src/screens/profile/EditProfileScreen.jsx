@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, Image,
-  StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -277,6 +277,7 @@ export default function EditProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <StatusBar barStyle="light-content" backgroundColor={T.background} />
       <StarryBackground />
 
@@ -497,6 +498,7 @@ export default function EditProfileScreen({ navigation }) {
           </Text>
         </View>
       </Animated.ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

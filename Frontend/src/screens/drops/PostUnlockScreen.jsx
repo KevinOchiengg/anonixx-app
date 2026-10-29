@@ -1,7 +1,7 @@
 /** Link up: sends the author a request. Coins move only if they accept. */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView, TextInput,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -221,6 +221,7 @@ export default function PostUnlockScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={s.root}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <DropScreenHeader title="Knock" navigation={navigation} />
 
       <ScrollView
@@ -403,6 +404,7 @@ export default function PostUnlockScreen({ route, navigation }) {
           <Text style={s.notNowText}>Not now</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

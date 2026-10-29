@@ -167,7 +167,7 @@ export default function DropsPollScreen({ navigation, route }) {
       <DropScreenHeader title="Poll" navigation={navigation} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <ScrollView
           style={{ flex: 1 }}

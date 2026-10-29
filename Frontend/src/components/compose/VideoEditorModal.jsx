@@ -2,7 +2,7 @@
  * utils/videoEdit.js). The 9:16 preview matches the feed. Has its own gesture root (Modal). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions,
+  Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -167,6 +167,7 @@ export default function VideoEditorModal({ visible, uri, duration, landscape, va
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaView style={st.safe}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <View style={st.header}>
             <TouchableOpacity onPress={() => { player.pause(); onClose(); }} hitSlop={HIT_SLOP}>
               <Text style={st.headerBtn}>Cancel</Text>
@@ -261,6 +262,7 @@ export default function VideoEditorModal({ visible, uri, duration, landscape, va
               </Text>
             )}
           </ScrollView>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </GestureHandlerRootView>
     </Modal>

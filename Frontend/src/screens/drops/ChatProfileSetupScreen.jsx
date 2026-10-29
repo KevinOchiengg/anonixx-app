@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Image, ActivityIndicator, TextInput, Switch, Alert,
+  Image, ActivityIndicator, TextInput, Switch, Alert, KeyboardAvoidingView,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -399,6 +399,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <DropScreenHeader title="Your Room" navigation={navigation} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsIn}>
         {TABS.map(([k, label]) => (
@@ -800,6 +801,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
       )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

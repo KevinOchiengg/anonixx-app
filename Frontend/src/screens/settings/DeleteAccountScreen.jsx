@@ -54,7 +54,7 @@ export default function DeleteAccountScreen({ navigation }) {
   }, [run]);
 
   return (
-    <KeyboardAvoidingView style={[s.safe, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={[s.safe, { paddingTop: insets.top }]} behavior="padding">
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} style={s.back}>
           <ArrowLeft size={rs(20)} color={T.text} />

@@ -422,7 +422,7 @@ export default function MpesaPaymentSheet({ visible, onClose, packages }) {
       <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
         <SafeAreaView edges={['bottom']} style={styles.safeArea}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior="padding"
             style={{ flex: 1 }}
           >
             {/* Handle + Header */}

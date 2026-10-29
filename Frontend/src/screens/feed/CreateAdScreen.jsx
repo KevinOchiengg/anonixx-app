@@ -165,7 +165,7 @@ export default function CreateAdScreen({ navigation }) {
         <View style={s.headerBtn} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
           <Text style={s.hint}>
             {AD_COINS_PER_HOUR} coins per hour it runs. Submissions go to a human for review before

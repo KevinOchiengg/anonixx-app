@@ -80,7 +80,7 @@ export default function WhatsAppSendScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP}>
             <ChevronLeft size={rs(24)} color={T.text} />

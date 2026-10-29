@@ -84,7 +84,7 @@ export default function DemoChatScreen({ navigation }) {
       <ChatBackground pattern="ink-bloom" style={{ flex: 1 }}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           keyboardVerticalOffset={0}
         >
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>

@@ -7,7 +7,7 @@ import {
   TextInput,
   ActivityIndicator,
   Animated,
-  StyleSheet,
+  StyleSheet, KeyboardAvoidingView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -296,6 +296,7 @@ export default function PremiumScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       {success && <SuccessOverlay onContinue={handleContinue} />}
 
       <View style={styles.header}>
@@ -387,6 +388,7 @@ export default function PremiumScreen({ navigation }) {
             : 'One payment. 30 days. No auto-renew.'}
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }

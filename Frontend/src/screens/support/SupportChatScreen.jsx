@@ -121,7 +121,7 @@ export default function SupportChatScreen({ navigation, route }) {
         ) : null}
       />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         {loading ? (
           <View style={a.centered}><ActivityIndicator color={T.primary} size="large" /></View>
         ) : (

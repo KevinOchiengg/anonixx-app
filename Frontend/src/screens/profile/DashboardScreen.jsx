@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, TextInput, Modal, Alert, RefreshControl,
+  ActivityIndicator, TextInput, Modal, Alert, RefreshControl, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -361,6 +361,7 @@ export default function DashboardScreen({ navigation }) {
 
       {/* Edit post modal */}
       <Modal visible={!!editingPost} transparent animationType="slide" onRequestClose={() => setEditingPost(null)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={s.modalOverlay}>
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
@@ -386,10 +387,12 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Withdraw modal */}
       <Modal visible={withdrawOpen && cashOut} transparent animationType="slide" onRequestClose={() => setWithdrawOpen(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={s.modalOverlay}>
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
@@ -428,6 +431,7 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

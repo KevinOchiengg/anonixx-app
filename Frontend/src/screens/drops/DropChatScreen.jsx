@@ -1473,7 +1473,7 @@ export default function DropChatScreen({ route, navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         keyboardVerticalOffset={0}
       >
         <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>

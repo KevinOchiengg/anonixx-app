@@ -788,7 +788,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         {/* Header */}
         <View style={s.header}>

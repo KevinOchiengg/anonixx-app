@@ -155,7 +155,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <Animated.View
           style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
