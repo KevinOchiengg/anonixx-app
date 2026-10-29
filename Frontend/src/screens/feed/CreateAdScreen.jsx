@@ -81,6 +81,7 @@ export default function CreateAdScreen({ navigation }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
+      legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
       mediaTypes: mediaType === 'video' ? ['videos'] : ['images'],
       quality: 0.85,
     });

@@ -131,6 +131,7 @@ export default function SignUpScreen({ navigation }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
+        legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
         mediaTypes:    'images',
         allowsEditing: true,
         aspect:        [1, 1],

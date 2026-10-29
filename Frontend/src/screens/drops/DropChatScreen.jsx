@@ -878,6 +878,7 @@ export default function DropChatScreen({ route, navigation }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
+        legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
         mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60,
       });
       if (result.canceled || !result.assets?.length) return;

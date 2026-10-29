@@ -603,6 +603,7 @@ export const CommentBottomSheet = React.memo(({
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
     const result = await ImagePicker.launchImageLibraryAsync({
+      legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
       mediaTypes: 'images',
       allowsEditing: true,
       aspect: [4, 3],

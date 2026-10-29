@@ -139,6 +139,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
+      legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
       mediaTypes: 'images', quality: 0.85, allowsEditing: true, aspect: [1, 1],
     });
     if (result.canceled) return;
@@ -168,6 +169,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
+      legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
       mediaTypes: ['images', 'videos'], quality: 0.85, videoMaxDuration: 90,
     });
     if (result.canceled) return;

@@ -462,6 +462,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
+        legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
         mediaTypes:           ['images', 'videos'],
         quality:              0.85,
         allowsEditing:        false,

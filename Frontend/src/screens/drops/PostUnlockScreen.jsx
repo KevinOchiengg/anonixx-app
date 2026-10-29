@@ -104,6 +104,7 @@ export default function PostUnlockScreen({ route, navigation }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
+      legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
       mediaTypes:       ['images', 'videos'],
       quality:          0.85,
       allowsEditing:    false,

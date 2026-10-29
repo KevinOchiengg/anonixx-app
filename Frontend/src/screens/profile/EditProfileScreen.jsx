@@ -165,6 +165,7 @@ export default function EditProfileScreen({ navigation }) {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
+        legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
         mediaTypes:    'images',
         allowsEditing: true,
         aspect:        [1, 1],
