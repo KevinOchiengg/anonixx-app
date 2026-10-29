@@ -5,7 +5,7 @@ import { Animated, StyleSheet } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import { Heart } from 'lucide-react-native';
 
-const DOUBLE_GAP = 300;   // second tap within this = like
+const DOUBLE_GAP = 320;   // second finger-down within this of the last tap = like
 const COMBO_GAP = 500;    // after a like, each tap within this adds another heart
 const SIZE = 96;
 
@@ -53,6 +53,7 @@ export function useDoubleTapLike({ onSingle, onDoubleLike, onLong }) {
   const [hearts, setHearts] = useState([]);
   const last = useRef(0);
   const combo = useRef(false);
+  const second = useRef(false);   // this touch landed inside the double-tap window
   const timer = useRef(null);
   const nextId = useRef(0);
   const cb = useRef({});
@@ -70,13 +71,22 @@ export function useDoubleTapLike({ onSingle, onDoubleLike, onLong }) {
     setHearts((prev) => prev.filter((h) => h.id !== id));
   }, []);
 
-  const onTap = useCallback((x, y) => {
-    const now = Date.now();
-    const gap = now - last.current;
-    last.current = now;
-    if (gap < (combo.current ? COMBO_GAP : DOUBLE_GAP)) {
+  // The second finger-down decides it: it cancels the pending single tap straight away, so a
+  // double tap never pauses, even if that second tap then drifts or comes up slowly.
+  const onDown = useCallback(() => {
+    if (Date.now() - last.current < (combo.current ? COMBO_GAP : DOUBLE_GAP)) {
+      second.current = true;
       clearTimeout(timer.current);
       timer.current = null;
+    }
+  }, []);
+
+  const onTap = useCallback((x, y, ok) => {
+    const wasSecond = second.current;
+    second.current = false;
+    if (!ok) return;
+    last.current = Date.now();
+    if (wasSecond) {
       combo.current = true;
       addHeart(x, y);
       cb.current.onDoubleLike?.();
@@ -98,12 +108,13 @@ export function useDoubleTapLike({ onSingle, onDoubleLike, onLong }) {
     Gesture.Tap()
       .runOnJS(true)
       .maxDistance(24)
-      .onEnd((e, success) => { if (success) onTap(e.x, e.y); }),
+      .onBegin(onDown)
+      .onFinalize((e, success) => onTap(e.x, e.y, success)),
     Gesture.LongPress()
       .runOnJS(true)
       .minDuration(450)
       .onStart(() => cb.current.onLong?.()),
-  ), [onTap]);
+  ), [onDown, onTap]);
 
   return { gesture, hearts, removeHeart, cancelPending };
 }

@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import Svg, { Line, Polygon } from 'react-native-svg';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, Pressable as GHPressable } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -250,26 +250,28 @@ const ActionBtn = ({ icon, count, onPress, active, tint }) => {
     onPress?.();
   };
   return (
-    <TouchableOpacity style={ss.actionBtn} onPress={handlePress} activeOpacity={0.9}>
+    <GHPressable style={ss.actionBtn} onPress={handlePress} hitSlop={6}>
       <Animated.View style={{ transform: [{ scale }] }}><RailIcon icon={icon} tint={tint} active={active} /></Animated.View>
       {count !== null && count !== undefined && (
         <Text style={[ss.actionCount, tint && { color: RAIL_TINTS[tint]?.c }, active && { color: tint ? RAIL_TINTS[tint]?.ca : THEME.primary }]}>
           {count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}
         </Text>
       )}
-    </TouchableOpacity>
+    </GHPressable>
   );
 };
 
+// Rail buttons use the gesture handler's Pressable so the feed's swipe and tap gestures
+// can't swallow the first tap.
 const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef, tint }) => (
-  <TouchableOpacity style={ss.actionBtn} onPress={onPress} activeOpacity={0.9}>
+  <GHPressable style={ss.actionBtn} onPress={onPress} hitSlop={6}>
     <Animated.View style={{ transform: [{ scale: scaleRef }] }}><RailIcon icon={icon} tint={tint} active={active} /></Animated.View>
     {count !== null && count !== undefined && (
       <Text style={[ss.actionCount, tint && { color: RAIL_TINTS[tint]?.c }, active && { color: tint ? RAIL_TINTS[tint]?.ca : THEME.primary }]}>
         {count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}
       </Text>
     )}
-  </TouchableOpacity>
+  </GHPressable>
 );
 
 // View count in the rail (not tappable).
@@ -1448,7 +1450,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const feedPan = useMemo(() => (
     Gesture.Pan()
       .runOnJS(true)
-      .activeOffsetY([-8, 8])       // taps and holds stay taps and holds
+      .activeOffsetY([-16, 16])     // a tap that drifts a little stays a tap
       .failOffsetX([-15, 15])       // sideways swipes belong to photo carousels / the scrub bar
       .onStart(() => {
         const r = swipeRef.current;
