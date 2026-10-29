@@ -6,7 +6,14 @@ import { Badge } from "@/components/admin/bits";
 type Sound = { id: string; title: string; mood: string; url: string; active: boolean };
 type Draft = { file: File; title: string; mood: string; state: "ready" | "sending" | "done" | "error"; error?: string };
 
-const MOODS = ["any", "longing", "untold", "horny", "discreet"];
+// Stored mood -> the card style it plays behind. A confession's mood comes from its card.
+const MOODS: [string, string][] = [
+  ["any", "Any card"],
+  ["longing", "Meet Me"],
+  ["untold", "Skeleton In The Closet"],
+  ["horny", "Just Tonight"],
+];
+const moodLabel = (m: string) => MOODS.find(([k]) => k === m)?.[1] ?? m;
 const MAX_MB = 5;
 const titleOf = (name: string) => name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
 
@@ -85,7 +92,7 @@ export default function AdminSounds() {
     <>
       <h2>Ambient sounds</h2>
       <p className="muted small">
-        Quiet background tracks for text confessions. Each confession picks a sound that matches its mood; &quot;any&quot; fits all.
+        Quiet background tracks for text confessions. Each confession plays a sound picked for its card style; &quot;Any card&quot; fits all.
         mp3 or m4a, up to {MAX_MB}MB each. Only upload tracks you have the rights to use.
       </p>
       {error ? <p className="err">{error}</p> : null}
@@ -110,7 +117,7 @@ export default function AdminSounds() {
               <div className="adm-search" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input value={d.title} maxLength={80} onChange={(e) => patch(i, { title: e.target.value })} placeholder="Title" disabled={d.state === "sending"} />
                 <select value={d.mood} onChange={(e) => patch(i, { mood: e.target.value })} disabled={d.state === "sending"} className="adm-btn">
-                  {MOODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  {MOODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
                 </select>
               </div>
               <div className="adm-foot">
@@ -136,11 +143,11 @@ export default function AdminSounds() {
                 <div className="adm-search" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <input value={edit.title} maxLength={80} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
                   <select value={edit.mood} onChange={(e) => setEdit({ ...edit, mood: e.target.value })} className="adm-btn">
-                    {MOODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                    {MOODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
                   </select>
                 </div>
               ) : (
-                <div className="adm-chips"><b>{s.title}</b><Badge>{s.mood}</Badge>{s.active ? null : <Badge tone="warn">off</Badge>}</div>
+                <div className="adm-chips"><b>{s.title}</b><Badge>{moodLabel(s.mood)}</Badge>{s.active ? null : <Badge tone="warn">off</Badge>}</div>
               )}
               <div className="adm-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button className="adm-btn" onClick={() => preview(s.url)}>▶ Play</button>

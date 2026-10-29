@@ -15,14 +15,15 @@ router = APIRouter(prefix="/sounds", tags=["sounds"])
 
 MAX_BYTES = 5 * 1024 * 1024
 ALLOWED_TYPES = {"audio/mpeg", "audio/mp3", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac"}
-MOODS = {"any", "longing", "untold", "horny", "discreet"}
+MOODS = {"any", "longing", "untold", "horny"}
+RETIRED_MOODS = {"discreet"}   # no card style posts with it any more; such sounds count as "any"
 
 
 def _out(doc: dict) -> dict:
     return {
         "id": str(doc["_id"]),
         "title": doc.get("title", ""),
-        "mood": doc.get("mood", "any"),
+        "mood": "any" if doc.get("mood") in RETIRED_MOODS else doc.get("mood", "any"),
         "url": doc.get("url", ""),
         "active": bool(doc.get("active", True)),
         "created_at": doc["created_at"].isoformat() if doc.get("created_at") else None,

@@ -411,7 +411,7 @@ const INTENTS: [string, string][] = [
   ["skeleton-in-the-closet", "Skeleton In The Closet"],
   ["just-tonight", "Just Tonight"],
 ];
-const MOODS = ["longing", "untold", "horny", "discreet"];
+const MOODS = ["longing", "untold", "horny"];
 
 function SearchInner() {
   const [q, setQ] = useState("");
