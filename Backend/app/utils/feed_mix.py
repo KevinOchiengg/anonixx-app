@@ -2,10 +2,15 @@
 separately in one cursor, so nothing is skipped or repeated. With a known country, text slots
 take LOCAL_RUN local confessions per global one; either side fills in when the other runs out.
 
-Cursor: "m=<iso>|<oid>;t=<iso>|<oid>;p=<n>" (+ "l=", "g=", "q=" when local first).
+Order is random: every drop has a fixed `rand` in [0, 1), and each fresh feed load picks a new
+seed, so drops come in order of (rand + seed) mod 1. The seed rides in the cursor, so paging
+keeps the same shuffle.
+
+Cursor: "s=<seed>;m=<key>|<oid>;t=<key>|<oid>;p=<n>" (+ "l=", "g=", "q=" when local first).
 A missing key = not started, "END" = exhausted.
 """
 import random
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -34,22 +39,21 @@ def is_media_drop(drop: dict) -> bool:
 
 
 def _pos(raw: str):
-    ts, oid = raw.rsplit("|", 1)
-    return datetime.fromisoformat(ts), ObjectId(oid)
+    key, oid = raw.rsplit("|", 1)
+    return float(key), ObjectId(oid)
 
 
 def _parse(cursor: Optional[str]) -> dict:
-    state: dict = {"m": None, "t": None, "l": None, "g": None, "p": 0, "q": 0}
-    if not cursor:
+    state: dict = {"s": random.random(), "m": None, "t": None, "l": None, "g": None, "p": 0, "q": 0}
+    # No seed = a fresh load, or a cursor from before random order: start a new shuffle.
+    if not cursor or "s=" not in cursor:
         return state
     try:
-        if "=" not in cursor:
-            legacy = _pos(cursor)
-            state["m"] = state["t"] = legacy
-            return state
         for part in cursor.split(";"):
             key, _, val = part.partition("=")
-            if key in STREAMS:
+            if key == "s":
+                state["s"] = float(val) % 1
+            elif key in STREAMS:
                 state[key] = "END" if val == "END" else _pos(val)
             elif key == "p":
                 state["p"] = int(val) % len(PATTERN)
@@ -61,11 +65,11 @@ def _parse(cursor: Optional[str]) -> dict:
 
 
 def _encode_pos(pos) -> str:
-    return "END" if pos == "END" else f"{pos[0].isoformat()}|{pos[1]}"
+    return "END" if pos == "END" else f"{pos[0]!r}|{pos[1]}"
 
 
 def _encode(state: dict) -> str:
-    parts = []
+    parts = [f"s={state['s']!r}"]
     for k in STREAMS:
         if state.get(k) is not None:
             parts.append(f"{k}={_encode_pos(state[k])}")
@@ -83,20 +87,37 @@ def _stream_filter(kind: str, country: Optional[str]) -> dict:
     return _STREAM_FILTER[kind]
 
 
-def _stream_query(base: dict, kind: str, pos, country: Optional[str] = None) -> dict:
+def _stream_pipeline(base: dict, kind: str, pos, seed: float, limit: int, country: Optional[str] = None) -> list:
+    """One page of a stream in shuffle order, after `pos`; each row carries its sort key in `_k`."""
     conds = [c for c in (base, _stream_filter(kind, country)) if c]
+    pipeline = [
+        {"$match": conds[0] if len(conds) == 1 else {"$and": conds}},
+        {"$addFields": {"_k": {"$mod": [{"$add": [{"$ifNull": ["$rand", 0.5]}, seed]}, 1]}}},
+    ]
     if pos:
-        dt, oid = pos
-        conds.append({"$or": [
-            {"created_at": {"$lt": dt}},
-            {"created_at": dt, "_id": {"$lt": oid}},
-        ]})
-    return conds[0] if len(conds) == 1 else {"$and": conds}
+        k, oid = pos
+        pipeline.append({"$match": {"$or": [{"_k": {"$gt": k}}, {"_k": k, "_id": {"$gt": oid}}]}})
+    pipeline += [{"$sort": {"_k": 1, "_id": 1}}, {"$limit": limit + 1}]
+    return pipeline
+
+
+# Drops get their `rand` here rather than at every place that creates one.
+RAND_FILL_EVERY = 30   # seconds
+_rand_filled_at = 0.0
+
+
+async def _fill_rand(db) -> None:
+    global _rand_filled_at
+    if time.monotonic() - _rand_filled_at < RAND_FILL_EVERY:
+        return
+    _rand_filled_at = time.monotonic()
+    await db["drops"].update_many({"rand": {"$exists": False}}, [{"$set": {"rand": {"$rand": {}}}}])
 
 
 async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str], country: Optional[str] = None):
-    """Returns (rows, next_cursor, has_more) for one page of the mixed feed.
+    """Returns (rows, next_cursor, has_more) for one page of the mixed feed, in random order.
     With `country`, text slots favour confessions from that country (local first)."""
+    await _fill_rand(db)
     state = _parse(cursor)
     kinds = ("m", "l", "g") if country else ("m", "t")
     buf: dict = {}
@@ -104,8 +125,8 @@ async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str], c
         if state[kind] == "END":
             buf[kind] = []
             continue
-        buf[kind] = await db["drops"].find(_stream_query(base_query, kind, state[kind], country)) \
-            .sort([("created_at", -1), ("_id", -1)]).limit(limit + 1).to_list(None)
+        pipeline = _stream_pipeline(base_query, kind, state[kind], state["s"], limit, country)
+        buf[kind] = await db["drops"].aggregate(pipeline).to_list(None)
 
     def preference(slot: str, q: int) -> list:
         text = (["l", "g"] if TEXT_PATTERN[q % len(TEXT_PATTERN)] == "l" else ["g", "l"]) if country else ["t"]
@@ -128,13 +149,15 @@ async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str], c
             q += 1
 
     has_more = any(buf[k] for k in kinds)
-    nxt = {**{k: state[k] for k in STREAMS}, "p": p % len(PATTERN), "q": q % len(TEXT_PATTERN)}
+    nxt = {**{k: state[k] for k in STREAMS}, "s": state["s"], "p": p % len(PATTERN), "q": q % len(TEXT_PATTERN)}
     for kind in kinds:
         if taken[kind]:
             last = taken[kind][-1]
-            nxt[kind] = (last["created_at"], last["_id"])
+            nxt[kind] = (last["_k"], last["_id"])
         if not buf[kind] and fetched[kind] <= limit:
             nxt[kind] = "END"
+    for row in rows:
+        row.pop("_k", None)
     return rows, (_encode(nxt) if has_more else None), has_more
 
 
