@@ -182,7 +182,7 @@ const LiveChips = ({ post, isOwnPost }) => {
 
 // ─── Shared: right action rail. Each action has its own colour and scales with screen height.
 const RAIL_TINTS = {
-  like:    { c: '#ff9d8c', ca: '#ff634a', bg: 'rgba(255,99,74,0.2)',  line: 'rgba(255,99,74,0.4)' },
+  like:    { c: '#ff9d8c', ca: '#ff2d55', bg: 'rgba(255,99,74,0.2)',  line: 'rgba(255,99,74,0.4)' },
   comment: { c: '#cdd5ff', ca: '#cdd5ff', bg: 'rgba(205,213,255,0.16)', line: 'rgba(205,213,255,0.32)' },
   save:    { c: '#ffd27a', ca: '#ffb81f', bg: 'rgba(255,184,31,0.2)', line: 'rgba(255,210,122,0.4)' },
   more:    { c: '#e8eaf2', ca: '#e8eaf2', bg: 'rgba(255,255,255,0.14)', line: 'rgba(255,255,255,0.28)' },
@@ -196,13 +196,12 @@ const RailIcon = ({ icon, tint, active }) => {
   const chip = Math.max(36, Math.min(46, winH * 0.056));
   const color = active ? t.ca : t.c;
   const filled = icon.props.fill && icon.props.fill !== 'none';
+  // Active (liked / saved) colours and fills only the icon; the chip stays the same.
   return (
     <View
       style={{
         width: chip, height: chip, borderRadius: chip / 2, alignItems: 'center', justifyContent: 'center',
-        borderWidth: 1.5, borderColor: active ? t.ca : t.line,
-        backgroundColor: active ? t.bg : 'rgba(10,12,18,0.5)',
-        ...(active ? { shadowColor: t.ca, shadowOpacity: 0.6, shadowRadius: 8, shadowOffset: { width: 0, height: 0 }, elevation: 4 } : null),
+        borderWidth: 1.5, borderColor: t.line, backgroundColor: 'rgba(10,12,18,0.5)',
       }}
     >
       {React.cloneElement(icon, { size: Math.round(chip * 0.54), color, ...(filled ? { fill: color } : null) })}
@@ -322,9 +321,10 @@ const AuthorProfileTrigger = ({ post, navigation, children }) => {
 
 // Author avatar at the top of the rail (the name below opens the same profile).
 const RailAvatar = ({ post, navigation }) => {
-  // Same size and dark glass as the Like / Comment / Save / Share chips (RailIcon).
+  // A little smaller than the Like / Comment / Save / Share chips (RailIcon): a full photo
+  // reads bigger than an icon in the same circle.
   const { height: winH } = useWindowDimensions();
-  const chip = Math.max(36, Math.min(46, winH * 0.056));
+  const chip = Math.round(Math.max(36, Math.min(46, winH * 0.056)) * 0.8);
   return (
   <AuthorProfileTrigger post={post} navigation={navigation}>
     <View style={[sw.railAvatarRing, { width: chip, height: chip, borderRadius: chip / 2 }]}>
@@ -591,7 +591,7 @@ const VideoSlide = ({
         </View>
       )}
 
-      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
+      <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
 
       {/* Two-finger hold or scrubbing hides everything but the header and video. */}
       {!chromeHidden && scrubT === null && (
@@ -791,7 +791,7 @@ const AudioSlide = ({
         {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
       </View>
 
-      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
+      <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
     </View>
   );
 };
@@ -951,7 +951,7 @@ const TextSlide = ({
         </View>
       </GestureDetector>
 
-      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
+      <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
 
       {!chromeHidden && (
         <>
@@ -1088,7 +1088,7 @@ const PollSlide = ({
           </View>
         </>
       )}
-      <HeartBursts hearts={hearts} color={THEME.primary} onDone={removeHeart} />
+      <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
     </View>
   );
 };
@@ -1800,7 +1800,7 @@ const sw = StyleSheet.create({
   // Author avatar at the top of the rail, above Like.
   railAvatarRing: {
     width: rs(40), height: rs(40), borderRadius: rs(20),
-    borderWidth: 2, borderColor: THEME.primary, overflow: 'hidden',
+    borderWidth: 1.5, borderColor: 'rgba(255,99,74,0.6)', overflow: 'hidden',
     backgroundColor: 'rgba(10,12,18,0.5)', marginBottom: rp(2),
   },
   railAvatarImg: { width: '100%', height: '100%' },
