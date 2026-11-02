@@ -50,7 +50,7 @@ const EMPTY = {
   wants: [],
   when: 'tonight', hosting: null, publicFirst: false,
   note: '', want: '', dontWant: '',
-  sound: '',
+  sound: '', soundOff: false,   // the sound is picked at random unless they turn it off
 };
 
 const digits = (v) => v.replace(/\D/g, '').slice(0, 2);
@@ -174,6 +174,19 @@ export default function GuidedConfession({ navigation, onBack }) {
   const preview = useAudioPlayer(null);
 
   const draft = useMemo(() => hookupDraft(a, seed), [a, seed]);
+
+  // A random sound behind it, unless they chose "No sound". Shuffle rolls another.
+  const shuffleSound = useCallback(() => {
+    if (!sounds?.length) return;
+    setA((cur) => {
+      const pool = sounds.length > 1 ? sounds.filter((x) => x.id !== cur.sound) : sounds;
+      return { ...cur, sound: pool[Math.floor(Math.random() * pool.length)].id, soundOff: false };
+    });
+  }, [sounds]);
+  useEffect(() => {
+    if (!ready || !sounds?.length || a.soundOff) return;
+    if (!a.sound || !sounds.some((x) => x.id === a.sound)) shuffleSound();
+  }, [ready, sounds, a.sound, a.soundOff, shuffleSound]);
   const problem = formProblem(a);
 
   // ── Restore and save answers ────────────────────────────────
@@ -464,21 +477,23 @@ export default function GuidedConfession({ navigation, onBack }) {
           </>
         )}
 
-        <Label optional>A sound behind it</Label>
+        <Label>A sound behind it</Label>
         {sounds === null ? <ActivityIndicator color={T.primary} /> : sounds.length === 0 ? (
           <Text style={s.hint}>No sounds yet. Yours goes out quiet, which works too.</Text>
         ) : (
-          <View style={s.chips}>
-            <Chip label="No sound" active={!a.sound} onPress={() => set({ sound: '' })} />
-            {sounds.map((snd) => (
-              <View key={snd.id} style={s.soundRow}>
-                <Chip label={snd.title} active={a.sound === snd.id} onPress={() => set({ sound: snd.id })} />
-                <TouchableOpacity onPress={() => hear(snd)} hitSlop={HIT_SLOP}>
-                  <Text style={s.link}>{hearing === snd.id ? 'stop' : 'listen'}</Text>
+          <>
+            <View style={s.chips}>
+              {pickedSound && <Chip label={`♪ ${pickedSound.title}`} active onPress={() => hear(pickedSound)} />}
+              {pickedSound && (
+                <TouchableOpacity onPress={() => hear(pickedSound)} hitSlop={HIT_SLOP} style={s.soundRow}>
+                  <Text style={s.link}>{hearing === pickedSound.id ? 'stop' : 'listen'}</Text>
                 </TouchableOpacity>
-              </View>
-            ))}
-          </View>
+              )}
+              <Chip label={pickedSound ? 'Shuffle' : 'Pick one for me'} active={false} onPress={shuffleSound} />
+              <Chip label="No sound" active={!a.sound} onPress={() => { if (hearing) { preview.pause(); setHearing(''); } set({ sound: '', soundOff: true }); }} />
+            </View>
+            <Text style={s.hint}>{pickedSound ? 'Picked at random. It plays softly while they read yours.' : 'Yours goes out quiet.'}</Text>
+          </>
         )}
         <Text style={s.hint}>{FRESH_HINT[FRESH_FOR_WHEN[a.when]]} Your Room and chats stay either way.{pickedSound ? `  ♪ ${pickedSound.title}` : ''}</Text>
       </View>

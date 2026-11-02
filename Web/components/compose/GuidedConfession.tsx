@@ -29,14 +29,14 @@ const FRESH_HINT: Record<string, string> = {
 };
 const WAITING = ["listening to what you said…", "finding your words…", "keeping it yours…"];
 
-type Answers = DraftAnswers & { sound: string };
+type Answers = DraftAnswers & { sound: string; soundOff: boolean };
 const EMPTY: Answers = {
   age: "", gender: null, area: "", appearance: "",
   lookingFor: "anyone", ageMin: "", ageMax: "",
   wants: [],
   when: "tonight", hosting: null, publicFirst: false,
   note: "", want: "", dontWant: "",
-  sound: "",
+  sound: "", soundOff: false,   // the sound is picked at random unless they turn it off
 };
 
 const digits = (v: string) => v.replace(/\D/g, "").slice(0, 2);
@@ -115,6 +115,19 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const preview = useRef<HTMLAudioElement | null>(null);
 
   const draft = useMemo(() => hookupDraft(a, seed), [a, seed]);
+
+  // A random sound behind it, unless they chose "No sound". Shuffle rolls another.
+  const shuffleSound = useCallback(() => {
+    if (!sounds?.length) return;
+    setA((cur) => {
+      const pool = sounds.length > 1 ? sounds.filter((x) => x.id !== cur.sound) : sounds;
+      return { ...cur, sound: pool[Math.floor(Math.random() * pool.length)].id, soundOff: false };
+    });
+  }, [sounds]);
+  useEffect(() => {
+    if (!ready || !sounds?.length || a.soundOff) return;
+    if (!a.sound || !sounds.some((x) => x.id === a.sound)) shuffleSound();
+  }, [ready, sounds, a.sound, a.soundOff, shuffleSound]);
   const problem = formProblem(a);
 
   useEffect(() => {
@@ -399,19 +412,23 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
               {writer.remaining != null ? <p className="hk-hint">{writer.remaining} rewordings left today.</p> : null}
             </>
           ) : null}
-          <h3 className="gc-label">A sound behind it <span className="hk-opt">optional</span></h3>
+          <h3 className="gc-label">A sound behind it</h3>
           {sounds === null ? <p className="hk-hint">Loading sounds…</p> : sounds.length === 0 ? (
             <p className="hk-hint">No sounds yet. Yours goes out quiet, which works too.</p>
           ) : (
-            <div className="chips gc-chips gc-sounds" role="group" aria-label="Sound">
-              <button type="button" aria-pressed={!a.sound} className={!a.sound ? "on" : ""} onClick={() => set({ sound: "" })}>No sound</button>
-              {sounds.map((snd) => (
-                <span key={snd.id} className="gc-sound">
-                  <button type="button" aria-pressed={a.sound === snd.id} className={a.sound === snd.id ? "on" : ""} onClick={() => set({ sound: snd.id })}>{snd.title}</button>
-                  <button type="button" className="gc-hear" onClick={() => hear(snd)} aria-label={hearing === snd.id ? `Stop ${snd.title}` : `Listen to ${snd.title}`}>{hearing === snd.id ? "stop" : "listen"}</button>
-                </span>
-              ))}
-            </div>
+            <>
+              <div className="chips gc-chips gc-sounds" role="group" aria-label="Sound">
+                {pickedSound ? (
+                  <span className="gc-sound">
+                    <button type="button" className="on" onClick={() => hear(pickedSound)}>♪ {pickedSound.title}</button>
+                    <button type="button" className="gc-hear" onClick={() => hear(pickedSound)} aria-label={hearing === pickedSound.id ? `Stop ${pickedSound.title}` : `Listen to ${pickedSound.title}`}>{hearing === pickedSound.id ? "stop" : "listen"}</button>
+                  </span>
+                ) : null}
+                <button type="button" onClick={shuffleSound}>{pickedSound ? "Shuffle" : "Pick one for me"}</button>
+                <button type="button" aria-pressed={!a.sound} className={!a.sound ? "on" : ""} onClick={() => { preview.current?.pause(); setHearing(""); set({ sound: "", soundOff: true }); }}>No sound</button>
+              </div>
+              <p className="hk-hint">{pickedSound ? "Picked at random. It plays softly while they read yours." : "Yours goes out quiet."}</p>
+            </>
           )}
           <p className="hk-hint">{FRESH_HINT[FRESH_FOR_WHEN[a.when]]} Your Room and chats stay either way.{pickedSound ? `  ♪ ${pickedSound.title}` : ""}</p>
         </div>
