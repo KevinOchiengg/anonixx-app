@@ -17,6 +17,48 @@ type Money = {
 
 const RANGES = [7, 30, 90, 365] as const;
 
+type PaidDrops = {
+  drops: { id: string; caption: string; created_at: string | null; price: number; views: number; unlocks: number; conversion_pct: number; coins: number }[];
+  totals: { drops: number; unlocks: number; coins: number };
+};
+
+// Paid drops (super admin videos with a clear preview): which teasers sell. All time.
+function PaidDropsPanel() {
+  const [p, setP] = useState<PaidDrops | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { api<PaidDrops>("/admin/insights/paid-drops").then(setP).catch((e) => setErr((e as Error).message)); }, []);
+  return (
+    <div className="adm-panel" style={{ marginTop: 16 }}>
+      <h3>Paid drops</h3>
+      {err ? <p className="err">{err}</p> : !p ? <p className="muted small">Loading…</p> : p.drops.length === 0 ? (
+        <p className="adm-empty">No paid drops yet. Post a video from the app, then pick a price under Spotlight → Paid drop.</p>
+      ) : (
+        <>
+          <p className="muted small">
+            {p.totals.drops} paid drops · {p.totals.unlocks.toLocaleString()} unlocks · {p.totals.coins.toLocaleString()} coins earned, all time.
+            Conversion is unlocks out of views; a caption that converts well is worth repeating.
+          </p>
+          <table className="adm-table">
+            <thead><tr><th>Caption</th><th>Price</th><th>Views</th><th>Unlocks</th><th>Conversion</th><th>Coins</th></tr></thead>
+            <tbody>
+              {p.drops.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.caption || <span className="muted">(no caption)</span>}</td>
+                  <td>{d.price}</td>
+                  <td>{d.views.toLocaleString()}</td>
+                  <td>{d.unlocks.toLocaleString()}</td>
+                  <td>{d.conversion_pct}%</td>
+                  <td>{d.coins.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function MoneyPage() {
   const [days, setDays] = useState<(typeof RANGES)[number]>(30);
   const [d, setD] = useState<Money | null>(null);
@@ -91,6 +133,7 @@ export default function MoneyPage() {
           </div>
         </div>
       )}
+      <PaidDropsPanel />
     </>
   );
 }

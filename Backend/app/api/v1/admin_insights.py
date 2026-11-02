@@ -225,6 +225,40 @@ async def best_times(
 
 # ─── Money ───────────────────────────────────────────────────────────────────
 
+@router.get("/admin/insights/paid-drops", summary="Paid drops: views, unlocks, conversion and coins per drop")
+async def paid_drops(
+    admin_id: str = Depends(require_scope("finance")),
+    db=Depends(get_database),
+):
+    rows = await db["drops"].find(
+        {"paywall": {"$ne": None}},
+        {"confession": 1, "created_at": 1, "views_count": 1, "paywall.price": 1, "paywall.unlocks": 1, "paywall.coins": 1, "cover_url": 1},
+    ).sort("created_at", -1).limit(200).to_list(None)
+    out = []
+    for d in rows:
+        pw = d.get("paywall") or {}
+        views, unlocks = d.get("views_count") or 0, pw.get("unlocks") or 0
+        out.append({
+            "id": str(d["_id"]),
+            "caption": (d.get("confession") or "")[:120],
+            "cover_url": d.get("cover_url"),
+            "created_at": d["created_at"].isoformat() if d.get("created_at") else None,
+            "price": pw.get("price"),
+            "views": views,
+            "unlocks": unlocks,
+            "conversion_pct": round(unlocks / views * 100, 1) if views else 0.0,
+            "coins": pw.get("coins") or 0,
+        })
+    return {
+        "drops": out,
+        "totals": {
+            "drops": len(out),
+            "unlocks": sum(r["unlocks"] for r in out),
+            "coins": sum(r["coins"] for r in out),
+        },
+    }
+
+
 @router.get("/admin/insights/money", summary="Payers, conversion, ARPPU, coin economy, refunds")
 async def money(
     days: int = Query(30, ge=1, le=365),
