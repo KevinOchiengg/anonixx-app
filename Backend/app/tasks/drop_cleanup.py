@@ -61,7 +61,7 @@ class DropCleanupWorker:
                 "expires_at":   {"$ne": None, "$lte": _now()},
                 "unlock_count": {"$gt": 0},
             },
-            {"_id": 1, "stream_uid": 1},
+            {"_id": 1, "stream_uid": 1, "paywall.full_uid": 1},
         ).limit(BATCH_LIMIT).to_list(None)
 
         if not expired:
@@ -72,7 +72,7 @@ class DropCleanupWorker:
 
         await db["drops"].delete_many({"_id": {"$in": drop_ids}})
         for d in expired:
-            await stream.delete_video(d.get("stream_uid"))
+            await stream.delete_drop_videos(d)
 
         # Same sub-collection cleanup DELETE /drops/{id} performs, so a
         # swept drop doesn't leave orphaned threads/saves/views behind.

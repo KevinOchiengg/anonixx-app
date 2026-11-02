@@ -3,6 +3,7 @@ posted window with the watermark and 3-minute cap; then delete the original and 
 clip. Off until CF_ACCOUNT_ID / CF_STREAM_TOKEN are set (videos go to R2)."""
 import base64
 import logging
+import time
 from typing import Optional
 
 import httpx
@@ -85,6 +86,27 @@ async def create_clip(source_uid: str, start: float, end: float, name: str) -> d
     return r.json()["result"]
 
 
+async def require_signed(uid: str) -> None:
+    """Locks a video: it then plays only through a signed link (paid drops' full video)."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(_url(f"/{uid}"), headers=_auth(), json={"uid": uid, "requireSignedURLs": True})
+    if r.status_code >= 300:
+        raise RuntimeError(f"Stream couldn't lock the video ({r.status_code}): {r.text[:200]}")
+
+
+async def signed_hls(uid: str, hls_url: str, ttl_seconds: int = 6 * 3600) -> str:
+    """A playback link for a locked video that stops working after ttl_seconds."""
+    exp = int(time.time()) + ttl_seconds
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(_url(f"/{uid}/token"), headers=_auth(), json={"exp": exp})
+    if r.status_code >= 300:
+        raise RuntimeError(f"Stream couldn't sign the video ({r.status_code}): {r.text[:200]}")
+    token = (r.json().get("result") or {}).get("token")
+    if not token or uid not in hls_url:
+        raise RuntimeError("Stream didn't return a usable signed link.")
+    return hls_url.replace(uid, token)
+
+
 async def enable_download(uid: str) -> Optional[str]:
     """Asks Stream for an MP4 copy (the socials publishers need a plain file,
     not a manifest). Returns its URL; the file itself becomes ready a little later."""
@@ -109,6 +131,12 @@ async def delete_video(uid: Optional[str]) -> None:
             log.warning("stream: delete %s returned %s", uid, r.status_code)
     except Exception as e:
         log.warning("stream: delete %s failed: %s", uid, e)
+
+
+async def delete_drop_videos(drop: dict) -> None:
+    """The drop's clip, plus a paid drop's locked full video."""
+    await delete_video(drop.get("stream_uid"))
+    await delete_video((drop.get("paywall") or {}).get("full_uid"))
 
 
 def is_ready(video: Optional[dict]) -> bool:

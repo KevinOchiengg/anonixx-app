@@ -20,7 +20,8 @@ LOCK_SECONDS = 90
 
 async def advance_video_jobs(db) -> None:
     """Moves Stream video drops along: original ready -> cut + watermark ->
-    clip ready -> original deleted -> job becomes a normal pending drop."""
+    clip ready -> original deleted -> job becomes a normal pending drop.
+    A paid drop also gets a short clear preview clip, and its full clip is locked."""
     from app.utils import stream
     if not stream.is_configured():
         return
@@ -48,10 +49,12 @@ async def _advance(db, job: dict, stream) -> None:
     from app.api.v1.drops import MAX_CLIP_SECONDS
     s = job["stream"]
     jid = job["_id"]
+    preview_secs = job["drop"].get("preview_seconds") if job["drop"].get("paywall_price") else None
 
     async def fail(reason: str):
         await db["scheduled_drops"].update_one({"_id": jid}, {"$set": {"status": "failed", "error": reason[:300]}})
         await stream.delete_video(s.get("clip_uid"))
+        await stream.delete_video(s.get("preview_uid"))
         await stream.delete_video(s["uid"])
 
     if not s.get("clip_uid"):
@@ -64,8 +67,14 @@ async def _advance(db, job: dict, stream) -> None:
         start = min(max(0.0, float(s.get("start") or 0)), max(0.0, duration - 1))
         end = float(s.get("end") or duration)
         end = min(end, duration or end, start + MAX_CLIP_SECONDS)
-        clip = await stream.create_clip(s["uid"], start, end, (job["drop"].get("confession") or "")[:80])
-        await db["scheduled_drops"].update_one({"_id": jid}, {"$set": {"stream.clip_uid": clip["uid"], "stream.start": start, "stream.end": end}})
+        name = (job["drop"].get("confession") or "")[:80]
+        fields = {"stream.start": start, "stream.end": end}
+        if preview_secs:
+            if end - start < preview_secs + 1:
+                return await fail(f"A paid video has to run longer than its {preview_secs}-second preview.")
+            fields["stream.preview_uid"] = (await stream.create_clip(s["uid"], start, start + preview_secs, f"preview {name}"[:80]))["uid"]
+        fields["stream.clip_uid"] = (await stream.create_clip(s["uid"], start, end, name))["uid"]
+        await db["scheduled_drops"].update_one({"_id": jid}, {"$set": fields})
         return
 
     clip = await stream.get_video(s["clip_uid"])
@@ -74,13 +83,35 @@ async def _advance(db, job: dict, stream) -> None:
     if not stream.is_ready(clip):
         return
 
+    preview = None
+    if preview_secs:
+        preview = await stream.get_video(s.get("preview_uid")) if s.get("preview_uid") else None
+        if (reason := stream.failure(preview)):
+            return await fail(reason)
+        if not stream.is_ready(preview):
+            return
+
     drop = dict(job["drop"])
     drop["media_type"] = "video"
-    drop["media_url"] = (clip.get("playback") or {}).get("hls")
-    drop["stream_uid"] = s["clip_uid"]
-    drop["media_download_url"] = await stream.enable_download(s["clip_uid"])
-    if not drop.get("cover_url") and clip.get("thumbnail"):
-        drop["cover_url"] = clip["thumbnail"]
+    if preview:
+        # Paid: everything public plays the preview; the full clip only plays through a signed link.
+        full_hls = (clip.get("playback") or {}).get("hls")
+        if not full_hls:
+            return await fail("Stream didn't return a playback address for the clip.")
+        await stream.require_signed(s["clip_uid"])
+        drop["media_url"] = (preview.get("playback") or {}).get("hls")
+        drop["stream_uid"] = s["preview_uid"]
+        drop["paywall"] = {"full_uid": s["clip_uid"], "full_hls": full_hls}
+        drop.pop("media_download_url", None)
+        # The full clip's thumbnail is locked too; the cover comes from the preview.
+        if preview.get("thumbnail") and (not drop.get("cover_url") or "cloudflarestream.com" in drop["cover_url"]):
+            drop["cover_url"] = preview["thumbnail"]
+    else:
+        drop["media_url"] = (clip.get("playback") or {}).get("hls")
+        drop["stream_uid"] = s["clip_uid"]
+        drop["media_download_url"] = await stream.enable_download(s["clip_uid"])
+        if not drop.get("cover_url") and clip.get("thumbnail"):
+            drop["cover_url"] = clip["thumbnail"]
     # The clip *is* the window now, so only the text overlays carry over.
     edit = drop.get("video_edit") or {}
     if edit.get("overlays"):

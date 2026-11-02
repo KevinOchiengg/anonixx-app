@@ -619,7 +619,7 @@ async def schedule_drop(
     admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
-    from app.api.v1.drops import CreateDropRequest, clean_video_edit, MAX_CLIP_SECONDS
+    from app.api.v1.drops import CreateDropRequest, clean_video_edit, check_paywall_request, MAX_CLIP_SECONDS
     if not data.publish_at and not data.stream:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pick a time to publish it")
     when = _check_publish_at(data.publish_at) if data.publish_at else None
@@ -629,6 +629,15 @@ async def schedule_drop(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "That post isn't complete. Check it and try again")
     if not (req.confession or req.media_url or req.images or req.poll or data.stream):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Add something to post")
+    req.paywall = None   # only the video pipeline fills this in
+    paid = check_paywall_request(req.paywall_price, req.preview_seconds)
+    if paid:
+        actor = await db["users"].find_one({"_id": ObjectId(admin_id)}, {"is_admin": 1, "email": 1})
+        if not is_super_admin_user(actor or {}):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the super admin can post paid drops")
+        if not data.stream:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Paid drops need a video")
+        req.preview_seconds = paid["preview_seconds"]
     if data.stream:
         if not stream.is_configured():
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Video uploads to Stream aren't switched on yet")
@@ -731,6 +740,8 @@ async def cancel_scheduled(
     s = job.get("stream") or {}
     await stream.delete_video(s.get("uid"))
     await stream.delete_video(s.get("clip_uid") or (job.get("drop") or {}).get("stream_uid"))
+    await stream.delete_video(s.get("preview_uid"))
+    await stream.delete_video(((job.get("drop") or {}).get("paywall") or {}).get("full_uid"))
     await audit(db, admin_id, "scheduled.cancel", "scheduled", schedule_id)
     return {"cancelled": schedule_id}
 
@@ -768,11 +779,11 @@ async def force_delete_drop(
     except Exception:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
 
-    gone = await db["drops"].find_one_and_delete({"_id": oid}, {"stream_uid": 1})
+    gone = await db["drops"].find_one_and_delete({"_id": oid}, {"stream_uid": 1, "paywall.full_uid": 1})
     if not gone:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
 
-    await stream.delete_video(gone.get("stream_uid"))
+    await stream.delete_drop_videos(gone)
     await db["drop_unlocks"].delete_many({"drop_id": drop_id})
     await db["drop_connections"].delete_many({"drop_id": drop_id})
 

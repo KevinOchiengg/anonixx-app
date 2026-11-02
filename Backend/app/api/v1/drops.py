@@ -4,7 +4,9 @@ from typing import Optional, List
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 import httpx
+import logging
 import random
 import re
 import asyncio
@@ -12,7 +14,7 @@ import math
 import time
 
 from app.database import get_database
-from app.dependencies import get_current_user_id, get_optional_user_id
+from app.dependencies import get_current_user_id, get_optional_user_id, is_super_admin_user
 from app.config import settings
 from app.utils.coin_service import debit_coins, credit_coins
 from app.utils.location import build_location, build_feed_location_filter, build_location_search_filter
@@ -33,6 +35,7 @@ from app.websockets.comments import (
 from app.websockets.chat import emit_new_message, emit_messages_seen, emit_message_deleted, emit_chat_event
 
 router = APIRouter(prefix="/drops", tags=["Drops"])
+log = logging.getLogger(__name__)
 
 # @mentions in comments (plain text). The client parses them the same way.
 MENTION_RE = re.compile(r'@([A-Za-z0-9_.]{2,30})')
@@ -314,6 +317,10 @@ class CreateDropRequest(BaseModel):
     # Set by the Stream video pipeline (app/tasks/scheduled_publisher.py), never by a client:
     stream_uid: Optional[str] = None             # the published clip on Cloudflare Stream
     media_download_url: Optional[str] = None     # its MP4 copy, for the socials publishers
+    paywall: Optional[dict] = None               # paid drops: {full_uid, full_hls} of the locked full video
+    # Paid drop (super admin, Stream video only): coins to unlock, and the clear preview length.
+    paywall_price: Optional[int] = None
+    preview_seconds: Optional[int] = None
     # Admin-only extras for official drops: a track from the Sounds library
     # played over the post, and a pin/boost that lifts it in the feed.
     sound_id: Optional[str] = None
@@ -642,6 +649,18 @@ async def create_drop(
     # Sharing to socials is the poster's choice; on unless they opted out.
     publisher_opt_in = (data.publisher_opt_in is not False)
 
+    # Paid drop: super admin only, and only a Stream video the pipeline has already locked.
+    paywall_doc = None
+    paid = check_paywall_request(data.paywall_price, data.preview_seconds)
+    if paid:
+        if not is_super_admin_user(user):
+            raise HTTPException(status_code=403, detail="Only the super admin can post paid drops.")
+        full = data.paywall or {}
+        if not (data.media_type == "video" and data.stream_uid and full.get("full_uid") and full.get("full_hls")):
+            raise HTTPException(status_code=400, detail="Paid drops need a video uploaded through Stream.")
+        paywall_doc = {**paid, "full_uid": full["full_uid"], "full_hls": full["full_hls"], "unlocks": 0, "coins": 0}
+        publisher_opt_in = False   # the socials would get the whole video
+
     kind = data.kind if data.kind in ("hookup", "confession") else None
     hookup_data = clean_hookup(data.hookup) if kind == "hookup" and data.hookup else None
     if kind == "hookup" and not hookup_data:
@@ -752,7 +771,8 @@ async def create_drop(
         "video_edit": video_edit_data,
         "cover_url": cover_url,
         "stream_uid": stream_uid,
-        "media_download_url": data.media_download_url if stream_uid else None,
+        "media_download_url": data.media_download_url if stream_uid and not paywall_doc else None,
+        "paywall": paywall_doc,
         "sound": sound,
         "promo_kind": data.promo_kind if promo_until else None,
         "promo_until": promo_until,
@@ -1091,6 +1111,79 @@ async def save_drop(
         pass
 
     return {"message": "Saved to your collection", "saved": True, "saves_count": saves}
+
+
+def paywall_out(drop: dict, unlocked: bool) -> Optional[dict]:
+    pw = drop.get("paywall")
+    if not pw:
+        return None
+    return {"price": pw["price"], "preview_seconds": pw.get("preview_seconds", PREVIEW_SECONDS_DEFAULT), "unlocked": unlocked}
+
+
+@router.post("/{drop_id}/unlock")
+async def unlock_paid_drop(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Pays for a paid drop (once) and returns a signed link to its full video. Calling it
+    again after paying, or as the poster, returns a fresh link without charging."""
+    try:
+        oid = ObjectId(drop_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    drop = await db["drops"].find_one({"_id": oid, "moderation_status": {"$ne": "hidden"}}, {"paywall": 1, "sender_id": 1})
+    pw = (drop or {}).get("paywall")
+    if not pw:
+        raise HTTPException(status_code=404, detail="This drop isn't locked.")
+
+    async def link() -> str:
+        return await stream.signed_hls(pw["full_uid"], pw["full_hls"], PAID_LINK_TTL)
+
+    if drop.get("sender_id") == current_user_id or await db["drop_purchases"].find_one({"_id": f"{current_user_id}:{drop_id}"}):
+        try:
+            return {"video_url": await link(), "charged": 0}
+        except Exception as e:
+            log.warning("paid drop %s: signing failed: %s", drop_id, e)
+            raise HTTPException(status_code=502, detail="The video isn't loading right now. Try again in a moment.")
+
+    # Claim first (the _id is unique), so two quick taps can't charge twice.
+    price = int(pw["price"])
+    try:
+        await db["drop_purchases"].insert_one({
+            "_id": f"{current_user_id}:{drop_id}", "user_id": current_user_id, "drop_id": drop_id,
+            "price": price, "created_at": now_utc(),
+        })
+    except DuplicateKeyError:
+        return {"video_url": await link(), "charged": 0}
+    try:
+        balance = await debit_coins(db, current_user_id, price, "paid_drop_unlock", "Unlocked a drop", {"drop_id": drop_id})
+    except ValueError:
+        await db["drop_purchases"].delete_one({"_id": f"{current_user_id}:{drop_id}"})
+        raise HTTPException(status_code=402, detail={"code": "insufficient_coins", "price": price})
+    try:
+        url = await link()
+    except Exception as e:
+        # Paid but nothing to watch: give the coins back and undo the purchase.
+        log.warning("paid drop %s: signing failed after payment, refunding: %s", drop_id, e)
+        await credit_coins(db, current_user_id, price, "paid_drop_refund", "Refund: the drop didn't load", {"drop_id": drop_id})
+        await db["drop_purchases"].delete_one({"_id": f"{current_user_id}:{drop_id}"})
+        raise HTTPException(status_code=502, detail="The video didn't load, so your coins are back. Try again in a moment.")
+    await db["drops"].update_one({"_id": oid}, {"$inc": {"paywall.unlocks": 1, "paywall.coins": price}})
+    return {"video_url": url, "charged": price, "coin_balance": balance}
+
+
+@router.get("/unlocked")
+async def get_unlocked_drops(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Paid drops this user has unlocked, newest purchase first."""
+    rows = await db["drop_purchases"].find({"user_id": current_user_id}).sort("created_at", -1).to_list(500)
+    oids = [ObjectId(r["drop_id"]) for r in rows if ObjectId.is_valid(r["drop_id"])]
+    by_id = {str(d["_id"]): d async for d in db["drops"].find({"_id": {"$in": oids}})}
+    drops = [by_id[r["drop_id"]] for r in rows if r["drop_id"] in by_id]
+    return {"drops": await batch_format_drops(drops, current_user_id, db)}
 
 
 @router.get("/saved")
@@ -1601,6 +1694,12 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
         db["drop_poll_votes"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}, {"drop_id": 1, "option_index": 1}).to_list(None) if current_user_id else none(),
     )
     sender_avatars: dict[str, Optional[str]] = {str(u["_id"]): u.get("avatar_url") for u in avatar_rows}
+    paid_ids = [str(d["_id"]) for d in drops if d.get("paywall")]
+    unlocked_set = {
+        r["drop_id"] async for r in db["drop_purchases"].find(
+            {"user_id": current_user_id, "drop_id": {"$in": paid_ids}}, {"drop_id": 1},
+        )
+    } if current_user_id and paid_ids else set()
     saved_set = {r["drop_id"] for r in saved_rows}
     liked_set = {str(r["_id"]) for r in liked_rows}
     voted_map: dict[str, int] = {v["drop_id"]: v["option_index"] for v in vote_rows}
@@ -1655,6 +1754,8 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "media_url":        drop.get("media_url"),
             "media_type":       drop.get("media_type"),
             "video_url":        drop.get("media_url") if drop.get("media_type") == "video" else None,
+            # Paid drop: video_url is the clear preview. The full video comes from POST /drops/{id}/unlock.
+            "paywall":          paywall_out(drop, did in unlocked_set or drop.get("sender_id") == current_user_id),
             "video_edit":       drop.get("video_edit") if drop.get("media_type") == "video" else None,
             "cover_url":        drop.get("cover_url"),
             "sound":            drop.get("sound"),
@@ -2050,7 +2151,7 @@ async def delete_drop(
     await db["drop_threads"].delete_many({"drop_id": drop_id})
     await db["saved_drops"].delete_many({"drop_id": drop_id})
     await db["drop_views"].delete_many({"drop_id": drop_id})
-    await stream.delete_video(drop.get("stream_uid"))   # Stream bills per stored minute
+    await stream.delete_drop_videos(drop)   # Stream bills per stored minute
 
     return {"message": "Gone for good."}
 
@@ -2058,6 +2159,26 @@ async def delete_drop(
 # ==================== UNLOCK — COINS ====================
 
 COINS_UNLOCK_COST         = 6    # coins required to unlock a drop
+
+# Paid drops: the feed plays a short clear preview; the full video is locked on Stream and
+# its signed link is handed out by POST /drops/{id}/unlock after payment.
+PAYWALL_PRICES = (20, 50, 100, 200)
+PREVIEW_SECONDS_DEFAULT = 3
+PREVIEW_SECONDS_RANGE = (2, 5)
+PAID_LINK_TTL = 6 * 3600   # seconds a signed full-video link keeps working
+
+
+def check_paywall_request(price: Optional[int], preview: Optional[int]) -> Optional[dict]:
+    """Validates a paid-drop request; returns {price, preview_seconds} or None for a free drop."""
+    if price is None:
+        return None
+    if price not in PAYWALL_PRICES:
+        raise HTTPException(status_code=400, detail=f"Pick a price of {', '.join(map(str, PAYWALL_PRICES))} coins.")
+    lo, hi = PREVIEW_SECONDS_RANGE
+    secs = PREVIEW_SECONDS_DEFAULT if preview is None else int(preview)
+    if not lo <= secs <= hi:
+        raise HTTPException(status_code=400, detail=f"The clear preview runs {lo} to {hi} seconds.")
+    return {"price": price, "preview_seconds": secs}
 
 # Hookup posts are live for HOOKUP_LIVE_HOURS, extendable up to HOOKUP_MAX_LIVE_HOURS.
 # After that they leave the feed and can't be linked up with.
