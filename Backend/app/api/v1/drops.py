@@ -96,7 +96,14 @@ class DropVoteRequest(BaseModel):
 
 HOOKUP_GENDERS = ("woman", "man", "other")
 HOOKUP_LOOKING = ("woman", "man", "anyone")
-HOOKUP_VIBES = ("company", "friendship", "dating", "casual", "discreet", "adventure")
+HOOKUP_VIBES = (
+    "company", "friendship", "dating", "casual", "discreet", "adventure",
+    # the guided form's "What I'm looking for" (shown as-is on Rooms, so they read as words)
+    "romance", "intimacy", "on our terms",
+)
+# The guided form's "When I'd like to meet". Each sets how long the post stays discoverable.
+HOOKUP_MEET_WHEN = {"asap": "tonight", "today": "tonight", "tonight": "tonight", "week": "week", "flexible": "flexible"}
+APPEARANCE_MAX = 60
 # Guided answers kept on the hookup block for feed tags. The private "secret" answer isn't stored.
 HOOKUP_CRAVINGS = ("warmth", "attention", "intimacy", "chemistry", "companionship")
 HOOKUP_TRAITS = ("sweet", "playful", "shy", "adventurous", "affectionate", "bold", "curious", "calm")
@@ -113,6 +120,8 @@ class GuidedDetails(BaseModel):
     tone: Optional[str] = None
     want: Optional[str] = None             # optional clarity line, "what I want"
     dont_want: Optional[str] = None        # optional clarity line, "what I don't"
+    appearance: Optional[str] = None       # optional, how they'd recognise you ("tall, curly hair")
+    meet_when: Optional[str] = None        # one of HOOKUP_MEET_WHEN
     ai_generated: bool = False
     edited: bool = False
 
@@ -163,6 +172,8 @@ def clean_guided(g: Optional["GuidedDetails"]) -> Optional[dict]:
         "tone": g.tone if g.tone in HOOKUP_TONES else None,
         "want": _clean_clarity(g.want),
         "dont_want": _clean_clarity(g.dont_want),
+        "appearance": _clean_clarity((g.appearance or "")[:APPEARANCE_MAX]),
+        "meet_when": g.meet_when if g.meet_when in HOOKUP_MEET_WHEN else None,
         "ai_generated": bool(g.ai_generated),
         "edited": bool(g.edited),
     }

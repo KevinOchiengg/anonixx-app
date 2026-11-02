@@ -105,3 +105,21 @@
 .gc-clarity { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 15px; }
 .gc-clarity span { flex: 0 0 104px; }
 .gc-clarity .hk-field { flex: 1; min-width: 0; }
+
+/* Guided hookup form: five short sections under a live preview. */
+.gc-live { position: sticky; top: 8px; z-index: 5; gap: 8px; padding: 16px 18px; }
+.gc-live .gc-text { font-size: 16px; max-height: 7.8em; overflow-y: auto; }
+.gc-live-head { display: flex; align-items: center; justify-content: space-between; }
+.gc .gc-live-head .gc-hear { border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; }
+.gc-section { display: grid; gap: 12px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
+.gc-section header { display: flex; align-items: flex-start; gap: 10px; }
+.gc-section h3 { margin: 0; font-family: var(--font-serif), Georgia, serif; font-style: italic; font-weight: 400; font-size: 20px; }
+.gc-section header .hk-hint { margin: 2px 0 0; }
+.gc-num { flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; border: 1px solid var(--rose); color: var(--rose); font-size: 12px; font-weight: 800; }
+.gc-num.done { background: var(--rose); color: #fff; }
+.gc-row { display: flex; align-items: center; gap: 10px; }
+.gc-row .hk-field { flex: 1; min-width: 0; }
+.gc-row .gc-age { flex: none; width: 76px; text-align: center; }
+.gc-range span { color: var(--muted); font-size: 14px; }
+.gc-foot-row { display: flex; gap: 10px; }
+.gc-foot-row .btn { flex: 1; }
