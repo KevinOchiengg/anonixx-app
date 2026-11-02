@@ -6,7 +6,7 @@
 
 const cap = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 const end = (t) => (/[.!?…]$/.test(t) ? t : `${t}.`);
-const join = (list) => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`);
+const join = (list) => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')}${list.some((x) => x.includes(' and ')) ? ', plus' : ' and'} ${list[list.length - 1]}`);
 
 // Ids match HOOKUP_VIBES / HOOKUP_MEET_WHEN in Backend/app/api/v1/drops.py.
 export const WANTS = [
