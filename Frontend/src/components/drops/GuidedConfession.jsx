@@ -32,9 +32,8 @@ const MY_AGE_KEY = 'anonixx.hookup.age';
 const MAX_CHARS = 500;
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
-const GENDERS = [['woman', 'Woman'], ['man', 'Man'], ['other', 'Other']];
-const LOOKING = [['woman', 'Women'], ['man', 'Men'], ['anyone', 'Anyone']];
-const HOSTING = [['can_host', 'I can host'], ['can_travel', "I'll come to you"]];
+const GENDERS = [['woman', 'woman'], ['man', 'man'], ['other', 'person']];
+const LOOKING = [['man', 'man'], ['woman', 'woman'], ['anyone', 'anyone']];
 const TONES = [['vulnerable', 'Vulnerable'], ['playful', 'Playful'], ['mysterious', 'Mysterious'], ['direct', 'Direct']];
 const FRESH_HINT = {
   tonight: "It's up for 12 hours. You can add more, up to 2 days.",
@@ -43,7 +42,7 @@ const FRESH_HINT = {
 };
 const WAITING = ['listening to what you said…', 'finding your words…', 'keeping it yours…'];
 const NOTE_MAX = 200;
-const CLARITY_MAX = 80;
+const CLARITY_MAX = 120;   // "Expectations", same cap as the API
 
 const EMPTY = {
   age: '', gender: null, area: '', appearance: '',
@@ -121,15 +120,25 @@ function Label({ children, optional }) {
   );
 }
 
+// A tick-box (or, with `radio`, single-choice) row, like a printed form.
+function CheckRow({ label, on, onPress, radio }) {
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[s.checkRow, on && s.checkRowOn]} accessibilityRole={radio ? 'radio' : 'checkbox'} accessibilityState={{ checked: on }}>
+      <View style={[radio ? s.radio : s.box, on && s.boxOn]}>{on && (radio ? <View style={s.radioDot} /> : <Check size={rs(12)} color="#fff" strokeWidth={3} />)}</View>
+      <Text style={[s.checkText, on && s.chipTextOn]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 function Section({ n, title, sub, done, optional, children }) {
   return (
     <View style={s.section}>
       <View style={s.sectionHead}>
         <View style={[s.num, done && s.numDone]}>
-          {done ? <Check size={rs(12)} color="#fff" strokeWidth={3} /> : <Text style={s.numText}>{n}</Text>}
+          {done ? <Check size={rs(12)} color="#fff" strokeWidth={3} /> : <Text style={s.numText}>{n || '+'}</Text>}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={s.sectionTitle}>{title}{optional ? <Text style={s.optional}>  optional</Text> : null}</Text>
+          <Text style={s.sectionTitle}>{n ? `${n}. ` : ''}{title.toUpperCase()}{optional ? <Text style={s.optional}>  optional</Text> : null}</Text>
           {sub ? <Text style={s.sectionSub}>{sub}</Text> : null}
         </View>
       </View>
@@ -341,78 +350,73 @@ export default function GuidedConfession({ navigation, onBack }) {
   function renderForm() {
     return (
       <>
-        <Section n={1} title="About me" sub="Only your age and area show on your card." done={aboutDone}>
+        <Section n={1} title="About me" done={aboutDone}>
           <View style={s.row}>
-            <Field style={s.ageField} value={a.age} onChangeText={(v) => set({ age: digits(v) })} placeholder="Age" keyboardType="number-pad" accessibilityLabel="Your age" />
-            <Field
-              style={{ flex: 1 }}
-              icon={<MapPin size={rs(16)} color={T.textSecondary} />}
-              value={a.area}
-              onChangeText={(v) => set({ area: v.slice(0, 60) })}
-              placeholder="Neighbourhood or city"
-              accessibilityLabel="Where you are"
-            />
+            <Text style={s.lead}>I'm a</Text>
+            <View style={[s.chips, { flex: 1 }]}>
+              {GENDERS.map(([k, l]) => <Chip key={k} label={l} active={a.gender === k} onPress={() => set({ gender: a.gender === k ? null : k })} />)}
+            </View>
           </View>
-          <View style={s.chips}>
-            {GENDERS.map(([k, l]) => <Chip key={k} label={l} active={a.gender === k} onPress={() => set({ gender: a.gender === k ? null : k })} />)}
-          </View>
-          <Label optional>How they'd recognise you</Label>
-          <Field value={a.appearance} onChangeText={(v) => set({ appearance: v.slice(0, 60) })} placeholder="Tall, curly hair, soft voice…" accessibilityLabel="Your appearance (optional)" />
+          <Label>Age</Label>
+          <Field style={s.ageField} value={a.age} onChangeText={(v) => set({ age: digits(v) })} placeholder="Your age" keyboardType="number-pad" accessibilityLabel="Your age" />
+          <Label>Location</Label>
+          <Field
+            icon={<MapPin size={rs(16)} color={T.textSecondary} />}
+            value={a.area}
+            onChangeText={(v) => set({ area: v.slice(0, 60) })}
+            placeholder="Your town or area"
+            accessibilityLabel="Your town or area"
+          />
+          <Label optional>Appearance</Label>
+          <Field value={a.appearance} onChangeText={(v) => set({ appearance: v.slice(0, 60) })} placeholder="How would you describe yourself?" accessibilityLabel="Appearance (optional)" />
+          <Text style={s.hint}>Only your age and area show on your card.</Text>
         </Section>
 
         <Section n={2} title="Who I'm looking for" done={!!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone'}>
-          <View style={s.chips}>
-            {LOOKING.map(([k, l]) => <Chip key={k} label={l} active={a.lookingFor === k} onPress={() => set({ lookingFor: k })} />)}
-          </View>
           <View style={s.row}>
-            <Text style={s.inline}>Aged</Text>
-            <Field style={s.ageField} value={a.ageMin} onChangeText={(v) => set({ ageMin: digits(v) })} placeholder="18" keyboardType="number-pad" accessibilityLabel="From this age" />
+            <Text style={s.lead}>I'm looking for</Text>
+            <View style={[s.chips, { flex: 1 }]}>
+              {LOOKING.map(([k, l]) => <Chip key={k} label={l} active={a.lookingFor === k} onPress={() => set({ lookingFor: k })} />)}
+            </View>
+          </View>
+          <Label optional>Preferred age range</Label>
+          <View style={s.row}>
+            <Field style={s.ageField} value={a.ageMin} onChangeText={(v) => set({ ageMin: digits(v) })} placeholder="Min" keyboardType="number-pad" accessibilityLabel="Minimum age" />
             <Text style={s.inline}>to</Text>
-            <Field style={s.ageField} value={a.ageMax} onChangeText={(v) => set({ ageMax: digits(v) })} placeholder="any" keyboardType="number-pad" accessibilityLabel="Up to this age" />
+            <Field style={s.ageField} value={a.ageMax} onChangeText={(v) => set({ ageMax: digits(v) })} placeholder="Max" keyboardType="number-pad" accessibilityLabel="Maximum age" />
           </View>
         </Section>
 
-        <Section n={3} title="What I'm looking for" sub="Pick up to three." done={a.wants.length > 0}>
-          <View style={s.chips}>
-            {WANTS.map(([k, l]) => <Chip key={k} label={l} active={a.wants.includes(k)} onPress={() => set({ wants: toggleIn(a.wants, k, 3) })} />)}
-          </View>
-          {a.wants.includes('on our terms') && <Text style={s.hint}>Whatever you two agree on, never for money. Nobody pays anybody on Anonixx.</Text>}
+        <Section n={3} title="What I'm looking for" sub="Tick up to three." done={a.wants.length > 0}>
+          {WANTS.filter(([k]) => k !== 'on our terms').map(([k, l]) => (
+            <CheckRow key={k} label={l} on={a.wants.includes(k)} onPress={() => set({ wants: toggleIn(a.wants, k, 3) })} />
+          ))}
         </Section>
 
         <Section n={4} title="When I'd like to meet" sub={FRESH_HINT[FRESH_FOR_WHEN[a.when]]} done={!!a.when}>
-          <View style={s.chips}>
-            {MEET_WHEN.map(([k, l]) => <Chip key={k} label={l} active={a.when === k} onPress={() => set({ when: k })} />)}
-          </View>
-          <View style={s.chips}>
-            {HOSTING.map(([k, l]) => <Chip key={k} label={l} active={a.hosting === k} onPress={() => set({ hosting: a.hosting === k ? null : k })} />)}
-            <Chip label="Somewhere public first" active={a.publicFirst} onPress={() => set({ publicFirst: !a.publicFirst })} />
-          </View>
+          {MEET_WHEN.map(([k, l]) => <CheckRow key={k} label={l} radio on={a.when === k} onPress={() => set({ when: k })} />)}
         </Section>
 
-        <Section n={5} title="Anything else" optional done={!!(a.note.trim() || a.want.trim() || a.dontWant.trim())}>
+        <Section n={5} title="Anything else?" optional done={!!a.note.trim()}>
           <View style={s.noteBox}>
             <TextInput
               style={s.noteInput}
               value={a.note}
               onChangeText={(v) => set({ note: v.slice(0, NOTE_MAX) })}
-              placeholder="Something only you would say…"
+              placeholder="Write something personal you'd like them to know."
               placeholderTextColor={T.textMute}
               multiline
               textAlignVertical="top"
             />
             <Text style={s.counter}>{NOTE_MAX - a.note.length}</Text>
           </View>
-          <View style={s.row}>
-            <Text style={s.clarityText}>I want</Text>
-            <Field style={{ flex: 1 }} value={a.want} onChangeText={(v) => set({ want: v.slice(0, CLARITY_MAX) })} placeholder="slow, then not so slow" accessibilityLabel="What you want (optional)" />
-          </View>
-          <View style={s.row}>
-            <Text style={s.clarityText}>I don't want</Text>
-            <Field style={{ flex: 1 }} value={a.dontWant} onChangeText={(v) => set({ dontWant: v.slice(0, CLARITY_MAX) })} placeholder="anything serious" accessibilityLabel="What you don't want (optional)" />
-          </View>
+        </Section>
+
+        <Section title="Expectations" optional done={!!a.want.trim()}>
+          <Field value={a.want} onChangeText={(v) => set({ want: v.slice(0, CLARITY_MAX) })} placeholder="Add any expectations or details." accessibilityLabel="Expectations (optional)" />
           <View style={s.privacyRow}>
             <Lock size={rs(12)} color={T.textMute} />
-            <Text style={s.privacy}>No names, numbers or socials. Link up is how you meet.</Text>
+            <Text style={s.privacy}>No names, numbers, socials or money. Link up is how you meet.</Text>
           </View>
         </Section>
       </>
@@ -493,7 +497,7 @@ export default function GuidedConfession({ navigation, onBack }) {
   }
 
   const onReview = phase === 'review';
-  const doneCount = [aboutDone, !!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone', a.wants.length > 0, !!a.when, !!(a.note.trim() || a.want.trim() || a.dontWant.trim())].filter(Boolean).length;
+  const doneCount = [aboutDone, !!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone', a.wants.length > 0, !!a.when, !!a.note.trim()].filter(Boolean).length;
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -584,7 +588,18 @@ const s = StyleSheet.create({
   num: { width: rs(24), height: rs(24), borderRadius: rs(12), borderWidth: 1, borderColor: T.primaryBorder, alignItems: 'center', justifyContent: 'center', marginTop: rs(1) },
   numDone: { backgroundColor: T.primary, borderColor: T.primary },
   numText: { color: T.primary, fontFamily: 'DMSans-Bold', fontSize: FONT.xs },
-  sectionTitle: { color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg },
+  sectionTitle: { color: T.text, fontFamily: 'DMSans-Bold', fontSize: FONT.sm, letterSpacing: 1.2, marginTop: rs(3) },
+  lead: { color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg },
+  checkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: rp(12), paddingVertical: rp(12),
+    borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.background,
+  },
+  checkRowOn: { borderColor: T.primary, backgroundColor: T.primaryDim },
+  checkText: { flex: 1, color: T.textSecondary, fontFamily: 'DMSans-SemiBold', fontSize: FONT.sm },
+  box: { width: rs(20), height: rs(20), borderRadius: rs(6), borderWidth: 1.5, borderColor: T.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  radio: { width: rs(20), height: rs(20), borderRadius: rs(10), borderWidth: 1.5, borderColor: T.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  boxOn: { backgroundColor: T.primary, borderColor: T.primary },
+  radioDot: { width: rs(8), height: rs(8), borderRadius: rs(4), backgroundColor: '#fff' },
   sectionSub: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, marginTop: rs(2), lineHeight: rf(17) },
 
   title: { color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.xxl, lineHeight: rf(36) },
@@ -615,7 +630,6 @@ const s = StyleSheet.create({
   },
   fieldInput: { flex: 1, color: T.text, fontFamily: 'DMSans-Regular', fontSize: FONT.md, paddingVertical: rp(12) },
   ageField: { width: rs(78) },
-  clarityText: { width: rs(96), color: T.text, fontFamily: 'DMSans-Regular', fontSize: FONT.sm },
 
   noteBox: { borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryTint, padding: rp(12) },
   noteInput: { minHeight: rs(80), color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.md, lineHeight: rf(23) },

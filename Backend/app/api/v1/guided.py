@@ -53,7 +53,7 @@ class GenerateRequest(BaseModel):
     secret: Optional[str] = Field(None, max_length=200)
     hosting: Optional[str] = None
     public_first: bool = False
-    want: Optional[str] = Field(None, max_length=80)        # optional clarity lines
+    want: Optional[str] = Field(None, max_length=120)       # "Expectations" in the form
     dont_want: Optional[str] = Field(None, max_length=80)
     appearance: Optional[str] = Field(None, max_length=60)
     meet_when: Optional[str] = None

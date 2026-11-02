@@ -16,12 +16,11 @@ const MY_AGE_KEY = "anonixx.hookup.age";
 const SAVE_KEY = GUIDED_SAVE_KEY;
 const MAX = 500;
 const NOTE_MAX = 200;
-const CLARITY_MAX = 80; // the optional "I want / I don't" lines, same cap as the API
+const CLARITY_MAX = 120; // "Expectations", same cap as the API
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
-const GENDERS: [string, string][] = [["woman", "Woman"], ["man", "Man"], ["other", "Other"]];
-const LOOKING: [string, string][] = [["woman", "Women"], ["man", "Men"], ["anyone", "Anyone"]];
-const HOSTING: [string, string][] = [["can_host", "I can host"], ["can_travel", "I'll come to you"]];
+const GENDERS: [string, string][] = [["woman", "woman"], ["man", "man"], ["other", "person"]];
+const LOOKING: [string, string][] = [["man", "man"], ["woman", "woman"], ["anyone", "anyone"]];
 const TONES: [string, string][] = [["vulnerable", "Vulnerable"], ["playful", "Playful"], ["mysterious", "Mysterious"], ["direct", "Direct"]];
 const FRESH_HINT: Record<string, string> = {
   tonight: "It's up for 12 hours. You can add more, up to 2 days.",
@@ -73,13 +72,13 @@ function Chips({ options, isOn, onPick, label }: { options: [string, string][]; 
   );
 }
 
-function Section({ n, title, sub, done, optional, children }: { n: number; title: string; sub?: string; done: boolean; optional?: boolean; children: React.ReactNode }) {
+function Section({ n, title, sub, done, optional, children }: { n?: number; title: string; sub?: string; done: boolean; optional?: boolean; children: React.ReactNode }) {
   return (
     <section className="gc-section">
       <header>
-        <span className={`gc-num${done ? " done" : ""}`} aria-hidden>{done ? "✓" : n}</span>
+        <span className={`gc-num${done ? " done" : ""}`} aria-hidden>{done ? "✓" : n || "+"}</span>
         <div>
-          <h3>{title}{optional ? <span className="hk-opt"> optional</span> : null}</h3>
+          <h3>{n ? `${n}. ` : ""}{title.toUpperCase()}{optional ? <span className="hk-opt"> optional</span> : null}</h3>
           {sub ? <p className="hk-hint">{sub}</p> : null}
         </div>
       </header>
@@ -297,7 +296,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     !!a.ageMin || !!a.ageMax || a.lookingFor !== "anyone",
     a.wants.length > 0,
     !!a.when,
-    !!(a.note.trim() || a.want.trim() || a.dontWant.trim()),
+    !!a.note.trim(),
   ];
   const doneCount = sections.filter(Boolean).length;
   const pickedSound = a.sound ? sounds?.find((x) => x.id === a.sound) : undefined;
@@ -322,55 +321,63 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             <p className="gc-text">{draft}</p>
           </div>
 
-          <Section n={1} title="About me" sub="Only your age and area show on your card." done={sections[0]}>
-            <div className="gc-row">
-              <input className="hk-field gc-age" inputMode="numeric" value={a.age} onChange={(e) => set({ age: digits(e.target.value) })} placeholder="Age" aria-label="Your age" />
-              <input className="hk-field" maxLength={60} value={a.area} onChange={(e) => set({ area: e.target.value })} placeholder="Neighbourhood or city" aria-label="Where you are" />
-            </div>
-            <Chips label="I am" options={GENDERS} isOn={(k) => a.gender === k} onPick={(k) => set({ gender: a.gender === k ? null : k })} />
-            <h4 className="gc-label">How they&apos;d recognise you <span className="hk-opt">optional</span></h4>
-            <input className="hk-field" maxLength={60} value={a.appearance} onChange={(e) => set({ appearance: e.target.value })} placeholder="Tall, curly hair, soft voice…" aria-label="Your appearance (optional)" />
+          <Section n={1} title="About me" done={sections[0]}>
+            <div className="gc-row gc-lead"><span>I&apos;m a</span><Chips label="I am" options={GENDERS} isOn={(k) => a.gender === k} onPick={(k) => set({ gender: a.gender === k ? null : k })} /></div>
+            <label className="gc-field"><span>Age</span>
+              <input className="hk-field gc-age" inputMode="numeric" value={a.age} onChange={(e) => set({ age: digits(e.target.value) })} placeholder="Your age" />
+            </label>
+            <label className="gc-field"><span>Location</span>
+              <input className="hk-field" maxLength={60} value={a.area} onChange={(e) => set({ area: e.target.value })} placeholder="Your town or area" />
+            </label>
+            <label className="gc-field"><span>Appearance <span className="hk-opt">optional</span></span>
+              <input className="hk-field" maxLength={60} value={a.appearance} onChange={(e) => set({ appearance: e.target.value })} placeholder="How would you describe yourself?" />
+            </label>
+            <p className="hk-hint">Only your age and area show on your card.</p>
           </Section>
 
           <Section n={2} title="Who I'm looking for" done={sections[1]}>
-            <Chips label="Looking for" options={LOOKING} isOn={(k) => a.lookingFor === k} onPick={(k) => set({ lookingFor: k })} />
-            <div className="gc-row gc-range">
-              <span>Aged</span>
-              <input className="hk-field gc-age" inputMode="numeric" value={a.ageMin} onChange={(e) => set({ ageMin: digits(e.target.value) })} placeholder="18" aria-label="From this age" />
-              <span>to</span>
-              <input className="hk-field gc-age" inputMode="numeric" value={a.ageMax} onChange={(e) => set({ ageMax: digits(e.target.value) })} placeholder="any" aria-label="Up to this age" />
+            <div className="gc-row gc-lead"><span>I&apos;m looking for</span><Chips label="Looking for" options={LOOKING} isOn={(k) => a.lookingFor === k} onPick={(k) => set({ lookingFor: k })} /></div>
+            <div className="gc-field"><span>Preferred age range <span className="hk-opt">optional</span></span>
+              <div className="gc-row gc-range">
+                <input className="hk-field gc-age" inputMode="numeric" value={a.ageMin} onChange={(e) => set({ ageMin: digits(e.target.value) })} placeholder="Min" aria-label="Minimum age" />
+                <span>to</span>
+                <input className="hk-field gc-age" inputMode="numeric" value={a.ageMax} onChange={(e) => set({ ageMax: digits(e.target.value) })} placeholder="Max" aria-label="Maximum age" />
+              </div>
             </div>
           </Section>
 
-          <Section n={3} title="What I'm looking for" sub="Pick up to three." done={sections[2]}>
-            <Chips label="What you're looking for" options={WANTS.map(([k, l]) => [k, l] as [string, string])} isOn={(k) => a.wants.includes(k)} onPick={(k) => set({ wants: toggleIn(a.wants, k, 3) })} />
-            {a.wants.includes("on our terms") ? <p className="hk-hint">Whatever you two agree on, never for money. Nobody pays anybody on Anonixx.</p> : null}
+          <Section n={3} title="What I'm looking for" sub="Tick up to three." done={sections[2]}>
+            <div className="gc-checks" role="group" aria-label="What you're looking for">
+              {WANTS.filter(([k]) => k !== "on our terms").map(([k, l]) => (
+                <label key={k} className={`gc-checkrow${a.wants.includes(k) ? " on" : ""}`}>
+                  <input type="checkbox" checked={a.wants.includes(k)} onChange={() => set({ wants: toggleIn(a.wants, k, 3) })} />
+                  {l}
+                </label>
+              ))}
+            </div>
           </Section>
 
           <Section n={4} title="When I'd like to meet" sub={FRESH_HINT[FRESH_FOR_WHEN[a.when]]} done={sections[3]}>
-            <Chips label="When" options={MEET_WHEN} isOn={(k) => a.when === k} onPick={(k) => set({ when: k })} />
-            <div className="chips gc-chips" role="group" aria-label="Where">
-              {HOSTING.map(([k, l]) => (
-                <button type="button" key={k} aria-pressed={a.hosting === k} className={a.hosting === k ? "on" : ""} onClick={() => set({ hosting: a.hosting === k ? null : k })}>{l}</button>
+            <div className="gc-checks" role="radiogroup" aria-label="When">
+              {MEET_WHEN.map(([k, l]) => (
+                <label key={k} className={`gc-checkrow${a.when === k ? " on" : ""}`}>
+                  <input type="radio" name="gc-when" checked={a.when === k} onChange={() => set({ when: k })} />
+                  {l}
+                </label>
               ))}
-              <button type="button" aria-pressed={a.publicFirst} className={a.publicFirst ? "on" : ""} onClick={() => set({ publicFirst: !a.publicFirst })}>Somewhere public first</button>
             </div>
           </Section>
 
-          <Section n={5} title="Anything else" optional done={sections[4]}>
+          <Section n={5} title="Anything else?" optional done={sections[4]}>
             <div className="gc-secret">
-              <textarea rows={3} maxLength={NOTE_MAX} value={a.note} onChange={(e) => set({ note: e.target.value })} placeholder="Something only you would say…" aria-label="A note in your own words (optional)" />
+              <textarea rows={3} maxLength={NOTE_MAX} value={a.note} onChange={(e) => set({ note: e.target.value })} placeholder="Write something personal you'd like them to know." aria-label="Anything else (optional)" />
               <span>{NOTE_MAX - a.note.length}</span>
             </div>
-            <label className="gc-clarity">
-              <span>I want</span>
-              <input className="hk-field" maxLength={CLARITY_MAX} value={a.want} onChange={(e) => set({ want: e.target.value })} placeholder="slow, then not so slow" />
-            </label>
-            <label className="gc-clarity">
-              <span>I don&apos;t want</span>
-              <input className="hk-field" maxLength={CLARITY_MAX} value={a.dontWant} onChange={(e) => set({ dontWant: e.target.value })} placeholder="anything serious" />
-            </label>
-            <p className="hk-hint">No names, numbers or socials. Link up is how you meet.</p>
+          </Section>
+
+          <Section title="Expectations" optional done={!!a.want.trim()}>
+            <input className="hk-field" maxLength={CLARITY_MAX} value={a.want} onChange={(e) => set({ want: e.target.value })} placeholder="Add any expectations or details." aria-label="Expectations (optional)" />
+            <p className="hk-hint">No names, numbers, socials or money. Link up is how you meet.</p>
           </Section>
         </>
       ) : (

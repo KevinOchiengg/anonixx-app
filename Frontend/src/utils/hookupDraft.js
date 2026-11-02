@@ -10,14 +10,17 @@ const join = (list) => (list.length < 2 ? list.join('') : `${list.slice(0, -1).j
 
 // Ids match HOOKUP_VIBES / HOOKUP_MEET_WHEN in Backend/app/api/v1/drops.py.
 export const WANTS = [
-  ['company', 'Company', 'good company'],
-  ['romance', 'Romance', 'a little romance'],
-  ['intimacy', 'Intimacy', 'real closeness'],
-  ['casual', 'Something casual', 'something easy, no pressure'],
+  ['company', 'Company and conversation', 'good company and real conversation'],
+  ['romance', 'Romance and affection', 'romance and a little affection'],
+  ['intimacy', 'Intimacy and company', 'closeness, the kind that stays a while'],
+  ['casual', 'Casual, no-strings connection', 'something casual, no strings'],
+  ['spontaneous', 'Something spontaneous', 'something spontaneous'],
+  // older drafts only; the form no longer offers it
   ['on our terms', 'On our terms', 'something we agree on together'],
 ];
 export const MEET_WHEN = [
-  ['asap', 'ASAP'], ['today', 'Today'], ['tonight', 'Tonight'], ['week', 'This week'], ['flexible', 'Flexible'],
+  ['asap', 'As soon as possible'], ['today', 'Before the end of today'], ['tonight', 'Tonight'],
+  ['week', 'This week'], ['flexible', 'Whenever the right person comes along'],
 ];
 // How long the post stays discoverable for each answer (Backend FRESH_WINDOWS).
 export const FRESH_FOR_WHEN = { asap: 'tonight', today: 'tonight', tonight: 'tonight', week: 'week', flexible: 'flexible' };
@@ -27,7 +30,7 @@ const WHEN_LINES = {
   today: ['Today, if you can.', "I'd like it to be today.", 'Today feels right.'],
   tonight: ['Tonight, ideally.', 'I keep thinking about tonight.', 'Tonight would be perfect.'],
   week: ['Sometime this week.', 'This week, whenever it suits us both.', 'Some evening this week.'],
-  flexible: ["No rush. When it feels right.", "I'm not in a hurry. I'd rather it be right.", 'Whenever it feels right for both of us.'],
+  flexible: ['Whenever the right person comes along.', "I'm not in a hurry. I'd rather it be right.", 'No rush. When it feels right for both of us.'],
 };
 const CLOSERS = ["If that's you, knock.", 'Knock if you felt that.', 'You know what to do if this is you.', 'If you read this twice, knock.'];
 
@@ -35,7 +38,7 @@ export function hookupDraft(a, seed = 0) {
   const pick = (list, k) => list[(seed + k * 7) % list.length];
   const age = a.age && Number(a.age) >= 18 ? a.age : '';
   const area = (a.area || '').trim();
-  const gword = a.gender === 'woman' ? 'woman' : a.gender === 'man' ? 'man' : '';
+  const gword = a.gender === 'woman' ? 'woman' : a.gender === 'man' ? 'man' : a.gender === 'other' ? 'person' : '';
   const parts = [];
 
   if (age && area) {
@@ -74,7 +77,8 @@ export function hookupDraft(a, seed = 0) {
   if (note) parts.push(end(note));
   const want = (a.want || '').trim().replace(/[.!?]+$/, '');
   const dont = (a.dontWant || '').trim().replace(/[.!?]+$/, '');
-  if (want) parts.push(pick([`What I want is ${want}.`, `Honestly? ${cap(want)}.`], 6));
+  // "Expectations" in the form.
+  if (want) parts.push(pick([`What I'd expect: ${want}.`, `One thing I'd ask: ${want}.`, `Just so you know: ${want}.`], 6));
   if (dont) parts.push(pick([`I don't want ${dont}.`, `Not ${dont}. Not this time.`], 4));
 
   parts.push(pick(CLOSERS, 5));

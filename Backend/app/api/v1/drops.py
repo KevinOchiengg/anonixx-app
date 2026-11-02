@@ -99,7 +99,7 @@ HOOKUP_LOOKING = ("woman", "man", "anyone")
 HOOKUP_VIBES = (
     "company", "friendship", "dating", "casual", "discreet", "adventure",
     # the guided form's "What I'm looking for" (shown as-is on Rooms, so they read as words)
-    "romance", "intimacy", "on our terms",
+    "romance", "intimacy", "spontaneous", "on our terms",
 )
 # The guided form's "When I'd like to meet". Each sets how long the post stays discoverable.
 HOOKUP_MEET_WHEN = {"asap": "tonight", "today": "tonight", "tonight": "tonight", "week": "week", "flexible": "flexible"}
@@ -128,7 +128,7 @@ class GuidedDetails(BaseModel):
 
 # The two clarity lines are short free text shown with the hookup (not yet
 # rendered on the feed card), so they get the same gates as the confession.
-CLARITY_MAX = 80
+CLARITY_MAX = 120
 
 
 def _clean_clarity(text: Optional[str]) -> Optional[str]:

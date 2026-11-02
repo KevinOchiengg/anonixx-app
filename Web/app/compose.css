@@ -113,7 +113,7 @@
 .gc .gc-live-head .gc-hear { border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; }
 .gc-section { display: grid; gap: 12px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
 .gc-section header { display: flex; align-items: flex-start; gap: 10px; }
-.gc-section h3 { margin: 0; font-family: var(--font-serif), Georgia, serif; font-style: italic; font-weight: 400; font-size: 20px; }
+.gc-section h3 { margin: 3px 0 0; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; }
 .gc-section header .hk-hint { margin: 2px 0 0; }
 .gc-num { flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; border: 1px solid var(--rose); color: var(--rose); font-size: 12px; font-weight: 800; }
 .gc-num.done { background: var(--rose); color: #fff; }
@@ -123,3 +123,10 @@
 .gc-range span { color: var(--muted); font-size: 14px; }
 .gc-foot-row { display: flex; gap: 10px; }
 .gc-foot-row .btn { flex: 1; }
+.gc-lead { flex-wrap: wrap; }
+.gc-lead > span { font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 19px; }
+.gc-field { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.gc-checks { display: grid; gap: 8px; }
+.gc-checkrow { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; }
+.gc-checkrow.on { border-color: var(--rose); background: var(--rose-dim); color: var(--fg); }
+.gc-checkrow input { width: 18px; height: 18px; margin: 0; accent-color: var(--rose); }
