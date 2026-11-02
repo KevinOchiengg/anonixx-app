@@ -25,7 +25,9 @@ export type Post = {
   avatar_url: string | null;
   is_admin_drop: boolean;
   mood_tag: string | null;
-  font_style?: string | null;   // text drops: the poster's font (lib/dropFonts.ts)
+  font_style?: string | null;
+  // Paid drop: video_url is a short clear preview; POST /drops/{id}/unlock returns the full video.
+  paywall?: { price: number; preview_seconds: number; unlocked: boolean } | null;   // text drops: the poster's font (lib/dropFonts.ts)
   kind?: "hookup" | "confession" | null;
   hookup?: {
     age: number; gender: string | null; area: string; looking_for: string | null; age_min: number | null; age_max: number | null; vibes: string[]; fresh_window?: string | null;

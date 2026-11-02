@@ -97,6 +97,43 @@ export default function Slide({
 
   const slides = post.images && post.images.length > 1 ? post.images : null;
   const videoSrc = post.video_url;
+  // Paid drop: the preview stops at preview_seconds and the lock shows until it's unlocked.
+  const pw = post.paywall;
+  const [fullUrl, setFullUrl] = useState<string | null>(null);
+  const locked = !!pw && !pw.unlocked && !fullUrl;
+  const [previewDone, setPreviewDone] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+  useEffect(() => { if (!active) setPreviewDone(false); }, [active]);
+  // Already unlocked: fetch the full video's link (free) once it's close to the screen.
+  useEffect(() => {
+    if (!pw?.unlocked || fullUrl || !near) return;
+    let gone = false;
+    api<{ video_url: string }>(`/drops/${post.id}/unlock`, { method: "POST" })
+      .then((r) => { if (!gone) setFullUrl(r.video_url); })
+      .catch(() => {});
+    return () => { gone = true; };
+  }, [pw?.unlocked, fullUrl, near, post.id]);
+
+  async function unlock() {
+    if (!pw || unlocking) return;
+    if (!user) return onGate("Sign up to unlock it. Nobody sees what you watch.");
+    if (!window.confirm(`Unlock this drop for ${pw.price} coins? It stays unlocked, so you can rewatch it any time.`)) return;
+    setUnlocking(true);
+    try {
+      const r = await api<{ video_url: string }>(`/drops/${post.id}/unlock`, { method: "POST" });
+      setFullUrl(r.video_url);
+      setPreviewDone(false);
+      onPatch(post.id, { paywall: { ...pw, unlocked: true } });
+    } catch (e) {
+      if ((e as { status?: number }).status === 402) {
+        if (window.confirm(`You need ${pw.price} coins to unlock this one. Get coins now?`)) window.location.href = "/coins";
+      } else {
+        onToast((e as Error).message);
+      }
+    } finally {
+      setUnlocking(false);
+    }
+  }
   const audioSrc = post.audio_url;
   const singleImage = !slides && !videoSrc && post.media_type === "image" ? post.media_url : post.image_url;
   const hasMedia = Boolean(slides || videoSrc || singleImage);
@@ -365,10 +402,12 @@ export default function Slide({
             </>
           ) : videoSrc ? (
             <VideoPlayer
-              src={videoSrc}
+              src={fullUrl || videoSrc}
               poster={post.cover_url || post.card_image_url}
               edit={post.video_edit}
-              active={active && !mature}
+              active={active && !mature && !(locked && previewDone)}
+              stopAt={locked ? pw?.preview_seconds || 3 : undefined}
+              onStop={() => setPreviewDone(true)}
               near={near}
               muted={muted || muteClip}
               rate={speed}
@@ -376,6 +415,20 @@ export default function Slide({
           ) : singleImage ? (
             <FitImage src={singleImage} alt={post.content.slice(0, 100)} priority={near} />
           ) : null}
+          {videoSrc && locked && previewDone ? (
+            <div className="paywall" onClick={(e) => e.stopPropagation()}>
+              {post.cover_url ? <div className="paywall-bg" style={{ backgroundImage: `url(${post.cover_url})` }} /> : null}
+              <div className="paywall-in">
+                <span className="paywall-icon" aria-hidden>🔒</span>
+                <b>The rest is locked</b>
+                <p>Unlock once, watch it whenever you want.</p>
+                <button type="button" className="btn" onClick={unlock} disabled={unlocking}>
+                  {unlocking ? "Unlocking…" : `Unlock for ${pw?.price} coins`}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {videoSrc && pw ? <span className="paid-pill" aria-label={locked ? `Locked, ${pw.price} coins` : "Unlocked"}>{locked ? `🔒 ${pw.price} coins` : "🔓 Unlocked"}</span> : null}
         </div>
       ) : null}
 

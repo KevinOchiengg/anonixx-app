@@ -12,6 +12,9 @@ type Props = {
   muted: boolean;
   edit?: VideoEdit | null;
   rate?: number;
+  // Paid drop preview: pause here (instead of looping) and report it.
+  stopAt?: number;
+  onStop?: () => void;
 };
 
 // Only the active slide plays; neighbours preload metadata; the rest show a poster.
@@ -22,7 +25,7 @@ const PlayIcon = () => <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 
 const KEY_JUMP = 5;
 export const TAP_GAP = 250;
 
-export default function VideoPlayer({ src, poster, active, near, muted, edit, rate = 1 }: Props) {
+export default function VideoPlayer({ src, poster, active, near, muted, edit, rate = 1, stopAt, onStop }: Props) {
   const ref = useRef<HTMLVideoElement>(null);
   const bar = useRef<HTMLSpanElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -223,6 +226,11 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           if (scrubbing.current) return;
+          if (stopAt && v.currentTime >= stopAt - 0.3) {
+            v.pause();
+            onStop?.();
+            return;
+          }
           if (end && (v.currentTime >= end || v.currentTime < start - 0.25)) {
             v.currentTime = start;
             if (v.paused && active && !paused) v.play().catch(() => {});

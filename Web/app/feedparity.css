@@ -640,3 +640,15 @@
 .post-menu { display: grid; }
 .post-menu .opt-row { display: flex; align-items: center; gap: 10px; font-size: 16px; }
 .post-menu .opt-row svg { width: 18px; height: 18px; }
+
+/* Paid drops: the preview stops, then the cover blurs behind the unlock button. */
+.paywall { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: rgba(6, 8, 14, 0.55); }
+.paywall-bg { position: absolute; inset: -20px; background-size: cover; background-position: center; filter: blur(26px) brightness(0.6); }
+.paywall-in { position: relative; display: grid; justify-items: center; gap: 6px; padding: 0 32px 60px; text-align: center; color: #fff; }
+.paywall-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; font-size: 28px; margin-bottom: 8px;
+  background: rgba(255, 99, 74, 0.22); border: 1.5px solid rgba(255, 99, 74, 0.6); }
+.paywall-in b { font-size: 20px; font-weight: 800; }
+.paywall-in p { margin: 0 0 12px; font-size: 13px; opacity: 0.75; }
+.paywall-in .btn { min-width: 220px; }
+.paid-pill { position: absolute; top: 74px; left: 14px; z-index: 4; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 800;
+  color: #fff; background: rgba(10, 12, 20, 0.6); border: 1px solid rgba(255, 99, 74, 0.55); pointer-events: none; }
