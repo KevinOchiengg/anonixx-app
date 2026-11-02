@@ -526,9 +526,15 @@ export default function GuidedConfession({ navigation, onBack }) {
           </View>
         </View>
 
-        {/* Live preview: rewrites itself as they answer. */}
-        {!onReview && (
-          <View style={s.previewWrap}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Animated.View style={{ opacity: fade }}>
+            {onReview ? renderReview() : renderForm()}
+          </Animated.View>
+        </ScrollView>
+
+        <View style={s.footer}>
+          {/* Live preview, fixed just above Continue: rewrites itself as they answer. */}
+          {!onReview && (
             <LinearGradient colors={['#1d1018', '#120a10']} style={s.previewCard}>
               <View style={s.previewHead}>
                 <Text style={s.cardKicker}>live preview</Text>
@@ -541,16 +547,7 @@ export default function GuidedConfession({ navigation, onBack }) {
                 <Text style={s.previewText}>{draft}</Text>
               </ScrollView>
             </LinearGradient>
-          </View>
-        )}
-
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <Animated.View style={{ opacity: fade }}>
-            {onReview ? renderReview() : renderForm()}
-          </Animated.View>
-        </ScrollView>
-
-        <View style={s.footer}>
+          )}
           <View style={s.footRow}>
             <TouchableOpacity style={s.copyBtn} onPress={copy} disabled={onReview ? !text.trim() : !!problem} activeOpacity={0.8} accessibilityLabel="Copy the confession">
               <Copy size={rs(16)} color={T.text} />
@@ -589,15 +586,14 @@ const s = StyleSheet.create({
   seg: { flex: 1, height: rs(3), borderRadius: rs(2), backgroundColor: T.borderStrong },
   segOn: { backgroundColor: T.primary },
 
-  previewWrap: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
   previewCard: { borderRadius: RADIUS.lg, borderWidth: 1, borderColor: T.primaryBorder, paddingHorizontal: SPACING.md, paddingVertical: rp(12), gap: rp(6) },
   previewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  previewScroll: { maxHeight: rs(96) },
+  previewScroll: { maxHeight: rs(88) },
   previewText: { color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.md, lineHeight: rf(22) },
   reword: { flexDirection: 'row', alignItems: 'center', gap: rs(4) },
   rewordText: { color: T.textSecondary, fontFamily: 'DMSans-SemiBold', fontSize: FONT.xs },
 
-  scroll: { padding: SPACING.md, paddingTop: SPACING.xs, paddingBottom: SPACING.xl, gap: SPACING.md },
+  scroll: { padding: SPACING.md, paddingTop: SPACING.sm, paddingBottom: SPACING.xl, gap: SPACING.md },
   section: { borderRadius: RADIUS.lg, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface, padding: SPACING.md, gap: SPACING.sm, marginBottom: SPACING.md },
   sectionHead: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
   num: { width: rs(24), height: rs(24), borderRadius: rs(12), borderWidth: 1, borderColor: T.primaryBorder, alignItems: 'center', justifyContent: 'center', marginTop: rs(1) },

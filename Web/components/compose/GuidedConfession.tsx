@@ -325,15 +325,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
 
       {!onReview ? (
         <>
-          {/* Live preview: rewrites itself as they answer. */}
-          <div className="gc-card gc-live" aria-live="polite">
-            <div className="gc-live-head">
-              <span className="gc-kicker">live preview</span>
-              <button type="button" className="gc-hear" onClick={() => setSeed((x) => x + 1)}>↻ new wording</button>
-            </div>
-            <p className="gc-text">{draft}</p>
-          </div>
-
           <Section n={1} title="About me" done={sections[0]}>
             <div className="gc-row gc-lead"><span>I&apos;m a</span><Chips label="I am" options={GENDERS} isOn={(k) => a.gender === k} onPick={(k) => set({ gender: a.gender === k ? null : k })} /></div>
             <label className="gc-field"><span>Age</span>
@@ -435,6 +426,17 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
       )}
 
       {error ? <div className="err">{error}</div> : null}
+      <div className="gc-dock">
+      {/* Live preview, fixed just above Continue: rewrites itself as they answer. */}
+      {!onReview ? (
+        <div className="gc-card gc-live" aria-live="polite">
+          <div className="gc-live-head">
+            <span className="gc-kicker">live preview</span>
+            <button type="button" className="gc-hear" onClick={() => setSeed((x) => x + 1)}>↻ new wording</button>
+          </div>
+          <p className="gc-text">{draft}</p>
+        </div>
+      ) : null}
       <div className="hk-foot">
         <div className="gc-foot-row">
           <button type="button" className="pill" disabled={onReview ? !text.trim() : !!problem} onClick={copy}>{copied ? "Copied" : "Copy"}</button>
@@ -452,6 +454,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
         ) : (
           <p className={problem ? "hk-missing" : "muted small"}>{problem || "Everything else is optional."}</p>
         )}
+      </div>
       </div>
     </div>
   );
