@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, MapPin, Menu, MessageCircle,
+  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle,
   Pause, Play, Search, Share2, ShieldCheck, X,
 } from 'lucide-react-native';
 
@@ -46,6 +46,7 @@ import { timeLeft } from '../../config/linkup';
 import FitImage, { FitBackdrop } from '../../components/feed/FitImage';
 import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
+import { fetchBalance } from '../../store/slices/coinsSlice';
 
 // Every 7th drop gets a market slide, every 8th an ad (they can coincide).
 const MARKET_FREQUENCY = 7;
@@ -209,6 +210,22 @@ const RailIcon = ({ icon, tint, active }) => {
   );
 };
 
+// Paid drop, after its clear preview: the cover blurred, with the price to unlock it.
+const PaywallLock = ({ poster, price, busy, onUnlock }) => (
+  <View style={StyleSheet.absoluteFill}>
+    {poster ? <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={28} /> : null}
+    <View style={[StyleSheet.absoluteFill, ss.lockTint]} />
+    <View style={ss.lockCenter}>
+      <View style={ss.lockIcon}><Lock size={30} color="#fff" /></View>
+      <Text style={ss.lockTitle}>The rest is locked</Text>
+      <Text style={ss.lockSub}>Unlock once, watch it whenever you want.</Text>
+      <TouchableOpacity style={ss.lockBtn} onPress={onUnlock} disabled={busy} activeOpacity={0.85}>
+        {busy ? <ActivityIndicator color="#fff" /> : <Text style={ss.lockBtnText}>Unlock for {price} coins</Text>}
+      </TouchableOpacity>
+    </View>
+  </View>
+);
+
 const PlayBadge = () => {
   const { height: winH } = useWindowDimensions();
   const size = Math.max(84, Math.min(108, winH * 0.12));
@@ -345,12 +362,18 @@ const RailAvatar = ({ post, navigation }) => {
 const posterCache = new Map();
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
+  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, onUnlock, headerHeight = 0,
 }) => {
   const likedRef = useRef(liked);
   likedRef.current = liked;
   const likeScale = useRef(new Animated.Value(1)).current;
   const [expanded, setExpanded] = useState(false);
+  // Paid drop: video_url is a short clear preview; the full video comes from onUnlock.
+  const pw = post.paywall;
+  const [fullUrl, setFullUrl] = useState(null);
+  const locked = !!pw && !fullUrl;
+  const [previewDone, setPreviewDone] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [playerStatus, setPlayerStatus] = useState('loading');
@@ -429,10 +452,20 @@ const VideoSlide = ({
     return () => clearInterval(id);
   }, [isActive, player, clipStart, clipEnd]);
 
+  // Already unlocked: fetch the full video's link (free) before loading anything.
+  const waitForFull = !!pw?.unlocked && !fullUrl;
   useEffect(() => {
-    if ((isActive || isNear) && !sourceLoaded.current) {
+    if (!waitForFull || !(isActive || isNear)) return;
+    let gone = false;
+    onUnlock?.({ silent: true }).then((url) => { if (url && !gone) setFullUrl(url); });
+    return () => { gone = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitForFull, isActive, isNear]);
+
+  useEffect(() => {
+    if ((isActive || isNear) && !sourceLoaded.current && !waitForFull) {
       sourceLoaded.current = true;
-      player.replaceAsync({ uri: post.video_url }).then(() => {
+      player.replaceAsync({ uri: fullUrl || post.video_url }).then(() => {
         if (clipStart) player.currentTime = clipStart;
         if (activeRef.current) player.play();   // a neighbour stays paused on its first frame
       }).catch(() => {});
@@ -444,8 +477,29 @@ const VideoSlide = ({
       player.pause();
       setVideoCurrentTime(0);
       setVideoDuration(0);
+      setPreviewDone(false);   // coming back replays the preview
     }
-  }, [isActive, isNear]);
+  }, [isActive, isNear, waitForFull]);
+
+  // The preview stops at its end and the lock shows (it would otherwise loop).
+  useEffect(() => {
+    if (locked && !previewDone && isActive && videoCurrentTime >= (pw.preview_seconds || 3) - 0.3) {
+      player.pause();
+      setPreviewDone(true);
+    }
+  }, [locked, previewDone, isActive, videoCurrentTime, pw, player]);
+
+  const handleUnlock = async () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    const url = await onUnlock?.({ silent: false });
+    setUnlocking(false);
+    if (!url) return;
+    setFullUrl(url);
+    setPreviewDone(false);
+    sourceLoaded.current = true;
+    player.replaceAsync({ uri: url }).then(() => { if (activeRef.current) player.play(); }).catch(() => {});
+  };
 
   // No cover on the post (older R2 videos): make one from the file itself, once.
   useEffect(() => {
@@ -561,6 +615,10 @@ const VideoSlide = ({
 
       <VideoOverlays overlays={post.video_edit?.overlays} />
 
+      {locked && previewDone && (
+        <PaywallLock poster={poster} price={pw.price} busy={unlocking} onUnlock={handleUnlock} />
+      )}
+
       {fast && (
         <View style={ss.fastPill} pointerEvents="none">
           <Text style={ss.fastText}>2x  ▶▶</Text>
@@ -573,7 +631,7 @@ const VideoSlide = ({
       )}
 
       {/* Scrub bar under the chrome, so the rail and Link up keep their taps. */}
-      {videoDuration > 0 && !chromeHidden && (
+      {videoDuration > 0 && !chromeHidden && !locked && (
         <GestureDetector gesture={scrubGesture}>
           <View style={ss.scrubHit} onLayout={(e) => { scrubWidth.current = e.nativeEvent.layout.width || 1; }}>
             <View style={[ss.progressWrap, scrubT !== null && ss.progressWrapOn]} pointerEvents="none">
@@ -599,8 +657,15 @@ const VideoSlide = ({
           <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
 
-          {isActive && videoDuration > 0 && !isPlaying && (
+          {isActive && videoDuration > 0 && !isPlaying && !(locked && previewDone) && (
             <PlayBadge />
+          )}
+
+          {pw && (
+            <View style={[ss.paidPill, { top: headerHeight + 10 }]} pointerEvents="none">
+              {locked ? <Lock size={12} color="#fff" /> : <LockOpen size={12} color="#fff" />}
+              <Text style={ss.paidPillText}>{locked ? `${pw.price} coins` : 'Unlocked'}</Text>
+            </View>
           )}
 
           <View style={ss.rail}>
@@ -1329,6 +1394,54 @@ export default function DropsSwipeScreen({ navigation, route }) {
     }
   }, [isAuthenticated, navigation, showToast]);
 
+  // Paid drop: pays (after a confirm) and returns the full video's link, or null.
+  // silent = already unlocked, just fetching a fresh link.
+  const handleUnlock = useCallback(async (post, { silent } = {}) => {
+    const price = post.paywall?.price;
+    if (!isAuthenticated) {
+      showToast({ type: 'info', message: 'Sign up to unlock it — nobody sees what you watch.' });
+      navigation.navigate('AuthNav', { screen: 'Login' });
+      return null;
+    }
+    if (!silent) {
+      const ok = await new Promise((resolve) => Alert.alert(
+        'Unlock this drop?',
+        `${price} coins. It stays unlocked, so you can rewatch it any time.`,
+        [
+          { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
+          { text: `Unlock · ${price} coins`, onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      ));
+      if (!ok) return null;
+    }
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/unlock`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 402) {
+        showToast({ type: 'warning', message: `You need ${price} coins to unlock this one.` });
+        navigation.navigate('Coins');
+        return null;
+      }
+      if (!res.ok || !data.video_url) {
+        showToast({ type: 'error', message: (typeof data.detail === 'string' && data.detail) || "Couldn't unlock it. Try again." });
+        return null;
+      }
+      if (data.charged) {
+        dispatch(fetchBalance());
+        setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, paywall: { ...p.paywall, unlocked: true } } : p)));
+      }
+      return data.video_url;
+    } catch {
+      showToast({ type: 'error', message: "Couldn't reach Anonixx. Try again." });
+      return null;
+    }
+  }, [isAuthenticated, navigation, showToast, dispatch]);
+
   const handleSave = useCallback(async (postId) => {
     if (!isAuthenticated) {
       showToast({ type: 'warning', message: 'Sign in to keep it — only you can see your saves.' });
@@ -1564,7 +1677,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
     let slide;
     if (item.video_url) {
-      slide = <VideoSlide {...commonProps} isActive={isActive} isNear={isNear} />;
+      slide = <VideoSlide {...commonProps} isActive={isActive} isNear={isNear} onUnlock={(o) => handleUnlock(item, o)} />;
     } else if (item.audio_url) {
       slide = <AudioSlide {...commonProps} isActive={isActive} />;
     } else if (item.poll) {
@@ -1575,7 +1688,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     return <View style={{ height: listHeight, width }}>{slide}</View>;
   }, [
     activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
-    handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress,
+    handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress, handleUnlock,
     isAuthenticated, navigation, headerHeight, chromeHidden,
   ]);
 
@@ -1726,6 +1839,25 @@ const ss = StyleSheet.create({
     shadowColor: '#ff634a', shadowOpacity: 0.55, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8,
   },
   actionBtn: { alignItems: 'center', gap: 5 },
+  lockTint: { backgroundColor: 'rgba(6,8,14,0.55)' },
+  lockCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingBottom: 60 },
+  lockIcon: {
+    width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,99,74,0.22)', borderWidth: 1.5, borderColor: 'rgba(255,99,74,0.6)', marginBottom: 14,
+  },
+  lockTitle: { color: '#fff', fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  lockSub: { color: 'rgba(255,255,255,0.75)', fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: 18 },
+  lockBtn: {
+    minWidth: 220, paddingVertical: 14, paddingHorizontal: 22, borderRadius: 999, alignItems: 'center',
+    backgroundColor: THEME.primary,
+  },
+  lockBtnText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  paidPill: {
+    position: 'absolute', left: 14, zIndex: 11, flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+    backgroundColor: 'rgba(10,12,20,0.6)', borderWidth: 1, borderColor: 'rgba(255,99,74,0.55)',
+  },
+  paidPillText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   actionCount: { fontSize: 11, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   // Caption column sits near the bottom, level with the rail.
   bottomInfo: { position: 'absolute', bottom: 20, left: 16, right: 76, zIndex: 10 },

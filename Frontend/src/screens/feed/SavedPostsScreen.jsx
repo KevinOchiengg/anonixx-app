@@ -5,7 +5,7 @@ import {
   ActivityIndicator, Animated, FlatList, RefreshControl, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bookmark } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, LockOpen } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
 import { useToast } from '../../components/ui/Toast';
@@ -45,7 +45,8 @@ const StarryBg = React.memo(() => (
 ));
 
 // ─── PostCard ─────────────────────────────────────────────────
-const PostCard = React.memo(({ post, onPress }) => {
+// `unlocked`: a paid drop this user bought (feed-shaped row from /drops/unlocked).
+const PostCard = React.memo(({ post, onPress, unlocked = false }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
   const onPressIn = useCallback(() => {
@@ -56,7 +57,9 @@ const PostCard = React.memo(({ post, onPress }) => {
     Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
   }, [scale]);
 
-  const timeLabel = post.saved_at
+  const timeLabel = unlocked
+    ? post.time_ago
+    : post.saved_at
     ? formatTimeAgo(post.saved_at)
     : post.saved_days_ago === 0
       ? 'today'
@@ -76,8 +79,10 @@ const PostCard = React.memo(({ post, onPress }) => {
         {/* Card header */}
         <View style={styles.cardHeader}>
           <View style={styles.savedBadge}>
-            <Bookmark size={rs(12)} color={T.primary} fill={T.primary} />
-            <Text style={styles.savedBadgeText}>saved</Text>
+            {unlocked
+              ? <LockOpen size={rs(12)} color={T.primary} />
+              : <Bookmark size={rs(12)} color={T.primary} fill={T.primary} />}
+            <Text style={styles.savedBadgeText}>{unlocked ? 'unlocked · tap to watch' : 'saved'}</Text>
           </View>
           <Text style={styles.cardTime}>{timeLabel}</Text>
         </View>
@@ -86,10 +91,10 @@ const PostCard = React.memo(({ post, onPress }) => {
 
         {/* Confession text — Playfair Display for emotional weight */}
         <Text style={styles.cardContent} numberOfLines={6}>
-          {post.confession}
+          {unlocked ? post.content : post.confession}
         </Text>
 
-        {post.confession?.length > 200 && (
+        {!unlocked && post.confession?.length > 200 && (
           <Text style={styles.readMore}>read more</Text>
         )}
       </TouchableOpacity>
@@ -103,6 +108,8 @@ export default function SavedPostsScreen({ navigation }) {
   const [savedPosts, setSavedPosts]       = useState([]);
   const [loading,    setLoading]          = useState(true);
   const [refreshing, setRefreshing]       = useState(false);
+  const [tab, setTab]                     = useState('saved');   // 'saved' | 'unlocked'
+  const [unlocked, setUnlocked]           = useState(null);       // null until first loaded
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(rs(28))).current;
 
@@ -130,6 +137,31 @@ export default function SavedPostsScreen({ navigation }) {
     loadSavedPosts();
   }, [loadSavedPosts]);
 
+  const loadUnlocked = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res   = await fetch(`${API_BASE_URL}/api/v1/drops/unlocked`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) setUnlocked(data.drops ?? []);
+      else showToast({ type: 'error', message: 'Could not load your unlocked drops.' });
+    } catch {
+      showToast({ type: 'error', message: 'Something went wrong. Please try again.' });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (tab === 'unlocked' && unlocked === null) loadUnlocked();
+  }, [tab, unlocked, loadUnlocked]);
+
+  // Opens the drop in the feed, where an unlocked one plays in full.
+  const openDrop = useCallback((id) => {
+    navigation.navigate('Main', { screen: 'Feed', params: { screen: 'FeedSwipe', params: { dropId: id } } });
+  }, [navigation]);
+
   // Entrance animation after load
   useEffect(() => {
     if (!loading) {
@@ -142,12 +174,17 @@ export default function SavedPostsScreen({ navigation }) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadSavedPosts();
-  }, [loadSavedPosts]);
+    if (tab === 'unlocked') loadUnlocked();
+    else loadSavedPosts();
+  }, [tab, loadSavedPosts, loadUnlocked]);
 
   const renderItem = useCallback(({ item }) => (
-    <PostCard post={item} />
-  ), []);
+    tab === 'unlocked'
+      ? <PostCard post={item} unlocked onPress={() => openDrop(item.id)} />
+      : <PostCard post={item} />
+  ), [tab, openDrop]);
+  const list = tab === 'unlocked' ? (unlocked ?? []) : savedPosts;
+  const listLoading = tab === 'unlocked' ? unlocked === null : loading;
 
   const keyExtractor = useCallback((item) => String(item.id ?? item._id), []);
 
@@ -165,21 +202,31 @@ export default function SavedPostsScreen({ navigation }) {
         <View style={{ width: rs(22) }} />
       </View>
 
-      {loading ? (
+      <View style={styles.tabs}>
+        {[['saved', 'Saved'], ['unlocked', 'Unlocked']].map(([id, label]) => (
+          <TouchableOpacity key={id} style={[styles.tab, tab === id && styles.tabOn]} onPress={() => setTab(id)} activeOpacity={0.8}>
+            <Text style={[styles.tabText, tab === id && styles.tabTextOn]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {listLoading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={T.primary} />
           <Text style={styles.loadingText}>retrieving what you held onto…</Text>
         </View>
-      ) : savedPosts.length === 0 ? (
+      ) : list.length === 0 ? (
         <Animated.View
           style={[styles.center, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
         >
           <View style={styles.emptyIconWrap}>
-            <Bookmark size={rs(38)} color={T.primary} />
+            {tab === 'unlocked' ? <LockOpen size={rs(38)} color={T.primary} /> : <Bookmark size={rs(38)} color={T.primary} />}
           </View>
-          <Text style={styles.emptyTitle}>nothing saved yet</Text>
+          <Text style={styles.emptyTitle}>{tab === 'unlocked' ? 'nothing unlocked yet' : 'nothing saved yet'}</Text>
           <Text style={styles.emptyBody}>
-            some words deserve a second read.{'\n'}bookmark any thought to find it here.
+            {tab === 'unlocked'
+              ? 'locked drops you unlock stay here,\nready to rewatch any time.'
+              : 'some words deserve a second read.\nbookmark any thought to find it here.'}
           </Text>
         </Animated.View>
       ) : (
@@ -188,16 +235,20 @@ export default function SavedPostsScreen({ navigation }) {
         >
           {/* Count strip */}
           <View style={styles.countStrip}>
-            <Bookmark size={rs(13)} color={T.primary} fill={T.primary} />
+            {tab === 'unlocked'
+              ? <LockOpen size={rs(13)} color={T.primary} />
+              : <Bookmark size={rs(13)} color={T.primary} fill={T.primary} />}
             <Text style={styles.countText}>
-              <Text style={styles.countNum}>{savedPosts.length}</Text>
+              <Text style={styles.countNum}>{list.length}</Text>
               {'  '}
-              {savedPosts.length === 1 ? 'saved drop' : 'saved drops'}
+              {tab === 'unlocked'
+                ? (list.length === 1 ? 'unlocked drop' : 'unlocked drops')
+                : (list.length === 1 ? 'saved drop' : 'saved drops')}
             </Text>
           </View>
 
           <FlatList
-            data={savedPosts}
+            data={list}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             contentContainerStyle={styles.listContent}
@@ -287,6 +338,11 @@ const styles = StyleSheet.create({
   },
 
   // Count strip
+  tabs: { flexDirection: 'row', gap: rp(8), paddingHorizontal: SPACING.md, paddingTop: rp(10) },
+  tab: { paddingHorizontal: rp(16), paddingVertical: rp(7), borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.border },
+  tabOn: { backgroundColor: T.primary, borderColor: T.primary },
+  tabText: { fontSize: rf(13), fontWeight: '700', color: T.textSecondary || T.text },
+  tabTextOn: { color: '#fff' },
   countStrip: {
     flexDirection:     'row',
     alignItems:        'center',

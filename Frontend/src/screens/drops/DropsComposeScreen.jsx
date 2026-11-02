@@ -55,6 +55,9 @@ const MAX_CHARS = 500;
 
 // Admin "Spotlight" extras — same options as the website's Post Studio.
 const PROMO_HOURS = [[6, '6 hours'], [24, '1 day'], [72, '3 days'], [168, '7 days']];
+// Paid drops (super admin): prices match PAYWALL_PRICES in drops.py.
+const PAID_PRICES = [20, 50, 100, 200];
+const PAID_PREVIEW_SECONDS = 3;
 // Search keywords — same rules as Post Studio and the server (drops.py):
 // lowercase, no '#', 30 chars, deduped, 10 max.
 const MAX_TAGS = 10;
@@ -314,6 +317,17 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [muteOriginal, setMuteOriginal] = useState(false);
   const [hearingId, setHearingId] = useState('');
   const [promo, setPromo] = useState('');            // '' | 'pin' | 'boost'
+  // Paid drop (super admin, videos): coins to unlock after a clear preview. 0 = free.
+  const [paidPrice, setPaidPrice] = useState(0);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  useEffect(() => {
+    if (!isAdmin) return;
+    let gone = false;
+    AsyncStorage.getItem('token').then((token) => fetch(`${API_BASE_URL}/api/v1/admin/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })).then((r) => (r.ok ? r.json() : null)).then((d) => { if (!gone && d) setIsSuperAdmin(!!d.is_super_admin); }).catch(() => {});
+    return () => { gone = true; };
+  }, [isAdmin]);
   const [promoHours, setPromoHours] = useState(24);
   const [publishAt, setPublishAt] = useState(null);  // ISO string, or null for now
   const [tags, setTags] = useState([]);              // search keywords
@@ -684,6 +698,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         ...(locationSubCounty.trim() ? { location_sub_county: locationSubCounty.trim() } : {}),
         ...(locationEstate.trim() ? { location_estate: locationEstate.trim() } : {}),
         font_style: fontStyle,
+        ...(isSuperAdmin && paidPrice && isVideo ? { paywall_price: paidPrice, preview_seconds: PAID_PREVIEW_SECONDS } : {}),
       };
 
       // A Stream video, or anything an admin schedules, goes through the scheduled
@@ -764,7 +779,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   }, [
     format, text, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, intensity, hint, taggedUser, publisherOptIn,
-    locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, storyTopics,
+    locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, storyTopics, paidPrice, isSuperAdmin,
     isAdmin, videoEdit, videoMeta, coverAt, soundId, muteOriginal, promo, promoHours, publishAt, tags,
     dispatch, navigation, showToast,
   ]);
@@ -926,7 +941,7 @@ export default function DropsComposeScreen({ navigation, route }) {
 
             {isAdmin && (
             <ToolIcon
-              active={!!soundId || !!promo || !!publishAt || tags.length > 0}
+              active={!!soundId || !!promo || !!publishAt || tags.length > 0 || !!paidPrice}
               onPress={() => { dismissToolbarHint(); setActiveSheet('spotlight'); }}
               label="Boost"
               a11yLabel="Spotlight — search keywords, sound, pin or boost, post later"
@@ -1315,6 +1330,21 @@ export default function DropsComposeScreen({ navigation, route }) {
               : promo === 'boost' ? "Shown near the top of everyone's feed."
               : 'Shows in the feed like any new drop.'}
           </Text>
+
+          {isSuperAdmin && mediaKind === 'video' && !!mediaUri && (
+            <>
+              <Text style={s.spotLabel}>Paid drop</Text>
+              <View style={s.spotChips}>
+                <SpotChip label="Free" on={!paidPrice} onPress={() => setPaidPrice(0)} />
+                {PAID_PRICES.map((p) => <SpotChip key={p} label={`${p} coins`} on={paidPrice === p} onPress={() => setPaidPrice(p)} />)}
+              </View>
+              <Text style={s.spotHint}>
+                {paidPrice
+                  ? `The first ${PAID_PREVIEW_SECONDS} seconds play clear, then it blurs until someone pays ${paidPrice} coins. Tease what's behind it in the caption.`
+                  : 'Everyone can watch the whole video.'}
+              </Text>
+            </>
+          )}
 
           <Text style={s.spotLabel}>When</Text>
           <View style={s.spotChips}>
