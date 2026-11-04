@@ -18,6 +18,7 @@ import { login } from '../../store/slices/authSlice';
 import { setBalance } from '../../store/slices/coinsSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
@@ -295,6 +296,14 @@ export default function LoginScreen({ navigation }) {
               <View style={styles.dividerLine} />
             </View>
 
+            <GoogleSignInButton
+              onDone={(isNew) => setTimeout(() => {
+                // Back to where login was triggered, unless it's a brand-new account.
+                if (!isNew && navigation.canGoBack()) navigation.goBack();
+                else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+              }, 600)}
+            />
+
             {/* Sign up */}
             <TouchableOpacity
               onPress={() => navigation.navigate('SignUp')}
@@ -417,7 +426,7 @@ const styles = StyleSheet.create({
   forgotBtn:  { alignSelf: 'flex-end', paddingVertical: rp(6), marginBottom: SPACING.xs },
   forgotText: { fontSize: FONT.sm, color: THEME.textSecondary, fontWeight: '500' },
 
-  signupBtn:      { alignItems: 'center', paddingVertical: rp(4) },
+  signupBtn:      { alignItems: 'center', paddingVertical: rp(4), marginTop: SPACING.md },
   signupText:     { fontSize: FONT.md, color: THEME.textSecondary },
   signupTextBold: { fontWeight: '700', color: THEME.primary },
 

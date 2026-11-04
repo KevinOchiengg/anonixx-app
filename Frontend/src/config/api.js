@@ -14,4 +14,8 @@ export const STRIPE_PUBLISHABLE_KEY =
 export const TENOR_API_KEY =
   process.env.EXPO_PUBLIC_TENOR_API_KEY ?? 'YOUR_TENOR_API_KEY';
 
-export default { API_BASE_URL, BACKENDS, STRIPE_PUBLISHABLE_KEY, TENOR_API_KEY };
+// Google sign-in: the OAuth "Web application" client ID (public; the same one the website and
+// backend GOOGLE_CLIENT_IDS use). Empty hides the Google button.
+export const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
+
+export default { API_BASE_URL, BACKENDS, STRIPE_PUBLISHABLE_KEY, TENOR_API_KEY, GOOGLE_WEB_CLIENT_ID };

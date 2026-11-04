@@ -21,6 +21,7 @@ import { signup, updateUser as updateReduxUser } from '../../store/slices/authSl
 import { setBalance } from '../../store/slices/coinsSlice';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import GoogleSignInButton, { GOOGLE_AVAILABLE } from '../../components/auth/GoogleSignInButton';
 import { uploadToR2 } from '../../utils/upload';
 import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
@@ -574,6 +575,22 @@ export default function SignUpScreen({ navigation }) {
               }
             </TouchableOpacity>
 
+            {/* Google: skips the email and password; asks only name, gender and 18+ */}
+            {GOOGLE_AVAILABLE && (
+              <View style={styles.googleWrap}>
+                <View style={styles.orRow}>
+                  <View style={styles.orLine} />
+                  <Text style={styles.orText}>or</Text>
+                  <View style={styles.orLine} />
+                </View>
+                <GoogleSignInButton
+                  label="Sign up with Google"
+                  referralCode={formData.referralCode}
+                  onDone={() => setTimeout(() => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }), 600)}
+                />
+              </View>
+            )}
+
             {/* Login link */}
             <View style={styles.loginRow}>
               <Text style={styles.loginText}>Already have an account?  </Text>
@@ -685,6 +702,10 @@ const styles = StyleSheet.create({
   submitBtnDisabled:{ opacity: 0.55, shadowOpacity: 0 },
   submitBtnText:    { color: '#fff', fontSize: FONT.lg, fontWeight: '700', fontFamily: 'DMSans-Bold', letterSpacing: rs(0.3) },
 
+  googleWrap:       { marginBottom: SPACING.lg },
+  orRow:            { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
+  orLine:           { flex: 1, height: 1, backgroundColor: THEME.border },
+  orText:           { fontSize: rf(12), fontFamily: 'DMSans-Regular', color: THEME.textMuted },
   loginRow:         { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg },
   loginText:        { fontSize: FONT.md, fontFamily: 'DMSans-Regular', color: THEME.textSecondary },
   loginTextBold:    { fontSize: FONT.md, fontWeight: '700', fontFamily: 'DMSans-Bold', color: THEME.primary },
