@@ -113,6 +113,7 @@ export function useDoubleTapLike({ onSingle, onDoubleLike, onLong }) {
     Gesture.LongPress()
       .runOnJS(true)
       .minDuration(450)
+      .maxDistance(24)   // a resting finger drifts; don't lose the hold over it
       .onStart(() => cb.current.onLong?.()),
   ), [onDown, onTap]);
 

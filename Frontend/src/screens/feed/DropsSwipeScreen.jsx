@@ -32,6 +32,7 @@ import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useToast } from '../../components/ui/Toast';
 import ReportSheet from '../../components/feed/ReportSheet';
+import PostMenuSheet from '../../components/feed/PostMenuSheet';
 import { HeartBursts, useDoubleTapLike } from '../../components/feed/DoubleTapLike';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
@@ -525,14 +526,7 @@ const VideoSlide = ({
     setFast(on);
   };
   useEffect(() => { if (!isActive && fast) setSpeed(false); }, [isActive]);
-  const openMenu = () => {
-    const canReport = !isOwnPost && !post.is_admin_drop;
-    Alert.alert('', undefined, [
-      { text: fast ? 'Normal speed' : 'Play at 2x', onPress: () => setSpeed(!fast) },
-      ...(canReport ? [{ text: 'Report or block', style: 'destructive', onPress: onMore }] : []),
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+  const openMenu = () => onMore({ fast, toggleSpeed: () => setSpeed(!fast) });
 
   const [scrubT, setScrubT] = useState(null);   // seconds into the clip while dragging
   const scrubWidth = useRef(1);
@@ -1234,6 +1228,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [saveCounts, setSaveCounts] = useState({});
   const [commentCounts, setCommentCounts] = useState({});
   const [reportPost, setReportPost] = useState(null);
+  const [postMenu, setPostMenu] = useState(null);   // { post, fast?, toggleSpeed? } from a long-press
   const [commentSheet, setCommentSheet] = useState({ visible: false, postId: null, isOwner: false });
 
   const loadingRef = useRef(false);
@@ -1669,7 +1664,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       onComment: () => setCommentSheet({ visible: true, postId: item.id, isOwner: item.is_own_post }),
       isOwnPost: item.is_own_post || false,
       onLinkUp: () => handleLinkUp(item),
-      onMore: () => { if (!item.is_own_post && !item.is_admin_drop) setReportPost(item); },
+      onMore: (extra) => setPostMenu({ post: item, ...(extra || {}) }),
       navigation,
       headerHeight,
       chromeHidden,
@@ -1801,6 +1796,15 @@ export default function DropsSwipeScreen({ navigation, route }) {
             setCommentCounts((prev) => ({ ...prev, [commentSheet.postId]: count }));
           }
         }}
+      />
+
+      <PostMenuSheet
+        menu={postMenu}
+        saved={postMenu ? saveMap[postMenu.post.id] || false : false}
+        onClose={() => setPostMenu(null)}
+        onSave={(p) => handleSave(p.id)}
+        onShare={async (p) => { try { await Share.share({ message: `"${p.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+        onReport={(p) => setReportPost(p)}
       />
 
       <ReportSheet
