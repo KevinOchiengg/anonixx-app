@@ -375,6 +375,7 @@
 .cmt-col { flex: 1; min-width: 0; }
 .cmt-av { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; font-weight: 800; color: #fff; }
 .cmt-av.sm { width: 24px; height: 24px; font-size: 11px; }
+.cmt-av.img { object-fit: cover; }
 .cmt-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
 .cmt-head b { font-weight: 600; color: var(--muted); }
 .cmt-badge { margin: 0; padding: 1px 6px; font-size: 10px; font-weight: 700; }

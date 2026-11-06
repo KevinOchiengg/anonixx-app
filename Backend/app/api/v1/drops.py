@@ -1322,6 +1322,7 @@ async def add_to_drop_thread(
         "id":             str(result.inserted_id),
         "content":        content,
         "anonymous_name": user.get("anonymous_name", "Anonymous"),
+        "avatar_url":     user.get("avatar_url"),
         "time_ago":       "just now",
         "likes_count":    0,
         "liked_by_me":    False,
@@ -1363,11 +1364,24 @@ async def get_drop_thread(
         {"drop_id": drop_id}
     ).sort("created_at", 1).to_list(None)
 
+    # Look up current avatars so a changed profile pic shows on old comments too.
+    author_oids = []
+    for uid in {t.get("user_id") for t in thread_docs if t.get("user_id")}:
+        try:
+            author_oids.append(ObjectId(uid))
+        except Exception:
+            pass
+    avatar_by_id: dict[str, Optional[str]] = {}
+    if author_oids:
+        async for u in db["users"].find({"_id": {"$in": author_oids}}, {"avatar_url": 1}):
+            avatar_by_id[str(u["_id"])] = u.get("avatar_url")
+
     def fmt(t):
         d = {
             "id":             str(t["_id"]),
             "content":        t.get("content", ""),
             "anonymous_name": t.get("anonymous_name", "Anonymous"),
+            "avatar_url":     avatar_by_id.get(t.get("user_id")),
             "created_at":     t["created_at"].isoformat(),
             "time_ago":       get_time_ago(t["created_at"]),
             "likes_count":    t.get("likes_count", 0),

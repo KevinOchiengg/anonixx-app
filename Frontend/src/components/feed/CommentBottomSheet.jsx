@@ -130,9 +130,13 @@ const CommentItem = React.memo(({
   return (
     <View style={[st.commentItem, depth > 0 && st.commentItemReply]}>
       <View style={st.commentAvatar}>
-        <Text style={st.commentAvatarText}>
-          {item.anonymous_name?.[0]?.toUpperCase() || 'A'}
-        </Text>
+        {item.avatar_url ? (
+          <Image source={{ uri: item.avatar_url }} style={st.commentAvatarImg} />
+        ) : (
+          <Text style={st.commentAvatarText}>
+            {item.anonymous_name?.[0]?.toUpperCase() || 'A'}
+          </Text>
+        )}
       </View>
 
       <View style={st.commentBody}>
@@ -409,6 +413,7 @@ export const CommentBottomSheet = React.memo(({
       id: optimisticId,
       content: (gifUrl || imageUrl || voiceUrl) ? '' : text.trim(),
       anonymous_name: 'You',
+      avatar_url: user?.avatar_url || undefined,
       time_ago: 'just now',
       likes_count: 0,
       liked_by_me: false,
@@ -934,7 +939,9 @@ const st = StyleSheet.create({
     backgroundColor: AVATAR_BG,
     alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
   },
+  commentAvatarImg:  { width: 34, height: 34, borderRadius: 17 },
   commentAvatarText: { fontSize: 13, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
   commentBody:       { flex: 1 },
   commentMetaRow: {

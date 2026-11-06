@@ -13,6 +13,7 @@ type Comment = {
   id: string;
   content: string;
   anonymous_name: string;
+  avatar_url?: string | null;
   time_ago: string;
   likes_count: number;
   liked_by_me: boolean;
@@ -37,8 +38,12 @@ const mmss = (s: number) => `0:${String(Math.floor(s)).padStart(2, "0")}`;
 const MENTION = /@([A-Za-z0-9_.]{2,30})/g;
 
 const HUES = [8, 352, 338, 358, 14, 328];
-function Av({ name, small }: { name: string; small?: boolean }) {
+function Av({ name, src, small }: { name: string; src?: string | null; small?: boolean }) {
   const n = name || "A";
+  if (src) {
+    const s = small ? 24 : 36;
+    return <Image className={`cmt-av img${small ? " sm" : ""}`} src={src} alt="" width={s} height={s} aria-hidden />;
+  }
   let h = 0;
   for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const hue = HUES[h % HUES.length];
@@ -132,7 +137,7 @@ export default function CommentsSheet({
     if ((!content && !media) || (busy && !media)) return;
     const parent = replyTo;
     const temp: Comment = {
-      id: `tmp-${Date.now()}`, content, anonymous_name: "You", time_ago: "just now",
+      id: `tmp-${Date.now()}`, content, anonymous_name: "You", avatar_url: user.avatar_url, time_ago: "just now",
       likes_count: 0, liked_by_me: false, pinned: false, replies: [], ...media,
     };
     setItems((l) => {
@@ -296,7 +301,7 @@ export default function CommentsSheet({
     return (
       <div key={c.id} className={`cmt${depth ? " nested" : ""}`}>
         <div className="cmt-main">
-          <Av name={name} small={depth > 0} />
+          <Av name={name} src={c.avatar_url} small={depth > 0} />
           <div className="cmt-col">
             <div className="cmt-head">
               <b>{name}</b>
