@@ -383,6 +383,15 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             <input className="hk-field" maxLength={CLARITY_MAX} value={a.want} onChange={(e) => set({ want: e.target.value })} placeholder="Add any expectations or details." aria-label="Expectations (optional)" />
             <p className="hk-hint">No names, numbers, socials or money. Link up is how you meet.</p>
           </Section>
+
+          {/* Live preview, right under Expectations: scrolls with the form and rewrites itself as they answer. */}
+          <div className="gc-card gc-live" aria-live="polite">
+            <div className="gc-live-head">
+              <span className="gc-kicker">live preview</span>
+              <button type="button" className="gc-hear" onClick={() => setSeed((x) => x + 1)}>↻ new wording</button>
+            </div>
+            <p className="gc-text">{draft}</p>
+          </div>
         </>
       ) : (
         <div className="gc-step">
@@ -427,16 +436,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
 
       {error ? <div className="err">{error}</div> : null}
       <div className="gc-dock">
-      {/* Live preview, fixed just above Continue: rewrites itself as they answer. */}
-      {!onReview ? (
-        <div className="gc-card gc-live" aria-live="polite">
-          <div className="gc-live-head">
-            <span className="gc-kicker">live preview</span>
-            <button type="button" className="gc-hear" onClick={() => setSeed((x) => x + 1)}>↻ new wording</button>
-          </div>
-          <p className="gc-text">{draft}</p>
-        </div>
-      ) : null}
       <div className="hk-foot">
         <div className="gc-foot-row">
           <button type="button" className="pill" disabled={onReview ? !text.trim() : !!problem} onClick={copy}>{copied ? "Copied" : "Copy"}</button>
