@@ -162,3 +162,47 @@ async def generate(
 
     await db["guided_generations"].insert_one({"user_id": current_user_id, "created_at": now_utc(), "tone": tone})
     return {"confession": text, "tone": tone, "remaining": max(0, DAILY_DRAFTS - used - 1)}
+
+
+class RewordRequest(BaseModel):
+    text: str = Field(..., max_length=500)
+    style: str = "direct"   # one of HOOKUP_TONES: direct | mysterious | playful | vulnerable
+
+
+REWORD_MIN_WORDS = 4
+
+
+@router.post("/reword")
+async def reword(
+    data: RewordRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db=Depends(get_database),
+):
+    """Quick confessions: rewords what the person typed in a style, keeping its meaning.
+    Shares the daily draft allowance with /generate. Posting still goes through POST /drops."""
+    if not writer.is_configured():
+        raise HTTPException(status_code=503, detail="The writer is resting right now. Your own words work too.")
+    text = "\n".join(" ".join(line.split()) for line in data.text.strip().splitlines()).strip()
+    if len(text.split()) < REWORD_MIN_WORDS:
+        raise HTTPException(status_code=400, detail="Write a little more first. It rewords what you said, it doesn't invent it.")
+    if contains_contact_info(text):
+        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
+    if violates_policy(text):
+        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
+
+    used = await _used_today(db, current_user_id)
+    if used >= DAILY_DRAFTS:
+        raise HTTPException(status_code=429, detail="That's all the rewordings for today. Your own words work too.")
+
+    style = data.style if data.style in HOOKUP_TONES else "direct"
+    try:
+        out = await writer.reword_confession(text, style)
+    except writer.WriterUnavailable:
+        raise HTTPException(status_code=503, detail="The writer is resting right now. Your own words work too.")
+    except writer.WriterFailed:
+        raise HTTPException(status_code=502, detail="Couldn't reword it this time. Try again, or try another style.")
+
+    await db["guided_generations"].insert_one(
+        {"user_id": current_user_id, "created_at": now_utc(), "tone": style, "mode": "reword"}
+    )
+    return {"confession": out, "style": style, "remaining": max(0, DAILY_DRAFTS - used - 1)}

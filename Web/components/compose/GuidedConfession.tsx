@@ -9,6 +9,8 @@ import { api, ApiError, COST, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { hookupDraft, FRESH_FOR_WHEN, MEET_WHEN, WANTS, type DraftAnswers } from "@/lib/hookupDraft";
 import AgeGate from "../AgeGate";
+import { ConfessionPreview } from "../ConfessionCard";
+import { linkUpFacts } from "@/lib/confession";
 
 export const GUIDED_SAVE_KEY = "anonixx.drops.guided.v1";
 // The poster's own age, remembered after their first hookup post so it's filled in next time.
@@ -21,7 +23,7 @@ const CLARITY_MAX = 120; // "Expectations", same cap as the API
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const GENDERS: [string, string][] = [["woman", "woman"], ["man", "man"], ["other", "person"]];
 const LOOKING: [string, string][] = [["man", "man"], ["woman", "woman"], ["anyone", "anyone"]];
-const TONES: [string, string][] = [["vulnerable", "Vulnerable"], ["playful", "Playful"], ["mysterious", "Mysterious"], ["direct", "Direct"]];
+const TONES: [string, string][] = [["direct", "Direct"], ["mysterious", "Mysterious"], ["playful", "Playful"], ["vulnerable", "Vulnerable"]];
 const FRESH_HINT: Record<string, string> = {
   tonight: "It's up for 12 hours. You can add more, up to 2 days.",
   week: "It's up for 7 days.",
@@ -115,6 +117,15 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const preview = useRef<HTMLAudioElement | null>(null);
 
   const draft = useMemo(() => hookupDraft(a, seed), [a, seed]);
+  // The chips the feed card will show, from the answers so far.
+  const previewFacts = useMemo(() => {
+    const [lo, hi] = wantedRange(a);
+    return linkUpFacts({
+      age: Number(a.age) || 0, gender: a.gender, area: a.area.trim(), looking_for: a.lookingFor,
+      age_min: lo, age_max: hi, vibes: a.wants,
+      guided: { craving: null, traits: [], hosting: a.hosting, public_first: a.publicFirst, tone: null, ai_generated: false, meet_when: a.when },
+    }, null);
+  }, [a]);
 
   // A random sound behind it, unless they chose "No sound". Shuffle rolls another.
   const shuffleSound = useCallback(() => {
@@ -309,7 +320,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     !!a.ageMin || !!a.ageMax || a.lookingFor !== "anyone",
     a.wants.length > 0,
     !!a.when,
-    !!a.note.trim(),
+    !!a.note.trim() || !!a.want.trim(),
   ];
   const doneCount = sections.filter(Boolean).length;
   const pickedSound = a.sound ? sounds?.find((x) => x.id === a.sound) : undefined;
@@ -372,26 +383,25 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             </div>
           </Section>
 
-          <Section n={5} title="Anything else?" optional done={sections[4]}>
+          <Section n={5} title="Anything else?" sub="A personal message, and anything they should know first." optional done={sections[4]}>
+            <h3 className="gc-label">Personal message <span className="hk-opt">optional</span></h3>
             <div className="gc-secret">
-              <textarea rows={3} maxLength={NOTE_MAX} value={a.note} onChange={(e) => set({ note: e.target.value })} placeholder="Write something personal you'd like them to know." aria-label="Anything else (optional)" />
+              <textarea rows={3} maxLength={NOTE_MAX} value={a.note} onChange={(e) => set({ note: e.target.value })} placeholder="Write something personal you'd like them to know." aria-label="Personal message (optional)" />
               <span>{NOTE_MAX - a.note.length}</span>
             </div>
-          </Section>
-
-          <Section title="Expectations" optional done={!!a.want.trim()}>
-            <input className="hk-field" maxLength={CLARITY_MAX} value={a.want} onChange={(e) => set({ want: e.target.value })} placeholder="Add any expectations or details." aria-label="Expectations (optional)" />
+            <h3 className="gc-label">Expectations <span className="hk-opt">optional</span></h3>
+            <input className="hk-field" maxLength={CLARITY_MAX} value={a.want} onChange={(e) => set({ want: e.target.value })} placeholder="Drinks first, somewhere public, no rush…" aria-label="Expectations (optional)" />
             <p className="hk-hint">No names, numbers, socials or money. Link up is how you meet.</p>
           </Section>
 
-          {/* Live preview, right under Expectations: scrolls with the form and rewrites itself as they answer. */}
-          <div className="gc-card gc-live" aria-live="polite">
-            <div className="gc-live-head">
-              <span className="gc-kicker">live preview</span>
-              <button type="button" className="gc-hear" onClick={() => setSeed((x) => x + 1)}>↻ new wording</button>
-            </div>
-            <p className="gc-text">{draft}</p>
-          </div>
+          {/* Live preview, right under section 5: the feed card as it will look, rewriting itself as they answer. */}
+          <p className="cc-kicker">live preview</p>
+          <ConfessionPreview
+            category="linkup"
+            text={draft}
+            facts={previewFacts}
+            right={<button type="button" className="gc-hear" onClick={() => setSeed((x) => x + 1)}>↻ new wording</button>}
+          />
         </>
       ) : (
         <div className="gc-step">
@@ -409,9 +419,11 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             <>
               <h3 className="gc-label">Reword it for me <span className="hk-opt">optional</span></h3>
               <Chips label="Tone" options={TONES} isOn={(k) => tone === k && !!aiText} onPick={(k) => { if (!generating) generate(k); }} />
-              {writer.remaining != null ? <p className="hk-hint">{writer.remaining} rewordings left today.</p> : null}
+              <p className="hk-hint">It keeps your details and adds none.{writer.remaining != null ? ` ${writer.remaining} rewordings left today.` : ""}</p>
             </>
           ) : null}
+          <h3 className="gc-label">How it shows in the feed</h3>
+          <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Say it the way you'd whisper it to them…" />
           <h3 className="gc-label">A sound behind it</h3>
           {sounds === null ? <p className="hk-hint">Loading sounds…</p> : sounds.length === 0 ? (
             <p className="hk-hint">No sounds yet. Yours goes out quiet, which works too.</p>

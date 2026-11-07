@@ -11,6 +11,7 @@ import "./call.css";
 import "./feedparity.css";
 import "./discover.css";
 import "./room.css";
+import "./confession.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";
 import OfflineBar from "@/components/OfflineBar";

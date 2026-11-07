@@ -6,7 +6,6 @@ import {
   ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
   View, useWindowDimensions,
 } from 'react-native';
-import Svg, { Line, Polygon } from 'react-native-svg';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Gesture, GestureDetector, Pressable as GHPressable } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -26,6 +25,7 @@ import {
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
 import AnonProfileSheet from '../../components/connect/AnonProfileSheet';
 import { PollCard } from '../../components/feed/DropCard';
+import ConfessionCard from '../../components/feed/ConfessionCard';
 import MarketCard from '../../components/feed/MarketCard';
 import FeedAdCard from '../../components/feed/FeedAdCard';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
@@ -101,7 +101,8 @@ const fmtClock = (s) => {
 
 // ─── Shared: Link Up button, pinned near the bottom of the slide.
 // heart: hookup posts get the 🖤 version.
-const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
+// cost: what Let In costs this viewer (0 with Premium). Knocking itself is free.
+const LinkUpButton = React.memo(({ onPress, name, wide, heart, cost = UNLOCK_COST }) => {
   const glow = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -113,7 +114,10 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
   }, [glow]);
   return (
     <Animated.View style={[sw.linkUpWrap, wide && { alignSelf: 'stretch' }, { transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] }) }] }]}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.85} hitSlop={HIT_SLOP}>
+      <TouchableOpacity
+        onPress={onPress} activeOpacity={0.85} hitSlop={HIT_SLOP} accessibilityRole="button"
+        accessibilityHint={cost ? `Free to knock. ${cost} coins only if they let you in.` : 'Free for you.'}
+      >
         <LinearGradient
           colors={['#ff8a73', '#ff634a', '#ff4f7b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={[sw.linkUpBtn, wide && { justifyContent: 'center' }]}
@@ -124,7 +128,7 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
           </Text>
           <View style={sw.linkUpCostPill}>
             <Coins size={rs(12)} color="#ffc93c" />
-            <Text style={sw.linkUpCostText}>{UNLOCK_COST}</Text>
+            <Text style={sw.linkUpCostText}>{cost ? `${cost} if let in` : 'Free'}</Text>
           </View>
         </LinearGradient>
       </TouchableOpacity>
@@ -148,13 +152,11 @@ const hookupTags = (h) => {
   ].filter(Boolean);
 };
 // Hookup posts are live for 12h; the owner can extend (up to 48h).
-const LiveChips = ({ post, isOwnPost }) => {
+const useLiveUntil = (post) => {
   const [liveUntil, setLiveUntil] = useState(post.live_until);
   const { showToast } = useToast();
   useEffect(() => { setLiveUntil(post.live_until); }, [post.live_until]);
-  if (post.kind !== 'hookup' || !liveUntil) return null;
-  const left = timeLeft(liveUntil);
-  const extend = async () => {
+  const extend = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/extend`, {
@@ -167,7 +169,14 @@ const LiveChips = ({ post, isOwnPost }) => {
     } catch (e) {
       showToast({ type: 'warning', message: e.message });
     }
-  };
+  }, [post.id, showToast]);
+  return [liveUntil, extend];
+};
+
+const LiveChips = ({ post, isOwnPost }) => {
+  const [liveUntil, extend] = useLiveUntil(post);
+  if (post.kind !== 'hookup' || !liveUntil) return null;
+  const left = timeLeft(liveUntil);
   return (
     <View style={sw.liveRow}>
       <Text style={[sw.liveChip, left && sw.liveChipHot]}>{left ? `Tonight · ${left}` : 'Ended'}</Text>
@@ -363,7 +372,7 @@ const RailAvatar = ({ post, navigation }) => {
 const posterCache = new Map();
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, onUnlock, headerHeight = 0,
+  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, onUnlock, headerHeight = 0, knockCost = UNLOCK_COST,
 }) => {
   const likedRef = useRef(liked);
   likedRef.current = liked;
@@ -698,7 +707,7 @@ const VideoSlide = ({
             ) : null}
 
             <LiveChips post={post} isOwnPost={isOwnPost} />
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} />}
           </View>
 
         </>
@@ -710,7 +719,7 @@ const VideoSlide = ({
 // ─── AUDIO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 const AudioSlide = ({
   post, isActive, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
+  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, knockCost = UNLOCK_COST,
 }) => {
   const audioPlayer = useAudioPlayer(null);
   const audioStatus = useAudioPlayerStatus(audioPlayer);
@@ -847,7 +856,7 @@ const AudioSlide = ({
         </TouchableOpacity>
 
         <LiveChips post={post} isOwnPost={isOwnPost} />
-        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
+        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} />}
       </View>
 
       <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
@@ -886,39 +895,8 @@ const ImageSlideCarousel = React.memo(({ images }) => {
 });
 
 // ─── TEXT SLIDE ─────────────────────────────────────────────────
-// With an image: full-bleed image and caption. Without: a sealed-letter backdrop (sized from
-// the window) with big centred text. Returns the flap height so text clears it.
-const envelopeFlapHeight = (h) => Math.max(52, Math.min(140, h * 0.14));
-
-const EnvelopeBackdrop = ({ top }) => {
-  const { width: w, height: h } = useWindowDimensions();
-  const gut = Math.max(10, Math.min(26, w * 0.035));
-  const ew = Math.min(560, w - gut * 2);
-  const flap = envelopeFlapHeight(h);
-  const seal = Math.max(30, Math.min(44, w * 0.08));
-  const left = (w - ew) / 2;
-  const y = top + gut;
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
-        <Polygon points={`${left},${y} ${left + ew},${y} ${w / 2},${y + flap}`} fill="rgba(255,255,255,0.09)" />
-        <Line x1={0} y1={h} x2={w / 2} y2={h * 0.62} stroke="rgba(255,255,255,0.07)" strokeWidth={1} />
-        <Line x1={w} y1={h} x2={w / 2} y2={h * 0.62} stroke="rgba(255,255,255,0.07)" strokeWidth={1} />
-      </Svg>
-      <View
-        style={{
-          position: 'absolute', left: w / 2 - seal / 2, top: y + flap - seal * 0.55,
-          width: seal, height: seal, borderRadius: seal / 2, backgroundColor: '#ff634a',
-          alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)',
-          shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 6,
-        }}
-      >
-        <Text style={{ color: 'rgba(255,255,255,0.88)', fontFamily: 'PlayfairDisplay-Italic', fontSize: seal * 0.5, fontWeight: '700' }}>x</Text>
-      </View>
-    </View>
-  );
-};
-
+// With an image: full-bleed image and caption. Without: the confession card
+// (components/feed/ConfessionCard) with its category, headline, facts and action.
 // The poster's chosen font for a text drop; older drops (no font_style) keep the default look.
 const fontOf = (id) => {
   const f = id && CARD_FONT_STYLES[id];
@@ -928,7 +906,10 @@ const fontOf = (id) => {
 const TextSlide = ({
   post, onLike, liked, likesCount, savesCount, onSave, saved, onComment, commentCount,
   isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false, isActive = false,
+  knockCost = UNLOCK_COST,
 }) => {
+  const [liveUntil, extendLive] = useLiveUntil(post);
+  const cardPost = useMemo(() => ({ ...post, live_until: liveUntil }), [post, liveUntil]);
   // A sound the poster picked plays on a loop while this slide is on screen;
   // the chip under the caption mutes it.
   const track = post.sound?.url ? post.sound : null;
@@ -959,13 +940,6 @@ const TextSlide = ({
     ? post.images
     : (post.media_url && post.media_type === 'image' ? [post.media_url] : []);
   const hasImage = imageList.length > 0;
-  const { height: winH } = useWindowDimensions();
-  const isEnvelope = !hasImage && post.kind !== 'hookup';
-  const envTop = headerHeight + rp(4);
-  const envClear = isEnvelope ? envelopeFlapHeight(winH) * 0.55 + rp(18) : 0;
-
-  // "Read more" link in case very long text still doesn't fit.
-  const isLong = (post.content?.length || 0) > 200;
 
 
   const handleLikeWithAnim = () => {
@@ -986,9 +960,9 @@ const TextSlide = ({
   return (
     <View style={[ss.slide, { backgroundColor: t.bgTo }]}>
       {/* Without an image the confession's colour is the background; with one, the image fills the slide. */}
+      {/* Text-only: the poster's colour stays underneath, darkened so every confession card reads the same. */}
       {!hasImage && <LinearGradient colors={[t.bgFrom, t.bgTo]} style={StyleSheet.absoluteFill} />}
-      {isEnvelope && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,16,0.72)' }]} pointerEvents="none" />}
-      {isEnvelope && <EnvelopeBackdrop top={envTop} />}
+      {!hasImage && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(11,15,24,0.78)' }]} pointerEvents="none" />}
 
       <GestureDetector gesture={tapGesture}>
         <View style={StyleSheet.absoluteFill} collapsable={false}>
@@ -1000,21 +974,25 @@ const TextSlide = ({
               // its own blur (components/feed/FitImage, utils/mediaFit).
               <FitImage uri={imageList[0]} style={StyleSheet.absoluteFill} />
             )
-          ) : (
-            // Top padding clears the header; bottom padding is small so the text sits near mid-screen.
-            <View style={[sw.bigTextWrap, { paddingTop: headerHeight + rp(12) + envClear }]} pointerEvents="none">
-              <Text
-                style={[sw.bigTextConfession, fontOf(post.font_style)]}
-                numberOfLines={14}
-                adjustsFontSizeToFit
-                minimumFontScale={0.4}
-              >
-                {post.content}
-              </Text>
-            </View>
-          )}
+          ) : null}
         </View>
       </GestureDetector>
+
+      {/* Text-only confession card. Empty space passes taps through to the double-tap layer. */}
+      {!hasImage && (
+        <ConfessionCard
+          post={cardPost}
+          isOwnPost={isOwnPost}
+          knockCost={knockCost}
+          onKnock={onLinkUp}
+          onComment={onComment}
+          onReadMore={() => setFullTextVisible(true)}
+          onExtend={extendLive}
+          topInset={headerHeight + rp(8)}
+          bottomInset={rp(track ? 120 : 92)}
+          headlineFont={fontOf(post.font_style)}
+        />
+      )}
 
       <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
 
@@ -1056,20 +1034,14 @@ const TextSlide = ({
                 <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} hookStyle={ss.captionHook} expanded={expanded} />
               </TouchableOpacity>
             ) : null}
-            {!hasImage && isLong && (
-              <TouchableOpacity onPress={() => setFullTextVisible(true)} activeOpacity={0.7} style={sw.readMoreBtn} hitSlop={HIT_SLOP}>
-                <Text style={sw.readMoreText}>Read full confession</Text>
-              </TouchableOpacity>
-            )}
-
-            <LiveChips post={post} isOwnPost={isOwnPost} />
+            {hasImage && <LiveChips post={post} isOwnPost={isOwnPost} />}
             {track && (
               <TouchableOpacity onPress={() => setTrackMuted((m) => !m)} hitSlop={HIT_SLOP} style={sw.liveRow}
                 accessibilityLabel={trackMuted ? `Play sound: ${track.title}` : `Mute sound: ${track.title}`}>
                 <Text style={sw.liveChip} numberOfLines={1}>{trackMuted ? '🔇' : '♪'} {track.title}</Text>
               </TouchableOpacity>
             )}
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} wide />}
+            {hasImage && !isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} wide />}
           </View>
         </>
       )}
@@ -1097,7 +1069,7 @@ const TextSlide = ({
 // ─── POLL SLIDE (new) ─────────────────────────────────────────────
 const PollSlide = ({
   post, isAuthenticated, onVote, onLike, liked, likesCount, savesCount, onSave, saved,
-  onComment, commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
+  onComment, commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, knockCost = UNLOCK_COST,
 }) => {
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
   // Double tap on any empty part of the slide likes it; hold for the menu.
@@ -1149,7 +1121,7 @@ const PollSlide = ({
               </AuthorProfileTrigger>
             </View>
             <LiveChips post={post} isOwnPost={isOwnPost} />
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} />}
           </View>
         </>
       )}
@@ -1668,6 +1640,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       navigation,
       headerHeight,
       chromeHidden,
+      knockCost: user?.is_premium ? 0 : UNLOCK_COST,
     };
 
     let slide;
@@ -1684,7 +1657,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }, [
     activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
     handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress, handleUnlock,
-    isAuthenticated, navigation, headerHeight, chromeHidden,
+    isAuthenticated, navigation, headerHeight, chromeHidden, user?.is_premium,
   ]);
 
   if (!loading && loadError && posts.length === 0) {
@@ -1959,8 +1932,6 @@ const sw = StyleSheet.create({
   railAvatarFallback: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   railAvatarInitial: { fontSize: rf(17), fontWeight: '800', color: THEME.primary },
 
-  readMoreBtn: { alignSelf: 'flex-start', marginTop: rp(6), marginBottom: rp(2) },
-  readMoreText: { fontSize: FONT.sm, fontWeight: '700', color: '#fff', textDecorationLine: 'underline' },
 
   fullTextBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   fullTextSheet: {
@@ -2000,12 +1971,6 @@ const sw = StyleSheet.create({
   linkUpCostText: { fontSize: rf(12), fontWeight: '800', color: '#ffe7a3' },
 
 
-  bigTextWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(28), paddingBottom: rp(24) },
-  bigTextConfession: {
-    fontFamily: 'PlayfairDisplay-Italic', fontSize: rf(34), lineHeight: rf(44),
-    color: '#fff', textAlign: 'center', letterSpacing: 0.2,
-    textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
-  },
   pollSlideCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(20) },
 
   // Multi-image carousel dots — sits just under the top safe area, clear

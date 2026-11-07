@@ -21,6 +21,7 @@ import { countryHeader } from '../../utils/country';
 import { awardMilestone, fetchBalance } from '../../store/slices/coinsSlice';
 import { hookupDraft, WANTS, MEET_WHEN, FRESH_FOR_WHEN } from '../../utils/hookupDraft';
 import AgeGate from './AgeGate';
+import { ConfessionPreview, linkUpFacts } from '../feed/ConfessionCard';
 import T from '../../utils/theme';
 
 // Must match DROP_POST_COST in Backend/app/api/v1/drops.py.
@@ -34,7 +35,7 @@ const MAX_CHARS = 500;
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const GENDERS = [['woman', 'woman'], ['man', 'man'], ['other', 'person']];
 const LOOKING = [['man', 'man'], ['woman', 'woman'], ['anyone', 'anyone']];
-const TONES = [['vulnerable', 'Vulnerable'], ['playful', 'Playful'], ['mysterious', 'Mysterious'], ['direct', 'Direct']];
+const TONES = [['direct', 'Direct'], ['mysterious', 'Mysterious'], ['playful', 'Playful'], ['vulnerable', 'Vulnerable']];
 const FRESH_HINT = {
   tonight: "It's up for 12 hours. You can add more, up to 2 days.",
   week: "It's up for 7 days.",
@@ -174,6 +175,15 @@ export default function GuidedConfession({ navigation, onBack }) {
   const preview = useAudioPlayer(null);
 
   const draft = useMemo(() => hookupDraft(a, seed), [a, seed]);
+  // The chips the feed card will show, from the answers so far.
+  const previewFacts = useMemo(() => {
+    const [lo, hi] = wantedRange(a);
+    return linkUpFacts({
+      age: a.age ? Number(a.age) : null, gender: a.gender, area: a.area.trim(),
+      looking_for: a.lookingFor, age_min: lo, age_max: hi, vibes: a.wants,
+      guided: { meet_when: a.when, hosting: a.hosting, public_first: a.publicFirst },
+    }, null);
+  }, [a]);
 
   // A random sound behind it, unless they chose "No sound". Shuffle rolls another.
   const shuffleSound = useCallback(() => {
@@ -410,7 +420,8 @@ export default function GuidedConfession({ navigation, onBack }) {
           {MEET_WHEN.map(([k, l]) => <CheckRow key={k} label={l} radio on={a.when === k} onPress={() => set({ when: k })} />)}
         </Section>
 
-        <Section n={5} title="Anything else?" optional done={!!a.note.trim()}>
+        <Section n={5} title="Anything else?" sub="A personal message, and anything they should know first." optional done={!!a.note.trim() || !!a.want.trim()}>
+          <Label optional>Personal message</Label>
           <View style={s.noteBox}>
             <TextInput
               style={s.noteInput}
@@ -423,15 +434,27 @@ export default function GuidedConfession({ navigation, onBack }) {
             />
             <Text style={s.counter}>{NOTE_MAX - a.note.length}</Text>
           </View>
-        </Section>
-
-        <Section title="Expectations" optional done={!!a.want.trim()}>
-          <Field value={a.want} onChangeText={(v) => set({ want: v.slice(0, CLARITY_MAX) })} placeholder="Add any expectations or details." accessibilityLabel="Expectations (optional)" />
+          <Label optional>Expectations</Label>
+          <Field value={a.want} onChangeText={(v) => set({ want: v.slice(0, CLARITY_MAX) })} placeholder="Drinks first, somewhere public, no rush…" accessibilityLabel="Expectations (optional)" />
           <View style={s.privacyRow}>
             <Lock size={rs(12)} color={T.textMute} />
             <Text style={s.privacy}>No names, numbers, socials or money. Link up is how you meet.</Text>
           </View>
         </Section>
+
+        {/* Live preview: the feed card as it will look, rewriting itself as they answer. */}
+        <Text style={s.previewKicker}>live preview</Text>
+        <ConfessionPreview
+          category="linkup"
+          text={draft}
+          facts={previewFacts}
+          right={(
+            <TouchableOpacity onPress={() => setSeed((x) => x + 1)} hitSlop={HIT_SLOP} style={s.reword} accessibilityLabel="Try different wording">
+              <RefreshCw size={rs(12)} color={T.textSecondary} />
+              <Text style={s.rewordText}>new wording</Text>
+            </TouchableOpacity>
+          )}
+        />
       </>
     );
   }
@@ -473,9 +496,14 @@ export default function GuidedConfession({ navigation, onBack }) {
                 <Chip key={k} label={l} active={tone === k && !!aiText} onPress={() => { if (!generating) generate(k); }} />
               ))}
             </View>
-            {writer.remaining != null && <Text style={s.hint}>{writer.remaining} rewordings left today.</Text>}
+            <Text style={s.hint}>
+              It keeps your details and adds none.{writer.remaining != null ? ` ${writer.remaining} rewordings left today.` : ''}
+            </Text>
           </>
         )}
+
+        <Label>How it shows in the feed</Label>
+        <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Say it the way you'd whisper it to them…" />
 
         <Label>A sound behind it</Label>
         {sounds === null ? <ActivityIndicator color={T.primary} /> : sounds.length === 0 ? (
@@ -512,7 +540,7 @@ export default function GuidedConfession({ navigation, onBack }) {
   }
 
   const onReview = phase === 'review';
-  const doneCount = [aboutDone, !!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone', a.wants.length > 0, !!a.when, !!a.note.trim()].filter(Boolean).length;
+  const doneCount = [aboutDone, !!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone', a.wants.length > 0, !!a.when, !!a.note.trim() || !!a.want.trim()].filter(Boolean).length;
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -533,21 +561,6 @@ export default function GuidedConfession({ navigation, onBack }) {
         </ScrollView>
 
         <View style={s.footer}>
-          {/* Live preview, fixed just above Continue: rewrites itself as they answer. */}
-          {!onReview && (
-            <LinearGradient colors={['#1d1018', '#120a10']} style={s.previewCard}>
-              <View style={s.previewHead}>
-                <Text style={s.cardKicker}>live preview</Text>
-                <TouchableOpacity onPress={() => setSeed((x) => x + 1)} hitSlop={HIT_SLOP} style={s.reword} accessibilityLabel="Try different wording">
-                  <RefreshCw size={rs(12)} color={T.textSecondary} />
-                  <Text style={s.rewordText}>new wording</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={s.previewScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                <Text style={s.previewText}>{draft}</Text>
-              </ScrollView>
-            </LinearGradient>
-          )}
           <View style={s.footRow}>
             <TouchableOpacity style={s.copyBtn} onPress={copy} disabled={onReview ? !text.trim() : !!problem} activeOpacity={0.8} accessibilityLabel="Copy the confession">
               <Copy size={rs(16)} color={T.text} />
@@ -586,10 +599,7 @@ const s = StyleSheet.create({
   seg: { flex: 1, height: rs(3), borderRadius: rs(2), backgroundColor: T.borderStrong },
   segOn: { backgroundColor: T.primary },
 
-  previewCard: { borderRadius: RADIUS.lg, borderWidth: 1, borderColor: T.primaryBorder, paddingHorizontal: SPACING.md, paddingVertical: rp(12), gap: rp(6) },
-  previewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  previewScroll: { maxHeight: rs(88) },
-  previewText: { color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.md, lineHeight: rf(22) },
+  previewKicker: { color: T.textSecondary, fontFamily: 'DMSans-Bold', fontSize: FONT.xs, letterSpacing: 1.5, marginBottom: SPACING.sm, textTransform: 'uppercase' },
   reword: { flexDirection: 'row', alignItems: 'center', gap: rs(4) },
   rewordText: { color: T.textSecondary, fontFamily: 'DMSans-SemiBold', fontSize: FONT.xs },
 

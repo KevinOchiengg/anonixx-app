@@ -29,9 +29,12 @@ export type Post = {
   // Paid drop: video_url is a short clear preview; POST /drops/{id}/unlock returns the full video.
   paywall?: { price: number; preview_seconds: number; unlocked: boolean } | null;   // text drops: the poster's font (lib/dropFonts.ts)
   kind?: "hookup" | "confession" | null;
+  // Feed card category (Backend drop_category): hookups are "linkup".
+  category?: "curiosity" | "vulnerable" | "linkup" | null;
+  topics?: string[] | null;
   hookup?: {
     age: number; gender: string | null; area: string; looking_for: string | null; age_min: number | null; age_max: number | null; vibes: string[]; fresh_window?: string | null;
-    guided?: { craving: string | null; traits: string[]; hosting: string | null; public_first: boolean; tone: string | null; ai_generated: boolean } | null;
+    guided?: { craving: string | null; traits: string[]; hosting: string | null; public_first: boolean; tone: string | null; ai_generated: boolean; meet_when?: string | null } | null;
   } | null;
   sensitivity: "general" | "mature";
   media_url: string | null;

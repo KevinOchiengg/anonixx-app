@@ -85,6 +85,32 @@ INTENT_LABELS = {
     "the-exchange":           "The Exchange",
 }
 
+# Feed card categories. Hookups are always "linkup"; a confession's author may pick one of
+# CONFESSION_CATEGORIES, otherwise it's worked out from their topics and words (drop_category).
+CONFESSION_CATEGORIES = ("curiosity", "vulnerable")
+_VULNERABLE_TOPICS = {"heartbreak", "regret", "betrayal", "anger", "relief", "confusion", "growth", "family"}
+_VULNERABLE_WORDS = re.compile(
+    r"\b(cry|cried|crying|tears|hurt|hurts|hurting|alone|lonely|loneliness|scared|afraid|depress\w*|anxious|anxiety"
+    r"|heartbr\w*|broke my heart|ashamed|shame|guilt\w*|grief|griev\w*|numb|empty inside|miss (?:him|her|them|you)"
+    r"|lost my|healing|forgive)\b",
+    re.IGNORECASE,
+)
+
+
+def drop_category(drop: dict) -> str:
+    """curiosity | vulnerable | linkup, for the feed card's label and action."""
+    if drop.get("kind") == "hookup":
+        return "linkup"
+    picked = drop.get("category")
+    if picked in CONFESSION_CATEGORIES:
+        return picked
+    if _VULNERABLE_TOPICS & set(drop.get("topics") or []):
+        return "vulnerable"
+    if _VULNERABLE_WORDS.search(drop.get("confession") or ""):
+        return "vulnerable"
+    return "curiosity"
+
+
 class DropPollInput(BaseModel):
     question: str
     options: List[str]  # 2–4 items
@@ -352,6 +378,8 @@ class CreateDropRequest(BaseModel):
     display_name: Optional[str] = None
     # Author-picked moods/topics for Stories (utils/search_lexicon.STORY_TAGS), up to 3.
     topics: Optional[List[str]] = None
+    # Optional feed category for a confession: one of CONFESSION_CATEGORIES. Ignored on hookups.
+    category: Optional[str] = None
 
 
 class PublishDropRequest(BaseModel):
@@ -809,6 +837,7 @@ async def create_drop(
         "font_style": font_style,
         "tags":       tags or None,
         "topics":     (clean_topics(data.topics) or None) if kind != "hookup" else None,
+        "category":   data.category if kind != "hookup" and data.category in CONFESSION_CATEGORIES else None,
 
         # ── Native social engagement (like/save/comment/view) ─
         "liked_by":     [],
@@ -1771,6 +1800,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "theme":            drop.get("theme"),
             "intent":           drop.get("intent"),
             "kind":             drop.get("kind"),
+            "category":         drop_category(drop),
             "hookup":           drop.get("hookup"),
             "live_until":       _aware(drop["live_until"]).isoformat() if drop.get("live_until") else None,
             "linkup_count":     linkup_counts.get(did, 0) if drop.get("kind") == "hookup" else None,

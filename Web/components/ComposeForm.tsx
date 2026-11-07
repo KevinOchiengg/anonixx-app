@@ -17,6 +17,8 @@ import TopicPicker from "./compose/TopicPicker";
 import Sheet from "./Sheet";
 import { DEFAULT_DROP_FONT, DROP_FONTS, DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 import GuidedConfession, { GUIDED_SAVE_KEY } from "./compose/GuidedConfession";
+import { ConfessionPreview } from "./ConfessionCard";
+import { CATEGORIES, autoCategory, topicLabel } from "@/lib/confession";
 import {
   IconImages, IconSparkles, IconUserPlus, IconPin, IconMic, IconPoll, IconShare, IconShuffle, IconX, IconWarn, IconMusic,
 } from "./compose/toolicons";
@@ -25,6 +27,11 @@ const MODES = [["text", "Text"], ["media", "Photo / Video"], ["voice", "Voice"],
 type Mode = (typeof MODES)[number][0];
 const MAX = 500;
 const DRAFT_KEY = "anonixx.drops.draft.v1";
+const HOOK_MAX = 100;
+// AI reword styles; ids match HOOKUP_TONES in Backend/app/api/v1/drops.py.
+const REWORD_STYLES = [["direct", "Direct"], ["mysterious", "Mysterious"], ["playful", "Playful"], ["vulnerable", "Vulnerable"]] as const;
+const REWORD_MIN_WORDS = 4;
+type Picked = "curiosity" | "vulnerable" | null;
 const INTENTS = {
   "meet-me": { label: "Meet Me", sub: "looking for something real", mood: "longing", from: "#12070c", to: "#2a121b", accent: "#FF6B8A", text: "#FBE8ED", hint: "#C98A9B" },
   "skeleton-in-the-closet": { label: "Skeleton In The Closet", sub: "secrets don't stay buried", mood: "untold", from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC", hint: "#C48A98" },
@@ -75,6 +82,21 @@ function Inner() {
   const [place, setPlace] = useState<LocationDraft>({ country: "", county: "", subCounty: "", estate: "" });
   const [shareOut, setShareOut] = useState(true);
   const [promptIx, setPromptIx] = useState(0);
+  // Quick Confession extras, all optional: an opening line (the feed headline), a category,
+  // and the AI reword (keeps their meaning; POST /guided/reword).
+  const [hook, setHook] = useState("");
+  const [category, setCategory] = useState<Picked>(null);
+  const [writer, setWriter] = useState<{ enabled: boolean; remaining: number | null }>({ enabled: false, remaining: null });
+  const [rewording, setRewording] = useState("");
+  const [rewordStyle, setRewordStyle] = useState("");
+  const [rewordError, setRewordError] = useState("");
+  const [beforeReword, setBeforeReword] = useState<{ hook: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    api<{ enabled: boolean; remaining: number }>("/guided/status")
+      .then((r) => setWriter({ enabled: !!r.enabled, remaining: r.remaining }))
+      .catch(() => {});
+  }, [user]);
   const area_ = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setPromptIx(Math.floor(Math.random() * 4)); }, [intent]);
   useEffect(() => {
@@ -112,6 +134,8 @@ function Inner() {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
       if (d && typeof d === "object") {
         if (typeof d.text === "string") setText(d.text);
+        if (typeof d.hook === "string") setHook(d.hook.slice(0, HOOK_MAX));
+        if (d.category === "curiosity" || d.category === "vulnerable") setCategory(d.category);
         if (typeof d.hint === "string") setHint(d.hint);
         if (typeof d.intent === "string" && d.intent in INTENTS) setIntent(d.intent as IntentId);
         if (d.place && typeof d.place === "object") setPlace({ country: "", county: "", subCounty: "", estate: "", ...d.place });
@@ -128,13 +152,15 @@ function Inner() {
   useEffect(() => {
     if (!draftReady.current || done) return;
     const t = setTimeout(() => {
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, hint, intent, place, shareOut, tagged })); } catch { /* ignore */ }
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, hook, category, hint, intent, place, shareOut, tagged })); } catch { /* ignore */ }
     }, 400);
     return () => clearTimeout(t);
-  }, [text, hint, intent, place, shareOut, tagged, done]);
+  }, [text, hook, category, hint, intent, place, shareOut, tagged, done]);
 
   function discardDraft() {
     setText("");
+    setHook("");
+    setCategory(null);
     setHint("");
     setTagged(null);
     setPlace({ country: "", county: "", subCounty: "", estate: "" });
@@ -142,12 +168,44 @@ function Inner() {
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
   }
 
+  // The opening line goes first, on its own line: the feed shows it as the headline.
+  const fullText = [hook.trim(), text.trim()].filter(Boolean).join("\n");
+  const wordCount = fullText ? fullText.split(/\s+/).length : 0;
+  async function reword(style: string) {
+    if (rewording || wordCount < REWORD_MIN_WORDS) return;
+    setRewording(style);
+    setRewordError("");
+    try {
+      const r = await api<{ confession: string; style: string; remaining: number }>("/guided/reword", { body: { text: fullText, style } });
+      setBeforeReword((b) => b || { hook, text });
+      const out = (r.confession || "").trim();
+      const nl = out.indexOf("\n");
+      // Keep the opening line separate when the reword kept one.
+      if (hook.trim() && nl > 0) { setHook(out.slice(0, nl).trim().slice(0, HOOK_MAX)); setText(out.slice(nl + 1).trim()); }
+      else { setHook(""); setText(out); }
+      setRewordStyle(r.style || style);
+      setWriter((w) => ({ ...w, remaining: r.remaining }));
+    } catch (e) {
+      if ((e as { status?: number }).status === 503) setWriter((w) => ({ ...w, enabled: false }));
+      setRewordError((e as Error).message || "Couldn't reword it this time.");
+    } finally {
+      setRewording("");
+    }
+  }
+  function undoReword() {
+    if (!beforeReword) return;
+    setHook(beforeReword.hook);
+    setText(beforeReword.text);
+    setBeforeReword(null);
+    setRewordStyle("");
+  }
+
   const pollOpts = poll.options.map((o) => o.trim()).filter(Boolean);
   const confessionOk =
     mode === "poll" ? poll.question.trim().length > 0 && pollOpts.length >= 2
     : mode === "voice" ? !!voice
     : mode === "media" ? !!media
-    : !!text.trim();
+    : !!fullText && fullText.length <= MAX;
   const theme = INTENTS[intent];
   const edge = detectEdge(text);
   const placed = [place.estate, place.subCounty, place.county, place.country].some((v) => v.trim());
@@ -196,10 +254,11 @@ function Inner() {
       }
       const body = {
           kind: "confession",
-          confession: text.trim() || undefined,
+          confession: fullText || undefined,
           intent,
           mood_tag: theme.mood,
           ...(topics.length ? { topics } : {}),
+          ...(category ? { category } : {}),
           font_style: font,
           sensitivity: "general",
           publisher_opt_in: shareOut,
@@ -244,16 +303,16 @@ function Inner() {
         <button type="button" className="kind-card" onClick={() => setKind("hookup")}>
           <span className="kind-ico" aria-hidden>🔥</span>
           <span className="kind-body">
-            <strong>Hookup</strong>
-            <span>Say who you are and who you want. If someone wants you back, they ask to link up.</span>
+            <strong>Guided Link Up</strong>
+            <span>Five short steps: who you are, who you want, when. If someone wants you back, they knock.</span>
             <span className="kind-tags"><em>18+</em><em>{COST.post} coins</em><em>Link up on</em></span>
           </span>
         </button>
         <button type="button" className="kind-card" onClick={() => setKind("confession")}>
           <span className="kind-ico" aria-hidden>🪶</span>
           <span className="kind-body">
-            <strong>Confession</strong>
-            <span>The thing you can&apos;t say out loud. Read, felt, never traced back to you.</span>
+            <strong>Quick Confession</strong>
+            <span>Just type it. The thing you can&apos;t say out loud, read and felt, never traced back to you.</span>
             <span className="kind-tags"><em>Free</em><em>Text, photo, video or voice</em></span>
           </span>
         </button>
@@ -265,7 +324,9 @@ function Inner() {
 
   const admin = Boolean(user?.is_admin);
   const prompts = PROMPTS[intent];
-  const left = MAX - text.length;
+  const bodyMax = MAX - (hook.trim() ? hook.trim().length + 1 : 0);
+  const left = bodyMax - text.length;
+  const previewCategory = autoCategory(category, topics, fullText);
   const cardVars = {
     "--cx-from": theme.from, "--cx-to": theme.to, "--cx-accent": theme.accent, "--cx-text": theme.text, "--cx-hint": theme.hint,
   } as React.CSSProperties;
@@ -289,7 +350,7 @@ function Inner() {
   return (
     <form className="cx-form" onSubmit={submit}>
       <div className="cx-top">
-        <button type="button" className="cx-switch" onClick={() => setKind(null)}>Confession · change</button>
+        <button type="button" className="cx-switch" onClick={() => setKind(null)}>Quick Confession · change</button>
       </div>
 
       {unsent ? (
@@ -305,6 +366,18 @@ function Inner() {
 
       {!text ? <p className="cx-guide">Say what you can&apos;t say out loud. Nobody will know it&apos;s you.</p> : null}
 
+      {/* Optional opening line: the first thing they read, shown as the feed headline. */}
+      <label className="qc-hook">
+        <input
+          value={hook}
+          onChange={(e) => setHook(e.target.value.replace(/\n/g, " ").slice(0, HOOK_MAX))}
+          maxLength={HOOK_MAX}
+          placeholder="Opening line, optional. The first thing they read."
+          aria-label="Opening line (optional)"
+        />
+        {hook ? <small>{HOOK_MAX - hook.length}</small> : null}
+      </label>
+
       <div className="cx-live" style={cardVars}>
         {mode === "media" ? <div className="cx-zone"><MediaPicker value={media} onChange={setMedia} onError={setError} /></div> : null}
         {mode === "voice" ? <div className="cx-zone"><VoiceRecorder value={voice} onChange={setVoice} onError={setError} /></div> : null}
@@ -315,7 +388,7 @@ function Inner() {
             ref={area_}
             style={mode === "text" ? dropFontStyle(font) : undefined}
             rows={mode === "text" ? 4 : 2}
-            maxLength={MAX}
+            maxLength={bodyMax}
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={mode === "text" ? prompts[promptIx % prompts.length] : "Add a caption (optional)"}
@@ -336,6 +409,52 @@ function Inner() {
       </div>
 
       <div className={`cx-count${left <= 20 ? (left <= 0 ? " bad" : " warn") : ""}`}>{left}</div>
+
+      {/* Quick Confession extras: category, reword, and how it lands in the feed. */}
+      {mode === "text" ? (
+        <div className="qc">
+          <p className="qc-label">Category<small>optional</small></p>
+          <div className="qc-chips" role="radiogroup" aria-label="Category">
+            {([[null, "Let Anonixx pick"], ["curiosity", CATEGORIES.curiosity.label], ["vulnerable", CATEGORIES.vulnerable.label]] as [Picked, string][]).map(([id, label]) => (
+              <button
+                type="button" key={label} role="radio" aria-checked={category === id}
+                className={category === id ? "on" : ""}
+                style={id ? ({ "--qc-tint": CATEGORIES[id].tint } as React.CSSProperties) : undefined}
+                onClick={() => setCategory(id)}
+              >{label}</button>
+            ))}
+          </div>
+
+          {writer.enabled && wordCount >= REWORD_MIN_WORDS ? (
+            <>
+              <p className="qc-label">Reword it for me<small>optional</small></p>
+              <div className="qc-chips">
+                {REWORD_STYLES.map(([id, label]) => (
+                  <button
+                    type="button" key={id} disabled={!!rewording}
+                    className={`${rewordStyle === id ? "on" : ""}${rewording === id ? " busy" : ""}`}
+                    onClick={() => reword(id)}
+                  >{rewording === id ? "Rewording…" : label}</button>
+                ))}
+              </div>
+              <p className="qc-hint">
+                Same story, same details, new voice. Nothing gets added.
+                {writer.remaining != null ? ` ${writer.remaining} left today.` : ""}
+                {beforeReword ? <button type="button" onClick={undoReword}>Undo</button> : null}
+              </p>
+              {rewordError ? <p className="qc-hint bad">{rewordError}</p> : null}
+            </>
+          ) : null}
+
+          <p className="qc-label">How it shows in the feed</p>
+          <ConfessionPreview
+            category={previewCategory}
+            text={fullText}
+            name={user?.anonymous_name}
+            facts={topics.slice(0, 3).map((t) => ({ text: topicLabel(t) }))}
+          />
+        </div>
+      ) : null}
 
       {edge ? (
         <div className="cx-edge">

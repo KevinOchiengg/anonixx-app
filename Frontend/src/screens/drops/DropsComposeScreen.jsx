@@ -28,6 +28,7 @@ import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
 import TopicPicker from '../../components/drops/TopicPicker';
 import GuidedConfession, { GUIDED_SAVE_KEY } from '../../components/drops/GuidedConfession';
+import { CATEGORIES, ConfessionPreview } from '../../components/feed/ConfessionCard';
 import { TAG_GROUPS, TOP_TAGS } from '../../config/adminTags';
 
 import {
@@ -89,6 +90,17 @@ const TOOLBAR_HINT_KEY = 'anonixx.drops.toolbarHint.seen';
 const POST_COST = 3;
 
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
+const HOOK_MAX = 100;
+// AI reword styles, same ids as HOOKUP_TONES in Backend/app/api/v1/drops.py.
+const REWORD_STYLES = [['direct', 'Direct'], ['mysterious', 'Mysterious'], ['playful', 'Playful'], ['vulnerable', 'Vulnerable']];
+const REWORD_MIN_WORDS = 4;
+// Mirrors drop_category() in drops.py, so the preview label matches the feed.
+const VULNERABLE_TOPICS = ['heartbreak', 'regret', 'betrayal', 'anger', 'relief', 'confusion', 'growth', 'family'];
+const VULNERABLE_WORDS = /\b(cry|cried|crying|tears|hurt|hurts|hurting|alone|lonely|loneliness|scared|afraid|depress\w*|anxious|anxiety|heartbr\w*|broke my heart|ashamed|shame|guilt\w*|grief|griev\w*|numb|empty inside|miss (?:him|her|them|you)|lost my|healing|forgive)\b/i;
+const autoCategory = (picked, topics, text) => (
+  picked || (topics.some((t) => VULNERABLE_TOPICS.includes(t)) || VULNERABLE_WORDS.test(text) ? 'vulnerable' : 'curiosity')
+);
+const topicLabel = (t) => (t === 'growth' ? 'Personal growth' : t.charAt(0).toUpperCase() + t.slice(1));
 const HINT_MAX = 16;
 
 // ─── Placeholder lines per confession type (never inserted into the text). Shuffle cycles them.
@@ -237,8 +249,8 @@ function KindChooser({ onPick, onBack }) {
         <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('hookup')}>
           <View style={s.kindIcon}><Flame size={rs(20)} color={T.primary} /></View>
           <View style={{ flex: 1, gap: rp(4) }}>
-            <Text style={s.kindCardTitle}>Hookup</Text>
-            <Text style={s.kindCardSub}>Say who you are and who you want. If someone wants you back, they ask to link up.</Text>
+            <Text style={s.kindCardTitle}>Guided Link Up</Text>
+            <Text style={s.kindCardSub}>Five short steps: who you are, who you want, when. If someone wants you back, they knock.</Text>
             <View style={s.kindTags}>
               <Text style={s.kindTag}>18+</Text>
               <Text style={s.kindTag}>{POST_COST} coins</Text>
@@ -249,8 +261,8 @@ function KindChooser({ onPick, onBack }) {
         <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('confession')}>
           <View style={s.kindIcon}><Feather size={rs(20)} color={T.primary} /></View>
           <View style={{ flex: 1, gap: rp(4) }}>
-            <Text style={s.kindCardTitle}>Confession</Text>
-            <Text style={s.kindCardSub}>The thing you can't say out loud. Read, felt, never traced back to you.</Text>
+            <Text style={s.kindCardTitle}>Quick Confession</Text>
+            <Text style={s.kindCardSub}>Just type it. The thing you can't say out loud, read and felt, never traced back to you.</Text>
             <View style={s.kindTags}>
               <Text style={s.kindTag}>Free</Text>
               <Text style={s.kindTag}>Text, photo, video or voice</Text>
@@ -347,6 +359,15 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [locationSubCounty, setLocationSubCounty] = useState('');
   const [locationEstate, setLocationEstate] = useState('');
   const [storyTopics, setStoryTopics] = useState([]);   // author's moods/topics (confessions only)
+  // Quick Confession extras, all optional: an opening line (the feed headline), a category,
+  // and the AI reword (keeps their meaning; /guided/reword).
+  const [hook, setHook] = useState('');
+  const [category, setCategory] = useState(null);      // null = worked out from the words | 'curiosity' | 'vulnerable'
+  const [writer, setWriter] = useState({ enabled: false, remaining: null });
+  const [rewording, setRewording] = useState('');      // the style being written, '' when idle
+  const [rewordStyle, setRewordStyle] = useState('');
+  const [rewordError, setRewordError] = useState('');
+  const [beforeReword, setBeforeReword] = useState(null);
   const [fontStyle, setFontStyle] = useState(DEFAULT_CARD_FONT); // an id from CARD_FONT_LIST
   const fontIdx = Math.max(0, CARD_FONT_LIST.findIndex((f) => f.id === fontStyle));
   const nextFont = useCallback(() => {
@@ -409,6 +430,8 @@ export default function DropsComposeScreen({ navigation, route }) {
               const hasContent =
                 (typeof d.text === 'string' && d.text.trim().length > 0);
               if (typeof d.text     === 'string') setText(d.text);
+              if (typeof d.hook     === 'string') setHook(d.hook.slice(0, HOOK_MAX));
+              if (d.category === 'curiosity' || d.category === 'vulnerable') setCategory(d.category);
               if (typeof d.format   === 'string') setFormat(d.format);
               if (typeof d.cardIntent === 'string' && d.cardIntent !== 'the-exchange' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
@@ -443,13 +466,65 @@ export default function DropsComposeScreen({ navigation, route }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
-        text, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
+        text, hook, category, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
         location: { country: locationCountry, county: locationCounty, subCounty: locationSubCounty, estate: locationEstate },
       })).catch(() => {});
     }, 400);
     return () => clearTimeout(saveTimer.current);
-  }, [text, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
+  }, [text, hook, category, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
       locationCountry, locationCounty, locationSubCounty, locationEstate]);
+
+  // ── AI reword (optional) ──────────────────────────────────────
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    let gone = false;
+    AsyncStorage.getItem('token').then((token) => fetch(`${API_BASE_URL}/api/v1/guided/status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })).then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!gone && d) setWriter({ enabled: !!d.enabled, remaining: d.remaining });
+    }).catch(() => {});
+    return () => { gone = true; };
+  }, [isAuthenticated]);
+
+  const fullText = useMemo(() => [hook.trim(), text.trim()].filter(Boolean).join('\n'), [hook, text]);
+  const wordCount = fullText ? fullText.split(/\s+/).length : 0;
+
+  const handleReword = useCallback(async (style) => {
+    if (rewording || wordCount < REWORD_MIN_WORDS) return;
+    setRewording(style);
+    setRewordError('');
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/v1/guided/reword`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ text: fullText, style }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 503) setWriter((w) => ({ ...w, enabled: false }));
+      if (!res.ok) { setRewordError(typeof data.detail === 'string' ? data.detail : "Couldn't reword it this time."); return; }
+      setBeforeReword((b) => b || { hook, text });
+      const out = String(data.confession || '').trim();
+      const nl = out.indexOf('\n');
+      // Keep the opening line separate when the reword kept one.
+      if (hook.trim() && nl > 0) { setHook(out.slice(0, nl).trim().slice(0, HOOK_MAX)); setText(out.slice(nl + 1).trim()); }
+      else { setHook(''); setText(out); }
+      setRewordStyle(data.style || style);
+      setWriter((w) => ({ ...w, remaining: data.remaining }));
+    } catch {
+      setRewordError("Couldn't reach the writer. Check your connection.");
+    } finally {
+      setRewording('');
+    }
+  }, [rewording, wordCount, fullText, hook, text]);
+
+  const undoReword = useCallback(() => {
+    if (!beforeReword) return;
+    setHook(beforeReword.hook);
+    setText(beforeReword.text);
+    setBeforeReword(null);
+    setRewordStyle('');
+  }, [beforeReword]);
 
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
@@ -611,7 +686,7 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ── Submit drop (client-side stub — posts to /drops) ───────────
   const handleDrop = useCallback(async () => {
-    if (!text.trim() && !mediaUri) {
+    if (!fullText && !mediaUri) {
       showToast({ type: 'warning', message: 'Write something or add a photo first.' });
       return;
     }
@@ -661,7 +736,8 @@ export default function DropsComposeScreen({ navigation, route }) {
         .slice(0, HINT_MAX)
         .toLowerCase();
 
-      const confessionText = text.trim();
+      // The opening line goes first, on its own line: the feed shows it as the headline.
+      const confessionText = fullText;
 
       const body = {
         confession: confessionText || undefined,
@@ -671,6 +747,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         mood_tag:   moodTag,
         intensity,
         ...(kind !== 'hookup' && storyTopics.length ? { topics: storyTopics } : {}),
+        ...(kind !== 'hookup' && category ? { category } : {}),
         // Hint only makes sense when a specific user is tagged.
         ...(taggedUser && hintClean ? { recognition_hint: hintClean } : {}),
         // Tag a specific user AND still hit marketplace.
@@ -755,7 +832,7 @@ export default function DropsComposeScreen({ navigation, route }) {
 
       // Clear draft
       await AsyncStorage.removeItem(DRAFT_KEY);
-      setText('');
+      setText(''); setHook(''); setCategory(null); setBeforeReword(null);
       setTags([]); setTagDraft('');
 
       Keyboard.dismiss();
@@ -777,7 +854,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    format, text, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
+    format, text, fullText, category, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, storyTopics, paidPrice, isSuperAdmin,
     isAdmin, videoEdit, videoMeta, coverAt, soundId, muteOriginal, promo, promoHours, publishAt, tags,
@@ -785,9 +862,11 @@ export default function DropsComposeScreen({ navigation, route }) {
   ]);
 
   // ── Derived ───────────────────────────────────────────────────
-  const canDrop       = !!text.trim() || !!mediaUri;
+  const canDrop       = !!fullText || !!mediaUri;
   const layoutMode    = 'split';
-  const remaining     = MAX_CHARS - text.length;
+  const bodyMax       = MAX_CHARS - (hook.trim() ? hook.trim().length + 1 : 0);
+  const remaining     = bodyMax - text.length;
+  const previewCategory = autoCategory(category, storyTopics, fullText);
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
   const locationSummary = [locationEstate, locationSubCounty, locationCounty, locationCountry]
@@ -815,7 +894,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             <ChevronLeft size={rs(24)} color={T.text} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setKind(null)} hitSlop={HIT_SLOP}>
-            <Text style={s.kindSwitch}>Confession · change</Text>
+            <Text style={s.kindSwitch}>Quick Confession · change</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.navigate('WhatsAppSend', { text })}
@@ -878,6 +957,21 @@ export default function DropsComposeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
+          {/* Optional opening line: the first thing they read, shown as the feed headline. */}
+          <View style={s.hookField}>
+            <TextInput
+              style={s.hookInput}
+              value={hook}
+              onChangeText={(v) => setHook(v.replace(/\n/g, ' ').slice(0, HOOK_MAX))}
+              placeholder="Opening line, optional. The first thing they read."
+              placeholderTextColor={T.textMute}
+              maxLength={HOOK_MAX}
+              returnKeyType="next"
+              accessibilityLabel="Opening line (optional)"
+            />
+            {!!hook && <Text style={s.hookCount}>{HOOK_MAX - hook.length}</Text>}
+          </View>
+
           {/* Type straight into the card; the toolbar is attached below it as one card. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
             <DropCardRenderer
@@ -894,7 +988,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               editable
               onChangeText={setText}
               placeholder={placeholder}
-              maxLength={MAX_CHARS}
+              maxLength={bodyMax}
               fontStyle={fontStyle}
               // Square bottom corners: the toolbar sits flush below.
               flushBottom
@@ -1071,6 +1165,68 @@ export default function DropsComposeScreen({ navigation, route }) {
           {format === 'text' && (
             <View style={s.cardMetaRow}>
               <Text style={[s.remaining, { color: remColor }]}>{remaining}</Text>
+            </View>
+          )}
+
+          {/* Quick Confession extras: category, reword, and how it lands in the feed. */}
+          {format === 'text' && (
+            <View style={s.qc}>
+              <Text style={s.qcLabel}>Category <Text style={s.qcOptional}>optional</Text></Text>
+              <View style={s.qcChips}>
+                {[[null, 'Let Anonixx pick'], ['curiosity', CATEGORIES.curiosity.label], ['vulnerable', CATEGORIES.vulnerable.label]].map(([id, label]) => {
+                  const on = category === id;
+                  const tint = id ? CATEGORIES[id].tint : T.text;
+                  return (
+                    <TouchableOpacity
+                      key={label} onPress={() => setCategory(id)} activeOpacity={0.8}
+                      style={[s.qcChip, on && { borderColor: tint, backgroundColor: T.surfaceAlt }]}
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text style={[s.qcChipText, on && { color: tint }]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {writer.enabled && wordCount >= REWORD_MIN_WORDS && (
+                <>
+                  <Text style={s.qcLabel}>Reword it for me <Text style={s.qcOptional}>optional</Text></Text>
+                  <View style={s.qcChips}>
+                    {REWORD_STYLES.map(([id, label]) => {
+                      const on = rewordStyle === id;
+                      return (
+                        <TouchableOpacity
+                          key={id} onPress={() => handleReword(id)} disabled={!!rewording} activeOpacity={0.8}
+                          style={[s.qcChip, on && s.qcChipOn, !!rewording && rewording !== id && { opacity: 0.45 }]}
+                          accessibilityLabel={`Reword it, ${label}`}
+                        >
+                          {rewording === id
+                            ? <ActivityIndicator size="small" color={T.primary} />
+                            : <Text style={[s.qcChipText, on && { color: T.text }]}>{label}</Text>}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <Text style={s.qcHint}>
+                    Same story, same details, new voice. Nothing gets added.
+                    {writer.remaining != null ? ` ${writer.remaining} left today.` : ''}
+                    {beforeReword ? <Text style={s.qcLink} onPress={undoReword}>  Undo</Text> : null}
+                  </Text>
+                  {!!rewordError && <Text style={[s.qcHint, { color: T.warn }]}>{rewordError}</Text>}
+                </>
+              )}
+
+              {!mediaUri && (
+                <>
+                  <Text style={s.qcLabel}>How it shows in the feed</Text>
+                  <ConfessionPreview
+                    category={previewCategory}
+                    text={fullText}
+                    name={user?.anonymous_name}
+                    facts={storyTopics.slice(0, 3).map((t) => ({ text: topicLabel(t) }))}
+                  />
+                </>
+              )}
             </View>
           )}
 
@@ -1562,6 +1718,26 @@ const s = StyleSheet.create({
     marginBottom:   SPACING.sm,
   },
   remaining: { fontSize: rf(12), fontWeight: '600' },
+
+  // Quick Confession extras
+  hookField: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm,
+    paddingHorizontal: rp(14), borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surface,
+  },
+  hookInput: { flex: 1, color: T.text, fontFamily: 'DMSans-Bold', fontSize: rf(16), paddingVertical: rp(12) },
+  hookCount: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: rf(12) },
+  qc: { gap: SPACING.sm, marginBottom: SPACING.md },
+  qcLabel: { color: T.text, fontFamily: 'DMSans-SemiBold', fontSize: FONT.sm, marginTop: SPACING.xs },
+  qcOptional: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs },
+  qcChips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  qcChip: {
+    minHeight: rs(38), justifyContent: 'center', paddingHorizontal: rp(14), borderRadius: RADIUS.full,
+    borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surface,
+  },
+  qcChipOn: { borderColor: T.primary, backgroundColor: T.primaryDim },
+  qcChipText: { color: T.textSecondary, fontFamily: 'DMSans-SemiBold', fontSize: FONT.sm },
+  qcHint: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, lineHeight: rf(17) },
+  qcLink: { color: T.primary, fontFamily: 'DMSans-Bold' },
 
   // Edge warning
   edgeWarn: {

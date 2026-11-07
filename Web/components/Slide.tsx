@@ -14,6 +14,8 @@ import AudioWave from "./AudioWave";
 import AmbientSound from "./AmbientSound";
 import Sheet from "./Sheet";
 import { DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
+import ConfessionCard from "./ConfessionCard";
+import { CATEGORIES, categoryOf } from "@/lib/confession";
 
 type Props = {
   post: Post;
@@ -140,6 +142,9 @@ export default function Slide({
 
   const Text = headline ? "h1" : "p";
   const textSlide = !hasMedia && !audioSrc;
+  // Text-only confessions (not polls) get the confession card: category, headline, facts, one action.
+  const card = textSlide && !post.poll;
+  const category = categoryOf(post);
   // A track picked in the Post Studio wins; text slides otherwise get one by mood.
   const chosen = post.sound && !audioSrc && !mature ? post.sound : null;
   const ambient = chosen || (textSlide && !mature ? pickSound(sounds, post) : null);
@@ -293,16 +298,20 @@ export default function Slide({
   }
 
   const canLinkUp = !post.is_admin_drop && !post.is_own_post && post.kind !== "confession";
+  // What Let In costs this viewer; knocking itself is free. Premium lets in free.
+  const knockCost = user?.is_premium ? 0 : COST.linkUp;
+  const knock = () => (user ? onLinkUp(post) : onGate("Sign in to knock. Your name stays hidden until they let you in."));
   const linkBtn = (
     <button
       className="linkup"
-      onClick={() => (user ? onLinkUp(post) : onGate("Sign in to knock. Your name stays hidden until they let you in."))}
+      onClick={knock}
+      title={knockCost ? `Free to knock. ${knockCost} coins only if they let you in.` : "Free for you."}
     >
       {post.kind === "hookup" ? <span className="lu-heart" aria-hidden>🖤</span> : <Link2 />}
       <span className="lu-label">Knock{post.anonymous_name ? <> on <b>{post.anonymous_name}</b>&apos;s door</> : null}</span>
       <span className="coin-cost">
         <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" fill="currentColor" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" fill="none" stroke="#7a4a00" strokeWidth="1.6" strokeLinecap="round" /></svg>
-        {COST.linkUp}
+        {knockCost ? <>{knockCost}<span className="when">if let in</span></> : "Free"}
       </span>
     </button>
   );
@@ -364,7 +373,8 @@ export default function Slide({
       onPointerLeave={pressEnd}
       onClickCapture={(e) => { if (pressed.current) { pressed.current = false; e.stopPropagation(); e.preventDefault(); } }}
       onContextMenu={(e) => { if (press.current || pressed.current) e.preventDefault(); }}
-      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${textSlide ? " text-slide" : ""}${textSlide && post.kind !== "hookup" ? " env" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
+      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${card ? " cc-slide" : textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
+      style={card ? ({ "--cc-tint": CATEGORIES[category].tint } as React.CSSProperties) : undefined}
       data-idx={index}
       data-post={post.id}
     >
@@ -435,7 +445,22 @@ export default function Slide({
       <div className={hasMedia ? "caption" : "text-body"} style={{ position: "relative", zIndex: 2 }}>
         {post.promo_kind === "pin" ? <span className="pin-tag">pinned</span> : null}
         {textSlide && post.font_style ? <link rel="stylesheet" href={DROP_FONTS_HREF} precedence="default" /> : null}
-        {post.content ? (
+        {card ? (
+          <ConfessionCard
+            post={post}
+            knockCost={knockCost}
+            headline={headline}
+            // the poster's font stays on the headline; the body is always the plain sans
+            fontStyle={post.font_style ? dropFontStyle(post.font_style) : undefined}
+            onKnock={knock}
+            onComment={() => onComments(post)}
+            onReadMore={() => setFullText(true)}
+            extend={post.is_own_post && post.kind === "hookup" && post.live_until ? (
+              <button type="button" onClick={extend}>{(post.hookup?.fresh_window || "tonight") === "tonight" ? "+12h" : "+3 days"}</button>
+            ) : null}
+          />
+        ) : null}
+        {!card && post.content ? (
           <Text
             ref={textRef as React.RefObject<HTMLParagraphElement>}
             // until measured, CSS clamps it so the first paint never overflows
@@ -455,11 +480,11 @@ export default function Slide({
           </Text>
         ) : null}
         {hasMedia && post.content ? <p ref={measureRef} className="confession caption-measure" aria-hidden /> : null}
-        {longText ? (
+        {longText && !card ? (
           <button className="read-full" onClick={() => setFullText(true)}>Read full confession</button>
         ) : null}
-        {liveChips}
-        {canLinkUp && !hasMedia ? linkBtn : null}
+        {card ? null : liveChips}
+        {canLinkUp && !hasMedia && !card ? linkBtn : null}
 
         {post.poll ? (
           <div className="poll">
