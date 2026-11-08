@@ -2,7 +2,7 @@
  * market items and ads mixed in. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Linking, Modal,
+  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Linking,
   ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
   View, useWindowDimensions,
 } from 'react-native';
@@ -19,7 +19,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
   Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle,
-  Pause, Play, Search, Share2, ShieldCheck, X,
+  Pause, Play, Search, Share2, ShieldCheck,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -933,7 +933,6 @@ const TextSlide = ({
   const likedRef = useRef(liked);
   likedRef.current = liked;
   const [expanded, setExpanded] = useState(false);
-  const [fullTextVisible, setFullTextVisible] = useState(false);
 
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
   const imageList = Array.isArray(post.images) && post.images.length
@@ -986,7 +985,6 @@ const TextSlide = ({
           knockCost={knockCost}
           onKnock={onLinkUp}
           onComment={onComment}
-          onReadMore={() => setFullTextVisible(true)}
           onExtend={extendLive}
           topInset={headerHeight + rp(8)}
           bottomInset={rp(track ? 120 : 92)}
@@ -1046,22 +1044,6 @@ const TextSlide = ({
         </>
       )}
 
-      <Modal visible={fullTextVisible} transparent animationType="slide" onRequestClose={() => setFullTextVisible(false)}>
-        <View style={sw.fullTextBackdrop}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setFullTextVisible(false)} />
-          <View style={sw.fullTextSheet}>
-            <View style={sw.fullTextHeader}>
-              <Text style={sw.fullTextTitle}>{post.anonymous_name || 'Anonymous'}</Text>
-              <TouchableOpacity onPress={() => setFullTextVisible(false)} hitSlop={HIT_SLOP}>
-                <X size={rs(20)} color="rgba(255,255,255,0.7)" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false} style={sw.fullTextScroll}>
-              <Text style={sw.fullTextBody}>{post.content}</Text>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -1933,18 +1915,6 @@ const sw = StyleSheet.create({
   railAvatarInitial: { fontSize: rf(17), fontWeight: '800', color: THEME.primary },
 
 
-  fullTextBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  fullTextSheet: {
-    maxHeight: '75%', backgroundColor: THEME.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,
-    paddingHorizontal: rp(20), paddingTop: rp(16), paddingBottom: rp(28),
-  },
-  fullTextHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingBottom: rp(14), marginBottom: rp(4), borderBottomWidth: 1, borderBottomColor: THEME.border,
-  },
-  fullTextTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: rf(16), color: THEME.text },
-  fullTextScroll: { marginTop: rp(8) },
-  fullTextBody: { fontFamily: 'PlayfairDisplay-Italic', fontSize: rf(17), lineHeight: rf(26), color: THEME.text, letterSpacing: 0.2 },
 
   promoSlide: { alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.background },
   promoCenter: { width: '100%', paddingHorizontal: rp(4) },

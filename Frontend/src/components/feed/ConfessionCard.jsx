@@ -1,10 +1,11 @@
 /** The body of a text-only confession in the swipe feed: category label, a headline (the
  * opening line), the confession, compact facts and one action that fits the category.
  * Curiosity and Vulnerable open the comments (free); Link Up knocks (coins only on Let In).
+ * "Read the rest" expands the text in place (it scrolls inside the card); "Show less" folds it.
  * Same design as the website (Web/components/ConfessionCard.tsx). The slide around it
  * (rail, author row, gestures, menus) stays in DropsSwipeScreen. */
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Coins, Feather, Flame, MessageCircle, Sparkles } from 'lucide-react-native';
 
@@ -117,7 +118,7 @@ const Chip = ({ text, hot, tint }) => (
 );
 
 function ConfessionCard({
-  post, isOwnPost, knockCost, onKnock, onComment, onReadMore, onExtend,
+  post, isOwnPost, knockCost, onKnock, onComment, onExtend,
   topInset = 0, bottomInset = 0, headlineFont,
 }) {
   const { height: winH } = useWindowDimensions();
@@ -136,6 +137,31 @@ function ConfessionCard({
   const cut = (body.length > (short ? 220 : 340)) || (head.length > 150);
   const canKnock = cat === 'linkup' && !isOwnPost && !post.is_admin_drop;
   const Icon = meta.Icon;
+  const [open, setOpen] = useState(false);
+  const scrollRef = useRef(null);
+  useEffect(() => { setOpen(false); }, [post.id]);
+  // Open text gets the room left after the label, chips, action and the slide's insets.
+  const openMax = Math.max(rs(160), winH - topInset - bottomInset - rp(250));
+  const toggle = () => {
+    if (open) scrollRef.current?.scrollTo({ y: 0, animated: false });
+    setOpen((o) => !o);
+  };
+
+  const copy = (
+    <View style={[c.copy, { borderLeftColor: alpha(meta.tint, 0.55) }]}>
+      {head ? (
+        <Text
+          style={[c.head, headOnly && c.headBig, headlineFont]}
+          numberOfLines={open ? undefined : (headOnly ? 6 : 4)}
+        >
+          {head}
+        </Text>
+      ) : null}
+      {body ? (
+        <Text style={[c.body, !head && c.bodyLead]} numberOfLines={open ? undefined : bodyLines}>{body}</Text>
+      ) : null}
+    </View>
+  );
 
   return (
     <View style={[StyleSheet.absoluteFill, c.root, { paddingTop: topInset, paddingBottom: bottomInset }]} pointerEvents="box-none">
@@ -147,30 +173,34 @@ function ConfessionCard({
         style={StyleSheet.absoluteFill}
       />
       <View style={c.block} pointerEvents="box-none">
-        <View pointerEvents="none">
-          <View style={[c.label, { borderColor: alpha(meta.tint, 0.35), backgroundColor: alpha(meta.tint, 0.1) }]}>
+        <View>
+          <View pointerEvents="none" style={[c.label, { borderColor: alpha(meta.tint, 0.35), backgroundColor: alpha(meta.tint, 0.1) }]}>
             <Icon size={rs(12)} color={meta.tint} strokeWidth={2.4} />
             <Text style={[c.labelText, { color: meta.tint }]}>{meta.label}</Text>
           </View>
 
-          <View style={[c.copy, { borderLeftColor: alpha(meta.tint, 0.55) }]}>
-            {head ? (
-              <Text
-                style={[c.head, headOnly && c.headBig, headlineFont]}
-                numberOfLines={headOnly ? 6 : 4}
-              >
-                {head}
-              </Text>
-            ) : null}
-            {body ? (
-              <Text style={[c.body, !head && c.bodyLead]} numberOfLines={bodyLines}>{body}</Text>
-            ) : null}
-          </View>
+          {/* Closed, taps pass through to the double-tap layer; open, the text scrolls on its own. */}
+          {open ? (
+            <ScrollView
+              ref={scrollRef}
+              style={{ maxHeight: openMax }}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              contentContainerStyle={c.openPad}
+            >
+              {copy}
+            </ScrollView>
+          ) : (
+            <View pointerEvents="none">{copy}</View>
+          )}
         </View>
 
-        {cut && (
-          <TouchableOpacity onPress={onReadMore} hitSlop={HIT_SLOP} style={c.more} accessibilityRole="button">
-            <Text style={c.moreText}>Read the rest</Text>
+        {(cut || open) && (
+          <TouchableOpacity
+            onPress={toggle} hitSlop={HIT_SLOP} style={c.more}
+            accessibilityRole="button" accessibilityState={{ expanded: open }}
+          >
+            <Text style={c.moreText}>{open ? 'Show less' : 'Read the rest'}</Text>
           </TouchableOpacity>
         )}
 
@@ -257,6 +287,7 @@ const c = StyleSheet.create({
     fontFamily: 'DMSans-Regular', fontSize: rf(17), lineHeight: rf(26), color: alpha(T.text, 0.82),
   },
   bodyLead: { fontSize: rf(18), lineHeight: rf(27), color: T.text },
+  openPad: { paddingBottom: rp(6) },
   more: { alignSelf: 'flex-start', marginLeft: rp(16), marginTop: -rp(4) },
   moreText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(14), color: T.text, textDecorationLine: 'underline' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: rp(6), marginLeft: rp(16) },

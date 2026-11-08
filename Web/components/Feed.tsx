@@ -344,7 +344,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     let axis: "" | "x" | "y" = "";
     let x0 = 0, y0 = 0, top0 = 0, t0 = 0, from = 0;
     const skip = (t: EventTarget | null) =>
-      (t as HTMLElement | null)?.closest?.(".confession:not(.clamp), .sheet, textarea, input, select, audio, .vp-scrub");
+      (t as HTMLElement | null)?.closest?.(".confession:not(.clamp), .cc-copy.open, .sheet, textarea, input, select, audio, .vp-scrub");
     const start = (e: TouchEvent) => {
       tracking = e.touches.length === 1 && !skip(e.target);
       if (!tracking) return;
@@ -403,7 +403,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     let idle: number | undefined;
     const onWheel = (e: WheelEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t?.closest(".confession:not(.clamp), .sheet, textarea, input, audio")) return;
+      if (t?.closest(".confession:not(.clamp), .cc-copy.open, .sheet, textarea, input, audio")) return;
       if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
       e.preventDefault();
       window.clearTimeout(idle);

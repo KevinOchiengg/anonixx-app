@@ -1,9 +1,10 @@
 "use client";
 /** The body of a text-only confession in the feed: category label, headline (the opening
  * line), the confession, compact facts and one action that fits the category. Curiosity and
- * Vulnerable open the comments (free); Link Up knocks (coins only on Let In). The slide around
+ * Vulnerable open the comments (free); Link Up knocks (coins only on Let In). "Read the rest"
+ * expands the text in place (it scrolls inside the card) and "Show less" folds it back. The slide around
  * it (rail, gestures, menus) stays in Slide.tsx. Same design as the app's ConfessionCard.jsx. */
-import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Post } from "@/lib/api";
 import { CATEGORIES, categoryOf, linkUpFacts, splitConfession, topicLabel, type Category, type Fact } from "@/lib/confession";
 
@@ -52,11 +53,10 @@ type Props = {
   fontStyle?: React.CSSProperties;
   onKnock: () => void;
   onComment: () => void;
-  onReadMore: () => void;
   extend?: React.ReactNode;    // the owner's "+12h" button
 };
 
-function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, onComment, onReadMore, extend }: Props) {
+function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, onComment, extend }: Props) {
   const cat = categoryOf(post);
   const meta = CATEGORIES[cat];
   const { head, body } = useMemo(() => splitConfession(post.content), [post.content]);
@@ -67,26 +67,36 @@ function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, onComme
   // "Read the rest" shows only when the clamp actually cut something.
   const copyRef = useRef<HTMLDivElement>(null);
   const [cut, setCut] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { setOpen(false); }, [post.id]);
   useLayoutEffect(() => {
     const el = copyRef.current;
-    if (!el) return;
+    if (!el || open) return;
     const check = () => setCut([...el.querySelectorAll<HTMLElement>(".cc-head, .cc-body")].some((n) => n.scrollHeight > n.clientHeight + 2));
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [head, body]);
+  }, [head, body, open]);
+  function toggle() {
+    if (open && copyRef.current) copyRef.current.scrollTop = 0;
+    setOpen((o) => !o);
+  }
   const canKnock = cat === "linkup" && !post.is_own_post && !post.is_admin_drop;
   const Head = headline ? "h1" : "p";
 
   return (
     <div className={`cc cc-${cat}`} style={{ "--cc-tint": meta.tint } as React.CSSProperties}>
       <CategoryLabel c={cat} />
-      <div className="cc-copy" ref={copyRef}>
+      <div className={`cc-copy${open ? " open" : ""}`} ref={copyRef} id={`cc-${post.id}`}>
         {head ? <Head className={`cc-head${body ? "" : " solo"}`} style={fontStyle}>{head}</Head> : null}
         {body ? (headline && !head ? <h1 className="cc-body lead">{body}</h1> : <p className={`cc-body${head ? "" : " lead"}`}>{body}</p>) : null}
       </div>
-      {cut ? <button type="button" className="cc-more" onClick={onReadMore}>Read the rest</button> : null}
+      {cut || open ? (
+        <button type="button" className="cc-more" onClick={toggle} aria-expanded={open} aria-controls={`cc-${post.id}`}>
+          {open ? "Show less" : "Read the rest"}
+        </button>
+      ) : null}
       <Chips
         facts={facts}
         extra={<>{extend}{cat === "linkup" && post.linkup_count ? <span>{post.linkup_count} linked up</span> : null}</>}
