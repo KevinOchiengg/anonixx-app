@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
@@ -99,8 +99,9 @@ function GateLoader() {
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
   const path = usePathname() || "/admin";
+  const router = useRouter();
   useKeepPlace(path);
-  const [state, setState] = useState<"checking" | "ok" | "denied">("checking");
+  const [state, setState] = useState<"checking" | "ok" | "login" | "denied">("checking");
   const [isSuper, setIsSuper] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -125,11 +126,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (!ready) return;
-    if (!user) { setState("denied"); return; }
+    if (!user) { setState("login"); return; }
     let live = true;
     api<{ is_super_admin: boolean }>("/admin/me")
       .then((r) => { if (live) { setIsSuper(Boolean(r.is_super_admin)); setState("ok"); } })
-      .catch(() => { if (live) setState("denied"); });
+      // 401 = signed out or expired token: sign in again. Anything else = not an admin.
+      .catch((e) => { if (live) setState((e as { status?: number }).status === 401 ? "login" : "denied"); });
     return () => { live = false; };
   }, [ready, user]);
 
@@ -155,20 +157,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return () => { live = false; window.clearInterval(t); };
   }, [state]);
 
-  if (state === "checking") return <div className="adm"><GateLoader /></div>;
-  if (state !== "ok") {
-    return (
-      <div className="adm">
-        <div className="adm-card adm-gate">
-          <h2>Admins only</h2>
-          <p className="muted">{user ? "This account doesn't have admin access." : "Sign in with an admin account."}</p>
-          <Link href={user ? "/" : `/login?next=${encodeURIComponent(path)}`} className="adm-btn primary">
-            {user ? "Back to Anonixx" : "Sign in"}
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  // No gate screen: signed out goes straight to sign in (and back here after);
+  // a signed-in account without admin access goes to the feed.
+  useEffect(() => {
+    if (state === "login") router.replace(`/login?next=${encodeURIComponent(path)}`);
+    else if (state === "denied") router.replace("/");
+  }, [state, path, router]);
+
+  if (state !== "ok") return <div className="adm"><GateLoader /></div>;
 
   const total = alerts.refunds + alerts.chats + alerts.system;
   const active = (href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(`${href}/`));
