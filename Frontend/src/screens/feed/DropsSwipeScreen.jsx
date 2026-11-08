@@ -984,7 +984,6 @@ const TextSlide = ({
           isOwnPost={isOwnPost}
           knockCost={knockCost}
           onKnock={onLinkUp}
-          onComment={onComment}
           onExtend={extendLive}
           topInset={headerHeight + rp(8)}
           bottomInset={rp(track ? 120 : 92)}

@@ -453,7 +453,6 @@ export default function Slide({
             // the poster's font stays on the headline; the body is always the plain sans
             fontStyle={post.font_style ? dropFontStyle(post.font_style) : undefined}
             onKnock={knock}
-            onComment={() => onComments(post)}
             extend={post.is_own_post && post.kind === "hookup" && post.live_until ? (
               <button type="button" onClick={extend}>{(post.hookup?.fresh_window || "tonight") === "tonight" ? "+12h" : "+3 days"}</button>
             ) : null}

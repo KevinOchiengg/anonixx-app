@@ -7,10 +7,10 @@ import { timeLeft } from "@/lib/linkup";
 export type Category = "curiosity" | "linkup" | "vulnerable";
 
 // Tints are existing theme variables only (globals.css): violet, rose, fg.
-export const CATEGORIES: Record<Category, { label: string; tint: string; action: string | null }> = {
-  curiosity: { label: "Curiosity", tint: "var(--violet)", action: "Ask what happened next" },
-  linkup: { label: "Link Up", tint: "var(--rose)", action: null },
-  vulnerable: { label: "Vulnerable", tint: "var(--fg)", action: "I've felt this too" },
+export const CATEGORIES: Record<Category, { label: string; tint: string }> = {
+  curiosity: { label: "Curiosity", tint: "var(--violet)" },
+  linkup: { label: "Link Up", tint: "var(--rose)" },
+  vulnerable: { label: "Vulnerable", tint: "var(--fg)" },
 };
 
 export const categoryOf = (post: Pick<Post, "category" | "kind">): Category =>

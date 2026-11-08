@@ -1,13 +1,13 @@
 /** The body of a text-only confession in the swipe feed: category label, a headline (the
- * opening line), the confession, compact facts and one action that fits the category.
- * Curiosity and Vulnerable open the comments (free); Link Up knocks (coins only on Let In).
+ * opening line), the confession and compact facts. Link Up adds the Knock (coins only on
+ * Let In); comments stay on the slide's rail.
  * "Read the rest" expands the text in place (it scrolls inside the card); "Show less" folds it.
  * Same design as the website (Web/components/ConfessionCard.tsx). The slide around it
  * (rail, author row, gestures, menus) stays in DropsSwipeScreen. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Coins, Feather, Flame, MessageCircle, Sparkles } from 'lucide-react-native';
+import { Coins, Feather, Flame, Sparkles } from 'lucide-react-native';
 
 import { T } from '../../utils/theme';
 import { rf, rp, rs, RADIUS, HIT_SLOP } from '../../utils/responsive';
@@ -16,18 +16,9 @@ import { timeLeft } from '../../config/linkup';
 
 // Tints are existing tokens only: coral for Link Up, violet for Curiosity, soft white for Vulnerable.
 export const CATEGORIES = {
-  curiosity: {
-    label: 'Curiosity', tint: T.violet, Icon: Sparkles,
-    action: 'Ask what happened next',
-  },
-  linkup: {
-    label: 'Link Up', tint: T.primary, Icon: Flame,
-    action: null,   // the Knock button
-  },
-  vulnerable: {
-    label: 'Vulnerable', tint: T.text, Icon: Feather,
-    action: "I've felt this too",
-  },
+  curiosity: { label: 'Curiosity', tint: T.violet, Icon: Sparkles },
+  linkup: { label: 'Link Up', tint: T.primary, Icon: Flame },
+  vulnerable: { label: 'Vulnerable', tint: T.text, Icon: Feather },
 };
 
 export const categoryOf = (post) =>
@@ -118,7 +109,7 @@ const Chip = ({ text, hot, tint }) => (
 );
 
 function ConfessionCard({
-  post, isOwnPost, knockCost, onKnock, onComment, onExtend,
+  post, isOwnPost, knockCost, onKnock, onExtend,
   topInset = 0, bottomInset = 0, headlineFont,
 }) {
   const { height: winH } = useWindowDimensions();
@@ -216,19 +207,11 @@ function ConfessionCard({
           </View>
         )}
 
-        <View style={c.actions} pointerEvents="box-none">
-          {canKnock ? (
+        {canKnock && (
+          <View style={c.actions} pointerEvents="box-none">
             <KnockButton name={post.anonymous_name} cost={knockCost} onPress={onKnock} />
-          ) : meta.action ? (
-            <TouchableOpacity
-              onPress={onComment} activeOpacity={0.85} hitSlop={HIT_SLOP} accessibilityRole="button"
-              style={[c.soft, { borderColor: alpha(meta.tint, 0.4), backgroundColor: alpha(meta.tint, 0.08) }]}
-            >
-              <MessageCircle size={rs(16)} color={meta.tint} strokeWidth={2.2} />
-              <Text style={[c.softText, { color: meta.tint === T.text ? T.text : meta.tint }]}>{meta.action}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -299,11 +282,6 @@ const c = StyleSheet.create({
   extend: { backgroundColor: T.gold, paddingHorizontal: rp(10), paddingVertical: rp(5), borderRadius: RADIUS.full },
   extendText: { fontFamily: 'DMSans-Bold', fontSize: rf(12), color: T.background },
   actions: { marginTop: rp(4) },
-  soft: {
-    alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: rp(8),
-    paddingHorizontal: rp(16), paddingVertical: rp(11), borderRadius: RADIUS.full, borderWidth: 1,
-  },
-  softText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(15) },
 });
 
 const p = StyleSheet.create({

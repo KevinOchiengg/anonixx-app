@@ -1,7 +1,7 @@
 "use client";
 /** The body of a text-only confession in the feed: category label, headline (the opening
- * line), the confession, compact facts and one action that fits the category. Curiosity and
- * Vulnerable open the comments (free); Link Up knocks (coins only on Let In). "Read the rest"
+ * line), the confession and compact facts. Link Up adds the Knock (coins only on Let In);
+ * comments stay on the slide's rail. "Read the rest"
  * expands the text in place (it scrolls inside the card) and "Show less" folds it back. The slide around
  * it (rail, gestures, menus) stays in Slide.tsx. Same design as the app's ConfessionCard.jsx. */
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -52,11 +52,10 @@ type Props = {
   headline?: boolean;          // the drop page's main post: headline is the page's h1
   fontStyle?: React.CSSProperties;
   onKnock: () => void;
-  onComment: () => void;
   extend?: React.ReactNode;    // the owner's "+12h" button
 };
 
-function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, onComment, extend }: Props) {
+function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, extend }: Props) {
   const cat = categoryOf(post);
   const meta = CATEGORIES[cat];
   const { head, body } = useMemo(() => splitConfession(post.content), [post.content]);
@@ -101,14 +100,7 @@ function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, onComme
         facts={facts}
         extra={<>{extend}{cat === "linkup" && post.linkup_count ? <span>{post.linkup_count} linked up</span> : null}</>}
       />
-      {canKnock ? (
-        <KnockCta name={post.anonymous_name} cost={knockCost} onClick={onKnock} />
-      ) : meta.action ? (
-        <button type="button" className="cc-soft" onClick={onComment}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.8-.9L3 20l1.1-4.6A8.4 8.4 0 1 1 21 11.5Z" /></svg>
-          {meta.action}
-        </button>
-      ) : null}
+      {canKnock ? <KnockCta name={post.anonymous_name} cost={knockCost} onClick={onKnock} /> : null}
     </div>
   );
 }
