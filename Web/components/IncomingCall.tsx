@@ -100,7 +100,7 @@ export default function IncomingCall() {
   if (!ring) return null;
   const name = ring.caller_name || "Someone";
   return (
-    <div className="ic" role="alertdialog" aria-modal aria-label={`${name} is calling`}>
+    <div className="ic-call" role="alertdialog" aria-modal aria-label={`${name} is calling`}>
       <div className="ic-in">
         <small>{ring.video ? "Video call" : "Voice call"} · from your Room</small>
         <span className="ic-ava">

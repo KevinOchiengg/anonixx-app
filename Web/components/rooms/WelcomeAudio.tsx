@@ -105,7 +105,7 @@ export default function WelcomeAudio({ saved, onSave, onRemove }: {
 
   const current = draft ? draft.url : saved?.url || null;
   return (
-    <div className="wa">
+    <div className="wa-box">
       <input ref={fileIn} type="file" accept="audio/*" hidden onChange={pick} />
       {recording ? (
         <div className="wa-row rec">

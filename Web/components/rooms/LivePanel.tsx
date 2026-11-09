@@ -48,7 +48,7 @@ export default function LivePanel() {
   const nothing = !hosting && !sessions.length && !direct.length;
 
   return (
-    <div className="lv">
+    <div className="lv-panel">
       {error ? <div className="err">{error}</div> : null}
       {direct.map((c) => (
         <div className="lv-card live" key={c.id}>
