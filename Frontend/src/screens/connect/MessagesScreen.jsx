@@ -1,3 +1,6 @@
+/** The Rooms tab. Four sections: Knocks (who's at your door, first), Connections (your
+ * conversations), Live (sessions and calls) and My Room (your Room and its welcome). The ⋮
+ * menu opens every Room setting. Accepts { section } to open on one. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, FlatList, Modal, RefreshControl, ScrollView,
@@ -8,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { Inbox, Menu, Palette, Plus, Search, X } from 'lucide-react-native';
+import { Inbox, Menu, MoreVertical, Plus, Search, X } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
@@ -16,6 +19,12 @@ import { API_BASE_URL } from '../../config/api';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useUnread } from '../../context/UnreadContext';
 import T from '../../utils/theme';
+import UnlockRequestsScreen from '../drops/UnlockRequestsScreen';
+import LivePanel from '../../components/rooms/LivePanel';
+import MyRoomPanel from '../../components/rooms/MyRoomPanel';
+import RoomSettingsSheet from '../../components/rooms/RoomSettingsSheet';
+
+const SECTIONS = [['knocks', 'Knocks'], ['connections', 'Connections'], ['live', 'Live'], ['myroom', 'My Room']];
 
 // ─── Helpers ──────────────────────────────────────────────────
 function formatChatTime(isoString) {
@@ -208,9 +217,13 @@ const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
         {/* Info */}
         <View style={styles.chatInfo}>
           <View style={styles.chatTopRow}>
-            <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]} numberOfLines={1}>
+            <Text style={[styles.chatName, hasUnread && styles.chatNameUnread, { flexShrink: 1 }]} numberOfLines={1}>
               {item.other_anonymous_name}
             </Text>
+            {item.is_sender !== null ? (
+              <Text style={styles.roleChip}>{item.is_sender ? 'your guest' : 'their Room'}</Text>
+            ) : null}
+            <View style={{ flex: 1 }} />
             <Text style={styles.chatTime}>{formatChatTime(item.last_message_at)}</Text>
           </View>
 
@@ -268,7 +281,7 @@ const AnonixxDemoCard = React.memo(({ onPress }) => (
 ));
 
 // ─── Screen ───────────────────────────────────────────────────
-export default function MessagesScreen({ navigation }) {
+export default function MessagesScreen({ navigation, route }) {
   const insets            = useSafeAreaInsets();
   const { showToast }     = useToast();
   const { refreshUnread } = useUnread();
@@ -286,6 +299,9 @@ export default function MessagesScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
+  const [section, setSection] = useState(route?.params?.section || 'knocks');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => { if (route?.params?.section) setSection(route.params.section); }, [route?.params?.section]);
 
   // ── Load chats (/drops/connections) and knocks (/unlock-requests/incoming) in parallel.
   const loadInbox = useCallback(async () => {
@@ -414,10 +430,7 @@ export default function MessagesScreen({ navigation }) {
     else setDetailRequest(request);
   }, [navigation]);
   const closeDetail = useCallback(() => setDetailRequest(null), []);
-  const handleOpenAllRequests = useCallback(
-    () => navigation.navigate('UnlockRequestsScreen'),
-    [navigation],
-  );
+  const handleOpenAllRequests = useCallback(() => setSection('knocks'), []);
 
   // Accept from the mini profile and open the new chat.
   const handleAcceptRequest = useCallback(async (request) => {
@@ -509,28 +522,57 @@ export default function MessagesScreen({ navigation }) {
           )}
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('ChatProfileSetup')}
-            style={styles.editRoomBtn}
-            hitSlop={HIT_SLOP}
-          >
-            <Palette size={rs(14)} color={T.text} strokeWidth={2} />
-            <Text style={styles.editRoomText}>Edit Room</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={toggleSearch} style={styles.iconBtn} hitSlop={HIT_SLOP}>
-            {searchOpen
-              ? <X size={rs(20)} color={T.textSecondary} strokeWidth={2} />
-              : <Search size={rs(20)} color={T.textSecondary} strokeWidth={2} />}
-          </TouchableOpacity>
+          {section === 'connections' && (
+            <TouchableOpacity onPress={toggleSearch} style={styles.iconBtn} hitSlop={HIT_SLOP} accessibilityLabel={searchOpen ? 'Close search' : 'Search conversations'}>
+              {searchOpen
+                ? <X size={rs(20)} color={T.textSecondary} strokeWidth={2} />
+                : <Search size={rs(20)} color={T.textSecondary} strokeWidth={2} />}
+            </TouchableOpacity>
+          )}
           {/* New chats start from the feed, so "+" goes there. */}
-          <TouchableOpacity onPress={handleGoToFeed} style={styles.addBtn} hitSlop={HIT_SLOP}>
+          <TouchableOpacity onPress={handleGoToFeed} style={styles.addBtn} hitSlop={HIT_SLOP} accessibilityLabel="Find someone on the feed">
             <Plus size={rs(20)} color="#fff" strokeWidth={2.4} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setSettingsOpen(true)} style={styles.iconBtn} hitSlop={HIT_SLOP} accessibilityLabel="Room settings">
+            <MoreVertical size={rs(20)} color={T.text} strokeWidth={2} />
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* Sections: Knocks first, then Connections, Live, My Room. */}
+      <View style={styles.sections} accessibilityRole="tablist">
+        {SECTIONS.map(([key, label]) => {
+          const count = key === 'knocks' ? pendingRequests.length : key === 'connections' ? totalUnread : 0;
+          const on = section === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[styles.sectionBtn, on && styles.sectionBtnOn]}
+              onPress={() => setSection(key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.sectionText, on && styles.sectionTextOn]} numberOfLines={1}>{label}</Text>
+              {count > 0 && (
+                <View style={[styles.sectionBadge, key === 'knocks' && styles.sectionBadgeKnock]}>
+                  <Text style={styles.sectionBadgeText}>{count > 99 ? '99+' : count}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {section === 'knocks' && <UnlockRequestsScreen embedded navigation={navigation} />}
+      {section === 'live' && <LivePanel navigation={navigation} />}
+      {section === 'myroom' && <MyRoomPanel navigation={navigation} />}
+
+      {section === 'connections' && (
+      <>
+
       {/* Search the loaded chats by name, last message or confession. */}
-      {searchOpen && (
+      {searchOpen && section === 'connections' && (
         <View style={styles.searchWrap}>
           <View style={styles.searchBar}>
             <Search size={rs(16)} color={T.textMuted} strokeWidth={2} />
@@ -596,7 +638,15 @@ export default function MessagesScreen({ navigation }) {
           <View style={styles.centered}>
             <Text style={styles.noResultsText}>You're all caught up.</Text>
           </View>
-        ) : null
+        ) : (
+          <View style={styles.centered}>
+            <Text style={styles.emptyTitle}>No connections yet</Text>
+            <Text style={styles.noResultsText}>Let someone in from Knocks, or knock on a Room you like. Conversations live here.</Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={() => (pendingRequests.length ? setSection('knocks') : handleGoToFeed())}>
+              <Text style={styles.emptyBtnText}>{pendingRequests.length ? `See ${pendingRequests.length} at your door` : 'Find someone on the feed'}</Text>
+            </TouchableOpacity>
+          </View>
+        )
       ) : (
         <FlatList
           data={filteredItems}
@@ -614,7 +664,11 @@ export default function MessagesScreen({ navigation }) {
         />
       )}
 
+      </>
+      )}
+
       <HamburgerMenu visible={menuVisible} onClose={() => setMenuVisible(false)} navigation={navigation} />
+      <RoomSettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} navigation={navigation} />
 
       {/* Mini profile with their clues, and Accept / Decline. */}
       <Modal visible={!!detailRequest} transparent animationType="fade" onRequestClose={closeDetail}>
@@ -692,6 +746,24 @@ const styles = StyleSheet.create({
   },
   headerBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
+  sections: {
+    flexDirection: 'row', gap: rp(6), paddingHorizontal: SPACING.md, paddingVertical: rp(10),
+    borderBottomWidth: 1, borderBottomColor: T.border,
+  },
+  sectionBtn: {
+    flexGrow: 1, flexShrink: 1, flexBasis: 'auto', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(5),
+    height: rs(36), borderRadius: 999, borderWidth: 1, borderColor: T.border, paddingHorizontal: rp(10),
+  },
+  sectionBtnOn: { backgroundColor: T.primaryTint, borderColor: T.primary },
+  sectionText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(12.5), color: T.textSecondary, flexShrink: 1 },
+  sectionTextOn: { color: T.text, fontFamily: 'DMSans-Bold' },
+  sectionBadge: { minWidth: rs(18), height: rs(18), borderRadius: rs(9), paddingHorizontal: rp(4), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  sectionBadgeKnock: { backgroundColor: T.primary },
+  sectionBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
+  roleChip: { fontFamily: 'DMSans-SemiBold', fontSize: rf(10.5), color: T.textSecondary, marginLeft: rp(6), paddingHorizontal: rp(7), paddingVertical: rp(1), borderRadius: 999, borderWidth: 1, borderColor: T.border, overflow: 'hidden' },
+  emptyTitle: { fontFamily: 'DMSans-Bold', fontSize: rf(18), color: T.text, marginBottom: rp(6), textAlign: 'center' },
+  emptyBtn: { marginTop: rp(16), height: rs(44), paddingHorizontal: rp(18), borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  emptyBtnText: { fontFamily: 'DMSans-Bold', fontSize: rf(14), color: '#fff' },
   iconBtn: {
     width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center',
     borderRadius: rs(18), backgroundColor: 'rgba(255,255,255,0.04)',

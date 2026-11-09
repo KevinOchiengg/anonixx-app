@@ -1,6 +1,6 @@
 /** The one voice-note player (cards, chat, comments). Resets the audio session out of
  * recording mode and waits until ready before playing. Bar heights are seeded from the URL,
- * not real audio. */
+ * not real audio. `speed` adds a 1x / 1.5x / 2x control (chat voice notes). */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
@@ -10,6 +10,7 @@ import { rs, rf, rp } from '../../utils/responsive';
 import { useToast } from '../ui/Toast';
 
 const BAR_COUNT = 28;
+const SPEEDS = [1, 1.5, 2];
 
 // Shared across all players, so starting one clip pauses the other.
 let activePlayer = null;
@@ -36,13 +37,20 @@ function fmt(secs) {
 }
 
 /** uri: audio URL. durationSeconds: shown until the player knows it. compact: smaller version. */
-export default function VoiceWaveform({ uri, durationSeconds = 0, compact = false }) {
+export default function VoiceWaveform({ uri, durationSeconds = 0, compact = false, speed = false }) {
   const { showToast } = useToast();
   const player = useAudioPlayer(null);
   const status = useAudioPlayerStatus(player);
   // expo-audio's status has no `status` field, so track loading ourselves.
   const loaded = useRef(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [rate, setRate] = useState(1);
+
+  const cycleRate = useCallback(() => {
+    const next = SPEEDS[(SPEEDS.indexOf(rate) + 1) % SPEEDS.length];
+    setRate(next);
+    try { player.setPlaybackRate(next); } catch {}
+  }, [rate, player]);
 
   const heights = useMemo(() => barHeightsFor(uri), [uri]);
 
@@ -102,16 +110,20 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
         setIsFinished(false);
         player.seekTo(0);
         player.play();
+        if (rate !== 1) player.setPlaybackRate(rate);
         return;
       }
       if (status.playing) player.pause();
-      else player.play();
+      else {
+        player.play();
+        if (rate !== 1) player.setPlaybackRate(rate);
+      }
     } catch (e) {
       // Show the error instead of failing silently.
       console.error('[VoiceWaveform] playback failed:', e);
       showToast({ type: 'error', message: e?.message || 'Could not play this voice note.' });
     }
-  }, [uri, status.playing, isFinished, player, showToast]);
+  }, [uri, status.playing, isFinished, player, rate, showToast]);
 
   const duration   = status.duration || durationSeconds || 0;
   const playing    = !!status.playing && !isFinished;
@@ -171,6 +183,14 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
       <Text style={styles.time}>
         {fmt(showingElapsed ? status.currentTime : duration)}
       </Text>
+      {speed ? (
+        <TouchableOpacity
+          onPress={cycleRate} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} style={styles.rate}
+          accessibilityRole="button" accessibilityLabel={`Playback speed ${rate} times`}
+        >
+          <Text style={styles.rateText}>{rate}×</Text>
+        </TouchableOpacity>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -191,6 +211,11 @@ const styles = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   bar: { minHeight: 2, borderRadius: rs(1) },
+  rate: {
+    minWidth: rs(30), height: rs(20), borderRadius: 999, paddingHorizontal: rp(6),
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  rateText: { fontSize: rf(10.5), fontWeight: '800', color: T.text },
   time: {
     fontSize: rf(10.5), fontWeight: '700', minWidth: rs(30), textAlign: 'right',
     color: T.textMuted,

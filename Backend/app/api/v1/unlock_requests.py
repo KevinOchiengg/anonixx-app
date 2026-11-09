@@ -167,7 +167,22 @@ async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
         await db["drop_unlock_requests"].update_one(
             {"_id": request_oid}, {"$set": {"status": "pending"}},
         )
-        return {"error": "payment_failed", "reason": str(e) or "Not enough coins."}
+        short = "insufficient" in str(e).lower()
+        if short:
+            # Tell the visitor once an hour at most; nothing was charged and the knock stays.
+            nudged = await db["drop_unlock_requests"].find_one_and_update(
+                {"_id": request_oid, "$or": [{"payment_nudged_at": None}, {"payment_nudged_at": {"$lt": now_utc() - timedelta(hours=1)}}]},
+                {"$set": {"payment_nudged_at": now_utc()}},
+            )
+            if nudged:
+                await send_push_notification(
+                    claimed["requester_id"], "They want to let you in 🔥",
+                    "Your wallet is short, so nothing was charged. Top up and they can let you in.", db,
+                    data={"type": "linkup_payment_short", "url": "/coins"},
+                )
+        return {"error": "payment_failed", "reason": (
+            "They don't have enough coins right now, so nothing was charged. Their knock stays here and we've let them know."
+            if short else (str(e) or "Not enough coins."))}
     except Exception:
         await db["drop_unlock_requests"].update_one(
             {"_id": request_oid}, {"$set": {"status": "pending"}},
@@ -355,6 +370,7 @@ async def create_unlock_request(
         db,
         data={"type": "linkup_request", "request_id": request_id, "url": f"/inbox?request={request_id}"},
         category="linkup_request",
+        kind="knock",
     )
 
     return {"request_id": request_id, "status": "pending", "expires_at": expires_at.isoformat()}

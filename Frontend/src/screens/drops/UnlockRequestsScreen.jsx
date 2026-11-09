@@ -1,6 +1,7 @@
 /** Knocks: Received (grouped by confession, Let All In per group; coins move only on accept)
  * and Sent (your own knocks and what happened to them). Optional { targetType, targetId }
- * narrows Received to one confession; { inTab } when shown as the Requests tab. */
+ * narrows Received to one confession; { inTab } when shown as the Requests tab; the
+ * `embedded` prop renders it inside the Rooms tab (no screen header). */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image,
@@ -48,8 +49,19 @@ function MediaPreviewModal({ media, onClose }) {
   );
 }
 
-export default function UnlockRequestsScreen({ route, navigation }) {
-  const { targetType, targetId, inTab } = route.params ?? {};
+// "2m", "3h", "Tue": when a knock arrived.
+function ago(iso) {
+  const t = new Date(iso).getTime();
+  if (!t) return '';
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  if (m < 60 * 24) return `${Math.round(m / 60)}h ago`;
+  return new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+export default function UnlockRequestsScreen({ route, navigation, embedded = false }) {
+  const { targetType, targetId, inTab } = route?.params ?? {};
   const { showToast } = useToast();
   const { socketService } = useSocket();
   const { refreshUnread } = useUnread() || {};
@@ -218,52 +230,58 @@ export default function UnlockRequestsScreen({ route, navigation }) {
     </View>
   ), [handleAcceptAll]);
 
+  // One knock: who (tap to peek at their Room), when, what they said, their clues, then the decision.
   const renderItem = useCallback(({ item }) => {
     const isBusy = busyIds.has(item.id);
     const thumbs = (item.requester_gallery || []).filter((g) => g.media_url && g.media_type !== 'video').slice(0, 3);
+    const name = item.requester_anonymous_name || 'Anonymous';
     return (
-      <View style={s.row}>
+      <View style={s.card}>
         <TouchableOpacity
-          style={s.rowMain}
+          style={s.cardHead}
           activeOpacity={0.8}
           onPress={() => item.requester_id && navigation.navigate('Room', { userId: item.requester_id })}
+          accessibilityRole="button"
+          accessibilityLabel={`Peek into ${name}'s Room`}
         >
-          <View style={s.rowInfo}>
-            {/* Knocker's photo, else their initial. */}
-            {item.requester_avatar_url ? (
-              <Image source={{ uri: item.requester_avatar_url }} style={s.rowAvatar} />
-            ) : (
-              <View style={s.rowAvatar}>
-                <Text style={s.rowAvatarText}>
-                  {item.requester_anonymous_name?.[0]?.toUpperCase() || 'A'}
-                </Text>
-              </View>
-            )}
-            <Text style={s.rowName}>{item.requester_anonymous_name}</Text>
-          </View>
-          <Text style={[s.rowPitch, !item.pitch && s.rowPitchEmpty]} numberOfLines={2}>
-            {item.pitch || 'knocked on your door'}
-          </Text>
-          {!!item.intents?.length && (
-            <View style={s.rowChips}>
-              {item.intents.map((i) => <Text key={i} style={s.rowChip}>{intentLabel(i)}</Text>)}
+          {item.requester_avatar_url ? (
+            <Image source={{ uri: item.requester_avatar_url }} style={s.cardAva} />
+          ) : (
+            <View style={[s.cardAva, s.cardAvaEmpty]}>
+              <Text style={s.cardAvaText}>{name[0].toUpperCase()}</Text>
             </View>
           )}
-          <KnockClues item={item} onOpenMedia={setPreviewMedia} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.cardName} numberOfLines={1}>{name}</Text>
+            <Text style={s.cardMeta} numberOfLines={1}>Knocked {ago(item.created_at)} · tap to peek</Text>
+          </View>
           {thumbs.length > 0 && (
             <View style={s.rowThumbs}>
               {thumbs.map((g, k) => <Image key={k} source={{ uri: g.media_url }} style={s.rowThumb} />)}
             </View>
           )}
         </TouchableOpacity>
+
+        <View style={s.cardQuote}>
+          <Text style={[s.rowPitch, !item.pitch && s.rowPitchEmpty]} numberOfLines={4}>
+            {item.pitch ? `“${item.pitch}”` : 'No message, just the knock.'}
+          </Text>
+        </View>
+        {!!item.intents?.length && (
+          <View style={s.rowChips}>
+            {item.intents.map((i) => <Text key={i} style={s.rowChip}>{intentLabel(i)}</Text>)}
+          </View>
+        )}
+        <KnockClues item={item} onOpenMedia={setPreviewMedia} />
+
         {isBusy ? (
-          <ActivityIndicator color={T.primary} size="small" />
+          <ActivityIndicator color={T.primary} size="small" style={{ alignSelf: 'center', marginTop: rp(6) }} />
         ) : (
-          <View style={s.rowActions}>
-            <TouchableOpacity style={s.declineBtn} onPress={() => handleDecline(item.id)} hitSlop={HIT_SLOP}>
+          <View style={s.cardActions}>
+            <TouchableOpacity style={s.cardDecline} onPress={() => handleDecline(item.id)} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel={`Decline ${name}`}>
               <Text style={s.declineBtnText}>Decline</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.acceptBtn} onPress={() => handleAccept(item.id)} hitSlop={HIT_SLOP}>
+            <TouchableOpacity style={s.cardAccept} onPress={() => handleAccept(item.id)} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel={`Let ${name} in`}>
               <Text style={s.acceptBtnText}>Let In</Text>
             </TouchableOpacity>
           </View>
@@ -328,9 +346,13 @@ export default function UnlockRequestsScreen({ route, navigation }) {
   const received = sections.reduce((n, sec) => n + sec.data.length, 0);
   const refresh = <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />;
 
+  const Root = embedded ? View : SafeAreaView;
   return (
-    <SafeAreaView style={s.root} edges={inTab ? ['top'] : undefined}>
-      <DropScreenHeader title="Knocks" navigation={navigation} hideBack={inTab} />
+    <Root style={s.root} {...(embedded ? {} : { edges: inTab ? ['top'] : undefined })}>
+      {!embedded && <DropScreenHeader title="Knocks" navigation={navigation} hideBack={inTab} />}
+      {view === 'in' && received > 0 ? (
+        <Text style={s.coinNote}>Knocking is free for them. Let someone in and their coins move automatically, once. Decline and nothing is charged.</Text>
+      ) : null}
 
       {!targetId && (
         <View style={s.segs}>
@@ -347,7 +369,8 @@ export default function UnlockRequestsScreen({ route, navigation }) {
       ) : view === 'sent' ? (
         sent.length === 0 ? (
           <View style={s.centered}>
-            <Text style={s.emptyText}>You haven't knocked on anyone yet. Find a confession you can't stop thinking about.</Text>
+            <Text style={s.emptyTitle}>No knocks sent</Text>
+            <Text style={s.emptyText}>Find a confession you can't stop thinking about, and knock. It's free until they let you in.</Text>
           </View>
         ) : (
           <FlatList
@@ -360,7 +383,14 @@ export default function UnlockRequestsScreen({ route, navigation }) {
         )
       ) : sections.length === 0 ? (
         <View style={s.centered}>
-          <Text style={s.emptyText}>No knocks yet. Post something for tonight and watch your door.</Text>
+          <View style={s.emptyDoor}><Text style={s.emptyDoorKnob}>•</Text></View>
+          <Text style={s.emptyTitle}>Nobody at the door yet</Text>
+          <Text style={s.emptyText}>Post something for tonight and the knocks come here. You decide who comes in.</Text>
+          {embedded ? (
+            <TouchableOpacity style={[s.acceptBtn, { marginTop: rp(14), paddingHorizontal: rp(18), paddingVertical: rp(10) }]} onPress={() => navigation.navigate('DropsCompose')}>
+              <Text style={s.acceptBtnText}>Post something</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : (
         <SectionList
@@ -377,14 +407,36 @@ export default function UnlockRequestsScreen({ route, navigation }) {
       {previewMedia && (
         <MediaPreviewModal media={previewMedia} onClose={() => setPreviewMedia(null)} />
       )}
-    </SafeAreaView>
+    </Root>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.background },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl },
-  emptyText: { color: T.textSecondary, fontSize: FONT.sm, textAlign: 'center' },
+  emptyText: { color: T.textSecondary, fontSize: FONT.sm, textAlign: 'center', lineHeight: FONT.sm * 1.5 },
+  emptyTitle: { color: T.text, fontSize: rf(18), fontFamily: 'DMSans-Bold', textAlign: 'center', marginBottom: rp(6) },
+  emptyDoor: {
+    width: rs(54), height: rs(78), borderTopLeftRadius: rs(27), borderTopRightRadius: rs(27), borderRadius: rs(6),
+    borderWidth: 1.5, borderColor: T.primaryBorder, backgroundColor: T.primaryTint, marginBottom: rp(16),
+    alignItems: 'flex-end', justifyContent: 'center', paddingRight: rp(9),
+  },
+  emptyDoorKnob: { color: T.primary, fontSize: rf(20), lineHeight: rf(20) },
+  coinNote: { color: T.textSecondary, fontSize: rf(12), lineHeight: rf(17), paddingHorizontal: SPACING.md, paddingTop: rp(10) },
+  card: {
+    gap: rp(10), padding: rp(14), marginBottom: rp(10), borderRadius: RADIUS.lg,
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
+  },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: rp(12) },
+  cardAva: { width: rs(46), height: rs(46), borderRadius: rs(23), backgroundColor: T.surfaceAlt, borderWidth: 1.5, borderColor: T.primaryBorder },
+  cardAvaEmpty: { alignItems: 'center', justifyContent: 'center' },
+  cardAvaText: { fontFamily: 'DMSans-Bold', fontSize: rf(18), color: T.primary },
+  cardName: { fontFamily: 'DMSans-Bold', fontSize: rf(16), color: T.text },
+  cardMeta: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textSecondary, marginTop: rp(2) },
+  cardQuote: { borderLeftWidth: 2, borderLeftColor: T.primaryBorder, paddingLeft: rp(12) },
+  cardActions: { flexDirection: 'row', gap: rp(10), marginTop: rp(2) },
+  cardDecline: { flex: 1, height: rs(44), borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  cardAccept: { flex: 1.4, height: rs(44), borderRadius: RADIUS.md, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
   listContent: { padding: SPACING.md },
   sectionHeader: {
     marginTop: SPACING.md, marginBottom: SPACING.sm,
@@ -409,7 +461,7 @@ const s = StyleSheet.create({
   },
   rowMain: { flex: 1, minWidth: 0, gap: rp(6) },
   rowInfo: { flexDirection: 'row', alignItems: 'center', gap: rp(10), flexShrink: 1 },
-  rowPitch: { fontSize: FONT.sm, color: T.text, lineHeight: FONT.sm * 1.4 },
+  rowPitch: { fontSize: rf(15), color: T.text, lineHeight: rf(22) },
   rowPitchEmpty: { color: T.textSecondary, fontStyle: 'italic' },
   rowChips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(5) },
   rowChip: { fontSize: rf(10.5), color: T.text, borderWidth: 1, borderColor: T.borderStrong, paddingHorizontal: rp(8), paddingVertical: rp(2), borderRadius: 999 },

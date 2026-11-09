@@ -43,6 +43,7 @@ import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
 import useDraft from '../../hooks/useDraft';
+import { callsApi, callParams } from '../../services/calls';
 import { intentLabel } from '../../config/linkup';
 
 // Fallback poll; messages normally arrive over the socket.
@@ -270,7 +271,7 @@ const MoodBoard = React.memo(() => (
 // ─── Voice note bubble — play/pause + duration, no autoplay ────
 // Shared implementation, see VoiceWaveform.jsx.
 const VoiceBubble = React.memo(({ item }) => (
-  <VoiceWaveform uri={item.media_url} durationSeconds={item.duration_seconds} />
+  <VoiceWaveform uri={item.media_url} durationSeconds={item.duration_seconds} speed />
 ));
 
 // ─── Quoted reply, shown above a reply's content.
@@ -594,6 +595,7 @@ export default function DropChatScreen({ route, navigation }) {
   const [isRecording, setIsRecording]     = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const [voiceUploading, setVoiceUploading] = useState(false);
+  const [voicePreview, setVoicePreview]   = useState(null);   // { uri, duration } waiting to be sent
   const recorder        = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recordTimerRef = useRef(null);
   const pressStartRef  = useRef(0);
@@ -961,17 +963,15 @@ export default function DropChatScreen({ route, navigation }) {
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
 
       if (heldMs < 500) {
-        showToast({ type: 'info', message: 'Hold to record, release to send.' });
+        showToast({ type: 'info', message: 'Hold the mic to record, then release to listen back.' });
         return;
       }
       if (!uri) {
         showToast({ type: 'error', message: 'Recording failed — no audio captured.' });
         return;
       }
-      setVoiceUploading(true);
-      const url = await uploadVoice(uri);
-      setVoiceUploading(false);
-      if (url) await sendVoiceMessage(url, durationSeconds);
+      // Listen back first: the preview row plays it, and Send or the bin decides.
+      setVoicePreview({ uri, duration: Math.max(1, durationSeconds) });
     } catch {
       clearInterval(recordTimerRef.current);
       recordTimerRef.current = null;
@@ -980,7 +980,24 @@ export default function DropChatScreen({ route, navigation }) {
       setVoiceUploading(false);
       showToast({ type: 'error', message: 'Could not send voice note.' });
     }
-  }, [isRecording, recordDuration, uploadVoice, sendVoiceMessage, showToast]);
+  }, [isRecording, recordDuration, showToast]);
+
+  const sendVoicePreview = useCallback(async () => {
+    if (!voicePreview || voiceUploading) return;
+    const { uri, duration } = voicePreview;
+    setVoiceUploading(true);
+    try {
+      const url = await uploadVoice(uri);
+      if (url) {
+        await sendVoiceMessage(url, duration);
+        setVoicePreview(null);
+      }
+    } catch {
+      showToast({ type: 'error', message: 'Could not send the voice note. Try again.' });
+    } finally {
+      setVoiceUploading(false);
+    }
+  }, [voicePreview, voiceUploading, uploadVoice, sendVoiceMessage, showToast]);
 
   // ── Helpers ───────────────────────────────────────────────
   // Add a date separator when the day changes.
@@ -1132,61 +1149,41 @@ export default function DropChatScreen({ route, navigation }) {
 
   const handleDismissWelcome = useCallback(() => setShowWelcome(false), []);
 
-  const handleStartCall = useCallback(async (isAudioOnly = false) => {
-    if (callLoading) return;
+  // Header icons ring the other person (POST /drop-calls/direct). Their Room settings
+  // decide whether they take voice/video calls; the server says so if not.
+  const handleDirectCall = useCallback(async (video) => {
+    if (callLoading || !connectionId) return;
     setCallLoading(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/drop-calls/start`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Could not start the call.');
-      navigation.navigate('DropCall', {
-        callId: data.call_id, channel: data.channel, token: data.token,
-        uid: data.uid, appId: data.app_id, isHost: true, isAudioOnly,
-      });
+      const data = await callsApi.direct(connectionId, video);
+      navigation.navigate('DropCall', callParams(data, {
+        other: { name: connection?.other_anonymous_name, avatar_url: chatProfile?.profile_picture_url, ...(data.other || {}) },
+      }));
     } catch (err) {
-      showToast({ type: 'error', message: err.message || 'Could not start the call.' });
+      showToast({ type: err.status === 409 || err.status === 403 ? 'info' : 'error', message: err.message || 'Could not start the call.' });
     } finally {
       setCallLoading(false);
     }
-  }, [callLoading, navigation, showToast]);
+  }, [callLoading, connectionId, connection, chatProfile, navigation, showToast]);
 
-  const handleJoinCall = useCallback(async (isAudioOnly = false) => {
+  // A group session open in this Room: guests join it from the strip.
+  const handleJoinCall = useCallback(async () => {
     if (callLoading || !activeCall) return;
     setCallLoading(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(`${API_BASE_URL}/api/v1/drop-calls/${activeCall.id}/join`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Could not join the call.');
-      navigation.navigate('DropCall', {
-        callId: data.call_id, channel: data.channel, token: data.token,
-        uid: data.uid, appId: data.app_id, isHost: false, isAudioOnly,
-        hostName: connection?.other_anonymous_name || 'Anonymous',
-      });
+      const data = await callsApi.join(activeCall.id);
+      navigation.navigate('DropCall', callParams(data, {
+        isHost: false, other: { name: connection?.other_anonymous_name || 'Anonymous' },
+      }));
     } catch (err) {
-      showToast({ type: 'error', message: err.message || 'Could not join the call.' });
+      showToast({ type: 'error', message: err.message || 'Could not join the session.' });
     } finally {
       setCallLoading(false);
     }
   }, [callLoading, activeCall, navigation, showToast, connection]);
 
-  // Call icons: the host starts a call, guests join the live one.
-  const handlePressAudio = useCallback(() => {
-    if (connection?.is_sender) return handleStartCall(true);
-    if (activeCall) return handleJoinCall(true);
-    showToast({ type: 'info', message: 'No live call right now.' });
-  }, [connection, activeCall, handleStartCall, handleJoinCall, showToast]);
-
-  const handlePressVideo = useCallback(() => {
-    if (connection?.is_sender) return handleStartCall(false);
-    if (activeCall) return handleJoinCall(false);
-    showToast({ type: 'info', message: 'No live call right now.' });
-  }, [connection, activeCall, handleStartCall, handleJoinCall, showToast]);
+  const handlePressAudio = useCallback(() => handleDirectCall(false), [handleDirectCall]);
+  const handlePressVideo = useCallback(() => handleDirectCall(true), [handleDirectCall]);
 
   // ── 3-dot menu — roster behind the room, host/guest specific actions ──
   useEffect(() => {
@@ -1217,6 +1214,15 @@ export default function DropChatScreen({ route, navigation }) {
   // your Room. They'd have to Knock, be let in, and pay again to come back.
   const handleRemoveGuest = useCallback(() => {
     setShowMoreMenu(false);
+    const unlocks = connection?.removable_at ? new Date(connection.removable_at) : null;
+    if (unlocks && unlocks > new Date()) {
+      Alert.alert(
+        'Not yet',
+        `You can remove someone 3 days after letting them in: from ${unlocks.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. If something's wrong, block them now.`,
+        [{ text: 'OK', style: 'cancel' }, { text: 'Block', style: 'destructive', onPress: () => handleBlockHost() }],
+      );
+      return;
+    }
     Alert.alert(
       `Remove ${connection?.other_anonymous_name || 'them'} from your Room?`,
       "This conversation closes for both of you. They'd have to knock again.",
@@ -1230,11 +1236,12 @@ export default function DropChatScreen({ route, navigation }) {
               const res = await fetch(`${API_BASE_URL}/api/v1/drops/connections/${connectionId}/remove`, {
                 method: 'POST', headers: { Authorization: `Bearer ${token}` },
               });
-              if (!res.ok) throw new Error();
-              showToast({ type: 'info', message: 'Removed from your Room.' });
+              const body = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(body?.detail?.message || (typeof body?.detail === 'string' ? body.detail : ''));
+              showToast({ type: 'info', message: "Removed. They're outside again and can knock if they want back in." });
               navigation.goBack();
-            } catch {
-              showToast({ type: 'error', message: 'Could not remove them. Try again.' });
+            } catch (e) {
+              showToast({ type: 'error', message: e.message || 'Could not remove them. Try again.' });
             }
           },
         },
@@ -1243,7 +1250,7 @@ export default function DropChatScreen({ route, navigation }) {
   }, [connection, connectionId, navigation, showToast]);
 
   const handleBlockHost = useCallback(() => {
-    if (!connection?.host_user_id) return;
+    if (!connection?.other_user_id) return;
     Alert.alert(
       'Block this person?',
       "They won't be able to reach you, and their content will be hidden from your feed and Drops.",
@@ -1254,7 +1261,7 @@ export default function DropChatScreen({ route, navigation }) {
           onPress: async () => {
             try {
               const token = await AsyncStorage.getItem('token');
-              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.host_user_id}/block`, {
+              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.other_user_id}/block`, {
                 method: 'POST', headers: { Authorization: `Bearer ${token}` },
               });
               if (!res.ok) throw new Error();
@@ -1271,7 +1278,7 @@ export default function DropChatScreen({ route, navigation }) {
   }, [connection, navigation, showToast]);
 
   const handleReportHost = useCallback(() => {
-    if (!connection?.host_user_id) return;
+    if (!connection?.other_user_id) return;
     const reasons = [
       { id: 'abuse',             label: 'Abuse or harassment' },
       { id: 'spam',              label: 'Spam' },
@@ -1444,9 +1451,14 @@ export default function DropChatScreen({ route, navigation }) {
       {activeCall ? (
         <View style={s.liveStrip}>
           <View style={s.liveStripDot} />
-          <Text style={s.liveStripText}>
-            {connection?.is_sender ? 'Your call is live' : 'Call live'} — {activeCall.guest_count}/{activeCall.max_guests} in room
+          <Text style={[s.liveStripText, { flexShrink: 1 }]} numberOfLines={1}>
+            {connection?.is_sender ? 'Your session is live' : `${otherName}'s session is live`} · {activeCall.guest_count}/{activeCall.max_guests} in
           </Text>
+          {!connection?.is_sender ? (
+            <TouchableOpacity style={s.liveJoinBtn} onPress={handleJoinCall} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityRole="button">
+              {callLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.liveJoinText}>Join</Text>}
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
 
@@ -1548,9 +1560,9 @@ export default function DropChatScreen({ route, navigation }) {
           onChangeText={handleTextChange}
           placeholder="Drop your desires"
           maxLength={500}
-          onAttachPress={!isRecording ? pickMedia : undefined}
+          onAttachPress={!isRecording && !voicePreview ? pickMedia : undefined}
           attachUploading={mediaUploading}
-          onEmojiPress={!isRecording ? () => setShowEmojiStrip((v) => !v) : undefined}
+          onEmojiPress={!isRecording && !voicePreview ? () => setShowEmojiStrip((v) => !v) : undefined}
           emojiActive={showEmojiStrip}
           paddingBottom={insets.bottom + rp(8)}
           recordingContent={isRecording ? (
@@ -1560,16 +1572,31 @@ export default function DropChatScreen({ route, navigation }) {
               <Text style={s.recordDurationLabel}>
                 {Math.floor(recordDuration / 60)}:{String(recordDuration % 60).padStart(2, '0')}
               </Text>
-              <Text style={s.recordHint}>release to send</Text>
+              <Text style={s.recordHint}>release to listen back</Text>
+            </View>
+          ) : voicePreview ? (
+            // Recorded: listen, then send or bin it.
+            <View style={s.recordingRow}>
+              <TouchableOpacity
+                onPress={() => setVoicePreview(null)} disabled={voiceUploading} hitSlop={HIT_SLOP}
+                accessibilityRole="button" accessibilityLabel="Delete voice note"
+              >
+                <Trash2 size={rs(18)} color={T.textMute} strokeWidth={1.8} />
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <VoiceWaveform uri={voicePreview.uri} durationSeconds={voicePreview.duration} compact />
+              </View>
             </View>
           ) : null}
           trailing={
             // Empty field: hold to record. Text typed: tap to send.
             <Pressable
-              onPressIn={!text.trim() ? handleVoicePressIn : undefined}
-              onPressOut={!text.trim() ? handleVoicePressOut : undefined}
-              onPress={text.trim() ? handleSend : undefined}
-              disabled={text.trim() ? sending : false}
+              onPressIn={!text.trim() && !voicePreview ? handleVoicePressIn : undefined}
+              onPressOut={!text.trim() && !voicePreview ? handleVoicePressOut : undefined}
+              onPress={voicePreview ? sendVoicePreview : text.trim() ? handleSend : undefined}
+              disabled={voicePreview ? voiceUploading : text.trim() ? sending : false}
+              accessibilityRole="button"
+              accessibilityLabel={voicePreview ? 'Send voice note' : text.trim() ? 'Send' : 'Hold to record a voice note'}
               hitSlop={HIT_SLOP}
               style={({ pressed }) => [
                 s.sendBtn,
@@ -1577,7 +1604,11 @@ export default function DropChatScreen({ route, navigation }) {
                 pressed && !isRecording && { opacity: 0.85 },
               ]}
             >
-              {text.trim() ? (
+              {voicePreview ? (
+                voiceUploading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />
+              ) : text.trim() ? (
                 sending
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />
@@ -1644,6 +1675,14 @@ export default function DropChatScreen({ route, navigation }) {
                 <TouchableOpacity style={s.menuAction} onPress={handleRemoveGuest} hitSlop={HIT_SLOP}>
                   <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
                   <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Remove from Room</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>
+                  <Flag size={rs(16)} color={T.text} strokeWidth={1.8} />
+                  <Text style={s.menuActionText}>Report</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.menuAction} onPress={handleBlockHost} hitSlop={HIT_SLOP}>
+                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Block</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -1802,6 +1841,8 @@ const s = StyleSheet.create({
     width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.online,
   },
   liveStripText: { fontSize: rf(11), fontWeight: '700', color: T.primary },
+  liveJoinBtn: { minWidth: rs(56), height: rs(28), paddingHorizontal: rp(12), borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  liveJoinText: { fontSize: rf(12), fontWeight: '800', color: '#fff' },
 
   // Plain icon buttons; only an active call is highlighted.
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(14) },

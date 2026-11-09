@@ -1,5 +1,6 @@
-"""Each poster's Room: theme, font, picture, gallery (up to 3 items), door rules and call
-settings. The full profile is only visible to people connected with them."""
+"""Each poster's Room: theme, font, picture, gallery (up to 3 items, the welcome media),
+welcome note and audio, door rules, call permissions and Room notification preferences.
+The full profile is only visible to people connected with them."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
@@ -11,6 +12,7 @@ from app.dependencies import get_current_user_id
 from app.utils.coin_service import debit_coins
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
+from app.utils.r2_storage import is_own_media_url
 
 router = APIRouter(prefix="/chat-profile", tags=["Chat Profile"])
 
@@ -48,6 +50,14 @@ PATTERN_TO_THEME = {
 ROOM_STATUSES = {"open", "late", "quiet", "away"}
 # Who sees the gallery: everyone, only people let in, or only the owner.
 GALLERY_VISIBILITY = {"window", "inside", "only_me"}
+# Who hears/reads the welcome (note + audio): everyone at the window, or only people let in.
+WELCOME_VISIBILITY = {"window", "inside"}
+MAX_WELCOME_AUDIO_SECONDS = 60
+# Room notifications (push). Quiet hours are local hours 0-23, start inclusive, end exclusive.
+NOTIFY_DEFAULTS = {
+    "knocks": True, "messages": True, "calls": True, "sessions": True,
+    "previews": True, "quiet_start": None, "quiet_end": None, "tz_offset_min": 0,
+}
 
 # Door rules: what a Knock must include. line | line_peek (line + photo/video/voice) | voice
 DOOR_RULES = {"line", "line_peek", "voice"}
@@ -117,6 +127,24 @@ class ChatProfileUpdate(BaseModel):
     door_rule:        Optional[str] = None   # see DOOR_RULES
     listing:          Optional[str] = None   # see LISTINGS
     break_hours:      Optional[int] = None   # with knocks_open=False: one of BREAK_HOURS, else until switched back
+    welcome_audio_url:     Optional[str] = None    # "" removes it
+    welcome_audio_seconds: Optional[float] = None
+    welcome_autoplay:      Optional[bool] = None   # plays once on a visitor's first entrance (never forced loud)
+    welcome_visibility:    Optional[str] = None    # see WELCOME_VISIBILITY
+    allow_audio_calls:     Optional[bool] = None   # people inside may ring you
+    allow_video_calls:     Optional[bool] = None
+    notify:                Optional["NotifyPrefs"] = None
+
+
+class NotifyPrefs(BaseModel):
+    knocks:   Optional[bool] = None
+    messages: Optional[bool] = None
+    calls:    Optional[bool] = None
+    sessions: Optional[bool] = None
+    previews: Optional[bool] = None    # show message text in notifications
+    quiet_start: Optional[int] = None  # -1 clears quiet hours
+    quiet_end:   Optional[int] = None
+    tz_offset_min: Optional[int] = None  # minutes east of UTC, from the device
 
 
 class CapacityUpgradeRequest(BaseModel):
@@ -127,6 +155,22 @@ class GalleryMediaInput(BaseModel):
     media_url:        str
     media_type:       str            # "image" | "video" | "gif"
     duration_seconds: Optional[float] = None
+    replace_index:    Optional[int] = None   # swap the item in this slot instead of adding one
+
+
+class GalleryOrderInput(BaseModel):
+    order: list[int]   # the current indexes in their new order, e.g. [2, 0, 1]
+
+
+ChatProfileUpdate.model_rebuild()
+
+
+def notify_prefs_of(doc: Optional[dict]) -> dict:
+    return {**NOTIFY_DEFAULTS, **((doc or {}).get("notify") or {})}
+
+
+def welcome_visible(doc: dict, inside: bool, is_owner: bool) -> bool:
+    return is_owner or inside or (doc.get("welcome_visibility") or "inside") == "window"
 
 
 def room_theme_of(doc: dict) -> str:
@@ -189,6 +233,12 @@ def _sanitize(doc: dict, user: Optional[dict] = None) -> dict:
         "break_until":         doc["knocks_paused_until"].isoformat() if not knocks_open_of(doc) and doc.get("knocks_paused_until") else None,
         "door_rule":           door_rule_of(doc),
         "listing":             doc.get("listing") if doc.get("listing") in LISTINGS else DEFAULT_LISTING,
+        "welcome_audio_url":     doc.get("welcome_audio_url"),
+        "welcome_audio_seconds": doc.get("welcome_audio_seconds"),
+        "welcome_autoplay":      bool(doc.get("welcome_autoplay", False)),
+        "welcome_visibility":    doc.get("welcome_visibility") or "inside",
+        "allow_audio_calls":     doc.get("allow_audio_calls", True) is not False,
+        "allow_video_calls":     doc.get("allow_video_calls", True) is not False,
         "updated_at":          doc["updated_at"].isoformat() if doc.get("updated_at") else None,
     }
 
@@ -202,7 +252,7 @@ async def get_my_chat_profile(
     user = await db["users"].find_one(
         {"_id": ObjectId(current_user_id)}, {"avatar_url": 1, "anonymous_name": 1},
     )
-    return _sanitize(doc, user)
+    return {**_sanitize(doc, user), "notify": notify_prefs_of(doc)}
 
 
 @router.put("/me")
@@ -231,6 +281,12 @@ async def update_my_chat_profile(
 
     if data.gallery_visibility and data.gallery_visibility not in GALLERY_VISIBILITY:
         raise HTTPException(status_code=400, detail=f"gallery_visibility must be one of: {', '.join(GALLERY_VISIBILITY)}")
+
+    if data.welcome_visibility and data.welcome_visibility not in WELCOME_VISIBILITY:
+        raise HTTPException(status_code=400, detail="welcome_visibility must be 'window' or 'inside'.")
+
+    if data.welcome_audio_url and not is_own_media_url(data.welcome_audio_url):
+        raise HTTPException(status_code=400, detail="Upload the welcome audio through Anonixx.")
 
     update = {"updated_at": _now()}
     if data.background_pattern is not None:
@@ -272,6 +328,44 @@ async def update_my_chat_profile(
         if data.door_rule not in DOOR_RULES:
             raise HTTPException(status_code=400, detail=f"door_rule must be one of: {', '.join(sorted(DOOR_RULES))}")
         update["door_rule"] = data.door_rule
+    if data.welcome_audio_url is not None:
+        if data.welcome_audio_url:
+            secs = data.welcome_audio_seconds
+            if secs is not None and (secs <= 0 or secs > MAX_WELCOME_AUDIO_SECONDS + 1):
+                raise HTTPException(status_code=400, detail=f"Keep the welcome audio under {MAX_WELCOME_AUDIO_SECONDS} seconds.")
+            update["welcome_audio_url"] = data.welcome_audio_url
+            update["welcome_audio_seconds"] = round(secs, 1) if secs else None
+        else:
+            update["welcome_audio_url"] = None
+            update["welcome_audio_seconds"] = None
+    if data.welcome_autoplay is not None:
+        update["welcome_autoplay"] = data.welcome_autoplay
+    if data.welcome_visibility is not None:
+        update["welcome_visibility"] = data.welcome_visibility
+    if data.allow_audio_calls is not None:
+        update["allow_audio_calls"] = data.allow_audio_calls
+    if data.allow_video_calls is not None:
+        update["allow_video_calls"] = data.allow_video_calls
+    if data.notify is not None:
+        n = data.notify
+        for key in ("knocks", "messages", "calls", "sessions", "previews"):
+            val = getattr(n, key)
+            if val is not None:
+                update[f"notify.{key}"] = val
+        if n.quiet_start is not None or n.quiet_end is not None:
+            if n.quiet_start == -1 or n.quiet_end == -1:
+                update["notify.quiet_start"] = None
+                update["notify.quiet_end"] = None
+            else:
+                qs, qe = n.quiet_start, n.quiet_end
+                if qs is None or qe is None or not (0 <= qs <= 23 and 0 <= qe <= 23) or qs == qe:
+                    raise HTTPException(status_code=400, detail="Quiet hours need a start and end hour (0-23) that differ.")
+                update["notify.quiet_start"] = qs
+                update["notify.quiet_end"] = qe
+        if n.tz_offset_min is not None and -840 <= n.tz_offset_min <= 840:
+            update["notify.tz_offset_min"] = n.tz_offset_min
+
+    old = await db["chat_profiles"].find_one({"user_id": current_user_id}, {"welcome_audio_url": 1}) or {}
 
     await db["chat_profiles"].update_one(
         {"user_id": current_user_id},
@@ -285,11 +379,15 @@ async def update_my_chat_profile(
         },
         upsert=True,
     )
+    # A replaced or removed welcome audio leaves storage too.
+    if "welcome_audio_url" in update and old.get("welcome_audio_url") and old["welcome_audio_url"] != update["welcome_audio_url"]:
+        from app.utils.r2_storage import delete_by_url
+        delete_by_url(old["welcome_audio_url"])
     doc  = await db["chat_profiles"].find_one({"user_id": current_user_id})
     user = await db["users"].find_one(
         {"_id": ObjectId(current_user_id)}, {"avatar_url": 1, "anonymous_name": 1},
     )
-    return _sanitize(doc, user)
+    return {**_sanitize(doc, user), "notify": notify_prefs_of(doc)}
 
 
 @router.post("/call-capacity")
@@ -348,17 +446,26 @@ async def add_gallery_media(
 ):
     if data.media_type not in ("image", "video", "gif"):
         raise HTTPException(status_code=400, detail="media_type must be 'image', 'video', or 'gif'")
+    if not is_own_media_url(data.media_url):
+        raise HTTPException(status_code=400, detail="Upload the photo or video through Anonixx.")
 
     doc = await db["chat_profiles"].find_one({"user_id": current_user_id})
     gallery = doc.get("gallery", []) if doc else []
-    if len(gallery) >= MAX_GALLERY_ITEMS:
-        raise HTTPException(status_code=400, detail=f"Gallery is capped at {MAX_GALLERY_ITEMS} items — delete one first.")
-
-    gallery.append({
+    item = {
         "media_url":        data.media_url,
         "media_type":       data.media_type,
         "duration_seconds": data.duration_seconds,
-    })
+    }
+    replaced = None
+    if data.replace_index is not None:
+        if not 0 <= data.replace_index < len(gallery):
+            raise HTTPException(status_code=400, detail="Invalid gallery index.")
+        replaced = gallery[data.replace_index].get("media_url")
+        gallery[data.replace_index] = item
+    else:
+        if len(gallery) >= MAX_GALLERY_ITEMS:
+            raise HTTPException(status_code=400, detail=f"Gallery is capped at {MAX_GALLERY_ITEMS} items — delete one first.")
+        gallery.append(item)
 
     await db["chat_profiles"].update_one(
         {"user_id": current_user_id},
@@ -372,6 +479,28 @@ async def add_gallery_media(
             },
         },
         upsert=True,
+    )
+    if replaced and replaced != data.media_url:
+        from app.utils.r2_storage import delete_by_url
+        delete_by_url(replaced)
+    updated = await db["chat_profiles"].find_one({"user_id": current_user_id})
+    return _sanitize(updated)
+
+
+@router.put("/media/order")
+async def reorder_gallery_media(
+    data:             GalleryOrderInput,
+    current_user_id:  str = Depends(get_current_user_id),
+    db                = Depends(get_database),
+):
+    """Reorder the welcome media; `order` must list every current index exactly once."""
+    doc = await db["chat_profiles"].find_one({"user_id": current_user_id}) or {}
+    gallery = doc.get("gallery", [])
+    if sorted(data.order) != list(range(len(gallery))):
+        raise HTTPException(status_code=400, detail="Order must list each item once.")
+    await db["chat_profiles"].update_one(
+        {"user_id": current_user_id},
+        {"$set": {"gallery": [gallery[i] for i in data.order], "updated_at": _now()}},
     )
     updated = await db["chat_profiles"].find_one({"user_id": current_user_id})
     return _sanitize(updated)
@@ -488,8 +617,15 @@ async def get_room_preview(
     )}
     room["gallery"] = visible
     room["gallery_hidden"] = len(raw_profile.get("gallery", [])) - len(visible)
-    # The welcome note is for people inside (and the owner previewing), not the window.
-    room["welcome_message"] = profile["welcome_message"] if (inside or user_id == current_user_id) else None
+    # The welcome (note + audio) is for people inside unless the owner shows it at the window.
+    show_welcome = welcome_visible(raw_profile, inside, user_id == current_user_id)
+    room["welcome_message"] = profile["welcome_message"] if show_welcome else None
+    room["welcome_audio_url"] = profile["welcome_audio_url"] if show_welcome else None
+    room["welcome_audio_seconds"] = profile["welcome_audio_seconds"] if show_welcome else None
+    room["welcome_autoplay"] = profile["welcome_autoplay"]
+    room["welcome_visibility"] = profile["welcome_visibility"]
+    room["allow_audio_calls"] = profile["allow_audio_calls"]
+    room["allow_video_calls"] = profile["allow_video_calls"]
     return {
         "user_id": user_id,
         "room": room,

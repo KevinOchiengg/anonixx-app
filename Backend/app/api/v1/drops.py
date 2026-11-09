@@ -525,9 +525,35 @@ async def update_vibe_score(user_id: str, action: str, db):
     )
 
 
-async def send_push_notification(user_id: str, title: str, body: str, db, data: Optional[dict] = None, category: Optional[str] = None):
+# Room notification kinds -> the switch in chat_profiles.notify (chat_profile.NOTIFY_DEFAULTS).
+PUSH_KIND_PREF = {"knock": "knocks", "message": "messages", "call": "calls", "session": "sessions"}
+
+
+def _in_quiet_hours(prefs: dict, now: Optional[datetime] = None) -> bool:
+    qs, qe = prefs.get("quiet_start"), prefs.get("quiet_end")
+    if qs is None or qe is None or qs == qe:
+        return False
+    local = (now or datetime.now(timezone.utc)) + timedelta(minutes=prefs.get("tz_offset_min") or 0)
+    h = local.hour
+    return qs <= h < qe if qs < qe else (h >= qs or h < qe)
+
+
+async def send_push_notification(user_id: str, title: str, body: str, db, data: Optional[dict] = None,
+                                 category: Optional[str] = None, kind: Optional[str] = None):
     """`category` names a set of action buttons — the app registers them by id
-    (e.g. "linkup_request" -> Accept), the website's sw.js reads data.actions."""
+    (e.g. "linkup_request" -> Accept), the website's sw.js reads data.actions.
+    `kind` (knock | message | call | session) applies the person's Room notification
+    settings: that switch, quiet hours, and hiding message text."""
+    if kind in PUSH_KIND_PREF:
+        try:
+            from app.api.v1.chat_profile import notify_prefs_of
+            prefs = notify_prefs_of(await db["chat_profiles"].find_one({"user_id": user_id}, {"notify": 1}))
+            if not prefs.get(PUSH_KIND_PREF[kind], True) or _in_quiet_hours(prefs):
+                return
+            if kind == "message" and not prefs.get("previews", True):
+                body = "New message in your Room."
+        except Exception as e:
+            print(f"⚠️ Push prefs check failed: {e}")
     try:
         from app.utils.notifications import send_web_push
         web_data = dict(data or {})
@@ -2348,7 +2374,8 @@ async def _create_drop_connection(drop_id: str, drop: dict, unlocker_id: str, db
         # A fresh Let In after the owner removed them reopens the same thread.
         if existing_conn.get("removed_at"):
             await db["drop_connections"].update_one(
-                {"_id": existing_conn["_id"]}, {"$set": {"removed_at": None, "removed_by": None}},
+                {"_id": existing_conn["_id"]},
+                {"$set": {"removed_at": None, "removed_by": None, "removed_reason": None, "let_in_at": now_utc()}},
             )
         # Update the unlock record with connection_id
         await db["drop_unlocks"].update_many(
@@ -2370,6 +2397,7 @@ async def _create_drop_connection(drop_id: str, drop: dict, unlocker_id: str, db
         "confession": drop["confession"],
         "message_count": 0,
         "created_at": now_utc(),
+        "let_in_at": now_utc(),
         "last_message_at": now_utc(),
     }
     await db["drop_connections"].insert_one(conn)
@@ -2413,6 +2441,14 @@ async def get_unread_message_counts(db, user_id: str) -> dict:
         if m["created_at"] > thresholds[cid]:
             counts[cid] += 1
     return counts
+
+
+# The owner can remove someone they let in once this long has passed (blocking is always instant).
+REMOVE_AFTER = timedelta(days=3)
+
+
+def removable_at_of(conn: dict) -> datetime:
+    return _ensure_aware(conn.get("let_in_at") or conn["created_at"]) + REMOVE_AFTER
 
 
 @router.get("/connections")
@@ -2472,6 +2508,9 @@ async def get_drop_connections(
             "other_avatar_url": avatar_by_id.get(other_id),
             "other_is_online": is_user_online(other_id),
             "is_sender": is_sender,
+            # Owner side: when "Remove from Room" unlocks (blocking never waits).
+            "let_in_at": _ensure_aware(conn.get("let_in_at") or conn["created_at"]).isoformat(),
+            "removable_at": removable_at_of(conn).isoformat() if is_sender else None,
             "message_count": conn.get("message_count", 0),
             "unread_count": unread_counts.get(str(conn["_id"]), 0),
             "last_message": last_msg["content"] if last_msg else None,
@@ -2558,7 +2597,7 @@ async def get_drop_messages(
     room_gallery = gallery_for(chat_profile, current_user_id, conn["sender_id"], inside=True) if chat_profile else []
 
     from app.api.v1.drop_calls import get_active_call_for_host
-    active_call = await get_active_call_for_host(conn["sender_id"], db)
+    active_call = await get_active_call_for_host(conn["sender_id"], db, viewer_id=current_user_id)
 
     from app.websockets.events import is_user_online
 
@@ -2590,6 +2629,7 @@ async def get_drop_messages(
             "other_user_id": other_user_id,
             "other_is_online": is_user_online(other_user_id),
             "inside_since": conn["created_at"].isoformat() if conn.get("created_at") else None,
+            "removable_at": removable_at_of(conn).isoformat() if is_sender else None,
             "message_count": conn.get("message_count", 0),
             "knock_pitch": (knock or {}).get("pitch"),
             "knock_intents": (knock or {}).get("intents") or [],
@@ -2738,6 +2778,7 @@ async def send_drop_message(
         notify_body,
         db,
         {"url": f"/chat/{connection_id}"},
+        kind="message",
     )
 
     return {
@@ -2881,8 +2922,9 @@ async def remove_from_room(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """The Room owner removes a visitor. Their threads close (messages kept); they must knock
-    and pay again to return. No refund."""
+    """The Room owner removes a visitor, from 3 days after letting them in (REMOVE_AFTER;
+    blocking is the instant option). Their threads close (messages kept); they're an outsider
+    again and must knock and pay to return. No refund."""
     try:
         conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
     except Exception:
@@ -2892,11 +2934,83 @@ async def remove_from_room(
     if conn["sender_id"] != current_user_id:
         raise HTTPException(status_code=403, detail="Only the Room's owner can remove someone.")
 
+    # The rule runs on the newest Let In between them (every open thread with this visitor).
+    open_conns = await db["drop_connections"].find(
+        {"sender_id": current_user_id, "unlocker_id": conn["unlocker_id"], "removed_at": None},
+    ).to_list(None)
+    if not open_conns:
+        return {"removed": True, "closed": 0}
+    unlocks_at = max(removable_at_of(c) for c in open_conns)
+    if now_utc() < unlocks_at:
+        raise HTTPException(status_code=409, detail={
+            "code": "too_soon",
+            "message": "You can remove someone 3 days after letting them in. If something's wrong, block them.",
+            "removable_at": unlocks_at.isoformat(),
+        })
+
     result = await db["drop_connections"].update_many(
         {"sender_id": current_user_id, "unlocker_id": conn["unlocker_id"], "removed_at": None},
-        {"$set": {"removed_at": now_utc(), "removed_by": current_user_id}},
+        {"$set": {"removed_at": now_utc(), "removed_by": current_user_id, "removed_reason": "removed"}},
     )
+    await _end_calls_between(current_user_id, conn["unlocker_id"], db)
     return {"removed": True, "closed": result.modified_count}
+
+
+async def close_connections_between(a: str, b: str, db, reason: str = "blocked") -> int:
+    """Close every thread between two people at once (used by block: no 3-day wait)."""
+    res = await db["drop_connections"].update_many(
+        {"$or": [{"sender_id": a, "unlocker_id": b}, {"sender_id": b, "unlocker_id": a}], "removed_at": None},
+        {"$set": {"removed_at": now_utc(), "removed_by": a, "removed_reason": reason}},
+    )
+    await _end_calls_between(a, b, db)
+    return res.modified_count
+
+
+async def _end_calls_between(a: str, b: str, db) -> None:
+    """A removal or block also ends their direct calls and takes the visitor out of group sessions."""
+    try:
+        from app.api.v1.drop_calls import drop_user_from_calls
+        await drop_user_from_calls(a, b, db)
+    except Exception as e:
+        log.warning(f"Ending calls after removal failed: {e}")
+
+
+@router.get("/room/visitors")
+async def list_room_visitors(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """The owner's visitor book: everyone they've let in, current and past, newest first.
+    One row per person (their newest thread)."""
+    rows = {}
+    async for c in db["drop_connections"].find({"sender_id": current_user_id}).sort("created_at", -1):
+        uid = c["unlocker_id"]
+        if uid in rows:
+            continue
+        rows[uid] = c
+    avatars = {}
+    ids = [ObjectId(u) for u in rows if ObjectId.is_valid(u)]
+    if ids:
+        async for u in db["users"].find({"_id": {"$in": ids}}, {"avatar_url": 1, "anonymous_name": 1}):
+            avatars[str(u["_id"])] = u
+    me = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"blocked_user_ids": 1}) or {}
+    blocked = set(me.get("blocked_user_ids", []))
+    out = []
+    for uid, c in rows.items():
+        u = avatars.get(uid, {})
+        removed = c.get("removed_at")
+        out.append({
+            "user_id": uid,
+            "connection_id": str(c["_id"]),
+            "anonymous_name": u.get("anonymous_name") or c.get("unlocker_anonymous_name") or "Anonymous",
+            "avatar_url": u.get("avatar_url"),
+            "status": "blocked" if uid in blocked else ("removed" if removed else "inside"),
+            "let_in_at": _ensure_aware(c.get("let_in_at") or c["created_at"]).isoformat(),
+            "removable_at": None if removed else removable_at_of(c).isoformat(),
+            "removed_at": _ensure_aware(removed).isoformat() if removed else None,
+            "last_message_at": _ensure_aware(c["last_message_at"]).isoformat() if c.get("last_message_at") else None,
+        })
+    return {"visitors": out}
 
 
 @router.get("/room/{host_user_id}/guests")

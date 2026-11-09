@@ -1,5 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+/** Someone's Room, in their theme. After a Let In, the first visit plays the entrance: their
+ * welcome note, three welcome media and welcome audio (tried once if the owner turned autoplay
+ * on and the browser allows sound; always playable by hand). */
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,6 +24,7 @@ type Preview = {
     background_pattern: string; font_style: string; profile_picture_url: string | null; anonymous_name: string;
     gallery: GalleryItem[]; gallery_hidden: number; gallery_visibility: string;
     room_theme: string; intro: string | null; room_status: string | null; knocks_open: boolean; welcome_message: string | null;
+    welcome_audio_url?: string | null; welcome_audio_seconds?: number | null; welcome_autoplay?: boolean;
   };
   inside: boolean;
   post: { id: string; kind: "hookup" | "confession" | null; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
@@ -52,6 +56,38 @@ function seen(cid: string) {
 }
 function markSeen(cid: string) {
   try { localStorage.setItem(seenKey(cid), "1"); } catch { /* storage blocked: it just plays again */ }
+}
+
+/** The owner's welcome audio: a play / replay button. autoplay tries once; a browser that
+ * blocks sound just leaves the button. */
+function WelcomeVoice({ url, seconds, autoplay }: { url: string; seconds?: number | null; autoplay?: boolean }) {
+  const el = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [done, setDone] = useState(false);
+  const [left, setLeft] = useState(Math.round(seconds || 0));
+  useEffect(() => {
+    if (!autoplay) return;
+    const t = window.setTimeout(() => { el.current?.play().catch(() => { /* needs a tap */ }); }, 1100);
+    return () => window.clearTimeout(t);
+  }, [autoplay]);
+  const toggle = () => {
+    const a = el.current;
+    if (!a) return;
+    if (done) { a.currentTime = 0; setDone(false); }
+    if (a.paused) a.play().catch(() => {}); else a.pause();
+  };
+  return (
+    <button type="button" className="rm-voice" onClick={toggle} aria-label={playing ? "Pause welcome audio" : "Play welcome audio"}>
+      <audio
+        ref={el} src={url} preload="metadata"
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setDone(true); }}
+        onTimeUpdate={(e) => { const a = e.currentTarget; if (Number.isFinite(a.duration)) setLeft(Math.max(0, Math.round(a.duration - a.currentTime))); }}
+      />
+      <i aria-hidden>{playing ? "❚❚" : done ? "↻" : "▶"}</i>
+      <span><b>{playing ? "Playing their welcome…" : done ? "Play it again" : "Their welcome, in their voice"}</b><small>{left ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Tap to listen"}</small></span>
+    </button>
+  );
 }
 
 /** Put an opener in the chat box (ChatPage reads it via useDraft). Never sends. */
@@ -290,6 +326,14 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
             ) : null}
           </section>
 
+          {room.welcome_message || room.welcome_audio_url ? (
+            <section className="rm-card rm-welcome">
+              <div className="rm-label"><span>{own ? "Your welcome" : cid ? `${name}'s welcome` : "A word at the door"}</span></div>
+              {room.welcome_message ? <p style={font}>&ldquo;{room.welcome_message}&rdquo;</p> : null}
+              {room.welcome_audio_url && !entrance ? <WelcomeVoice url={room.welcome_audio_url} seconds={room.welcome_audio_seconds} /> : null}
+            </section>
+          ) : null}
+
           {post ? (
             <section className={`rm-card rm-post${live ? "" : " ended"}`}>
               <div className="rm-label">
@@ -360,17 +404,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
         {bar}
         {toast ? <div className="room-toast">{toast}</div> : null}
 
-        {big ? (
-          <div className="u-modal" onClick={() => setBig(null)}>
-            {big.media_type === "video" ? (
-              <video src={big.media_url} controls autoPlay loop playsInline onClick={(e) => e.stopPropagation()} />
-            ) : (
-              <Image src={big.media_url} alt="" width={800} height={1000} />
-            )}
-            <button className="u-modal-x" aria-label="Close" onClick={() => setBig(null)}>×</button>
-          </div>
-        ) : null}
-
         {entrance && cid ? (
           <div className="rm-enter" role="dialog" aria-modal aria-label={`Welcome to ${name}'s Room`}>
             <div className="rm-enter-in">
@@ -378,15 +411,36 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
               <small>You&apos;re inside.</small>
               <h2 style={font}>Welcome to {name}&apos;s Room.</h2>
               {room.welcome_message ? <blockquote style={font}>&ldquo;{room.welcome_message}&rdquo;</blockquote> : null}
+              {room.welcome_audio_url ? <WelcomeVoice url={room.welcome_audio_url} seconds={room.welcome_audio_seconds} autoplay={room.welcome_autoplay} /> : null}
+              {gallery.length ? (
+                <div className="rm-grid rm-enter-media">
+                  {gallery.slice(0, 3).map((g, k) => (
+                    <button key={k} className="rm-frame" style={{ animationDelay: `${300 + k * 110}ms` }} onClick={() => setBig(g)} aria-label={`Open welcome media ${k + 1}`}>
+                      {g.media_type === "video" ? <video src={g.media_url} muted loop autoPlay playsInline /> : <Image src={g.media_url} alt="" width={200} height={260} sizes="30vw" />}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <button className="room-cta rm-accent wide" onClick={() => openChat(cid)}>Start the conversation</button>
               <div className="rm-starters">
                 <span>Need an opener? Tap one to put it in the box. You send it, not us.</span>
                 {STARTERS.map((s) => (
                   <button key={s} type="button" onClick={() => openChat(cid, s)}>{s}</button>
                 ))}
               </div>
-              <button className="room-cta rm-accent wide" onClick={() => openChat(cid)}>Start the conversation</button>
               <button className="u-link-btn" onClick={() => setEntrance(false)}>Look around first</button>
             </div>
+          </div>
+        ) : null}
+
+        {big ? (
+          <div className="u-modal rm-big" onClick={() => setBig(null)}>
+            {big.media_type === "video" ? (
+              <video src={big.media_url} controls autoPlay loop playsInline onClick={(e) => e.stopPropagation()} />
+            ) : (
+              <Image src={big.media_url} alt="" width={800} height={1000} />
+            )}
+            <button className="u-modal-x" aria-label="Close" onClick={() => setBig(null)}>×</button>
           </div>
         ) : null}
       </div>

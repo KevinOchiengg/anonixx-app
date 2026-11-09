@@ -11,6 +11,7 @@ import { connectSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
 import AppShell from "./AppShell";
 import CallRoom, { type CallInfo } from "./CallRoom";
+import { callsApi, callInfo } from "@/lib/calls";
 import "../app/chat-media.css";
 
 type Msg = {
@@ -31,8 +32,28 @@ type Msg = {
 };
 
 const REACTIONS = ["🔥", "😈", "💋", "🥵", "😂", "🖤"];
-type Conn = { other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean };
-type ActiveCall = { id: string; guest_count: number; max_guests: number };
+type Conn = {
+  other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
+  removable_at?: string | null;
+};
+
+// A voice note with a 1x / 1.5x / 2x control.
+function VoiceNote({ src }: { src: string }) {
+  const el = useRef<HTMLAudioElement>(null);
+  const [rate, setRate] = useState(1);
+  const next = () => {
+    const r = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
+    setRate(r);
+    if (el.current) el.current.playbackRate = r;
+  };
+  return (
+    <span className="vn" onClick={(e) => e.stopPropagation()}>
+      <audio ref={el} src={src} controls preload="none" onPlay={() => { if (el.current) el.current.playbackRate = rate; }} />
+      <button type="button" className="vn-rate" onClick={next} aria-label={`Playback speed ${rate} times`}>{rate}×</button>
+    </span>
+  );
+}
+type ActiveCall = { id: string; guest_count: number; max_guests: number; video?: boolean };
 type Profile = { background_pattern: string; font_style: string; profile_picture_url: string | null; gallery: GalleryItem[] };
 
 function GalleryOverlay({ items, title, onClose }: { items: GalleryItem[]; title?: string; onClose: () => void }) {
@@ -87,6 +108,7 @@ function Inner({ id }: { id: string }) {
   const chunks = useRef<Blob[]>([]);
   const timer = useRef<number | null>(null);
   const cancelled = useRef(false);
+  const [voice, setVoice] = useState<{ blob: Blob; url: string; secs: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
@@ -106,7 +128,7 @@ function Inner({ id }: { id: string }) {
       setConn(r.connection);
       if (r.chat_profile) setProfile(r.chat_profile);
       setActiveCall(r.active_call || null);
-      if (!r.active_call && roomRef.current && !roomRef.current.isHost) { roomRef.current = null; setRoom(null); }
+      if (!r.active_call && roomRef.current && roomRef.current.kind !== "direct" && !roomRef.current.isHost) { roomRef.current = null; setRoom(null); }
       if (r.welcome_gallery?.length) setWelcome(r.welcome_gallery);
     } catch (e) {
       setError((e as Error).message);
@@ -178,22 +200,32 @@ function Inner({ id }: { id: string }) {
     setRoom(info);
   }
 
+  // The header buttons ring the other person. Their Room settings decide whether they
+  // take voice / video calls; the server says so if not.
   async function pressCall(audioOnly: boolean) {
     if (callBusy || !conn) return;
-    if (!conn.is_sender && !activeCall) { setError("No live call right now."); return; }
     setCallBusy(true);
     setError("");
     try {
-      type Res = { call_id: string; channel: string; token: string; uid: number; app_id: string };
-      const r = conn.is_sender
-        ? await api<Res>("/drop-calls/start", { method: "POST" })
-        : await api<Res>(`/drop-calls/${activeCall!.id}/join`, { method: "POST" });
-      openRoom({
-        callId: r.call_id, channel: r.channel, token: r.token, uid: r.uid, appId: r.app_id,
-        isHost: !!conn.is_sender, audioOnly, hostName: conn.other_anonymous_name || "Anonymous",
-      });
+      const r = await callsApi.direct(id, !audioOnly);
+      openRoom(callInfo(r, { other: { name: conn.other_anonymous_name, avatar_url: profile?.profile_picture_url, ...(r.other || {}) } }));
     } catch (e) {
       setError((e as Error).message || "Could not start the call.");
+    } finally {
+      setCallBusy(false);
+    }
+  }
+
+  // A group session open in this Room: guests join it from the strip.
+  async function joinSession() {
+    if (callBusy || !activeCall) return;
+    setCallBusy(true);
+    setError("");
+    try {
+      const r = await callsApi.join(activeCall.id);
+      openRoom(callInfo(r, { isHost: false, other: { name: conn?.other_anonymous_name || "Anonymous" } }));
+    } catch (e) {
+      setError((e as Error).message || "Could not join the session.");
     } finally {
       setCallBusy(false);
     }
@@ -274,14 +306,8 @@ function Inner({ id }: { id: string }) {
         setRecording(false);
         if (cancelled.current || !chunks.current.length) return;
         const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
-        setBusy(true);
-        try {
-          await sendMedia(await uploadFile(blob, "voice"), "voice", Math.max(1, Math.round((Date.now() - started) / 1000)));
-        } catch (err) {
-          setError((err as Error).message);
-        } finally {
-          setBusy(false);
-        }
+        // Listen back first; Send or Discard decides.
+        setVoice({ blob, url: URL.createObjectURL(blob), secs: Math.max(1, Math.round((Date.now() - started) / 1000)) });
       };
       recorder.current = rec;
       rec.start();
@@ -290,6 +316,25 @@ function Inner({ id }: { id: string }) {
       timer.current = window.setInterval(() => setSecs((n) => n + 1), 1000);
     } catch {
       setError("Allow microphone access to send voice notes.");
+    }
+  }
+
+  function discardVoice() {
+    if (voice) URL.revokeObjectURL(voice.url);
+    setVoice(null);
+  }
+
+  async function sendVoice() {
+    if (!voice || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await sendMedia(await uploadFile(voice.blob, "voice"), "voice", voice.secs);
+      discardVoice();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -337,20 +382,25 @@ function Inner({ id }: { id: string }) {
 
   async function block() {
     if (!conn?.other_user_id) return;
-    if (!window.confirm("Block this person? You won't see each other's posts.")) return;
+    if (!window.confirm("Block this person?\n\nThe conversation and any call close now, and they can't see your Room or knock again.")) return;
     try {
       await api(`/users/${conn.other_user_id}/block`, { method: "POST" });
-      setError("Blocked.");
-      setMenu(false);
+      router.push("/inbox");
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
   async function removeFromRoom() {
+    const unlocks = conn?.removable_at ? new Date(conn.removable_at) : null;
+    if (unlocks && unlocks > new Date()) {
+      setMenu(false);
+      setError(`You can remove someone 3 days after letting them in: from ${unlocks.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. If something's wrong, block them now.`);
+      return;
+    }
     if (!window.confirm(`Remove ${conn?.other_anonymous_name || "them"} from your Room?
 
-This conversation closes for both of you. They'd have to knock again.`)) return;
+This conversation closes for both of you. They're outside again and can knock if they want back in.`)) return;
     try {
       await api(`/drops/connections/${id}/remove`, { method: "POST" });
       router.push("/inbox");
@@ -390,13 +440,11 @@ This conversation closes for both of you. They'd have to knock again.`)) return;
           <b>{name}</b>
           <small>{typing ? "typing…" : online ? "online" : ""}</small>
         </span>
-        <button className={`call-btn${activeCall ? " live" : ""}`} onClick={() => pressCall(true)} disabled={callBusy} aria-label="Voice call">
+        <button className="call-btn" onClick={() => pressCall(true)} disabled={callBusy || !!room} aria-label={`Voice call ${name}`}>
           <svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
-          {activeCall ? <i /> : null}
         </button>
-        <button className={`call-btn${activeCall ? " live" : ""}`} onClick={() => pressCall(false)} disabled={callBusy} aria-label="Video call">
+        <button className="call-btn" onClick={() => pressCall(false)} disabled={callBusy || !!room} aria-label={`Video call ${name}`}>
           <svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2" /><path d="M16 10l6-3v10l-6-3" /></svg>
-          {activeCall ? <i /> : null}
         </button>
         <button className="kebab" onClick={() => setMenu((m) => !m)} aria-label="More">⋯</button>
         {menu ? (
@@ -410,7 +458,10 @@ This conversation closes for both of you. They'd have to knock again.`)) return;
         ) : null}
       </div>
       {activeCall ? (
-        <div className="call-strip"><i />{conn?.is_sender ? "Your call is live" : "Call live"} · {activeCall.guest_count}/{activeCall.max_guests} in room</div>
+        <div className="call-strip">
+          <i />{conn?.is_sender ? "Your session is live" : `${name}'s session is live`} · {activeCall.guest_count}/{activeCall.max_guests} in
+          {!conn?.is_sender ? <button className="call-join" onClick={joinSession} disabled={callBusy}>{callBusy ? "…" : "Join"}</button> : null}
+        </div>
       ) : null}
       {room ? <CallRoom info={room} onClose={() => { openRoom(null); load(); }} /> : null}
       {welcome.length ? <GalleryOverlay items={welcome} title="Swipe to see more · tap × to start chatting" onClose={() => setWelcome([])} /> : null}
@@ -431,7 +482,7 @@ This conversation closes for both of you. They'd have to knock again.`)) return;
             ) : null}
             {!m.deleted && !m.view_once && m.media_type === "image" && m.media_url ? <Image src={m.media_url} alt="" width={400} height={400} style={{ height: "auto" }} sizes="80vw" /> : null}
             {!m.deleted && !m.view_once && m.media_type === "video" && m.media_url ? <video src={m.media_url} controls preload="metadata" playsInline onClick={(e) => e.stopPropagation()} /> : null}
-            {!m.deleted && !m.view_once && m.media_type === "voice" && m.media_url ? <audio src={m.media_url} controls preload="none" onClick={(e) => e.stopPropagation()} /> : null}
+            {!m.deleted && !m.view_once && m.media_type === "voice" && m.media_url ? <VoiceNote src={m.media_url} /> : null}
             {!m.deleted && m.content ? <span>{m.content}</span> : null}
             <small>{m.time_ago}{m.is_own && m.seen ? " · seen" : ""}</small>
             {m.reactions?.length ? (
@@ -465,7 +516,13 @@ This conversation closes for both of you. They'd have to knock again.`)) return;
           <span className="rec-dot" />
           <span className="grow">Recording {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")}</span>
           <button type="button" className="pill ghost" onClick={() => stopRecording(true)}>Cancel</button>
-          <button type="button" className="pill" onClick={() => stopRecording(false)}>Send</button>
+          <button type="button" className="pill" onClick={() => stopRecording(false)}>Done</button>
+        </div>
+      ) : voice ? (
+        <div className="chat-input">
+          <audio className="grow vn-preview" src={voice.url} controls aria-label="Your voice note" />
+          <button type="button" className="pill ghost" onClick={discardVoice} disabled={busy}>Discard</button>
+          <button type="button" className="pill" onClick={sendVoice} disabled={busy}>{busy ? "Sending…" : "Send"}</button>
         </div>
       ) : (
         <form className="chat-input" onSubmit={send}>

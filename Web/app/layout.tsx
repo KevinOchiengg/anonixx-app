@@ -12,10 +12,12 @@ import "./feedparity.css";
 import "./discover.css";
 import "./room.css";
 import "./confession.css";
+import "./rooms.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";
 import OfflineBar from "@/components/OfflineBar";
 import VisitTracker from "@/components/VisitTracker";
+import IncomingCall from "@/components/IncomingCall";
 
 const ADSENSE = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
 
@@ -55,7 +57,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={serif.variable}>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <IncomingCall />
+        </AuthProvider>
         <OfflineBar />
         <VisitTracker />
         {ADSENSE ? (

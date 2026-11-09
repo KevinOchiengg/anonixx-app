@@ -1,4 +1,7 @@
 "use client";
+/** Rooms: Knocks (who's at your door, first; your sent knocks too), Connections (your
+ * conversations), Live (sessions and calls) and My Room. The ⋮ menu opens every Room setting.
+ * ?tab=knocks|sent|connections|live|myroom (old ?tab=requests still works). */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -7,6 +10,9 @@ import { api } from "@/lib/api";
 import { intentLabel } from "@/lib/linkup";
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
+import LivePanel from "./rooms/LivePanel";
+import MyRoomPanel from "./rooms/MyRoomPanel";
+import RoomSettingsMenu from "./rooms/RoomSettingsMenu";
 
 type Conn = {
   id: string;
@@ -20,6 +26,7 @@ type Conn = {
   last_message_at: string | null;
   last_message_is_own?: boolean;
   last_message_seen?: boolean;
+  is_sender?: boolean;
 };
 type Req = KnockClue & {
   id: string;
@@ -37,7 +44,8 @@ type Req = KnockClue & {
   created_at?: string;
 };
 type Sent = { id: string; target_type: string; status: string; connection_id: string | null; target_id: string };
-type View = "chats" | "requests" | "sent";
+type View = "knocks" | "sent" | "connections" | "live" | "myroom";
+const SECTIONS: [View, string][] = [["knocks", "Knocks"], ["connections", "Connections"], ["live", "Live"], ["myroom", "My Room"]];
 
 const AVATAR_COLORS = ["#C96F53", "#C97B84", "#D98E4A", "#B56576", "#A8674F"];
 function avatarColor(seed?: string) {
@@ -71,10 +79,10 @@ const Svg = ({ d, size = 20 }: { d: React.ReactNode; size?: number }) => (
 const SearchIcon = ({ size }: { size?: number }) => <Svg size={size} d={<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>} />;
 const CloseIcon = ({ size }: { size?: number }) => <Svg size={size} d={<path d="M18 6 6 18M6 6l12 12" />} />;
 const PlusIcon = ({ size }: { size?: number }) => <Svg size={size} d={<path d="M12 5v14M5 12h14" />} />;
-const PaletteIcon = ({ size }: { size?: number }) => <Svg size={size} d={<><circle cx="13.5" cy="6.5" r="1" /><circle cx="17.5" cy="10.5" r="1" /><circle cx="8.5" cy="7.5" r="1" /><circle cx="6.5" cy="12.5" r="1" /><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4a4.6 4.6 0 0 0 4.6-4.6C22 6 17.5 2 12 2z" /></>} />;
+const DotsIcon = ({ size }: { size?: number }) => <Svg size={size} d={<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>} />;
 const InboxIcon = ({ size }: { size?: number }) => <Svg size={size} d={<><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" /></>} />;
 
-function Inner({ search, view, setView }: { search: string; view: View; setView: (v: View) => void }) {
+function Inner({ search, view, setView, onCounts }: { search: string; view: View; setView: (v: View) => void; onCounts: (k: number, u: number) => void }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [conns, setConns] = useState<Conn[] | null>(null);
@@ -94,10 +102,11 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
       setConns([...c.connections].sort((a, b) => (b.last_message_at || "").localeCompare(a.last_message_at || "")));
       setReqs(r.requests);
       setSent(s.requests);
+      onCounts(r.requests.length, c.connections.reduce((n, x) => n + (x.unread_count || 0), 0));
     } catch (e) {
       setError((e as Error).message);
     }
-  }, []);
+  }, [onCounts]);
 
   useEffect(() => {
     load();
@@ -195,19 +204,34 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
     </>
   );
 
-  if (view === "requests") {
+  if (view === "live") return <LivePanel />;
+  if (view === "myroom") return <MyRoomPanel />;
+
+  const pendingSent = (sent || []).filter((s) => s.status === "pending").length;
+  const knockTabs = (
+    <div className="u-segs">
+      <button className={`u-seg${view === "knocks" ? " on" : ""}`} onClick={() => setView("knocks")}>Received{reqs?.length ? ` · ${reqs.length}` : ""}</button>
+      <button className={`u-seg${view === "sent" ? " on" : ""}`} onClick={() => setView("sent")}>Sent{pendingSent ? ` · ${pendingSent}` : ""}</button>
+    </div>
+  );
+
+  if (view === "knocks") {
     return (
       <div>
-        <div className="u-segs">
-          <button className="u-seg" onClick={() => setView("chats")}>← Rooms</button>
-        </div>
+        {knockTabs}
         {banner}
         {reqs === null ? (
           <p className="muted center">Loading…</p>
         ) : reqs.length === 0 ? (
-          <div className="u-empty">No knocks yet. Post something for tonight and watch your door.</div>
+          <div className="rx-empty">
+            <span className="rx-door" aria-hidden><i /></span>
+            <b>Nobody at the door yet</b>
+            <p>Post something for tonight and the knocks come here. You decide who comes in.</p>
+            <Link href="/compose" className="u-cta">Post something</Link>
+          </div>
         ) : (
           <div className="lr-list">
+            <p className="rs-info">Knocking is free for them. Let someone in and their coins move automatically, once. Decline and nothing is charged.</p>
             {reqs.map((r) => {
               const b = busy.has(r.id);
               const thumbs = (r.requester_gallery || []).slice(0, 3);
@@ -252,9 +276,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
   if (view === "sent") {
     return (
       <div>
-        <div className="u-segs">
-          <button className="u-seg" onClick={() => setView("chats")}>← Rooms</button>
-        </div>
+        {knockTabs}
         {banner}
         {sent === null ? (
           <p className="muted center">Loading…</p>
@@ -299,7 +321,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
       {banner}
       {reqs && reqs.length ? (
         <div className="u-stories">
-          <button className="u-story" onClick={() => setView("requests")}>
+          <button className="u-story" onClick={() => setView("knocks")}>
             <span className="u-ring all">
               <InboxIcon size={20} />
               <i>{reqs.length > 99 ? "99+" : reqs.length}</i>
@@ -324,19 +346,20 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
         {([["all", "All"], ["unread", "Unread"]] as const).map(([k, label]) => (
           <button key={k} className={`u-seg${filter === k ? " on" : ""}`} onClick={() => setFilter(k)}>{label}</button>
         ))}
-        {sent && sent.length ? (
-          <button className="u-seg" style={{ marginLeft: "auto" }} onClick={() => setView("sent")}>
-            Sent{sent.some((s) => s.status === "pending") ? ` · ${sent.filter((s) => s.status === "pending").length}` : ""}
-          </button>
-        ) : null}
       </div>
 
       {conns === null ? (
         <p className="muted center">Loading…</p>
       ) : shown.length === 0 ? (
-        <div className="u-empty">
-          {q ? `No Rooms match “${search.trim()}”` : filter === "unread" ? "You're all caught up." : "No Rooms yet. Knock on someone tonight and their door opens here."}
-        </div>
+        q || filter === "unread" ? (
+          <div className="u-empty">{q ? `No conversations match “${search.trim()}”` : "You're all caught up."}</div>
+        ) : (
+          <div className="rx-empty">
+            <b>No connections yet</b>
+            <p>Let someone in from Knocks, or knock on a Room you like. Conversations live here.</p>
+            {reqs?.length ? <button className="u-cta" onClick={() => setView("knocks")}>See {reqs.length} at your door</button> : <Link href="/" className="u-cta">Find someone on the feed</Link>}
+          </div>
+        )
       ) : (
         <ul className="u-cards">
           {shown.map((c) => {
@@ -354,6 +377,7 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
                   <span className="u-info">
                     <span className="u-top">
                       <b>{c.other_anonymous_name}</b>
+                      {c.is_sender !== undefined ? <em className="u-role">{c.is_sender ? "your guest" : "their Room"}</em> : null}
                       <time>{chatTime(c.last_message_at)}</time>
                     </span>
                     <span className="u-bot">
@@ -377,29 +401,38 @@ function Inner({ search, view, setView }: { search: string; view: View; setView:
 
 export default function InboxPage() {
   const router = useRouter();
-  const [view, setView] = useState<View>("chats");
+  const [view, setViewState] = useState<View>("knocks");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [menu, setMenu] = useState(false);
+  const [counts, setCounts] = useState({ knocks: 0, unread: 0 });
+  const onCounts = useCallback((knocks: number, unread: number) => setCounts({ knocks, unread }), []);
+  const setView = useCallback((v: View) => {
+    setViewState(v);
+    window.history.replaceState(null, "", `/inbox?tab=${v}`);
+  }, []);
 
   useEffect(() => {
     const qs = new URLSearchParams(window.location.search);
     const t = qs.get("tab");
-    if (t === "requests" || t === "sent") setView(t);
+    if (t === "requests") setViewState("knocks");
+    else if (t === "chats") setViewState("connections");
+    else if (t && ["knocks", "sent", "connections", "live", "myroom"].includes(t)) setViewState(t as View);
     // From a link up push: the Accept action lands on ?accept=, a plain tap on ?request=.
     const acc = qs.get("accept");
     const req = qs.get("request");
     if (acc) {
       api<{ connection_id?: string }>(`/unlock-requests/${acc}/accept`, { method: "POST" })
-        .then((d) => router.replace(d.connection_id ? `/chat/${d.connection_id}` : "/inbox?tab=requests"))
-        .catch(() => { setView("requests"); router.replace("/inbox?tab=requests"); });
+        .then((d) => router.replace(d.connection_id ? `/chat/${d.connection_id}` : "/inbox?tab=knocks"))
+        .catch(() => { setViewState("knocks"); router.replace("/inbox?tab=knocks"); });
     } else if (req) {
       api<{ requests: Req[] }>("/unlock-requests/incoming")
         .then((d) => {
           const r = d.requests.find((x) => x.id === req);
           if (r) router.replace(`/room/${r.requester_id}`);
-          else setView("requests");
+          else setViewState("knocks");
         })
-        .catch(() => setView("requests"));
+        .catch(() => setViewState("knocks"));
     }
   }, [router]);
 
@@ -408,18 +441,31 @@ export default function InboxPage() {
     setSearchOpen(!searchOpen);
   };
 
-  const right =
-    view === "chats" ? (
-      <>
-        <button className="u-icon" onClick={() => router.push("/chat-setup")} aria-label="Your Room"><PaletteIcon size={18} /></button>
-        <button className="u-icon" onClick={toggle} aria-label="Search">{searchOpen ? <CloseIcon size={18} /> : <SearchIcon size={18} />}</button>
-        <button className="u-add" onClick={() => router.push("/")} aria-label="Find someone on the feed"><PlusIcon size={18} /></button>
-      </>
-    ) : null;
+  const right = (
+    <>
+      {view === "connections" ? (
+        <button className="u-icon" onClick={toggle} aria-label={searchOpen ? "Close search" : "Search conversations"}>{searchOpen ? <CloseIcon size={18} /> : <SearchIcon size={18} />}</button>
+      ) : null}
+      <button className="u-add" onClick={() => router.push("/")} aria-label="Find someone on the feed"><PlusIcon size={18} /></button>
+      <button className="u-icon" onClick={() => setMenu(true)} aria-label="Room settings"><DotsIcon size={18} /></button>
+    </>
+  );
+  const section = view === "sent" ? "knocks" : view;
 
   return (
-    <AppShell title={view === "requests" ? "Knocks" : view === "sent" ? "Your knocks" : "rooms"} right={right}>
-      {searchOpen && view === "chats" ? (
+    <AppShell title="rooms" right={right}>
+      <nav className="rx-tabs" role="tablist" aria-label="Rooms">
+        {SECTIONS.map(([k, label]) => {
+          const n = k === "knocks" ? counts.knocks : k === "connections" ? counts.unread : 0;
+          return (
+            <button key={k} role="tab" aria-selected={section === k} className={section === k ? "on" : ""} onClick={() => setView(k)}>
+              {label}
+              {n ? <b className={k === "knocks" ? "hot" : ""}>{n > 99 ? "99+" : n}</b> : null}
+            </button>
+          );
+        })}
+      </nav>
+      {searchOpen && view === "connections" ? (
         <div className="u-search">
           <label>
             <SearchIcon size={16} />
@@ -428,7 +474,8 @@ export default function InboxPage() {
           </label>
         </div>
       ) : null}
-      <Inner search={search} view={view} setView={setView} />
+      <Inner search={search} view={view} setView={setView} onCounts={onCounts} />
+      {menu ? <RoomSettingsMenu onClose={() => setMenu(false)} /> : null}
     </AppShell>
   );
 }

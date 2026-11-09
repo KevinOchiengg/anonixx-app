@@ -118,6 +118,16 @@ def upload_bytes_at(key: str, data: bytes, content_type: str) -> str:
     return public_url_for(key)
 
 
+def is_own_media_url(url: Optional[str]) -> bool:
+    """True for files we host: our R2 bucket, or legacy Cloudinary uploads. Without R2 set
+    up (local dev) any https URL passes, so uploads still work there."""
+    if not url or not url.startswith("https://"):
+        return False
+    if not settings.R2_PUBLIC_URL:
+        return True
+    return url.startswith(settings.R2_PUBLIC_URL.rstrip("/") + "/") or url.startswith("https://res.cloudinary.com/")
+
+
 def delete_by_url(url: Optional[str]):
     """Delete the object behind a public URL. Never raises."""
     if not url or not settings.R2_PUBLIC_URL:

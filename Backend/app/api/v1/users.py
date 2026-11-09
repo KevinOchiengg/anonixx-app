@@ -263,6 +263,10 @@ async def block_user(
         {"_id": ObjectId(current_user_id)},
         {"$addToSet": {"blocked_user_ids": user_id}},
     )
+    # A block closes any Room threads and calls between them straight away; unblocking
+    # doesn't reopen them (they'd knock again).
+    from app.api.v1.drops import close_connections_between
+    await close_connections_between(current_user_id, user_id, db)
     return {"message": "User blocked"}
 
 

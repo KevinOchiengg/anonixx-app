@@ -1,4 +1,6 @@
 "use client";
+/** "Your Room", and where every Room setting lives (the Rooms ⋮ menu opens it on a tab):
+ * My Room, Welcome, Knocks, Inside, Calls, Appearance, Privacy, Notifications. ?tab= picks one. */
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -23,6 +25,7 @@ import {
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
+import WelcomeAudio from "./rooms/WelcomeAudio";
 
 type Profile = {
   background_pattern?: string;
@@ -43,7 +46,32 @@ type Profile = {
   break_until?: string | null;
   door_rule?: string;
   listing?: string;
+  welcome_audio_url?: string | null;
+  welcome_audio_seconds?: number | null;
+  welcome_autoplay?: boolean;
+  welcome_visibility?: string;
+  allow_audio_calls?: boolean;
+  allow_video_calls?: boolean;
+  notify?: Notify;
 };
+type Notify = {
+  knocks: boolean; messages: boolean; calls: boolean; sessions: boolean; previews: boolean;
+  quiet_start: number | null; quiet_end: number | null;
+};
+const NOTIFY_DEFAULTS: Notify = { knocks: true, messages: true, calls: true, sessions: true, previews: true, quiet_start: null, quiet_end: null };
+const NOTIFY_ROWS: [keyof Notify, string, string][] = [
+  ["knocks", "New knocks", "Someone knocks on your Room"],
+  ["messages", "Messages", "New messages in your conversations"],
+  ["calls", "Calls", "Incoming and missed calls"],
+  ["sessions", "Group sessions", "Someone you are inside with opens a session"],
+  ["previews", "Show message text", "Off: notifications say \"New message\" without the words"],
+];
+const WELCOME_VISIBILITY = [
+  { id: "inside", label: "Only people I let in", hint: "Your note and audio wait behind the door. The default." },
+  { id: "window", label: "Everyone peeking", hint: "Anyone who opens your Room hears and reads your welcome before knocking." },
+];
+type Visitor = { user_id: string; anonymous_name: string; avatar_url: string | null; status: string; let_in_at: string };
+const hourLabel = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
 
 type Knock = KnockClue & {
   id: string; requester_id: string; requester_anonymous_name: string; requester_avatar_url: string | null;
@@ -64,12 +92,13 @@ const LISTINGS: { id: string; label: string; hint: string }[] = [
 ];
 type Conn = {
   id: string; other_user_id: string; other_anonymous_name: string; other_avatar_url: string | null;
-  is_sender: boolean; last_message: string | null; last_message_at: string;
+  is_sender: boolean; last_message: string | null; last_message_at: string; removable_at?: string | null;
 };
 
-type Tab = "room" | "knocks" | "inside" | "appearance" | "privacy";
+type Tab = "room" | "welcome" | "knocks" | "inside" | "calls" | "appearance" | "privacy" | "notifications";
 const TABS: [Tab, string][] = [
-  ["room", "My Room"], ["knocks", "Knocks"], ["inside", "Inside"], ["appearance", "Appearance"], ["privacy", "Privacy"],
+  ["room", "My Room"], ["welcome", "Welcome"], ["knocks", "Knocks"], ["inside", "Inside"], ["calls", "Calls"],
+  ["appearance", "Appearance"], ["privacy", "Privacy"], ["notifications", "Notifications"],
 ];
 
 const SLOT_COST = 25;
@@ -124,6 +153,14 @@ function Inner() {
   const [inside, setInside] = useState<Conn[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [reporting, setReporting] = useState<Conn | null>(null);
+  const [welcomeAudio, setWelcomeAudio] = useState<{ url: string; seconds?: number | null } | null>(null);
+  const [autoplay, setAutoplay] = useState(false);
+  const [welcomeVis, setWelcomeVis] = useState("inside");
+  const [allowAudio, setAllowAudio] = useState(true);
+  const [allowVideo, setAllowVideo] = useState(true);
+  const [notify, setNotify] = useState<Notify>(NOTIFY_DEFAULTS);
+  const [history, setHistory] = useState<Visitor[]>([]);
+  const replaceAt = useRef<number | null>(null);
   const picInput = useRef<HTMLInputElement>(null);
   const galInput = useRef<HTMLInputElement>(null);
 
@@ -147,6 +184,12 @@ function Inner() {
     setBreakHours(null);
     setDoorRule(d.door_rule || "line_peek");
     setListing(d.listing || "limited");
+    setWelcomeAudio(d.welcome_audio_url ? { url: d.welcome_audio_url, seconds: d.welcome_audio_seconds } : null);
+    setAutoplay(!!d.welcome_autoplay);
+    setWelcomeVis(d.welcome_visibility || "inside");
+    setAllowAudio(d.allow_audio_calls !== false);
+    setAllowVideo(d.allow_video_calls !== false);
+    setNotify({ ...NOTIFY_DEFAULTS, ...(d.notify || {}) });
   };
 
   useEffect(() => {
@@ -158,11 +201,13 @@ function Inner() {
 
   const loadPeople = useCallback(async () => {
     try {
-      const [k, c] = await Promise.all([
+      const [k, c, v] = await Promise.all([
         api<{ requests: Knock[] }>("/unlock-requests/incoming"),
         api<{ connections: Conn[] }>("/drops/connections"),
+        api<{ visitors: Visitor[] }>("/drops/room/visitors").catch(() => ({ visitors: [] as Visitor[] })),
       ]);
       setKnocks(k.requests);
+      setHistory(v.visitors.filter((x) => x.status !== "inside"));
       // One row per person inside, their latest thread first.
       const seen = new Set<string>();
       setInside(c.connections.filter((x) => x.is_sender && !seen.has(x.other_user_id) && seen.add(x.other_user_id)));
@@ -199,7 +244,9 @@ function Inner() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (gallery.length >= MAX_GALLERY) { setError("Gallery is capped at 3 items. Delete one first."); return; }
+    const replaceIndex = replaceAt.current;
+    replaceAt.current = null;
+    if (replaceIndex === null && gallery.length >= MAX_GALLERY) { setError("Gallery is capped at 3 items. Delete one first."); return; }
     const isVideo = file.type.startsWith("video/");
     if (!isVideo && !file.type.startsWith("image/")) { setError("Pick a photo, GIF or video."); return; }
     setUploading(true);
@@ -207,7 +254,10 @@ function Inner() {
     try {
       const url = await uploadFile(file, isVideo ? "video" : "image");
       const p = await api<Profile>("/chat-profile/media", {
-        body: { media_url: url, media_type: isVideo ? "video" : file.type === "image/gif" ? "gif" : "image" },
+        body: {
+          media_url: url, media_type: isVideo ? "video" : file.type === "image/gif" ? "gif" : "image",
+          ...(replaceIndex !== null ? { replace_index: replaceIndex } : {}),
+        },
       });
       setGallery(p.gallery || []);
     } catch (err) {
@@ -224,6 +274,31 @@ function Inner() {
     } catch {
       setError("Could not remove media.");
     }
+  }
+
+  async function moveMedia(from: number, to: number) {
+    if (to < 0 || to >= gallery.length) return;
+    const order = gallery.map((_, i) => i);
+    [order[from], order[to]] = [order[to], order[from]];
+    setGallery(order.map((i) => gallery[i]));
+    try {
+      const p = await api<Profile>("/chat-profile/media/order", { method: "PUT", body: { order } });
+      setGallery(p.gallery || []);
+    } catch {
+      setError("Could not reorder. Try again.");
+    }
+  }
+
+  // Saved straight away (outside Save): the welcome audio and its removal.
+  async function saveAudio(url: string, seconds: number | null) {
+    const d = await api<Profile>("/chat-profile/me", { method: "PUT", body: { welcome_audio_url: url, ...(seconds ? { welcome_audio_seconds: seconds } : {}) } });
+    setWelcomeAudio(d.welcome_audio_url ? { url: d.welcome_audio_url, seconds: d.welcome_audio_seconds } : null);
+    setNote("Welcome audio saved.");
+  }
+  async function removeAudio() {
+    await api<Profile>("/chat-profile/me", { method: "PUT", body: { welcome_audio_url: "" } });
+    setWelcomeAudio(null);
+    setNote("Welcome audio removed.");
   }
 
   async function buySlots(n: number) {
@@ -255,6 +330,12 @@ function Inner() {
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic, welcome_sound: sound, call_mode: callMode,
           intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
+          welcome_autoplay: autoplay, welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
+          notify: {
+            knocks: notify.knocks, messages: notify.messages, calls: notify.calls, sessions: notify.sessions, previews: notify.previews,
+            ...(notify.quiet_start !== null && notify.quiet_end !== null ? { quiet_start: notify.quiet_start, quiet_end: notify.quiet_end } : { quiet_start: -1, quiet_end: -1 }),
+            tz_offset_min: -new Date().getTimezoneOffset(),
+          },
         },
       });
       apply(d);
@@ -293,7 +374,11 @@ function Inner() {
   }
 
   async function remove(c: Conn) {
-    if (!window.confirm(`Remove ${c.other_anonymous_name} from your Room?\n\nThe conversation closes for both of you. They'd have to knock again to come back.`)) return;
+    if (c.removable_at && new Date(c.removable_at) > new Date()) {
+      setError(`You can remove someone 3 days after letting them in: ${c.other_anonymous_name} from ${new Date(c.removable_at).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. If something's wrong, block them now.`);
+      return;
+    }
+    if (!window.confirm(`Remove ${c.other_anonymous_name} from your Room?\n\nThe conversation closes for both of you. They're an outsider again and can knock if they want back in.`)) return;
     setBusy(c.id);
     try {
       await api(`/drops/connections/${c.id}/remove`, { method: "POST" });
@@ -310,9 +395,9 @@ function Inner() {
     if (!window.confirm(`Block ${c.other_anonymous_name}?\n\nThey're removed from your Room and can't knock again.`)) return;
     setBusy(c.id);
     try {
+      // Blocking closes the conversation and any call straight away, server side.
       await api(`/users/${c.other_user_id}/block`, { method: "POST" });
-      await api(`/drops/connections/${c.id}/remove`, { method: "POST" }).catch(() => {});
-      setNote("Blocked.");
+      setNote("Blocked. They can't see your Room or knock again.");
       await loadPeople();
     } catch (e) {
       setError((e as Error).message);
@@ -393,38 +478,87 @@ function Inner() {
               </div>
             </div>
 
+            <button type="button" className="rs-next" onClick={() => go("welcome")}>
+              <b>Your welcome</b>
+              <small>A note, your voice and three welcome photos or videos for people you let in.</small>
+            </button>
+            {saveBar}
+          </>
+        ) : null}
+
+        {tab === "welcome" ? (
+          <>
             <div className="rs-field">
-              <label htmlFor="rs-welcome">Welcome message</label>
+              <label htmlFor="rs-welcome">Welcome note</label>
               <textarea id="rs-welcome" rows={3} value={welcome} maxLength={MAX_WELCOME} onChange={(e) => setWelcome(e.target.value)} placeholder="What they read the moment you let them in…" />
-              <small>{welcome.length}/{MAX_WELCOME} · only people you let in see this.</small>
+              <small>{welcome.length}/{MAX_WELCOME} · {welcomeVis === "window" ? "everyone peeking sees this." : "only people you let in see this."}</small>
             </div>
 
-            <p className="rs-h">On the walls</p>
+            <p className="rs-h">Welcome audio</p>
+            <WelcomeAudio saved={welcomeAudio} onSave={saveAudio} onRemove={removeAudio} />
+            <div className="rs-toggle">
+              <span><b>Play it when they walk in</b><small>Plays once on their first visit, if their browser allows sound. Off: they press play.</small></span>
+              <button type="button" role="switch" aria-checked={autoplay} aria-label="Play welcome audio on entry" className={`rs-switch${autoplay ? " on" : ""}`} onClick={() => setAutoplay(!autoplay)} />
+            </div>
+
+            <p className="rs-h">Who gets your welcome</p>
+            <div className="rs-opts" role="radiogroup" aria-label="Who gets your welcome">
+              {WELCOME_VISIBILITY.map((v) => (
+                <button key={v.id} type="button" role="radio" aria-checked={welcomeVis === v.id} className={`rs-opt${welcomeVis === v.id ? " on" : ""}`} onClick={() => setWelcomeVis(v.id)}>
+                  <i />
+                  <span><b>{v.label}</b><small>{v.hint}</small></span>
+                </button>
+              ))}
+            </div>
+
+            <p className="rs-h">Welcome media ({gallery.length}/{MAX_GALLERY})</p>
             <p className="u-sub" style={{ margin: 0 }}>
-              Up to {MAX_GALLERY} photos, GIFs or short videos. Who sees them is set in <button type="button" className="u-link-btn" style={{ padding: 0 }} onClick={() => go("privacy")}>Privacy</button>.
+              Photos, GIFs or short videos on your walls, in this order. Who sees them is set in <button type="button" className="u-link-btn" style={{ padding: 0 }} onClick={() => go("privacy")}>Privacy</button>.
             </p>
             <input ref={galInput} type="file" accept="image/*,video/*" hidden onChange={addMedia} />
             <div className="u-gallery">
               {gallery.map((m, i) => (
-                <div className="u-gal" key={i}>
+                <div className="u-gal" key={`${m.media_url}-${i}`}>
                   {m.media_type === "video" ? <video src={m.media_url} muted playsInline preload="metadata" /> : <Image src={m.media_url} alt="" width={92} height={92} />}
                   {m.media_type !== "image" ? <b>{m.media_type.toUpperCase()}</b> : null}
-                  <button type="button" onClick={() => removeMedia(i)} aria-label="Remove">×</button>
+                  <button type="button" onClick={() => removeMedia(i)} aria-label={`Remove welcome media ${i + 1}`}>×</button>
+                  <span className="u-gal-tools">
+                    <button type="button" disabled={i === 0} onClick={() => moveMedia(i, i - 1)} aria-label="Move earlier">‹</button>
+                    <button type="button" disabled={uploading} onClick={() => { replaceAt.current = i; galInput.current?.click(); }} aria-label={`Replace welcome media ${i + 1}`}>↻</button>
+                    <button type="button" disabled={i === gallery.length - 1} onClick={() => moveMedia(i, i + 1)} aria-label="Move later">›</button>
+                  </span>
                 </div>
               ))}
               {gallery.length < MAX_GALLERY ? (
-                <button type="button" className="u-gal-add" onClick={() => galInput.current?.click()} disabled={uploading} aria-label="Add media">+</button>
+                <button type="button" className="u-gal-add" onClick={() => { replaceAt.current = null; galInput.current?.click(); }} disabled={uploading} aria-label="Add welcome media">+</button>
               ) : null}
             </div>
 
-            <p className="rs-h">Welcome sound</p>
+            <p className="rs-h">Entrance chime</p>
+            <p className="u-sub" style={{ margin: 0 }}>A short sound in the app when someone you let in opens your Room for the first time.</p>
             <div className="u-chips">
               {SOUNDS.map((s) => (
                 <button key={s.id} type="button" className={`u-chip${sound === s.id ? " on" : ""}`} onClick={() => setSound(s.id)}>{s.label}</button>
               ))}
             </div>
+            {saveBar}
+          </>
+        ) : null}
 
-            <p className="rs-h">Video calls</p>
+        {tab === "calls" ? (
+          <>
+            <p className="rs-h">Who can call you</p>
+            <div className="rs-toggle">
+              <span><b>Voice calls</b><small>People inside your Room can ring you from your conversation.</small></span>
+              <button type="button" role="switch" aria-checked={allowAudio} aria-label="Allow voice calls" className={`rs-switch${allowAudio ? " on" : ""}`} onClick={() => setAllowAudio(!allowAudio)} />
+            </div>
+            <div className="rs-toggle">
+              <span><b>Video calls</b><small>Off: they see you&apos;re not taking video calls and can message instead.</small></span>
+              <button type="button" role="switch" aria-checked={allowVideo} aria-label="Allow video calls" className={`rs-switch${allowVideo ? " on" : ""}`} onClick={() => setAllowVideo(!allowVideo)} />
+            </div>
+
+            <p className="rs-h">Group sessions</p>
+            <p className="u-sub" style={{ margin: 0 }}>You open sessions from Rooms → Live, for everyone inside or the people you pick.</p>
             <div className="u-chips">
               {[["solo", "One-on-one"], ["multi", "Group room"]].map(([k, l]) => (
                 <button key={k} type="button" className={`u-chip${callMode === k ? " on" : ""}`} onClick={() => setCallMode(k)}>{l}</button>
@@ -436,12 +570,48 @@ function Inner() {
                   Fits <b>{maxGuests}</b> guests ({FREE_GUESTS} free{slots ? ` + ${slots} bought` : ""}). Extra slots are {SLOT_COST} coins each, up to {MAX_GUESTS}.
                 </span>
                 {roomLeft > 0 ? (
-                  <button type="button" disabled={buying} onClick={() => buySlots(1)}>
-                    {buying ? "Buying…" : `Add a slot · ${SLOT_COST} coins`}
+                  <button type="button" disabled={buying} onClick={() => { if (window.confirm(`Add one guest seat for ${SLOT_COST} coins?\n\nCharged once, now. Your Room will fit ${maxGuests + 1} guests.`)) buySlots(1); }}>
+                    {buying ? "Buying…" : `Add a seat · ${SLOT_COST} coins`}
                   </button>
                 ) : null}
               </div>
             ) : null}
+            <p className="rs-info">4 guests are free. Starting or joining a session costs nothing.</p>
+            {saveBar}
+          </>
+        ) : null}
+
+        {tab === "notifications" ? (
+          <>
+            <p className="rs-h">Room notifications</p>
+            {NOTIFY_ROWS.map(([k, title, hint]) => (
+              <div className="rs-toggle" key={k}>
+                <span><b>{title}</b><small>{hint}</small></span>
+                <button type="button" role="switch" aria-checked={!!notify[k]} aria-label={title} className={`rs-switch${notify[k] ? " on" : ""}`} onClick={() => setNotify((n) => ({ ...n, [k]: !n[k] }))} />
+              </div>
+            ))}
+            <p className="rs-h">Quiet hours</p>
+            <div className="rs-toggle">
+              <span>
+                <b>Hold notifications overnight</b>
+                <small>{notify.quiet_start !== null && notify.quiet_end !== null ? `Nothing buzzes from ${hourLabel(notify.quiet_start)} to ${hourLabel(notify.quiet_end)}.` : "Knocks, messages and calls still arrive, just silently."}</small>
+              </span>
+              <button type="button" role="switch" aria-checked={notify.quiet_start !== null} aria-label="Quiet hours" className={`rs-switch${notify.quiet_start !== null ? " on" : ""}`}
+                onClick={() => setNotify((n) => (n.quiet_start !== null ? { ...n, quiet_start: null, quiet_end: null } : { ...n, quiet_start: 23, quiet_end: 7 }))} />
+            </div>
+            {notify.quiet_start !== null && notify.quiet_end !== null ? (
+              <div className="rs-hours">
+                {([["quiet_start", "From"], ["quiet_end", "Until"]] as const).map(([k, label]) => (
+                  <label key={k}>
+                    {label}
+                    <select value={notify[k] ?? 0} onChange={(e) => setNotify((n) => ({ ...n, [k]: Number(e.target.value) }))}>
+                      {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <p className="rs-info">Notifications never show where you are or anyone&apos;s contact details. Turn off &ldquo;Show message text&rdquo; to keep words off your lock screen.</p>
             {saveBar}
           </>
         ) : null}
@@ -451,7 +621,7 @@ function Inner() {
             <div className="u-empty">No one&apos;s at the door. Post something and watch the knocks come in.</div>
           ) : (
             <div>
-              <p className="rs-info">Knocking is free for them. Let someone in and their coins move automatically. Decline and nothing happens.</p>
+              <p className="rs-info">Knocking is free for them. When they knock they agree that a Let In takes the Let In fee from their wallet, once. Let them in and it moves automatically; decline, or they take the knock back, and nothing is charged. You never pay to let someone in. <Link href="/coins">Your wallet and coin history</Link>.</p>
               {knocks.map((k) => (
                 <div className="rs-person" key={k.id}>
                   <Ava src={k.requester_avatar_url} name={k.requester_anonymous_name || "A"} />
@@ -476,7 +646,7 @@ function Inner() {
             <div className="u-empty">Nobody&apos;s inside yet. When you let someone in, they show up here.</div>
           ) : (
             <div>
-              <p className="rs-info">People you&apos;ve let in. Remove closes the conversation; they&apos;d have to knock again. Block also stops them knocking.</p>
+              <p className="rs-info">People you&apos;ve let in. Access doesn&apos;t expire. You can remove someone 3 days after letting them in: the conversation closes and they&apos;re an outsider again, free to knock. Block works any time and stops them knocking.</p>
               {inside.map((c) => (
                 <div className="rs-person" key={c.id}>
                   <Ava src={c.other_avatar_url} name={c.other_anonymous_name || "A"} />
@@ -486,10 +656,23 @@ function Inner() {
                   </div>
                   <div className="rs-person-acts">
                     <Link href={`/chat/${c.id}`}>Chat</Link>
-                    <button disabled={busy === c.id} onClick={() => remove(c)}>Remove</button>
+                    <button disabled={busy === c.id} onClick={() => remove(c)} className={c.removable_at && new Date(c.removable_at) > new Date() ? "later" : ""}>
+                      {c.removable_at && new Date(c.removable_at) > new Date() ? `Remove from ${new Date(c.removable_at).toLocaleDateString([], { weekday: "short" })}` : "Remove"}
+                    </button>
                     <button disabled={busy === c.id} onClick={() => setReporting(c)}>Report</button>
                     <button className="danger" disabled={busy === c.id} onClick={() => block(c)}>Block</button>
                   </div>
+                </div>
+              ))}
+              {history.length ? <p className="rs-h">History</p> : null}
+              {history.map((h) => (
+                <div className="rs-person past" key={h.user_id}>
+                  <Ava src={h.avatar_url} name={h.anonymous_name || "A"} />
+                  <div className="rs-person-t">
+                    <b>{h.anonymous_name}</b>
+                    <small>{h.status === "blocked" ? "Blocked" : "Removed"} · let in {new Date(h.let_in_at).toLocaleDateString([], { day: "numeric", month: "short" })}</small>
+                  </div>
+                  {h.status === "blocked" ? <div className="rs-person-acts"><Link href="/blocked">Manage</Link></div> : null}
                 </div>
               ))}
               {reporting ? (
@@ -540,6 +723,16 @@ function Inner() {
             <div className="rs-opts" role="radiogroup">
               {GALLERY_VISIBILITY.map((v) => (
                 <button key={v.id} type="button" role="radio" aria-checked={visibility === v.id} className={`rs-opt${visibility === v.id ? " on" : ""}`} onClick={() => setVisibility(v.id)}>
+                  <i />
+                  <span><b>{v.label}</b><small>{v.hint}</small></span>
+                </button>
+              ))}
+            </div>
+
+            <p className="rs-h">Who gets your welcome</p>
+            <div className="rs-opts" role="radiogroup" aria-label="Who gets your welcome">
+              {WELCOME_VISIBILITY.map((v) => (
+                <button key={v.id} type="button" role="radio" aria-checked={welcomeVis === v.id} className={`rs-opt${welcomeVis === v.id ? " on" : ""}`} onClick={() => setWelcomeVis(v.id)}>
                   <i />
                   <span><b>{v.label}</b><small>{v.hint}</small></span>
                 </button>

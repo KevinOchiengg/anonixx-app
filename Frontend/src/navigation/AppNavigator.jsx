@@ -32,6 +32,8 @@ import PostUnlockScreen from '../screens/drops/PostUnlockScreen';
 import UnlockWaitingScreen from '../screens/drops/UnlockWaitingScreen';
 import UnlockRequestsScreen from '../screens/drops/UnlockRequestsScreen';
 import RoomScreen from '../screens/drops/RoomScreen';
+import DropCallScreen from '../screens/drops/DropCallScreen';
+import IncomingCallOverlay from '../components/calls/IncomingCallOverlay';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminModerationScreen from '../screens/admin/AdminModerationScreen';
@@ -84,6 +86,7 @@ let Notifications = null;
 try { Notifications = require('expo-notifications'); } catch { /* not available */ }
 
 const navigationRef = createNavigationContainerRef();
+const navigateRoot = (name, params) => { if (navigationRef.isReady()) navigationRef.navigate(name, params); };
 
 // Push taps: Accept on a link up accepts and opens the chat; a Knock opens requests; a Let In
 // opens their Room; mutual opens the chat.
@@ -149,6 +152,8 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="UnlockWaitingScreen" component={UnlockWaitingScreen} />
         <Stack.Screen name="UnlockRequestsScreen" component={UnlockRequestsScreen} />
         <Stack.Screen name="Room" component={RoomScreen} />
+        {/* Calls open from anywhere (the incoming call screen, the Live tab). */}
+        <Stack.Screen name="DropCall" component={DropCallScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="AdminDashboard"  component={AdminDashboardScreen} />
         <Stack.Screen name="AdminUsers"      component={AdminUsersScreen} />
         <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
@@ -175,6 +180,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="Market"         component={MarketScreen} />
         <Stack.Screen name="MarketItem"     component={MarketItemScreen} />
       </Stack.Navigator>
+      {!loading && <IncomingCallOverlay navigate={navigateRoot} />}
     </NavigationContainer>
   );
 }
