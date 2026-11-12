@@ -171,7 +171,7 @@ export default function ChatInfoScreen({ route, navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   center: { alignItems: 'center', justifyContent: 'center' },
   top: { height: rs(52), justifyContent: 'center', paddingHorizontal: SPACING.md },
   hero: { alignItems: 'center', paddingHorizontal: SPACING.md, paddingBottom: rp(18) },

@@ -171,3 +171,15 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .cmt-empty span svg { color: var(--faint); }
 .mx-dir { display: inline-flex; vertical-align: -2px; }
 .mx-st-bub i { display: inline-flex; }
+
+/* ── Coral drops show through: sticky bars are tinted glass, full-screen layers carry the drops ── */
+.apphead, .mx-tabs, .mx-searchbar, .rs-tabs {
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.sp-phone, .ci { background: url("/bg-drops.svg") center / cover no-repeat, var(--bg); }
+
+/* ── The coral "● ANONIXX" mark at the top of pages (same as sign-in and the app) ── */
+.brand-row { flex: none; display: flex; align-items: center; gap: 8px; height: 34px; padding: 6px 18px 0; text-decoration: none; }
+.brand-row i { width: 8px; height: 8px; border-radius: 50%; background: var(--rose); box-shadow: 0 0 10px var(--rose); }
+.brand-row b { font-size: 11px; font-weight: 800; letter-spacing: 3px; color: var(--rose); opacity: 0.85; }

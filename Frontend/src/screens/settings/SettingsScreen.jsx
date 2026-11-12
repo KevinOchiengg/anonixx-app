@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated, Linking, StyleSheet, Switch,
+  Animated, StyleSheet, Switch,
   Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,8 +14,6 @@ import { rs, rp, rh, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/respons
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
-import { deviceCountry } from '../../utils/country';
-import { helplinesFor } from '../../config/helplines';
 
 const NavRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onPress, danger }) => (
   <TouchableOpacity style={row.wrap} onPress={onPress} activeOpacity={0.75} hitSlop={HIT_SLOP}>
@@ -85,12 +83,6 @@ export default function SettingsScreen({ navigation }) {
   const [inAppSounds,      setInAppSounds]      = useState(true);
 
   const handleDeleteAccount = useCallback(() => navigation.navigate('DeleteAccount'), [navigation]);
-
-  const openLink = useCallback((url) => {
-    Linking.openURL(url).catch(() => {
-      showToast({ type: 'error', message: 'Could not open link.' });
-    });
-  }, [showToast]);
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -318,16 +310,6 @@ export default function SettingsScreen({ navigation }) {
           />
         </Section>
 
-        {/* ── Crisis support ── */}
-        <Section title="Need to talk to someone?">
-          {helplinesFor(deviceCountry()).map((h, i) => (
-            <React.Fragment key={h.href}>
-              {i > 0 && <View style={sec.divider} />}
-              <NavRow icon={HelpCircle} label={`${h.name} · ${h.label}`} onPress={() => openLink(h.href)} />
-            </React.Fragment>
-          ))}
-        </Section>
-
         {/* ── Logout ── */}
         <View style={styles.logoutWrap}>
           <TouchableOpacity style={styles.logoutBtn} onPress={confirmLogout} activeOpacity={0.85}>
@@ -399,7 +381,7 @@ const sec = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  safe:        { flex: 1, backgroundColor: T.background },
+  safe:        { flex: 1, backgroundColor: 'transparent' },
   header: {
     flexDirection:     'row',
     alignItems:        'center',

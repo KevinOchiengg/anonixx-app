@@ -592,7 +592,7 @@ export default function GuidedConfession({ navigation, onBack }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   headerTitle: { color: T.text, fontFamily: 'DMSans-Bold', fontSize: FONT.md },
   progress: { flex: 1, flexDirection: 'row', gap: rs(5), marginLeft: SPACING.sm },

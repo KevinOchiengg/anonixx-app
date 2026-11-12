@@ -506,7 +506,7 @@ export default function EditProfileScreen({ navigation }) {
 
 // ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
 
   header: {
     flexDirection:     'row',

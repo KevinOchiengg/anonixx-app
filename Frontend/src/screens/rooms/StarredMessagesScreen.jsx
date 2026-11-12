@@ -83,7 +83,7 @@ export default function StarredMessagesScreen({ route, navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   head: { flexDirection: 'row', alignItems: 'center', gap: rp(18), paddingHorizontal: SPACING.md, height: rs(56) },
   title: { fontSize: rf(19), fontFamily: 'DMSans-Bold', color: T.text },
   sub: { fontSize: rf(12.5), color: T.textSecondary },

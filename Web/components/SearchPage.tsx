@@ -15,6 +15,7 @@ import AgeGate from "./AgeGate";
 import BottomNav from "./BottomNav";
 import { Clock, Close, MapPin, SearchIcon } from "./feedicons";
 import { ArrowLeft, Heart, MessageCircleMore } from "lucide-react";
+import { BrandMark } from "./AppShell";
 
 type Tab = "near" | "stories";
 type Scope = "close" | "area" | "country" | "anywhere";
@@ -180,6 +181,7 @@ export default function SearchPage() {
   return (
     <div className="stage">
       <div className="phone sp-phone dc hasnav">
+        <BrandMark />
         <form className="sp-head" onSubmit={(e) => { e.preventDefault(); remember(); }}>
           <button type="button" className="sp-back" onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} aria-label="Back"><ArrowLeft size={20} strokeWidth={2} aria-hidden /></button>
           <div className="sp-input">

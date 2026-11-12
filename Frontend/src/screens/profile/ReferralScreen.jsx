@@ -301,7 +301,7 @@ export default function ReferralScreen({ navigation }) {
 }
 
 const sStyles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: THEME.bg },
+  container:  { flex: 1, backgroundColor: 'transparent' },
   navbar: {
     flexDirection:   'row',
     alignItems:      'center',

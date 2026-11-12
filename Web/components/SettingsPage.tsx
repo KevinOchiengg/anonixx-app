@@ -2,8 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, viewerCountry } from "@/lib/api";
-import { helplinesFor, FIND_A_HELPLINE } from "@/lib/helplines";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@/lib/push";
@@ -13,8 +12,6 @@ import { Ban, Bell, Bookmark, ChevronRight, Coins, Crown, FileText, Flag, Gift, 
 function Inner() {
   const { user, logout, refresh } = useAuth();
   // Read after mount: the country cookie isn't available during server render.
-  const [helplines, setHelplines] = useState([FIND_A_HELPLINE]);
-  useEffect(() => setHelplines(helplinesFor(viewerCountry())), []);
   const router = useRouter();
   const [name, setName] = useState(user?.anonymous_name || "");
   const [note, setNote] = useState("");
@@ -146,14 +143,6 @@ function Inner() {
           </li>
         </ul>
       ) : null}
-
-      <h2 className="sec">Need to talk to someone?</h2>
-      <p className="muted small">If you&apos;re thinking of hurting yourself, you&apos;re not alone. Talk to someone tonight. In an emergency, call your local emergency number.</p>
-      <ul className="rows links">
-        {helplines.map((h) => (
-          <li key={h.href}><a href={h.href} className="row-item" {...(h.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}><span className="grow"><b>{h.name}</b> <span className="muted">{h.label}</span></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></a></li>
-        ))}
-      </ul>
 
       <h2 className="sec">Legal</h2>
       <ul className="rows links">

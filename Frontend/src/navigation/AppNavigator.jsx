@@ -55,6 +55,7 @@ import DropsPollScreen from '../screens/drops/DropsPollScreen';
 import WhatsAppSendScreen from '../screens/drops/WhatsAppSendScreen';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
+import { withBackdrop } from '../components/common/CoralBackdrop';
 
 const Stack = createStackNavigator();
 
@@ -139,54 +140,54 @@ export default function AppNavigator({ fontsReady }) {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {/* No login gate: everyone lands on the feed; auth screens are under "AuthNav". */}
         {loading
-          ? <Stack.Screen name="Splash" component={Loading} />
+          ? <Stack.Screen name="Splash" component={withBackdrop(Loading, { brand: false })} />
           : <Stack.Screen name="Main" component={TabNavigator} />
         }
         {/* Keep accessible for deep links */}
         <Stack.Screen name="AuthNav" component={AuthNavigator} />
-        <Stack.Screen name="Premium" component={PremiumScreen} />
-        <Stack.Screen name="DropChat" component={DropChatScreen} />
-        <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />
-        <Stack.Screen name="StarredMessages" component={StarredMessagesScreen} />
-        <Stack.Screen name="ArchivedChats" component={ArchivedChatsScreen} />
-        <Stack.Screen name="ChatMedia" component={ChatMediaScreen} />
-        <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
-        <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
-        <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />
-        <Stack.Screen name="DropsPoll" component={DropsPollScreen} />
-        <Stack.Screen name="WhatsAppSend" component={WhatsAppSendScreen} />
-        <Stack.Screen name="VibeScore" component={VibeScoreScreen} />
-        <Stack.Screen name="PostUnlock" component={PostUnlockScreen} />
-        <Stack.Screen name="UnlockWaitingScreen" component={UnlockWaitingScreen} />
-        <Stack.Screen name="UnlockRequestsScreen" component={UnlockRequestsScreen} />
-        <Stack.Screen name="Room" component={RoomScreen} />
+        <Stack.Screen name="Premium" component={withBackdrop(PremiumScreen)} />
+        <Stack.Screen name="DropChat" component={withBackdrop(DropChatScreen, { brand: false })} />
+        <Stack.Screen name="ChatInfo" component={withBackdrop(ChatInfoScreen)} />
+        <Stack.Screen name="StarredMessages" component={withBackdrop(StarredMessagesScreen)} />
+        <Stack.Screen name="ArchivedChats" component={withBackdrop(ArchivedChatsScreen)} />
+        <Stack.Screen name="ChatMedia" component={withBackdrop(ChatMediaScreen)} />
+        <Stack.Screen name="DropsCompose" component={withBackdrop(DropsComposeScreen)} />
+        <Stack.Screen name="DropsRecord" component={withBackdrop(DropsRecordScreen, { brand: false })} />
+        <Stack.Screen name="DropsPublish" component={withBackdrop(DropsPublishScreen)} />
+        <Stack.Screen name="DropsPoll" component={withBackdrop(DropsPollScreen)} />
+        <Stack.Screen name="WhatsAppSend" component={withBackdrop(WhatsAppSendScreen)} />
+        <Stack.Screen name="VibeScore" component={withBackdrop(VibeScoreScreen)} />
+        <Stack.Screen name="PostUnlock" component={withBackdrop(PostUnlockScreen)} />
+        <Stack.Screen name="UnlockWaitingScreen" component={withBackdrop(UnlockWaitingScreen)} />
+        <Stack.Screen name="UnlockRequestsScreen" component={withBackdrop(UnlockRequestsScreen)} />
+        <Stack.Screen name="Room" component={withBackdrop(RoomScreen, { brand: false })} />
         {/* Calls open from anywhere (the incoming call screen, the Live tab). */}
-        <Stack.Screen name="DropCall" component={DropCallScreen} options={{ gestureEnabled: false }} />
-        <Stack.Screen name="AdminDashboard"  component={AdminDashboardScreen} />
-        <Stack.Screen name="AdminUsers"      component={AdminUsersScreen} />
-        <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
-        <Stack.Screen name="AdminDeceptionReports" component={AdminDeceptionReportsScreen} />
-        <Stack.Screen name="AdminAds"        component={AdminAdsScreen} />
-        <Stack.Screen name="AdminPosts"      component={AdminPostsScreen} />
-        <Stack.Screen name="AdminRefunds"    component={AdminRefundsScreen} />
-        <Stack.Screen name="AdminSupport"    component={AdminSupportScreen} />
-        <Stack.Screen name="SupportChat"     component={SupportChatScreen} />
-        <Stack.Screen name="CreateAd"        component={CreateAdScreen} />
+        <Stack.Screen name="DropCall" component={withBackdrop(DropCallScreen, { brand: false })} options={{ gestureEnabled: false }} />
+        <Stack.Screen name="AdminDashboard"  component={withBackdrop(AdminDashboardScreen)} />
+        <Stack.Screen name="AdminUsers"      component={withBackdrop(AdminUsersScreen)} />
+        <Stack.Screen name="AdminModeration" component={withBackdrop(AdminModerationScreen)} />
+        <Stack.Screen name="AdminDeceptionReports" component={withBackdrop(AdminDeceptionReportsScreen)} />
+        <Stack.Screen name="AdminAds"        component={withBackdrop(AdminAdsScreen)} />
+        <Stack.Screen name="AdminPosts"      component={withBackdrop(AdminPostsScreen)} />
+        <Stack.Screen name="AdminRefunds"    component={withBackdrop(AdminRefundsScreen)} />
+        <Stack.Screen name="AdminSupport"    component={withBackdrop(AdminSupportScreen)} />
+        <Stack.Screen name="SupportChat"     component={withBackdrop(SupportChatScreen, { brand: false })} />
+        <Stack.Screen name="CreateAd"        component={withBackdrop(CreateAdScreen)} />
         {/* Accessible from HamburgerMenu across all tabs */}
-        <Stack.Screen name="Settings"       component={SettingsScreen} />
-        <Stack.Screen name="EditProfile"    component={EditProfileScreen} />
-        <Stack.Screen name="Dashboard"      component={DashboardScreen} />
-        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-        <Stack.Screen name="DeleteAccount"  component={DeleteAccountScreen} />
-        <Stack.Screen name="SavedDrops"     component={SavedPostsScreen} />
-        <Stack.Screen name="Coins"          component={CoinsScreen} />
-        <Stack.Screen name="Referral"       component={ReferralScreen} />
-        <Stack.Screen name="Legal"          component={LegalScreen} />
-        <Stack.Screen name="BlockList"          component={BlockListScreen} />
-        <Stack.Screen name="ModerationHistory"  component={ModerationHistoryScreen} />
-        <Stack.Screen name="FeedLocation"       component={FeedLocationScreen} />
-        <Stack.Screen name="Market"         component={MarketScreen} />
-        <Stack.Screen name="MarketItem"     component={MarketItemScreen} />
+        <Stack.Screen name="Settings"       component={withBackdrop(SettingsScreen)} />
+        <Stack.Screen name="EditProfile"    component={withBackdrop(EditProfileScreen)} />
+        <Stack.Screen name="Dashboard"      component={withBackdrop(DashboardScreen)} />
+        <Stack.Screen name="ChangePassword" component={withBackdrop(ChangePasswordScreen)} />
+        <Stack.Screen name="DeleteAccount"  component={withBackdrop(DeleteAccountScreen)} />
+        <Stack.Screen name="SavedDrops"     component={withBackdrop(SavedPostsScreen)} />
+        <Stack.Screen name="Coins"          component={withBackdrop(CoinsScreen)} />
+        <Stack.Screen name="Referral"       component={withBackdrop(ReferralScreen)} />
+        <Stack.Screen name="Legal"          component={withBackdrop(LegalScreen)} />
+        <Stack.Screen name="BlockList"          component={withBackdrop(BlockListScreen)} />
+        <Stack.Screen name="ModerationHistory"  component={withBackdrop(ModerationHistoryScreen)} />
+        <Stack.Screen name="FeedLocation"       component={withBackdrop(FeedLocationScreen)} />
+        <Stack.Screen name="Market"         component={withBackdrop(MarketScreen)} />
+        <Stack.Screen name="MarketItem"     component={withBackdrop(MarketItemScreen)} />
       </Stack.Navigator>
       {!loading && <IncomingCallOverlay navigate={navigateRoot} />}
     </NavigationContainer>

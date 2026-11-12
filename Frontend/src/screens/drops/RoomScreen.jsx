@@ -301,7 +301,7 @@ export default function RoomScreen({ route, navigation }) {
 
   if (gate || error || !p) {
     return (
-      <SafeAreaView style={[s.root, { backgroundColor: T.background }]}>
+      <SafeAreaView style={[s.root, { backgroundColor: 'transparent' }]}>
         <View style={s.plainHead}>
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} accessibilityLabel="Back"><ChevronLeft size={rs(24)} color={T.text} /></TouchableOpacity>
           <Text style={s.plainTitle}>Room</Text>

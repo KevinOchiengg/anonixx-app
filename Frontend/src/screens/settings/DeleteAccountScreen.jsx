@@ -88,7 +88,7 @@ export default function DeleteAccountScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.bg },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: rp(16) },
   back: { width: rs(32) },
   title: { fontSize: FONT.lg, fontWeight: '700', color: T.text },

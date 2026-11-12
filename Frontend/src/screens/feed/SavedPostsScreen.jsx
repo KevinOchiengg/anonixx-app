@@ -277,7 +277,7 @@ export default function SavedPostsScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex:            1,
-    backgroundColor: T.background,
+    backgroundColor: 'transparent',
   },
 
   // Header

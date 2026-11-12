@@ -181,7 +181,7 @@ export default function AdminDashboardScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   centered: { justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

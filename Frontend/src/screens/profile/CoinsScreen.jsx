@@ -140,7 +140,7 @@ const WalletHeader = React.memo(({ balance, streak, geoConfig, onMpesa, onStripe
   return (
     <Animated.View style={[hStyles.wrap, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
       <LinearGradient
-        colors={['#1a1530', '#0b0f18']}
+        colors={['#1a1530', '#2c1f26']}
         style={hStyles.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -444,7 +444,7 @@ export default function CoinsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.bg },
+  container: { flex: 1, backgroundColor: 'transparent' },
   navbar: {
     flexDirection:     'row',
     alignItems:        'center',

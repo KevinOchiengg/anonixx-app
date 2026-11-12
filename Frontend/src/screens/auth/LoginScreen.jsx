@@ -326,7 +326,7 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   topBar: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
 

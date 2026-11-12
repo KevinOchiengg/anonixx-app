@@ -559,7 +559,7 @@ function Pill({ label, onPress, primary, disabled }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: T.background },
+  container: { flex: 1, backgroundColor: 'transparent' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingTop: rp(6), paddingBottom: rp(10), gap: SPACING.sm },
   backBtn: { width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center' },
   inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(9), backgroundColor: T.surfaceAlt, borderRadius: RADIUS.full || 999, paddingHorizontal: rp(14), height: rs(42) },

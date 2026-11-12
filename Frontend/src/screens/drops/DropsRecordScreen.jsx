@@ -714,7 +714,7 @@ export default function DropsRecordScreen({ navigation, route }) {
 
 // ─── Styles ────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
 
   contextStrip: {
     flexDirection:     'row',

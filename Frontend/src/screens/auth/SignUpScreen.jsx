@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
   genderChipSelected: { backgroundColor: 'rgba(255,99,74,0.12)', borderColor: 'rgba(255,99,74,0.45)' },
   genderChipText: { fontSize: rf(13), color: THEME.textSecondary, fontWeight: '500' },
   genderChipTextSelected: { color: THEME.primary, fontWeight: '700' },
-  container:    { flex: 1, backgroundColor: THEME.background },
+  container:    { flex: 1, backgroundColor: 'transparent' },
   glowOrb: {
     position: 'absolute', width: rs(300), height: rs(300),
     borderRadius: rs(150), backgroundColor: THEME.primary,

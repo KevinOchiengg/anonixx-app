@@ -113,7 +113,7 @@ export default function ChatMediaScreen({ route, navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   head: { flexDirection: 'row', alignItems: 'center', gap: rp(18), paddingHorizontal: SPACING.md, height: rs(56) },
   title: { flex: 1, fontSize: rf(19), fontFamily: 'DMSans-Bold', color: T.text },
   tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: T.border },

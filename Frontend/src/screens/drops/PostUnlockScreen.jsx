@@ -410,7 +410,7 @@ export default function PostUnlockScreen({ route, navigation }) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.background },
+  root: { flex: 1, backgroundColor: 'transparent' },
   body: {
     flexGrow: 1,
     alignItems: 'center',

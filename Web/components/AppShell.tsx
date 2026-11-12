@@ -5,16 +5,24 @@ import { useAuth } from "@/lib/auth";
 import BottomNav from "./BottomNav";
 import { ArrowLeft } from "lucide-react";
 
+/** The coral "● ANONIXX" mark, as on sign-in and in the app. */
+export function BrandMark() {
+  return <Link href="/" className="brand-row" aria-label="Anonixx home"><i /><b>ANONIXX</b></Link>;
+}
+
 export default function AppShell({
   title,
   back,
   right,
   children,
+  brand = true,
 }: {
   title: string;
   back?: string;
   right?: React.ReactNode;
   children: React.ReactNode;
+  /** Show the coral brand mark above the header (off inside chats and Rooms). */
+  brand?: boolean;
 }) {
   const { user, ready } = useAuth();
   const path = usePathname() || "/";
@@ -22,6 +30,7 @@ export default function AppShell({
   return (
     <div className="stage">
       <div className="phone hasnav">
+        {brand ? <BrandMark /> : null}
         <header className="apphead">
           {back ? <Link href={back} className="back" aria-label="Back">
             <ArrowLeft size={20} strokeWidth={2} aria-hidden />

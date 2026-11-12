@@ -70,7 +70,7 @@ export default function ArchivedChatsScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   head: { flexDirection: 'row', alignItems: 'center', gap: rp(18), paddingHorizontal: SPACING.md, height: rs(56) },
   title: { flex: 1, fontSize: rf(19), fontFamily: 'DMSans-Bold', color: T.text },
   note: { fontSize: rf(12.5), color: T.textSecondary, textAlign: 'center', paddingHorizontal: SPACING.xl, paddingVertical: rp(10) },

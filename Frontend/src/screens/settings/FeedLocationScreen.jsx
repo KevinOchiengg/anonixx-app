@@ -243,7 +243,7 @@ export default function FeedLocationScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   localRow: {
     flexDirection: 'row', alignItems: 'center', gap: rp(12), padding: rp(14), marginBottom: SPACING.lg,
     borderRadius: RADIUS.lg, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: T.surface,

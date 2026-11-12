@@ -24,7 +24,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0b0f18"
+        "backgroundColor": "#2c1f26"
       },
       "permissions": [
         "NOTIFICATIONS",
@@ -62,7 +62,7 @@
       "shortName": "Anonixx",
       "description": "Anonymous emotion. Structured connection.",
       "themeColor": "#FF634A",
-      "backgroundColor": "#0b0f18"
+      "backgroundColor": "#2c1f26"
     },
     "plugins": [
       "expo-asset",
@@ -85,7 +85,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "backgroundColor": "#0b0f18"
+          "backgroundColor": "#2c1f26"
         }
       ],
       [

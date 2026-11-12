@@ -1061,7 +1061,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  safe:     { flex: 1, backgroundColor: T.background },
+  safe:     { flex: 1, backgroundColor: 'transparent' },
   centered: { justifyContent: 'center', alignItems: 'center' },
   content:  { padding: SPACING.md, gap: rp(4) },
 

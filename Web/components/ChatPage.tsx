@@ -610,7 +610,7 @@ This conversation closes for both of you. They're outside again and can knock if
 
 export default function ChatPage({ id }: { id: string }) {
   return (
-    <AppShell title="Chat" back="/inbox">
+    <AppShell brand={false} title="Chat" back="/inbox">
       <Inner id={id} />
     </AppShell>
   );

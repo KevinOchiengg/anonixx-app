@@ -329,7 +329,7 @@ const lockedStyles = StyleSheet.create({
     left:            0,
     right:           0,
     bottom:          0,
-    backgroundColor: 'rgba(11,15,24,0.92)',
+    backgroundColor: 'rgba(44,31,38,0.92)',
     alignItems:      'center',
     justifyContent:  'center',
     padding:         rp(20),
@@ -453,7 +453,7 @@ export default function MarketItemScreen({ navigation, route }) {
               <Image source={{ uri: item.media_url }} style={styles.cover} resizeMode="cover" />
             ) : (
               <LinearGradient
-                colors={['#1a1530', '#0b0f18']}
+                colors={['#1a1530', '#2c1f26']}
                 style={styles.cover}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -535,7 +535,7 @@ export default function MarketItemScreen({ navigation, route }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.bg },
+  container: { flex: 1, backgroundColor: 'transparent' },
   loadingWrap: {
     flex:           1,
     alignItems:     'center',

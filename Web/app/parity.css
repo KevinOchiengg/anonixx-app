@@ -45,7 +45,7 @@
 .chips button.on { background: var(--rose); border-color: var(--rose); }
 
 .balance, .vibe-hero {
-  background: linear-gradient(135deg, #1a1530, #0b0f18); border: 1px solid rgba(251,191,36,0.22); border-radius: 18px;
+  background: linear-gradient(135deg, #1a1530, #2c1f26); border: 1px solid rgba(251,191,36,0.22); border-radius: 18px;
 }
 .balance strong { color: var(--gold); }
 .balance small, .balance span { color: var(--muted); }

@@ -185,7 +185,7 @@ export default function DropsPublishScreen({ navigation, route }) {
 
 // ─── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
 
   scroll: {
     paddingHorizontal: SPACING.md,

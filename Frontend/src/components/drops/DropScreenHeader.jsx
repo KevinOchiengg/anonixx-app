@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     paddingVertical:   SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: T.border,
-    backgroundColor:   T.background,
+    backgroundColor:   'transparent',
   },
   sideSlot: {
     minWidth:     rs(32),

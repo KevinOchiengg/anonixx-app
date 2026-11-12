@@ -410,7 +410,7 @@ export default function PremiumScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: T.background },
+  container: { flex: 1, backgroundColor: 'transparent' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   // Success overlay
   successOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(11,15,24,0.96)',
+    backgroundColor: 'rgba(44,31,38,0.96)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 99,

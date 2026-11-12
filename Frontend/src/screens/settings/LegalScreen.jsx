@@ -191,7 +191,7 @@ export default function LegalScreen({ route, navigation }) {
 }
 
 const st = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: T.background },
+  safe:   { flex: 1, backgroundColor: 'transparent' },
   header: {
     flexDirection:     'row',
     alignItems:        'center',

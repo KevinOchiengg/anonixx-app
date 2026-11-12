@@ -1586,7 +1586,7 @@ const s = StyleSheet.create({
     backgroundColor: T.primaryTint, borderRadius: rs(10), paddingHorizontal: rp(8), paddingVertical: rp(3),
   },
   kindSwitch: { fontSize: FONT.sm, fontWeight: '700', color: T.text },
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
 
   header: {
     flexDirection:     'row',

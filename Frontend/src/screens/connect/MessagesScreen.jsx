@@ -433,7 +433,7 @@ export default function MessagesScreen({ navigation, route }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   header: { flexDirection: 'row', alignItems: 'center', gap: rp(18), paddingHorizontal: SPACING.md, height: rs(56) },
   title: { flex: 1, fontSize: rf(24), fontFamily: 'DMSans-Bold', color: T.primary, letterSpacing: -0.4 },
   selTitle: { color: T.text, fontSize: rf(20) },

@@ -438,7 +438,7 @@ export default function DashboardScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: THEME.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   centered: { alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

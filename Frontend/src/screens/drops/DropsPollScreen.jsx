@@ -269,7 +269,7 @@ export default function DropsPollScreen({ navigation, route }) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   scrollContent: { padding: SPACING.md, paddingBottom: SPACING.xl },
 
   confessionQuote: {

@@ -250,7 +250,7 @@ const field = StyleSheet.create({
 const styles = StyleSheet.create({
   safe: {
     flex:            1,
-    backgroundColor: T.background,
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection:     'row',

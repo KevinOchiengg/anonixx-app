@@ -83,7 +83,7 @@
 .adm-msg { align-self: flex-start; max-width: 80%; display: flex; flex-direction: column; gap: 4px; padding: 9px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
 .adm-msg.mine { align-self: flex-end; background: var(--rose); border-color: var(--rose); color: #fff; }
 .adm-msg small { font-size: 11px; opacity: 0.7; }
-.adm { --card: var(--surface); --adm-side: 0px; min-height: 100vh; background: var(--bg); color: var(--fg); }
+.adm { --card: var(--surface); --adm-side: 0px; min-height: 100vh; background: url("/bg-drops.svg") center / cover no-repeat fixed, var(--bg); color: var(--fg); }
 @media (min-width: 900px) { .adm { --adm-side: 264px; } .adm[data-collapsed="1"] { --adm-side: 80px; } }
 .adm h2 { font-size: 22px; margin: 4px 0 10px; }
 .adm h3 { margin: 0; }

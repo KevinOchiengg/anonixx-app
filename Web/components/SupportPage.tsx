@@ -115,5 +115,5 @@ function Inner() {
 }
 
 export default function SupportPage() {
-  return <AppShell title="Support" back="/profile"><Inner /></AppShell>;
+  return <AppShell brand={false} title="Support" back="/profile"><Inner /></AppShell>;
 }

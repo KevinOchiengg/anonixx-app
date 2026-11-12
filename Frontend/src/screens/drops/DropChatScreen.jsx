@@ -1922,7 +1922,7 @@ const s = StyleSheet.create({
   forwardedLabel: { fontSize: rf(11.5), fontStyle: 'italic', color: T.textMute, marginBottom: rp(3) },
   headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
   headerHintText: { fontSize: rf(11), color: T.textMute },
-  safe:     { flex: 1, backgroundColor: T.background },
+  safe:     { flex: 1, backgroundColor: 'transparent' },
   centered: { justifyContent: 'center', alignItems: 'center' },
 
   // Header title: avatar, name, online line. flex: 1 keeps it next to the back button

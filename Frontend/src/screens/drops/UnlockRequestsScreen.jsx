@@ -412,7 +412,7 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.background },
+  root: { flex: 1, backgroundColor: 'transparent' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl },
   emptyText: { color: T.textSecondary, fontSize: FONT.sm, textAlign: 'center', lineHeight: FONT.sm * 1.5 },
   emptyTitle: { color: T.text, fontSize: rf(18), fontFamily: 'DMSans-Bold', textAlign: 'center', marginBottom: rp(6) },

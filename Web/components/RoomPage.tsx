@@ -471,7 +471,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
 
 export default function RoomPage({ userId, postId }: { userId: string; postId: string | null }) {
   return (
-    <AppShell title="Room" back="/">
+    <AppShell brand={false} title="Room" back="/">
       <Inner userId={userId} postId={postId} />
     </AppShell>
   );

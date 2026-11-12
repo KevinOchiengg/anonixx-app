@@ -314,7 +314,7 @@ export default function VibeScoreScreen({ navigation }) {
 
 // ─── Styles ───────────────────────────────────────────────────
 const s = StyleSheet.create({
-  safe:     { flex: 1, backgroundColor: T.background },
+  safe:     { flex: 1, backgroundColor: 'transparent' },
   centered: {
     flex:              1,
     justifyContent:    'center',

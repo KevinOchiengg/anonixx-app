@@ -37,6 +37,7 @@ import ChatMediaScreen from '../screens/rooms/ChatMediaScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
 import { THEME } from '../utils/theme';
+import { withBackdrop } from '../components/common/CoralBackdrop';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -96,9 +97,9 @@ const CustomTabBarButton = ({ children, onPress }) => (
 function FeedStack() {
   return (
     <Stack.Navigator initialRouteName="FeedSwipe" screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="FeedSwipe" component={DropsSwipeScreen} />
-      <Stack.Screen name="Search" component={SearchScreen} />
-      <Stack.Screen name="SavedDrops" component={SavedPostsScreen} />
+      <Stack.Screen name="FeedSwipe" component={withBackdrop(DropsSwipeScreen, { brand: false })} />
+      <Stack.Screen name="Search" component={withBackdrop(SearchScreen)} />
+      <Stack.Screen name="SavedDrops" component={withBackdrop(SavedPostsScreen)} />
     </Stack.Navigator>
   );
 }
@@ -107,15 +108,15 @@ function FeedStack() {
 function MessagesStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="MessagesMain" component={MessagesScreen} />
-      <Stack.Screen name="DropChat"     component={DropChatScreen} />
-      <Stack.Screen name="DropCall"     component={DropCallScreen} options={{ gestureEnabled: false }} />
-      <Stack.Screen name="DemoChat"     component={DemoChatScreen} />
-      <Stack.Screen name="ChatProfileSetup" component={ChatProfileSetupScreen} />
-      <Stack.Screen name="ChatInfo"        component={ChatInfoScreen} />
-      <Stack.Screen name="StarredMessages" component={StarredMessagesScreen} />
-      <Stack.Screen name="ArchivedChats"   component={ArchivedChatsScreen} />
-      <Stack.Screen name="ChatMedia"       component={ChatMediaScreen} />
+      <Stack.Screen name="MessagesMain" component={withBackdrop(MessagesScreen)} />
+      <Stack.Screen name="DropChat"     component={withBackdrop(DropChatScreen, { brand: false })} />
+      <Stack.Screen name="DropCall"     component={withBackdrop(DropCallScreen, { brand: false })} options={{ gestureEnabled: false }} />
+      <Stack.Screen name="DemoChat"     component={withBackdrop(DemoChatScreen, { brand: false })} />
+      <Stack.Screen name="ChatProfileSetup" component={withBackdrop(ChatProfileSetupScreen)} />
+      <Stack.Screen name="ChatInfo"        component={withBackdrop(ChatInfoScreen)} />
+      <Stack.Screen name="StarredMessages" component={withBackdrop(StarredMessagesScreen)} />
+      <Stack.Screen name="ArchivedChats"   component={withBackdrop(ArchivedChatsScreen)} />
+      <Stack.Screen name="ChatMedia"       component={withBackdrop(ChatMediaScreen)} />
     </Stack.Navigator>
   );
 }
@@ -124,7 +125,7 @@ function MessagesStack() {
 function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
+      <Stack.Screen name="ProfileMain" component={withBackdrop(ProfileScreen)} />
     </Stack.Navigator>
   );
 }
@@ -174,7 +175,7 @@ export default function TabNavigator() {
       />
       <Tab.Screen
         name="Create"
-        component={DropsComposeScreen}
+        component={withBackdrop(DropsComposeScreen)}
         options={{
           tabBarLabel: '',
           tabBarButton: (props) => <CustomTabBarButton {...props} />,
@@ -191,7 +192,7 @@ export default function TabNavigator() {
       />
       <Tab.Screen
         name="Requests"
-        component={UnlockRequestsScreen}
+        component={withBackdrop(UnlockRequestsScreen)}
         initialParams={{ inTab: true }}
         options={{ tabBarLabel: 'Requests' }}
         listeners={({ navigation }) => ({
