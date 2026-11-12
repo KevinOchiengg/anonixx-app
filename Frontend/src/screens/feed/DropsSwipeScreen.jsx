@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageCircleMore, Pause, Play, Search, Share2, ShieldCheck, VolumeX, Music,
+  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Play, Search, Share2, ShieldCheck, VolumeX, Music,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -676,7 +676,7 @@ const VideoSlide = ({
               icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
               tint="like" count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
             />
-            <ActionBtn tint="comment" icon={<MessageCircleMore size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn tint="comment" icon={<MessageSquareMore size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
               tint="save" count={savesCount} onPress={onSave} active={saved}
@@ -806,7 +806,7 @@ const AudioSlide = ({
             icon={<Heart size={26} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
             tint="like" count={likesCount} onPress={onLike} active={liked}
           />
-          <ActionBtn tint="comment" icon={<MessageCircleMore size={26} color="#fff" />} count={commentCount} onPress={onComment} />
+          <ActionBtn tint="comment" icon={<MessageSquareMore size={26} color="#fff" />} count={commentCount} onPress={onComment} />
           <ActionBtn
             icon={<Bookmark size={26} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
             tint="save" count={savesCount} onPress={onSave} active={saved}
@@ -1002,7 +1002,7 @@ const TextSlide = ({
               icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
               tint="like" count={likesCount} onPress={handleLikeWithAnim} active={liked} scaleRef={likeScale}
             />
-            <ActionBtn tint="comment" icon={<MessageCircleMore size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn tint="comment" icon={<MessageSquareMore size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
               tint="save" count={savesCount} onPress={onSave} active={saved}
@@ -1083,7 +1083,7 @@ const PollSlide = ({
               icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
               tint="like" count={likesCount} onPress={onLike} active={liked}
             />
-            <ActionBtn tint="comment" icon={<MessageCircleMore size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn tint="comment" icon={<MessageSquareMore size={28} color="#fff" />} count={commentCount} onPress={onComment} />
             <ActionBtn
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
               tint="save" count={savesCount} onPress={onSave} active={saved}

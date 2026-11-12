@@ -3,7 +3,7 @@ import Slider from '@react-native-community/slider';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
-  BarChart2, Bookmark, Coins, EyeOff, Flag, Heart, Link2, MessageCircle, MessageCircleMore, MoreHorizontal, Play, Share2, UserX, VolumeX, X, Eye,
+  BarChart2, Bookmark, Coins, EyeOff, Flag, Heart, Link2, MessageCircle, MessageSquareMore, MoreHorizontal, Play, Share2, UserX, VolumeX, X, Eye,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -614,7 +614,7 @@ function DropCard({
 
               <View style={styles.actionsRight}>
                 <TouchableOpacity onPress={handleCommentPress} style={styles.action} hitSlop={HIT_SLOP}>
-                  <MessageCircleMore size={rs(18)} color={T.textSecondary} />
+                  <MessageSquareMore size={rs(18)} color={T.textSecondary} />
                   <Text style={styles.actionCount}>{post.thread_count || 0}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleLikePress} style={styles.action} hitSlop={HIT_SLOP}>

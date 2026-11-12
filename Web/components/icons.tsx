@@ -2,7 +2,7 @@
 // the app uses, at stroke 2. `filled`: solid for liked / saved, a soft fill for the current tab.
 import {
   Bell, Bookmark as LBookmark, DoorOpen, Ellipsis as LMore, Flame as LFlame, Heart as LHeart, House, Inbox as LInbox,
-  MessageCircleMore, Plus as LPlus, Share as LShare, User as LUser,
+  MessageSquareMore, Plus as LPlus, Share as LShare, User as LUser,
 } from "lucide-react";
 
 const S = 2;
@@ -11,7 +11,7 @@ const fillProps = (filled?: boolean) => (filled ? { fill: "currentColor" } : {})
 const softFill = (on?: boolean) => (on ? { fill: "currentColor", fillOpacity: 0.18 } : {});
 
 export const Heart = ({ filled = false }: { filled?: boolean }) => <LHeart strokeWidth={S} {...fillProps(filled)} />;
-export const Comment = () => <MessageCircleMore strokeWidth={S} />;
+export const Comment = () => <MessageSquareMore strokeWidth={S} />;
 export const Share = () => <LShare strokeWidth={S} />;
 export const Bookmark = ({ filled = false }: { filled?: boolean }) => <LBookmark strokeWidth={S} {...fillProps(filled)} />;
 export const More = () => <LMore strokeWidth={S} />;

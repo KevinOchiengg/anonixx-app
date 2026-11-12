@@ -14,7 +14,7 @@ import { COUNTRIES, KENYA_COUNTIES } from "@/lib/locations";
 import AgeGate from "./AgeGate";
 import BottomNav from "./BottomNav";
 import { Clock, Close, MapPin, SearchIcon } from "./feedicons";
-import { ArrowLeft, Heart, MessageCircleMore } from "lucide-react";
+import { ArrowLeft, Heart, MessageSquareMore } from "lucide-react";
 import { BrandMark } from "./AppShell";
 
 type Tab = "near" | "stories";
@@ -562,7 +562,7 @@ function StoryCard({ post }: { post: Post }) {
       <div className="sp-card-foot">
         <b>{post.anonymous_name || "Anonymous"}</b>
         <span><Heart className="inl-ic" size={13} strokeWidth={2} aria-hidden /> {compact(post.likes_count || 0)}</span>
-        <span><MessageCircleMore className="inl-ic" size={13} strokeWidth={2} aria-hidden /> {post.thread_count ? compact(post.thread_count) : "be first"}</span>
+        <span><MessageSquareMore className="inl-ic" size={13} strokeWidth={2} aria-hidden /> {post.thread_count ? compact(post.thread_count) : "be first"}</span>
       </div>
     </Link>
   );
