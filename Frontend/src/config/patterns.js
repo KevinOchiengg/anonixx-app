@@ -5,7 +5,7 @@ export const BACKGROUND_PATTERNS = [
   {
     id: 'midnight-solid',
     label: 'Midnight',
-    gradient: ['#1f2532', '#121620'],
+    gradient: ['#283041', '#191e29'],
     overlay: { kind: 'none' },
   },
   {

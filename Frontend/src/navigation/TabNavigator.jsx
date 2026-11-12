@@ -216,7 +216,7 @@ export default function TabNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: THEME.surface,
+    backgroundColor: THEME.background,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.07)',
     shadowColor: '#000',

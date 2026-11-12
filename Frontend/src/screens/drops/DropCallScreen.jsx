@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   },
   tileLabel: { fontSize: rf(11), color: '#fff', fontWeight: '600', maxWidth: rs(110) },
 
-  connectingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(22,27,38,0.5)' },
+  connectingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(31,37,50,0.5)' },
 
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(14), paddingTop: rp(16), paddingBottom: rp(8) },
   ctrlBtn: { width: rs(50), height: rs(50), borderRadius: rs(25), backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.border },

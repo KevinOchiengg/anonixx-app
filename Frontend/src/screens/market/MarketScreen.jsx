@@ -52,7 +52,7 @@ const MarketListCard = React.memo(({ item, onPress }) => {
           <Image source={{ uri: item.media_url }} style={styles.cover} />
         ) : (
           <LinearGradient
-            colors={['#1a1530', '#161b26']}
+            colors={['#1a1530', '#1f2532']}
             style={styles.cover}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -151,7 +151,7 @@ export default function MarketScreen({ navigation }) {
   const ListHeader = useMemo(() => (
     <View style={styles.heroWrap}>
       <LinearGradient
-        colors={['#1a1530', '#161b26']}
+        colors={['#1a1530', '#1f2532']}
         style={styles.hero}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}

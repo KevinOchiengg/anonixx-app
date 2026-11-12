@@ -7,7 +7,7 @@
   content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background:
     radial-gradient(90% 55% at 0% 0%, color-mix(in srgb, var(--cc-tint) 16%, transparent) 0%, transparent 70%),
-    linear-gradient(180deg, rgba(22, 27, 38, 0.55) 0%, rgba(22, 27, 38, 0.82) 100%);
+    linear-gradient(180deg, rgba(31, 37, 50, 0.55) 0%, rgba(31, 37, 50, 0.82) 100%);
 }
 .slide.cc-slide > .text-body { justify-content: center; padding-bottom: 8px; }
 

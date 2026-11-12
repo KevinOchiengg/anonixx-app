@@ -3,10 +3,10 @@
 const palette = {
 
   // ─── Surfaces ──────────────────────────────────────────────────────────────
-  background:   '#161b26',   // screen bg: the original cool dark, lifted a step (behind it: CoralBackdrop)
-  surface:      '#1f2532',   // cards, inputs, raised layers
-  surfaceAlt:   '#262d3b',   // secondary raised layer
-  surfaceDark:  '#121620',   // below-surface (chat input bg, deep wells)
+  background:   '#1f2532',   // screen bg = the bottom tab bar colour, across Anonixx (behind it: CoralBackdrop)
+  surface:      '#283041',   // cards, inputs, raised layers
+  surfaceAlt:   '#2f3849',   // secondary raised layer
+  surfaceDark:  '#191e29',   // below-surface (chat input bg, deep wells)
   inputBg:      'rgba(255,255,255,0.04)',
 
   // ─── Text ──────────────────────────────────────────────────────────────────
@@ -80,14 +80,14 @@ const palette = {
 
   // ─── Chat bubbles ──────────────────────────────────────────────────────────
   myBubble:    '#FF634A',   // own sent message
-  theirBubble: '#262d3b',   // received message
+  theirBubble: '#2f3849',   // received message
 
   // ─── Avatar / profile defaults ─────────────────────────────────────────────
-  avatarBg:   '#262d3b',
+  avatarBg:   '#2f3849',
   avatarIcon: '#6F7486',
 
   // ─── Convenience aliases ───────────────────────────────────────────────────
-  bg: '#161b26',   // alias for background (used in a few older screens)
+  bg: '#1f2532',   // alias for background (used in a few older screens)
 };
 
 // Named exports — T is the canonical name, THEME is the legacy alias

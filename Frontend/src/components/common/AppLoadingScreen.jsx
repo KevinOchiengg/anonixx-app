@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
-const BG    = '#161b26';
+const BG    = '#1f2532';
 const CORAL = '#FF634A';
 
 const STARS = Array.from({ length: 32 }, (_, i) => ({
