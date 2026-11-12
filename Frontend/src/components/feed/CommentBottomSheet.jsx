@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ChevronDown, CornerDownRight, Heart, Pin, X, MessageCircle, Target, Flame,
+  ChevronDown, CornerDownRight, Heart, Pin, X, MessageCircle, MessageCircleMore, Target, Flame,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
@@ -771,10 +771,10 @@ export const CommentBottomSheet = React.memo(({
           </View>
         ) : sortedComments.length === 0 ? (
           <View style={st.emptyWrap}>
-            <MessageCircle size={rs(36)} color={T.textMuted} strokeWidth={2} style={{ marginBottom: rp(8) }} />
-            <Text style={st.emptyTitle}>dead silence.</Text>
+            <MessageCircleMore size={rs(36)} color={T.textMuted} strokeWidth={2} style={{ marginBottom: rp(8) }} />
+            <Text style={st.emptyTitle}>First word's yours.</Text>
             <Text style={st.emptyBody}>
-              {'no one has been brave enough yet.\nbreak the silence.'}
+              {"Nobody's answered this yet. Say what you really think.\nYour name stays hidden."}
             </Text>
           </View>
         ) : (

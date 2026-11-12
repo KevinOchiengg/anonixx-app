@@ -8,7 +8,7 @@ import { uploadFile } from "@/lib/upload";
 import AudioWave from "./AudioWave";
 import { ChevronDown, Reply, Smile, Close, Pin, ImageIcon, Mic, Gif, Send } from "./feedicons";
 import { Heart } from "./icons";
-import { MessageCircle } from "lucide-react";
+import { MessageCircleMore } from "lucide-react";
 
 type Comment = {
   id: string;
@@ -365,9 +365,9 @@ export default function CommentsSheet({
           {items === null ? <p className="muted center">Loading…</p> : null}
           {items && sorted.length === 0 ? (
             <div className="cmt-empty">
-              <span><MessageCircle size={28} strokeWidth={1.5} aria-hidden /></span>
-              <b>dead silence.</b>
-              <p>no one has been brave enough yet.<br />break the silence.</p>
+              <span><MessageCircleMore size={28} strokeWidth={1.5} aria-hidden /></span>
+              <b>First word&apos;s yours.</b>
+              <p>Nobody&apos;s answered this yet. Say what you really think.<br />Your name stays hidden.</p>
             </div>
           ) : null}
           {sorted.map((c) => row(c))}
