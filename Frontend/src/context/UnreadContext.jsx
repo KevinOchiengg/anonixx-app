@@ -1,4 +1,5 @@
-/** Bottom-nav badge counts. Polls every 30s, and refreshes on knock socket events. */
+/** Bottom-nav badge counts. Polls every 30s, and refreshes on message, knock and call socket events.
+ * The Rooms badge counts everything waiting there: unread messages, knocks and missed calls. */
 import React, {
   createContext, useContext, useState, useEffect, useCallback, useRef,
 } from 'react';
@@ -21,14 +22,16 @@ export function UnreadProvider({ children }) {
       const token = await AsyncStorage.getItem('token');
       if (!token) { setBadgeCounts(EMPTY_COUNTS); return; }
 
-      const res = await fetch(`${API_BASE_URL}/api/v1/notifications/badge-counts`, {
+      const seen = await AsyncStorage.getItem('rooms_calls_seen_at');   // set by the Calls tab
+      const qs = seen ? `?calls_seen=${encodeURIComponent(seen)}` : '';
+      const res = await fetch(`${API_BASE_URL}/api/v1/notifications/badge-counts${qs}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
 
       const data = await res.json();
       setBadgeCounts({
-        Messages: data.messages ?? 0,
+        Messages: data.rooms ?? data.messages ?? 0,
         Requests: data.unlock_requests ?? 0,
       });
     } catch {
@@ -56,10 +59,13 @@ export function UnreadProvider({ children }) {
     };
   }, [fetchUnread]);
 
-  // Unlock requests already push socket events — piggyback them for an
-  // instant Requests-badge refresh instead of waiting for the next poll.
+  // Knocks, messages and calls push socket events: refresh the badges right away instead of
+  // waiting for the next poll (debounced, so a burst of messages is one request).
   useEffect(() => {
-    const handleChange = () => fetchUnread();
+    let t = null;
+    const handleChange = () => { clearTimeout(t); t = setTimeout(fetchUnread, 500); };
+    const more = ['new_message', 'messages_seen', 'call_missed', 'call_cancelled'];
+    more.forEach((e) => socketService.on?.(e, handleChange));
 
     socketService.on?.('unlock_request_received',  handleChange);
     socketService.on?.('unlock_request_accepted',  handleChange);
@@ -71,6 +77,8 @@ export function UnreadProvider({ children }) {
       socketService.off?.('unlock_request_accepted',  handleChange);
       socketService.off?.('unlock_request_declined',  handleChange);
       socketService.off?.('unlock_request_cancelled', handleChange);
+      more.forEach((e) => socketService.off?.(e, handleChange));
+      clearTimeout(t);
     };
   }, [socketService, fetchUnread]);
 

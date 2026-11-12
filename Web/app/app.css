@@ -19,6 +19,11 @@
 }
 .bottomnav a.on { color: var(--rose); }
 .bottomnav svg { width: 24px; height: 24px; }
+.bottomnav .me-ava { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; background: var(--surface-alt); color: var(--rose); font-size: 12px; font-weight: 800; box-shadow: 0 0 0 1.5px transparent; }
+.bottomnav .me-ava img { width: 100%; height: 100%; object-fit: cover; }
+.bottomnav a.on .me-ava { box-shadow: 0 0 0 1.5px var(--rose); }
+.bottomnav .bn-ic { position: relative; display: grid; place-items: center; }
+.bottomnav .bn-badge { position: absolute; top: -5px; left: calc(100% - 9px); min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--rose); color: #fff; font-size: 10px; font-weight: 800; line-height: 17px; text-align: center; box-shadow: 0 0 0 2px var(--bg); }
 .bottomnav a.create { color: #fff; }
 .bottomnav a.create span {
   width: 56px; height: 56px; margin-top: -22px; border-radius: 50%; background: var(--rose);

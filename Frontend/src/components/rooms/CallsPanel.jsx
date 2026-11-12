@@ -12,6 +12,7 @@ import {
 import { rs, rf, rp, FONT, SPACING, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
 import { useSocket } from '../../context/SocketContext';
+import { useUnread } from '../../context/UnreadContext';
 import { useToast } from '../ui/Toast';
 import { callsApi, callParams } from '../../services/calls';
 import { chatsApi } from '../../services/chats';
@@ -44,6 +45,7 @@ function DirectionIcon({ c }) {
 const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissedCount }, ref) {
   const { socketService, connected } = useSocket();
   const { showToast } = useToast();
+  const { refreshUnread } = useUnread();
   const [calls, setCalls] = useState(null);
   const [live, setLive] = useState({ hosting: null, direct: [] });
   const [refreshing, setRefreshing] = useState(false);
@@ -78,7 +80,7 @@ const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissed
   useEffect(() => {
     if (!active) return;
     load();
-    AsyncStorage.setItem(SEEN_KEY, new Date().toISOString()).catch(() => {});
+    AsyncStorage.setItem(SEEN_KEY, new Date().toISOString()).then(refreshUnread, () => {});
     onMissedCount?.(0);
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 

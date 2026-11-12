@@ -37,13 +37,23 @@ import ChatMediaScreen from '../screens/rooms/ChatMediaScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
 import { THEME } from '../utils/theme';
+import Avatar from '../components/common/Avatar';
 import { withBackdrop } from '../components/common/CoralBackdrop';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 // ─── TAB BAR ICON ─────────────────────────────────────────────
-const TabBarIcon = ({ route, focused, badgeCount }) => {
+// The You tab shows your own photo (or initial) once you're signed in, ringed in coral when open.
+const MeIcon = ({ user, focused }) => (
+  <View style={[styles.meRing, focused && styles.meRingOn]}>
+    <Avatar uri={user.avatar_url} size={24} name={user.anonymous_name || user.username} />
+  </View>
+);
+
+const TabBarIcon = ({ route, focused, badgeCount, user }) => {
+  if (route.name === 'Profile' && user) return <View style={styles.iconContainer}><MeIcon user={user} focused={focused} /></View>;
+
   const icons = {
     Feed:     Home,
     Requests: UserCheck,
@@ -134,7 +144,7 @@ function ProfileStack() {
 export default function TabNavigator() {
   const insets      = useSafeAreaInsets();
   const { badgeCounts } = useUnread();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <Tab.Navigator
@@ -158,6 +168,7 @@ export default function TabNavigator() {
               route={route}
               focused={focused}
               badgeCount={badgeCounts[route.name]}
+              user={isAuthenticated ? user : null}
             />
           );
         },
@@ -234,6 +245,9 @@ const styles = StyleSheet.create({
   tabBarItem: {
     paddingVertical: 2,
   },
+
+  meRing: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  meRingOn: { borderColor: THEME.primary },
 
   // Icon + pill
   iconContainer: {
