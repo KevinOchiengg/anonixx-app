@@ -583,6 +583,67 @@ async def live_calls(
     }
 
 
+def _mine(user_id: str) -> dict:
+    return {
+        "$or": [{"host_user_id": user_id}, {"callee_id": user_id}, {f"uids.{user_id}": {"$exists": True}}],
+        "hidden_for": {"$ne": user_id},
+    }
+
+
+@router.get("/history")
+async def call_history(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """The Calls tab log: my 1-to-1 calls (in, out, missed, declined) and sessions I hosted or
+    joined, newest first."""
+    await _expire_rings(db)
+    calls = await db["drop_calls"].find(_mine(current_user_id)).sort("started_at", -1).to_list(80)
+    people = await _people(db, [u for c in calls for u in (c["host_user_id"], c.get("callee_id"))])
+    out = []
+    for c in calls:
+        direct = c.get("kind") == "direct"
+        outgoing = c["host_user_id"] == current_user_id
+        status = c["status"]
+        started = _aware(c["started_at"])
+        ended = _aware(c.get("ended_at"))
+        answered = _aware(c.get("answered_at"))
+        if direct:
+            other = c["callee_id"] if outgoing else c["host_user_id"]
+            begin = answered
+        else:
+            other = c["host_user_id"]
+            begin = started
+        seconds = int((ended - begin).total_seconds()) if ended and begin else None
+        out.append({
+            "id": str(c["_id"]),
+            "kind": "direct" if direct else "group",
+            "video": c.get("video", not direct),
+            "status": status,
+            "direction": ("outgoing" if outgoing else "incoming") if direct else ("hosted" if outgoing else "joined"),
+            # Missed = rang for me and I never picked up.
+            "missed": direct and not outgoing and status in ("missed", "cancelled"),
+            "started_at": started.isoformat(),
+            "duration_seconds": seconds,
+            "connection_id": c.get("connection_id"),
+            "guest_count": len(c.get("uids") or {}) - 1 if not direct else None,
+            "other": None if (not direct and outgoing) else {"user_id": other, **people.get(other, {})},
+        })
+    return {"calls": out}
+
+
+@router.post("/history/clear")
+async def clear_call_history(
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Clear my call log (calls still running are kept). Only hides them for me."""
+    q = _mine(current_user_id)
+    q["status"] = {"$nin": ["ringing", "active"]}
+    res = await db["drop_calls"].update_many(q, {"$addToSet": {"hidden_for": current_user_id}})
+    return {"cleared": res.modified_count}
+
+
 @router.get("/{call_id}")
 async def call_details(
     call_id: str,

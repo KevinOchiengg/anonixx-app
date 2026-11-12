@@ -2487,9 +2487,15 @@ async def get_drop_connections(
         other_name = conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"]
 
         last_msg = await db["drop_messages"].find_one(
-            {"connection_id": str(conn["_id"])},
+            {"connection_id": str(conn["_id"]), "deleted_for": {"$ne": current_user_id}},
             sort=[("created_at", -1)]
         )
+        if not last_msg:
+            last_preview = None
+        elif last_msg.get("deleted_for_everyone"):
+            last_preview = "This message was deleted"
+        else:
+            last_preview = _message_preview_text(last_msg.get("content", ""), last_msg.get("media_type"), bool(last_msg.get("view_once")))
 
         # Seen tick, only when the last message is mine.
         other_last_read_at = conn.get("unlocker_last_read_at" if is_sender else "sender_last_read_at")
@@ -2513,13 +2519,264 @@ async def get_drop_connections(
             "removable_at": removable_at_of(conn).isoformat() if is_sender else None,
             "message_count": conn.get("message_count", 0),
             "unread_count": unread_counts.get(str(conn["_id"]), 0),
-            "last_message": last_msg["content"] if last_msg else None,
+            "last_message": last_preview,
+            "last_message_type": (last_msg or {}).get("media_type") if last_msg and not last_msg.get("deleted_for_everyone") else None,
+            "last_message_deleted": bool(last_msg and last_msg.get("deleted_for_everyone")),
             "last_message_at": conn["last_message_at"].isoformat(),
             "last_message_is_own": last_message_is_own,
             "last_message_seen": last_message_seen,
+            **_prefs_out(conn, current_user_id),
         })
 
+    # Pinned chats first (most recently pinned on top), then newest activity.
+    connections.sort(key=lambda c: (c["pinned_at"] or "", c["last_message_at"]), reverse=True)
+    connections.sort(key=lambda c: not c["pinned"])
     return {"connections": connections}
+
+
+def _prefs_out(conn: dict, user_id: str) -> dict:
+    prefs = _prefs_of(conn, user_id)
+    pinned_at = prefs.get("pinned_at")
+    muted = _muted_until(conn, user_id)
+    return {
+        "pinned": bool(pinned_at),
+        "pinned_at": _ensure_aware(pinned_at).isoformat() if pinned_at else None,
+        "archived": bool(prefs.get("archived")),
+        "muted_until": muted.isoformat() if muted else None,
+    }
+
+
+async def _avatar_of(db, user_id: str) -> Optional[str]:
+    if not ObjectId.is_valid(user_id or ""):
+        return None
+    u = await db["users"].find_one({"_id": ObjectId(user_id)}, {"avatar_url": 1})
+    return (u or {}).get("avatar_url")
+
+
+async def _my_chat(db, connection_id: str, user_id: str) -> dict:
+    """A chat I'm in and still inside of, or an HTTP error."""
+    if not ObjectId.is_valid(connection_id or ""):
+        raise HTTPException(status_code=404, detail="Chat not found")
+    conn = await db["drop_connections"].find_one({"_id": ObjectId(connection_id)})
+    if not conn or user_id not in (conn["sender_id"], conn["unlocker_id"]):
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if conn.get("removed_at"):
+        raise HTTPException(status_code=403, detail="You're no longer inside this Room.")
+    return conn
+
+
+MAX_PINNED = 3
+MUTE_FOR = {"8h": timedelta(hours=8), "1w": timedelta(weeks=1)}
+MUTE_ALWAYS = datetime(9999, 1, 1, tzinfo=timezone.utc)
+
+
+class ChatPrefsUpdate(BaseModel):
+    pinned: Optional[bool] = None
+    archived: Optional[bool] = None
+    mute: Optional[str] = None        # "8h" | "1w" | "always" | "off"
+
+
+@router.post("/connections/{connection_id}/prefs")
+async def update_chat_prefs(
+    connection_id: str,
+    body: ChatPrefsUpdate,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Pin, archive or mute a chat, for me only. Up to 3 pinned; archiving unpins."""
+    conn = await _my_chat(db, connection_id, current_user_id)
+    key = f"chat_prefs.{current_user_id}"
+    sets, unsets = {}, {}
+    if body.pinned is True and not _prefs_of(conn, current_user_id).get("pinned_at"):
+        pinned = await db["drop_connections"].count_documents({
+            "$or": [{"sender_id": current_user_id}, {"unlocker_id": current_user_id}],
+            "removed_at": None,
+            f"{key}.pinned_at": {"$ne": None},
+        })
+        if pinned >= MAX_PINNED:
+            raise HTTPException(status_code=409, detail=f"You can pin up to {MAX_PINNED} chats.")
+        sets[f"{key}.pinned_at"] = now_utc()
+        sets[f"{key}.archived"] = False
+    elif body.pinned is False:
+        unsets[f"{key}.pinned_at"] = ""
+    if body.archived is not None:
+        sets[f"{key}.archived"] = body.archived
+        if body.archived:
+            unsets[f"{key}.pinned_at"] = ""
+            sets.pop(f"{key}.pinned_at", None)
+    if body.mute is not None:
+        if body.mute == "off":
+            unsets[f"{key}.muted_until"] = ""
+        elif body.mute == "always":
+            sets[f"{key}.muted_until"] = MUTE_ALWAYS
+        elif body.mute in MUTE_FOR:
+            sets[f"{key}.muted_until"] = now_utc() + MUTE_FOR[body.mute]
+        else:
+            raise HTTPException(status_code=400, detail="mute must be 8h, 1w, always or off.")
+    update = {}
+    if sets:
+        update["$set"] = sets
+    if unsets:
+        update["$unset"] = unsets
+    if update:
+        conn = await db["drop_connections"].find_one_and_update(
+            {"_id": conn["_id"]}, update, return_document=ReturnDocument.AFTER)
+    return _prefs_out(conn, current_user_id)
+
+
+@router.post("/connections/{connection_id}/clear")
+async def clear_chat(
+    connection_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Clear chat: hide every message so far, for me only (the other person keeps theirs)."""
+    conn = await _my_chat(db, connection_id, current_user_id)
+    res = await db["drop_messages"].update_many(
+        {"connection_id": str(conn["_id"])}, {"$addToSet": {"deleted_for": current_user_id}})
+    return {"cleared": res.modified_count}
+
+
+@router.post("/connections/{connection_id}/messages/{message_id}/star")
+async def star_message(
+    connection_id: str,
+    message_id: str,
+    data: dict,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Star or unstar a message, for me only."""
+    msg, _ = await _chat_message(db, connection_id, message_id, current_user_id)
+    if current_user_id in (msg.get("deleted_for") or []):
+        raise HTTPException(status_code=404, detail="Message not found")
+    starred = bool(data.get("starred", True))
+    op = "$addToSet" if starred else "$pull"
+    await db["drop_messages"].update_one({"_id": msg["_id"]}, {op: {"starred_by": current_user_id}})
+    return {"starred": starred}
+
+
+def _thread_item(msg: dict, viewer_id: str) -> dict:
+    """A message as a row in Starred / Media lists (never view-once media)."""
+    is_own = msg["sender_id"] == viewer_id
+    return {
+        "id": str(msg["_id"]),
+        "connection_id": msg["connection_id"],
+        "content": msg.get("content") or "",
+        "media_url": None if msg.get("view_once") else msg.get("media_url"),
+        "media_type": msg.get("media_type"),
+        "duration_seconds": msg.get("duration_seconds"),
+        "is_own": is_own,
+        "preview": _message_preview_text(msg.get("content", ""), msg.get("media_type"), bool(msg.get("view_once"))),
+        "created_at": msg["created_at"].isoformat(),
+    }
+
+
+@router.get("/connections/starred")
+async def starred_messages(
+    connection_id: Optional[str] = None,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """My starred messages, newest first, across every chat I'm still inside (or one chat)."""
+    conns = await db["drop_connections"].find({
+        "$or": [{"sender_id": current_user_id}, {"unlocker_id": current_user_id}], "removed_at": None,
+    }).to_list(None)
+    by_id = {str(c["_id"]): c for c in conns}
+    ids = [connection_id] if connection_id in by_id else ([] if connection_id else list(by_id))
+    items = []
+    if ids:
+        async for msg in db["drop_messages"].find({
+            "connection_id": {"$in": ids}, "starred_by": current_user_id,
+            "deleted_for": {"$ne": current_user_id}, "deleted_for_everyone": {"$ne": True},
+        }).sort("created_at", -1).limit(200):
+            c = by_id[msg["connection_id"]]
+            is_sender = c["sender_id"] == current_user_id
+            items.append({
+                **_thread_item(msg, current_user_id),
+                "other_anonymous_name": c["unlocker_anonymous_name"] if is_sender else c["sender_anonymous_name"],
+            })
+    return {"messages": items}
+
+
+LINK_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+
+
+@router.get("/connections/{connection_id}/media")
+async def chat_media(
+    connection_id: str,
+    kind: str = "media",
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Media, voice notes or links shared in a chat, newest first. View-once media never appears."""
+    conn = await _my_chat(db, connection_id, current_user_id)
+    q = {"connection_id": str(conn["_id"]), "deleted_for": {"$ne": current_user_id},
+         "deleted_for_everyone": {"$ne": True}}
+    if kind == "media":
+        q.update({"media_type": {"$in": ["image", "video"]}, "view_once": {"$ne": True}})
+    elif kind == "voice":
+        q["media_type"] = "voice"
+    elif kind == "links":
+        q["content"] = {"$regex": "https?://", "$options": "i"}
+    else:
+        raise HTTPException(status_code=400, detail="kind must be media, voice or links.")
+    items = []
+    async for msg in db["drop_messages"].find(q).sort("created_at", -1).limit(300):
+        row = _thread_item(msg, current_user_id)
+        if kind == "links":
+            row["links"] = LINK_RE.findall(msg.get("content") or "")[:5]
+        items.append(row)
+    counts = {}
+    base = {"connection_id": str(conn["_id"]), "deleted_for": {"$ne": current_user_id}, "deleted_for_everyone": {"$ne": True}}
+    counts["media"] = await db["drop_messages"].count_documents({**base, "media_type": {"$in": ["image", "video"]}, "view_once": {"$ne": True}})
+    counts["voice"] = await db["drop_messages"].count_documents({**base, "media_type": "voice"})
+    counts["links"] = await db["drop_messages"].count_documents({**base, "content": {"$regex": "https?://", "$options": "i"}})
+    return {"items": items, "counts": counts}
+
+
+MAX_FORWARD = 5
+
+
+@router.post("/connections/{connection_id}/messages/{message_id}/forward")
+async def forward_message(
+    connection_id: str,
+    message_id: str,
+    data: dict,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Forward one of the messages I can see to up to 5 of my other chats. View-once media and
+    deleted messages can't be forwarded; blocked or removed chats are skipped."""
+    from app.api.v1.chat_profile import is_blocked_between
+    msg, _ = await _chat_message(db, connection_id, message_id, current_user_id)
+    if current_user_id in (msg.get("deleted_for") or []):
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.get("view_once"):
+        raise HTTPException(status_code=400, detail="View-once photos and videos can't be forwarded.")
+    targets = [t for t in dict.fromkeys(data.get("to") or []) if isinstance(t, str)]
+    if not targets:
+        raise HTTPException(status_code=400, detail="Pick at least one chat.")
+    if len(targets) > MAX_FORWARD:
+        raise HTTPException(status_code=400, detail=f"You can forward to up to {MAX_FORWARD} chats at once.")
+    sent, skipped = [], []
+    for cid in targets:
+        try:
+            conn = await _my_chat(db, cid, current_user_id)
+        except HTTPException:
+            skipped.append(cid)
+            continue
+        other = conn["unlocker_id"] if conn["sender_id"] == current_user_id else conn["sender_id"]
+        if await is_blocked_between(db, current_user_id, other):
+            skipped.append(cid)
+            continue
+        await _deliver_message(
+            db, conn, current_user_id, content=msg.get("content") or "", media_url=msg.get("media_url"),
+            media_type=msg.get("media_type"), duration_seconds=msg.get("duration_seconds"), forwarded=True,
+        )
+        sent.append(cid)
+    if not sent:
+        raise HTTPException(status_code=403, detail="Those chats can't receive messages right now.")
+    return {"sent": sent, "skipped": skipped}
 
 
 @router.get("/connections/{connection_id}/messages")
@@ -2570,6 +2827,8 @@ async def get_drop_messages(
             "opened":          bool(msg.get("opened_at")),
             "reactions":       _reactions_out(msg, current_user_id),
             "deleted":         deleted_for_everyone,
+            "starred":         current_user_id in (msg.get("starred_by") or []),
+            "forwarded":       bool(msg.get("forwarded")) and not deleted_for_everyone,
             "reply_to":        reply_payload,
             "sender_id": msg["sender_id"],
             "is_own": is_own,
@@ -2633,6 +2892,8 @@ async def get_drop_messages(
             "message_count": conn.get("message_count", 0),
             "knock_pitch": (knock or {}).get("pitch"),
             "knock_intents": (knock or {}).get("intents") or [],
+            "other_avatar_url": await _avatar_of(db, other_user_id),
+            **_prefs_out(conn, current_user_id),
         },
         "chat_profile": {
             "background_pattern": chat_profile.get("background_pattern", "midnight-solid") if chat_profile else "midnight-solid",
@@ -2731,70 +2992,100 @@ async def send_drop_message(
                 "media_type": None if replied.get("deleted_for_everyone") else replied.get("media_type"),
             }
 
+    msg = await _deliver_message(
+        db, conn, current_user_id, content=content, media_url=media_url, media_type=media_type,
+        duration_seconds=data.get("duration_seconds"), reply_to=reply_to, view_once=view_once,
+    )
+    return _own_message_out(msg, current_user_id)
+
+
+def _own_message_out(msg: dict, viewer_id: str) -> dict:
+    return {
+        "id": str(msg["_id"]),
+        "content": msg["content"],
+        "media_url": msg.get("media_url"),
+        "media_type": msg.get("media_type"),
+        "duration_seconds": msg.get("duration_seconds"),
+        "view_once": bool(msg.get("view_once")),
+        "opened": False,
+        "reactions": [],
+        "deleted": False,
+        "starred": False,
+        "forwarded": bool(msg.get("forwarded")),
+        "reply_to": _reply_payload_for(msg.get("reply_to"), viewer_id),
+        "is_own": True,
+        "seen": False,
+        "time_ago": "just now",
+        "created_at": msg["created_at"].isoformat(),
+    }
+
+
+def _prefs_of(conn: dict, user_id: str) -> dict:
+    """This person's own settings for a chat: pinned_at, archived, muted_until."""
+    return ((conn.get("chat_prefs") or {}).get(user_id)) or {}
+
+
+def _muted_until(conn: dict, user_id: str) -> Optional[datetime]:
+    mu = _prefs_of(conn, user_id).get("muted_until")
+    mu = _ensure_aware(mu) if mu else None
+    return mu if mu and mu > now_utc() else None
+
+
+async def _deliver_message(db, conn: dict, sender_id: str, *, content: str, media_url=None, media_type=None,
+                           duration_seconds=None, reply_to=None, view_once=False, forwarded=False) -> dict:
+    """Store a message in a chat, tell the other person live, and push it unless they muted the chat."""
+    connection_id = str(conn["_id"])
     msg = {
         "_id": ObjectId(),
         "connection_id": connection_id,
-        "sender_id": current_user_id,
+        "sender_id": sender_id,
         "content": content,
         "media_url": media_url,
         "media_type": media_type,
-        "duration_seconds": data.get("duration_seconds"),
+        "duration_seconds": duration_seconds,
         "reply_to": reply_to,
         "view_once": view_once,
-        "created_at": now_utc()
+        "forwarded": forwarded,
+        "created_at": now_utc(),
     }
     await db["drop_messages"].insert_one(msg)
     await db["drop_connections"].update_one(
-        {"_id": ObjectId(connection_id)},
-        {"$inc": {"message_count": 1}, "$set": {"last_message_at": now_utc()}}
+        {"_id": conn["_id"]},
+        {"$inc": {"message_count": 1}, "$set": {"last_message_at": msg["created_at"]}}
     )
 
-    # Notify other party
-    other_id = conn["unlocker_id"] if current_user_id == conn["sender_id"] else conn["sender_id"]
-    sender_name = conn["sender_anonymous_name"] if current_user_id == conn["sender_id"] else conn["unlocker_anonymous_name"]
+    other_id = conn["unlocker_id"] if sender_id == conn["sender_id"] else conn["sender_id"]
+    sender_name = conn["sender_anonymous_name"] if sender_id == conn["sender_id"] else conn["unlocker_anonymous_name"]
 
-    # Push the new message to the other person.
     await emit_new_message(other_id, connection_id, {
         "id":               str(msg["_id"]),
         "content":          content,
         "media_url":        None if view_once else media_url,
         "media_type":       media_type,
-        "duration_seconds": msg["duration_seconds"],
+        "duration_seconds": duration_seconds,
         "view_once":        view_once,
         "opened":           False,
         "reactions":        [],
-        "sender_id":        current_user_id,
+        "sender_id":        sender_id,
         "is_own":           False,
         "deleted":          False,
+        "starred":          False,
+        "forwarded":        forwarded,
         "reply_to":         _reply_payload_for(reply_to, other_id),
         "time_ago":         "just now",
         "created_at":       msg["created_at"].isoformat(),
     })
 
-    notify_body = _message_preview_text(content, media_type, view_once)
-    await send_push_notification(
-        other_id,
-        f"{sender_name} sent a message 💬",
-        notify_body,
-        db,
-        {"url": f"/chat/{connection_id}"},
-        kind="message",
-    )
-
-    return {
-        "id": str(msg["_id"]),
-        "content": content,
-        "media_url": media_url,
-        "media_type": media_type,
-        "duration_seconds": msg["duration_seconds"],
-        "view_once": view_once,
-        "opened": False,
-        "reactions": [],
-        "deleted": False,
-        "reply_to": _reply_payload_for(reply_to, current_user_id),
-        "time_ago": "just now",
-        "created_at": msg["created_at"].isoformat(),
-    }
+    if not _muted_until(conn, other_id):
+        await send_push_notification(
+            other_id,
+            f"{sender_name} sent a message 💬",
+            _message_preview_text(content, media_type, view_once),
+            db,
+            {"url": f"/chat/{connection_id}"},
+            kind="message",
+        )
+    return msg
 
 
 @router.post("/connections/{connection_id}/messages/{message_id}/delete")

@@ -156,7 +156,7 @@ export default function LivePanel({ navigation }) {
   );
 }
 
-function StartSessionSheet({ onClose, onStarted, navigation }) {
+export function StartSessionSheet({ onClose, onStarted, navigation }) {
   const { showToast } = useToast();
   const [video, setVideo] = useState(true);
   const [everyone, setEveryone] = useState(true);

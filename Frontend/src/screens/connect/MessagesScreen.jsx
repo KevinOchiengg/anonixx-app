@@ -1,18 +1,20 @@
-/** The Rooms tab. Four sections: Knocks (who's at your door, first), Connections (your
- * conversations), Live (sessions and calls) and My Room (your Room and its welcome). The ⋮
- * menu opens every Room setting. Accepts { section } to open on one. */
+/** The Rooms tab, built like a messenger home. Four swipeable tabs: Chats (everyone you're
+ * connected with), Updates (who's live + your Room), Knocks (who's at your door) and Calls
+ * (call log). Long-press chats to pin, mute or archive them. Accepts { section } to open a tab
+ * (knocks / connections|chats / live|myroom|updates / calls). */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, FlatList, Modal, RefreshControl, ScrollView,
-  StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View, Image,
+  ActivityIndicator, Alert, Animated, BackHandler, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text,
+  TextInput, TouchableOpacity, TouchableWithoutFeedback, View, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { VideoView, useVideoPlayer } from 'expo-video';
-import { Inbox, Menu, MoreVertical, Plus, Search, X } from 'lucide-react-native';
-import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import {
+  Archive, ArrowLeft, BellOff, Bell, DoorOpen, MessageSquarePlus, MoreVertical, Phone, Pin, PinOff,
+  Radio, Search, Star, Video, X, Compass, Settings, Menu as MenuIcon, Trash2, Home,
+} from 'lucide-react-native';
+import { rs, rf, rp, SPACING, FONT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { API_BASE_URL } from '../../config/api';
@@ -20,918 +22,461 @@ import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useUnread } from '../../context/UnreadContext';
 import T from '../../utils/theme';
 import UnlockRequestsScreen from '../drops/UnlockRequestsScreen';
-import LivePanel from '../../components/rooms/LivePanel';
-import MyRoomPanel from '../../components/rooms/MyRoomPanel';
 import RoomSettingsSheet from '../../components/rooms/RoomSettingsSheet';
+import UpdatesPanel from '../../components/rooms/UpdatesPanel';
+import CallsPanel from '../../components/rooms/CallsPanel';
+import PickChatSheet from '../../components/rooms/PickChatSheet';
+import { ChatRow, st as rowSt } from '../../components/rooms/ChatBits';
+import { chatsApi, MUTE_OPTIONS } from '../../services/chats';
+import { callsApi, callParams } from '../../services/calls';
 
-const SECTIONS = [['knocks', 'Knocks'], ['connections', 'Connections'], ['live', 'Live'], ['myroom', 'My Room']];
+const TABS = [['chats', 'Chats'], ['updates', 'Updates'], ['knocks', 'Knocks'], ['calls', 'Calls']];
+const SECTION_TO_TAB = { knocks: 'knocks', connections: 'chats', chats: 'chats', live: 'updates', myroom: 'updates', updates: 'updates', calls: 'calls' };
+const FILTERS = [['all', 'All'], ['unread', 'Unread'], ['guests', 'Guests'], ['rooms', 'Their Rooms']];
 
-// ─── Helpers ──────────────────────────────────────────────────
-function formatChatTime(isoString) {
-  if (!isoString) return '';
-  const withT      = isoString.replace(' ', 'T');
-  const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(withT);
-  const normalised  = hasTimezone ? withT : withT + 'Z';
-  const msgDate     = new Date(normalised);
-  if (isNaN(msgDate.getTime())) return '';
-
-  const now       = new Date();
-  const msgStr    = msgDate.toDateString();
-
-  if (msgStr === now.toDateString()) {
-    return msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-  }
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (msgStr === yesterday.toDateString()) return 'Yesterday';
-
-  const sevenAgo = new Date(now);
-  sevenAgo.setDate(now.getDate() - 7);
-  if (msgDate > sevenAgo) {
-    return msgDate.toLocaleDateString([], { weekday: 'short' });
-  }
-  return msgDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
-
-// Avatar fallback colours: warm tones, distinct from coral (actions), gold and violet.
-const AVATAR_COLORS = ['#C96F53', '#C97B84', '#D98E4A', '#B56576', '#A8674F'];
-
-// Deterministic, not random — the same person gets the same color every
-// time the list re-renders, instead of flickering to a different one.
-function avatarColorFor(seed) {
-  if (!seed) return AVATAR_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
-// Poster frame for a video URL (swap the extension to an image).
-function videoPosterUrl(url) {
-  return url ? url.replace(/\.\w+(\?.*)?$/, '.jpg$1') : url;
-}
-
-// ─── Typing dots ──────────────────────────────────────────────
-const TypingDots = React.memo(() => {
-  const dot1 = useRef(new Animated.Value(0.3)).current;
-  const dot2 = useRef(new Animated.Value(0.3)).current;
-  const dot3 = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    const animate = (dot, delay) => Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(dot, { toValue: 1,   duration: 300, useNativeDriver: true }),
-        Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
-        Animated.delay(600),
-      ])
-    ).start();
-    animate(dot1, 0);
-    animate(dot2, 200);
-    animate(dot3, 400);
-  }, []);
-
-  return (
-    <View style={styles.typingDots}>
-      {[dot1, dot2, dot3].map((dot, i) => (
-        <Animated.View key={i} style={[styles.typingDot, { opacity: dot }]} />
-      ))}
-    </View>
-  );
-});
-
-// ─── Unanswered knocks as stories; tap to review, "All" opens the full list. ──
-const PendingUnlockStory = React.memo(({ request, onPress }) => {
-  const clueUri = request.media_url
-    ? (request.media_type === 'video' ? videoPosterUrl(request.media_url) : request.media_url)
-    : null;
-
-  return (
-    <TouchableOpacity style={styles.storyItem} onPress={() => onPress(request)} activeOpacity={0.8}>
-      <LinearGradient colors={[T.primary, T.gold]} style={styles.storyRing}>
-        <View style={styles.storyAvatar}>
-          {clueUri ? (
-            <Image source={{ uri: clueUri }} style={styles.storyAvatarImage} />
-          ) : (
-            <Text style={styles.storyAvatarText}>
-              {request.requester_anonymous_name?.[0]?.toUpperCase() || 'A'}
-            </Text>
-          )}
-        </View>
-      </LinearGradient>
-      <Text style={styles.storyName} numberOfLines={1}>
-        {request.requester_anonymous_name || 'Anonymous'}
-      </Text>
-    </TouchableOpacity>
-  );
-});
-
-const PendingUnlockStories = React.memo(({ requests, onOpenRequest, onOpenAll }) => {
-  if (!requests.length) return null;
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.storiesRow}
-      contentContainerStyle={styles.storiesContent}
-    >
-      <TouchableOpacity style={styles.storyItem} onPress={onOpenAll} activeOpacity={0.8}>
-        <View style={styles.storyAllRing}>
-          <Inbox size={rs(20)} color={T.primary} strokeWidth={2} />
-          <View style={styles.storyAllBadge}>
-            <Text style={styles.storyAllBadgeText}>{requests.length > 99 ? '99+' : requests.length}</Text>
-          </View>
-        </View>
-        <Text style={styles.storyName}>Knocking</Text>
-      </TouchableOpacity>
-      {requests.map((r) => (
-        <PendingUnlockStory key={r.id} request={r} onPress={onOpenRequest} />
-      ))}
-    </ScrollView>
-  );
-});
-
-// ─── Clue media inside the mini profile — same muted/looping treatment as
-// UnlockRequestsScreen's own thumbnail, just shown full-size here. ────────
-const RequestClueMedia = React.memo(({ mediaUrl, mediaType }) => {
-  const isVideo = mediaType === 'video';
-  const player = useVideoPlayer(
-    isVideo ? { uri: mediaUrl } : null,
-    (p) => { p.loop = true; p.muted = true; p.play(); },
-  );
-  if (!mediaUrl) return null;
-  return isVideo ? (
-    <VideoView player={player} style={styles.sheetMedia} contentFit="cover" />
-  ) : (
-    <Image source={{ uri: mediaUrl }} style={styles.sheetMedia} resizeMode="cover" />
-  );
-});
-
-// ─── Chat row: avatar with presence dot, name + time, preview + badge, and a read tick on my last message. ──
-const ChatCard = React.memo(({ item, onPress, isOnline, isTyping }) => {
-  const hasUnread = item.unread_count > 0;
-  const slideAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.spring(slideAnim, { toValue: 1, friction: 7, tension: 80, useNativeDriver: true }).start();
-  }, []);
-
-  const handlePress = useCallback(() => onPress(item), [onPress, item]);
-
-  // Avatar gradient keyed on their id, so it stays the same.
-  const avatarColor = useMemo(
-    () => avatarColorFor(item.other_user_id || item.other_anonymous_name),
-    [item.other_user_id, item.other_anonymous_name],
-  );
-
-  const previewText = item.last_message || (item.confession ? `"${item.confession}"` : 'nothing said yet');
-
-  // Only meaningful on my own last-sent message — mirrors the tick logic
-  // already used inside the chat itself (DropChatScreen's Bubble).
-  const showTick = item.last_message_is_own && !isTyping;
-
-  return (
-    <Animated.View style={{ opacity: slideAnim, transform: [{ translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
-      <TouchableOpacity
-        style={[styles.chatCard, hasUnread && styles.chatCardUnread]}
-        onPress={handlePress}
-        activeOpacity={0.8}
-      >
-        {/* Avatar: photo, else coloured initial; green dot when online. */}
-        <View style={styles.chatAvatarWrap}>
-          {item.other_avatar_url ? (
-            <View style={styles.chatAvatar}>
-              <Image source={{ uri: item.other_avatar_url }} style={styles.chatAvatarImage} />
-            </View>
-          ) : (
-            <View style={[styles.chatAvatar, { backgroundColor: avatarColor }]}>
-              <Text style={styles.chatAvatarInitial}>
-                {item.other_anonymous_name?.[0]?.toUpperCase() || 'A'}
-              </Text>
-            </View>
-          )}
-          {isOnline && <View style={styles.onlineDot} />}
-        </View>
-
-        {/* Info */}
-        <View style={styles.chatInfo}>
-          <View style={styles.chatTopRow}>
-            <Text style={[styles.chatName, hasUnread && styles.chatNameUnread, { flexShrink: 1 }]} numberOfLines={1}>
-              {item.other_anonymous_name}
-            </Text>
-            {item.is_sender !== null ? (
-              <Text style={styles.roleChip}>{item.is_sender ? 'your guest' : 'their Room'}</Text>
-            ) : null}
-            <View style={{ flex: 1 }} />
-            <Text style={styles.chatTime}>{formatChatTime(item.last_message_at)}</Text>
-          </View>
-
-          <View style={styles.chatBottomRow}>
-            {isTyping ? (
-              <View style={styles.typingRow}>
-                <TypingDots />
-                <Text style={styles.typingLabel}>typing</Text>
-              </View>
-            ) : (
-              <Text
-                style={[styles.chatPreview, hasUnread && styles.chatPreviewUnread]}
-                numberOfLines={1}
-              >
-                {showTick ? (
-                  <Text style={item.last_message_seen ? styles.tickSeen : styles.tickSent}>
-                    {item.last_message_seen ? '✓✓ ' : '✓ '}
-                  </Text>
-                ) : null}
-                {previewText}
-              </Text>
-            )}
-            {hasUnread && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{item.unread_count > 99 ? '99+' : item.unread_count}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-});
-
-// ─── Pinned Anonixx guide row (opens DemoChatScreen), so the tab is never empty. ──
-const AnonixxDemoCard = React.memo(({ onPress }) => (
-  <TouchableOpacity style={styles.chatCard} onPress={onPress} activeOpacity={0.85}>
-    <View style={styles.chatAvatarWrap}>
-      <View style={[styles.chatAvatar, { backgroundColor: '#A8674F' }]}>
-        <Text style={styles.chatAvatarInitial}>🌑</Text>
-      </View>
-      <View style={styles.onlineDot} />
-    </View>
-    <View style={styles.chatInfo}>
-      <View style={styles.chatTopRow}>
-        <Text style={styles.chatName} numberOfLines={1}>
-          anonixx<Text style={styles.demoGuideTag}> · guide</Text>
-        </Text>
-      </View>
-      <View style={styles.chatBottomRow}>
-        <Text style={styles.chatPreview} numberOfLines={1}>see what a Room looks like inside</Text>
-      </View>
-    </View>
-  </TouchableOpacity>
-));
-
-// ─── Screen ───────────────────────────────────────────────────
 export default function MessagesScreen({ navigation, route }) {
-  const insets            = useSafeAreaInsets();
-  const { showToast }     = useToast();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const { showToast } = useToast();
   const { refreshUnread } = useUnread();
   const { socketService } = useSocket();
 
-  const [items,       setItems]       = useState([]);
-  const [loading,     setLoading]     = useState(false);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [onlineIds,   setOnlineIds]   = useState(new Set());
-  const [typingIds,   setTypingIds]   = useState(new Set());
-  const [pendingRequests, setPendingRequests] = useState([]);
-  const [acceptingIds, setAcceptingIds] = useState(new Set());
-  const [detailRequest, setDetailRequest] = useState(null);
-  const [search, setSearch] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [filter, setFilter] = useState('all'); // 'all' | 'unread'
-  const [section, setSection] = useState(route?.params?.section || 'knocks');
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  useEffect(() => { if (route?.params?.section) setSection(route.params.section); }, [route?.params?.section]);
+  const startTab = SECTION_TO_TAB[route?.params?.section] || 'chats';
+  const [tab, setTab] = useState(startTab);
+  const [visited, setVisited] = useState(() => new Set([startTab]));
+  const pager = useRef(null);
+  const scrollX = useRef(new Animated.Value(TABS.findIndex(([k]) => k === startTab) * width)).current;
 
-  // ── Load chats (/drops/connections) and knocks (/unlock-requests/incoming) in parallel.
-  const loadInbox = useCallback(async () => {
-    setLoading(true);
+  const [chats, setChats] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [knocks, setKnocks] = useState([]);
+  const [onlineIds, setOnlineIds] = useState(new Set());
+  const [typingIds, setTypingIds] = useState(new Set());
+  const [filter, setFilter] = useState('all');
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hamburger, setHamburger] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [picker, setPicker] = useState(null); // 'chat' | 'call'
+  const [missed, setMissed] = useState(0);
+  const [liveCount, setLiveCount] = useState(0);
+  const callsRef = useRef(null);
+  const updatesRef = useRef(null);
+
+  const goTab = useCallback((key, animated = true) => {
+    const i = TABS.findIndex(([k]) => k === key);
+    setTab(key);
+    setVisited((v) => (v.has(key) ? v : new Set(v).add(key)));
+    pager.current?.scrollTo({ x: i * width, animated });
+  }, [width]);
+
+  useEffect(() => {
+    const t = SECTION_TO_TAB[route?.params?.section];
+    if (t) goTab(t, false);
+  }, [route?.params?.section]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Android back: leave selection or search first, like any messenger.
+  useFocusEffect(useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (selected.length) { setSelected([]); return true; }
+      if (searching) { setSearching(false); setQuery(''); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [selected.length, searching]));
+
+  // ── Data ────────────────────────────────────────────────────
+  const load = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) { setLoading(false); return; }
-
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const [dropsRes, unlockReqRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/v1/drops/connections`,  { headers }),
-        fetch(`${API_BASE_URL}/api/v1/unlock-requests/incoming`, { headers }),
+      if (!token) { setChats([]); return; }
+      const [list, k] = await Promise.all([
+        chatsApi.list(),
+        fetch(`${API_BASE_URL}/api/v1/unlock-requests/incoming`, { headers: { Authorization: `Bearer ${token}` } })
+          .then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
       ]);
-
-      const dropsData   = dropsRes.ok    ? await dropsRes.json().catch(() => [])    : [];
-      const unlockReqData = unlockReqRes.ok ? await unlockReqRes.json().catch(() => ({})) : {};
-      const incomingRequests = unlockReqData?.requests || [];
-      setPendingRequests(incomingRequests);
-
-      // Normalise drop connections → inbox shape
-      // Production endpoint returns { connections: [...] } with field "id"
-      const rawDrops = dropsData?.connections || (Array.isArray(dropsData) ? dropsData : []);
-      const dropItems = rawDrops.map(d => ({
-        id:                   d.id,
-        chat_type:            'drop',
-        other_anonymous_name: d.other_anonymous_name || 'Anonymous',
-        other_avatar_url:     d.other_avatar_url || null,
-        other_user_id:        d.other_user_id || '',
-        other_is_online:      !!d.other_is_online,
-        last_message:         d.last_message  || null,
-        last_message_at:      d.last_message_at || null,
-        last_message_is_own:  !!d.last_message_is_own,
-        last_message_seen:    !!d.last_message_seen,
-        unread_count:         d.unread_count || 0,
-        message_count:        d.message_count || 0,
-        drop_id:              d.drop_id       || null,
-        confession:           d.confession    || null,
-        is_sender:            d.is_sender     ?? null,
-      }));
-
-      // Sort by most-recent message
-      const merged = [...dropItems].sort((a, b) => {
-        const ta = a.last_message_at || '';
-        const tb = b.last_message_at || '';
-        return tb.localeCompare(ta);
-      });
-
-      setItems(merged);
-      // Seed presence from this fetch (fresh ground truth); socket
-      // user_online/user_offline events keep it live after this.
-      setOnlineIds(new Set(dropItems.filter(d => d.other_is_online).map(d => d.other_user_id).filter(Boolean)));
+      const rows = list.connections || [];
+      setChats(rows);
+      setKnocks(k?.requests || []);
+      setOnlineIds(new Set(rows.filter((c) => c.other_is_online).map((c) => c.other_user_id)));
       refreshUnread();
-    } catch (e) {
-      console.warn('MessagesScreen: loadInbox error', e);
+    } catch {
+      setChats((c) => c || []);
       showToast({ type: 'error', message: 'Connection error. Pull down to retry.' });
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   }, [refreshUnread, showToast]);
 
-  useFocusEffect(useCallback(() => { loadInbox(); }, [loadInbox]));
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // ── Socket: online/typing ─────────────────────────────────
+  // Live list: presence, typing, new messages and knocks.
   useEffect(() => {
-    if (!socketService) return;
-
-    const handleOnline  = ({ userId }) => setOnlineIds(prev => new Set([...prev, userId]));
-    const handleOffline = ({ userId }) => setOnlineIds(prev => { const s = new Set(prev); s.delete(userId); return s; });
-    const typingTimers  = {};
-    const handleTyping  = ({ userId }) => {
+    if (!socketService) return undefined;
+    let pending = null;
+    const soon = () => { clearTimeout(pending); pending = setTimeout(load, 400); };
+    const timers = {};
+    const onOnline = ({ userId }) => setOnlineIds((p) => new Set(p).add(userId));
+    const onOffline = ({ userId }) => setOnlineIds((p) => { const s = new Set(p); s.delete(userId); return s; });
+    const onTyping = ({ userId }) => {
       if (!userId) return;
-      setTypingIds(prev => new Set([...prev, userId]));
-      clearTimeout(typingTimers[userId]);
-      typingTimers[userId] = setTimeout(() => {
-        setTypingIds(prev => { const s = new Set(prev); s.delete(userId); return s; });
-      }, 3000);
+      setTypingIds((p) => new Set(p).add(userId));
+      clearTimeout(timers[userId]);
+      timers[userId] = setTimeout(() => setTypingIds((p) => { const s = new Set(p); s.delete(userId); return s; }), 3000);
     };
-
-    const handleUnlockRequestChange = () => loadInbox();
-
-    socketService.on?.('user_online',  handleOnline);
-    socketService.on?.('user_offline', handleOffline);
-    socketService.on?.('user_typing',  handleTyping);
-    socketService.on?.('unlock_request_received',  handleUnlockRequestChange);
-    socketService.on?.('unlock_request_cancelled', handleUnlockRequestChange);
-
+    const events = [['user_online', onOnline], ['user_offline', onOffline], ['user_typing', onTyping],
+      ['new_message', soon], ['messages_seen', soon], ['message_deleted', soon],
+      ['unlock_request_received', soon], ['unlock_request_cancelled', soon]];
+    events.forEach(([e, fn]) => socketService.on?.(e, fn));
     return () => {
-      socketService.off?.('user_online',  handleOnline);
-      socketService.off?.('user_offline', handleOffline);
-      socketService.off?.('user_typing',  handleTyping);
-      socketService.off?.('unlock_request_received',  handleUnlockRequestChange);
-      socketService.off?.('unlock_request_cancelled', handleUnlockRequestChange);
-      Object.values(typingTimers).forEach(clearTimeout);
+      events.forEach(([e, fn]) => socketService.off?.(e, fn));
+      clearTimeout(pending);
+      Object.values(timers).forEach(clearTimeout);
     };
-  }, [socketService, loadInbox]);
+  }, [socketService, load]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadInbox();
-    setRefreshing(false);
-  }, [loadInbox]);
+  // ── Derived ─────────────────────────────────────────────────
+  const inbox = useMemo(() => (chats || []).filter((c) => !c.archived), [chats]);
+  const archived = useMemo(() => (chats || []).filter((c) => c.archived), [chats]);
+  const unreadChats = inbox.filter((c) => c.unread_count > 0).length;
+  const archivedUnread = archived.reduce((n, c) => n + (c.unread_count > 0 ? 1 : 0), 0);
 
-  // ── Open chat — route by type ─────────────────────────────
-  const handleOpenChat = useCallback((item) => {
-    navigation.navigate('DropChat', { connectionId: item.id });
-  }, [navigation]);
-
-  const handleOpenDemo = useCallback(() => navigation.navigate('DemoChat'), [navigation]);
-
-  // "+": new chats start from the feed, so go there.
-  const handleGoToFeed = useCallback(() => navigation.navigate('Feed'), [navigation]);
-
-  // Header search icon toggles the search bar instead of it always sitting
-  // there — closing it also clears the query so the list resets.
-  const toggleSearch = useCallback(() => {
-    setSearchOpen((v) => {
-      if (v) setSearch('');
-      return !v;
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = q ? chats || [] : inbox;
+    return base.filter((c) => {
+      if (filter === 'unread' && !(c.unread_count > 0)) return false;
+      if (filter === 'guests' && !c.is_sender) return false;
+      if (filter === 'rooms' && c.is_sender) return false;
+      if (!q) return true;
+      return c.other_anonymous_name?.toLowerCase().includes(q)
+        || c.last_message?.toLowerCase().includes(q)
+        || c.confession?.toLowerCase().includes(q);
     });
-  }, []);
+  }, [chats, inbox, filter, query]);
 
-  // ── Story avatar tap → mini profile sheet, not an instant accept ──
-  const handleOpenRequestDetail = useCallback((request) => {
-    if (request.requester_id) navigation.navigate('Room', { userId: request.requester_id });
-    else setDetailRequest(request);
-  }, [navigation]);
-  const closeDetail = useCallback(() => setDetailRequest(null), []);
-  const handleOpenAllRequests = useCallback(() => setSection('knocks'), []);
+  // ── Selection (long-press) ──────────────────────────────────
+  const selecting = selected.length > 0;
+  const selRows = (chats || []).filter((c) => selected.includes(c.id));
+  const toggleSelect = useCallback((item) => setSelected((s) => (s.includes(item.id) ? s.filter((x) => x !== item.id) : [...s, item.id])), []);
+  const clearSelection = useCallback(() => setSelected([]), []);
 
-  // Accept from the mini profile and open the new chat.
-  const handleAcceptRequest = useCallback(async (request) => {
-    setAcceptingIds((prev) => new Set(prev).add(request.id));
+  const applyPrefs = useCallback(async (body, done) => {
+    const ids = [...selected];
+    clearSelection();
+    const results = await Promise.allSettled(ids.map((id) => chatsApi.prefs(id, body)));
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed) showToast({ type: 'info', message: failed.reason?.message || 'Some chats could not be updated.' });
+    else if (done) showToast({ type: 'success', message: done(ids.length) });
+    load();
+  }, [selected, clearSelection, showToast, load]);
+
+  const allPinned = selRows.length > 0 && selRows.every((c) => c.pinned);
+  const allMuted = selRows.length > 0 && selRows.every((c) => c.muted_until);
+  const onPin = () => applyPrefs({ pinned: !allPinned });
+  const onArchive = () => applyPrefs({ archived: true }, (n) => `${n} ${n === 1 ? 'chat' : 'chats'} archived`);
+  const onMute = () => {
+    if (allMuted) { applyPrefs({ mute: 'off' }); return; }
+    Alert.alert('Mute notifications', 'Messages still arrive; you just won’t get a notification.', [
+      ...MUTE_OPTIONS.map(([v, label]) => ({ text: label, onPress: () => applyPrefs({ mute: v }) })),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  // ── Actions ─────────────────────────────────────────────────
+  const openChat = useCallback((item) => {
+    if (selecting) { toggleSelect(item); return; }
+    navigation.navigate('DropChat', { connectionId: item.id });
+  }, [navigation, selecting, toggleSelect]);
+
+  const startCall = useCallback(async (item, video) => {
+    setPicker(null);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests/${request.id}/accept`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setPendingRequests((prev) => prev.filter((r) => r.id !== request.id));
-        setDetailRequest(null);
-        showToast({ type: 'success', message: `You're chatting with ${request.requester_anonymous_name || 'them'} now.` });
-        loadInbox();
-        navigation.navigate('DropChat', { connectionId: data.connection_id });
-      } else {
-        showToast({ type: 'warning', message: data.detail || 'Could not accept right now.' });
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Something went wrong.' });
-    } finally {
-      setAcceptingIds((prev) => { const s = new Set(prev); s.delete(request.id); return s; });
+      const d = await callsApi.direct(item.id, video);
+      navigation.navigate('DropCall', callParams(d, { other: { name: item.other_anonymous_name, avatar_url: item.other_avatar_url, ...(d.other || {}) } }));
+    } catch (e) {
+      showToast({ type: e.status === 409 || e.status === 403 ? 'info' : 'error', message: e.message });
     }
-  }, [showToast, loadInbox, navigation]);
+  }, [navigation, showToast]);
 
-  // Decline from inside the mini profile — same effect as declining on the
-  // full requests screen, just without leaving this one.
-  const handleDeclineRequest = useCallback(async (request) => {
-    setAcceptingIds((prev) => new Set(prev).add(request.id));
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests/${request.id}/decline`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setPendingRequests((prev) => prev.filter((r) => r.id !== request.id));
-        setDetailRequest(null);
-      } else {
-        showToast({ type: 'error', message: 'Could not decline right now.' });
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Something went wrong.' });
-    } finally {
-      setAcceptingIds((prev) => { const s = new Set(prev); s.delete(request.id); return s; });
-    }
-  }, [showToast]);
+  const onFab = () => {
+    if (tab === 'chats') setPicker('chat');
+    else if (tab === 'calls') setPicker('call');
+    else if (tab === 'updates') updatesRef.current?.goLive();
+  };
 
-  const renderItem = useCallback(({ item }) => (
-    <ChatCard
-      item={item}
-      onPress={handleOpenChat}
-      isOnline={onlineIds.has(item.other_user_id)}
-      isTyping={typingIds.has(item.other_user_id)}
-    />
-  ), [handleOpenChat, onlineIds, typingIds]);
+  const menuItems = [
+    tab === 'calls' && { icon: Trash2, label: 'Clear call log', onPress: () => Alert.alert('Clear call log?', 'This only clears it for you.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => callsRef.current?.clear() }]) },
+    tab === 'updates' && { icon: Radio, label: 'Go live', onPress: () => updatesRef.current?.goLive() },
+    { icon: Star, label: 'Starred messages', onPress: () => navigation.navigate('StarredMessages') },
+    { icon: Archive, label: `Archived${archived.length ? ` (${archived.length})` : ''}`, onPress: () => navigation.navigate('ArchivedChats') },
+    { icon: Home, label: 'My Room', onPress: () => goTab('updates') },
+    { icon: Settings, label: 'Room settings', onPress: () => setSettingsOpen(true) },
+    { icon: MenuIcon, label: 'More of Anonixx', onPress: () => setHamburger(true) },
+  ].filter(Boolean);
 
-  const keyExtractor = useCallback((item) => `${item.chat_type}-${item.id}`, []);
+  // ── Pieces ──────────────────────────────────────────────────
+  const header = selecting ? (
+    <View style={s.header}>
+      <TouchableOpacity onPress={clearSelection} hitSlop={HIT_SLOP} accessibilityLabel="Cancel selection"><ArrowLeft size={rs(22)} color={T.text} /></TouchableOpacity>
+      <Text style={[s.title, s.selTitle]}>{selected.length}</Text>
+      <View style={s.headerIcons}>
+        <TouchableOpacity onPress={onPin} hitSlop={HIT_SLOP} accessibilityLabel={allPinned ? 'Unpin' : 'Pin'}>
+          {allPinned ? <PinOff size={rs(21)} color={T.text} /> : <Pin size={rs(21)} color={T.text} />}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMute} hitSlop={HIT_SLOP} accessibilityLabel={allMuted ? 'Unmute' : 'Mute'}>
+          {allMuted ? <Bell size={rs(21)} color={T.text} /> : <BellOff size={rs(21)} color={T.text} />}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onArchive} hitSlop={HIT_SLOP} accessibilityLabel="Archive"><Archive size={rs(21)} color={T.text} /></TouchableOpacity>
+      </View>
+    </View>
+  ) : searching ? (
+    <View style={s.header}>
+      <TouchableOpacity onPress={() => { setSearching(false); setQuery(''); }} hitSlop={HIT_SLOP} accessibilityLabel="Close search"><ArrowLeft size={rs(22)} color={T.text} /></TouchableOpacity>
+      <TextInput
+        style={s.searchInput} value={query} onChangeText={setQuery} autoFocus
+        placeholder="Search chats…" placeholderTextColor={T.textMuted} returnKeyType="search"
+      />
+      {query ? <TouchableOpacity onPress={() => setQuery('')} hitSlop={HIT_SLOP}><X size={rs(18)} color={T.textSecondary} /></TouchableOpacity> : null}
+    </View>
+  ) : (
+    <View style={s.header}>
+      <Text style={s.title}>Rooms</Text>
+      <View style={s.headerIcons}>
+        <TouchableOpacity onPress={() => { setSearching(true); goTab('chats'); }} hitSlop={HIT_SLOP} accessibilityLabel="Search chats">
+          <Search size={rs(21)} color={T.text} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setMenuOpen(true)} hitSlop={HIT_SLOP} accessibilityLabel="More options">
+          <MoreVertical size={rs(21)} color={T.text} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
-  // Total unread for header
-  const totalUnread = items.reduce((acc, i) => acc + (i.unread_count || 0), 0);
+  const counts = { chats: unreadChats, updates: liveCount, knocks: knocks.length, calls: missed };
+  const tabW = width / TABS.length;
+  const tabBar = !searching && !selecting ? (
+    <View style={s.tabs} accessibilityRole="tablist">
+      {TABS.map(([key, label]) => {
+        const on = tab === key;
+        const n = counts[key];
+        return (
+          <TouchableOpacity key={key} style={s.tab} onPress={() => goTab(key)} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+            <Text style={[s.tabText, on && s.tabTextOn]}>{label}</Text>
+            {n > 0 ? (
+              key === 'updates' ? <View style={s.tabDot} /> : (
+                <View style={[s.tabBadge, key === 'knocks' && s.tabBadgeHot]}><Text style={s.tabBadgeText}>{n > 99 ? '99+' : n}</Text></View>
+              )
+            ) : null}
+          </TouchableOpacity>
+        );
+      })}
+      <Animated.View style={[s.indicator, { width: tabW, transform: [{ translateX: Animated.divide(scrollX, TABS.length) }] }]} />
+    </View>
+  ) : null;
 
-  const filteredItems = useMemo(() => {
-    const base = filter === 'unread' ? items.filter((i) => (i.unread_count || 0) > 0) : items;
-    const q = search.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter((i) => (
-      i.other_anonymous_name?.toLowerCase().includes(q)
-      || i.last_message?.toLowerCase().includes(q)
-      || i.confession?.toLowerCase().includes(q)
-    ));
-  }, [items, search, filter]);
+  const chatsHeader = (
+    <View>
+      {!query ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+          {FILTERS.map(([k, label]) => (
+            <TouchableOpacity key={k} onPress={() => setFilter(k)} style={[s.chip, filter === k && s.chipOn]} activeOpacity={0.8}>
+              <Text style={[s.chipText, filter === k && s.chipTextOn]}>{label}{k === 'unread' && unreadChats ? ` ${unreadChats}` : ''}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : null}
+      {!query && archived.length > 0 ? (
+        <TouchableOpacity style={s.utilRow} onPress={() => navigation.navigate('ArchivedChats')} activeOpacity={0.7}>
+          <View style={s.utilIcon}><Archive size={rs(19)} color={T.primary} /></View>
+          <Text style={s.utilText}>Archived</Text>
+          {archivedUnread ? <Text style={s.utilCount}>{archivedUnread}</Text> : null}
+        </TouchableOpacity>
+      ) : null}
+      {!query && knocks.length > 0 ? (
+        <TouchableOpacity style={s.utilRow} onPress={() => goTab('knocks')} activeOpacity={0.7}>
+          <View style={[s.utilIcon, s.utilIconHot]}><DoorOpen size={rs(19)} color="#fff" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.utilText}>{knocks.length === 1 ? '1 person is knocking' : `${knocks.length} people are knocking`}</Text>
+            <Text style={s.utilSub} numberOfLines={1}>{knocks.slice(0, 3).map((k) => k.requester_anonymous_name || 'Someone').join(', ')} · tap to answer</Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+
+  const emptyChats = chats === null ? (
+    <ActivityIndicator color={T.primary} style={{ marginTop: rp(40) }} />
+  ) : query ? (
+    <Text style={s.emptyText}>No chats match “{query.trim()}”.</Text>
+  ) : filter !== 'all' ? (
+    <Text style={s.emptyText}>{filter === 'unread' ? 'You’re all caught up.' : filter === 'guests' ? 'Nobody you’ve let in yet.' : 'You’re not inside anyone’s Room yet.'}</Text>
+  ) : (
+    <View style={s.empty}>
+      <View style={s.emptyIcon}><MessageSquarePlus size={rs(28)} color={T.primary} /></View>
+      <Text style={s.emptyTitle}>No chats yet</Text>
+      <Text style={s.emptyText}>Let someone in from Knocks, or knock on a Room you like. Every conversation lives here.</Text>
+      <TouchableOpacity style={s.emptyBtn} onPress={() => (knocks.length ? goTab('knocks') : navigation.navigate('Feed'))}>
+        <Text style={s.emptyBtnText}>{knocks.length ? `Answer ${knocks.length} at your door` : 'Find someone on the feed'}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => navigation.navigate('DemoChat')} style={{ marginTop: rp(14) }}>
+        <Text style={s.link}>See what a Room looks like inside</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const pages = {
+    chats: (
+      <FlatList
+        data={chats === null ? [] : visible}
+        keyExtractor={(c) => c.id}
+        ListHeaderComponent={chatsHeader}
+        ListEmptyComponent={emptyChats}
+        renderItem={({ item }) => (
+          <ChatRow
+            item={item}
+            online={onlineIds.has(item.other_user_id)}
+            typing={typingIds.has(item.other_user_id)}
+            selected={selected.includes(item.id)}
+            onPress={openChat}
+            onLongPress={toggleSelect}
+          />
+        )}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: rs(110) }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={T.primary} colors={[T.primary]} />}
+        ListFooterComponent={chats && inbox.length ? (
+          <Text style={s.footer}>Only the two of you can read a chat. Calls and chats are separate: ending one never ends the other.</Text>
+        ) : null}
+      />
+    ),
+    updates: <UpdatesPanel ref={updatesRef} navigation={navigation} onLiveCount={setLiveCount} />,
+    knocks: <UnlockRequestsScreen embedded navigation={navigation} />,
+    calls: <CallsPanel ref={callsRef} navigation={navigation} active={tab === 'calls'} onMissedCount={setMissed} />,
+  };
+
+  const FabIcon = tab === 'chats' ? MessageSquarePlus : tab === 'calls' ? Phone : tab === 'updates' ? Video : null;
 
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
-      {/* Header: menu + title left; search + "+" right. */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.iconBtn} hitSlop={HIT_SLOP}>
-            <Menu size={rs(22)} color={T.text} strokeWidth={2} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>rooms</Text>
-          {totalUnread > 0 && (
-            <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.headerRight}>
-          {section === 'connections' && (
-            <TouchableOpacity onPress={toggleSearch} style={styles.iconBtn} hitSlop={HIT_SLOP} accessibilityLabel={searchOpen ? 'Close search' : 'Search conversations'}>
-              {searchOpen
-                ? <X size={rs(20)} color={T.textSecondary} strokeWidth={2} />
-                : <Search size={rs(20)} color={T.textSecondary} strokeWidth={2} />}
-            </TouchableOpacity>
-          )}
-          {/* New chats start from the feed, so "+" goes there. */}
-          <TouchableOpacity onPress={handleGoToFeed} style={styles.addBtn} hitSlop={HIT_SLOP} accessibilityLabel="Find someone on the feed">
-            <Plus size={rs(20)} color="#fff" strokeWidth={2.4} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setSettingsOpen(true)} style={styles.iconBtn} hitSlop={HIT_SLOP} accessibilityLabel="Room settings">
-            <MoreVertical size={rs(20)} color={T.text} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Sections: Knocks first, then Connections, Live, My Room. */}
-      <View style={styles.sections} accessibilityRole="tablist">
-        {SECTIONS.map(([key, label]) => {
-          const count = key === 'knocks' ? pendingRequests.length : key === 'connections' ? totalUnread : 0;
-          const on = section === key;
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[styles.sectionBtn, on && styles.sectionBtnOn]}
-              onPress={() => setSection(key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: on }}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.sectionText, on && styles.sectionTextOn]} numberOfLines={1}>{label}</Text>
-              {count > 0 && (
-                <View style={[styles.sectionBadge, key === 'knocks' && styles.sectionBadgeKnock]}>
-                  <Text style={styles.sectionBadgeText}>{count > 99 ? '99+' : count}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {section === 'knocks' && <UnlockRequestsScreen embedded navigation={navigation} />}
-      {section === 'live' && <LivePanel navigation={navigation} />}
-      {section === 'myroom' && <MyRoomPanel navigation={navigation} />}
-
-      {section === 'connections' && (
-      <>
-
-      {/* Search the loaded chats by name, last message or confession. */}
-      {searchOpen && section === 'connections' && (
-        <View style={styles.searchWrap}>
-          <View style={styles.searchBar}>
-            <Search size={rs(16)} color={T.textMuted} strokeWidth={2} />
-            <TextInput
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search"
-              placeholderTextColor={T.textMuted}
-              returnKeyType="search"
-              autoFocus
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')} hitSlop={HIT_SLOP}>
-                <X size={rs(15)} color={T.textMuted} strokeWidth={2} />
-              </TouchableOpacity>
-            )}
+    <View style={[s.safe, { paddingTop: insets.top }]}>
+      {header}
+      {tabBar}
+      <Animated.ScrollView
+        ref={pager}
+        horizontal
+        pagingEnabled
+        scrollEnabled={!selecting && !searching}
+        showsHorizontalScrollIndicator={false}
+        contentOffset={{ x: TABS.findIndex(([k]) => k === startTab) * width, y: 0 }}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+        onMomentumScrollEnd={(e) => {
+          const key = TABS[Math.round(e.nativeEvent.contentOffset.x / width)]?.[0];
+          if (key && key !== tab) { setTab(key); setVisited((v) => (v.has(key) ? v : new Set(v).add(key))); }
+        }}
+        keyboardShouldPersistTaps="handled"
+        style={{ flex: 1 }}
+      >
+        {TABS.map(([key]) => (
+          <View key={key} style={{ width, flex: 1 }}>
+            {visited.has(key) || key === 'calls' ? pages[key] : null}
           </View>
-        </View>
-      )}
+        ))}
+      </Animated.ScrollView>
 
-      {/* Waiting knocks; hidden when there are none. */}
-      <PendingUnlockStories
-        requests={pendingRequests}
-        onOpenRequest={handleOpenRequestDetail}
-        onOpenAll={handleOpenAllRequests}
+      {FabIcon && !selecting && !searching ? (
+        <TouchableOpacity style={s.fab} onPress={onFab} activeOpacity={0.85}
+          accessibilityLabel={tab === 'chats' ? 'New chat' : tab === 'calls' ? 'New call' : 'Go live'}>
+          <FabIcon size={rs(23)} color="#fff" strokeWidth={2.2} />
+        </TouchableOpacity>
+      ) : null}
+
+      {/* ⋮ menu */}
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <TouchableWithoutFeedback onPress={() => setMenuOpen(false)}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
+        <View style={[s.menu, { top: insets.top + rp(8) }]}>
+          {menuItems.map(({ icon: Icon, label, onPress }) => (
+            <TouchableOpacity key={label} style={s.menuItem} onPress={() => { setMenuOpen(false); onPress(); }}>
+              <Icon size={rs(17)} color={T.textSecondary} />
+              <Text style={s.menuText}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Modal>
+
+      <PickChatSheet
+        visible={picker === 'chat'}
+        mode="open"
+        title="New chat"
+        onClose={() => setPicker(null)}
+        onOpen={(c) => { setPicker(null); navigation.navigate('DropChat', { connectionId: c.id }); }}
+        extras={[
+          { label: 'Find someone new', hint: 'Browse the feed and knock on a Room', icon: <Compass size={rs(20)} color="#fff" />, onPress: () => { setPicker(null); navigation.navigate('Feed'); } },
+          { label: 'Go live', hint: 'Open a voice or video session in your Room', icon: <Radio size={rs(20)} color="#fff" />, onPress: () => { setPicker(null); goTab('updates'); setTimeout(() => updatesRef.current?.goLive(), 350); } },
+        ]}
+      />
+      <PickChatSheet
+        visible={picker === 'call'}
+        mode="call"
+        title="New call"
+        subtitle="Voice or video, free, with anyone you're connected with"
+        onClose={() => setPicker(null)}
+        onCall={startCall}
       />
 
-      {/* Filter chips — All / Unread, coral pill when active */}
-      <View style={styles.filterRow}>
-        {[['all', 'All'], ['unread', 'Unread']].map(([key, label]) => (
-          <TouchableOpacity
-            key={key}
-            onPress={() => setFilter(key)}
-            style={[styles.filterChip, filter === key && styles.filterChipActive]}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>
-              {label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Anonixx guide row, always shown. */}
-      {search.trim().length === 0 && (
-        <View style={styles.demoWrap}>
-          <AnonixxDemoCard onPress={handleOpenDemo} />
-        </View>
-      )}
-
-      {/* Content */}
-      {loading && !refreshing ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={T.primary} />
-        </View>
-      ) : filteredItems.length === 0 ? (
-        search.trim().length > 0 ? (
-          <View style={styles.centered}>
-            <Text style={styles.noResultsText}>No Rooms match "{search.trim()}"</Text>
-          </View>
-        ) : filter === 'unread' ? (
-          <View style={styles.centered}>
-            <Text style={styles.noResultsText}>You're all caught up.</Text>
-          </View>
-        ) : (
-          <View style={styles.centered}>
-            <Text style={styles.emptyTitle}>No connections yet</Text>
-            <Text style={styles.noResultsText}>Let someone in from Knocks, or knock on a Room you like. Conversations live here.</Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={() => (pendingRequests.length ? setSection('knocks') : handleGoToFeed())}>
-              <Text style={styles.emptyBtnText}>{pendingRequests.length ? `See ${pendingRequests.length} at your door` : 'Find someone on the feed'}</Text>
-            </TouchableOpacity>
-          </View>
-        )
-      ) : (
-        <FlatList
-          data={filteredItems}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={12}
-          windowSize={10}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />
-          }
-        />
-      )}
-
-      </>
-      )}
-
-      <HamburgerMenu visible={menuVisible} onClose={() => setMenuVisible(false)} navigation={navigation} />
+      <HamburgerMenu visible={hamburger} onClose={() => setHamburger(false)} navigation={navigation} />
       <RoomSettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} navigation={navigation} />
-
-      {/* Mini profile with their clues, and Accept / Decline. */}
-      <Modal visible={!!detailRequest} transparent animationType="fade" onRequestClose={closeDetail}>
-        <TouchableWithoutFeedback onPress={closeDetail}>
-          <View style={styles.sheetBackdrop} />
-        </TouchableWithoutFeedback>
-        {detailRequest && (
-          <View style={styles.sheetCard}>
-            <TouchableOpacity style={styles.sheetClose} onPress={closeDetail} hitSlop={HIT_SLOP}>
-              <X size={rs(18)} color={T.textSecondary} />
-            </TouchableOpacity>
-
-            {detailRequest.media_url ? (
-              <RequestClueMedia mediaUrl={detailRequest.media_url} mediaType={detailRequest.media_type} />
-            ) : (
-              <View style={styles.sheetNoMedia}>
-                <Text style={styles.sheetNoMediaInitial}>
-                  {detailRequest.requester_anonymous_name?.[0]?.toUpperCase() || 'A'}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.sheetBody}>
-              <Text style={styles.sheetName}>{detailRequest.requester_anonymous_name || 'Anonymous'}</Text>
-              <Text style={styles.sheetSub}>wants to unlock your confession</Text>
-              {!!detailRequest.confession_snippet && (
-                <Text style={styles.sheetSnippet} numberOfLines={3}>
-                  &ldquo;{detailRequest.confession_snippet}&rdquo;
-                </Text>
-              )}
-
-              <View style={styles.sheetActions}>
-                <TouchableOpacity
-                  style={styles.sheetDeclineBtn}
-                  onPress={() => handleDeclineRequest(detailRequest)}
-                  disabled={acceptingIds.has(detailRequest.id)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.sheetDeclineText}>Decline</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.sheetAcceptBtn}
-                  onPress={() => handleAcceptRequest(detailRequest)}
-                  disabled={acceptingIds.has(detailRequest.id)}
-                  activeOpacity={0.85}
-                >
-                  {acceptingIds.has(detailRequest.id)
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={styles.sheetAcceptText}>Accept</Text>}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-      </Modal>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.background },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md, paddingVertical: rp(14),
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: rp(10) },
-  headerTitle: { fontSize: rs(21), fontWeight: '800', color: T.primary, letterSpacing: -0.3 },
-  headerBadge: {
-    backgroundColor: T.primary, borderRadius: rs(10),
-    minWidth: rs(20), height: rs(20),
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(5),
-  },
-  headerBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
-  sections: {
-    flexDirection: 'row', gap: rp(6), paddingHorizontal: SPACING.md, paddingVertical: rp(10),
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  sectionBtn: {
-    flexGrow: 1, flexShrink: 1, flexBasis: 'auto', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(5),
-    height: rs(36), borderRadius: 999, borderWidth: 1, borderColor: T.border, paddingHorizontal: rp(10),
-  },
-  sectionBtnOn: { backgroundColor: T.primaryTint, borderColor: T.primary },
-  sectionText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(12.5), color: T.textSecondary, flexShrink: 1 },
-  sectionTextOn: { color: T.text, fontFamily: 'DMSans-Bold' },
-  sectionBadge: { minWidth: rs(18), height: rs(18), borderRadius: rs(9), paddingHorizontal: rp(4), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  sectionBadgeKnock: { backgroundColor: T.primary },
-  sectionBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
-  roleChip: { fontFamily: 'DMSans-SemiBold', fontSize: rf(10.5), color: T.textSecondary, marginLeft: rp(6), paddingHorizontal: rp(7), paddingVertical: rp(1), borderRadius: 999, borderWidth: 1, borderColor: T.border, overflow: 'hidden' },
-  emptyTitle: { fontFamily: 'DMSans-Bold', fontSize: rf(18), color: T.text, marginBottom: rp(6), textAlign: 'center' },
-  emptyBtn: { marginTop: rp(16), height: rs(44), paddingHorizontal: rp(18), borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: rp(18), paddingHorizontal: SPACING.md, height: rs(56) },
+  title: { flex: 1, fontSize: rf(24), fontFamily: 'DMSans-Bold', color: T.primary, letterSpacing: -0.4 },
+  selTitle: { color: T.text, fontSize: rf(20) },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: rp(22) },
+  searchInput: { flex: 1, fontSize: FONT.md, color: T.text, padding: 0 },
+  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: T.border },
+  tab: { flex: 1, height: rs(44), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(5) },
+  tabText: { fontSize: rf(13.5), fontFamily: 'DMSans-SemiBold', color: T.textSecondary },
+  tabTextOn: { color: T.primary, fontFamily: 'DMSans-Bold' },
+  tabBadge: { minWidth: rs(18), height: rs(18), borderRadius: rs(9), paddingHorizontal: rp(4), backgroundColor: T.textMuted, alignItems: 'center', justifyContent: 'center' },
+  tabBadgeHot: { backgroundColor: T.primary },
+  tabBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
+  tabDot: { width: rs(7), height: rs(7), borderRadius: rs(4), backgroundColor: T.primary },
+  indicator: { position: 'absolute', bottom: -1, left: 0, height: 3, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: T.primary },
+  chips: { gap: rp(8), paddingHorizontal: SPACING.md, paddingTop: rp(10), paddingBottom: rp(6) },
+  chip: { paddingHorizontal: rp(14), height: rs(32), borderRadius: 999, backgroundColor: T.surface, justifyContent: 'center' },
+  chipOn: { backgroundColor: T.primaryTint, borderWidth: 1, borderColor: T.primaryBorder },
+  chipText: { fontSize: rf(13), fontFamily: 'DMSans-SemiBold', color: T.textSecondary },
+  chipTextOn: { color: T.primary },
+  utilRow: { ...rowSt.row, gap: rp(14) },
+  utilIcon: { width: rs(50), height: rs(50), alignItems: 'center', justifyContent: 'center' },
+  utilIconHot: { borderRadius: rs(25), backgroundColor: T.primary },
+  utilText: { flex: 1, fontSize: FONT.md, fontFamily: 'DMSans-SemiBold', color: T.text },
+  utilSub: { fontSize: rf(12.5), color: T.textSecondary, marginTop: rp(2) },
+  utilCount: { fontSize: rf(12), fontFamily: 'DMSans-Bold', color: T.primary },
+  empty: { alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: rp(40) },
+  emptyIcon: { width: rs(64), height: rs(64), borderRadius: rs(32), backgroundColor: T.primaryTint, alignItems: 'center', justifyContent: 'center', marginBottom: rp(14) },
+  emptyTitle: { fontSize: rf(18), fontFamily: 'DMSans-Bold', color: T.text, marginBottom: rp(6) },
+  emptyText: { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: FONT.sm * 1.5, padding: SPACING.md },
+  emptyBtn: { marginTop: rp(10), height: rs(44), paddingHorizontal: rp(20), borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
   emptyBtnText: { fontFamily: 'DMSans-Bold', fontSize: rf(14), color: '#fff' },
-  iconBtn: {
-    width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center',
-    borderRadius: rs(18), backgroundColor: 'rgba(255,255,255,0.04)',
+  link: { color: T.primary, fontFamily: 'DMSans-SemiBold', fontSize: rf(13) },
+  footer: { fontSize: rf(11.5), color: T.textMuted, textAlign: 'center', paddingHorizontal: SPACING.xl, paddingTop: rp(18) },
+  fab: {
+    position: 'absolute', right: SPACING.md, bottom: rp(18), width: rs(56), height: rs(56), borderRadius: rs(18),
+    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
+    elevation: 6, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
   },
-  editRoomBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(5), height: rs(32),
-    paddingHorizontal: rp(11), borderRadius: rs(16),
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+  menu: {
+    position: 'absolute', right: rp(10), minWidth: rs(210), paddingVertical: rp(6), borderRadius: rs(14),
+    backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border, elevation: 10,
+    shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
   },
-  editRoomText: { color: T.text, fontSize: rf(12), fontWeight: '600' },
-  addBtn: {
-    width: rs(36), height: rs(36), alignItems: 'center', justifyContent: 'center',
-    borderRadius: rs(18), backgroundColor: T.primary,
-  },
-
-  // List
-  centered:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listContent: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, paddingBottom: rs(100), gap: SPACING.xs },
-
-  // Anonixx demo row
-  // Search bar
-  searchWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(8),
-    backgroundColor: T.surface, borderRadius: RADIUS.md,
-    borderWidth: 1, borderColor: T.border,
-    paddingHorizontal: SPACING.md, paddingVertical: rp(10),
-  },
-  searchInput: {
-    flex: 1, fontSize: FONT.sm, color: T.text, padding: 0,
-  },
-  noResultsText: { fontSize: FONT.sm, color: T.textMuted },
-
-  // Filter chips
-  filterRow: {
-    flexDirection: 'row', gap: rp(8),
-    paddingHorizontal: SPACING.md, paddingTop: SPACING.sm,
-  },
-  filterChip: {
-    paddingHorizontal: rp(16), paddingVertical: rp(7),
-    borderRadius: RADIUS.full,
-    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
-  },
-  filterChipActive: { backgroundColor: T.primary, borderColor: T.primary },
-  filterChipText: { fontSize: FONT.xs, fontWeight: '700', color: T.textMuted },
-  filterChipTextActive: { color: '#fff' },
-
-  // Pending unlock stories
-  storiesRow: { maxHeight: rs(92) },
-  storiesContent: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, gap: rp(14) },
-  storyItem: { width: rs(64), alignItems: 'center', gap: rp(5) },
-  storyRing: {
-    width: rs(60), height: rs(60), borderRadius: rs(30),
-    padding: rs(2.5), alignItems: 'center', justifyContent: 'center',
-  },
-  storyAvatar: {
-    width: '100%', height: '100%', borderRadius: rs(28),
-    backgroundColor: T.surfaceAlt, borderWidth: 2, borderColor: T.background,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  storyAvatarImage: { width: '100%', height: '100%' },
-  storyAvatarText: { fontSize: rf(18), fontWeight: '700', color: T.primary },
-  storyName: { fontSize: rf(10.5), color: T.textSecondary, fontWeight: '600' },
-  storyAllRing: {
-    width: rs(60), height: rs(60), borderRadius: rs(30),
-    backgroundColor: T.surfaceAlt, borderWidth: 1.5, borderColor: T.border,
-    alignItems: 'center', justifyContent: 'center', position: 'relative',
-  },
-  storyAllBadge: {
-    position: 'absolute', top: -rp(2), right: -rp(2),
-    backgroundColor: T.primary, borderRadius: rs(9),
-    minWidth: rs(18), height: rs(18), paddingHorizontal: rp(4),
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: T.background,
-  },
-  storyAllBadgeText: { fontSize: rf(9), fontWeight: '800', color: '#fff' },
-
-  // Pending unlock request — mini profile sheet
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)' },
-  sheetCard: {
-    position: 'absolute', left: SPACING.lg, right: SPACING.lg, top: '18%',
-    backgroundColor: T.surface, borderRadius: RADIUS.lg,
-    borderWidth: 1, borderColor: T.border, overflow: 'hidden',
-  },
-  sheetClose: {
-    position: 'absolute', top: rp(10), right: rp(10), zIndex: 2,
-    width: rs(30), height: rs(30), borderRadius: rs(15),
-    backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center',
-  },
-  sheetMedia: { width: '100%', height: rs(220), backgroundColor: T.surfaceAlt },
-  sheetNoMedia: {
-    width: '100%', height: rs(140), backgroundColor: T.surfaceAlt,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sheetNoMediaInitial: { fontSize: rf(36), fontWeight: '700', color: T.primary },
-  sheetBody: { padding: SPACING.lg, gap: rp(4) },
-  sheetName: { fontSize: FONT.lg, fontWeight: '800', color: T.text },
-  sheetSub: { fontSize: FONT.xs, color: T.textMuted, marginBottom: rp(4) },
-  sheetSnippet: {
-    fontSize: FONT.sm, color: T.textSecondary, fontStyle: 'italic',
-    lineHeight: FONT.sm * 1.5, marginBottom: SPACING.sm,
-  },
-  sheetActions: { flexDirection: 'row', gap: rp(10), marginTop: rp(6) },
-  sheetDeclineBtn: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: rp(12), borderRadius: RADIUS.md,
-    borderWidth: 1, borderColor: T.border,
-  },
-  sheetDeclineText: { color: T.textSecondary, fontSize: FONT.sm, fontWeight: '700' },
-  sheetAcceptBtn: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: rp(12), borderRadius: RADIUS.md,
-    backgroundColor: T.primary,
-  },
-  sheetAcceptText: { color: '#fff', fontSize: FONT.sm, fontWeight: '700' },
-
-  demoWrap: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
-  demoGuideTag: { fontSize: FONT.xs, fontWeight: '600', color: T.primary },
-
-  // Chat card — plain row, no card border/background per the mockup;
-  // unread rows just get a subtly raised background, same as before.
-  chatCard: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: rp(10), gap: SPACING.sm,
-  },
-  chatCardUnread: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: RADIUS.md },
-
-  // Shadow on the wrapper (overflow:hidden on the avatar clips it on iOS).
-  chatAvatarWrap: {
-    position: 'relative', flexShrink: 0,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25, shadowRadius: 4, elevation: 3,
-  },
-  chatAvatar: {
-    width: rs(52), height: rs(52), borderRadius: rs(26),
-    backgroundColor: T.avatarBg,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  chatAvatarImage: { width: '100%', height: '100%' },
-  chatAvatarInitial: { fontSize: rf(20), fontWeight: '800', color: '#fff' },
-  // Presence dot at the avatar's bottom-right.
-  onlineDot: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: rs(13), height: rs(13), borderRadius: rs(7),
-    backgroundColor: T.online, borderWidth: 2, borderColor: T.background,
-  },
-
-  chatInfo:   { flex: 1, gap: rp(3) },
-  chatTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chatName:   { fontSize: FONT.md, fontWeight: '600', color: T.text, flex: 1 },
-  chatNameUnread: { fontWeight: '800' },
-  chatTime:   { fontSize: FONT.xs, color: T.textMuted },
-
-  chatBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: rp(8) },
-  chatPreview:       { flex: 1, fontSize: FONT.sm, color: T.textSecondary },
-  chatPreviewUnread: { color: T.text, fontWeight: '500' },
-  tickSent: { color: T.textMuted },
-  tickSeen: { color: T.primary, fontWeight: '700' },
-
-  typingRow:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(6) },
-  typingDots:  { flexDirection: 'row', alignItems: 'center', gap: rp(3) },
-  typingDot:   { width: rs(5), height: rs(5), borderRadius: rs(3), backgroundColor: T.primary },
-  typingLabel: { fontSize: FONT.xs, color: T.primary, fontStyle: 'italic' },
-
-  unreadBadge: {
-    backgroundColor: T.primary, borderRadius: rs(10),
-    minWidth: rs(18), height: rs(18),
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(4),
-  },
-  unreadBadgeText: { fontSize: rf(10), fontWeight: '700', color: '#fff' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: rp(12), paddingHorizontal: rp(16), height: rs(46) },
+  menuText: { fontSize: FONT.sm, color: T.text, fontFamily: 'DMSans-Medium' },
 });

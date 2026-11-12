@@ -25,6 +25,10 @@ import PremiumScreen from '../screens/profile/PremiumScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import DropChatScreen from '../screens/drops/DropChatScreen';
+import ChatInfoScreen from '../screens/rooms/ChatInfoScreen';
+import StarredMessagesScreen from '../screens/rooms/StarredMessagesScreen';
+import ArchivedChatsScreen from '../screens/rooms/ArchivedChatsScreen';
+import ChatMediaScreen from '../screens/rooms/ChatMediaScreen';
 import MarketScreen from '../screens/market/MarketScreen';
 import MarketItemScreen from '../screens/market/MarketItemScreen';
 import VibeScoreScreen from '../screens/drops/VibeScoreScreen';
@@ -142,6 +146,10 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="AuthNav" component={AuthNavigator} />
         <Stack.Screen name="Premium" component={PremiumScreen} />
         <Stack.Screen name="DropChat" component={DropChatScreen} />
+        <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />
+        <Stack.Screen name="StarredMessages" component={StarredMessagesScreen} />
+        <Stack.Screen name="ArchivedChats" component={ArchivedChatsScreen} />
+        <Stack.Screen name="ChatMedia" component={ChatMediaScreen} />
         <Stack.Screen name="DropsCompose" component={DropsComposeScreen} />
         <Stack.Screen name="DropsRecord" component={DropsRecordScreen} />
         <Stack.Screen name="DropsPublish" component={DropsPublishScreen} />

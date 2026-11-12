@@ -28,6 +28,10 @@ import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
 
 // Messages
 import MessagesScreen from '../screens/connect/MessagesScreen';
+import ChatInfoScreen from '../screens/rooms/ChatInfoScreen';
+import StarredMessagesScreen from '../screens/rooms/StarredMessagesScreen';
+import ArchivedChatsScreen from '../screens/rooms/ArchivedChatsScreen';
+import ChatMediaScreen from '../screens/rooms/ChatMediaScreen';
 
 // Profile
 import ProfileScreen from '../screens/profile/ProfileScreen';
@@ -106,6 +110,10 @@ function MessagesStack() {
       <Stack.Screen name="DropCall"     component={DropCallScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="DemoChat"     component={DemoChatScreen} />
       <Stack.Screen name="ChatProfileSetup" component={ChatProfileSetupScreen} />
+      <Stack.Screen name="ChatInfo"        component={ChatInfoScreen} />
+      <Stack.Screen name="StarredMessages" component={StarredMessagesScreen} />
+      <Stack.Screen name="ArchivedChats"   component={ArchivedChatsScreen} />
+      <Stack.Screen name="ChatMedia"       component={ChatMediaScreen} />
     </Stack.Navigator>
   );
 }

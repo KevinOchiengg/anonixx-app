@@ -16,7 +16,7 @@ import { API_BASE_URL } from '../../config/api';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { roomThemeById, statusLabel } from '../../config/roomThemes';
 
-export default function MyRoomPanel({ navigation }) {
+export default function MyRoomPanel({ navigation, header, onRefresh }) {
   const me = useSelector((state) => state.auth.user?.id);
   const [room, setRoom] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,8 +49,9 @@ export default function MyRoomPanel({ navigation }) {
   return (
     <ScrollView
       contentContainerStyle={s.wrap}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={T.primary} colors={[T.primary]} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); onRefresh?.(); }} tintColor={T.primary} colors={[T.primary]} />}
     >
+      {header}
       {/* The window: what a visitor sees first, in your theme. */}
       <View style={[s.hero, { backgroundColor: th.bg, borderColor: th.border }]}>
         <LinearGradient colors={[th.glow, 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.8 }} />

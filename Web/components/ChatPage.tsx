@@ -12,6 +12,9 @@ import type { Socket } from "socket.io-client";
 import AppShell from "./AppShell";
 import CallRoom, { type CallInfo } from "./CallRoom";
 import { callsApi, callInfo } from "@/lib/calls";
+import { chatsApi, mutedLabel, MUTE_OPTIONS, type Prefs } from "@/lib/chats";
+import ChatInfo from "./rooms/ChatInfo";
+import { PickChats } from "./rooms/Messenger";
 import "../app/chat-media.css";
 
 type Msg = {
@@ -29,12 +32,15 @@ type Msg = {
   view_once?: boolean;
   opened?: boolean;
   reactions?: { emoji: string; count: number; mine: boolean }[];
+  starred?: boolean;
+  forwarded?: boolean;
 };
 
 const REACTIONS = ["🔥", "😈", "💋", "🥵", "😂", "🖤"];
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
-  removable_at?: string | null;
+  removable_at?: string | null; other_avatar_url?: string | null; inside_since?: string | null;
+  knock_pitch?: string | null; knock_intents?: string[]; pinned?: boolean; archived?: boolean; muted_until?: string | null;
 };
 
 // A voice note with a 1x / 1.5x / 2x control.
@@ -118,6 +124,11 @@ function Inner({ id }: { id: string }) {
   const typingTimer = useRef<number | null>(null);
   const [typing, setTyping] = useState(false);
   const [presence, setPresence] = useState<boolean | null>(null);
+  const [info, setInfo] = useState(false);
+  const [forward, setForward] = useState<Msg | null>(null);
+  const [muteOpen, setMuteOpen] = useState(false);
+  const [toast, setToast] = useState("");
+  useEffect(() => { if (!toast) return; const t = window.setTimeout(() => setToast(""), 3000); return () => window.clearTimeout(t); }, [toast]);
 
   const load = useCallback(async () => {
     try {
@@ -369,6 +380,38 @@ function Inner({ id }: { id: string }) {
     }
   }
 
+  async function star(m: Msg) {
+    setSel(null);
+    const next = !m.starred;
+    setMsgs((x) => x.map((y) => (y.id === m.id ? { ...y, starred: next } : y)));
+    try { await chatsApi.star(id, m.id, next); setToast(next ? "Starred. Find it in Starred messages." : "Unstarred."); }
+    catch (err) { setError((err as Error).message); await load(); }
+  }
+
+  async function copy(m: Msg) {
+    setSel(null);
+    try { await navigator.clipboard.writeText(m.content || ""); setToast("Copied."); } catch { setError("Could not copy."); }
+  }
+
+  async function doForward(to: string[]) {
+    if (!forward) return;
+    try {
+      const r = await chatsApi.forward(id, forward.id, to);
+      setForward(null);
+      setToast(`Forwarded to ${r.sent.length} ${r.sent.length === 1 ? "chat" : "chats"}${r.skipped.length ? ` (${r.skipped.length} couldn't receive it)` : ""}.`);
+    } catch (err) { setError((err as Error).message); }
+  }
+
+  const applyPrefs = (p: Prefs) => setConn((c) => (c ? { ...c, ...p } : c));
+  async function mute(v: string) {
+    setMuteOpen(false);
+    try { applyPrefs(await chatsApi.prefs(id, { mute: v })); setToast(v === "off" ? "Notifications on." : "Muted."); } catch (err) { setError((err as Error).message); }
+  }
+  async function clearChat() {
+    if (!window.confirm("Clear this chat?\n\nMessages disappear for you only. They keep their copy.")) return;
+    try { await chatsApi.clear(id); setInfo(false); await load(); setToast("Chat cleared."); } catch (err) { setError((err as Error).message); }
+  }
+
   // View once: opens a single time, then it's gone for the receiver.
   async function openOnce(m: Msg) {
     try {
@@ -411,9 +454,10 @@ This conversation closes for both of you. They're outside again and can knock if
 
   async function report() {
     if (!conn?.other_user_id) return;
+    if (!window.confirm(`Report ${conn.other_anonymous_name || "this person"} for abuse or harassment?`)) return;
     try {
       await api(`/users/${conn.other_user_id}/report`, { body: { reason: "abuse" } });
-      setError("Reported. Thank you.");
+      setToast("Report received. Thank you.");
       setMenu(false);
     } catch (e) {
       setError((e as Error).message);
@@ -422,7 +466,8 @@ This conversation closes for both of you. They're outside again and can knock if
 
   const name = conn?.other_anonymous_name || "…";
   const online = presence ?? !!conn?.other_is_online;
-  const pic = profile?.profile_picture_url;
+  // A guest sees the Room's picture; the owner sees the guest's own avatar (the chat profile is the owner's).
+  const pic = conn?.is_sender ? conn?.other_avatar_url : (profile?.profile_picture_url || conn?.other_avatar_url);
   const hasGallery = !!profile?.gallery?.length;
 
   return (
@@ -430,16 +475,18 @@ This conversation closes for both of you. They're outside again and can knock if
       <link rel="stylesheet" href={FONTS_HREF} precedence="default" />
       <ChatBackground id={profile?.background_pattern} />
       <div className="chat-head u-chat-head">
-        <span className="u-ava">
-          <span style={pic ? undefined : { background: "var(--rose-dim)", color: "var(--rose)" }}>
-            {pic ? <Image src={pic} alt="" width={38} height={38} /> : name[0]?.toUpperCase() || "A"}
+        <button type="button" className="mx-headbtn" onClick={() => setInfo(true)} aria-label={`${name}, contact info`}>
+          <span className="u-ava">
+            <span style={pic ? undefined : { background: "var(--rose-dim)", color: "var(--rose)" }}>
+              {pic ? <Image src={pic} alt="" width={38} height={38} /> : name[0]?.toUpperCase() || "A"}
+            </span>
+            {online ? <em /> : null}
           </span>
-          {online ? <em /> : null}
-        </span>
-        <span className="u-head-t">
-          <b>{name}</b>
-          <small>{typing ? "typing…" : online ? "online" : ""}</small>
-        </span>
+          <span className="u-head-t">
+            <b>{name}{conn?.muted_until ? <i className="mx-muted" title="Muted"> 🔕</i> : null}</b>
+            <small className={typing || online ? "" : "dim"}>{typing ? "typing…" : online ? "online" : "click for contact info"}</small>
+          </span>
+        </button>
         <button className="call-btn" onClick={() => pressCall(true)} disabled={callBusy || !!room} aria-label={`Voice call ${name}`}>
           <svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
         </button>
@@ -449,7 +496,13 @@ This conversation closes for both of you. They're outside again and can knock if
         <button className="kebab" onClick={() => setMenu((m) => !m)} aria-label="More">⋯</button>
         {menu ? (
           <div className="menu" onClick={() => setMenu(false)}>
-            {hasGallery ? <button onClick={() => setGallery(true)}>View gallery</button> : null}
+            <button onClick={() => setInfo(true)}>Contact info</button>
+            <button onClick={() => setInfo(true)}>Media, links and voice</button>
+            {conn?.muted_until ? <button onClick={() => mute("off")}>Unmute ({mutedLabel(conn.muted_until).toLowerCase()})</button>
+              : <button onClick={(e) => { e.stopPropagation(); setMuteOpen((v) => !v); }}>Mute notifications…</button>}
+            {muteOpen ? MUTE_OPTIONS.map(([v, l]) => <button key={v} className="sub" onClick={() => mute(v)}>· {l}</button>) : null}
+            <button onClick={clearChat}>Clear chat</button>
+            {hasGallery ? <button onClick={() => setGallery(true)}>View welcome media</button> : null}
             {conn?.is_sender ? <Link href="/chat-setup" className="u-menu-link">Your Room</Link> : null}
             {conn?.is_sender ? <button onClick={removeFromRoom}>Remove from Room</button> : null}
             {conn?.other_user_id ? <button onClick={report}>Report</button> : null}
@@ -471,6 +524,7 @@ This conversation closes for both of you. They're outside again and can knock if
       <div className="chat-log">
         {msgs.map((m) => (
           <div key={m.id} className={`bubble${m.is_own ? " own" : ""}`} onClick={() => !m.deleted && setSel(sel === m.id ? null : m.id)}>
+            {m.forwarded && !m.deleted ? <span className="mx-fwd">↪ Forwarded</span> : null}
             {m.reply_to && !m.deleted ? (
               <div className="reply-quote">{m.reply_to.is_own ? "You" : "Them"}: {m.reply_to.preview || m.reply_to.media_type}</div>
             ) : null}
@@ -484,7 +538,7 @@ This conversation closes for both of you. They're outside again and can knock if
             {!m.deleted && !m.view_once && m.media_type === "video" && m.media_url ? <video src={m.media_url} controls preload="metadata" playsInline onClick={(e) => e.stopPropagation()} /> : null}
             {!m.deleted && !m.view_once && m.media_type === "voice" && m.media_url ? <VoiceNote src={m.media_url} /> : null}
             {!m.deleted && m.content ? <span>{m.content}</span> : null}
-            <small>{m.time_ago}{m.is_own && m.seen ? " · seen" : ""}</small>
+            <small>{m.starred ? "★ " : ""}{m.time_ago}{m.is_own && !m.deleted ? <span className={`mx-tick${m.seen ? " seen" : ""}`}> {m.seen ? "✓✓" : "✓"}</span> : null}</small>
             {m.reactions?.length ? (
               <div className="msg-reactions" onClick={(e) => e.stopPropagation()}>
                 {m.reactions.map((r) => (
@@ -496,6 +550,9 @@ This conversation closes for both of you. They're outside again and can knock if
               <div className="msg-actions" onClick={(e) => e.stopPropagation()}>
                 {REACTIONS.map((e) => <button key={e} onClick={() => react(m, e)}>{e}</button>)}
                 <button onClick={() => { setReplyTo(m); setSel(null); }}>Reply</button>
+                <button onClick={() => star(m)}>{m.starred ? "Unstar" : "Star"}</button>
+                {!m.view_once ? <button onClick={() => { setSel(null); setForward(m); }}>Forward</button> : null}
+                {m.content ? <button onClick={() => copy(m)}>Copy</button> : null}
                 <button onClick={() => removeMsg(m, false)}>Delete for me</button>
                 {m.is_own ? <button onClick={() => removeMsg(m, true)}>Delete for everyone</button> : null}
               </div>
@@ -505,6 +562,16 @@ This conversation closes for both of you. They're outside again and can knock if
         <div ref={bottom} />
       </div>
       {error ? <div className="err pad">{error}</div> : null}
+      {toast ? <div className="ic-note" role="status">{toast}</div> : null}
+      {info && conn ? (
+        <ChatInfo
+          id={id} conn={conn} avatar={profile?.profile_picture_url} onClose={() => setInfo(false)} onPrefs={applyPrefs}
+          onCall={(video) => { setInfo(false); void pressCall(!video); }}
+          onClear={clearChat} onBlock={block} onReport={report}
+          onRemove={conn.is_sender ? () => { setInfo(false); void removeFromRoom(); } : undefined}
+        />
+      ) : null}
+      {forward ? <PickChats mode="forward" title="Forward to…" exclude={id} onClose={() => setForward(null)} onForward={doForward} /> : null}
       {replyTo ? (
         <div className="reply-bar">
           <span>Replying to: {replyTo.content || replyTo.media_type || "message"}</span>

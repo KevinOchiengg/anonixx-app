@@ -22,8 +22,9 @@ import {
 import {
   Send, X, Video, Phone, MoreVertical,
   Mic, Play, Settings, Flag, ShieldOff, Users, AlertTriangle,
-  Reply, Trash2, Lock, Eye,
+  Reply, Trash2, Lock, Eye, Star, Forward, Copy, Info, BellOff, Eraser, Images,
 } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 
 import { T } from '../../utils/colorTokens';
 import {
@@ -44,6 +45,9 @@ import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
 import useDraft from '../../hooks/useDraft';
 import { callsApi, callParams } from '../../services/calls';
+import { chatsApi } from '../../services/chats';
+import { confirmClear, mutedLabel, pickMute } from '../../services/roomActions';
+import PickChatSheet from '../../components/rooms/PickChatSheet';
 import { intentLabel } from '../../config/linkup';
 
 // Fallback poll; messages normally arrive over the socket.
@@ -307,6 +311,8 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
   }, [item, onReact]);
   // Ticks on my messages: single = sent, double (accent) = seen.
   const tick = isOwn ? (item.seen ? '✓✓' : '✓') : null;
+  const starMark = item.starred ? '★ ' : '';
+  const fwd = item.forwarded ? <Text style={s.forwardedLabel}>↪ Forwarded</Text> : null;
 
   const handleSwipeableOpen = useCallback(() => {
     swipeableRef.current?.close();
@@ -345,10 +351,11 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
     // Voice notes have no bubble background.
     content = (
       <View style={s.voiceMessageWrap}>
+        {fwd}
         <VoiceBubble item={item} />
         {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
         <Text style={s.bubbleTime}>
-          {item.time_ago}
+          {starMark}{item.time_ago}
           {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
         </Text>
       </View>
@@ -362,6 +369,7 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
         onLongPress={handleLongPress}
         style={s.mediaBubble}
       >
+        {fwd}
         <View style={s.mediaImageWrap}>
           <Image
             source={{ uri: isVideo ? videoPosterUrl(item.media_url) : item.media_url }}
@@ -374,7 +382,7 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
             </View>
           )}
           <Text style={[s.mediaBubbleTime, isOwn && s.mediaBubbleTimeOwn]}>
-            {item.time_ago}
+            {starMark}{item.time_ago}
             {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
           </Text>
         </View>
@@ -389,12 +397,13 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
     // Sent: time inline. Received: time on its own line.
     content = (
       <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
+        {fwd}
         {isOwn ? (
           <>
             <Text style={[s.bubbleText, fontFamily && { fontFamily }, s.bubbleTextOwn]}>
               {item.content}
               <Text style={s.bubbleTimeInlineOwn}>
-                {'  '}{item.time_ago}
+                {'  '}{starMark}{item.time_ago}
               </Text>
               {tick && <Text style={item.seen ? s.tickSeen : s.bubbleTimeInlineOwn}> {tick}</Text>}
             </Text>
@@ -404,7 +413,7 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
           <>
             <Text style={[s.bubbleText, fontFamily && { fontFamily }]}>{item.content}</Text>
             {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
-            <Text style={s.bubbleTime}>{item.time_ago}</Text>
+            <Text style={s.bubbleTime}>{starMark}{item.time_ago}</Text>
           </>
         )}
       </View>
@@ -574,6 +583,7 @@ export default function DropChatScreen({ route, navigation }) {
   // ── Reply / delete ────────────────────────────────────────────
   const [replyingTo, setReplyingTo]     = useState(null); // full message being replied to, or null
   const [actionSheetItem, setActionSheetItem] = useState(null); // message long-pressed, for the reply/delete sheet
+  const [forwardItem, setForwardItem] = useState(null);        // message being forwarded
   const inputRef = useRef(null);
 
   // ── Poster's themed chat surface (per-user chat_profiles doc) ──
@@ -1102,6 +1112,45 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [connectionId, loadMessages]);
 
+  // Star: mine only, saved on the server so it shows in Starred messages everywhere.
+  const handleStar = useCallback(async (item) => {
+    setActionSheetItem(null);
+    const next = !item.starred;
+    setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, starred: next } : m)));
+    try {
+      await chatsApi.star(connectionId, item.id, next);
+      showToast({ type: 'success', message: next ? 'Starred. Find it in Starred messages.' : 'Unstarred.' });
+    } catch (e) {
+      setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, starred: !next } : m)));
+      showToast({ type: 'error', message: e.message });
+    }
+  }, [connectionId, showToast]);
+
+  const handleCopy = useCallback(async (item) => {
+    setActionSheetItem(null);
+    try {
+      await Clipboard.setStringAsync(item.content || '');
+      showToast({ type: 'success', message: 'Copied.' });
+    } catch {
+      showToast({ type: 'error', message: 'Could not copy.' });
+    }
+  }, [showToast]);
+
+  const handleForward = useCallback(async (to) => {
+    const item = forwardItem;
+    if (!item) return;
+    try {
+      const r = await chatsApi.forward(connectionId, item.id, to);
+      setForwardItem(null);
+      const n = r.sent?.length || 0;
+      showToast({ type: 'success', message: `Forwarded to ${n} ${n === 1 ? 'chat' : 'chats'}${r.skipped?.length ? ` (${r.skipped.length} couldn't receive it)` : ''}.` });
+    } catch (e) {
+      showToast({ type: 'error', message: e.message });
+    }
+  }, [connectionId, forwardItem, showToast]);
+
+  const openInfo = useCallback(() => navigation.navigate('ChatInfo', { connectionId }), [navigation, connectionId]);
+
   const handleOpenViewOnce = useCallback(async (item) => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -1295,7 +1344,7 @@ export default function DropChatScreen({ route, navigation }) {
           onPress: async () => {
             try {
               const token = await AsyncStorage.getItem('token');
-              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.host_user_id}/report`, {
+              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.other_user_id}/report`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body:    JSON.stringify({ reason: r.id }),
@@ -1390,16 +1439,24 @@ export default function DropChatScreen({ route, navigation }) {
     return connection.other_anonymous_name || 'Anonymous';
   }, [connection]);
 
-  // Header centre: avatar (opens gallery), name, and "typing…" or online status.
+  // The other person's picture: a guest sees the Room's picture; the owner sees the guest's
+  // own avatar (the chat profile is always the owner's, never the guest's).
+  const headerPic = connection?.is_sender
+    ? connection?.other_avatar_url
+    : (chatProfile?.profile_picture_url || connection?.other_avatar_url);
+
+  // Header centre: avatar, name, and "typing…" or online status. Tap for contact info.
   const HeaderTitle = useMemo(() => (
     <TouchableOpacity
       style={s.headerTitleRow}
-      activeOpacity={chatProfile?.gallery?.length ? 0.75 : 1}
-      onPress={() => chatProfile?.gallery?.length && setGalleryViewerOpen(true)}
+      activeOpacity={0.75}
+      onPress={openInfo}
+      accessibilityRole="button"
+      accessibilityLabel={`${headerTitle}, contact info`}
     >
       <View style={s.headerAvatarWrap}>
-        {chatProfile?.profile_picture_url ? (
-          <Image source={{ uri: chatProfile.profile_picture_url }} style={s.headerAvatar} />
+        {headerPic ? (
+          <Image source={{ uri: headerPic }} style={s.headerAvatar} />
         ) : (
           <View style={[s.headerAvatar, s.headerAvatarInitialWrap, { backgroundColor: avatarColorFor(headerTitle) }]}>
             <Text style={s.headerAvatarInitialText}>{headerTitle?.[0]?.toUpperCase() || 'A'}</Text>
@@ -1412,18 +1469,23 @@ export default function DropChatScreen({ route, navigation }) {
         )}
       </View>
       <View style={s.headerTitleTextWrap}>
-        <Text style={s.headerTitleName} numberOfLines={1}>{headerTitle}</Text>
+        <View style={s.headerNameRow}>
+          <Text style={s.headerTitleName} numberOfLines={1}>{headerTitle}</Text>
+          {connection?.muted_until ? <BellOff size={rs(13)} color={T.textMute} strokeWidth={2} /> : null}
+        </View>
         {isOtherTyping ? (
           <Text style={s.headerTypingText}>typing…</Text>
-        ) : connection?.other_is_online && (
+        ) : connection?.other_is_online ? (
           <View style={s.headerOnlineRow}>
             <View style={s.headerOnlineDot} />
             <Text style={s.headerOnlineText}>online</Text>
           </View>
+        ) : (
+          <Text style={s.headerHintText}>tap for contact info</Text>
         )}
       </View>
     </TouchableOpacity>
-  ), [chatProfile, headerTitle, connection?.other_is_online, isOtherTyping]);
+  ), [chatProfile, headerTitle, headerPic, connection?.other_is_online, connection?.muted_until, isOtherTyping, openInfo]);
 
   // ── Loading ───────────────────────────────────────────────
   if (loading) {
@@ -1637,6 +1699,49 @@ export default function DropChatScreen({ route, navigation }) {
         >
           <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
             <View style={s.modalHandle} />
+            <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); openInfo(); }} hitSlop={HIT_SLOP}>
+              <Info size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Text style={s.menuActionText}>Contact info</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); navigation.navigate('ChatMedia', { connectionId, name: headerTitle }); }} hitSlop={HIT_SLOP}>
+              <Images size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Text style={s.menuActionText}>Media, links and voice</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); navigation.navigate('StarredMessages', { connectionId, name: headerTitle }); }} hitSlop={HIT_SLOP}>
+              <Star size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Text style={s.menuActionText}>Starred messages</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.menuAction}
+              onPress={() => {
+                setShowMoreMenu(false);
+                pickMute(connectionId, connection?.muted_until,
+                  (prefs) => { setConnection(c => ({ ...c, ...prefs })); showToast({ type: 'success', message: prefs.muted_until ? 'Muted.' : 'Notifications on.' }); },
+                  (m) => showToast({ type: 'error', message: m }));
+              }}
+              hitSlop={HIT_SLOP}
+            >
+              <BellOff size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Text style={s.menuActionText}>{connection?.muted_until ? `Unmute (muted: ${mutedLabel(connection.muted_until).toLowerCase()})` : 'Mute notifications'}</Text>
+            </TouchableOpacity>
+            {chatProfile?.gallery?.length ? (
+              <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); setGalleryViewerOpen(true); }} hitSlop={HIT_SLOP}>
+                <Images size={rs(16)} color={T.text} strokeWidth={1.8} />
+                <Text style={s.menuActionText}>Welcome media ({chatProfile.gallery.length})</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={s.menuAction}
+              onPress={() => {
+                setShowMoreMenu(false);
+                confirmClear(connectionId, (m) => { setMessages([]); showToast({ type: 'success', message: m }); }, (m) => showToast({ type: 'error', message: m }));
+              }}
+              hitSlop={HIT_SLOP}
+            >
+              <Eraser size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Text style={s.menuActionText}>Clear chat</Text>
+            </TouchableOpacity>
+            <View style={s.menuDivider} />
             <View style={s.menuHeaderRow}>
               <Users size={rs(16)} color={T.textMute} strokeWidth={1.8} />
               <Text style={s.menuHeaderText}>
@@ -1750,6 +1855,22 @@ export default function DropChatScreen({ route, navigation }) {
               <Reply size={rs(16)} color={T.text} strokeWidth={1.8} />
               <Text style={s.menuActionText}>Reply</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={s.menuAction} onPress={() => handleStar(actionSheetItem)} hitSlop={HIT_SLOP}>
+              <Star size={rs(16)} color={actionSheetItem?.starred ? T.gold || '#F5B942' : T.text} strokeWidth={1.8} fill={actionSheetItem?.starred ? T.gold || '#F5B942' : 'transparent'} />
+              <Text style={s.menuActionText}>{actionSheetItem?.starred ? 'Unstar' : 'Star'}</Text>
+            </TouchableOpacity>
+            {!actionSheetItem?.view_once ? (
+              <TouchableOpacity style={s.menuAction} onPress={() => { setForwardItem(actionSheetItem); setActionSheetItem(null); }} hitSlop={HIT_SLOP}>
+                <Forward size={rs(16)} color={T.text} strokeWidth={1.8} />
+                <Text style={s.menuActionText}>Forward</Text>
+              </TouchableOpacity>
+            ) : null}
+            {actionSheetItem?.content ? (
+              <TouchableOpacity style={s.menuAction} onPress={() => handleCopy(actionSheetItem)} hitSlop={HIT_SLOP}>
+                <Copy size={rs(16)} color={T.text} strokeWidth={1.8} />
+                <Text style={s.menuActionText}>Copy</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={s.menuAction}
               onPress={() => handleDeleteMessage(actionSheetItem, false)}
@@ -1783,12 +1904,24 @@ export default function DropChatScreen({ route, navigation }) {
       {viewerMedia && (
         <ChatMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />
       )}
+
+      <PickChatSheet
+        visible={!!forwardItem}
+        mode="forward"
+        title="Forward to…"
+        exclude={connectionId}
+        onClose={() => setForwardItem(null)}
+        onForward={handleForward}
+      />
     </SafeAreaView>
   );
 }
 
 // ─── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
+  forwardedLabel: { fontSize: rf(11.5), fontStyle: 'italic', color: T.textMute, marginBottom: rp(3) },
+  headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
+  headerHintText: { fontSize: rf(11), color: T.textMute },
   safe:     { flex: 1, backgroundColor: T.background },
   centered: { justifyContent: 'center', alignItems: 'center' },
 

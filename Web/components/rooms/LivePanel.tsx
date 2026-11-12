@@ -97,7 +97,7 @@ export default function LivePanel() {
   );
 }
 
-function StartSession({ onClose, onStarted }: { onClose: () => void; onStarted: (c: CallInfo) => void }) {
+export function StartSession({ onClose, onStarted }: { onClose: () => void; onStarted: (c: CallInfo) => void }) {
   const [video, setVideo] = useState(true);
   const [everyone, setEveryone] = useState(true);
   const [people, setPeople] = useState<Conn[] | null>(null);
