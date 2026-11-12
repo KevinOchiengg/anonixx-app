@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   // Success overlay
   successOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(36,25,32,0.96)',
+    backgroundColor: 'rgba(22,27,38,0.96)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 99,

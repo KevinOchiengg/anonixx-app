@@ -1,5 +1,5 @@
 /* App chrome (signed-in) */
-:root { --nav-h: 62px; --card: #33242b; --ok: #34d399; }
+:root { --nav-h: 62px; --card: #1f2532; --ok: #34d399; }
 .phone.hasnav { display: flex; flex-direction: column; }
 .hasnav .scroller { flex: 1; min-height: 0; height: auto; }
 .hasnav .slide { height: calc(100dvh - var(--nav-h)); padding-bottom: 40px; }
@@ -61,7 +61,7 @@
 }
 .field textarea { min-height: 150px; resize: vertical; line-height: 1.4; }
 .field input:focus, .field select:focus, .field textarea:focus, .cmt-input input:focus, .chat-input input:focus { border-color: var(--rose); }
-.field select option { background: #33242b; }
+.field select option { background: #1f2532; }
 .opt { font-weight: 400; font-size: 12px; opacity: 0.7; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--muted); line-height: 1.4; }
 .check input { margin-top: 3px; accent-color: var(--rose); }
@@ -100,7 +100,7 @@
 .replying { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 
 /* Coins */
-.balance { display: flex; justify-content: space-between; align-items: baseline; padding: 18px; border-radius: 16px; background: linear-gradient(135deg, rgba(255,99,74,0.22), #33242b); border: 1px solid var(--line); }
+.balance { display: flex; justify-content: space-between; align-items: baseline; padding: 18px; border-radius: 16px; background: linear-gradient(135deg, rgba(255,99,74,0.22), #1f2532); border: 1px solid var(--line); }
 .balance strong { font-size: 34px; }
 .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .card { position: relative; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
@@ -146,7 +146,7 @@
 /* Mature veil, poll results, liked */
 .mature-veil {
   position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  background: rgba(36, 25, 32, 0.8); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); text-align: center;
+  background: rgba(22, 27, 38, 0.8); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); text-align: center;
 }
 .mature-veil strong { font-size: 22px; }
 .mature-veil span { color: var(--muted); }
@@ -240,7 +240,7 @@
 .video-poster { background-size: cover; }
 
 /* ── App parity: feed overlay, sheets, states ── */
-.topbar { background: linear-gradient(to bottom, rgba(36, 25, 32, 0.7), transparent); }
+.topbar { background: linear-gradient(to bottom, rgba(22, 27, 38, 0.7), transparent); }
 .pill { background: var(--rose); box-shadow: 0 4px 14px rgba(255, 99, 74, 0.35); }
 .pill.ghost { background: rgba(255, 255, 255, 0.1); box-shadow: none; border: 1px solid rgba(255, 255, 255, 0.08); }
 
@@ -268,7 +268,7 @@
 .mood { background: rgba(255, 99, 74, 0.14); color: var(--rose); border: 1px solid rgba(255, 99, 74, 0.3); }
 .slide.has-media .mood { background: rgba(0, 0, 0, 0.45); }
 
-.poll button { background: rgba(51, 36, 43, 0.85); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; }
+.poll button { background: rgba(31, 37, 50, 0.85); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; }
 
 .sheet-back { background: rgba(0, 0, 0, 0.85); }
 .sheet { padding: 12px 20px 28px; border-radius: 24px 24px 0 0; background: var(--surface); border-top: 1px solid rgba(255, 255, 255, 0.07); }
@@ -281,7 +281,7 @@
 
 .hero h1 em { color: var(--rose); }
 .empty h2 { font-size: 18px; }
-.slide .mature-veil { background: rgba(36, 25, 32, 0.92); }
+.slide .mature-veil { background: rgba(22, 27, 38, 0.92); }
 .nav-arrows button { background: var(--surface-alt); border: 1px solid rgba(255, 255, 255, 0.08); }
 .join h3 { font-size: 16px; margin: 18px 0 4px; color: var(--fg); }
 .join section b { color: var(--fg); }

@@ -1,4 +1,4 @@
-/** The Anonixx backdrop: a warm plum base with soft coral glows, scattered coral drops and
+/** The Anonixx backdrop: a cool dark base with soft coral glows, scattered coral drops and
  * shadowed edges (the anonymous, late-night feel).
  * Mirrors Web/public/bg-drops.svg (same shapes, same places) so the app and the site match.
  * `withBackdrop(Screen)` puts it behind a screen (screen roots keep a transparent background)
@@ -52,9 +52,9 @@ const CoralBackdrop = React.memo(function CoralBackdrop({ style }) {
           </RadialGradient>
           {/* Shadowed edges: the middle stays lit, the corners fall into near-black. */}
           <RadialGradient id="vg" cx="0.5" cy="0.42" r="0.75">
-            <Stop offset="0.35" stopColor="#0d080b" stopOpacity="0" />
-            <Stop offset="0.8" stopColor="#0d080b" stopOpacity="0.55" />
-            <Stop offset="1" stopColor="#0d080b" stopOpacity="0.85" />
+            <Stop offset="0.35" stopColor="#06080d" stopOpacity="0" />
+            <Stop offset="0.8" stopColor="#06080d" stopOpacity="0.55" />
+            <Stop offset="1" stopColor="#06080d" stopOpacity="0.85" />
           </RadialGradient>
         </Defs>
         <Circle cx="360" cy="40" r="210" fill="url(#cg1)" />

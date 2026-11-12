@@ -4,9 +4,9 @@
 .room-sub { color: var(--gold) !important; letter-spacing: 0.02em; }
 .call-btn.room-locked { position: relative; }
 .call-btn.room-locked > svg:first-child { opacity: 0.55; }
-.call-btn.room-locked .room-lock { position: absolute; right: -2px; bottom: -2px; width: 15px; height: 15px; padding: 2px; border-radius: 50%; background: #241920; stroke: var(--gold); fill: none; stroke-width: 2.4; }
+.call-btn.room-locked .room-lock { position: absolute; right: -2px; bottom: -2px; width: 15px; height: 15px; padding: 2px; border-radius: 50%; background: #161b26; stroke: var(--gold); fill: none; stroke-width: 2.4; }
 
-.room-pin { flex: none; margin: 12px 14px 0; padding: 14px 16px; border-radius: 18px; background: rgba(36, 25, 32, 0.62); backdrop-filter: blur(10px); border: 1px solid rgba(251, 191, 36, 0.22); box-shadow: 0 12px 30px -16px rgba(0, 0, 0, 0.8); }
+.room-pin { flex: none; margin: 12px 14px 0; padding: 14px 16px; border-radius: 18px; background: rgba(22, 27, 38, 0.62); backdrop-filter: blur(10px); border: 1px solid rgba(251, 191, 36, 0.22); box-shadow: 0 12px 30px -16px rgba(0, 0, 0, 0.8); }
 .room-pin.ended { border-color: var(--line); opacity: 0.75; }
 .room-pin p { margin: 8px 0 0; font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 17px; line-height: 1.35; color: var(--fg); }
 .room-pin-top { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -33,7 +33,7 @@
 @keyframes roomIn { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
 @keyframes roomDot { 0%, 80%, 100% { opacity: 0.3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 
-.room-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: rgba(36, 25, 32, 0.78); backdrop-filter: blur(10px); border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 13px; color: var(--muted); }
+.room-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: rgba(22, 27, 38, 0.78); backdrop-filter: blur(10px); border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 13px; color: var(--muted); }
 .room-bar > span { flex: 1; line-height: 1.4; }
 .room-bar.decide .room-cta { flex: 1; }
 .room-bar.decide .room-cta.ghost { flex: 0 0 34%; }

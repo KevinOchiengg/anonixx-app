@@ -1,11 +1,11 @@
 :root {
-  --bg: #241920;
-  --bg-edge: #140d11;
-  --surface: #33242b;
-  --surface-alt: #3c2b33;
-  --fg: #F3E9ED;
-  --muted: #C2AEB6;
-  --faint: #8E7881;
+  --bg: #161b26;
+  --bg-edge: #0c0f16;
+  --surface: #1f2532;
+  --surface-alt: #262d3b;
+  --fg: #EAEAF0;
+  --muted: #A3A6B4;
+  --faint: #6B7186;
   --rose: #FF634A;
   --rose-dim: rgba(255, 99, 74, 0.12);
   --gold: #fbbf24;
@@ -68,12 +68,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .slide.has-media { justify-content: flex-end; padding-top: 0; background: #000; }
 
-.g0 { background: radial-gradient(120% 90% at 20% 0%, #3a1a2e 0%, #241920 70%); }
-.g1 { background: radial-gradient(120% 90% at 80% 10%, #2a1a4a 0%, #241920 70%); }
-.g2 { background: radial-gradient(120% 90% at 10% 90%, #4a1f1a 0%, #241920 70%); }
-.g3 { background: radial-gradient(120% 90% at 90% 80%, #1f1a4a 0%, #241920 70%); }
-.g4 { background: radial-gradient(120% 90% at 50% 0%, #3d1a3a 0%, #241920 70%); }
-.g5 { background: radial-gradient(120% 90% at 0% 40%, #3a1a22 0%, #241920 70%); }
+.g0 { background: radial-gradient(120% 90% at 20% 0%, #3a1a2e 0%, #161b26 70%); }
+.g1 { background: radial-gradient(120% 90% at 80% 10%, #2a1a4a 0%, #161b26 70%); }
+.g2 { background: radial-gradient(120% 90% at 10% 90%, #4a1f1a 0%, #161b26 70%); }
+.g3 { background: radial-gradient(120% 90% at 90% 80%, #1f1a4a 0%, #161b26 70%); }
+.g4 { background: radial-gradient(120% 90% at 50% 0%, #3d1a3a 0%, #161b26 70%); }
+.g5 { background: radial-gradient(120% 90% at 0% 40%, #3a1a22 0%, #161b26 70%); }
 
 .mood {
   align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;

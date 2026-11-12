@@ -3,20 +3,20 @@
 const palette = {
 
   // ─── Surfaces ──────────────────────────────────────────────────────────────
-  background:   '#241920',   // screen bg: warm plum that sits with coral (behind it: CoralBackdrop)
-  surface:      '#33242b',   // cards, inputs, raised layers
-  surfaceAlt:   '#3c2b33',   // secondary raised layer
-  surfaceDark:  '#1c1318',   // below-surface (chat input bg, deep wells)
+  background:   '#161b26',   // screen bg: the original cool dark, lifted a step (behind it: CoralBackdrop)
+  surface:      '#1f2532',   // cards, inputs, raised layers
+  surfaceAlt:   '#262d3b',   // secondary raised layer
+  surfaceDark:  '#121620',   // below-surface (chat input bg, deep wells)
   inputBg:      'rgba(255,255,255,0.04)',
 
   // ─── Text ──────────────────────────────────────────────────────────────────
-  text:          '#F3E9ED',   // primary readable text
-  textSecondary: '#C2AEB6',   // supporting / meta text
-  textSec:       '#C2AEB6',   // alias (used in Drops/payments screens)
-  textSub:       '#C2AEB6',   // alias (used in payment components)
-  textMuted:     '#8E7881',   // faint / disabled / captions
-  textMute:      '#8E7881',   // alias (used in Drops screens)
-  inactive:      '#9A8790',   // tab bar inactive icons, placeholder chrome
+  text:          '#EAEAF0',   // primary readable text
+  textSecondary: '#A3A6B4',   // supporting / meta text
+  textSec:       '#A3A6B4',   // alias (used in Drops/payments screens)
+  textSub:       '#A3A6B4',   // alias (used in payment components)
+  textMuted:     '#6B7186',   // faint / disabled / captions
+  textMute:      '#6B7186',   // alias (used in Drops screens)
+  inactive:      '#6F7486',   // tab bar inactive icons, placeholder chrome
 
   // ─── Primary — coral ───────────────────────────────────────────────────────
   primary:       '#FF634A',
@@ -80,14 +80,14 @@ const palette = {
 
   // ─── Chat bubbles ──────────────────────────────────────────────────────────
   myBubble:    '#FF634A',   // own sent message
-  theirBubble: '#3c2b33',   // received message
+  theirBubble: '#262d3b',   // received message
 
   // ─── Avatar / profile defaults ─────────────────────────────────────────────
-  avatarBg:   '#3c2b33',
-  avatarIcon: '#9A8790',
+  avatarBg:   '#262d3b',
+  avatarIcon: '#6F7486',
 
   // ─── Convenience aliases ───────────────────────────────────────────────────
-  bg: '#241920',   // alias for background (used in a few older screens)
+  bg: '#161b26',   // alias for background (used in a few older screens)
 };
 
 // Named exports — T is the canonical name, THEME is the legacy alias

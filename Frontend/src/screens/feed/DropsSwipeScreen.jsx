@@ -960,7 +960,7 @@ const TextSlide = ({
       {/* Without an image the confession's colour is the background; with one, the image fills the slide. */}
       {/* Text-only: the poster's colour stays underneath, darkened so every confession card reads the same. */}
       {!hasImage && <LinearGradient colors={[t.bgFrom, t.bgTo]} style={StyleSheet.absoluteFill} />}
-      {!hasImage && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(36,25,32,0.78)' }]} pointerEvents="none" />}
+      {!hasImage && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(22,27,38,0.78)' }]} pointerEvents="none" />}
 
       <GestureDetector gesture={tapGesture}>
         <View style={StyleSheet.absoluteFill} collapsable={false}>
