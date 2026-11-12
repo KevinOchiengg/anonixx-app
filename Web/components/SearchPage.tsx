@@ -188,7 +188,7 @@ export default function SearchPage() {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setFocused(true)}
               onBlur={() => window.setTimeout(() => setFocused(false), 150)}
-              placeholder={tab === "near" ? "try “dem wa Kisumu”, “jamaa Thika tonight”" : "try “stories za heartbreak”"}
+              placeholder={tab === "near" ? "try “someone nearby tonight”" : "try “heartbreak stories”"}
               aria-label="Search"
               aria-autocomplete="list"
               aria-expanded={focused && sugs.length > 0}
@@ -405,7 +405,7 @@ function Near({
       ) : near.meta.needs_place ? (
         <div className="dc-empty">
           <b>{place?.scope === "close" ? "Tell us your part of town." : "Pick a place first."}</b>
-          <p>{place?.scope === "close" ? "Close by needs your area (like Westlands or Milimani). Nobody sees it but you." : "Choose where to look."}</p>
+          <p>{place?.scope === "close" ? "Close by needs your area (like your neighbourhood or part of town). Nobody sees it but you." : "Choose where to look."}</p>
           <div className="dc-acts">
             <button type="button" className="dc-cta" onClick={onWhere}>Choose a place</button>
             {place && wider ? <button type="button" className="pill" onClick={() => onWiden({ ...place, scope: wider })}>Look wider</button> : null}
@@ -590,7 +590,7 @@ function WhereSheet({ current, onSave, onClose }: { current: Place; onSave: (p: 
               <div className="sp-loc">
                 <input list="dc-countries" placeholder="Country" value={p.country} onChange={(e) => setP({ ...p, country: e.target.value })} />
                 {needsCounty ? <input list={p.country === "Kenya" ? "dc-counties" : undefined} placeholder="City, county or region" value={p.county} onChange={(e) => setP({ ...p, county: e.target.value })} /> : null}
-                {p.scope === "close" ? <input placeholder="Part of town (e.g. Westlands)" value={p.sub} onChange={(e) => setP({ ...p, sub: e.target.value })} /> : null}
+                {p.scope === "close" ? <input placeholder="Part of town (e.g. Downtown)" value={p.sub} onChange={(e) => setP({ ...p, sub: e.target.value })} /> : null}
                 <datalist id="dc-countries">{COUNTRIES.map((c) => <option key={c} value={c} />)}</datalist>
                 <datalist id="dc-counties">{KENYA_COUNTIES.map((c) => <option key={c} value={c} />)}</datalist>
               </div>

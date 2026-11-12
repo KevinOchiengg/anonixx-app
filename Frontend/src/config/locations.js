@@ -1,8 +1,7 @@
-/** Countries and Kenya's 47 counties. Sub-county and area are free text. */
+/** Countries (A–Z, none pinned first) and Kenya's 47 counties, offered only when the
+ * country is Kenya. Other countries use a free-text region. */
 
-// Kenya pinned first (primary market), then the rest of the M-Pesa footprint
-// (MPESA_COUNTRIES in geo_pricing.py), then the rest of the world A–Z.
-export const COUNTRIES = [
+const COUNTRY_LIST = [
   { code: 'KE', name: 'Kenya' },
   { code: 'TZ', name: 'Tanzania' },
   { code: 'UG', name: 'Uganda' },
@@ -158,6 +157,7 @@ export const COUNTRIES = [
   { code: 'ZM', name: 'Zambia' },
   { code: 'ZW', name: 'Zimbabwe' },
 ];
+export const COUNTRIES = [...COUNTRY_LIST].sort((a, b) => a.name.localeCompare(b.name));
 
 // Kenya's counties. Other countries use a free-text region.
 export const KENYA_COUNTIES = [

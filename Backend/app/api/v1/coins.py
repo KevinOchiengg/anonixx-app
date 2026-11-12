@@ -382,7 +382,8 @@ async def buy_coins_stripe_create_intent(
 
     # Derive tier from IP — prevents price manipulation from the client. Same
     # tier_for as GET /geo/config, so the price charged is the price shown.
-    tier         = tier_for(await pricing_country(request))
+    country      = await pricing_country(request)
+    tier         = tier_for(country)
     stripe_tier  = min(tier, 2)                 # Tier 3 M-Pesa countries → Tier 2 USD
     amount_cents = STRIPE_PRICES[stripe_tier][data.package_id]
 

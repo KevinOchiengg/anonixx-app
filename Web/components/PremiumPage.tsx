@@ -13,6 +13,7 @@ function Inner() {
   const until = user?.premium_until ? new Date(user.premium_until) : null;
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [mpesa, setMpesa] = useState(false);
   const [phone, setPhone] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "waiting" | "done" | "failed">("idle");
   const [msg, setMsg] = useState("");
@@ -20,6 +21,8 @@ function Inner() {
 
   useEffect(() => {
     api<{ plans: Plan[] }>("/premium/plans").then((r) => setPlans(r.plans)).catch(() => setPlans([]));
+    // M-Pesa checkout only where M-Pesa exists; everyone else buys in the app.
+    api<{ show_mpesa: boolean }>("/geo/config").then((r) => setMpesa(Boolean(r.show_mpesa))).catch(() => {});
     return () => { if (timer.current) window.clearTimeout(timer.current); };
   }, []);
 
@@ -48,6 +51,8 @@ function Inner() {
     } catch (err) { setState("failed"); setMsg((err as Error).message); }
   }
 
+  const price = (p: Plan) => (mpesa ? `KES ${p.kes}` : p.usd_display || "");
+
   function close() {
     if (timer.current) window.clearTimeout(timer.current);
     setPlan(null); setState("idle"); setMsg("");
@@ -64,27 +69,32 @@ function Inner() {
       ) : (
         <div className="prem-status"><b>Not premium yet</b><small>Pick a plan to post and link up without coins.</small></div>
       )}
-      <p className="muted small">Post and link up without spending coins. Pay with M-Pesa, no auto-renew.</p>
+      <p className="muted small">Post and link up without spending coins.{mpesa ? " Pay with M-Pesa, no auto-renew." : ""}</p>
       <h2 className="sec">Choose a plan</h2>
       {plans === null ? <p className="muted">Loading…</p> : plans.length === 0 ? <p className="muted">Plans aren&apos;t available right now.</p> : (
         <div className="cards">
           {plans.map((p) => (
             <button key={p.id} className="card wide" onClick={() => setPlan(p)}>
               <strong>{p.label}</strong>
-              <span>KES {p.kes}{p.usd_display ? ` · ${p.usd_display}` : ""}</span>
+              <span>{price(p)}</span>
               <small>{p.days} days</small>
               {p.save ? <span className="plan-save">{p.save}</span> : null}
             </button>
           ))}
         </div>
       )}
-      <p className="muted small">Card payments are only available in the app.</p>
+      <p className="muted small">{mpesa ? "Card payments are only available in the app." : "Get premium in the Anonixx app, by card or through your app store."}</p>
 
       {plan ? (
         <div className="sheet-back" onClick={close}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h3>{plan.label} · KES {plan.kes}</h3>
-            {state === "idle" || state === "sending" ? (
+            <h3>{plan.label} · {price(plan)}</h3>
+            {!mpesa ? (
+              <>
+                <p>Card payments happen in the Anonixx app for now. Sign in there with this account and premium works here too.</p>
+                <div className="row"><button className="pill ghost" onClick={close}>Close</button></div>
+              </>
+            ) : state === "idle" || state === "sending" ? (
               <form onSubmit={pay} className="form">
                 <label className="field">M-Pesa number
                   <input inputMode="tel" required placeholder="07XX XXX XXX" value={phone} onChange={(e) => setPhone(e.target.value)} />

@@ -4,17 +4,18 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
 
-type Pack = { id: string; kes: number; coins: number; label: string; tag: string | null };
-type Plan = { id: string; label: string; days: number; kes: number };
+/** Coins and plans, priced for the visitor's country (GET /geo/config). M-Pesa checkout only
+ * where M-Pesa exists; everywhere else prices show in USD and buying happens in the app. */
+type Pack = { id: string; coins: number; label: string; tag: string | null; display_price: string; kes?: number };
+type Plan = { id: string; label: string; days: number; kes: number; usd_display?: string };
 
-type Buying =
-  | { kind: "coins"; id: string; title: string; kes: number }
-  | { kind: "premium"; id: string; title: string; kes: number };
+type Buying = { kind: "coins" | "premium"; id: string; title: string; price: string };
 
 function Inner() {
   const { user, refresh } = useAuth();
   const [packs, setPacks] = useState<Pack[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [mpesa, setMpesa] = useState(false);
   const [buying, setBuying] = useState<Buying | null>(null);
   const [phone, setPhone] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "waiting" | "done" | "failed">("idle");
@@ -22,7 +23,9 @@ function Inner() {
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
-    api<{ packages: Pack[] }>("/coins/packages").then((r) => setPacks(r.packages)).catch(() => {});
+    api<{ show_mpesa: boolean; packages: Pack[] }>("/geo/config")
+      .then((r) => { setMpesa(Boolean(r.show_mpesa)); setPacks(r.packages); })
+      .catch(() => {});
     api<{ plans: Plan[] }>("/premium/plans").then((r) => setPlans(r.plans)).catch(() => {});
     return () => { if (timer.current) window.clearTimeout(timer.current); };
   }, []);
@@ -76,6 +79,8 @@ function Inner() {
     }
   }
 
+  const planPrice = (p: Plan) => (mpesa ? `KES ${p.kes}` : p.usd_display || "");
+
   function close() {
     if (timer.current) window.clearTimeout(timer.current);
     setBuying(null);
@@ -93,10 +98,10 @@ function Inner() {
       <h2 className="sec">Buy coins</h2>
       <div className="cards">
         {packs.map((p) => (
-          <button key={p.id} className="card" onClick={() => setBuying({ kind: "coins", id: p.id, title: `${p.coins} coins`, kes: p.kes })}>
+          <button key={p.id} className="card" onClick={() => setBuying({ kind: "coins", id: p.id, title: `${p.coins} coins`, price: p.display_price })}>
             {p.tag ? <em>{p.tag}</em> : null}
             <strong>{p.coins} coins</strong>
-            <span>KES {p.kes}</span>
+            <span>{p.display_price}</span>
           </button>
         ))}
       </div>
@@ -106,9 +111,9 @@ function Inner() {
           <h2 className="sec">Go unlimited</h2>
           <div className="cards">
             {plans.map((p) => (
-              <button key={p.id} className="card wide" onClick={() => setBuying({ kind: "premium", id: p.id, title: `Subscription, ${p.label}`, kes: p.kes })}>
+              <button key={p.id} className="card wide" onClick={() => setBuying({ kind: "premium", id: p.id, title: `Subscription, ${p.label}`, price: planPrice(p) })}>
                 <strong>{p.label}</strong>
-                <span>KES {p.kes}</span>
+                <span>{planPrice(p)}</span>
                 <small>Posting and link-ups free for {p.days} days</small>
               </button>
             ))}
@@ -116,13 +121,18 @@ function Inner() {
         </>
       ) : null}
 
-      <p className="muted small">Pay with M-Pesa. Coins have no cash value. Need a refund? Message support in Settings.</p>
+      <p className="muted small">{mpesa ? "Pay with M-Pesa." : "Buy in the Anonixx app, by card or through your app store."} Coins have no cash value. Need a refund? Message support in Settings.</p>
 
       {buying ? (
         <div className="sheet-back" onClick={close}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h3>{buying.title} · KES {buying.kes}</h3>
-            {state === "idle" || state === "sending" ? (
+            <h3>{buying.title} · {buying.price}</h3>
+            {!mpesa ? (
+              <>
+                <p>Card payments happen in the Anonixx app for now. Sign in there with this account and your coins show up here too.</p>
+                <div className="row"><button className="pill ghost" onClick={close}>Close</button></div>
+              </>
+            ) : state === "idle" || state === "sending" ? (
               <form onSubmit={pay} className="form">
                 <label className="field">M-Pesa number
                   <input inputMode="tel" required placeholder="07XX XXX XXX" value={phone} onChange={(e) => setPhone(e.target.value)} />

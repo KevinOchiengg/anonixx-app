@@ -408,7 +408,7 @@ export default function SearchScreen({ navigation }) {
             onSubmitEditing={() => { remember(); setFocused(false); }}
             onFocus={() => setFocused(true)}
             onBlur={() => setTimeout(() => setFocused(false), 150)}
-            placeholder={tab === 'near' ? 'try “dem wa Kisumu”' : 'try “stories za heartbreak”'}
+            placeholder={tab === 'near' ? 'try “someone nearby tonight”' : 'try “heartbreak stories”'}
             placeholderTextColor={T.textMute}
             returnKeyType="search"
             autoCorrect={false}
@@ -500,7 +500,7 @@ function PlacePicker({ current, onSave }) {
         <>
           <TextInput style={styles.field} value={p.country} onChangeText={(v) => setP({ ...p, country: v })} placeholder="Country" placeholderTextColor={T.textMute} />
           {needsCounty && <TextInput style={styles.field} value={p.county} onChangeText={(v) => setP({ ...p, county: v })} placeholder="City, county or region" placeholderTextColor={T.textMute} />}
-          {p.scope === 'close' && <TextInput style={styles.field} value={p.sub} onChangeText={(v) => setP({ ...p, sub: v })} placeholder="Part of town (e.g. Westlands)" placeholderTextColor={T.textMute} />}
+          {p.scope === 'close' && <TextInput style={styles.field} value={p.sub} onChangeText={(v) => setP({ ...p, sub: v })} placeholder="Part of town (e.g. Downtown)" placeholderTextColor={T.textMute} />}
         </>
       )}
       <Pill label="Show me" primary disabled={!ready} onPress={() => onSave({ ...p, country: p.country.trim(), county: p.county.trim(), sub: p.sub.trim() })} />

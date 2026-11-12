@@ -268,7 +268,8 @@ export default function PremiumScreen({ navigation }) {
   const { showToast } = useToast()
   const [plans, setPlans] = useState(FALLBACK_PLANS)
   const [selectedPlan, setSelectedPlan] = useState('monthly')
-  const [method, setMethod] = useState('mpesa')
+  const [method, setMethod] = useState('stripe')
+  const [showMpesa, setShowMpesa] = useState(false)
   const [success, setSuccess] = useState(false)
   const [playPrice, setPlayPrice] = useState(null)
 
@@ -287,6 +288,19 @@ export default function PremiumScreen({ navigation }) {
           if (data?.plans?.length) setPlans(data.plans)
         }
       } catch { /* fallback list already showing */ }
+    })()
+  }, [])
+
+  // M-Pesa is offered only in M-Pesa countries (the server decides from the request).
+  useEffect(() => {
+    if (USE_PLAY_BILLING) return
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/geo/config`, { headers: await authHeaders() })
+        if (!res.ok) return
+        const data = await res.json()
+        if (data?.show_mpesa) { setShowMpesa(true); setMethod('mpesa') }
+      } catch { /* card only */ }
     })()
   }, [])
 
@@ -360,7 +374,7 @@ export default function PremiumScreen({ navigation }) {
 
         {!USE_PLAY_BILLING && <Text style={styles.sectionLabel}>Pay with</Text>}
         {!USE_PLAY_BILLING && <View style={styles.methodRow}>
-          {PAYMENT_METHODS.map((m) => (
+          {PAYMENT_METHODS.filter((m) => showMpesa || m.id !== 'mpesa').map((m) => (
             <TouchableOpacity
               key={m.id}
               onPress={() => setMethod(m.id)}
