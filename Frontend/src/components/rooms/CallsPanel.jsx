@@ -34,11 +34,11 @@ function statusLine(c) {
 function DirectionIcon({ c }) {
   const bad = c.missed || c.status === 'declined' || c.status === 'cancelled' || c.status === 'missed';
   const color = c.missed ? T.danger : bad ? T.textMuted : T.success;
-  if (c.kind === 'group') return <Users size={rs(14)} color={T.violet} strokeWidth={2.4} />;
-  if (c.missed) return <PhoneMissed size={rs(14)} color={color} strokeWidth={2.4} />;
+  if (c.kind === 'group') return <Users size={rs(14)} color={T.violet} strokeWidth={2} />;
+  if (c.missed) return <PhoneMissed size={rs(14)} color={color} strokeWidth={2} />;
   return c.direction === 'outgoing'
-    ? <ArrowUpRight size={rs(15)} color={color} strokeWidth={2.6} />
-    : <ArrowDownLeft size={rs(15)} color={color} strokeWidth={2.6} />;
+    ? <ArrowUpRight size={rs(15)} color={color} strokeWidth={2} />
+    : <ArrowDownLeft size={rs(15)} color={color} strokeWidth={2} />;
 }
 
 const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissedCount }, ref) {

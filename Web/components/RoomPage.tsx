@@ -16,6 +16,7 @@ import AgeGate from "./AgeGate";
 import LinkUpSheet from "./LinkUpSheet";
 import Sheet from "./Sheet";
 import KnockClues, { type KnockClue } from "./KnockClues";
+import { Ellipsis, Lock as LockIcon, Pause, Play, RotateCcw, X } from "lucide-react";
 
 type Hookup = { age: number; gender: string | null; area: string; looking_for: string | null; vibes: string[] } | null;
 type Preview = {
@@ -43,10 +44,10 @@ const REPORT_REASONS: [string, string][] = [
 ];
 
 const Lock = ({ className = "rm-lock" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+  <LockIcon className={className} strokeWidth={2} aria-hidden />
 );
 const Dots = () => (
-  <svg viewBox="0 0 24 24" aria-hidden><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+  <Ellipsis strokeWidth={2} aria-hidden />
 );
 
 // Remembered per connection, so the entrance plays once, not on every visit.
@@ -84,7 +85,7 @@ function WelcomeVoice({ url, seconds, autoplay }: { url: string; seconds?: numbe
         onEnded={() => { setPlaying(false); setDone(true); }}
         onTimeUpdate={(e) => { const a = e.currentTarget; if (Number.isFinite(a.duration)) setLeft(Math.max(0, Math.round(a.duration - a.currentTime))); }}
       />
-      <i aria-hidden>{playing ? "❚❚" : done ? "↻" : "▶"}</i>
+      <i aria-hidden>{playing ? <Pause size={16} fill="currentColor" strokeWidth={0} /> : done ? <RotateCcw size={16} strokeWidth={2.2} /> : <Play size={16} fill="currentColor" strokeWidth={0} />}</i>
       <span><b>{playing ? "Playing their welcome…" : done ? "Play it again" : "Their welcome, in their voice"}</b><small>{left ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Tap to listen"}</small></span>
     </button>
   );
@@ -440,7 +441,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
             ) : (
               <Image src={big.media_url} alt="" width={800} height={1000} />
             )}
-            <button className="u-modal-x" aria-label="Close" onClick={() => setBig(null)}>×</button>
+            <button className="u-modal-x" aria-label="Close" onClick={() => setBig(null)}><X size={20} strokeWidth={2} aria-hidden /></button>
           </div>
         ) : null}
       </div>

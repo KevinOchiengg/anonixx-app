@@ -1,4 +1,5 @@
 "use client";
+import { X } from "lucide-react";
 
 export type PollDraft = { question: string; options: string[] };
 
@@ -14,7 +15,7 @@ export default function PollEditor({ value, onChange }: { value: PollDraft; onCh
         <div className="cx-opt" key={i}>
           <input type="text" maxLength={60} value={o} onChange={(e) => setOpt(i, e.target.value)} placeholder={`Option ${i + 1}`} aria-label={`Option ${i + 1}`} />
           {value.options.length > 2 ? (
-            <button type="button" className="cx-x" aria-label="Remove option" onClick={() => onChange({ ...value, options: value.options.filter((_, j) => j !== i) })}>×</button>
+            <button type="button" className="cx-x" aria-label="Remove option" onClick={() => onChange({ ...value, options: value.options.filter((_, j) => j !== i) })}><X size={20} strokeWidth={2} aria-hidden /></button>
           ) : null}
         </div>
       ))}

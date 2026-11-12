@@ -402,17 +402,17 @@ export default function DropCallScreen({ route, navigation }) {
 
       <View style={styles.controls}>
         <CtrlBtn on={micMuted} onPress={toggleMic} label={micMuted ? 'Unmute' : 'Mute'}
-          icon={micMuted ? <MicOff size={rs(20)} color="#fff" /> : <Mic size={rs(20)} color={T.text} strokeWidth={1.8} />} />
+          icon={micMuted ? <MicOff size={rs(20)} color="#fff" /> : <Mic size={rs(20)} color={T.text} strokeWidth={2} />} />
         <CtrlBtn on={camOff} onPress={toggleCam} label={camOff ? 'Camera on' : 'Camera off'}
-          icon={camOff ? <VideoOff size={rs(20)} color="#fff" /> : <Video size={rs(20)} color={T.text} strokeWidth={1.8} />} />
+          icon={camOff ? <VideoOff size={rs(20)} color="#fff" /> : <Video size={rs(20)} color={T.text} strokeWidth={2} />} />
         <TouchableOpacity style={styles.endBtn} onPress={() => finish()} hitSlop={HIT_SLOP} activeOpacity={0.85}
           accessibilityRole="button" accessibilityLabel={!direct && isHost ? 'End session for everyone' : 'End call'}>
           <PhoneOff size={rs(24)} color="#fff" strokeWidth={2} />
         </TouchableOpacity>
         <CtrlBtn on={!speaker} onPress={toggleSpeaker} label={speaker ? 'Speaker on' : 'Speaker off'}
-          icon={speaker ? <Volume2 size={rs(20)} color={T.text} strokeWidth={1.8} /> : <VolumeX size={rs(20)} color="#fff" />} />
+          icon={speaker ? <Volume2 size={rs(20)} color={T.text} strokeWidth={2} /> : <VolumeX size={rs(20)} color="#fff" />} />
         <CtrlBtn disabled={camOff} onPress={switchCamera} label="Flip camera"
-          icon={<RefreshCw size={rs(20)} color={camOff ? T.textMute : T.text} strokeWidth={1.8} />} />
+          icon={<RefreshCw size={rs(20)} color={camOff ? T.textMute : T.text} strokeWidth={2} />} />
       </View>
 
       <Text style={styles.hostNote}>

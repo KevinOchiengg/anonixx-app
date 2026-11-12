@@ -3,6 +3,7 @@
  * /chat-setup on the matching tab, so there's still only one settings page. */
 import Link from "next/link";
 import Sheet from "../Sheet";
+import { ChevronRight } from "lucide-react";
 
 export const ROOM_SETTINGS: { tab: string; title: string; hint: string }[] = [
   { tab: "room", title: "Personalize Room", hint: "Picture, intro, status, theme, fonts" },
@@ -21,12 +22,12 @@ export default function RoomSettingsMenu({ onClose }: { onClose: () => void }) {
         {ROOM_SETTINGS.map((s) => (
           <Link key={s.tab} href={`/chat-setup?tab=${s.tab}`} className="rsm-row" onClick={onClose}>
             <span><b>{s.title}</b><small>{s.hint}</small></span>
-            <i aria-hidden>›</i>
+            <i aria-hidden><ChevronRight size={18} strokeWidth={2} aria-hidden /></i>
           </Link>
         ))}
         <Link href="/coins" className="rsm-row" onClick={onClose}>
           <span><b>Coin history</b><small>Your wallet and every transaction</small></span>
-          <i aria-hidden>›</i>
+          <i aria-hidden><ChevronRight size={18} strokeWidth={2} aria-hidden /></i>
         </Link>
       </nav>
     </Sheet>

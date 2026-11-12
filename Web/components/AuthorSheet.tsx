@@ -4,6 +4,7 @@ import Image from "next/image";
 import { api, COST, type Post } from "@/lib/api";
 import Sheet from "./Sheet";
 import { Link2 } from "./feedicons";
+import { MapPin, X } from "lucide-react";
 
 type Item = { media_url: string; media_type: string };
 type Profile = {
@@ -74,7 +75,7 @@ export default function AuthorSheet({
                 {p.gender && GENDER[p.gender] ? <span>{GENDER[p.gender]}</span> : null}
                 {p.location ? (
                   <span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+                    <MapPin size={12} strokeWidth={2} aria-hidden />
                     {p.location}
                   </span>
                 ) : null}
@@ -124,7 +125,7 @@ export default function AuthorSheet({
           ) : (
             <Image src={big.media_url} alt="" width={1200} height={1500} sizes="100vw" />
           )}
-          <button type="button" aria-label="Close" onClick={() => setBig(null)}>×</button>
+          <button type="button" aria-label="Close" onClick={() => setBig(null)}><X size={20} strokeWidth={2} aria-hidden /></button>
         </div>
       ) : null}
     </>

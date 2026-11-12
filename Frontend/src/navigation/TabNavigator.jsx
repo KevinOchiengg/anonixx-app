@@ -60,7 +60,9 @@ const TabBarIcon = ({ route, focused, badgeCount }) => {
       <IconComponent
         size={22}
         color={color}
-        strokeWidth={focused ? 2.5 : 1.8}
+        strokeWidth={2}
+        fill={focused ? color : 'none'}
+        fillOpacity={focused ? 0.18 : 0}
       />
 
       {showBadge && (
@@ -84,7 +86,7 @@ const CustomTabBarButton = ({ children, onPress }) => (
     {/* Outer glow ring */}
     <View style={styles.centerButtonGlow} />
     <View style={styles.centerButton}>
-      <Plus size={26} color="#fff" strokeWidth={2.5} />
+      <Plus size={26} color="#fff" strokeWidth={2} />
     </View>
   </TouchableOpacity>
 );

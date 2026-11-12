@@ -16,6 +16,7 @@ import { chatsApi, mutedLabel, MUTE_OPTIONS, type Prefs } from "@/lib/chats";
 import ChatInfo from "./rooms/ChatInfo";
 import { PickChats } from "./rooms/Messenger";
 import "../app/chat-media.css";
+import { BellOff, EllipsisVertical, Lock, Mic, Paperclip, Phone, Star, Video, X } from "lucide-react";
 
 type Msg = {
   id: string;
@@ -67,7 +68,7 @@ function GalleryOverlay({ items, title, onClose }: { items: GalleryItem[]; title
   const track = useRef<HTMLDivElement>(null);
   return (
     <div className="u-welcome" role="dialog" aria-modal>
-      <button className="u-modal-x" onClick={onClose} aria-label="Close">×</button>
+      <button className="u-modal-x" onClick={onClose} aria-label="Close"><X size={20} strokeWidth={2} aria-hidden /></button>
       <div
         className="u-welcome-track"
         ref={track}
@@ -483,17 +484,17 @@ This conversation closes for both of you. They're outside again and can knock if
             {online ? <em /> : null}
           </span>
           <span className="u-head-t">
-            <b>{name}{conn?.muted_until ? <i className="mx-muted" title="Muted"> 🔕</i> : null}</b>
+            <b>{name}{conn?.muted_until ? <BellOff className="mx-muted" size={13} strokeWidth={2} aria-label="Muted" /> : null}</b>
             <small className={typing || online ? "" : "dim"}>{typing ? "typing…" : online ? "online" : "click for contact info"}</small>
           </span>
         </button>
         <button className="call-btn" onClick={() => pressCall(true)} disabled={callBusy || !!room} aria-label={`Voice call ${name}`}>
-          <svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
+          <Phone strokeWidth={2} aria-hidden />
         </button>
         <button className="call-btn" onClick={() => pressCall(false)} disabled={callBusy || !!room} aria-label={`Video call ${name}`}>
-          <svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2" /><path d="M16 10l6-3v10l-6-3" /></svg>
+          <Video strokeWidth={2} aria-hidden />
         </button>
-        <button className="kebab" onClick={() => setMenu((m) => !m)} aria-label="More">⋯</button>
+        <button className="kebab" onClick={() => setMenu((m) => !m)} aria-label="More"><EllipsisVertical size={20} strokeWidth={2} aria-hidden /></button>
         {menu ? (
           <div className="menu" onClick={() => setMenu(false)}>
             <button onClick={() => setInfo(true)}>Contact info</button>
@@ -530,15 +531,15 @@ This conversation closes for both of you. They're outside again and can knock if
             ) : null}
             {m.deleted ? <em>Message deleted</em> : null}
             {!m.deleted && m.view_once ? (
-              m.is_own ? <em>🔒 View-once {m.media_type === "video" ? "video" : "photo"} · {m.opened ? "opened" : "not opened yet"}</em>
+              m.is_own ? <em><Lock className="inl-ic" size={13} strokeWidth={2} aria-hidden /> View-once {m.media_type === "video" ? "video" : "photo"} · {m.opened ? "opened" : "not opened yet"}</em>
               : m.opened ? <em>Opened</em>
-              : <button type="button" className="pill" onClick={(e) => { e.stopPropagation(); openOnce(m); }}>🔒 Tap to open · view once</button>
+              : <button type="button" className="pill" onClick={(e) => { e.stopPropagation(); openOnce(m); }}><Lock className="inl-ic" size={13} strokeWidth={2} aria-hidden /> Tap to open · view once</button>
             ) : null}
             {!m.deleted && !m.view_once && m.media_type === "image" && m.media_url ? <Image src={m.media_url} alt="" width={400} height={400} style={{ height: "auto" }} sizes="80vw" /> : null}
             {!m.deleted && !m.view_once && m.media_type === "video" && m.media_url ? <video src={m.media_url} controls preload="metadata" playsInline onClick={(e) => e.stopPropagation()} /> : null}
             {!m.deleted && !m.view_once && m.media_type === "voice" && m.media_url ? <VoiceNote src={m.media_url} /> : null}
             {!m.deleted && m.content ? <span>{m.content}</span> : null}
-            <small>{m.starred ? "★ " : ""}{m.time_ago}{m.is_own && !m.deleted ? <span className={`mx-tick${m.seen ? " seen" : ""}`}> {m.seen ? "✓✓" : "✓"}</span> : null}</small>
+            <small>{m.starred ? <Star className="inl-ic star" size={11} fill="currentColor" strokeWidth={2} aria-label="Starred" /> : null}{m.time_ago}{m.is_own && !m.deleted ? <span className={`mx-tick${m.seen ? " seen" : ""}`}> {m.seen ? "✓✓" : "✓"}</span> : null}</small>
             {m.reactions?.length ? (
               <div className="msg-reactions" onClick={(e) => e.stopPropagation()}>
                 {m.reactions.map((r) => (
@@ -575,7 +576,7 @@ This conversation closes for both of you. They're outside again and can knock if
       {replyTo ? (
         <div className="reply-bar">
           <span>Replying to: {replyTo.content || replyTo.media_type || "message"}</span>
-          <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">×</button>
+          <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><X size={20} strokeWidth={2} aria-hidden /></button>
         </div>
       ) : null}
       {recording ? (
@@ -594,12 +595,12 @@ This conversation closes for both of you. They're outside again and can knock if
       ) : (
         <form className="chat-input" onSubmit={send}>
           <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={pickFile} />
-          <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photo or video">📎</button>
+          <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photo or video"><Paperclip size={20} strokeWidth={2} aria-hidden /></button>
           <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
           {text.trim() ? (
             <button className="pill" disabled={busy}>Send</button>
           ) : (
-            <button type="button" className="icon-btn" onClick={startRecording} disabled={busy} aria-label="Record voice note">🎤</button>
+            <button type="button" className="icon-btn" onClick={startRecording} disabled={busy} aria-label="Record voice note"><Mic size={20} strokeWidth={2} aria-hidden /></button>
           )}
         </form>
       )}

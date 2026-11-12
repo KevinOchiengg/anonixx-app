@@ -131,7 +131,7 @@ const InsideCard = React.memo(({ connection, otherName }) => {
       style={s.insideCard}
     >
       <View style={s.insideKickerRow}>
-        <Lock size={rs(11)} color={T.gold} strokeWidth={2.4} />
+        <Lock size={rs(11)} color={T.gold} strokeWidth={2} />
         <Text style={s.insideKicker}>{guest ? "YOU'RE INSIDE" : 'INSIDE YOUR ROOM'}</Text>
       </View>
       <Text style={s.insideTitle}>
@@ -192,7 +192,7 @@ const ViewOnceBubble = React.memo(({ item, onOpen, onLongPress }) => {
     >
       {item.opened || isOwn
         ? <Eye size={rs(16)} color={isOwn ? '#fff' : T.textMute} strokeWidth={2} />
-        : <Lock size={rs(16)} color={T.gold} strokeWidth={2.2} />}
+        : <Lock size={rs(16)} color={T.gold} strokeWidth={2} />}
       <Text style={[s.viewOnceText, sealed && s.viewOnceTextSealed, isOwn && { color: '#fff' }]}>{label}</Text>
       <Text style={[s.viewOnceTime, isOwn && { color: 'rgba(255,255,255,0.65)' }]}>{item.time_ago}</Text>
     </GHTouchableOpacity>
@@ -324,7 +324,7 @@ const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply,
       s.replyActionWrap,
       { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) },
     ]}>
-      <Reply size={rs(18)} color={T.primary} strokeWidth={2.2} />
+      <Reply size={rs(18)} color={T.primary} strokeWidth={2} />
     </Animated.View>
   ), []);
 
@@ -1407,7 +1407,7 @@ export default function DropChatScreen({ route, navigation }) {
           hitSlop={HIT_SLOP}
           activeOpacity={0.75}
         >
-          <Phone size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
+          <Phone size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={2} />
           {callLive && <View style={s.liveDot} />}
         </TouchableOpacity>
 
@@ -1418,7 +1418,7 @@ export default function DropChatScreen({ route, navigation }) {
           hitSlop={HIT_SLOP}
           activeOpacity={0.75}
         >
-          <Video size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={1.8} />
+          <Video size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={2} />
           {callLive && <View style={s.liveDot} />}
         </TouchableOpacity>
 
@@ -1428,7 +1428,7 @@ export default function DropChatScreen({ route, navigation }) {
           hitSlop={HIT_SLOP}
           activeOpacity={0.75}
         >
-          <MoreVertical size={rs(19)} color={T.textMute} strokeWidth={1.8} />
+          <MoreVertical size={rs(19)} color={T.textMute} strokeWidth={2} />
         </TouchableOpacity>
       </View>
     );
@@ -1643,7 +1643,7 @@ export default function DropChatScreen({ route, navigation }) {
                 onPress={() => setVoicePreview(null)} disabled={voiceUploading} hitSlop={HIT_SLOP}
                 accessibilityRole="button" accessibilityLabel="Delete voice note"
               >
-                <Trash2 size={rs(18)} color={T.textMute} strokeWidth={1.8} />
+                <Trash2 size={rs(18)} color={T.textMute} strokeWidth={2} />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <VoiceWaveform uri={voicePreview.uri} durationSeconds={voicePreview.duration} compact />
@@ -1669,11 +1669,11 @@ export default function DropChatScreen({ route, navigation }) {
               {voicePreview ? (
                 voiceUploading
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />
+                  : <Send size={rs(21)} color="#fff" strokeWidth={2} />
               ) : text.trim() ? (
                 sending
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />
+                  : <Send size={rs(21)} color="#fff" strokeWidth={2} />
               ) : (
                 voiceUploading
                   ? <ActivityIndicator size="small" color="#fff" />
@@ -1700,15 +1700,15 @@ export default function DropChatScreen({ route, navigation }) {
           <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
             <View style={s.modalHandle} />
             <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); openInfo(); }} hitSlop={HIT_SLOP}>
-              <Info size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Info size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>Contact info</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); navigation.navigate('ChatMedia', { connectionId, name: headerTitle }); }} hitSlop={HIT_SLOP}>
-              <Images size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Images size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>Media, links and voice</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); navigation.navigate('StarredMessages', { connectionId, name: headerTitle }); }} hitSlop={HIT_SLOP}>
-              <Star size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Star size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>Starred messages</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1721,12 +1721,12 @@ export default function DropChatScreen({ route, navigation }) {
               }}
               hitSlop={HIT_SLOP}
             >
-              <BellOff size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <BellOff size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>{connection?.muted_until ? `Unmute (muted: ${mutedLabel(connection.muted_until).toLowerCase()})` : 'Mute notifications'}</Text>
             </TouchableOpacity>
             {chatProfile?.gallery?.length ? (
               <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); setGalleryViewerOpen(true); }} hitSlop={HIT_SLOP}>
-                <Images size={rs(16)} color={T.text} strokeWidth={1.8} />
+                <Images size={rs(16)} color={T.text} strokeWidth={2} />
                 <Text style={s.menuActionText}>Welcome media ({chatProfile.gallery.length})</Text>
               </TouchableOpacity>
             ) : null}
@@ -1738,12 +1738,12 @@ export default function DropChatScreen({ route, navigation }) {
               }}
               hitSlop={HIT_SLOP}
             >
-              <Eraser size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Eraser size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>Clear chat</Text>
             </TouchableOpacity>
             <View style={s.menuDivider} />
             <View style={s.menuHeaderRow}>
-              <Users size={rs(16)} color={T.textMute} strokeWidth={1.8} />
+              <Users size={rs(16)} color={T.textMute} strokeWidth={2} />
               <Text style={s.menuHeaderText}>
                 {connection?.is_sender ? 'Your room' : `${headerTitle}'s room`}
               </Text>
@@ -1774,34 +1774,34 @@ export default function DropChatScreen({ route, navigation }) {
             {connection?.is_sender ? (
               <>
                 <TouchableOpacity style={s.menuAction} onPress={handleOpenSettings} hitSlop={HIT_SLOP}>
-                  <Settings size={rs(16)} color={T.text} strokeWidth={1.8} />
+                  <Settings size={rs(16)} color={T.text} strokeWidth={2} />
                   <Text style={s.menuActionText}>Room settings</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.menuAction} onPress={handleRemoveGuest} hitSlop={HIT_SLOP}>
-                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
                   <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Remove from Room</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>
-                  <Flag size={rs(16)} color={T.text} strokeWidth={1.8} />
+                  <Flag size={rs(16)} color={T.text} strokeWidth={2} />
                   <Text style={s.menuActionText}>Report</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.menuAction} onPress={handleBlockHost} hitSlop={HIT_SLOP}>
-                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
                   <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Block</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>
-                  <Flag size={rs(16)} color={T.text} strokeWidth={1.8} />
+                  <Flag size={rs(16)} color={T.text} strokeWidth={2} />
                   <Text style={s.menuActionText}>Report</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.menuAction} onPress={handleReportDeceptive} hitSlop={HIT_SLOP}>
-                  <AlertTriangle size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <AlertTriangle size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
                   <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>This wasn't real</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.menuAction} onPress={handleBlockHost} hitSlop={HIT_SLOP}>
-                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
                   <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Block</Text>
                 </TouchableOpacity>
               </>
@@ -1852,22 +1852,22 @@ export default function DropChatScreen({ route, navigation }) {
               onPress={() => handleReply(actionSheetItem)}
               hitSlop={HIT_SLOP}
             >
-              <Reply size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Reply size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>Reply</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.menuAction} onPress={() => handleStar(actionSheetItem)} hitSlop={HIT_SLOP}>
-              <Star size={rs(16)} color={actionSheetItem?.starred ? T.gold || '#F5B942' : T.text} strokeWidth={1.8} fill={actionSheetItem?.starred ? T.gold || '#F5B942' : 'transparent'} />
+              <Star size={rs(16)} color={actionSheetItem?.starred ? T.gold || '#F5B942' : T.text} strokeWidth={2} fill={actionSheetItem?.starred ? T.gold || '#F5B942' : 'transparent'} />
               <Text style={s.menuActionText}>{actionSheetItem?.starred ? 'Unstar' : 'Star'}</Text>
             </TouchableOpacity>
             {!actionSheetItem?.view_once ? (
               <TouchableOpacity style={s.menuAction} onPress={() => { setForwardItem(actionSheetItem); setActionSheetItem(null); }} hitSlop={HIT_SLOP}>
-                <Forward size={rs(16)} color={T.text} strokeWidth={1.8} />
+                <Forward size={rs(16)} color={T.text} strokeWidth={2} />
                 <Text style={s.menuActionText}>Forward</Text>
               </TouchableOpacity>
             ) : null}
             {actionSheetItem?.content ? (
               <TouchableOpacity style={s.menuAction} onPress={() => handleCopy(actionSheetItem)} hitSlop={HIT_SLOP}>
-                <Copy size={rs(16)} color={T.text} strokeWidth={1.8} />
+                <Copy size={rs(16)} color={T.text} strokeWidth={2} />
                 <Text style={s.menuActionText}>Copy</Text>
               </TouchableOpacity>
             ) : null}
@@ -1876,7 +1876,7 @@ export default function DropChatScreen({ route, navigation }) {
               onPress={() => handleDeleteMessage(actionSheetItem, false)}
               hitSlop={HIT_SLOP}
             >
-              <Trash2 size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Trash2 size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>Delete for me</Text>
             </TouchableOpacity>
             {actionSheetItem?.is_own && (
@@ -1885,7 +1885,7 @@ export default function DropChatScreen({ route, navigation }) {
                 onPress={() => confirmDeleteForEveryone(actionSheetItem)}
                 hitSlop={HIT_SLOP}
               >
-                <Trash2 size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={1.8} />
+                <Trash2 size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
                 <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Delete for everyone</Text>
               </TouchableOpacity>
             )}

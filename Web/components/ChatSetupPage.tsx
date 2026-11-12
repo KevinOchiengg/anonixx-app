@@ -26,6 +26,7 @@ import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
 import WelcomeAudio from "./rooms/WelcomeAudio";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 type Profile = {
   background_pattern?: string;
@@ -521,11 +522,11 @@ function Inner() {
                 <div className="u-gal" key={`${m.media_url}-${i}`}>
                   {m.media_type === "video" ? <video src={m.media_url} muted playsInline preload="metadata" /> : <Image src={m.media_url} alt="" width={92} height={92} />}
                   {m.media_type !== "image" ? <b>{m.media_type.toUpperCase()}</b> : null}
-                  <button type="button" onClick={() => removeMedia(i)} aria-label={`Remove welcome media ${i + 1}`}>×</button>
+                  <button type="button" onClick={() => removeMedia(i)} aria-label={`Remove welcome media ${i + 1}`}><X size={20} strokeWidth={2} aria-hidden /></button>
                   <span className="u-gal-tools">
-                    <button type="button" disabled={i === 0} onClick={() => moveMedia(i, i - 1)} aria-label="Move earlier">‹</button>
+                    <button type="button" disabled={i === 0} onClick={() => moveMedia(i, i - 1)} aria-label="Move earlier"><ChevronLeft size={18} strokeWidth={2} aria-hidden /></button>
                     <button type="button" disabled={uploading} onClick={() => { replaceAt.current = i; galInput.current?.click(); }} aria-label={`Replace welcome media ${i + 1}`}>↻</button>
-                    <button type="button" disabled={i === gallery.length - 1} onClick={() => moveMedia(i, i + 1)} aria-label="Move later">›</button>
+                    <button type="button" disabled={i === gallery.length - 1} onClick={() => moveMedia(i, i + 1)} aria-label="Move later"><ChevronRight size={18} strokeWidth={2} aria-hidden /></button>
                   </span>
                 </div>
               ))}

@@ -20,6 +20,7 @@ import { defaultEdit, isMeaningful, type VideoEdit } from "@/lib/videoEdit";
 import { IconText, IconImages, IconVideo, IconMic, IconPoll } from "../compose/toolicons";
 import { TAG_GROUPS, TOP_TAGS } from "@/lib/adminTags";
 import "../../app/poststudio.css";
+import { Upload, X } from "lucide-react";
 
 type Format = "text" | "photo" | "video" | "voice" | "poll";
 const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode }[] = [
@@ -418,7 +419,7 @@ export default function PostStudio() {
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileRef.current?.click(); }}
     >
       <span className="ps-drop-ic" aria-hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" /></svg>
+        <Upload strokeWidth={2} aria-hidden />
       </span>
       <b>{format === "video" ? "Select video to upload" : photos.length ? "Add more photos" : "Select photos to upload"}</b>
       <span>or drag and drop {format === "video" ? "a file" : "them"} here · it starts uploading straight away</span>
@@ -488,7 +489,7 @@ export default function PostStudio() {
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={p.url} alt={`Photo ${i + 1}`} />
                             {i === 0 ? <em>Cover</em> : <button type="button" className="mk" onClick={() => makeCover(i)}>Make cover</button>}
-                            <button type="button" className="rm" aria-label="Remove photo" onClick={() => setPhotos((l) => l.filter((_, j) => j !== i))}>×</button>
+                            <button type="button" className="rm" aria-label="Remove photo" onClick={() => setPhotos((l) => l.filter((_, j) => j !== i))}><X size={20} strokeWidth={2} aria-hidden /></button>
                           </div>
                         ))}
                       </div>
@@ -530,7 +531,7 @@ export default function PostStudio() {
                   <div className="ps-opt" key={i}>
                     <span>{String.fromCharCode(65 + i)}</span>
                     <input type="text" maxLength={60} value={o} onChange={(e) => setOptions((l) => l.map((x, j) => (j === i ? e.target.value : x)))} placeholder={`Option ${i + 1}`} aria-label={`Option ${i + 1}`} />
-                    {options.length > 2 ? <button type="button" aria-label="Remove option" onClick={() => setOptions((l) => l.filter((_, j) => j !== i))}>×</button> : null}
+                    {options.length > 2 ? <button type="button" aria-label="Remove option" onClick={() => setOptions((l) => l.filter((_, j) => j !== i))}><X size={20} strokeWidth={2} aria-hidden /></button> : null}
                   </div>
                 ))}
                 {options.length < 4 ? <button type="button" className="ps-link" onClick={() => setOptions((l) => [...l, ""])}>+ Add option</button> : null}
@@ -556,7 +557,7 @@ export default function PostStudio() {
             <p className="ps-help">When someone searches Anonixx, these words (and your caption) are what find this drop. Add what people would type.</p>
             <div className="ps-tags">
               {tags.map((t) => (
-                <span key={t} className="ps-tag">#{t}<button type="button" aria-label={`Remove ${t}`} onClick={() => setTags((l) => l.filter((x) => x !== t))}>×</button></span>
+                <span key={t} className="ps-tag">#{t}<button type="button" aria-label={`Remove ${t}`} onClick={() => setTags((l) => l.filter((x) => x !== t))}><X size={20} strokeWidth={2} aria-hidden /></button></span>
               ))}
               {tags.length < MAX_TAGS ? (
                 <input

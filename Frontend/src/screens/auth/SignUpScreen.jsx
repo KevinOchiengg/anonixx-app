@@ -27,7 +27,9 @@ import {
   rs, rf, rp, rh, SPACING, FONT, RADIUS,
   ICON, INPUT_HEIGHT, BUTTON_HEIGHT, SCREEN, HIT_SLOP,
 } from '../../utils/responsive';
-import { User, Mail, Lock, Eye, EyeOff, CheckCircle2, Check, Gift, ArrowLeft, Camera } from 'lucide-react-native';
+import {
+  User, Mail, Lock, Eye, EyeOff, CheckCircle2, Check, Gift, ArrowLeft, Camera, TriangleAlert,
+} from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import { THEME } from '../../utils/theme';
 import { ANONYMOUS_NAME_RE, ANONYMOUS_NAME_HINT, normalizeNameSpaces } from '../../utils/anonymousName';
@@ -305,7 +307,7 @@ export default function SignUpScreen({ navigation }) {
                   <Image source={{ uri: avatarUri }} style={styles.avatarImage} resizeMode="cover" />
                 ) : (
                   <View style={styles.avatarPlaceholder}>
-                    <User size={rs(28)} color={THEME.textSecondary} strokeWidth={1.8} />
+                    <User size={rs(28)} color={THEME.textSecondary} strokeWidth={2} />
                   </View>
                 )}
                 <TouchableOpacity
@@ -323,7 +325,7 @@ export default function SignUpScreen({ navigation }) {
 
               {showPhotoDisclaimer && !avatarUri && (
                 <View style={styles.photoDisclaimer}>
-                  <Text style={styles.photoDisclaimerTitle}>⚠️  Before you upload</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><TriangleAlert size={rs(14)} color={THEME.warning || '#F59E0B'} strokeWidth={2} /><Text style={styles.photoDisclaimerTitle}>Before you upload</Text></View>
                   <Text style={styles.photoDisclaimerBody}>
                     A real photo makes you identifiable. Anonixx is built for anonymous
                     expression — most people stay faceless. You can always skip this and
@@ -556,7 +558,7 @@ export default function SignUpScreen({ navigation }) {
               accessibilityState={{ checked: adult }}
             >
               <View style={[styles.adultBox, adult && styles.adultBoxOn, errors.adult && styles.inputRowError]}>
-                {adult ? <Check size={rs(14)} color="#fff" strokeWidth={3} /> : null}
+                {adult ? <Check size={rs(14)} color="#fff" strokeWidth={2.5} /> : null}
               </View>
               <Text style={styles.adultText}>I'm 18 or older and I agree to the Terms of Service and Privacy Policy.</Text>
             </TouchableOpacity>

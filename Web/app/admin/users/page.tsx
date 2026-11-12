@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { X } from "lucide-react";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 
@@ -120,7 +121,7 @@ export default function AdminUsers() {
                       <div className="adm-menu">
                         <div className="adm-menu-head">
                           <span>Actions</span>
-                          <button type="button" className="adm-menu-x" aria-label="Close" onClick={() => setOpen(null)}>×</button>
+                          <button type="button" className="adm-menu-x" aria-label="Close" onClick={() => setOpen(null)}><X size={20} strokeWidth={2} aria-hidden /></button>
                         </div>
                         <button disabled={busy === u.id} onClick={() => toggle(u, "ban")}>{u.is_active ? "Ban" : "Unban"}</button>
                         <button disabled={busy === u.id} onClick={() => toggle(u, "verify")}>{u.is_verified ? "Unverify" : "Verify"}</button>

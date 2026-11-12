@@ -4,7 +4,9 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ArrowLeft, Mic, Star } from 'lucide-react-native';
+import {
+  ArrowLeft, Mic, Star, Video as VideoIcon,
+} from 'lucide-react-native';
 import { rs, rf, rp, FONT, SPACING, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
 import { useToast } from '../../components/ui/Toast';
@@ -68,7 +70,7 @@ export default function StarredMessagesScreen({ route, navigation }) {
                 {m.media_type === 'voice' ? (
                   <View style={s.voice}><Mic size={rs(16)} color={T.primary} /><Text style={s.text}>Voice note {duration(m.duration_seconds)}</Text></View>
                 ) : null}
-                {m.media_type === 'video' ? <Text style={s.text}>🎥 Video</Text> : null}
+                {m.media_type === 'video' ? <View style={s.voice}><VideoIcon size={rs(16)} color={T.primary} /><Text style={s.text}>Video</Text></View> : null}
                 {m.content ? <Text style={s.text}>{m.content}</Text> : null}
                 <Star size={rs(11)} color={T.gold} fill={T.gold} style={s.star} />
               </View>

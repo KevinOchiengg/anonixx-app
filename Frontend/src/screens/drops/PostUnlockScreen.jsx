@@ -328,7 +328,7 @@ export default function PostUnlockScreen({ route, navigation }) {
                 </View>
               )}
               <TouchableOpacity style={s.mediaRemoveBtn} onPress={handleClearMedia} hitSlop={HIT_SLOP}>
-                <X size={rs(14)} color="#fff" strokeWidth={2.5} />
+                <X size={rs(14)} color="#fff" strokeWidth={2} />
               </TouchableOpacity>
             </View>
           ) : (

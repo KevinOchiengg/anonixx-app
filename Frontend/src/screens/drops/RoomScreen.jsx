@@ -309,7 +309,7 @@ export default function RoomScreen({ route, navigation }) {
         <View style={s.centered}>
           {gate ? <AgeGate onDone={load} /> : error ? (
             <>
-              <Lock size={rs(30)} color={T.gold} strokeWidth={1.8} />
+              <Lock size={rs(30)} color={T.gold} strokeWidth={2} />
               <Text style={s.closedTitle}>This Room is closed.</Text>
               <Text style={s.muted}>{error}</Text>
             </>

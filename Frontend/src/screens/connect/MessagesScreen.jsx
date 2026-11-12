@@ -389,7 +389,7 @@ export default function MessagesScreen({ navigation, route }) {
       {FabIcon && !selecting && !searching ? (
         <TouchableOpacity style={s.fab} onPress={onFab} activeOpacity={0.85}
           accessibilityLabel={tab === 'chats' ? 'New chat' : tab === 'calls' ? 'New call' : 'Go live'}>
-          <FabIcon size={rs(23)} color="#fff" strokeWidth={2.2} />
+          <FabIcon size={rs(23)} color="#fff" strokeWidth={2} />
         </TouchableOpacity>
       ) : null}
 

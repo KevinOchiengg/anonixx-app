@@ -19,6 +19,7 @@ import RoomSettingsMenu from "./rooms/RoomSettingsMenu";
 import UpdatesPanel from "./rooms/UpdatesPanel";
 import { StartSession } from "./rooms/LivePanel";
 import { CallsPanel, ChatRow, Icon, PickChats } from "./rooms/Messenger";
+import { Star } from "lucide-react";
 
 type Req = KnockClue & {
   id: string;
@@ -170,7 +171,7 @@ function Starred({ back }: { back: () => void }) {
                 {m.media_type === "image" && m.media_url ? <Image src={m.media_url} alt="" width={220} height={220} style={{ height: "auto" }} /> : null}
                 {m.media_type && m.media_type !== "image" ? <span>{m.preview}</span> : null}
                 {m.content ? <span>{m.content}</span> : null}
-                <i aria-hidden>★</i>
+                <i aria-hidden><Star size={12} fill="currentColor" strokeWidth={2} /></i>
               </Link>
               <button className="mx-st-un" onClick={() => unstar(m)}>Unstar</button>
             </li>

@@ -3,8 +3,7 @@ import Slider from '@react-native-community/slider';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import {
-  BarChart2, Bookmark, Coins, EyeOff, Flag, Heart, Link2,
-  MessageCircle, MoreHorizontal, Play, Share2, UserX, VolumeX, X,
+  BarChart2, Bookmark, Coins, EyeOff, Flag, Heart, Link2, MessageCircle, MoreHorizontal, Play, Share2, UserX, VolumeX, X, Eye,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -287,7 +286,7 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edi
           )}
           {viewCount > 0 && (
             <View style={styles.videoViewsChip} pointerEvents="none">
-              <Text style={styles.videoViewsText}>👁 {views}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Eye size={rs(12)} color="#fff" strokeWidth={2} /><Text style={styles.videoViewsText}>{views}</Text></View>
             </View>
           )}
         </View>
@@ -329,7 +328,7 @@ export const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) =
   return (
     <View style={styles.pollWrap}>
       <View style={styles.pollTopRow}>
-        <BarChart2 size={rs(12)} color={T.primary} strokeWidth={1.5} />
+        <BarChart2 size={rs(12)} color={T.primary} strokeWidth={2} />
         <Text style={styles.pollLabel}>{isExpired ? 'poll ended' : 'poll · 24h'}</Text>
         {hasVoted && <Text style={styles.pollVoteCount}>{poll.total_votes} vote{poll.total_votes !== 1 ? 's' : ''}</Text>}
       </View>
@@ -631,7 +630,7 @@ function DropCard({
             {!post.is_own_post && !post.is_admin_drop && post.kind !== 'confession' && (
               <TouchableOpacity onPress={handleLinkUpPress} style={styles.linkUpBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
                 {post.kind === 'hookup'
-                  ? <Text style={styles.linkUpBtnText}>🖤</Text>
+                  ? <Heart size={rs(16)} color="#fff" fill="#fff" strokeWidth={2} />
                   : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
                 <Text style={styles.linkUpBtnText}>Knock</Text>
                 <View style={styles.linkUpCostPill}>

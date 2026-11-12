@@ -85,8 +85,8 @@ const UpdatesPanel = forwardRef(function UpdatesPanel({ navigation, onLiveCount 
           sub={hosting ? `${hosting.guest_count}/${hosting.max_guests} in` : 'Your Room'}
           busy={busy === 'host'}
           onPress={() => (hosting ? run('host', () => callsApi.end(hosting.id)) : setStarting(true))}
-          badge={hosting ? <View style={[s.plus, s.liveBadge]}><Radio size={rs(11)} color="#fff" strokeWidth={3} /></View>
-            : <View style={s.plus}><Plus size={rs(13)} color="#fff" strokeWidth={3} /></View>}
+          badge={hosting ? <View style={[s.plus, s.liveBadge]}><Radio size={rs(11)} color="#fff" strokeWidth={2.5} /></View>
+            : <View style={s.plus}><Plus size={rs(13)} color="#fff" strokeWidth={2.5} /></View>}
         />
         {sessions.map((c) => (
           <Ring

@@ -49,7 +49,7 @@ export default function ChatInputBar({
               >
                 {attachUploading
                   ? <ActivityIndicator size="small" color={T.primary} />
-                  : <Paperclip size={rs(21)} color={T.textMute} strokeWidth={1.8} />}
+                  : <Paperclip size={rs(21)} color={T.textMute} strokeWidth={2} />}
               </TouchableOpacity>
             )}
             {!!onEmojiPress && (
@@ -59,7 +59,7 @@ export default function ChatInputBar({
                 hitSlop={HIT_SLOP}
                 activeOpacity={0.75}
               >
-                <Smile size={rs(23)} color={emojiActive ? T.primary : T.textMute} strokeWidth={1.8} />
+                <Smile size={rs(23)} color={emojiActive ? T.primary : T.textMute} strokeWidth={2} />
               </TouchableOpacity>
             )}
           </>
@@ -82,7 +82,7 @@ export function SendButton({ onPress, sending = false, disabled = false }) {
     >
       {sending
         ? <ActivityIndicator size="small" color="#fff" />
-        : <Send size={rs(21)} color="#fff" strokeWidth={2.2} />}
+        : <Send size={rs(21)} color="#fff" strokeWidth={2} />}
     </TouchableOpacity>
   );
 }

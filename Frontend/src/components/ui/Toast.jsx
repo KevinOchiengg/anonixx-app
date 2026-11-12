@@ -140,7 +140,7 @@ const ToastItem = React.memo(({ toast, onDismiss }) => {
       <View
         style={[styles.iconWrapper, { backgroundColor: config.color + '22' }]}
       >
-        <Icon size={18} color={config.color} strokeWidth={2.2} />
+        <Icon size={18} color={config.color} strokeWidth={2} />
       </View>
 
       {/* Text */}
@@ -162,7 +162,7 @@ const ToastItem = React.memo(({ toast, onDismiss }) => {
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         activeOpacity={0.7}
       >
-        <X size={14} color={THEME.textSecondary} strokeWidth={2.5} />
+        <X size={14} color={THEME.textSecondary} strokeWidth={2} />
       </TouchableOpacity>
     </Animated.View>
   );

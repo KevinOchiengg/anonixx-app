@@ -1,24 +1,30 @@
-const P = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+// Admin dashboard icons. Lucide at stroke 2, the same family as the app and the rest of the site.
+import {
+  Activity, Bell, Bot, Calendar, Check, Coins, Eye, FileText, Flag, LayoutDashboard, List, Megaphone, Menu,
+  MessagesSquare, Music, RotateCcw, ShieldCheck, SquareKanban, SquarePlus, TrendingUp, Users, X,
+} from "lucide-react";
 
-export const IcDash = () => (<svg {...P}><rect x="3" y="3" width="7.5" height="9" rx="2" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="2" /><rect x="13.5" y="11.5" width="7.5" height="9.5" rx="2" /><rect x="3" y="15" width="7.5" height="6" rx="2" /></svg>);
-export const IcPost = () => (<svg {...P}><rect x="3" y="3" width="18" height="18" rx="5" /><path d="M12 8v8M8 12h8" /></svg>);
-export const IcUsers = () => (<svg {...P}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.4c2 .7 3.5 2.6 3.5 5.6" /></svg>);
-export const IcPosts = () => (<svg {...P}><rect x="4" y="3" width="16" height="18" rx="3" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>);
-export const IcShield = () => (<svg {...P}><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8 7.5 9.5 4.4-1.5 7.5-4.9 7.5-9.5V6z" /><path d="m9 12 2.2 2.2L15.5 10" /></svg>);
-export const IcRefund = () => (<svg {...P}><path d="M4 12a8 8 0 1 0 2.6-5.9" /><path d="M4 4v4.5h4.5" /><path d="M12 8v4l2.5 1.5" /></svg>);
-export const IcChat = () => (<svg {...P}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5z" /></svg>);
-export const IcMegaphone = () => (<svg {...P}><path d="M3 10v4a1 1 0 0 0 1 1h3l8 4.5V4.5L7 9H4a1 1 0 0 0-1 1z" /><path d="M19 9.5a3.5 3.5 0 0 1 0 5" /></svg>);
-export const IcMusic = () => (<svg {...P}><path d="M9 18V6l11-2v12" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="17.5" cy="16" r="2.5" /></svg>);
-export const IcFlag = () => (<svg {...P}><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></svg>);
-export const IcCalendar = () => (<svg {...P}><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M8 3v4M16 3v4M3.5 10h17" /></svg>);
-export const IcKanban = () => (<svg {...P}><rect x="3.5" y="3.5" width="5" height="17" rx="1.8" /><rect x="10" y="3.5" width="5" height="11" rx="1.8" /><rect x="16.5" y="3.5" width="4" height="7" rx="1.8" /></svg>);
-export const IcMenu = () => (<svg {...P}><path d="M4 7h16M4 12h16M4 17h10" /></svg>);
-export const IcBell = () => (<svg {...P}><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>);
-export const IcClose = () => (<svg {...P}><path d="M6 6l12 12M18 6 6 18" /></svg>);
-export const IcCheck = () => (<svg {...P}><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>);
-export const IcCoin = () => (<svg {...P}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9.5 9.5c.4-.9 1.3-1.4 2.5-1.4 1.5 0 2.5.7 2.5 1.8s-1 1.6-2.5 1.9-2.5.8-2.5 1.9 1 1.9 2.5 1.9c1.2 0 2.1-.5 2.5-1.4" /></svg>);
-export const IcTrendUp = () => (<svg {...P}><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>);
-export const IcEye = () => (<svg {...P}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></svg>);
-export const IcPulse = () => (<svg {...P}><path d="M3 12h4l2.5-6 5 12 2.5-6H21" /></svg>);
-export const IcBot = () => (<svg {...P}><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9.5 17h5" /></svg>);
-export const IcList = () => (<svg {...P}><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg>);
+const P = { size: 20, strokeWidth: 2, "aria-hidden": true } as const;
+
+export const IcDash = () => <LayoutDashboard {...P} />;
+export const IcPost = () => <SquarePlus {...P} />;
+export const IcUsers = () => <Users {...P} />;
+export const IcPosts = () => <FileText {...P} />;
+export const IcShield = () => <ShieldCheck {...P} />;
+export const IcRefund = () => <RotateCcw {...P} />;
+export const IcChat = () => <MessagesSquare {...P} />;
+export const IcMegaphone = () => <Megaphone {...P} />;
+export const IcMusic = () => <Music {...P} />;
+export const IcFlag = () => <Flag {...P} />;
+export const IcCalendar = () => <Calendar {...P} />;
+export const IcKanban = () => <SquareKanban {...P} />;
+export const IcMenu = () => <Menu {...P} />;
+export const IcBell = () => <Bell {...P} />;
+export const IcClose = () => <X {...P} />;
+export const IcCheck = () => <Check {...P} />;
+export const IcCoin = () => <Coins {...P} />;
+export const IcTrendUp = () => <TrendingUp {...P} />;
+export const IcEye = () => <Eye {...P} />;
+export const IcPulse = () => <Activity {...P} />;
+export const IcBot = () => <Bot {...P} />;
+export const IcList = () => <List {...P} />;

@@ -220,7 +220,7 @@ export default function GoogleSignInButton({ label = 'Continue with Google', ref
                 accessibilityState={{ checked: adult }}
               >
                 <View style={[styles.adultBox, adult && styles.adultBoxOn]}>
-                  {adult ? <Check size={rs(14)} color="#fff" strokeWidth={3} /> : null}
+                  {adult ? <Check size={rs(14)} color="#fff" strokeWidth={2.5} /> : null}
                 </View>
                 <Text style={styles.adultText}>I'm 18 or older and I agree to the Terms of Service and Privacy Policy.</Text>
               </TouchableOpacity>

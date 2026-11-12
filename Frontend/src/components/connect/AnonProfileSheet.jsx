@@ -7,7 +7,9 @@ import {
   StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X, UserCheck, Crown, MapPin, Link2, Coins } from 'lucide-react-native';
+import {
+  X, UserCheck, Crown, MapPin, Link2, Coins, CircleAlert,
+} from 'lucide-react-native';
 
 // Same Link Up cost as DropCard / PostUnlockScreen.
 const UNLOCK_COST = 6;
@@ -184,7 +186,7 @@ export default function AnonProfileSheet({
         {/* Error */}
         {error && !loading && (
           <View style={styles.centered}>
-            <Text style={styles.errorEmoji}>🌑</Text>
+            <CircleAlert size={rs(36)} color={T.textMuted} strokeWidth={2} style={{ marginBottom: rp(8) }} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               style={styles.retryBtn}

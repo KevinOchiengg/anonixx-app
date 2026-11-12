@@ -7,12 +7,13 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Post } from "@/lib/api";
 import { CATEGORIES, categoryOf, linkUpFacts, splitConfession, topicLabel, type Category, type Fact } from "@/lib/confession";
+import { Feather, Flame, Sparkles } from "lucide-react";
 
 function CategoryIcon({ c }: { c: Category }) {
-  const p = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-  if (c === "linkup") return <svg {...p}><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.3 1.6 1.2 2.6 2.4 3C11 9 11.5 5.5 12 3Z" /></svg>;
-  if (c === "vulnerable") return <svg {...p}><path d="M20.2 4.8a6 6 0 0 0-8.5 0L5 11.5V19h7.5l6.7-6.7a6 6 0 0 0 1-7.5ZM16 8 2 22M17.5 15H9" /></svg>;
-  return <svg {...p}><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4L12 3ZM19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" /></svg>;
+  const p = { strokeWidth: 2, "aria-hidden": true } as const;
+  if (c === "linkup") return <Flame {...p} />;
+  if (c === "vulnerable") return <Feather {...p} />;
+  return <Sparkles {...p} />;
 }
 
 export function CategoryLabel({ c }: { c: Category }) {

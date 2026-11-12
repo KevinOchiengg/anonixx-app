@@ -14,6 +14,7 @@ import { COUNTRIES, KENYA_COUNTIES } from "@/lib/locations";
 import AgeGate from "./AgeGate";
 import BottomNav from "./BottomNav";
 import { Clock, Close, MapPin, SearchIcon } from "./feedicons";
+import { ArrowLeft, Heart, MessageCircle } from "lucide-react";
 
 type Tab = "near" | "stories";
 type Scope = "close" | "area" | "country" | "anywhere";
@@ -180,7 +181,7 @@ export default function SearchPage() {
     <div className="stage">
       <div className="phone sp-phone dc hasnav">
         <form className="sp-head" onSubmit={(e) => { e.preventDefault(); remember(); }}>
-          <button type="button" className="sp-back" onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} aria-label="Back">←</button>
+          <button type="button" className="sp-back" onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} aria-label="Back"><ArrowLeft size={20} strokeWidth={2} aria-hidden /></button>
           <div className="sp-input">
             <SearchIcon />
             <input
@@ -558,8 +559,8 @@ function StoryCard({ post }: { post: Post }) {
       {text ? <p className="sp-text">{text}</p> : <p className="sp-text dim">A post with media</p>}
       <div className="sp-card-foot">
         <b>{post.anonymous_name || "Anonymous"}</b>
-        <span>♥ {compact(post.likes_count || 0)}</span>
-        <span>💬 {post.thread_count ? compact(post.thread_count) : "be first"}</span>
+        <span><Heart className="inl-ic" size={13} strokeWidth={2} aria-hidden /> {compact(post.likes_count || 0)}</span>
+        <span><MessageCircle className="inl-ic" size={13} strokeWidth={2} aria-hidden /> {post.thread_count ? compact(post.thread_count) : "be first"}</span>
       </div>
     </Link>
   );

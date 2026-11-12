@@ -151,3 +151,23 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .ci-row > em { font-style: normal; font-size: 12.5px; color: var(--muted); }
 .ci-group.danger .ci-row > b { color: #ef4444; }
 .ci-mute { display: flex; gap: 8px; padding: 0 16px 12px; flex-wrap: wrap; }
+
+/* ── One icon system across Anonixx: Lucide, stroke 2, coral accent in soft tiles ── */
+.ibox { color: var(--rose); }
+.ibox.gold { color: var(--gold); }
+.ibox svg { width: 18px; height: 18px; }
+.row-chev { flex: none; color: var(--faint); }
+.inl-ic { display: inline-block; vertical-align: -2px; flex: none; }
+.inl-ic.star { color: var(--gold); margin-right: 3px; }
+.mx-muted { display: inline-block; vertical-align: -1px; margin-left: 5px; color: var(--faint); }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.icon-btn:hover:not(:disabled) { color: var(--rose); }
+.kind-ico { color: var(--rose); }
+.kind-ico svg { width: 20px; height: 20px; }
+.lu-heart { width: 15px; height: 15px; color: currentColor; }
+.paywall-icon svg { width: 28px; height: 28px; }
+.limit-moon { display: inline-flex; color: var(--rose); }
+.limit-moon svg { width: 56px; height: 56px; }
+.cmt-empty span svg { color: var(--faint); }
+.mx-dir { display: inline-flex; vertical-align: -2px; }
+.mx-st-bub i { display: inline-flex; }

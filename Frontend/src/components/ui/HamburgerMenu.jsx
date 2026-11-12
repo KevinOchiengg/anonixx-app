@@ -27,7 +27,7 @@ const NavRow = React.memo(({ icon: Icon, label, value, onPress, danger }) => (
     hitSlop={HIT_SLOP}
   >
     <View style={[row.icon, danger && row.iconDanger]}>
-      <Icon size={rs(15)} color={danger ? T.danger : T.text} strokeWidth={1.8} />
+      <Icon size={rs(17)} color={danger ? T.danger : T.primary} strokeWidth={2} />
     </View>
     <Text style={[row.label, danger && row.labelDanger]}>{label}</Text>
     {value ? <Text style={row.value}>{value}</Text> : null}
@@ -38,7 +38,7 @@ const NavRow = React.memo(({ icon: Icon, label, value, onPress, danger }) => (
 const ToggleRow = React.memo(({ icon: Icon, label, value, onToggle, indent }) => (
   <View style={[row.wrap, indent && row.wrapIndent]}>
     {!indent
-      ? <View style={row.icon}><Icon size={rs(15)} color={T.text} strokeWidth={1.8} /></View>
+      ? <View style={row.icon}><Icon size={rs(17)} color={T.primary} strokeWidth={2} /></View>
       : <View style={row.indentBar} />
     }
     <Text style={[row.label, { flex: 1 }]}>{label}</Text>
@@ -238,7 +238,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           <SectionHeader title="About" />
           <View style={sec.card}>
             <View style={row.wrap}>
-              <View style={row.icon}><HelpCircle size={rs(15)} color={T.text} strokeWidth={1.8} /></View>
+              <View style={row.icon}><HelpCircle size={rs(15)} color={T.text} strokeWidth={2} /></View>
               <Text style={[row.label, { flex: 1 }]}>Version</Text>
               <Text style={row.value}>1.0.0</Text>
             </View>

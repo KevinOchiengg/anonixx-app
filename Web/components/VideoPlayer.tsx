@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { fillsFrame } from "@/lib/mediaFit";
 import { fmtTime, type VideoEdit } from "@/lib/videoEdit";
 import VideoOverlays from "./VideoOverlays";
+import { Play } from "lucide-react";
 
 type Props = {
   src: string;
@@ -20,7 +21,7 @@ type Props = {
 // Only the active slide plays; neighbours preload metadata; the rest show a poster.
 // Tap to pause/play, drag the bottom bar to scrub, 2x from the long-press menu (`rate`),
 // ←/→ jump 5s on desktop. Phone-shaped videos fill the screen; others sit over a blurred copy.
-const PlayIcon = () => <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z" /></svg>;
+const PlayIcon = () => <Play fill="currentColor" strokeWidth={0} aria-hidden />;
 
 const KEY_JUMP = 5;
 export const TAP_GAP = 250;

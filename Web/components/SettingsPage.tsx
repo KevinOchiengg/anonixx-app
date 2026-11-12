@@ -7,6 +7,7 @@ import { helplinesFor, FIND_A_HELPLINE } from "@/lib/helplines";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@/lib/push";
+import { Ban, Bell, Bookmark, ChevronRight, Coins, Crown, FileText, Flag, Gift, Headphones, Lock, MapPin, Megaphone, MessageCircle, Search, ShieldCheck, ShieldEllipsis, ShoppingBag, Sparkles, Trash2, UserRound, Wallet } from "lucide-react";
 
 
 function Inner() {
@@ -94,27 +95,27 @@ function Inner() {
       {err ? <div className="err">{err}</div> : null}
 
       <ul className="rows links">
-        <li><Link href="/coins" className="row-item"><span className="ibox gold">🪙</span><span className="grow"><b>Coins and subscription</b><small>{user.coin_balance} coins</small></span>›</Link></li>
-        <li><Link href="/saved" className="row-item"><span className="ibox">🔖</span><span className="grow"><b>Saved posts</b></span>›</Link></li>
-        <li><Link href="/search" className="row-item"><span className="ibox">🔍</span><span className="grow"><b>Search</b></span>›</Link></li>
-        <li><Link href="/support" className="row-item"><span className="ibox">🎧</span><span className="grow"><b>Support</b><small>Message us. We reply here.</small></span>›</Link></li>
-        <li><Link href="/premium" className="row-item"><span className="ibox gold">👑</span><span className="grow"><b>Premium</b></span>›</Link></li>
-        <li><Link href="/dashboard" className="row-item"><span className="ibox gold">💰</span><span className="grow"><b>Earnings</b></span>›</Link></li>
-        <li><Link href="/market" className="row-item"><span className="ibox">🛍️</span><span className="grow"><b>Market</b></span>›</Link></li>
-        <li><Link href="/vibe" className="row-item"><span className="ibox rose">✨</span><span className="grow"><b>Vibe score</b></span>›</Link></li>
-        <li><Link href="/whatsapp" className="row-item"><span className="ibox">💬</span><span className="grow"><b>Send anonymous WhatsApp</b></span>›</Link></li>
-        <li><Link href="/ads/new" className="row-item"><span className="ibox">📣</span><span className="grow"><b>Advertise</b></span>›</Link></li>
-        <li><Link href="/referrals" className="row-item"><span className="ibox rose">🎁</span><span className="grow"><b>Invite friends</b><small>Earn coins for every friend who joins</small></span>›</Link></li>
-        {user.is_admin ? <li><Link href="/admin" className="row-item"><span className="ibox">🛡️</span><span className="grow"><b>Admin</b></span>›</Link></li> : null}
+        <li><Link href="/coins" className="row-item"><span className="ibox gold"><Coins size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Coins and subscription</b><small>{user.coin_balance} coins</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/saved" className="row-item"><span className="ibox"><Bookmark size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Saved posts</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/search" className="row-item"><span className="ibox"><Search size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Search</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/support" className="row-item"><span className="ibox"><Headphones size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Support</b><small>Message us. We reply here.</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/premium" className="row-item"><span className="ibox gold"><Crown size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Premium</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/dashboard" className="row-item"><span className="ibox gold"><Wallet size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Earnings</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/market" className="row-item"><span className="ibox"><ShoppingBag size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Market</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/vibe" className="row-item"><span className="ibox rose"><Sparkles size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Vibe score</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/whatsapp" className="row-item"><span className="ibox"><MessageCircle size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Send anonymous WhatsApp</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/ads/new" className="row-item"><span className="ibox"><Megaphone size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Advertise</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/referrals" className="row-item"><span className="ibox rose"><Gift size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Invite friends</b><small>Earn coins for every friend who joins</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        {user.is_admin ? <li><Link href="/admin" className="row-item"><span className="ibox"><ShieldCheck size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Admin</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li> : null}
       </ul>
 
       <h2 className="sec">Profile and privacy</h2>
       <ul className="rows links">
-        <li><Link href="/profile/edit" className="row-item"><span className="ibox">👤</span><span className="grow"><b>Edit profile</b><small>Name, photo, gender</small></span>›</Link></li>
-        <li><Link href="/change-password" className="row-item"><span className="ibox">🔒</span><span className="grow"><b>Change password</b></span>›</Link></li>
-        <li><Link href="/location" className="row-item"><span className="ibox">📍</span><span className="grow"><b>Feed location</b><small>Lean your feed toward people nearby</small></span>›</Link></li>
-        <li><Link href="/blocked" className="row-item"><span className="ibox">🚫</span><span className="grow"><b>Blocked people</b></span>›</Link></li>
-        <li><Link href="/moderation" className="row-item"><span className="ibox">🚩</span><span className="grow"><b>Flagged posts</b><small>See what was reported or hidden</small></span>›</Link></li>
+        <li><Link href="/profile/edit" className="row-item"><span className="ibox"><UserRound size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Edit profile</b><small>Name, photo, gender</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/change-password" className="row-item"><span className="ibox"><Lock size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Change password</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/location" className="row-item"><span className="ibox"><MapPin size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Feed location</b><small>Lean your feed toward people nearby</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/blocked" className="row-item"><span className="ibox"><Ban size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Blocked people</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/moderation" className="row-item"><span className="ibox"><Flag size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Flagged posts</b><small>See what was reported or hidden</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
       </ul>
 
       <form className="form" onSubmit={rename}>
@@ -138,7 +139,7 @@ function Inner() {
         <ul className="rows links">
           <li>
             <button type="button" className="row-item" onClick={togglePush} style={{ width: "100%", textAlign: "left" }}>
-              <span className="ibox rose">🔔</span>
+              <span className="ibox rose"><Bell size={18} strokeWidth={2} aria-hidden /></span>
               <span className="grow"><b>Notifications</b><small>{pushOn ? "On for this browser. Tap to turn off." : "Get told when someone messages, links up or goes live."}</small></span>
               {pushOn ? "On" : "Off"}
             </button>
@@ -150,15 +151,15 @@ function Inner() {
       <p className="muted small">If you&apos;re thinking of hurting yourself, you&apos;re not alone. Talk to someone tonight. In an emergency, call your local emergency number.</p>
       <ul className="rows links">
         {helplines.map((h) => (
-          <li key={h.href}><a href={h.href} className="row-item" {...(h.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}><span className="grow"><b>{h.name}</b> <span className="muted">{h.label}</span></span>›</a></li>
+          <li key={h.href}><a href={h.href} className="row-item" {...(h.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}><span className="grow"><b>{h.name}</b> <span className="muted">{h.label}</span></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></a></li>
         ))}
       </ul>
 
       <h2 className="sec">Legal</h2>
       <ul className="rows links">
-        <li><Link href="/terms" className="row-item"><span className="ibox">📄</span><span className="grow"><b>Terms of Service</b></span>›</Link></li>
-        <li><Link href="/privacy" className="row-item"><span className="ibox">🔐</span><span className="grow"><b>Privacy Policy</b></span>›</Link></li>
-        <li><Link href="/delete-account" className="row-item"><span className="ibox">🗑️</span><span className="grow"><b>Account deletion</b></span>›</Link></li>
+        <li><Link href="/terms" className="row-item"><span className="ibox"><FileText size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Terms of Service</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/privacy" className="row-item"><span className="ibox"><ShieldEllipsis size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Privacy Policy</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/delete-account" className="row-item"><span className="ibox"><Trash2 size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Account deletion</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
       </ul>
 
       <h2 className="sec">Account</h2>

@@ -68,15 +68,15 @@ export default function DemoChatScreen({ navigation }) {
 
         <View style={s.headerActions}>
           <TouchableOpacity style={[s.headerActionBtn, s.headerActionBtnLive]} onPress={nudge} hitSlop={HIT_SLOP}>
-            <Phone size={rs(15)} color={T.primary} strokeWidth={1.8} />
+            <Phone size={rs(15)} color={T.primary} strokeWidth={2} />
             <View style={s.liveDot} />
           </TouchableOpacity>
           <TouchableOpacity style={[s.headerActionBtn, s.headerActionBtnLive]} onPress={nudge} hitSlop={HIT_SLOP}>
-            <Video size={rs(15)} color={T.primary} strokeWidth={1.8} />
+            <Video size={rs(15)} color={T.primary} strokeWidth={2} />
             <View style={s.liveDot} />
           </TouchableOpacity>
           <TouchableOpacity style={s.headerActionBtn} onPress={() => setShowMenu(true)} hitSlop={HIT_SLOP}>
-            <MoreVertical size={rs(15)} color={T.textMute} strokeWidth={1.8} />
+            <MoreVertical size={rs(15)} color={T.textMute} strokeWidth={2} />
           </TouchableOpacity>
         </View>
       </View>
@@ -93,7 +93,7 @@ export default function DemoChatScreen({ navigation }) {
               {b.type === 'voice' ? (
                 <TouchableOpacity style={s.voiceBubble} onPress={nudge} activeOpacity={0.85}>
                   <View style={s.voicePlayBtn}>
-                    <Play size={rs(13)} color={T.primary} strokeWidth={2.2} fill={T.primary} />
+                    <Play size={rs(13)} color={T.primary} strokeWidth={2} fill={T.primary} />
                   </View>
                   <View style={s.voiceBars}>
                     {DEMO_WAVE.map((h, j) => (
@@ -144,7 +144,7 @@ export default function DemoChatScreen({ navigation }) {
             maxLength={500}
           />
           <TouchableOpacity style={s.micBtn} onPress={nudge} hitSlop={HIT_SLOP}>
-            <Mic size={rs(16)} color={T.textMute} strokeWidth={1.6} />
+            <Mic size={rs(16)} color={T.textMute} strokeWidth={2} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.sendBtn, !text.trim() && { opacity: 0.4 }]}
@@ -153,7 +153,7 @@ export default function DemoChatScreen({ navigation }) {
             hitSlop={HIT_SLOP}
             activeOpacity={0.85}
           >
-            <Send size={rs(18)} color="#fff" strokeWidth={2.2} />
+            <Send size={rs(18)} color="#fff" strokeWidth={2} />
           </TouchableOpacity>
         </View>
         </KeyboardAvoidingView>
@@ -170,7 +170,7 @@ export default function DemoChatScreen({ navigation }) {
           <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
             <View style={s.modalHandle} />
             <View style={s.menuHeaderRow}>
-              <Users size={rs(16)} color={T.textMute} strokeWidth={1.8} />
+              <Users size={rs(16)} color={T.textMute} strokeWidth={2} />
               <Text style={s.menuHeaderText}>Your room, once it's live</Text>
             </View>
 
@@ -196,7 +196,7 @@ export default function DemoChatScreen({ navigation }) {
               onPress={() => { setShowMenu(false); navigation.navigate('ChatProfileSetup'); }}
               hitSlop={HIT_SLOP}
             >
-              <Settings size={rs(16)} color={T.text} strokeWidth={1.8} />
+              <Settings size={rs(16)} color={T.text} strokeWidth={2} />
               <Text style={s.menuActionText}>Set up your room now</Text>
             </TouchableOpacity>
 

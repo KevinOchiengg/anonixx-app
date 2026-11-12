@@ -18,8 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle,
-  Pause, Play, Search, Share2, ShieldCheck,
+  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, Pause, Play, Search, Share2, ShieldCheck, VolumeX, Music,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -122,7 +121,7 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart, cost = UNLOCK_COS
           colors={['#ff8a73', '#ff634a', '#ff4f7b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={[sw.linkUpBtn, wide && { justifyContent: 'center' }]}
         >
-          {heart ? <Text style={sw.linkUpHeart}>🖤</Text> : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
+          {heart ? <Heart size={rs(16)} color="#fff" fill="#fff" strokeWidth={2} /> : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
           <Text style={sw.linkUpBtnText} numberOfLines={1}>
             Knock{name ? ' on ' : ''}{name ? <Text style={{ fontWeight: '900' }}>{name}</Text> : null}{name ? "'s door" : ''}
           </Text>
@@ -1035,7 +1034,7 @@ const TextSlide = ({
             {track && (
               <TouchableOpacity onPress={() => setTrackMuted((m) => !m)} hitSlop={HIT_SLOP} style={sw.liveRow}
                 accessibilityLabel={trackMuted ? `Play sound: ${track.title}` : `Mute sound: ${track.title}`}>
-                <Text style={sw.liveChip} numberOfLines={1}>{trackMuted ? '🔇' : '♪'} {track.title}</Text>
+                <View style={[sw.liveChip, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>{trackMuted ? <VolumeX size={rs(12)} color="#fff" strokeWidth={2} /> : <Music size={rs(12)} color="#fff" strokeWidth={2} />}<Text style={{ color: '#fff', fontSize: rf(11), fontWeight: '700' }} numberOfLines={1}>{track.title}</Text></View>
               </TouchableOpacity>
             )}
             {hasImage && !isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} wide />}

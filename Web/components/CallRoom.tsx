@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { connectSocket } from "@/lib/socket";
 import { callsApi, type Participant, type Person } from "@/lib/calls";
+import { Mic, MicOff, PhoneOff, ScreenShare, ScreenShareOff, SwitchCamera, Users, Video, VideoOff } from "lucide-react";
 
 export type CallInfo = {
   callId: string;
@@ -34,25 +35,13 @@ type AnyTrack = {
 };
 type Remote = { uid: number; video?: AnyTrack; muted: boolean };
 
-const ico = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
-const MicI = ({ off }: { off?: boolean }) => (
-  <svg {...ico}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" />{off ? <path d="M3 3l18 18" /> : null}</svg>
-);
-const CamI = ({ off }: { off?: boolean }) => (
-  <svg {...ico}><rect x="2" y="6" width="14" height="12" rx="2" /><path d="M16 10l6-3v10l-6-3" />{off ? <path d="M3 3l18 18" /> : null}</svg>
-);
-const ScreenI = ({ off }: { off?: boolean }) => (
-  <svg {...ico}><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" />{off ? <path d="M3 3l18 18" /> : null}</svg>
-);
-const FlipI = () => (
-  <svg {...ico}><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" /></svg>
-);
-const EndI = () => (
-  <svg {...ico}><path d="M3 14c5-5 13-5 18 0l-3 3-3-2v-3a12 12 0 0 0-6 0v3l-3 2z" /></svg>
-);
-const PeopleI = () => (
-  <svg {...ico}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6" /></svg>
-);
+const ico = { strokeWidth: 2, "aria-hidden": true } as const;
+const MicI = ({ off }: { off?: boolean }) => (off ? <MicOff {...ico} /> : <Mic {...ico} />);
+const CamI = ({ off }: { off?: boolean }) => (off ? <VideoOff {...ico} /> : <Video {...ico} />);
+const ScreenI = ({ off }: { off?: boolean }) => (off ? <ScreenShareOff {...ico} /> : <ScreenShare {...ico} />);
+const FlipI = () => <SwitchCamera {...ico} />;
+const EndI = () => <PhoneOff {...ico} />;
+const PeopleI = () => <Users {...ico} />;
 
 function Ava({ p, size }: { p?: Person | null; size: number }) {
   const name = p?.name || "A";

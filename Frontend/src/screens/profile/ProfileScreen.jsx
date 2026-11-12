@@ -7,7 +7,9 @@ import {
   StyleSheet,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Settings, Edit, Lock, Palette, ChevronRight, LayoutDashboard } from 'lucide-react-native'
+import {
+  Settings, Edit, Lock, Palette, ChevronRight, LayoutDashboard, Crown,
+} from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient'
 import { useDispatch, useSelector } from 'react-redux'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -99,7 +101,7 @@ export default function ProfileScreen({ navigation }) {
           activeOpacity={0.85}
         >
           <View style={styles.dashboardIconWrap}>
-            <LayoutDashboard size={20} color={THEME.primary} strokeWidth={1.8} />
+            <LayoutDashboard size={20} color={THEME.primary} strokeWidth={2} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.dashboardTitle}>Your Dashboard</Text>
@@ -130,7 +132,7 @@ export default function ProfileScreen({ navigation }) {
               end={{ x: 1, y: 1 }}
               style={styles.premiumCard}
             >
-              <Text style={styles.premiumTitle}>👑 Anonixx Premium</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Crown size={18} color="#fff" strokeWidth={2} /><Text style={styles.premiumTitle}>Anonixx Premium</Text></View>
               <Text style={styles.premiumSubtitle}>
                 Cheaper unlocks. Bigger payouts. No ads.
               </Text>
@@ -152,7 +154,7 @@ export default function ProfileScreen({ navigation }) {
             style={styles.accountRow}
             onPress={() => navigation.navigate('ChangePassword')}
           >
-            <Lock size={18} color={THEME.text} strokeWidth={1.8} />
+            <Lock size={18} color={THEME.text} strokeWidth={2} />
             <View style={styles.accountRowBody}>
               <Text style={styles.accountRowLabel}>Email & Password</Text>
               <Text style={styles.accountRowDesc}>Manage login credentials</Text>
@@ -164,7 +166,7 @@ export default function ProfileScreen({ navigation }) {
             style={styles.accountRow}
             onPress={() => navigation.navigate('Messages', { screen: 'ChatProfileSetup' })}
           >
-            <Palette size={18} color={THEME.text} strokeWidth={1.8} />
+            <Palette size={18} color={THEME.text} strokeWidth={2} />
             <View style={styles.accountRowBody}>
               <Text style={styles.accountRowLabel}>Your Room</Text>
               <Text style={styles.accountRowDesc}>

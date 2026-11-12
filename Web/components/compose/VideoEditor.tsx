@@ -6,6 +6,7 @@ import {
 } from "@/lib/videoEdit";
 import "../../app/videooverlay.css";
 import "../../app/videoeditor.css";
+import { Pause, Play } from "lucide-react";
 
 const SIZES: [OverlaySize, string][] = [["s", "S"], ["m", "M"], ["l", "L"]];
 const STYLES: [OverlayStyle, string][] = [["shadow", "Clean"], ["dark", "Box"], ["coral", "Coral"]];
@@ -144,8 +145,8 @@ export default function VideoEditor({ src, duration, value, onChange, onNoPrevie
         </div>
         <button type="button" className="vx-play" onClick={toggle} aria-label={playing ? "Pause" : "Play"}>
           {playing
-            ? <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1.2" /><rect x="13.5" y="5" width="4" height="14" rx="1.2" /></svg>
-            : <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z" /></svg>}
+            ? <Pause fill="currentColor" strokeWidth={0} aria-hidden />
+            : <Play fill="currentColor" strokeWidth={0} aria-hidden />}
         </button>
         <span className="vx-clock">{fmtTime(Math.max(0, now - start))} / {fmtTime(len)}</span>
       </div>

@@ -13,7 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useStripe } from '@stripe/stripe-react-native'
 
-import { ArrowLeft, Check, Crown, EyeOff, Coins, Clock3 } from 'lucide-react-native'
+import {
+  ArrowLeft, Check, Crown, EyeOff, Coins, Clock3, Smartphone, CreditCard, Sparkles,
+} from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive'
 import { useToast } from '../../components/ui/Toast'
 import { API_BASE_URL } from '../../config/api'
@@ -45,8 +47,8 @@ const FALLBACK_PLANS = [
 ]
 
 const PAYMENT_METHODS = [
-  { id: 'mpesa',  label: 'M-Pesa', flag: '📱' },
-  { id: 'stripe', label: 'Card',   flag: '💳' },
+  { id: 'mpesa',  label: 'M-Pesa', Icon: Smartphone },
+  { id: 'stripe', label: 'Card',   Icon: CreditCard },
 ]
 
 async function authHeaders(json = false) {
@@ -253,7 +255,7 @@ const SuccessOverlay = React.memo(({ onContinue }) => {
   return (
     <Animated.View style={[styles.successOverlay, { opacity }]}>
       <Animated.View style={[styles.successCard, { transform: [{ scale }] }]}>
-        <Text style={styles.successEmoji}>✨</Text>
+        <Sparkles size={rs(44)} color={T.gold} strokeWidth={2} style={{ marginBottom: rp(10) }} />
         <Text style={styles.successTitle}>You're in.</Text>
         <Text style={styles.successBody}>Cheaper unlocks. Bigger payouts. No ads. Go.</Text>
         <TouchableOpacity onPress={onContinue} style={styles.successBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
@@ -381,7 +383,7 @@ export default function PremiumScreen({ navigation }) {
               style={[styles.methodBtn, method === m.id && styles.methodBtnActive]}
               activeOpacity={0.85}
             >
-              <Text style={styles.methodFlag}>{m.flag}</Text>
+              <m.Icon size={rs(18)} color={method === m.id ? T.primary : T.textSecondary} strokeWidth={2} />
               <Text style={[styles.methodLabel, method === m.id && { color: T.text }]}>{m.label}</Text>
             </TouchableOpacity>
           ))}

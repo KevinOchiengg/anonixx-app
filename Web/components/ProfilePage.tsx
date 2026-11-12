@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, compact } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
+import { Bookmark, ChevronRight, Coins, Crown, Headphones, Lock, Settings, ShieldCheck, Wallet } from "lucide-react";
 
 function Inner() {
   const { user } = useAuth();
@@ -40,19 +41,19 @@ function Inner() {
       </div>
 
       <Link href="/dashboard" className="prof-card">
-        <span className="ibox gold">💰</span>
-        <span className="grow"><b>Dashboard</b><small>Your posts, views and earnings</small></span>›
+        <span className="ibox gold"><Wallet size={18} strokeWidth={2} aria-hidden /></span>
+        <span className="grow"><b>Dashboard</b><small>Your posts, views and earnings</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden />
       </Link>
 
       <Link href="/coins" className="prof-card">
-        <span className="ibox gold">🪙</span>
-        <span className="grow"><b>{user.coin_balance} coins</b><small>Top up or withdraw</small></span>›
+        <span className="ibox gold"><Coins size={18} strokeWidth={2} aria-hidden /></span>
+        <span className="grow"><b>{user.coin_balance} coins</b><small>Top up or withdraw</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden />
       </Link>
 
       {user.is_premium ? (
         <Link href="/premium" className="prof-card prem-on">
-          <span className="ibox gold">👑</span>
-          <span className="grow"><b>Premium</b><small>{user.premium_until ? `Active until ${new Date(user.premium_until).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : "Active"}</small></span>›
+          <span className="ibox gold"><Crown size={18} strokeWidth={2} aria-hidden /></span>
+          <span className="grow"><b>Premium</b><small>{user.premium_until ? `Active until ${new Date(user.premium_until).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : "Active"}</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden />
         </Link>
       ) : (
         <Link href="/premium" className="prof-premium">
@@ -65,16 +66,16 @@ function Inner() {
 
       <h2 className="sec">ACCOUNT</h2>
       <ul className="rows links">
-        <li><Link href="/change-password" className="row-item"><span className="ibox">🔒</span><span className="grow"><b>Email &amp; password</b></span>›</Link></li>
-        <li><Link href="/saved" className="row-item"><span className="ibox">🔖</span><span className="grow"><b>Saved posts</b></span>›</Link></li>
-        <li><Link href="/support" className="row-item"><span className="ibox">🎧</span><span className="grow"><b>Support</b></span>›</Link></li>
-        <li><Link href="/settings" className="row-item"><span className="ibox">⚙️</span><span className="grow"><b>Settings</b></span>›</Link></li>
-        {user.is_admin ? <li><Link href="/admin" className="row-item"><span className="ibox">🛡️</span><span className="grow"><b>Admin</b></span>›</Link></li> : null}
+        <li><Link href="/change-password" className="row-item"><span className="ibox"><Lock size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Email &amp; password</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/saved" className="row-item"><span className="ibox"><Bookmark size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Saved posts</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/support" className="row-item"><span className="ibox"><Headphones size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Support</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/settings" className="row-item"><span className="ibox"><Settings size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Settings</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        {user.is_admin ? <li><Link href="/admin" className="row-item"><span className="ibox"><ShieldCheck size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Admin</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li> : null}
       </ul>
     </div>
   );
 }
 
 export default function ProfilePage() {
-  return <AppShell title="You" right={<Link href="/settings" aria-label="Settings">⚙️</Link>}><Inner /></AppShell>;
+  return <AppShell title="You" right={<Link href="/settings" aria-label="Settings" className="u-icon"><Settings size={19} strokeWidth={2} aria-hidden /></Link>}><Inner /></AppShell>;
 }

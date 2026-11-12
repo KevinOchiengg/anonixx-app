@@ -166,7 +166,7 @@ function ConfessionCard({
       <View style={c.block} pointerEvents="box-none">
         <View>
           <View pointerEvents="none" style={[c.label, { borderColor: alpha(meta.tint, 0.35), backgroundColor: alpha(meta.tint, 0.1) }]}>
-            <Icon size={rs(12)} color={meta.tint} strokeWidth={2.4} />
+            <Icon size={rs(12)} color={meta.tint} strokeWidth={2} />
             <Text style={[c.labelText, { color: meta.tint }]}>{meta.label}</Text>
           </View>
 
@@ -232,7 +232,7 @@ export const ConfessionPreview = React.memo(({ category, text, facts = [], name,
       />
       <View style={p.top}>
         <View style={[c.label, { marginBottom: 0, borderColor: alpha(meta.tint, 0.35), backgroundColor: alpha(meta.tint, 0.1) }]}>
-          <Icon size={rs(11)} color={meta.tint} strokeWidth={2.4} />
+          <Icon size={rs(11)} color={meta.tint} strokeWidth={2} />
           <Text style={[c.labelText, p.labelText, { color: meta.tint }]}>{meta.label}</Text>
         </View>
         {right}

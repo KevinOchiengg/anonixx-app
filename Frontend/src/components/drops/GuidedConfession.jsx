@@ -98,7 +98,7 @@ const detailText = (data, fallback) => (typeof data?.detail === 'string' ? data.
 function Chip({ label, active, onPress }) {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[s.chip, active && s.chipOn]} accessibilityState={{ selected: active }}>
-      {active && <Check size={rs(13)} color={T.primary} strokeWidth={3} />}
+      {active && <Check size={rs(13)} color={T.primary} strokeWidth={2.5} />}
       <Text style={[s.chipText, active && s.chipTextOn]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -125,7 +125,7 @@ function Label({ children, optional }) {
 function CheckRow({ label, on, onPress, radio }) {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[s.checkRow, on && s.checkRowOn]} accessibilityRole={radio ? 'radio' : 'checkbox'} accessibilityState={{ checked: on }}>
-      <View style={[radio ? s.radio : s.box, on && s.boxOn]}>{on && (radio ? <View style={s.radioDot} /> : <Check size={rs(12)} color="#fff" strokeWidth={3} />)}</View>
+      <View style={[radio ? s.radio : s.box, on && s.boxOn]}>{on && (radio ? <View style={s.radioDot} /> : <Check size={rs(12)} color="#fff" strokeWidth={2.5} />)}</View>
       <Text style={[s.checkText, on && s.chipTextOn]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -136,7 +136,7 @@ function Section({ n, title, sub, done, optional, children }) {
     <View style={s.section}>
       <View style={s.sectionHead}>
         <View style={[s.num, done && s.numDone]}>
-          {done ? <Check size={rs(12)} color="#fff" strokeWidth={3} /> : <Text style={s.numText}>{n || '+'}</Text>}
+          {done ? <Check size={rs(12)} color="#fff" strokeWidth={2.5} /> : <Text style={s.numText}>{n || '+'}</Text>}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={s.sectionTitle}>{n ? `${n}. ` : ''}{title.toUpperCase()}{optional ? <Text style={s.optional}>  optional</Text> : null}</Text>

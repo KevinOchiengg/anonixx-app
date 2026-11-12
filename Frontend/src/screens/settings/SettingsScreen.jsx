@@ -20,7 +20,7 @@ import { helplinesFor } from '../../config/helplines';
 const NavRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onPress, danger }) => (
   <TouchableOpacity style={row.wrap} onPress={onPress} activeOpacity={0.75} hitSlop={HIT_SLOP}>
     <View style={[row.iconBox, danger && row.iconBoxDanger]}>
-      <Icon size={rs(17)} color={danger ? T.danger : (iconColor || T.text)} strokeWidth={1.8} />
+      <Icon size={rs(18)} color={danger ? T.danger : (iconColor || T.primary)} strokeWidth={2} />
     </View>
     <View style={row.body}>
       <Text style={[row.label, danger && row.labelDanger]}>{label}</Text>
@@ -35,7 +35,7 @@ const ToggleRow = React.memo(({ icon: Icon, iconColor, label, desc, value, onTog
   <View style={[row.wrap, indent && row.indent]}>
     {!indent && (
       <View style={row.iconBox}>
-        <Icon size={rs(17)} color={iconColor || T.text} strokeWidth={1.8} />
+        <Icon size={rs(18)} color={iconColor || T.primary} strokeWidth={2} />
       </View>
     )}
     {indent && <View style={row.indentLine} />}
@@ -291,7 +291,7 @@ export default function SettingsScreen({ navigation }) {
         <Section title="About">
           <View style={row.wrap}>
             <View style={row.iconBox}>
-              <HelpCircle size={rs(17)} color={T.text} strokeWidth={1.8} />
+              <HelpCircle size={rs(17)} color={T.text} strokeWidth={2} />
             </View>
             <View style={row.body}>
               <Text style={row.label}>Version</Text>

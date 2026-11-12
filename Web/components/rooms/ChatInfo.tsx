@@ -7,6 +7,7 @@ import Link from "next/link";
 import { chatsApi, chatTime, mutedLabel, MUTE_OPTIONS, type Prefs, type ThreadItem } from "@/lib/chats";
 import { intentLabel } from "@/lib/linkup";
 import { Ava, Icon } from "./Messenger";
+import { Star, X } from "lucide-react";
 
 export type InfoConn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; other_avatar_url?: string | null;
@@ -108,7 +109,7 @@ export default function ChatInfo({ id, conn, avatar, onClose, onPrefs, onCall, o
         <div className="ci-card">
           <b className="ci-h">Starred messages{starred?.length ? ` · ${starred.length}` : ""}</b>
           {!starred ? null : starred.length === 0 ? <p className="ci-m">Star a message from its actions to keep it here.</p> : (
-            <ul className="ci-rows">{starred.slice(0, 5).map((m) => <li key={m.id}><small>{m.is_own ? "You" : name} · {chatTime(m.created_at)}</small><span>★ {m.content || m.preview}</span></li>)}</ul>
+            <ul className="ci-rows">{starred.slice(0, 5).map((m) => <li key={m.id}><small>{m.is_own ? "You" : name} · {chatTime(m.created_at)}</small><span><Star className="inl-ic star" size={12} fill="currentColor" strokeWidth={2} aria-hidden /> {m.content || m.preview}</span></li>)}</ul>
           )}
         </div>
 
@@ -143,7 +144,7 @@ export default function ChatInfo({ id, conn, avatar, onClose, onPrefs, onCall, o
         <div className="u-modal" onClick={() => setOpen(null)}>
           {open.media_type === "video" ? <video src={open.media_url || undefined} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
             : <Image src={open.media_url || ""} alt="" width={800} height={1000} />}
-          <button className="u-modal-x" aria-label="Close" onClick={() => setOpen(null)}>×</button>
+          <button className="u-modal-x" aria-label="Close" onClick={() => setOpen(null)}><X size={20} strokeWidth={2} aria-hidden /></button>
         </div>
       ) : null}
     </div>

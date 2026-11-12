@@ -8,28 +8,17 @@ import { callsApi, callInfo } from "@/lib/calls";
 import { chatsApi, chatTime, callTime, duration, avatarColor, MUTE_OPTIONS, MAX_FORWARD, type Chat, type CallLog } from "@/lib/chats";
 import CallRoom, { type CallInfo } from "../CallRoom";
 import Sheet from "../Sheet";
+import {
+  Archive, ArrowLeft, BellOff, ChevronDown, Compass, DoorOpen, EllipsisVertical, Link2, MessageSquarePlus, Phone, Pin,
+  Radio, Search, Send, Star, Video, X, Users, PhoneMissed, ArrowUpRight, ArrowDownLeft, type LucideIcon,
+} from "lucide-react";
 
-const Svg = ({ d, size = 20 }: { d: React.ReactNode; size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{d}</svg>
-);
+const ic = (C: LucideIcon) => (s = 20) => <C size={s} strokeWidth={2} aria-hidden />;
+/** Rooms icons: Lucide at stroke 2, the same family as the app. */
 export const Icon = {
-  phone: (s?: number) => <Svg size={s} d={<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" />} />,
-  video: (s?: number) => <Svg size={s} d={<><rect x="2" y="6" width="14" height="12" rx="2" /><path d="M16 10l6-3v10l-6-3" /></>} />,
-  pin: (s?: number) => <Svg size={s} d={<><path d="M12 17v5" /><path d="M9 10.8V5h6v5.8l2 2.2v2H7v-2z" /></>} />,
-  mute: (s?: number) => <Svg size={s} d={<><path d="M13.7 21a2 2 0 0 1-3.4 0" /><path d="M18.6 13A17.9 17.9 0 0 1 18 8" /><path d="M6.3 6.3A5.9 5.9 0 0 0 6 8c0 7-3 9-3 9h14" /><path d="M18 8a6 6 0 0 0-9.3-5" /><path d="m2 2 20 20" /></>} />,
-  archive: (s?: number) => <Svg size={s} d={<><rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4" /></>} />,
-  star: (s?: number) => <Svg size={s} d={<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z" />} />,
-  chat: (s?: number) => <Svg size={s} d={<><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z" /><path d="M12 9v6M9 12h6" /></>} />,
-  door: (s?: number) => <Svg size={s} d={<><path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h20M13 20V4.6a1 1 0 0 0-1.2-1L5 5v15" /><path d="M10 12v.01" /></>} />,
-  link: (s?: number) => <Svg size={s} d={<><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></>} />,
-  chevron: (s?: number) => <Svg size={s} d={<path d="m6 9 6 6 6-6" />} />,
-  back: (s?: number) => <Svg size={s} d={<path d="M19 12H5M11 6l-6 6 6 6" />} />,
-  search: (s?: number) => <Svg size={s} d={<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>} />,
-  close: (s?: number) => <Svg size={s} d={<path d="M18 6 6 18M6 6l12 12" />} />,
-  dots: (s?: number) => <Svg size={s} d={<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>} />,
-  send: (s?: number) => <Svg size={s} d={<><path d="m22 2-7 20-4-9-9-4z" /><path d="M22 2 11 13" /></>} />,
-  radio: (s?: number) => <Svg size={s} d={<><circle cx="12" cy="12" r="2" /><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2" /></>} />,
-  compass: (s?: number) => <Svg size={s} d={<><circle cx="12" cy="12" r="10" /><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z" /></>} />,
+  phone: ic(Phone), video: ic(Video), pin: ic(Pin), mute: ic(BellOff), archive: ic(Archive), star: ic(Star),
+  chat: ic(MessageSquarePlus), door: ic(DoorOpen), link: ic(Link2), chevron: ic(ChevronDown), back: ic(ArrowLeft),
+  search: ic(Search), close: ic(X), dots: ic(EllipsisVertical), send: ic(Send), radio: ic(Radio), compass: ic(Compass),
 };
 
 export function Ava({ name, url, seed, size = 50, online }: { name?: string; url?: string | null; seed?: string; size?: number; online?: boolean }) {
@@ -232,7 +221,7 @@ export function CallsPanel({ onStartSession, refreshKey }: { onStartSession: () 
             {calls.map((c) => {
               const name = c.kind === "group" && c.direction === "hosted" ? "Your Room" : c.other?.name || "Anonymous";
               const canBack = c.kind === "direct" && c.connection_id && mine.has(c.connection_id);
-              const arrow = c.kind === "group" ? "👥" : c.missed ? "↙" : c.direction === "outgoing" ? "↗" : "↙";
+              const arrow = c.kind === "group" ? <Users size={14} strokeWidth={2.2} /> : c.missed ? <PhoneMissed size={14} strokeWidth={2.2} /> : c.direction === "outgoing" ? <ArrowUpRight size={15} strokeWidth={2.4} /> : <ArrowDownLeft size={15} strokeWidth={2.4} />;
               return (
                 <li key={c.id} className="mx-li">
                   {c.connection_id && mine.has(c.connection_id) ? (

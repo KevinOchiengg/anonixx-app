@@ -14,6 +14,7 @@ import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
 import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
+import { SatelliteDish } from "lucide-react";
 
 type Item =
   | { kind: "hero" }
@@ -477,7 +478,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
                 <section key="status" className="slide limit-slide net-slide" data-idx={i}>
                   {bad ? (
                     <>
-                      <span className="limit-moon" aria-hidden>📡</span>
+                      <span className="limit-moon" aria-hidden><SatelliteDish strokeWidth={1.5} /></span>
                       <h2>{first === "failed" ? "Can't reach Anonixx." : "Couldn't load more."}</h2>
                       <p>Check your connection. Nothing you've seen is lost.</p>
                       <button className="pill" onClick={tryAgain}>Try again</button>

@@ -208,7 +208,7 @@ export default function CreateAdScreen({ navigation }) {
                   activeOpacity={0.8}
                 >
                   <View style={[s.dropCheck, selectedDropId === d.id && s.dropCheckActive]}>
-                    {selectedDropId === d.id && <Check size={rs(11)} color="#fff" strokeWidth={3} />}
+                    {selectedDropId === d.id && <Check size={rs(11)} color="#fff" strokeWidth={2.5} />}
                   </View>
                   <Text style={s.dropRowText} numberOfLines={2}>
                     {d.confession || '[media drop]'}

@@ -91,7 +91,7 @@ export const ChatRow = React.memo(({ item, online, typing, selected, onPress, on
     >
       <View>
         <Avatar name={item.other_anonymous_name} url={item.other_avatar_url} online={online} seed={item.other_user_id} />
-        {selected ? <View style={st.check}><Check size={rs(12)} color="#fff" strokeWidth={3} /></View> : null}
+        {selected ? <View style={st.check}><Check size={rs(12)} color="#fff" strokeWidth={2.5} /></View> : null}
       </View>
       <View style={st.body}>
         <View style={st.top}>

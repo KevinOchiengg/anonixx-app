@@ -50,7 +50,7 @@ const getProgress = (score) => {
 // ─── Empty state ──────────────────────────────────────────────
 const EmptyState = React.memo(({ onCreateDrop }) => (
   <View style={s.centered}>
-    <Star size={rs(40)} color={T.textMute} strokeWidth={1.5} />
+    <Star size={rs(40)} color={T.textMute} strokeWidth={2} />
     <Text style={s.errorTitle}>Unrated. For now.</Text>
     <Text style={s.errorSub}>
       Start creating drops to build your vibe score.
@@ -61,7 +61,7 @@ const EmptyState = React.memo(({ onCreateDrop }) => (
       hitSlop={HIT_SLOP}
       activeOpacity={0.9}
     >
-      <Flame size={rs(18)} color="#fff" strokeWidth={2.2} />
+      <Flame size={rs(18)} color="#fff" strokeWidth={2} />
       <Text style={s.primaryBtnText}>Create your first Drop</Text>
     </TouchableOpacity>
   </View>
@@ -231,13 +231,13 @@ export default function VibeScoreScreen({ navigation }) {
         {/* ── Stats ── */}
         <View style={s.statsGrid}>
           <View style={[s.statCard, { borderColor: 'rgba(255,107,138,0.32)' }]}>
-            <Eye size={rs(22)} color="#FF6B8A" strokeWidth={1.8} />
+            <Eye size={rs(22)} color="#FF6B8A" strokeWidth={2} />
             <Text style={[s.statBig, { color: '#FF6B8A' }]}>{data.admirer_count}</Text>
             <Text style={s.statCardLabel}>Admirers</Text>
             <Text style={s.statCardSub}>viewed your drops</Text>
           </View>
           <View style={[s.statCard, { borderColor: 'rgba(255,183,71,0.32)' }]}>
-            <Flame size={rs(22)} color="#FFB347" strokeWidth={1.8} />
+            <Flame size={rs(22)} color="#FFB347" strokeWidth={2} />
             <Text style={[s.statBig, { color: '#FFB347' }]}>{data.confession_streak}</Text>
             <Text style={s.statCardLabel}>Day Streak</Text>
             <Text style={s.statCardSub}>longest: {data.longest_streak}</Text>
@@ -302,7 +302,7 @@ export default function VibeScoreScreen({ navigation }) {
           hitSlop={HIT_SLOP}
           activeOpacity={0.9}
         >
-          <Flame size={rs(18)} color="#fff" strokeWidth={2.2} />
+          <Flame size={rs(18)} color="#fff" strokeWidth={2} />
           <Text style={s.primaryBtnText}>Create a Drop to earn points</Text>
         </TouchableOpacity>
 

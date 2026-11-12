@@ -60,6 +60,7 @@ uvicorn app.main:app --reload   # Dev server at http://localhost:8000
 - **API:** mostly `fetch` with `API_BASE_URL` from `config/api.js`; the JWT is in AsyncStorage.
 - **Real-time:** Socket.IO via `SocketContext.jsx` / `services/socket.js`.
 - **Styling:** `StyleSheet` with tokens from `utils/theme.js` and sizes from `utils/responsive.js`.
+- **Icons (app and web):** Lucide only (`lucide-react-native` / `lucide-react`, same version), stroke 2. Menu and settings rows put a coral icon in a soft rounded tile; the current tab gets a soft coral fill; liked/saved are solid. No emoji as icons.
 - **Screens:** `feed/` (full-screen swipe feed, search), `drops/` (compose, chat, Rooms, knocks, calls), `connect/` (messages), `market/`, `profile/`, `settings/`, `admin/`, `support/`.
 
 ### Web

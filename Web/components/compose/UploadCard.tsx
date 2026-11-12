@@ -1,6 +1,7 @@
 "use client";
 import { useBgUpload, fmtEta, fmtMB, type BgUpload } from "@/lib/bgUpload";
 import "../../app/uploadcard.css";
+import { Check, Video } from "lucide-react";
 
 type Props = {
   up: BgUpload;
@@ -19,8 +20,8 @@ export default function UploadCard({ up, onReplace, onCancel, onRetry }: Props) 
     <div className={`uc${done ? " done" : ""}${failed ? " bad" : ""}`}>
       <div className="uc-ic" aria-hidden>
         {done
-          ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
-          : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="13" height="14" rx="2.5" /><path d="m16 10 5-3v10l-5-3" /></svg>}
+          ? <Check strokeWidth={2.5} aria-hidden />
+          : <Video strokeWidth={2} aria-hidden />}
       </div>
       <div className="uc-body">
         <div className="uc-top">

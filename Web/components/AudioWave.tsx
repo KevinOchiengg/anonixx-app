@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { Pause, Play } from "lucide-react";
 
 const BARS = 48;
 
@@ -51,7 +52,7 @@ export default function AudioWave({ src, seed, active }: { src: string; seed: st
         aria-label={playing ? "Pause" : "Play"}
         onClick={() => { const a = ref.current; if (a) (a.paused ? a.play() : a.pause()); }}
       >
-        {playing ? "❚❚" : "▶"}
+        {playing ? <Pause size={16} fill="currentColor" strokeWidth={0} aria-hidden /> : <Play size={16} fill="currentColor" strokeWidth={0} aria-hidden />}
       </button>
     </div>
   );

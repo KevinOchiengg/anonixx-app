@@ -20,14 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
 import {
-  ArrowLeft,
-  Check,
-  Coins,
-  Copy,
-  Gift,
-  Share2,
-  Users,
-  Zap,
+  ArrowLeft, Check, Coins, Copy, Gift, Share2, Users, Zap,
 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -172,7 +165,7 @@ export default function ReferralScreen({ navigation }) {
     if (item.type === 'header') {
       return (
         <Animated.View style={[sStyles.heroWrap, { opacity: headerOpacity, transform: [{ translateY: headerTranslateY }] }]}>
-          <Text style={sStyles.heroEmoji}>🔗</Text>
+          <View style={{ width: rs(64), height: rs(64), borderRadius: rs(20), backgroundColor: THEME.primaryTint, alignItems: 'center', justifyContent: 'center', marginBottom: rp(12) }}><Gift size={rs(30)} color={THEME.primary} strokeWidth={2} /></View>
           <Text style={sStyles.heroTitle}>Give a little,{'\n'}earn a lot.</Text>
           <Text style={sStyles.heroSub}>
             Every friend you bring in earns you <Text style={sStyles.heroHighlight}>30 coins</Text>.

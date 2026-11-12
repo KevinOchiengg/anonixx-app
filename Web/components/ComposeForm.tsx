@@ -22,6 +22,7 @@ import { CATEGORIES, autoCategory, topicLabel } from "@/lib/confession";
 import {
   IconImages, IconSparkles, IconUserPlus, IconPin, IconMic, IconPoll, IconShare, IconShuffle, IconX, IconWarn, IconMusic,
 } from "./compose/toolicons";
+import { Feather, Flame } from "lucide-react";
 
 const MODES = [["text", "Text"], ["media", "Photo / Video"], ["voice", "Voice"], ["poll", "Poll"]] as const;
 type Mode = (typeof MODES)[number][0];
@@ -301,7 +302,7 @@ function Inner() {
         <h2>What are you dropping tonight?</h2>
         <p className="muted small">Either way, nobody sees who you are.</p>
         <button type="button" className="kind-card" onClick={() => setKind("hookup")}>
-          <span className="kind-ico" aria-hidden>🔥</span>
+          <span className="kind-ico" aria-hidden><Flame strokeWidth={2} /></span>
           <span className="kind-body">
             <strong>Guided Link Up</strong>
             <span>Five short steps: who you are, who you want, when. If someone wants you back, they knock.</span>
@@ -309,7 +310,7 @@ function Inner() {
           </span>
         </button>
         <button type="button" className="kind-card" onClick={() => setKind("confession")}>
-          <span className="kind-ico" aria-hidden>🪶</span>
+          <span className="kind-ico" aria-hidden><Feather strokeWidth={2} /></span>
           <span className="kind-body">
             <strong>Quick Confession</strong>
             <span>Just type it. The thing you can&apos;t say out loud, read and felt, never traced back to you.</span>

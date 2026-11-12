@@ -48,7 +48,7 @@ export default function AgeGate({ onDone }) {
       <Text style={s.title}>Adults only past this point.</Text>
       <Text style={s.copy}>Confirm you're 18+ once and every Room opens.</Text>
       <TouchableOpacity style={s.row} onPress={() => setAgree((v) => !v)} activeOpacity={0.8} accessibilityRole="checkbox" accessibilityState={{ checked: agree }}>
-        <View style={[s.box, agree && s.boxOn]}>{agree ? <Check size={rs(14)} color="#fff" strokeWidth={3} /> : null}</View>
+        <View style={[s.box, agree && s.boxOn]}>{agree ? <Check size={rs(14)} color="#fff" strokeWidth={2.5} /> : null}</View>
         <Text style={s.copy}>I'm 18 or older and I agree to the Terms.</Text>
       </TouchableOpacity>
       {!!error && <Text style={s.error}>{error}</Text>}

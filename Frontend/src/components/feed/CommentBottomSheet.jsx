@@ -11,10 +11,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ChevronDown, CornerDownRight, Heart, Pin, X,
+  ChevronDown, CornerDownRight, Heart, Pin, X, MessageCircle, Target, Flame,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
 import T from '../../utils/theme';
+import { rs, rp } from '../../utils/responsive';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
 import VoiceWaveform from '../common/VoiceWaveform';
 import ChatInputBar, { SendButton } from '../common/ChatInputBar';
@@ -152,12 +153,12 @@ const CommentItem = React.memo(({
           )}
           {isFirst && !isHot && (
             <View style={st.firstBadge}>
-              <Text style={st.firstBadgeText}>first 🎯</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Target size={rs(10)} color={T.gold} strokeWidth={2.5} /><Text style={st.firstBadgeText}>first</Text></View>
             </View>
           )}
           {isHot && (
             <View style={st.hotBadge}>
-              <Text style={st.hotBadgeText}>🔥 hot</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Flame size={rs(10)} color={T.primary} fill={T.primary} strokeWidth={2} /><Text style={st.hotBadgeText}>hot</Text></View>
             </View>
           )}
         </View>
@@ -770,7 +771,7 @@ export const CommentBottomSheet = React.memo(({
           </View>
         ) : sortedComments.length === 0 ? (
           <View style={st.emptyWrap}>
-            <Text style={st.emptyEmoji}>🌑</Text>
+            <MessageCircle size={rs(36)} color={T.textMuted} strokeWidth={2} style={{ marginBottom: rp(8) }} />
             <Text style={st.emptyTitle}>dead silence.</Text>
             <Text style={st.emptyBody}>
               {'no one has been brave enough yet.\nbreak the silence.'}

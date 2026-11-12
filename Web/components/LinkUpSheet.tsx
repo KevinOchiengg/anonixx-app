@@ -11,6 +11,7 @@ import { INTENTS, MAX_INTENTS, MAX_PITCH } from "@/lib/linkup";
 import AgeGate from "./AgeGate";
 import Sheet from "./Sheet";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
+import { Camera, Flame, X } from "lucide-react";
 
 const MAX_CLUE_VIDEO_SECONDS = 30;
 const MAX_PEEK = 3;
@@ -232,11 +233,11 @@ export default function LinkUpSheet({
             <div className="u-clue-prev">
               {clue.kind === "video" ? <video src={clue.url} muted playsInline preload="metadata" /> : <img src={clue.url} alt="" />}
               {clue.kind === "video" ? <span className="u-clue-play">▶</span> : null}
-              <button type="button" className="u-clue-x" onClick={() => setClue(null)} aria-label="Remove">×</button>
+              <button type="button" className="u-clue-x" onClick={() => setClue(null)} aria-label="Remove"><X size={20} strokeWidth={2} aria-hidden /></button>
             </div>
           ) : (
             <button type="button" className="u-clue-add" onClick={() => fileInput.current?.click()}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+              <Camera size={16} strokeWidth={2} aria-hidden />
               {rule === "line_peek" && !peek.length ? "Or add a photo or short clip" : "Add a photo or short clip (optional)"}
             </button>
           )}
@@ -249,7 +250,7 @@ export default function LinkUpSheet({
         </div>
 
         <div className="u-price">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s5 4 5 9a5 5 0 0 1-10 0c0-2 1-3 1-3s1 2 2 2c0-3 2-5 2-8z" /></svg>
+          <Flame size={16} fill="currentColor" strokeWidth={2} aria-hidden />
           {COST.linkUp} coins, only if they let you in
         </div>
         <div className="u-bal">Your balance: {balance} coin{balance === 1 ? "" : "s"}</div>

@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  ArrowLeft, AtSign, Camera, Mail, RotateCw, Save, User,
+  ArrowLeft, AtSign, Camera, Mail, RotateCw, Save, User, TriangleAlert, Coins, Lightbulb,
 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchBalance } from '../../store/slices/coinsSlice';
@@ -334,7 +334,7 @@ export default function EditProfileScreen({ navigation }) {
           {/* Photo disclaimer — shown inline before first upload */}
           {showPhotoDisclaimer && !avatarUri && (
             <View style={styles.photoDisclaimer}>
-              <Text style={styles.photoDisclaimerTitle}>⚠️  Before you upload</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><TriangleAlert size={rs(14)} color={T.warning || '#F59E0B'} strokeWidth={2} /><Text style={styles.photoDisclaimerTitle}>Before you upload</Text></View>
               <Text style={styles.photoDisclaimerBody}>
                 A real photo makes you identifiable to anyone who sees your profile.
                 Anonixx is built for anonymous expression — we recommend keeping this blank.
@@ -360,7 +360,7 @@ export default function EditProfileScreen({ navigation }) {
         <View style={styles.form}>
           <FieldCard label="Username" hint="how others see you in the dark">
             <View style={styles.inputRow}>
-              <AtSign size={rs(16)} color={T.textSecondary} strokeWidth={1.8} />
+              <AtSign size={rs(16)} color={T.textSecondary} strokeWidth={2} />
               <TextInput
                 value={username}
                 onChangeText={setUsername}
@@ -374,7 +374,7 @@ export default function EditProfileScreen({ navigation }) {
 
           <FieldCard label="Email" hint="kept private, always">
             <View style={styles.inputRow}>
-              <Mail size={rs(16)} color={T.textSecondary} strokeWidth={1.8} />
+              <Mail size={rs(16)} color={T.textSecondary} strokeWidth={2} />
               <TextInput
                 value={email}
                 onChangeText={setEmail}
@@ -404,7 +404,7 @@ export default function EditProfileScreen({ navigation }) {
               (nameStatus === 'taken' || nameStatus === 'invalid') && { borderColor: '#EF4444' },
               nameStatus === 'error' && { borderColor: '#F59E0B' },
             ]}>
-              <User size={rs(16)} color={T.textSecondary} strokeWidth={1.8} />
+              <User size={rs(16)} color={T.textSecondary} strokeWidth={2} />
               <TextInput
                 value={anonymousName}
                 onChangeText={handleNameChange}
@@ -462,7 +462,7 @@ export default function EditProfileScreen({ navigation }) {
           <View style={styles.coinsCard}>
             <View style={styles.coinsInner}>
               <View style={styles.coinsIconWrap}>
-                <Text style={styles.coinsEmoji}>💰</Text>
+                <Coins size={rs(22)} color={T.gold} strokeWidth={2} />
               </View>
               <View>
                 <Text style={styles.coinsLabel}>Your Coins</Text>
@@ -484,7 +484,7 @@ export default function EditProfileScreen({ navigation }) {
             ? <ActivityIndicator size="small" color="#fff" />
             : (
               <>
-                <Save size={rs(18)} color="#fff" strokeWidth={2.5} />
+                <Save size={rs(18)} color="#fff" strokeWidth={2} />
                 <Text style={styles.saveBtnText}>Save Changes</Text>
               </>
             )
@@ -492,9 +492,10 @@ export default function EditProfileScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* ── Info note ── */}
-        <View style={styles.infoNote}>
-          <Text style={styles.infoText}>
-            💡  Anonymous name can be changed once every 30 days.{'\n'}Choose something that feels like you — you're stuck with it for a while.
+        <View style={[styles.infoNote, { flexDirection: 'row', gap: 8 }]}>
+          <Lightbulb size={rs(16)} color={T.gold} strokeWidth={2} style={{ marginTop: 2 }} />
+          <Text style={[styles.infoText, { flex: 1 }]}>
+            Anonymous name can be changed once every 30 days.{'\n'}Choose something that feels like you — you're stuck with it for a while.
           </Text>
         </View>
       </Animated.ScrollView>

@@ -21,7 +21,7 @@ const MIN_WITHDRAWAL_COINS = 100;
 // ─── Small pieces ───────────────────────────────────────────────
 const StatCard = React.memo(({ icon: Icon, value, label, color }) => (
   <View style={s.statCard}>
-    <Icon size={rs(16)} color={color || THEME.primary} strokeWidth={1.8} />
+    <Icon size={rs(16)} color={color || THEME.primary} strokeWidth={2} />
     <Text style={s.statValue}>{value}</Text>
     <Text style={s.statLabel}>{label}</Text>
   </View>
