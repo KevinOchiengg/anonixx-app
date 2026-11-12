@@ -1,16 +1,16 @@
 :root {
-  --bg: #1f2532;
-  --bg-edge: #12161f;
-  --surface: #283041;
-  --surface-alt: #2f3849;
+  --bg: #0b0f18;
+  --bg-edge: #070a11;
+  --surface: #151924;
+  --surface-alt: #1a1f2e;
   --fg: #EAEAF0;
-  --muted: #A3A6B4;
-  --faint: #6B7186;
+  --muted: #9A9AA3;
+  --faint: #4a5068;
   --rose: #FF634A;
   --rose-dim: rgba(255, 99, 74, 0.12);
   --gold: #fbbf24;
   --violet: #B36BFF;
-  --line: rgba(255, 255, 255, 0.09);
+  --line: rgba(255, 255, 255, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -31,7 +31,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .stage { height: 100dvh; display: flex; justify-content: center; background: var(--bg-edge); }
 .phone {
   position: relative; width: 100%; max-width: 480px; height: 100dvh;
-  /* Warm plum base with soft coral drops (public/bg-drops.svg, mirrored in the app's CoralBackdrop). */
+  /* Original dark base with coral star splashes (public/bg-drops.svg, mirrored in the app's CoralBackdrop). */
   background: url("/bg-drops.svg") center / cover no-repeat, var(--bg); overflow: hidden;
 }
 @media (min-width: 560px) {
@@ -68,12 +68,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .slide.has-media { justify-content: flex-end; padding-top: 0; background: #000; }
 
-.g0 { background: radial-gradient(120% 90% at 20% 0%, #3a1a2e 0%, #1f2532 70%); }
-.g1 { background: radial-gradient(120% 90% at 80% 10%, #2a1a4a 0%, #1f2532 70%); }
-.g2 { background: radial-gradient(120% 90% at 10% 90%, #4a1f1a 0%, #1f2532 70%); }
-.g3 { background: radial-gradient(120% 90% at 90% 80%, #1f1a4a 0%, #1f2532 70%); }
-.g4 { background: radial-gradient(120% 90% at 50% 0%, #3d1a3a 0%, #1f2532 70%); }
-.g5 { background: radial-gradient(120% 90% at 0% 40%, #3a1a22 0%, #1f2532 70%); }
+.g0 { background: radial-gradient(120% 90% at 20% 0%, #3a1a2e 0%, #0b0f18 70%); }
+.g1 { background: radial-gradient(120% 90% at 80% 10%, #2a1a4a 0%, #0b0f18 70%); }
+.g2 { background: radial-gradient(120% 90% at 10% 90%, #4a1f1a 0%, #0b0f18 70%); }
+.g3 { background: radial-gradient(120% 90% at 90% 80%, #1f1a4a 0%, #0b0f18 70%); }
+.g4 { background: radial-gradient(120% 90% at 50% 0%, #3d1a3a 0%, #0b0f18 70%); }
+.g5 { background: radial-gradient(120% 90% at 0% 40%, #3a1a22 0%, #0b0f18 70%); }
 
 .mood {
   align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;

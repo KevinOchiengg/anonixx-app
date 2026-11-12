@@ -3,20 +3,20 @@
 const palette = {
 
   // ─── Surfaces ──────────────────────────────────────────────────────────────
-  background:   '#1f2532',   // screen bg = the bottom tab bar colour, across Anonixx (behind it: CoralBackdrop)
-  surface:      '#283041',   // cards, inputs, raised layers
-  surfaceAlt:   '#2f3849',   // secondary raised layer
-  surfaceDark:  '#191e29',   // below-surface (chat input bg, deep wells)
+  background:   '#0b0f18',   // screen bg (behind it: CoralBackdrop)
+  surface:      '#151924',   // cards, inputs, raised layers
+  surfaceAlt:   '#1a1f2e',   // secondary raised layer
+  surfaceDark:  '#10131c',   // below-surface (chat input bg, deep wells)
   inputBg:      'rgba(255,255,255,0.04)',
 
   // ─── Text ──────────────────────────────────────────────────────────────────
   text:          '#EAEAF0',   // primary readable text
-  textSecondary: '#A3A6B4',   // supporting / meta text
-  textSec:       '#A3A6B4',   // alias (used in Drops/payments screens)
-  textSub:       '#A3A6B4',   // alias (used in payment components)
-  textMuted:     '#6B7186',   // faint / disabled / captions
-  textMute:      '#6B7186',   // alias (used in Drops screens)
-  inactive:      '#6F7486',   // tab bar inactive icons, placeholder chrome
+  textSecondary: '#9A9AA3',   // supporting / meta text
+  textSec:       '#9A9AA3',   // alias (used in Drops/payments screens)
+  textSub:       '#9A9AA3',   // alias (used in payment components)
+  textMuted:     '#4a5068',   // faint / disabled / captions
+  textMute:      '#4a5068',   // alias (used in Drops screens)
+  inactive:      '#5a5f70',   // tab bar inactive icons, placeholder chrome
 
   // ─── Primary — coral ───────────────────────────────────────────────────────
   primary:       '#FF634A',
@@ -26,7 +26,7 @@ const palette = {
   primaryGlow:   'rgba(255,99,74,0.18)',
 
   // ─── Borders ───────────────────────────────────────────────────────────────
-  border:        'rgba(255,255,255,0.08)',
+  border:        'rgba(255,255,255,0.06)',
   borderStrong:  'rgba(255,255,255,0.12)',
 
   // ─── Success / Open / Online — green ───────────────────────────────────────
@@ -80,14 +80,14 @@ const palette = {
 
   // ─── Chat bubbles ──────────────────────────────────────────────────────────
   myBubble:    '#FF634A',   // own sent message
-  theirBubble: '#2f3849',   // received message
+  theirBubble: '#1e2535',   // received message
 
   // ─── Avatar / profile defaults ─────────────────────────────────────────────
-  avatarBg:   '#2f3849',
-  avatarIcon: '#6F7486',
+  avatarBg:   '#1e2330',
+  avatarIcon: '#5a5f70',
 
   // ─── Convenience aliases ───────────────────────────────────────────────────
-  bg: '#1f2532',   // alias for background (used in a few older screens)
+  bg: '#0b0f18',   // alias for background (used in a few older screens)
 };
 
 // Named exports — T is the canonical name, THEME is the legacy alias

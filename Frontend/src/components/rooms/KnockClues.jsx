@@ -96,7 +96,7 @@ const s = StyleSheet.create({
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
   tile: { width: rs(70), height: rs(92), borderRadius: RADIUS.md, overflow: 'hidden', backgroundColor: '#000' },
   img: { width: '100%', height: '100%' },
-  videoTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#2f3849' },
+  videoTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1f2e' },
   veil: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
   veilKind: { color: '#fff', fontSize: rf(10), fontWeight: '800', letterSpacing: 1 },
   veilHint: { color: 'rgba(255,255,255,0.85)', fontSize: rf(10) },
