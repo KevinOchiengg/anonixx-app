@@ -140,7 +140,7 @@ const WalletHeader = React.memo(({ balance, streak, geoConfig, onMpesa, onStripe
   return (
     <Animated.View style={[hStyles.wrap, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
       <LinearGradient
-        colors={['#1a1530', '#2c1f26']}
+        colors={['#1a1530', '#241920']}
         style={hStyles.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}

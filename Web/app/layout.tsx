@@ -47,7 +47,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#2c1f26",
+  themeColor: "#241920",
 };
 
 // Brand serif (same face as the app's display font): caption hooks, text-only

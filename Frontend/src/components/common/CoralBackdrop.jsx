@@ -1,4 +1,5 @@
-/** The Anonixx backdrop: a warm plum base with soft coral glows and scattered coral drops.
+/** The Anonixx backdrop: a warm plum base with soft coral glows, scattered coral drops and
+ * shadowed edges (the anonymous, late-night feel).
  * Mirrors Web/public/bg-drops.svg (same shapes, same places) so the app and the site match.
  * `withBackdrop(Screen)` puts it behind a screen (screen roots keep a transparent background)
  * and adds the coral "● ANONIXX" mark in a slim row at the top; `{ brand: false }` leaves the
@@ -7,7 +8,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { rf, rp, rs, SPACING } from '../../utils/responsive';
-import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import T from '../../utils/theme';
 
 const CORAL = '#FF634A';
@@ -49,6 +50,12 @@ const CoralBackdrop = React.memo(function CoralBackdrop({ style }) {
             <Stop offset="0" stopColor="#FF8A73" stopOpacity="0.18" />
             <Stop offset="1" stopColor="#FF8A73" stopOpacity="0" />
           </RadialGradient>
+          {/* Shadowed edges: the middle stays lit, the corners fall into near-black. */}
+          <RadialGradient id="vg" cx="0.5" cy="0.42" r="0.75">
+            <Stop offset="0.35" stopColor="#0d080b" stopOpacity="0" />
+            <Stop offset="0.8" stopColor="#0d080b" stopOpacity="0.55" />
+            <Stop offset="1" stopColor="#0d080b" stopOpacity="0.85" />
+          </RadialGradient>
         </Defs>
         <Circle cx="360" cy="40" r="210" fill="url(#cg1)" />
         <Circle cx="-20" cy="470" r="230" fill="url(#cg2)" />
@@ -65,6 +72,7 @@ const CoralBackdrop = React.memo(function CoralBackdrop({ style }) {
             strokeOpacity={outline ? op : 0}
           />
         ))}
+        <Rect x="-60" y="-60" width="520" height="940" fill="url(#vg)" />
       </Svg>
     </View>
   );

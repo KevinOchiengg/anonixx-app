@@ -3,10 +3,10 @@
 const palette = {
 
   // ─── Surfaces ──────────────────────────────────────────────────────────────
-  background:   '#2c1f26',   // screen bg: warm plum that sits with coral (behind it: CoralBackdrop)
-  surface:      '#3a2a32',   // cards, inputs, raised layers
-  surfaceAlt:   '#43313a',   // secondary raised layer
-  surfaceDark:  '#24191f',   // below-surface (chat input bg, deep wells)
+  background:   '#241920',   // screen bg: warm plum that sits with coral (behind it: CoralBackdrop)
+  surface:      '#33242b',   // cards, inputs, raised layers
+  surfaceAlt:   '#3c2b33',   // secondary raised layer
+  surfaceDark:  '#1c1318',   // below-surface (chat input bg, deep wells)
   inputBg:      'rgba(255,255,255,0.04)',
 
   // ─── Text ──────────────────────────────────────────────────────────────────
@@ -80,14 +80,14 @@ const palette = {
 
   // ─── Chat bubbles ──────────────────────────────────────────────────────────
   myBubble:    '#FF634A',   // own sent message
-  theirBubble: '#43313a',   // received message
+  theirBubble: '#3c2b33',   // received message
 
   // ─── Avatar / profile defaults ─────────────────────────────────────────────
-  avatarBg:   '#43313a',
+  avatarBg:   '#3c2b33',
   avatarIcon: '#9A8790',
 
   // ─── Convenience aliases ───────────────────────────────────────────────────
-  bg: '#2c1f26',   // alias for background (used in a few older screens)
+  bg: '#241920',   // alias for background (used in a few older screens)
 };
 
 // Named exports — T is the canonical name, THEME is the legacy alias

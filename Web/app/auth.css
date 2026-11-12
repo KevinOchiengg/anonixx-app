@@ -1,7 +1,7 @@
 /* Sign in / sign up / reset password: the app's auth screens (Frontend/src/screens/auth/*)
    brought to the web, same tokens as Frontend/src/utils/theme.js. */
 .au {
-  --au-bg: #2c1f26;
+  --au-bg: #241920;
   --au-text: #eaeaf0;
   --au-sub: #9a9aa3;
   --au-mute: #4a5068;

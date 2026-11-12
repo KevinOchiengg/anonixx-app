@@ -16,7 +16,7 @@ export const lightTheme = {
   surfaceDark:   '#e0e0e8',
   inputBg:       'rgba(0,0,0,0.04)',
 
-  text:          '#2c1f26',
+  text:          '#241920',
   textSecondary: '#4a4f62',
   textSec:       '#4a4f62',
   textSub:       '#4a4f62',
