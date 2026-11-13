@@ -14,7 +14,7 @@ import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
 import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
-import { SatelliteDish } from "lucide-react";
+import { Eye, SatelliteDish } from "lucide-react";
 
 type Item =
   | { kind: "hero" }
@@ -430,15 +430,28 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
 
   const share = useCallback(async (post: Post) => {
     const url = `${window.location.origin}/drop/${post.id}`;
+    const text = (post.content || "").trim();
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Anonixx", text: `"${post.content.substring(0, 100)}..." — Anonixx`, url });
+        await navigator.share({ title: "Anonixx", text: text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"` : undefined, url });
       } else {
         await navigator.clipboard.writeText(url);
         flash("Link copied");
       }
     } catch { /* share sheet dismissed */ }
   }, [flash]);
+
+  // Long-press menu: one speed for every video this visit, Clear display, Copy link, Not interested.
+  const [speed, setSpeed] = useState(1);
+  const [clear, setClear] = useState(false);
+  const copyLink = useCallback(async (post: Post) => {
+    try { await navigator.clipboard.writeText(`${window.location.origin}/drop/${post.id}`); flash("Link copied."); } catch {}
+  }, [flash]);
+  const notInterested = useCallback((post: Post) => {
+    setPosts((prev) => prev.filter((x) => x.id !== post.id));
+    flash("Got it. Less like this.");
+    if (user) api(`/drops/${post.id}/not-interested`, { method: "POST" }).catch(() => {});
+  }, [flash, user]);
 
   const commentsId = commentsFor?.id;
   const onCount = useCallback((n: number) => {
@@ -511,6 +524,12 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
                 onProfile={openRoom}
                 onReport={setReportFor}
                 onToast={flash}
+                speed={speed}
+                onSpeed={setSpeed}
+                clear={clear}
+                onClear={() => setClear(true)}
+                onCopyLink={copyLink}
+                onNotInterested={notInterested}
               />
             );
           })}
@@ -555,6 +574,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
           />
         ) : null}
 
+        {clear ? <button type="button" className="clear-exit" onClick={() => setClear(false)}><Eye size={15} strokeWidth={2} aria-hidden />Show display</button> : null}
         {toast ? <div className="toast">{toast}</div> : null}
       </div>
 

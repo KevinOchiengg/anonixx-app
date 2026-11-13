@@ -641,6 +641,18 @@
 .post-menu { display: grid; }
 .post-menu .opt-row { display: flex; align-items: center; gap: 10px; font-size: 16px; }
 .post-menu .opt-row svg { width: 18px; height: 18px; }
+.post-menu .pm-ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; flex: none; background: rgba(255, 99, 74, 0.12); color: var(--rose); }
+.post-menu .pm-danger { color: var(--danger, #ef4444); }
+.post-menu .pm-danger .pm-ic { background: rgba(239, 68, 68, 0.12); color: var(--danger, #ef4444); }
+.post-menu .pm-chips { margin-left: auto; display: flex; gap: 6px; }
+.post-menu .pm-chips button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.post-menu .pm-chips button.on { background: var(--rose); border-color: var(--rose); color: #fff; }
+.post-menu .pm-tip { margin: 8px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
+
+/* Clear display: only the post itself until "Show display" */
+.slide.clear .rail, .slide.clear .linkup, .slide.clear.has-media .caption, .slide.clear .vp-scrub, .slide.clear .paid-pill { display: none; }
+.slide.clear.has-media::after, .slide.clear.has-media::before { opacity: 0; }
+.clear-exit { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.14); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 
 /* Paid drops: the preview stops, then the cover blurs behind the unlock button. */
 .paywall { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: rgba(6, 8, 14, 0.55); }

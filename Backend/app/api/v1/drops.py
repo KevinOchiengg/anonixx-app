@@ -1139,6 +1139,22 @@ async def unlike_drop(
     return {"message": "Drop unliked", "liked": False, "likes_count": max(0, updated.get("likes_count", 0))}
 
 
+@router.post("/{drop_id}/not-interested")
+async def not_interested(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Hide this drop from the viewer's feed. Keeps the latest 1000."""
+    if not ObjectId.is_valid(drop_id):
+        raise HTTPException(status_code=400, detail="Invalid drop id")
+    await db["users"].update_one(
+        {"_id": ObjectId(current_user_id)},
+        {"$push": {"not_interested_drop_ids": {"$each": [drop_id], "$slice": -1000}}},
+    )
+    return {"ok": True}
+
+
 @router.post("/{drop_id}/save")
 async def save_drop(
     drop_id: str,
@@ -1903,7 +1919,7 @@ async def get_drops_feed(
             return await db["users"].find_one(
                 {"_id": ObjectId(current_user_id)},
                 {
-                    "blocked_user_ids": 1,
+                    "blocked_user_ids": 1, "not_interested_drop_ids": 1,
                     "location_country": 1, "location_county": 1,
                     "location_sub_county": 1, "location_estate": 1,
                     "feed_location_scope": 1, "age_verified": 1,
@@ -1922,6 +1938,9 @@ async def get_drops_feed(
         blocked_ids += [str(u["_id"]) async for u in db["users"].find({"blocked_user_ids": current_user_id}, {"_id": 1})]
 
     pool_query = {"sender_id": {"$nin": blocked_ids}} if blocked_ids else {}
+    skipped = [ObjectId(i) for i in (user_doc.get("not_interested_drop_ids") or [] if user_doc else []) if ObjectId.is_valid(i)]
+    if skipped:
+        pool_query = {**pool_query, "_id": {"$nin": skipped}}
     pool_query = apply_content_mode(pool_query, mature_allowed(x_content_mode, user_doc))
     pool_query = {"$and": [pool_query, discovery_fresh(now_utc()), DISCOVERY_VISIBLE]} if pool_query else {"$and": [discovery_fresh(now_utc()), DISCOVERY_VISIBLE]}
 

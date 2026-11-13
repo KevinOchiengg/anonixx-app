@@ -48,8 +48,8 @@ export function HeartBursts({ hearts, color, onDone }) {
 
 /** Returns { gesture, hearts, removeHeart }. onSingle runs after DOUBLE_GAP when no
  * second tap comes (pass null to skip the wait); onDoubleLike runs on each double tap;
- * onLong on a 450ms hold. */
-export function useDoubleTapLike({ onSingle, onDoubleLike, onLong }) {
+ * onLong({ x, y }) on a 450ms hold, onLongEnd when that finger lifts. */
+export function useDoubleTapLike({ onSingle, onDoubleLike, onLong, onLongEnd }) {
   const [hearts, setHearts] = useState([]);
   const last = useRef(0);
   const combo = useRef(false);
@@ -57,7 +57,7 @@ export function useDoubleTapLike({ onSingle, onDoubleLike, onLong }) {
   const timer = useRef(null);
   const nextId = useRef(0);
   const cb = useRef({});
-  cb.current = { onSingle, onDoubleLike, onLong };
+  cb.current = { onSingle, onDoubleLike, onLong, onLongEnd };
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -114,7 +114,8 @@ export function useDoubleTapLike({ onSingle, onDoubleLike, onLong }) {
       .runOnJS(true)
       .minDuration(450)
       .maxDistance(24)   // a resting finger drifts; don't lose the hold over it
-      .onStart(() => cb.current.onLong?.()),
+      .onStart((e) => cb.current.onLong?.({ x: e.x, y: e.y }))
+      .onEnd(() => cb.current.onLongEnd?.()),
   ), [onDown, onTap]);
 
   return { gesture, hearts, removeHeart, cancelPending };

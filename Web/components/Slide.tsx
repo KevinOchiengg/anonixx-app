@@ -9,14 +9,14 @@ import { allowMature, useMatureOk } from "@/lib/matureConsent";
 import VideoPlayer, { TAP_GAP } from "./VideoPlayer";
 import FitImage from "./FitImage";
 import { Bookmark, Comment, Heart, Share } from "./icons";
-import { Flag, Link2, SoundOff } from "./feedicons";
+import { Link2, SoundOff } from "./feedicons";
 import AudioWave from "./AudioWave";
 import AmbientSound from "./AmbientSound";
 import Sheet from "./Sheet";
 import { DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 import ConfessionCard from "./ConfessionCard";
 import { CATEGORIES, categoryOf } from "@/lib/confession";
-import { Heart as HeartFill, Lock } from "lucide-react";
+import { Bookmark as LBookmark, EyeOff, Flag as LFlag, Gauge, Heart as HeartFill, Link2 as LLink2, Lock, Maximize, Share2 } from "lucide-react";
 
 type Props = {
   post: Post;
@@ -35,7 +35,15 @@ type Props = {
   onProfile: (post: Post) => void;
   onReport: (post: Post) => void;
   onToast: (msg: string) => void;
+  speed: number;
+  onSpeed: (v: number) => void;
+  clear: boolean;
+  onClear: () => void;
+  onCopyLink: (post: Post) => void;
+  onNotInterested: (post: Post) => void;
 };
+
+const SPEEDS = [0.5, 1, 1.5, 2];
 
 const CAPTION_LINES = 2;
 
@@ -68,6 +76,7 @@ const LONG_PRESS_SLOP = 10;
 export default function Slide({
   post, index, active, near, muted, sounds, headline,
   onToggleMute, onGate, onShare, onPatch, onComments, onLinkUp, onProfile, onReport, onToast,
+  speed, onSpeed, clear, onClear, onCopyLink, onNotInterested,
 }: Props) {
   const { user } = useAuth();
   const [page, setPage] = useState(0);
@@ -78,10 +87,10 @@ export default function Slide({
   const [burst, setBurst] = useState<{ id: number; x: number; y: number; rot: number } | null>(null);
   const viewed = useRef(false);
   const lastTap = useRef(0);
-  // Long-press anywhere on the post opens its menu (report / block, and 2x on videos).
+  // Long-press opens the post's menu; on a video, holding either edge plays 2x until you let go.
   // There's no ⋯ button: fewer icons on the rail.
   const [menu, setMenu] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  const [held, setHeld] = useState(false);
   const press = useRef<{ timer: number; x: number; y: number } | null>(null);
   const pressed = useRef(false);
 
@@ -120,7 +129,7 @@ export default function Slide({
   async function unlock() {
     if (!pw || unlocking) return;
     if (!user) return onGate("Sign up to unlock it. Nobody sees what you watch.");
-    if (!window.confirm(`Unlock this drop for ${pw.price} coins? It stays unlocked, so you can rewatch it any time.`)) return;
+    if (!window.confirm(`Unlock for ${pw.price} coins? Yours to rewatch any time.`)) return;
     setUnlocking(true);
     try {
       const r = await api<{ video_url: string }>(`/drops/${post.id}/unlock`, { method: "POST" });
@@ -129,7 +138,7 @@ export default function Slide({
       onPatch(post.id, { paywall: { ...pw, unlocked: true } });
     } catch (e) {
       if ((e as { status?: number }).status === 402) {
-        if (window.confirm(`You need ${pw.price} coins to unlock this one. Get coins now?`)) window.location.href = "/coins";
+        if (window.confirm(`You need ${pw.price} coins. Top up?`)) window.location.href = "/coins";
       } else {
         onToast((e as Error).message);
       }
@@ -339,20 +348,20 @@ export default function Slide({
     </div>
   ) : null;
 
-  useEffect(() => { if (!active) setSpeed(1); }, [active]);
+  useEffect(() => { if (!active) setHeld(false); }, [active]);
   const canReport = !post.is_admin_drop && !post.is_own_post;
-  function openMenu() {
-    if (videoSrc && !mature) { setMenu(true); return; }
-    if (canReport) (user ? onReport(post) : onGate("Sign in to report a post."));
-  }
+  const isVideo = Boolean(videoSrc) && !mature;
   function pressStart(e: React.PointerEvent) {
     if (e.button > 0 || (e.target as Element).closest("button, a, input, textarea, select, .rail, .vp-bar, .vp-scrub")) return;
     pressed.current = false;
+    const box = e.currentTarget.getBoundingClientRect();
+    const edge = box.width ? (e.clientX - box.left) / box.width : 0.5;
     const timer = window.setTimeout(() => {
       press.current = null;
       pressed.current = true;   // the release that follows isn't a tap
       if (navigator.vibrate) navigator.vibrate(12);
-      openMenu();
+      if (isVideo && (edge < 0.2 || edge > 0.8)) setHeld(true);
+      else setMenu(true);
     }, LONG_PRESS_MS);
     press.current = { timer, x: e.clientX, y: e.clientY };
   }
@@ -363,6 +372,7 @@ export default function Slide({
   function pressEnd() {
     if (press.current) window.clearTimeout(press.current.timer);
     press.current = null;
+    setHeld(false);
   }
 
   return (
@@ -374,7 +384,7 @@ export default function Slide({
       onPointerLeave={pressEnd}
       onClickCapture={(e) => { if (pressed.current) { pressed.current = false; e.stopPropagation(); e.preventDefault(); } }}
       onContextMenu={(e) => { if (press.current || pressed.current) e.preventDefault(); }}
-      className={`slide ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${card ? " cc-slide" : textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
+      className={`slide${clear ? " clear" : ""} ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${card ? " cc-slide" : textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
       style={card ? ({ "--cc-tint": CATEGORIES[category].tint } as React.CSSProperties) : undefined}
       data-idx={index}
       data-post={post.id}
@@ -421,7 +431,8 @@ export default function Slide({
               onStop={() => setPreviewDone(true)}
               near={near}
               muted={muted || muteClip}
-              rate={speed}
+              rate={held ? 2 : speed}
+              holding={held}
             />
           ) : singleImage ? (
             <FitImage src={singleImage} alt={post.content.slice(0, 100)} priority={near} />
@@ -544,14 +555,39 @@ export default function Slide({
       {menu ? (
         <Sheet onClose={() => setMenu(false)}>
           <div className="post-menu">
-            <button className="opt-row" onClick={() => { setSpeed((s) => (s === 1 ? 2 : 1)); setMenu(false); }}>
-              {speed === 1 ? "▶▶  Play at 2x" : "▶  Normal speed"}
+            {isVideo ? (
+              <div className="opt-row pm-speed">
+                <span className="pm-ic"><Gauge /></span>Speed
+                <span className="pm-chips">
+                  {SPEEDS.map((v) => (
+                    <button key={v} type="button" className={speed === v ? "on" : ""} onClick={() => { onSpeed(v); setMenu(false); }}>{v}x</button>
+                  ))}
+                </span>
+              </div>
+            ) : null}
+            <button className="opt-row" onClick={() => { setMenu(false); save(); }}>
+              <span className="pm-ic"><LBookmark fill={post.is_saved ? "currentColor" : "none"} /></span>{post.is_saved ? "Saved" : "Save"}
+            </button>
+            <button className="opt-row" onClick={() => { setMenu(false); onShare(post); }}>
+              <span className="pm-ic"><Share2 /></span>Share
+            </button>
+            <button className="opt-row" onClick={() => { setMenu(false); onCopyLink(post); }}>
+              <span className="pm-ic"><LLink2 /></span>Copy link
+            </button>
+            <button className="opt-row" onClick={() => { setMenu(false); onClear(); }}>
+              <span className="pm-ic"><Maximize /></span>Clear display
             </button>
             {canReport ? (
-              <button className="opt-row" onClick={() => { setMenu(false); user ? onReport(post) : onGate("Sign in to report a post."); }}>
-                <Flag />  Report or block
+              <button className="opt-row" onClick={() => { setMenu(false); onNotInterested(post); }}>
+                <span className="pm-ic"><EyeOff /></span>Not interested
               </button>
             ) : null}
+            {canReport ? (
+              <button className="opt-row pm-danger" onClick={() => { setMenu(false); user ? onReport(post) : onGate("Sign in to report a post."); }}>
+                <span className="pm-ic"><LFlag /></span>Report or block
+              </button>
+            ) : null}
+            {isVideo ? <p className="pm-tip">Hold either edge for 2x.</p> : null}
           </div>
         </Sheet>
       ) : null}

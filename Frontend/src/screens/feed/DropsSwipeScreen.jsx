@@ -46,6 +46,16 @@ import { timeLeft } from '../../config/linkup';
 import FitImage, { FitBackdrop } from '../../components/feed/FitImage';
 import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
+import * as Clipboard from 'expo-clipboard';
+
+// Public web link for a drop; the app opens it too (AppNavigator linking).
+const dropLink = (p) => `https://anonixx.com/drop/${p.id}`;
+const sharePost = async (p) => {
+  const text = (p.content || '').trim();
+  const quote = text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"
+` : '';
+  try { await Share.share({ message: `${quote}${dropLink(p)}` }); } catch {}
+};
 import { fetchBalance } from '../../store/slices/coinsSlice';
 
 // Every 7th drop gets a market slide, every 8th an ad (they can coincide).
@@ -372,6 +382,7 @@ const posterCache = new Map();
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, onUnlock, headerHeight = 0, knockCost = UNLOCK_COST,
+  speed = 1, onSpeed,
 }) => {
   const likedRef = useRef(liked);
   likedRef.current = liked;
@@ -527,14 +538,17 @@ const VideoSlide = ({
     return () => clearTimeout(t);
   }, [isActive, playerStatus]);
 
-  // Long-press opens the menu: 2x speed, report or block. Drag the bottom line to scrub.
-  const [fast, setFast] = useState(false);
-  const setSpeed = (on) => {
-    player.playbackRate = on ? 2 : 1;
-    setFast(on);
+  // Hold an edge for 2x until you let go; hold anywhere else for the menu. Drag the bottom line to scrub.
+  const [held, setHeld] = useState(false);
+  const slideW = useRef(1);
+  useEffect(() => { if (!isActive) setHeld(false); }, [isActive]);
+  useEffect(() => { player.playbackRate = held ? 2 : speed; }, [player, held, speed]);
+  const openMenu = () => onMore({ speed, onSpeed });
+  const onHold = ({ x }) => {
+    const w = slideW.current;
+    if (x < w * 0.2 || x > w * 0.8) setHeld(true);
+    else openMenu();
   };
-  useEffect(() => { if (!isActive && fast) setSpeed(false); }, [isActive]);
-  const openMenu = () => onMore({ fast, toggleSpeed: () => setSpeed(!fast) });
 
   const [scrubT, setScrubT] = useState(null);   // seconds into the clip while dragging
   const scrubWidth = useRef(1);
@@ -587,13 +601,14 @@ const VideoSlide = ({
   const { gesture: tapGesture, hearts, removeHeart, cancelPending } = useDoubleTapLike({
     onSingle: () => { playingRef.current ? player.pause() : player.play(); },
     onDoubleLike: () => { if (!likedRef.current) { likedRef.current = true; handleLikeWithAnim(); } },
-    onLong: openMenu,
+    onLong: onHold,
+    onLongEnd: () => setHeld(false),
   });
   useEffect(() => { if (!isActive) cancelPending(); }, [isActive, cancelPending]);
 
 
   return (
-    <View style={ss.slide} onLayout={(e) => setSlideSize(e.nativeEvent.layout)}>
+    <View style={ss.slide} onLayout={(e) => { setSlideSize(e.nativeEvent.layout); slideW.current = e.nativeEvent.layout.width || 1; }}>
       {!fillVideo && <FitBackdrop uri={poster} />}
       <VideoView
         player={player}
@@ -621,9 +636,9 @@ const VideoSlide = ({
         <PaywallLock poster={poster} price={pw.price} busy={unlocking} onUnlock={handleUnlock} />
       )}
 
-      {fast && (
+      {(held || speed !== 1) && (
         <View style={ss.fastPill} pointerEvents="none">
-          <Text style={ss.fastText}>2x  ▶▶</Text>
+          <Text style={ss.fastText}>{held ? '2x  ▶▶' : `${speed}x`}</Text>
         </View>
       )}
       {scrubT !== null && (
@@ -683,7 +698,7 @@ const VideoSlide = ({
             />
             <ActionBtn
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
-              onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+              onPress={() => sharePost(post)}
             />
             <ViewsStat count={post.views_count} />
           </View>
@@ -813,7 +828,7 @@ const AudioSlide = ({
           />
           <ActionBtn
             tint="share" icon={<Share2 size={26} color="#fff" />} count={null}
-            onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+            onPress={() => sharePost(post)}
           />
           <ViewsStat count={post.views_count} />
         </View>
@@ -1009,7 +1024,7 @@ const TextSlide = ({
             />
             <ActionBtn
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
-              onPress={async () => { try { await Share.share({ message: `"${post.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+              onPress={() => sharePost(post)}
             />
             <ViewsStat count={post.views_count} />
           </View>
@@ -1180,7 +1195,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [saveCounts, setSaveCounts] = useState({});
   const [commentCounts, setCommentCounts] = useState({});
   const [reportPost, setReportPost] = useState(null);
-  const [postMenu, setPostMenu] = useState(null);   // { post, fast?, toggleSpeed? } from a long-press
+  const [postMenu, setPostMenu] = useState(null);   // { post, speed?, onSpeed? } from a long-press
+  const [playSpeed, setPlaySpeed] = useState(1);   // video speed for this session
+  const [clearMode, setClearMode] = useState(false);   // Clear display: only the video
   const [commentSheet, setCommentSheet] = useState({ visible: false, postId: null, isOwner: false });
 
   const loadingRef = useRef(false);
@@ -1353,7 +1370,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     if (!silent) {
       const ok = await new Promise((resolve) => Alert.alert(
         'Unlock this drop?',
-        `${price} coins. It stays unlocked, so you can rewatch it any time.`,
+        `${price} coins. Yours to rewatch any time.`,
         [
           { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
           { text: `Unlock · ${price} coins`, onPress: () => resolve(true) },
@@ -1410,6 +1427,20 @@ export default function DropsSwipeScreen({ navigation, route }) {
       setSaveCounts((prev) => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) + (wasSaved ? 1 : -1)) }));
     }
   }, [isAuthenticated, navigation, showToast]);
+
+  // Not interested: gone from this feed now, and the server keeps it out of later pages.
+  const handleNotInterested = useCallback(async (post) => {
+    setPosts((prev) => prev.filter((p) => p.id !== post.id));
+    showToast({ type: 'success', message: "Got it. Less like this." });
+    if (!isAuthenticated) return;
+    try {
+      const token = await AsyncStorage.getItem('token');
+      await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/not-interested`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {}
+  }, [isAuthenticated, showToast]);
 
   const handleVote = useCallback(async (postId, optionIndex) => {
     if (!isAuthenticated) {
@@ -1619,13 +1650,18 @@ export default function DropsSwipeScreen({ navigation, route }) {
       onMore: (extra) => setPostMenu({ post: item, ...(extra || {}) }),
       navigation,
       headerHeight,
-      chromeHidden,
+      chromeHidden: chromeHidden || clearMode,
       knockCost: user?.is_premium ? 0 : UNLOCK_COST,
     };
 
     let slide;
     if (item.video_url) {
-      slide = <VideoSlide {...commonProps} isActive={isActive} isNear={isNear} onUnlock={(o) => handleUnlock(item, o)} />;
+      slide = (
+        <VideoSlide
+          {...commonProps} isActive={isActive} isNear={isNear} onUnlock={(o) => handleUnlock(item, o)}
+          speed={playSpeed} onSpeed={setPlaySpeed}
+        />
+      );
     } else if (item.audio_url) {
       slide = <AudioSlide {...commonProps} isActive={isActive} />;
     } else if (item.poll) {
@@ -1637,7 +1673,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }, [
     activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
     handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress, handleUnlock,
-    isAuthenticated, navigation, headerHeight, chromeHidden, user?.is_premium,
+    isAuthenticated, navigation, headerHeight, chromeHidden, clearMode, playSpeed, user?.is_premium,
   ]);
 
   if (!loading && loadError && posts.length === 0) {
@@ -1729,7 +1765,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       </View>
 
       {/* Daily-claim banner below the header (hides itself when nothing to claim). */}
-      {isAuthenticated && !chromeHidden && (
+      {isAuthenticated && !chromeHidden && !clearMode && (
         <View style={[sw.rewardBannerWrap, { top: insets.top + rp(8) + rs(34) + rp(12) }]} pointerEvents="box-none">
           <DailyRewardBanner />
         </View>
@@ -1756,9 +1792,21 @@ export default function DropsSwipeScreen({ navigation, route }) {
         saved={postMenu ? saveMap[postMenu.post.id] || false : false}
         onClose={() => setPostMenu(null)}
         onSave={(p) => handleSave(p.id)}
-        onShare={async (p) => { try { await Share.share({ message: `"${p.content?.substring(0, 100)}..." — Anonixx` }); } catch {} }}
+        onShare={sharePost}
+        onCopyLink={async (p) => {
+          try { await Clipboard.setStringAsync(dropLink(p)); showToast({ type: 'success', message: 'Link copied.' }); } catch {}
+        }}
+        onClear={() => setClearMode(true)}
+        onNotInterested={handleNotInterested}
         onReport={(p) => setReportPost(p)}
       />
+
+      {clearMode && (
+        <TouchableOpacity style={[sw.clearExit, { bottom: insets.bottom + rp(18) }]} onPress={() => setClearMode(false)} activeOpacity={0.8}>
+          <Eye size={rs(15)} color="#fff" />
+          <Text style={sw.clearExitText}>Show display</Text>
+        </TouchableOpacity>
+      )}
 
       <ReportSheet
         visible={!!reportPost}
@@ -1979,6 +2027,12 @@ const sw = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
   headerBtnAdmin: { backgroundColor: 'rgba(255,99,74,0.14)', borderColor: 'rgba(255,99,74,0.45)' },
+  clearExit: {
+    position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: rp(6),
+    paddingHorizontal: rp(14), paddingVertical: rp(8), borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+  },
+  clearExitText: { color: '#fff', fontSize: rf(13), fontWeight: '600' },
   locationPill: {
     flexDirection: 'row', alignItems: 'center', gap: rp(4), paddingHorizontal: rp(10), paddingVertical: rp(6),
     borderRadius: RADIUS.full, backgroundColor: 'rgba(0,0,0,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',

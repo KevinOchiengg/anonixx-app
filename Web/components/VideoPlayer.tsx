@@ -13,20 +13,22 @@ type Props = {
   muted: boolean;
   edit?: VideoEdit | null;
   rate?: number;
+  // An edge is being held for 2x.
+  holding?: boolean;
   // Paid drop preview: pause here (instead of looping) and report it.
   stopAt?: number;
   onStop?: () => void;
 };
 
 // Only the active slide plays; neighbours preload metadata; the rest show a poster.
-// Tap to pause/play, drag the bottom bar to scrub, 2x from the long-press menu (`rate`),
+// Tap to pause/play, drag the bottom bar to scrub, speed from the long-press menu (`rate`),
 // ←/→ jump 5s on desktop. Phone-shaped videos fill the screen; others sit over a blurred copy.
 const PlayIcon = () => <Play fill="currentColor" strokeWidth={0} aria-hidden />;
 
 const KEY_JUMP = 5;
 export const TAP_GAP = 250;
 
-export default function VideoPlayer({ src, poster, active, near, muted, edit, rate = 1, stopAt, onStop }: Props) {
+export default function VideoPlayer({ src, poster, active, near, muted, edit, rate = 1, holding = false, stopAt, onStop }: Props) {
   const ref = useRef<HTMLVideoElement>(null);
   const bar = useRef<HTMLSpanElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -191,7 +193,7 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
     if (v && resume.current) v.play().catch(() => {});
   }
 
-  // Speed comes from the post's long-press menu.
+  // Speed comes from the post's long-press menu, or 2x while an edge is held.
   useEffect(() => {
     const v = ref.current;
     if (v) v.playbackRate = rate;
@@ -248,7 +250,7 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
       />
       <VideoOverlays overlays={edit?.overlays} />
       {paused && scrub === null ? <span className="play-badge" aria-hidden><PlayIcon /></span> : null}
-      {rate !== 1 ? <span className="vp-fast" aria-live="polite">{rate}x <i aria-hidden>▶▶</i></span> : null}
+      {rate !== 1 ? <span className="vp-fast" aria-live="polite">{rate}x{holding ? <i aria-hidden> ▶▶</i> : null}</span> : null}
       {scrub !== null ? <span className="vp-time" aria-hidden><b>{fmtTime(scrub)}</b> / {fmtTime(len)}</span> : null}
       {active ? (
         <div
