@@ -291,7 +291,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
           <span className="rm-knock-t">Knock on {name}&apos;s door</span>
           <em>Free to knock</em>
         </button>
-        <small>{cost ? `If ${name} lets you in, ${cost} coins come out of your wallet automatically. Decline or no answer: nothing.` : "Free for you. Nothing is charged."}</small>
+        <small>{cost ? `${cost} coins only if ${name} lets you in. Otherwise, nothing.` : "Free for you. Nothing is charged."}</small>
       </div>
     );
   } else {
@@ -323,7 +323,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
             {room.intro ? (
               <p className="rm-intro" style={font}>{room.intro}</p>
             ) : own ? (
-              <Link href="/chat-setup" className="rm-intro empty">Add a line about you. It&apos;s the first thing visitors read.</Link>
+              <Link href="/chat-setup" className="rm-intro empty">Add a line about you. It&apos;s what they read first.</Link>
             ) : null}
           </section>
 
@@ -424,7 +424,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
               ) : null}
               <button className="room-cta rm-accent wide" onClick={() => openChat(cid)}>Start the conversation</button>
               <div className="rm-starters">
-                <span>Need an opener? Tap one to put it in the box. You send it, not us.</span>
+                <span>Need an opener? Tap one.</span>
                 {STARTERS.map((s) => (
                   <button key={s} type="button" onClick={() => openChat(cid, s)}>{s}</button>
                 ))}

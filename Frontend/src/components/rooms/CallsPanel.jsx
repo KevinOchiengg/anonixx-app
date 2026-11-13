@@ -163,7 +163,7 @@ const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissed
           <View style={s.empty}>
             <View style={s.emptyIcon}><Phone size={rs(26)} color={T.primary} /></View>
             <Text style={s.emptyTitle}>No calls yet</Text>
-            <Text style={s.emptyText}>Call anyone you're connected with. 1-to-1 calls are free, and ending one never ends the chat.</Text>
+            <Text style={s.emptyText}>Call anyone you're connected with. Always free.</Text>
           </View>
         )}
         renderItem={({ item: c }) => {

@@ -225,8 +225,8 @@ export default function SavedPostsScreen({ navigation }) {
           <Text style={styles.emptyTitle}>{tab === 'unlocked' ? 'nothing unlocked yet' : 'nothing saved yet'}</Text>
           <Text style={styles.emptyBody}>
             {tab === 'unlocked'
-              ? 'locked drops you unlock stay here,\nready to rewatch any time.'
-              : 'some words deserve a second read.\nbookmark any thought to find it here.'}
+              ? 'unlocked drops live here.'
+              : 'some words deserve a second read.'}
           </Text>
         </Animated.View>
       ) : (

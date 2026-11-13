@@ -73,9 +73,9 @@ export default function UpdatesPanel({ onGoLive, onLive }: { onGoLive: () => voi
           );
         })}
       </div>
-      {live && !sessions.length ? <p className="mx-note">When someone whose Room you&apos;re inside goes live, they show up here. Click a ring to join.</p> : null}
+      {live && !sessions.length ? <p className="mx-note">Rooms you&apos;re inside show up here when they go live.</p> : null}
       <h3 className="mx-h">Your Room</h3>
-      <p className="mx-note">What people see when they peek, and what they get when you let them in.</p>
+      <p className="mx-note">What they see when they peek, and once they’re in.</p>
       <MyRoomPanel />
       {call ? <CallRoom info={call} onClose={() => { setCall(null); void load(); }} /> : null}
     </div>

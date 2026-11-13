@@ -137,7 +137,7 @@ function GoogleFinish({ hold, refCode, onBack }: { hold: GoogleHold; refCode: st
     <AuthShell scroll>
       <AuthHead title="One last thing" sub={`Signing up as ${hold.email}. Pick a name and confirm you're 18+.`} />
       <form className="au-form" onSubmit={submit} noValidate>
-        <Field label="Anonymous name" optional icon={<IcUser />} error={errors.username} hint="What everyone sees you as. Your Google name and photo are never shown. Skip it and we'll make one.">
+        <Field label="Anonymous name" optional icon={<IcUser />} error={errors.username} hint="What everyone sees. Your Google name and photo stay hidden. Skip it and we'll pick one.">
           <input type="text" maxLength={30} autoComplete="off" placeholder="what should we call you?" value={username} onChange={(e) => setUsername(e.target.value.replace(/ {2,}/g, " "))} />
           {NAME_RE.test(username.trim()) ? <IcCheck /> : null}
         </Field>
@@ -286,7 +286,7 @@ export function SignupForm() {
       <AuthHead title="Create account" sub="No names. No judgment. Just what's real." />
       <form className="au-form" onSubmit={submit} noValidate>
         <Field label="Anonymous name" optional icon={<IcUser />} error={errors.username}
-          hint="This is what everyone sees you as. No real names. Skip it and we'll make one.">
+          hint="What everyone sees. No real names. Skip it and we'll pick one.">
           <input type="text" maxLength={30} autoComplete="off" placeholder="what should we call you?" value={username}
             onChange={(e) => { setUsername(e.target.value.replace(/ {2,}/g, " ")); clear("username"); }} />
           {NAME_RE.test(username.trim()) && !errors.username ? <IcCheck /> : null}

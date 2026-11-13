@@ -195,7 +195,7 @@ export default function PostUnlockScreen({ route, navigation }) {
         showToast({
           type: 'success',
           title: 'You knocked.',
-          message: `${displayName || 'They'} decides whether to let you in. Nothing's charged unless they do.`,
+          message: `${displayName || 'They'} decides. Nothing's charged unless you're let in.`,
         });
         dispatch(fetchBalance());
         clearPitch();
@@ -308,7 +308,7 @@ export default function PostUnlockScreen({ route, navigation }) {
                 })}
               </View>
             ) : (
-              <Text style={s.mediaHint}>Your Room has no photos yet. Add some from Your Room, or attach one below.</Text>
+              <Text style={s.mediaHint}>No Room photos yet. Attach one below.</Text>
             )}
             <Text style={s.mediaHint}>Only {displayName || 'they'} sees what you pick, even if your Room is private. It arrives blurred until they tap, and disappears if they say no.</Text>
           </View>
@@ -338,7 +338,7 @@ export default function PostUnlockScreen({ route, navigation }) {
             </TouchableOpacity>
           )}
           <Text style={s.mediaHint}>
-            A clue of who's asking. Keep it decent, reported clues get accounts restricted.
+            A clue of who's asking. Keep it decent.
           </Text>
         </View>
 

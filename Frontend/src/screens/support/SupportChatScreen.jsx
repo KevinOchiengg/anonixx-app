@@ -133,7 +133,7 @@ export default function SupportChatScreen({ navigation, route }) {
             contentContainerStyle={s.list}
             ListEmptyComponent={
               <Text style={a.emptyText}>
-                {isAdminView ? 'No messages.' : 'Ask us anything — a real person from Anonixx replies here.\nTap the arrow icon to request a coin refund.'}
+                {isAdminView ? 'No messages.' : 'Ask anything. A real person replies.\nTap the arrow to request a coin refund.'}
               </Text>
             }
           />

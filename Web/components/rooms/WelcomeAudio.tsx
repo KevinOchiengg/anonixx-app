@@ -134,7 +134,7 @@ export default function WelcomeAudio({ saved, onSave, onRemove }: {
         </>
       ) : (
         <>
-          <small className="wa-hint">Say hello in your own voice, up to a minute. It&apos;s the first thing they hear.</small>
+          <small className="wa-hint">Your voice, up to a minute. The first thing they hear.</small>
           <div className="wa-row">
             <button type="button" className="pill" onClick={start}>Record</button>
             <button type="button" className="pill ghost" onClick={() => fileIn.current?.click()}>Upload a file</button>

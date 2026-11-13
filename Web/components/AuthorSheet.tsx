@@ -110,7 +110,7 @@ export default function AuthorSheet({
                   <button className="u-cta" onClick={() => { onClose(); onLinkUp(post); }}>
                     <Link2 />Knock<span className="coin-cost">{COST.linkUp}</span>
                   </button>
-                  <p className="u-hint">Free to knock. Coins move only if they let you in, and they won&apos;t know it&apos;s you until then.</p>
+                  <p className="u-hint">Free to knock. Coins only if they let you in.</p>
                 </>
               ) : null}
             </>

@@ -144,7 +144,7 @@ export default function LinkUpSheet({
       setSent(true);
     } catch (e) {
       if (e instanceof ApiError && e.code === "age_verification_required") { setAgeGate(true); return; }
-      setError(e instanceof ApiError && e.status === 402 ? "You need enough coins ready in case they let you in. Top up first." : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 402 ? "Top up first. Coins only move if they let you in." : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -241,7 +241,7 @@ export default function LinkUpSheet({
               {rule === "line_peek" && !peek.length ? "Or add a photo or short clip" : "Add a photo or short clip (optional)"}
             </button>
           )}
-          <p className="u-hint">A clue of who&apos;s asking. Keep it decent, reported clues get accounts restricted.</p>
+          <p className="u-hint">A clue of who&apos;s asking. Keep it decent.</p>
         </div>
 
         <div className="lu-voice">

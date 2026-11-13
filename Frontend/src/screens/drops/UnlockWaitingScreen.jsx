@@ -195,7 +195,7 @@ export default function UnlockWaitingScreen({ route, navigation }) {
         ) : (
           <>
             <Text style={s.title}>This confession expired</Text>
-            <Text style={s.sub}>It's gone before they got to respond — no coins were spent.</Text>
+            <Text style={s.sub}>Gone before they answered. No coins spent.</Text>
             <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} style={s.backLink}>
               <Text style={s.backLinkText}>Back to feed</Text>
             </TouchableOpacity>

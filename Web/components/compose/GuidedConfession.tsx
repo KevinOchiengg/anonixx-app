@@ -383,7 +383,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             </div>
           </Section>
 
-          <Section n={5} title="Anything else?" sub="A personal message, and anything they should know first." optional done={sections[4]}>
+          <Section n={5} title="Anything else?" sub="Anything they should know first." optional done={sections[4]}>
             <h3 className="gc-label">Personal message <span className="hk-opt">optional</span></h3>
             <div className="gc-secret">
               <textarea rows={3} maxLength={NOTE_MAX} value={a.note} onChange={(e) => set({ note: e.target.value })} placeholder="Write something personal you'd like them to know." aria-label="Personal message (optional)" />
@@ -439,7 +439,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
                 <button type="button" onClick={shuffleSound}>{pickedSound ? "Shuffle" : "Pick one for me"}</button>
                 <button type="button" aria-pressed={!a.sound} className={!a.sound ? "on" : ""} onClick={() => { preview.current?.pause(); setHearing(""); set({ sound: "", soundOff: true }); }}>No sound</button>
               </div>
-              <p className="hk-hint">{pickedSound ? "Picked at random. It plays softly while they read yours." : "Yours goes out quiet."}</p>
+              <p className="hk-hint">{pickedSound ? "Plays softly while they read yours." : "Yours goes out quiet."}</p>
             </>
           )}
           <p className="hk-hint">{FRESH_HINT[FRESH_FOR_WHEN[a.when]]} Your Room and chats stay either way.{pickedSound ? `  ♪ ${pickedSound.title}` : ""}</p>

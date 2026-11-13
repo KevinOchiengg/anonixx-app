@@ -177,7 +177,7 @@ export default function FeedLocationScreen({ navigation }) {
               <Text style={s.localLabel}>Local first</Text>
               <Text style={s.localSub}>
                 {localFirst
-                  ? `Confessions from ${country.trim() || detected || 'your country'} show up first. Everywhere else still mixes in.`
+                  ? `${country.trim() || detected || 'your country'} first. The rest of the world still mixes in.`
                   : 'Your feed shows everywhere equally.'}
               </Text>
             </View>

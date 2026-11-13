@@ -900,7 +900,7 @@ export default function DropChatScreen({ route, navigation }) {
       // View once: they can open it a single time, then it's gone for them.
       const viewOnce = await new Promise((resolve) => Alert.alert(
         mediaType === 'video' ? 'Send this video' : 'Send this photo',
-        'View once lets them open it a single time. After that it is gone for them.',
+        'They open it once. Then it’s gone.',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
           { text: 'View once', onPress: () => resolve(true) },
@@ -1072,7 +1072,7 @@ export default function DropChatScreen({ route, navigation }) {
   const confirmDeleteForEveryone = useCallback((item) => {
     Alert.alert(
       'Delete for everyone?',
-      "They'll see \"This message was deleted\" instead. This can't be undone.",
+      "They'll see it was deleted. Can't be undone.",
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => handleDeleteMessage(item, true) },
@@ -1267,14 +1267,14 @@ export default function DropChatScreen({ route, navigation }) {
     if (unlocks && unlocks > new Date()) {
       Alert.alert(
         'Not yet',
-        `You can remove someone 3 days after letting them in: from ${unlocks.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. If something's wrong, block them now.`,
+        `You can remove them from ${unlocks.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Something wrong? Block them now.`,
         [{ text: 'OK', style: 'cancel' }, { text: 'Block', style: 'destructive', onPress: () => handleBlockHost() }],
       );
       return;
     }
     Alert.alert(
       `Remove ${connection?.other_anonymous_name || 'them'} from your Room?`,
-      "This conversation closes for both of you. They'd have to knock again.",
+      "The chat closes. They'd have to knock again.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -1287,7 +1287,7 @@ export default function DropChatScreen({ route, navigation }) {
               });
               const body = await res.json().catch(() => ({}));
               if (!res.ok) throw new Error(body?.detail?.message || (typeof body?.detail === 'string' ? body.detail : ''));
-              showToast({ type: 'info', message: "Removed. They're outside again and can knock if they want back in." });
+              showToast({ type: 'info', message: "Removed. They're outside again." });
               navigation.goBack();
             } catch (e) {
               showToast({ type: 'error', message: e.message || 'Could not remove them. Try again.' });
@@ -1302,7 +1302,7 @@ export default function DropChatScreen({ route, navigation }) {
     if (!connection?.other_user_id) return;
     Alert.alert(
       'Block this person?',
-      "They won't be able to reach you, and their content will be hidden from your feed and Drops.",
+      "They can't reach you, and you won't see their posts.",
       [
         { text: 'Cancel', style: 'cancel' },
         {

@@ -263,7 +263,7 @@ export default function SearchScreen({ navigation }) {
             {FRESH.map(([id, l]) => <Chip key={id} label={l} on={fresh === id} onPress={() => setFresh(fresh === id ? '' : id)} />)}
           </ScrollView>
           {near.meta.loose && near.items.length > 0 && (
-            <Text style={styles.note}>No post has all of those words, so these have some of them.</Text>
+            <Text style={styles.note}>Close matches.</Text>
           )}
           {rooms.items.length > 0 && (
             <>
@@ -312,10 +312,10 @@ export default function SearchScreen({ navigation }) {
             </View>
           )}
           {stories.meta.loose && stories.items.length > 0 && (
-            <Text style={styles.note}>No post has all of those words, so these have some of them.</Text>
+            <Text style={styles.note}>Close matches.</Text>
           )}
           {stab === 'trending' && stories.meta.trending_ready === false && (
-            <Text style={styles.note}>Not enough going on for Trending yet, so here's what's newest.</Text>
+            <Text style={styles.note}>Nothing trending yet. Here's what's new.</Text>
           )}
         </>
       )}
@@ -330,7 +330,7 @@ export default function SearchScreen({ navigation }) {
           <Text style={styles.emptyTitle}>Near is for adults.</Text>
           <Text style={styles.emptyText}>
             {near.meta.gate === 'signin'
-              ? 'Sign in and confirm you’re 18+ to see who’s looking near you.'
+              ? 'Sign in (18+) to see who’s looking near you.'
               : 'Near isn’t in the app yet. Here you can read Stories.'}
           </Text>
           <Pill label="Read Stories" primary onPress={() => pickTab('stories')} />
@@ -353,7 +353,7 @@ export default function SearchScreen({ navigation }) {
     return tab === 'near' ? (
       <View style={styles.empty}>
         <Text style={styles.emptyTitle}>No fresh connections {place.scope === 'anywhere' ? 'right now' : 'in this area yet'}.</Text>
-        <Text style={styles.emptyText}>{keyword || gender || fresh ? 'Nothing matches all of that. Loosen a filter or look wider.' : 'Be the first one people find here, or look a little wider.'}</Text>
+        <Text style={styles.emptyText}>{keyword || gender || fresh ? 'Nothing matches. Loosen a filter.' : 'Nobody here yet. Look wider.'}</Text>
         {wider && <Pill label={`Look in ${wider === 'anywhere' ? 'the whole world' : wider === 'country' ? 'my country' : 'my area'}`} primary onPress={() => saveWhere({ ...place, scope: wider })} />}
         <Pill label="Read Stories" onPress={() => pickTab('stories')} />
       </View>
@@ -492,7 +492,7 @@ function PlacePicker({ current, onSave }) {
   const ready = p.scope === 'anywhere' || (p.country && (!needsCounty || p.county) && (p.scope !== 'close' || p.sub));
   return (
     <View style={styles.picker}>
-      <Text style={styles.note}>Only where you're looking. The location on your posts doesn't change, and nobody sees where you browse.</Text>
+      <Text style={styles.note}>Only changes where you look. Nobody sees it.</Text>
       <View style={styles.scopes}>
         {SCOPES.map((s) => <Chip key={s.id} label={s.label} on={p.scope === s.id} onPress={() => setP({ ...p, scope: s.id })} />)}
       </View>

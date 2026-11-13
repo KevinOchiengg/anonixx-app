@@ -176,7 +176,7 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
     let dead = false;
     (async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError("This browser can't do calls. Try Chrome, Edge, Safari or Firefox over https.");
+        setError("This browser can't call. Try Chrome, Edge, Safari or Firefox.");
         return;
       }
       try {
@@ -311,7 +311,7 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   async function hostAction(p: Participant, action: "mute" | "remove") {
     try {
       if (action === "mute") { await callsApi.mute(info.callId, p.user_id); setError(`Muted ${p.name}.`); }
-      else { await callsApi.remove(info.callId, p.user_id); setError(`${p.name} is out of this session. They're still in your Room.`); void loadPeople(); }
+      else { await callsApi.remove(info.callId, p.user_id); setError(`${p.name} left the session. Still in your Room.`); void loadPeople(); }
     } catch (e) {
       setError((e as Error).message);
     }
@@ -391,8 +391,8 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
         {cams.length > 1 ? <button onClick={flip} aria-label="Switch camera"><FlipI /></button> : null}
       </div>
       <p className="cr-note">
-        {direct ? "Hanging up ends the call. Your conversation stays open."
-          : info.isHost ? "Ending closes the session for everyone. Nobody leaves your Room."
+        {direct ? "Ends the call. The chat stays open."
+          : info.isHost ? "Ends it for everyone. Nobody leaves your Room."
             : "Leaving the session keeps you in the Room."}
       </p>
     </div>

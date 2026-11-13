@@ -205,7 +205,7 @@ export default function SignUpScreen({ navigation }) {
           updateUserProfile?.({ avatar_url: cloudUrl });
           dispatch(updateReduxUser({ avatar_url: cloudUrl }));
         } catch {
-          showToast({ type: 'warning', message: 'Account created, but the photo upload failed. Add it later from your profile.' });
+          showToast({ type: 'warning', message: 'You’re in. The photo didn’t upload, add it from your profile.' });
         }
       }
 

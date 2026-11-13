@@ -59,7 +59,7 @@ export default function WelcomeAudioEditor({ saved, onSave, onRemove }) {
     try {
       const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
-        showToast({ type: 'warning', message: 'Allow the microphone for Anonixx in Settings to record a welcome.' });
+        showToast({ type: 'warning', message: 'Allow the microphone in Settings to record.' });
         return;
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
@@ -84,7 +84,7 @@ export default function WelcomeAudioEditor({ saved, onSave, onRemove }) {
     if (r.canceled || !r.assets?.[0]) return;
     const a = r.assets[0];
     if (a.size && a.size > 8 * 1024 * 1024) {
-      showToast({ type: 'warning', message: 'That file is too big. Keep it under 8 MB and a minute long.' });
+      showToast({ type: 'warning', message: 'Too big. Keep it under 8 MB and a minute.' });
       return;
     }
     // The player reports the real length; we save without one if it's unknown.
@@ -157,7 +157,7 @@ export default function WelcomeAudioEditor({ saved, onSave, onRemove }) {
         </>
       ) : (
         <>
-          <Text style={s.hint}>Say hello in your own voice, up to a minute. It's the first thing they hear.</Text>
+          <Text style={s.hint}>Your voice, up to a minute. The first thing they hear.</Text>
           <View style={s.row}>
             <TouchableOpacity style={s.primary} onPress={start} accessibilityRole="button">
               <Mic size={rs(15)} color="#fff" /><Text style={s.primaryText}>Record</Text>

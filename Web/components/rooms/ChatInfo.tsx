@@ -82,7 +82,7 @@ export default function ChatInfo({ id, conn, avatar, onClose, onPrefs, onCall, o
             ))}
           </div>
           {!list ? <p className="muted center">Loading…</p> : list.length === 0 ? (
-            <p className="ci-m">{kind === "media" ? "Photos and videos you share appear here. View-once media never does." : kind === "voice" ? "No voice notes yet." : "No links yet."}</p>
+            <p className="ci-m">{kind === "media" ? "Shared photos and videos land here." : kind === "voice" ? "No voice notes yet." : "No links yet."}</p>
           ) : kind === "media" ? (
             <div className="ci-grid">
               {list.map((m) => (
@@ -138,7 +138,7 @@ export default function ChatInfo({ id, conn, avatar, onClose, onPrefs, onCall, o
           <button className="ci-row" onClick={onBlock}><b>Block {name}</b></button>
           <button className="ci-row" onClick={onReport}><b>Report {name}</b></button>
         </div>
-        <p className="mx-foot">Anonixx never shows your real name, number or location to anyone you chat with.</p>
+        <p className="mx-foot">Your real name, number and location stay hidden.</p>
       </div>
       {open ? (
         <div className="u-modal" onClick={() => setOpen(null)}>

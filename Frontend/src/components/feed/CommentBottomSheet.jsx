@@ -772,10 +772,7 @@ export const CommentBottomSheet = React.memo(({
         ) : sortedComments.length === 0 ? (
           <View style={st.emptyWrap}>
             <MessageSquareMore size={rs(36)} color={T.textMuted} strokeWidth={2} style={{ marginBottom: rp(8) }} />
-            <Text style={st.emptyTitle}>First word's yours.</Text>
-            <Text style={st.emptyBody}>
-              {"Nobody's answered this yet. Say what you really think.\nYour name stays hidden."}
-            </Text>
+            <Text style={st.emptyTitle}>Be the first to break the silence</Text>
           </View>
         ) : (
           <FlatList
@@ -929,7 +926,6 @@ const st = StyleSheet.create({
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 44, gap: 10 },
   emptyEmoji:{ fontSize: 42 },
   emptyTitle:{ fontSize: 18, fontWeight: '800', color: T.text, letterSpacing: 0.3, fontFamily: 'PlayfairDisplay-Bold' },
-  emptyBody: { fontSize: 14, color: T.textMuted, textAlign: 'center', lineHeight: 21, fontFamily: 'PlayfairDisplay-Italic' },
   list:        { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 },
   // ── Flat comment row: no bubble, no border. ─────────────────────

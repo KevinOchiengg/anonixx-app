@@ -135,7 +135,7 @@ export default function ReferralScreen({ navigation }) {
     if (!shareLink) return;
     try {
       await Share.share({
-        message: `Join me on Anonixx — the space where you can be real, stay anonymous, and actually feel heard.\n\nUse my link: ${shareLink}`,
+        message: `Come say what you can’t say out loud. Join me on Anonixx: ${shareLink}`,
         url:     shareLink,
         title:   'Join Anonixx',
       });

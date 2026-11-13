@@ -179,7 +179,7 @@ export default function MessagesScreen({ navigation, route }) {
   const onArchive = () => applyPrefs({ archived: true }, (n) => `${n} ${n === 1 ? 'chat' : 'chats'} archived`);
   const onMute = () => {
     if (allMuted) { applyPrefs({ mute: 'off' }); return; }
-    Alert.alert('Mute notifications', 'Messages still arrive; you just won’t get a notification.', [
+    Alert.alert('Mute notifications', 'Messages still arrive, silently.', [
       ...MUTE_OPTIONS.map(([v, label]) => ({ text: label, onPress: () => applyPrefs({ mute: v }) })),
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -317,7 +317,7 @@ export default function MessagesScreen({ navigation, route }) {
     <View style={s.empty}>
       <View style={s.emptyIcon}><MessageSquarePlus size={rs(28)} color={T.primary} /></View>
       <Text style={s.emptyTitle}>No chats yet</Text>
-      <Text style={s.emptyText}>Let someone in from Knocks, or knock on a Room you like. Every conversation lives here.</Text>
+      <Text style={s.emptyText}>Let someone in, or go knock. Every conversation lives here.</Text>
       <TouchableOpacity style={s.emptyBtn} onPress={() => (knocks.length ? goTab('knocks') : navigation.navigate('Feed'))}>
         <Text style={s.emptyBtnText}>{knocks.length ? `Answer ${knocks.length} at your door` : 'Find someone on the feed'}</Text>
       </TouchableOpacity>
@@ -348,7 +348,7 @@ export default function MessagesScreen({ navigation, route }) {
         contentContainerStyle={{ paddingBottom: rs(110) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={T.primary} colors={[T.primary]} />}
         ListFooterComponent={chats && inbox.length ? (
-          <Text style={s.footer}>Only the two of you can read a chat. Calls and chats are separate: ending one never ends the other.</Text>
+          <Text style={s.footer}>Only the two of you can read a chat.</Text>
         ) : null}
       />
     ),
@@ -421,7 +421,7 @@ export default function MessagesScreen({ navigation, route }) {
         visible={picker === 'call'}
         mode="call"
         title="New call"
-        subtitle="Voice or video, free, with anyone you're connected with"
+        subtitle="Free voice or video calls"
         onClose={() => setPicker(null)}
         onCall={startCall}
       />

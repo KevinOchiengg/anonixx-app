@@ -151,7 +151,7 @@ function Entrance({ th, name, font, welcome, audio, gallery = [], onOpenMedia, o
             <TouchableOpacity style={[s.accentBtn, { backgroundColor: th.accent, alignSelf: 'stretch', marginTop: rp(6) }]} onPress={() => onStart(null)}>
               <Text style={[s.accentText, { color: th.bg }]}>Start the conversation</Text>
             </TouchableOpacity>
-            <Text style={[s.startersHint, { color: th.muted }]}>Need an opener? Tap one to put it in the box. You send it, not us.</Text>
+            <Text style={[s.startersHint, { color: th.muted }]}>Need an opener? Tap one.</Text>
             {STARTERS.map((line) => (
               <TouchableOpacity key={line} style={[s.starter, { borderColor: th.border }]} onPress={() => onStart(line)} activeOpacity={0.8}>
                 <Text style={[s.starterText, { color: th.text }]}>{line}</Text>
@@ -397,7 +397,7 @@ export default function RoomScreen({ route, navigation }) {
           </LinearGradient>
         </TouchableOpacity>
         <Text style={[s.fine, { color: th.muted }]}>
-          {cost ? `If ${name} lets you in, ${cost} coins come out of your wallet automatically. Decline or no answer: nothing.` : 'Free for you. Nothing is charged.'}
+          {cost ? `${cost} coins only if ${name} lets you in. Otherwise, nothing.` : 'Free for you. Nothing is charged.'}
         </Text>
       </View>
     );
@@ -437,7 +437,7 @@ export default function RoomScreen({ route, navigation }) {
             {room.intro ? (
               <Text style={[s.intro, { color: th.muted, fontFamily: font }]}>{room.intro}</Text>
             ) : own ? (
-              <Text style={[s.intro, s.introEmpty, { color: th.muted }]}>Add a line about you. It's the first thing visitors read.</Text>
+              <Text style={[s.intro, s.introEmpty, { color: th.muted }]}>Add a line about you. It's what they read first.</Text>
             ) : null}
           </Animated.View>
 
@@ -489,7 +489,7 @@ export default function RoomScreen({ route, navigation }) {
             </View>
           ) : own ? (
             <View style={[s.card, card]}>
-              <Text style={[s.noteText, { color: th.muted }]}>Your walls are bare. Hang up to 3 photos so visitors know who they're knocking for.</Text>
+              <Text style={[s.noteText, { color: th.muted }]}>Bare walls. Hang up to 3 photos.</Text>
             </View>
           ) : null}
 
@@ -508,7 +508,7 @@ export default function RoomScreen({ route, navigation }) {
             <View style={[s.card, card]}>
               <Text style={[s.label, { color: th.muted, marginBottom: rp(10) }]}>BEHIND THE DOOR</Text>
               {[
-                `A private conversation with ${name}. No timer, no charge per message.`,
+                `Just you and ${name}. No timer, no per-message fees.`,
                 `Voice and video calls, if ${name} opens them.`,
                 ...(veiled ? [`${veiled} more ${veiled === 1 ? 'photo' : 'photos'} ${name} saves for people inside.`] : []),
               ].map((line) => (

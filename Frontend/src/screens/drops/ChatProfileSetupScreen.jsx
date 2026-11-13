@@ -34,15 +34,15 @@ import WelcomeAudioEditor from '../../components/rooms/WelcomeAudioEditor';
 
 // What a Knock on this Room must carry (Backend chat_profile.py DOOR_RULES).
 const DOOR_RULES = [
-  { id: 'line_peek', label: 'A line + a peek', hint: 'They write a line and show something: from their Room, a photo or video, or a voice note.' },
+  { id: 'line_peek', label: 'A line + a peek', hint: 'A line plus a photo, video or voice note.' },
   { id: 'line', label: 'A line is enough', hint: 'Just a line about themselves. Fewer clues, more knocks.' },
   { id: 'voice', label: 'A voice note', hint: '5 to 15 seconds of their voice. A strong clue without a face.' },
 ];
 
 // Where the Room shows in Discover (Backend chat_profile.py LISTINGS). Default "limited".
 const LISTINGS = [
-  { id: 'discoverable', label: 'Show my Room in Near', hint: 'People browsing your area can find your Room, even when you have no post up.' },
-  { id: 'limited', label: 'Only through my posts', hint: "People reach your Room from your posts. It isn't listed on its own." },
+  { id: 'discoverable', label: 'Show my Room in Near', hint: 'People nearby can find your Room, even with no post up.' },
+  { id: 'limited', label: 'Only through my posts', hint: "Only reachable from your posts." },
   { id: 'private', label: 'Keep me out of Near', hint: "Your posts still show in the feed, but you won't appear in Near." },
 ];
 
@@ -53,7 +53,7 @@ const TABS = [
 // Who hears/reads the welcome (Backend chat_profile.py WELCOME_VISIBILITY).
 const WELCOME_VISIBILITY = [
   { id: 'inside', label: 'Only people I let in', hint: 'Your note and audio wait behind the door. The default.' },
-  { id: 'window', label: 'Everyone peeking', hint: 'Anyone who opens your Room hears and reads your welcome before knocking.' },
+  { id: 'window', label: 'Everyone peeking', hint: 'Visitors hear and read this before they knock.' },
 ];
 const NOTIFY_ROWS = [
   ['knocks', 'New knocks', 'Someone knocks on your Room'],
@@ -416,13 +416,13 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
 
   const handleRemove = useCallback((c) => {
     if (c.removable_at && new Date(c.removable_at) > new Date()) {
-      Alert.alert('Not yet', `You can remove someone 3 days after letting them in: from ${shortDate(c.removable_at)}. If something's wrong, block them now.`, [
+      Alert.alert('Not yet', `You can remove them from ${shortDate(c.removable_at)}. Something wrong? Block them now.`, [
         { text: 'OK', style: 'cancel' },
         { text: 'Block', style: 'destructive', onPress: () => handleBlock(c) },
       ]);
       return;
     }
-    Alert.alert(`Remove ${c.other_anonymous_name}?`, "The conversation closes for both of you. They're an outsider again: they can peek and knock if they want back in.", [
+    Alert.alert(`Remove ${c.other_anonymous_name}?`, "The chat closes. They're outside again.", [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
         setPersonBusy(c.id);
@@ -512,7 +512,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           <RoomMini theme={roomTheme} name={anonymousName} big />
           <View style={{ flex: 1, gap: rp(6) }}>
             <Text style={styles.heroTitle}>{roomThemeById(roomTheme).room}</Text>
-            <Text style={styles.heroText}>Your private space. Visitors peek through the window, knock, and you decide who comes in.</Text>
+            <Text style={styles.heroText}>Your private space. They peek, they knock, you decide.</Text>
             {me ? (
               <TouchableOpacity style={styles.pill} onPress={() => navigation.navigate('Room', { userId: me })}>
                 <Text style={styles.pillText}>See it as a visitor</Text>
@@ -561,7 +561,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
 
         <TouchableOpacity style={styles.nextCard} onPress={() => setTab('welcome')} activeOpacity={0.85}>
           <Text style={styles.optionTitle}>Your welcome</Text>
-          <Text style={styles.optionHint}>A note, your voice and three welcome photos or videos for people you let in.</Text>
+          <Text style={styles.optionHint}>What people get once you let them in.</Text>
         </TouchableOpacity>
           </>
         )}
@@ -629,7 +629,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         <View style={[styles.option, { marginTop: rp(8) }]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Play it when they walk in</Text>
-            <Text style={styles.optionHint}>Plays once on their first visit, at their phone's volume, and never through silent mode. Off: they tap to play it.</Text>
+            <Text style={styles.optionHint}>Plays once on their first visit, never in silent mode. Off: they tap to play.</Text>
           </View>
           <Switch
             value={welcomeAutoplay}
@@ -688,7 +688,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           <Phone size={rs(16)} color={T.textSecondary} />
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Voice calls</Text>
-            <Text style={styles.optionHint}>People inside your Room can ring you from your conversation.</Text>
+            <Text style={styles.optionHint}>People inside can ring you from the chat.</Text>
           </View>
           <Switch value={allowAudioCalls} onValueChange={setAllowAudioCalls} trackColor={{ false: T.surfaceAlt, true: T.gold }} thumbColor="#fff" accessibilityLabel="Allow voice calls" />
         </View>
@@ -696,7 +696,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           <Video size={rs(16)} color={T.textSecondary} />
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Video calls</Text>
-            <Text style={styles.optionHint}>Off: they see you're not taking video calls and can message instead.</Text>
+            <Text style={styles.optionHint}>Off: they'll message instead.</Text>
           </View>
           <Switch value={allowVideoCalls} onValueChange={setAllowVideoCalls} trackColor={{ false: T.surfaceAlt, true: T.gold }} thumbColor="#fff" accessibilityLabel="Allow video calls" />
         </View>
@@ -751,7 +751,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             ) : (
               <Text style={styles.capacityMaxedText}>Room is at its largest size.</Text>
             )}
-            <Text style={styles.optionHint}>4 guests are free. Extra seats are 25 coins each, charged once when you tap, up to 12 guests. Starting a session is free.</Text>
+            <Text style={styles.optionHint}>4 seats free. Extras 25 coins each, one-off, up to 12. Going live is free.</Text>
           </View>
         )}
           </>
@@ -816,7 +816,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         {tab === 'knocks' && (
           knocks === null ? <ActivityIndicator color={T.primary} style={{ marginTop: rp(30) }} /> : (
             <>
-              <Text style={styles.info}>Knocking is free for them. When they knock they agree that a Let In takes the Let In fee from their wallet, once. Let them in and it moves automatically; decline, or they take the knock back, and nothing is charged. You never pay to let someone in.</Text>
+              <Text style={styles.info}>Knocking is free. Let them in and the fee leaves their wallet, once. Decline and nothing moves. You never pay to let someone in.</Text>
               <TouchableOpacity style={styles.linkRow} onPress={() => navigation.navigate('Coins')}>
                 <Coins size={rs(14)} color={T.gold} />
                 <Text style={styles.linkText}>Your wallet and coin history</Text>
@@ -851,8 +851,8 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         {tab === 'inside' && (
           inside === null ? <ActivityIndicator color={T.primary} style={{ marginTop: rp(30) }} /> : (
             <>
-              <Text style={styles.info}>People you've let in. Access doesn't expire. You can remove someone 3 days after letting them in: the conversation closes and they're an outsider again, free to knock. Block works any time and stops them knocking.</Text>
-              {inside.length === 0 ? <Text style={styles.empty}>Nobody's inside yet. When you let someone in, they show up here.</Text> : null}
+              <Text style={styles.info}>People you've let in. Remove after 3 days, block any time.</Text>
+              {inside.length === 0 ? <Text style={styles.empty}>Nobody's inside yet.</Text> : null}
               {inside.map((c) => (
                 <View key={c.id} style={styles.person}>
                   <View style={styles.personAva}>
@@ -920,7 +920,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
                 <Text style={styles.optionHint}>
                   {notify.quiet_start != null
                     ? `Nothing buzzes from ${hourLabel(notify.quiet_start)} to ${hourLabel(notify.quiet_end)}. Everything waits in your Room.`
-                    : 'Knocks, messages and calls still arrive, just silently in the app.'}
+                    : 'Everything still arrives, silently.'}
                 </Text>
               </View>
               <Switch
@@ -944,7 +944,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
             ))}
-            <Text style={styles.info}>Notifications never show where you are or anyone's contact details. Turn off "Show message text" to keep words off your lock screen.</Text>
+            <Text style={styles.info}>Turn off "Show message text" to keep words off your lock screen.</Text>
           </>
         )}
 
@@ -975,8 +975,8 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
                   {knocksOpen
                     ? 'Anyone 18+ who finds your post can knock.'
                     : breakUntil && breakHours === null
-                      ? `Taking a break until ${new Date(breakUntil).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}. People already inside stay inside.`
-                      : 'Taking a break. Nobody new can knock. People already inside stay inside.'}
+                      ? `On a break until ${new Date(breakUntil).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}. Nobody new can knock.`
+                      : 'On a break. Nobody new can knock.'}
                 </Text>
               </View>
               <Switch
@@ -1002,7 +1002,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
                 </View>
               </TouchableOpacity>
             ))}
-            <Text style={styles.info}>Open or on a break is about knocks only. Nobody sees when you're online.</Text>
+            <Text style={styles.info}>Only affects knocks. Nobody sees when you're online.</Text>
             <Text style={styles.sectionLabel}>What a knock must include</Text>
             {DOOR_RULES.map((r) => (
               <TouchableOpacity
@@ -1019,7 +1019,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
                 </View>
               </TouchableOpacity>
             ))}
-            <Text style={styles.info}>Photos and videos on a knock arrive blurred until you tap them, and disappear if you decline.</Text>
+            <Text style={styles.info}>Knock photos and videos stay blurred until you tap.</Text>
             <Text style={styles.sectionLabel}>Where people find your Room</Text>
             {LISTINGS.map((r) => (
               <TouchableOpacity

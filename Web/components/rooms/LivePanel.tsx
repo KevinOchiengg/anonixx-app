@@ -67,7 +67,7 @@ export default function LivePanel() {
       ) : (
         <button className="lv-start" onClick={() => setStarting(true)}>
           <span className="lv-ava icon" aria-hidden>+</span>
-          <span className="lv-t"><b>Start a session</b><small>A voice or video room for people you&apos;ve let in. Invite everyone or pick a few.</small></span>
+          <span className="lv-t"><b>Start a session</b><small>Voice or video, for everyone inside or a chosen few.</small></span>
         </button>
       )}
 
@@ -88,7 +88,7 @@ export default function LivePanel() {
         <div className="rx-empty">
           <span className="rx-empty-ico" aria-hidden>◉</span>
           <b>Nothing live right now</b>
-          <p>When someone you&apos;re inside with opens a session, it shows here. Calls between two of you start from the chat.</p>
+          <p>Live sessions from Rooms you&apos;re inside show up here.</p>
         </div>
       ) : null}
 
@@ -132,7 +132,7 @@ export function StartSession({ onClose, onStarted }: { onClose: () => void; onSt
   return (
     <Sheet title="Start a session" onClose={onClose}>
       {people === null ? <p className="muted center">Loading…</p> : people.length === 0 ? (
-        <p className="u-sub">Nobody&apos;s inside your Room yet. Let someone in first, then you can call them here.</p>
+        <p className="u-sub">Nobody&apos;s inside yet. Let someone in first.</p>
       ) : (
         <div className="lv-sheet">
           <div className="u-segs">
@@ -156,8 +156,8 @@ export function StartSession({ onClose, onStarted }: { onClose: () => void; onSt
           }) : null}
           <p className="rs-info">
             {solo
-              ? "Your Room takes one guest at a time. Switch to a group room in Calls: 4 guests are free."
-              : `Your Room holds ${room?.max_guests || 4} guests at once (4 are free). Extra seats are 25 coins each, bought in Calls. Starting a session costs nothing.`}
+              ? "One guest at a time. Switch to a group room in Calls, 4 seats free."
+              : `Up to ${room?.max_guests || 4} guests. 4 seats free, extras 25 coins each. Going live is free.`}
             {" "}<Link href="/chat-setup?tab=calls">Room size and call settings</Link>
           </p>
           {error ? <div className="err">{error}</div> : null}

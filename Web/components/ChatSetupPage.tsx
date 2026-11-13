@@ -69,7 +69,7 @@ const NOTIFY_ROWS: [keyof Notify, string, string][] = [
 ];
 const WELCOME_VISIBILITY = [
   { id: "inside", label: "Only people I let in", hint: "Your note and audio wait behind the door. The default." },
-  { id: "window", label: "Everyone peeking", hint: "Anyone who opens your Room hears and reads your welcome before knocking." },
+  { id: "window", label: "Everyone peeking", hint: "Visitors hear and read this before they knock." },
 ];
 type Visitor = { user_id: string; anonymous_name: string; avatar_url: string | null; status: string; let_in_at: string };
 const hourLabel = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
@@ -81,14 +81,14 @@ type Knock = KnockClue & {
 
 // What a Knock on this Room must carry (Backend chat_profile.py DOOR_RULES).
 const DOOR_RULES: { id: string; label: string; hint: string }[] = [
-  { id: "line_peek", label: "A line + a peek", hint: "They write a line and show something: from their Room, a photo or video, or a voice note." },
+  { id: "line_peek", label: "A line + a peek", hint: "A line plus a photo, video or voice note." },
   { id: "line", label: "A line is enough", hint: "Just a line about themselves. Fewer clues, more knocks." },
   { id: "voice", label: "A voice note", hint: "5 to 15 seconds of their voice. A strong clue without a face." },
 ];
 // Where the Room shows in Discover (Backend chat_profile.py LISTINGS). Default "limited".
 const LISTINGS: { id: string; label: string; hint: string }[] = [
-  { id: "discoverable", label: "Show my Room in Near", hint: "People browsing your area can find your Room, even when you have no post up." },
-  { id: "limited", label: "Only through my posts", hint: "People reach your Room from your posts. It isn't listed on its own." },
+  { id: "discoverable", label: "Show my Room in Near", hint: "People nearby can find your Room, even with no post up." },
+  { id: "limited", label: "Only through my posts", hint: "Only reachable from your posts." },
   { id: "private", label: "Keep me out of Near", hint: "Your posts still show in the feed, but you won't appear in Near." },
 ];
 type Conn = {
@@ -196,7 +196,7 @@ function Inner() {
   useEffect(() => {
     api<Profile | null>("/chat-profile/me")
       .then((d) => { if (d) apply(d); })
-      .catch(() => setError("Could not load your Room. Pull to refresh or try again."))
+      .catch(() => setError("Couldn’t load your Room. Try again."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -376,10 +376,10 @@ function Inner() {
 
   async function remove(c: Conn) {
     if (c.removable_at && new Date(c.removable_at) > new Date()) {
-      setError(`You can remove someone 3 days after letting them in: ${c.other_anonymous_name} from ${new Date(c.removable_at).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. If something's wrong, block them now.`);
+      setError(`You can remove ${c.other_anonymous_name} from ${new Date(c.removable_at).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Something wrong? Block them now.`);
       return;
     }
-    if (!window.confirm(`Remove ${c.other_anonymous_name} from your Room?\n\nThe conversation closes for both of you. They're an outsider again and can knock if they want back in.`)) return;
+    if (!window.confirm(`Remove ${c.other_anonymous_name} from your Room?\n\nThe chat closes. They're outside again.`)) return;
     setBusy(c.id);
     try {
       await api(`/drops/connections/${c.id}/remove`, { method: "POST" });
@@ -452,7 +452,7 @@ function Inner() {
               <RoomMini theme={theme} name={name} big />
               <div className="rs-hero-t">
                 <b>{t.room}</b>
-                <span>Your private space. Visitors peek through the window, knock, and you decide who comes in.</span>
+                <span>Your private space. They peek, they knock, you decide.</span>
                 {user?.id ? <Link href={`/room/${user.id}`} className="pill ghost">See it as a visitor</Link> : null}
               </div>
             </div>
@@ -481,7 +481,7 @@ function Inner() {
 
             <button type="button" className="rs-next" onClick={() => go("welcome")}>
               <b>Your welcome</b>
-              <small>A note, your voice and three welcome photos or videos for people you let in.</small>
+              <small>What people get once you let them in.</small>
             </button>
             {saveBar}
           </>
@@ -536,7 +536,7 @@ function Inner() {
             </div>
 
             <p className="rs-h">Entrance chime</p>
-            <p className="u-sub" style={{ margin: 0 }}>A short sound in the app when someone you let in opens your Room for the first time.</p>
+            <p className="u-sub" style={{ margin: 0 }}>A chime when someone you let in walks in for the first time.</p>
             <div className="u-chips">
               {SOUNDS.map((s) => (
                 <button key={s.id} type="button" className={`u-chip${sound === s.id ? " on" : ""}`} onClick={() => setSound(s.id)}>{s.label}</button>
@@ -550,16 +550,16 @@ function Inner() {
           <>
             <p className="rs-h">Who can call you</p>
             <div className="rs-toggle">
-              <span><b>Voice calls</b><small>People inside your Room can ring you from your conversation.</small></span>
+              <span><b>Voice calls</b><small>People inside can ring you from the chat.</small></span>
               <button type="button" role="switch" aria-checked={allowAudio} aria-label="Allow voice calls" className={`rs-switch${allowAudio ? " on" : ""}`} onClick={() => setAllowAudio(!allowAudio)} />
             </div>
             <div className="rs-toggle">
-              <span><b>Video calls</b><small>Off: they see you&apos;re not taking video calls and can message instead.</small></span>
+              <span><b>Video calls</b><small>Off: they&apos;ll message instead.</small></span>
               <button type="button" role="switch" aria-checked={allowVideo} aria-label="Allow video calls" className={`rs-switch${allowVideo ? " on" : ""}`} onClick={() => setAllowVideo(!allowVideo)} />
             </div>
 
             <p className="rs-h">Group sessions</p>
-            <p className="u-sub" style={{ margin: 0 }}>You open sessions from Rooms → Live, for everyone inside or the people you pick.</p>
+            <p className="u-sub" style={{ margin: 0 }}>Go live from Rooms → Live.</p>
             <div className="u-chips">
               {[["solo", "One-on-one"], ["multi", "Group room"]].map(([k, l]) => (
                 <button key={k} type="button" className={`u-chip${callMode === k ? " on" : ""}`} onClick={() => setCallMode(k)}>{l}</button>
@@ -577,7 +577,7 @@ function Inner() {
                 ) : null}
               </div>
             ) : null}
-            <p className="rs-info">4 guests are free. Starting or joining a session costs nothing.</p>
+            <p className="rs-info">4 seats free. Going live is free.</p>
             {saveBar}
           </>
         ) : null}
@@ -612,7 +612,7 @@ function Inner() {
                 ))}
               </div>
             ) : null}
-            <p className="rs-info">Notifications never show where you are or anyone&apos;s contact details. Turn off &ldquo;Show message text&rdquo; to keep words off your lock screen.</p>
+            <p className="rs-info">Turn off &ldquo;Show message text&rdquo; to keep words off your lock screen.</p>
             {saveBar}
           </>
         ) : null}
@@ -622,7 +622,7 @@ function Inner() {
             <div className="u-empty">No one&apos;s at the door. Post something and watch the knocks come in.</div>
           ) : (
             <div>
-              <p className="rs-info">Knocking is free for them. When they knock they agree that a Let In takes the Let In fee from their wallet, once. Let them in and it moves automatically; decline, or they take the knock back, and nothing is charged. You never pay to let someone in. <Link href="/coins">Your wallet and coin history</Link>.</p>
+              <p className="rs-info">Knocking is free. Let them in and the fee leaves their wallet, once. Decline and nothing moves. You never pay to let someone in. <Link href="/coins">Your wallet and coin history</Link>.</p>
               {knocks.map((k) => (
                 <div className="rs-person" key={k.id}>
                   <Ava src={k.requester_avatar_url} name={k.requester_anonymous_name || "A"} />
@@ -644,10 +644,10 @@ function Inner() {
 
         {tab === "inside" ? (
           inside === null ? <p className="muted center">Loading…</p> : inside.length === 0 ? (
-            <div className="u-empty">Nobody&apos;s inside yet. When you let someone in, they show up here.</div>
+            <div className="u-empty">Nobody&apos;s inside yet.</div>
           ) : (
             <div>
-              <p className="rs-info">People you&apos;ve let in. Access doesn&apos;t expire. You can remove someone 3 days after letting them in: the conversation closes and they&apos;re an outsider again, free to knock. Block works any time and stops them knocking.</p>
+              <p className="rs-info">People you&apos;ve let in. Remove after 3 days, block any time.</p>
               {inside.map((c) => (
                 <div className="rs-person" key={c.id}>
                   <Ava src={c.other_avatar_url} name={c.other_anonymous_name || "A"} />
@@ -748,8 +748,8 @@ function Inner() {
                   {knocksOpen
                     ? "Anyone 18+ who finds your post can knock."
                     : breakUntil && breakHours === null
-                      ? `Taking a break until ${new Date(breakUntil).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}. People already inside stay inside.`
-                      : "Taking a break. Nobody new can knock. People already inside stay inside."}
+                      ? `On a break until ${new Date(breakUntil).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}. Nobody new can knock.`
+                      : "On a break. Nobody new can knock."}
                 </small>
               </span>
               <button type="button" role="switch" aria-checked={knocksOpen} aria-label="Taking knocks" className={`rs-switch${knocksOpen ? " on" : ""}`} onClick={() => { setKnocksOpen(!knocksOpen); setBreakHours(knocksOpen ? 12 : null); }} />
@@ -764,7 +764,7 @@ function Inner() {
                 ))}
               </div>
             ) : null}
-            <p className="rs-info">Open or on a break is about knocks only. Nobody sees when you&apos;re online.</p>
+            <p className="rs-info">Only affects knocks. Nobody sees when you&apos;re online.</p>
 
             <p className="rs-h">What a knock must include</p>
             <div className="rs-opts" role="radiogroup" aria-label="Door rule">
@@ -775,7 +775,7 @@ function Inner() {
                 </button>
               ))}
             </div>
-            <p className="rs-info">Photos and videos on a knock arrive blurred until you tap them, and disappear if you decline.</p>
+            <p className="rs-info">Knock photos and videos stay blurred until you tap.</p>
 
             <p className="rs-h">Where people find your Room</p>
             <div className="rs-opts" role="radiogroup" aria-label="Room listing">

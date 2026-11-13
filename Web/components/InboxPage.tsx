@@ -93,12 +93,12 @@ function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"
           <div className="rx-empty">
             <span className="rx-door" aria-hidden><i /></span>
             <b>Nobody at the door yet</b>
-            <p>Post something for tonight and the knocks come here. You decide who comes in.</p>
+            <p>Post something tonight. The knocks land here.</p>
             <Link href="/compose" className="u-cta">Post something</Link>
           </div>
         ) : (
           <div className="lr-list">
-            <p className="rs-info">Knocking is free for them. Let someone in and their coins move automatically, once. Decline and nothing is charged.</p>
+            <p className="rs-info">Knocking is free. Let them in and their coins move, once. Decline: nothing.</p>
             {reqs.map((r) => {
               const b = busy.has(r.id);
               const thumbs = (r.requester_gallery || []).slice(0, 3);
@@ -130,13 +130,13 @@ function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"
           </div>
         )
       ) : sent === null ? <p className="muted center">Loading…</p> : sent.length === 0 ? (
-        <div className="u-empty">You haven&apos;t knocked on anyone yet. Tap Knock on a post you can&apos;t stop thinking about.</div>
+        <div className="u-empty">No knocks yet. Find a post you can&apos;t stop thinking about.</div>
       ) : sent.map((s) => (
         <div className="u-sent" key={s.id}>
-          {s.status === "pending" ? (<><b>Waiting for a response…</b><small>Nothing&apos;s charged yet. Coins move only if they let you in.</small></>)
+          {s.status === "pending" ? (<><b>Waiting for a response…</b><small>Nothing&apos;s charged unless they let you in.</small></>)
             : s.status === "accepted" ? <b>You&apos;re inside.</b>
             : s.status === "declined" ? (<><b>They&apos;re not up for it right now</b><small>You can knock again anytime. No coins were spent.</small></>)
-            : (<><b>{s.status === "expired" ? "This confession expired" : s.status[0].toUpperCase() + s.status.slice(1)}</b><small>It&apos;s gone before they got to respond. No coins were spent.</small></>)}
+            : (<><b>{s.status === "expired" ? "This confession expired" : s.status[0].toUpperCase() + s.status.slice(1)}</b><small>Gone before they answered. No coins spent.</small></>)}
           <div className="row">
             {s.status === "accepted" && s.connection_id ? <Link href={`/chat/${s.connection_id}`} className="pill">Open chat</Link> : null}
             {s.status === "pending" ? <button className="pill ghost" disabled={busy.has(s.id)} onClick={() => cancel(s)}>Take back knock</button> : null}
@@ -161,7 +161,7 @@ function Starred({ back }: { back: () => void }) {
     <div>
       <button className="mx-backrow" onClick={back}>{Icon.back(18)} Starred messages</button>
       {items === null ? <p className="muted center">Loading…</p> : items.length === 0 ? (
-        <div className="rx-empty"><b>No starred messages</b><p>Open a message&apos;s actions in a chat and choose Star to keep it here. Only you see your stars.</p></div>
+        <div className="rx-empty"><b>No starred messages</b><p>Star a message to keep it here. Only you see them.</p></div>
       ) : (
         <ul className="mx-starred">
           {items.map((m) => (
@@ -330,12 +330,12 @@ export default function InboxPage() {
       {view === "archived" && archived.length ? <p className="mx-note center">These chats stay archived when new messages arrive.</p> : null}
       {chats === null ? <p className="muted center">Loading…</p> : shown.length === 0 ? (
         q ? <div className="u-empty">No chats match “{query.trim()}”.</div>
-          : view === "archived" ? <div className="rx-empty"><b>No archived chats</b><p>Use a chat&apos;s ⌄ menu and choose Archive to tuck it away here.</p></div>
+          : view === "archived" ? <div className="rx-empty"><b>No archived chats</b><p>Archive a chat to tuck it away here.</p></div>
           : filter !== "all" ? <div className="u-empty">{filter === "unread" ? "You’re all caught up." : filter === "guests" ? "Nobody you’ve let in yet." : "You’re not inside anyone’s Room yet."}</div>
           : (
             <div className="rx-empty">
               <b>No chats yet</b>
-              <p>Let someone in from Knocks, or knock on a Room you like. Every conversation lives here.</p>
+              <p>Let someone in, or go knock. Every conversation lives here.</p>
               {reqs?.length ? <button className="u-cta" onClick={() => setView("knocks")}>Answer {reqs.length} at your door</button> : <Link href="/" className="u-cta">Find someone on the feed</Link>}
             </div>
           )
@@ -344,7 +344,7 @@ export default function InboxPage() {
           {shown.map((c) => <ChatRow key={c.id} c={c} href={`/chat/${c.id}`} onPrefs={setPrefs} />)}
         </ul>
       )}
-      {chats && inbox.length && view === "chats" ? <p className="mx-foot">Only the two of you can read a chat. Calls and chats are separate: ending one never ends the other.</p> : null}
+      {chats && inbox.length && view === "chats" ? <p className="mx-foot">Only the two of you can read a chat.</p> : null}
     </div>
   );
 

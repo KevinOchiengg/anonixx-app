@@ -65,7 +65,7 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
         <Text style={[s.name, { color: th.text, fontFamily: font }]} numberOfLines={1}>{name}</Text>
         {status ? <Text style={[s.status, { color: th.text, borderColor: th.border, backgroundColor: th.tint }]}>{status}</Text> : null}
         <Text style={[s.intro, { color: th.muted, fontFamily: font }]} numberOfLines={3}>
-          {room.intro || 'No intro yet. A line about you is the first thing visitors read.'}
+          {room.intro || 'No intro yet. It’s the first thing they read.'}
         </Text>
         <View style={s.slots}>
           {[0, 1, 2].map((i) => {
@@ -113,7 +113,7 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
         <Text style={s.noteText}>
           {room.welcome_visibility === 'window'
             ? 'Your welcome note and audio play for anyone peeking.'
-            : 'Your welcome note and audio are only for people you let in.'}
+            : 'Only people you let in see this.'}
           {' '}Change who sees what in Privacy.
         </Text>
       </View>

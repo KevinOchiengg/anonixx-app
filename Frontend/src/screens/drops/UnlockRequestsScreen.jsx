@@ -310,7 +310,7 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
   const renderSent = useCallback(({ item }) => {
     const isBusy = busyIds.has(item.id);
     const [title, note] = {
-      pending:  ['Waiting at their door…', "Nothing's charged yet. Coins move only if they let you in."],
+      pending:  ['Waiting at their door…', "Nothing's charged unless they let you in."],
       accepted: ["You're inside.", 'They let you in. Your chat is open.'],
       declined: ["They're not up for it right now", 'No coins were spent. You can knock again anytime.'],
       expired:  ['This knock expired', 'They never answered. No coins were spent.'],
@@ -351,7 +351,7 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
     <Root style={s.root} {...(embedded ? {} : { edges: inTab ? ['top'] : undefined })}>
       {!embedded && <DropScreenHeader title="Knocks" navigation={navigation} hideBack={inTab} />}
       {view === 'in' && received > 0 ? (
-        <Text style={s.coinNote}>Knocking is free for them. Let someone in and their coins move automatically, once. Decline and nothing is charged.</Text>
+        <Text style={s.coinNote}>Knocking is free. Let them in and their coins move, once. Decline: nothing.</Text>
       ) : null}
 
       {!targetId && (
@@ -370,7 +370,7 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
         sent.length === 0 ? (
           <View style={s.centered}>
             <Text style={s.emptyTitle}>No knocks sent</Text>
-            <Text style={s.emptyText}>Find a confession you can't stop thinking about, and knock. It's free until they let you in.</Text>
+            <Text style={s.emptyText}>Found one you can't stop thinking about? Knock. It's free.</Text>
           </View>
         ) : (
           <FlatList
@@ -385,7 +385,7 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
         <View style={s.centered}>
           <View style={s.emptyDoor}><Text style={s.emptyDoorKnob}>•</Text></View>
           <Text style={s.emptyTitle}>Nobody at the door yet</Text>
-          <Text style={s.emptyText}>Post something for tonight and the knocks come here. You decide who comes in.</Text>
+          <Text style={s.emptyText}>Post something tonight. The knocks land here.</Text>
           {embedded ? (
             <TouchableOpacity style={[s.acceptBtn, { marginTop: rp(14), paddingHorizontal: rp(18), paddingVertical: rp(10) }]} onPress={() => navigation.navigate('DropsCompose')}>
               <Text style={s.acceptBtnText}>Post something</Text>

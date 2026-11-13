@@ -91,7 +91,7 @@ function Inner() {
             <h3>{plan.label} · {price(plan)}</h3>
             {!mpesa ? (
               <>
-                <p>Card payments happen in the Anonixx app for now. Sign in there with this account and premium works here too.</p>
+                <p>Get it in the app. Same account, premium here too.</p>
                 <div className="row"><button className="pill ghost" onClick={close}>Close</button></div>
               </>
             ) : state === "idle" || state === "sending" ? (

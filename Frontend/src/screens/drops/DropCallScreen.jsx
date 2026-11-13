@@ -204,14 +204,14 @@ export default function DropCallScreen({ route, navigation }) {
         const perms = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, ...(wantVideo ? [PermissionsAndroid.PERMISSIONS.CAMERA] : [])];
         const granted = await PermissionsAndroid.requestMultiple(perms);
         if (granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] !== PermissionsAndroid.RESULTS.GRANTED) {
-          showToast({ type: 'warning', title: 'Microphone blocked', message: 'Allow the microphone for Anonixx in Settings to make calls.' });
+          showToast({ type: 'warning', title: 'Microphone blocked', message: 'Allow the microphone in Settings to call.' });
           finish();
           return;
         }
         if (wantVideo && granted[PermissionsAndroid.PERMISSIONS.CAMERA] !== PermissionsAndroid.RESULTS.GRANTED) {
           camAllowed = false;
           setCamOff(true);
-          showToast({ type: 'info', message: 'Camera blocked, so this is voice only. You can allow it in Settings.' });
+          showToast({ type: 'info', message: 'Camera blocked. Voice only.' });
         }
       }
 
@@ -312,7 +312,7 @@ export default function DropCallScreen({ route, navigation }) {
         showToast({ type: 'info', message: `Muted ${person.name}.` });
       } else {
         await callsApi.remove(callId, person.user_id);
-        showToast({ type: 'info', message: `${person.name} is out of this session. They're still in your Room.` });
+        showToast({ type: 'info', message: `${person.name} left the session. Still in your Room.` });
         loadPeople();
       }
     } catch (e) {
@@ -416,8 +416,8 @@ export default function DropCallScreen({ route, navigation }) {
       </View>
 
       <Text style={styles.hostNote}>
-        {direct ? 'Hanging up ends the call. Your conversation stays open.'
-          : isHost ? 'Ending closes the session for everyone. Nobody leaves your Room.'
+        {direct ? 'Ends the call. The chat stays open.'
+          : isHost ? 'Ends it for everyone. Nobody leaves your Room.'
             : 'Leaving the session keeps you in the Room.'}
       </Text>
 

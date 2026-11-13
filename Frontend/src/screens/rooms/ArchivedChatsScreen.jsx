@@ -47,12 +47,12 @@ export default function ArchivedChatsScreen({ navigation }) {
           data={items}
           keyExtractor={(c) => c.id}
           contentContainerStyle={{ flexGrow: 1 }}
-          ListHeaderComponent={items.length ? <Text style={s.note}>These chats stay archived when new messages arrive. Long-press to unarchive.</Text> : null}
+          ListHeaderComponent={items.length ? <Text style={s.note}>They stay here when they message. Long-press to unarchive.</Text> : null}
           ListEmptyComponent={(
             <View style={s.empty}>
               <View style={s.emptyIcon}><Archive size={rs(28)} color={T.primary} /></View>
               <Text style={s.emptyTitle}>No archived chats</Text>
-              <Text style={s.emptyText}>Long-press a chat in Rooms and tap Archive to tuck it away here.</Text>
+              <Text style={s.emptyText}>Long-press a chat to tuck it away here.</Text>
             </View>
           )}
           renderItem={({ item }) => (

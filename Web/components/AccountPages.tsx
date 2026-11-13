@@ -295,13 +295,13 @@ function LocationInner() {
           <b>Local first</b>
           <small>
             {localFirst
-              ? `Confessions from ${f.country.trim() || detected || "your country"} show up first. Everywhere else still mixes in.`
+              ? `${f.country.trim() || detected || "your country"} first. The rest of the world still mixes in.`
               : "Your feed shows everywhere equally."}
           </small>
         </span>
         <input type="checkbox" checked={localFirst} onChange={(e) => toggleLocal(e.target.checked)} />
       </label>
-      <p className="muted small">Tell us where home is and we&apos;ll lean your feed toward people nearby. Posts with no location still show.{detected && !f.country.trim() ? ` Right now we think you're in ${detected}; set a country below to change that.` : ""}</p>
+      <p className="muted small">Tell us where home is and we&apos;ll lean your feed toward people nearby. Posts with no location still show.{detected && !f.country.trim() ? ` Looks like ${detected}. Change it below.` : ""}</p>
       <label className="field">Country<input value={f.country} onChange={set("country")} placeholder="Where's home" /></label>
       <label className="field">Region<input value={f.county} onChange={set("county")} placeholder="e.g. your state or county" /></label>
       <label className="field">Area<input value={f.sub} onChange={set("sub")} placeholder="e.g. Downtown" /></label>

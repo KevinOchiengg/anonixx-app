@@ -78,7 +78,7 @@ export default function PickChatSheet({ visible, mode = 'open', title, subtitle,
                 {list.length ? <Text style={s.section}>Your chats</Text> : null}
               </View>
             ) : null}
-            ListEmptyComponent={<Text style={s.empty}>{q ? `No chats match “${q}”.` : 'No chats yet. Let someone in, or knock on a Room you like.'}</Text>}
+            ListEmptyComponent={<Text style={s.empty}>{q ? `No chats match “${q}”.` : 'No chats yet. Let someone in, or go knock.'}</Text>}
             renderItem={({ item }) => {
               const on = picked.includes(item.id);
               return (

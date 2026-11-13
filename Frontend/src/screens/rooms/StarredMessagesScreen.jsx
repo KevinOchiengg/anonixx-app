@@ -52,7 +52,7 @@ export default function StarredMessagesScreen({ route, navigation }) {
             <View style={s.empty}>
               <View style={s.emptyIcon}><Star size={rs(28)} color={T.primary} /></View>
               <Text style={s.emptyTitle}>No starred messages</Text>
-              <Text style={s.emptyText}>Long-press any message in a chat and tap Star to keep it here. Only you see your stars.</Text>
+              <Text style={s.emptyText}>Star a message to keep it here. Only you see them.</Text>
             </View>
           )}
           renderItem={({ item: m }) => (

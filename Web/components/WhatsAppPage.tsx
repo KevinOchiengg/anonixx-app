@@ -35,7 +35,7 @@ function Inner() {
     setBusy(true); setError(""); setOk(""); setNeedCoins(false);
     try {
       await api("/whatsapp/send", { body: { phone: num, text: text.trim() } });
-      setOk("Sent. They get a request first and only see your message if they agree. Your name stays hidden.");
+      setOk("Sent. They read it only if they agree.");
       setText(""); setPhone("");
       load(); refresh();
     } catch (err) {
@@ -48,7 +48,7 @@ function Inner() {
   return (
     <div className="pad">
       <form className="form" onSubmit={submit}>
-        <p className="muted small">Send an anonymous message to someone&apos;s WhatsApp. They approve before they read it and never see who you are. 3 coins, free for premium.</p>
+        <p className="muted small">An anonymous message to anyone&apos;s WhatsApp. They approve first and never see who you are. 3 coins, free with premium.</p>
         <label className="field">Their number, with country code
           <input inputMode="tel" required placeholder="+1 555 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </label>

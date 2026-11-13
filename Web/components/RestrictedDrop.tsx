@@ -28,7 +28,7 @@ export default function RestrictedDrop({ id }: { id: string }) {
         <p>Loading…</p>
       ) : user ? (
         <>
-          <p>We couldn&apos;t show this post. It may have been removed, or your age hasn&apos;t been confirmed yet.</p>
+          <p>Can&apos;t show this one. It&apos;s gone, or it&apos;s 18+ only.</p>
           <div className="cta">
             <Link href="/settings" className="pill">Confirm my age</Link>
             <Link href="/" className="pill ghost">Back to the feed</Link>
@@ -36,7 +36,7 @@ export default function RestrictedDrop({ id }: { id: string }) {
         </>
       ) : (
         <>
-          <p>Some confessions are only shown to signed-in members who&apos;ve confirmed they&apos;re 18+. Your name stays hidden.</p>
+          <p>Some confessions are 18+ only. Sign in to see them.</p>
           <div className="cta">
             <Link href={`/login?next=/drop/${id}`} className="pill">Sign in</Link>
             <Link href={`/signup?next=/drop/${id}`} className="pill ghost">Join free</Link>

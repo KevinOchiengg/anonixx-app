@@ -307,7 +307,7 @@ export default function GuidedConfession({ navigation, onBack }) {
       setDrafts((d) => [...d, data.confession].slice(-4));
       setWriter((w) => ({ ...w, remaining: data.remaining }));
     } catch {
-      setGenError("Couldn't reach the writer. Check your connection and try again.");
+      setGenError("Couldn't reach the writer. Try again.");
     } finally {
       setGenerating(false);
     }
@@ -420,7 +420,7 @@ export default function GuidedConfession({ navigation, onBack }) {
           {MEET_WHEN.map(([k, l]) => <CheckRow key={k} label={l} radio on={a.when === k} onPress={() => set({ when: k })} />)}
         </Section>
 
-        <Section n={5} title="Anything else?" sub="A personal message, and anything they should know first." optional done={!!a.note.trim() || !!a.want.trim()}>
+        <Section n={5} title="Anything else?" sub="Anything they should know first." optional done={!!a.note.trim() || !!a.want.trim()}>
           <Label optional>Personal message</Label>
           <View style={s.noteBox}>
             <TextInput
@@ -520,7 +520,7 @@ export default function GuidedConfession({ navigation, onBack }) {
               <Chip label={pickedSound ? 'Shuffle' : 'Pick one for me'} active={false} onPress={shuffleSound} />
               <Chip label="No sound" active={!a.sound} onPress={() => { if (hearing) { preview.pause(); setHearing(''); } set({ sound: '', soundOff: true }); }} />
             </View>
-            <Text style={s.hint}>{pickedSound ? 'Picked at random. It plays softly while they read yours.' : 'Yours goes out quiet.'}</Text>
+            <Text style={s.hint}>{pickedSound ? 'Plays softly while they read yours.' : 'Yours goes out quiet.'}</Text>
           </>
         )}
         <Text style={s.hint}>{FRESH_HINT[FRESH_FOR_WHEN[a.when]]} Your Room and chats stay either way.{pickedSound ? `  ♪ ${pickedSound.title}` : ''}</Text>

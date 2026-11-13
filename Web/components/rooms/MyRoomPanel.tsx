@@ -40,7 +40,7 @@ export default function MyRoomPanel() {
         <span className="mr-ava"><span>{me.profile_picture_url ? <Image src={me.profile_picture_url} alt="" width={86} height={86} /> : name[0].toUpperCase()}</span></span>
         <b className="mr-name" style={fontStyleById(me.font_style)}>{name}</b>
         {status ? <span className="mr-status">{status}</span> : null}
-        <p className="mr-intro" style={fontStyleById(me.font_style)}>{me.intro || "No intro yet. A line about you is the first thing visitors read."}</p>
+        <p className="mr-intro" style={fontStyleById(me.font_style)}>{me.intro || "No intro yet. It’s the first thing they read."}</p>
         <div className="mr-slots">
           {[0, 1, 2].map((i) => {
             const g = gallery[i];
@@ -68,7 +68,7 @@ export default function MyRoomPanel() {
       </div>
       <Link href="/chat-setup?tab=welcome" className="u-cta mr-cta">{steps.every((s) => s.done) ? "Edit your welcome" : "Set up your welcome"}</Link>
       <p className="rs-info">
-        {me.welcome_visibility === "window" ? "Your welcome note and audio play for anyone peeking." : "Your welcome note and audio are only for people you let in."} Change who sees what in{" "}
+        {me.welcome_visibility === "window" ? "Your welcome note and audio play for anyone peeking." : "Only people you let in see this."} Change who sees what in{" "}
         <Link href="/chat-setup?tab=privacy">Privacy</Link>.
       </p>
     </div>

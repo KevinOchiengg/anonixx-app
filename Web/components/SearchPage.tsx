@@ -393,7 +393,7 @@ function Near({
           <b>Near is for adults.</b>
           {near.meta.gate === "signin" ? (
             <>
-              <p>Sign in and confirm you&apos;re 18+ to see who&apos;s looking near you. Nobody sees that you looked.</p>
+              <p>Sign in (18+) to see who&apos;s looking near you.</p>
               <div className="dc-acts"><Link className="dc-cta" href="/login?next=/search">Sign in</Link><button type="button" className="pill" onClick={onStories}>Read Stories</button></div>
             </>
           ) : gateOpen ? (
@@ -408,7 +408,7 @@ function Near({
       ) : near.meta.needs_place ? (
         <div className="dc-empty">
           <b>{place?.scope === "close" ? "Tell us your part of town." : "Pick a place first."}</b>
-          <p>{place?.scope === "close" ? "Close by needs your area (like your neighbourhood or part of town). Nobody sees it but you." : "Choose where to look."}</p>
+          <p>{place?.scope === "close" ? "Close by needs your area. Only you see it." : "Choose where to look."}</p>
           <div className="dc-acts">
             <button type="button" className="dc-cta" onClick={onWhere}>Choose a place</button>
             {place && wider ? <button type="button" className="pill" onClick={() => onWiden({ ...place, scope: wider })}>Look wider</button> : null}
@@ -434,7 +434,7 @@ function Near({
             </section>
           ) : null}
 
-          {near.meta.loose && near.items.length ? <p className="dc-note">No post has all of those words, so these have some of them.</p> : null}
+          {near.meta.loose && near.items.length ? <p className="dc-note">Close matches.</p> : null}
           {near.items.map((c) => <NearItem key={c.post.id} card={c} />)}
 
           {near.loading ? <p className="sp-loading">looking…</p> : null}
@@ -443,7 +443,7 @@ function Near({
           {!near.loading && !near.items.length && !near.failed ? (
             <div className="dc-empty">
               <b>No fresh connections {place?.scope === "anywhere" ? "right now" : "in this area yet"}.</b>
-              <p>{keyword || filters.gender || filters.fresh || advanced ? "Nothing matches all of that. Loosen a filter or look wider." : "Be the first one people find here, or look a little wider."}</p>
+              <p>{keyword || filters.gender || filters.fresh || advanced ? "Nothing matches. Loosen a filter." : "Nobody here yet. Look wider."}</p>
               <div className="dc-acts">
                 {place && wider ? <button type="button" className="dc-cta" data-track="discover:near:widen" onClick={() => onWiden({ ...place, scope: wider })}>Look in {wider === "anywhere" ? "the whole world" : wider === "country" ? "my country" : "my area"}</button> : null}
                 <button type="button" className="pill" onClick={onWhere}>Change place</button>
@@ -527,10 +527,10 @@ function Stories({
       ) : null}
 
       {stab === "trending" && list.meta.trending_ready === false ? (
-        <p className="dc-note">Not enough going on for Trending yet, so here&apos;s what&apos;s newest.</p>
+        <p className="dc-note">Nothing trending yet. Here&apos;s what&apos;s new.</p>
       ) : null}
       {stab === "unanswered" && list.items.length ? <p className="dc-note">Nobody has answered these yet. Be the first.</p> : null}
-      {list.meta.loose && list.items.length ? <p className="dc-note">No post has all of those words, so these have some of them.</p> : null}
+      {list.meta.loose && list.items.length ? <p className="dc-note">Close matches.</p> : null}
 
       <div className="sp-results">{list.items.map((p) => <StoryCard key={p.id} post={p} />)}</div>
       {list.loading ? <p className="sp-loading">reading…</p> : null}
@@ -578,7 +578,7 @@ function WhereSheet({ current, onSave, onClose }: { current: Place; onSave: (p: 
     <div className="dc-sheet" role="dialog" aria-modal="true" aria-label="Where to discover" onClick={onClose}>
       <div className="dc-sheet-in" onClick={(e) => e.stopPropagation()}>
         <h3>Discover in</h3>
-        <p className="dc-note">This is only where you&apos;re looking. The location on your posts doesn&apos;t change, and nobody sees where you browse.</p>
+        <p className="dc-note">Only changes where you look. Nobody sees it.</p>
         <div className="dc-scopes">
           {SCOPES.map((s) => (
             <button key={s.id} type="button" className={p.scope === s.id ? "on" : ""} onClick={() => setP({ ...p, scope: s.id })}>

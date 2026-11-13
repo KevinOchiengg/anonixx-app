@@ -47,7 +47,7 @@ export default function ForgotPassword() {
     <AuthShell>
       {step === "email" ? (
         <>
-          <AuthHead title="Locked out?" sub="Enter your email and we'll send a 6-digit code. Your secrets stay exactly where they are." />
+          <AuthHead title="Locked out?" sub="We'll email you a 6-digit code. Your secrets stay put." />
           <form className="au-form" onSubmit={sendCode}>
             <Field label="Email" icon={<IcMail />}>
               <input type="email" required autoComplete="email" placeholder="your@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -59,7 +59,7 @@ export default function ForgotPassword() {
       ) : null}
       {step === "code" ? (
         <>
-          <AuthHead title="Check your inbox" sub={`We sent a code to ${email.trim()}. It expires soon, so use it now.`} />
+          <AuthHead title="Check your inbox" sub={`Code sent to ${email.trim()}. Use it soon.`} />
           <form className="au-form" onSubmit={reset}>
             <Field label="6-digit code" icon={<IcKey />}>
               <input inputMode="numeric" maxLength={6} autoComplete="one-time-code" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} />

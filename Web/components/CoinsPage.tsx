@@ -49,7 +49,7 @@ function Inner() {
       } catch { /* keep trying */ }
       if (tries >= 40) {
         setState("failed");
-        setMsg("We didn't get a confirmation. If you were charged, your coins will arrive shortly or contact support.");
+        setMsg("Not confirmed yet. If you were charged, your coins are on the way.");
         return;
       }
       poll(b, checkoutId, tries + 1);
@@ -129,7 +129,7 @@ function Inner() {
             <h3>{buying.title} · {buying.price}</h3>
             {!mpesa ? (
               <>
-                <p>Card payments happen in the Anonixx app for now. Sign in there with this account and your coins show up here too.</p>
+                <p>Buy in the app. Same account, same coins here.</p>
                 <div className="row"><button className="pill ghost" onClick={close}>Close</button></div>
               </>
             ) : state === "idle" || state === "sending" ? (

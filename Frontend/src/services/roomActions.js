@@ -23,7 +23,7 @@ async function post(path, body) {
 export function confirmBlock(userId, onDone, onError) {
   Alert.alert(
     'Block this person?',
-    "They can't knock, message or call you, and your chat with them closes. Their posts are hidden from you.",
+    "They can't knock, message or call you. Your chat closes and their posts disappear.",
     [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Block', style: 'destructive', onPress: () => post(`/users/${userId}/block`).then(() => onDone('Blocked.')).catch((e) => onError(e.message)) },
@@ -52,17 +52,17 @@ export function confirmRemove(connection, onDone, onError, onBlockInstead) {
   if (when && when > new Date()) {
     Alert.alert(
       'Not yet',
-      `You can remove someone 3 days after letting them in: from ${when.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. If something's wrong, block them now.`,
+      `You can remove them from ${when.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Something wrong? Block them now.`,
       [{ text: 'OK', style: 'cancel' }, { text: 'Block', style: 'destructive', onPress: onBlockInstead }],
     );
     return;
   }
   Alert.alert(
     `Remove ${connection?.other_anonymous_name || 'them'} from your Room?`,
-    "This conversation closes for both of you. They'd have to knock again.",
+    "The chat closes. They'd have to knock again.",
     [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => post(`/drops/connections/${connection.id}/remove`).then(() => onDone("Removed. They're outside again and can knock if they want back in.")).catch((e) => onError(e.message)) },
+      { text: 'Remove', style: 'destructive', onPress: () => post(`/drops/connections/${connection.id}/remove`).then(() => onDone("Removed. They're outside again.")).catch((e) => onError(e.message)) },
     ],
   );
 }
@@ -80,7 +80,7 @@ export function pickMute(connectionId, mutedUntil, onDone, onError) {
     chatsApi.prefs(connectionId, { mute: 'off' }).then(onDone).catch((e) => onError(e.message));
     return;
   }
-  Alert.alert('Mute notifications', 'Messages still arrive; you just won’t get a notification.', [
+  Alert.alert('Mute notifications', 'Messages still arrive, silently.', [
     ...MUTE_OPTIONS.map(([v, text]) => ({ text, onPress: () => chatsApi.prefs(connectionId, { mute: v }).then(onDone).catch((e) => onError(e.message)) })),
     { text: 'Cancel', style: 'cancel' },
   ]);

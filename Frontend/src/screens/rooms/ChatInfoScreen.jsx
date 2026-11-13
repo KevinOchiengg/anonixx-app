@@ -134,7 +134,7 @@ export default function ChatInfoScreen({ route, navigation }) {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          ) : <Text style={s.cardMeta}>Photos and videos you share appear here. View-once media never does.</Text>}
+          ) : <Text style={s.cardMeta}>Shared photos and videos land here.</Text>}
         </View>
 
         {!c.is_sender && prof.gallery?.length ? (
@@ -164,7 +164,7 @@ export default function ChatInfoScreen({ route, navigation }) {
           <Row icon={ShieldOff} label={`Block ${name}`} danger onPress={() => confirmBlock(c.other_user_id, leave, fail)} />
           <Row icon={Flag} label={`Report ${name}`} danger onPress={() => confirmReport(c.other_user_id, ok, fail)} />
         </View>
-        <Text style={s.foot}>Anonixx never shows your real name, number or location to anyone you chat with.</Text>
+        <Text style={s.foot}>Your real name, number and location stay hidden.</Text>
       </ScrollView>
     </SafeAreaView>
   );

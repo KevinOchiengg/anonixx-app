@@ -366,8 +366,7 @@ export default function CommentsSheet({
           {items && sorted.length === 0 ? (
             <div className="cmt-empty">
               <span><MessageSquareMore size={28} strokeWidth={1.5} aria-hidden /></span>
-              <b>First word&apos;s yours.</b>
-              <p>Nobody&apos;s answered this yet. Say what you really think.<br />Your name stays hidden.</p>
+              <b>Be the first to break the silence</b>
             </div>
           ) : null}
           {sorted.map((c) => row(c))}

@@ -409,7 +409,7 @@ function Inner({ id }: { id: string }) {
     try { applyPrefs(await chatsApi.prefs(id, { mute: v })); setToast(v === "off" ? "Notifications on." : "Muted."); } catch (err) { setError((err as Error).message); }
   }
   async function clearChat() {
-    if (!window.confirm("Clear this chat?\n\nMessages disappear for you only. They keep their copy.")) return;
+    if (!window.confirm("Clear this chat?\n\nOnly for you. They keep their copy.")) return;
     try { await chatsApi.clear(id); setInfo(false); await load(); setToast("Chat cleared."); } catch (err) { setError((err as Error).message); }
   }
 
@@ -426,7 +426,7 @@ function Inner({ id }: { id: string }) {
 
   async function block() {
     if (!conn?.other_user_id) return;
-    if (!window.confirm("Block this person?\n\nThe conversation and any call close now, and they can't see your Room or knock again.")) return;
+    if (!window.confirm("Block this person?\n\nThe chat closes and they can't knock again.")) return;
     try {
       await api(`/users/${conn.other_user_id}/block`, { method: "POST" });
       router.push("/inbox");
@@ -439,7 +439,7 @@ function Inner({ id }: { id: string }) {
     const unlocks = conn?.removable_at ? new Date(conn.removable_at) : null;
     if (unlocks && unlocks > new Date()) {
       setMenu(false);
-      setError(`You can remove someone 3 days after letting them in: from ${unlocks.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. If something's wrong, block them now.`);
+      setError(`You can remove them from ${unlocks.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Something wrong? Block them now.`);
       return;
     }
     if (!window.confirm(`Remove ${conn?.other_anonymous_name || "them"} from your Room?

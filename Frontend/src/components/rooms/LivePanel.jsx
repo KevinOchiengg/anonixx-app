@@ -110,7 +110,7 @@ export default function LivePanel({ navigation }) {
           <View style={s.liveIcon}><Users size={rs(18)} color={T.primary} /></View>
           <View style={{ flex: 1 }}>
             <Text style={s.title}>Start a session</Text>
-            <Text style={s.meta}>A voice or video room for people you've let in. Invite everyone or pick a few.</Text>
+            <Text style={s.meta}>Voice or video, for everyone inside or a chosen few.</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -141,7 +141,7 @@ export default function LivePanel({ navigation }) {
         <View style={s.empty}>
           <View style={s.emptyIcon}><Radio size={rs(26)} color={T.primary} /></View>
           <Text style={s.emptyTitle}>Nothing live right now</Text>
-          <Text style={s.emptyText}>When someone you're inside with opens a session, it shows here. Calls between two of you start from the chat.</Text>
+          <Text style={s.emptyText}>Live sessions from Rooms you're inside show up here.</Text>
         </View>
       )}
 
@@ -208,7 +208,7 @@ export function StartSessionSheet({ onClose, onStarted, navigation }) {
             <TouchableOpacity onPress={onClose} hitSlop={HIT_SLOP} accessibilityLabel="Close"><X size={rs(18)} color={T.textSecondary} /></TouchableOpacity>
           </View>
           {people === null ? <ActivityIndicator color={T.primary} style={{ marginVertical: rp(30) }} /> : people.length === 0 ? (
-            <Text style={s.emptyText}>Nobody's inside your Room yet. Let someone in first, then you can call them here.</Text>
+            <Text style={s.emptyText}>Nobody's inside yet. Let someone in first.</Text>
           ) : (
             <ScrollView style={{ maxHeight: rs(380) }} contentContainerStyle={{ gap: rp(12) }}>
               <View style={s.seg}>
@@ -238,8 +238,8 @@ export function StartSessionSheet({ onClose, onStarted, navigation }) {
               })}
               <Text style={s.fine}>
                 {solo
-                  ? 'Your Room takes one guest at a time. Switch to a group room in Room settings: 4 guests are free.'
-                  : `Your Room holds ${seats} guests at once (4 are free). Extra seats cost 25 coins each, bought in Room settings. Starting a session costs nothing.`}
+                  ? 'One guest at a time. Switch to a group room in Room settings, 4 seats free.'
+                  : `Up to ${seats} guests. 4 seats free, extras 25 coins each. Going live is free.`}
               </Text>
               {solo || seats < 12 ? (
                 <TouchableOpacity onPress={() => { onClose(); navigation.navigate('ChatProfileSetup', { tab: 'calls' }); }}>

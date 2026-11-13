@@ -250,7 +250,7 @@ function KindChooser({ onPick, onBack }) {
           <View style={s.kindIcon}><Flame size={rs(20)} color={T.primary} /></View>
           <View style={{ flex: 1, gap: rp(4) }}>
             <Text style={s.kindCardTitle}>Guided Link Up</Text>
-            <Text style={s.kindCardSub}>Five short steps: who you are, who you want, when. If someone wants you back, they knock.</Text>
+            <Text style={s.kindCardSub}>Who you are, who you want, when. The right one knocks.</Text>
             <View style={s.kindTags}>
               <Text style={s.kindTag}>18+</Text>
               <Text style={s.kindTag}>{POST_COST} coins</Text>
@@ -262,7 +262,7 @@ function KindChooser({ onPick, onBack }) {
           <View style={s.kindIcon}><Feather size={rs(20)} color={T.primary} /></View>
           <View style={{ flex: 1, gap: rp(4) }}>
             <Text style={s.kindCardTitle}>Quick Confession</Text>
-            <Text style={s.kindCardSub}>Just type it. The thing you can't say out loud, read and felt, never traced back to you.</Text>
+            <Text style={s.kindCardSub}>The thing you can't say out loud. Never traced back to you.</Text>
             <View style={s.kindTags}>
               <Text style={s.kindTag}>Free</Text>
               <Text style={s.kindTag}>Text, photo, video or voice</Text>
@@ -795,7 +795,7 @@ export default function DropsComposeScreen({ navigation, route }) {
           title: later ? 'Queued.' : 'Almost out there.',
           message: later
             ? `Goes live ${whenLabel(later)}.`
-            : 'Your video is being cut and watermarked. It posts itself in a minute or two.',
+            : 'Polishing your video. It posts in a minute or two.',
         });
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         return;
@@ -1384,7 +1384,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         {/* ── Spotlight sheet (admin) — same extras as the website's Post Studio ── */}
         {isAdmin && (
         <OptionSheet visible={activeSheet === 'spotlight'} title="Spotlight" onClose={closeSheet}>
-          <Text style={s.sectionSubLabel}>Extras that make a drop stop the scroll and travel further.</Text>
+          <Text style={s.sectionSubLabel}>Make it stop the scroll.</Text>
 
           {/* Keywords search matches on (same picks as the website). */}
           <Text style={s.spotLabel}>Search keywords <Text style={s.spotCount}>{tags.length}/{MAX_TAGS}</Text></Text>
@@ -1496,7 +1496,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               </View>
               <Text style={s.spotHint}>
                 {paidPrice
-                  ? `The first ${PAID_PREVIEW_SECONDS} seconds play clear, then it blurs until someone pays ${paidPrice} coins. Tease what's behind it in the caption.`
+                  ? `The first ${PAID_PREVIEW_SECONDS}s play clear, then it blurs until they pay ${paidPrice} coins. Tease it in the caption.`
                   : 'Everyone can watch the whole video.'}
               </Text>
             </>

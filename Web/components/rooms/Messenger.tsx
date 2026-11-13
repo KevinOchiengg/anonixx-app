@@ -119,7 +119,7 @@ export function PickChats({ mode, title, exclude, onClose, onOpen, onCall, onFor
             )}
           </li>
         ))}
-        {chats === null ? <li className="muted center">Loading…</li> : list.length === 0 ? <li className="mx-note">{q ? `No chats match “${q}”.` : "No chats yet. Let someone in, or knock on a Room you like."}</li> : list.map((c) => {
+        {chats === null ? <li className="muted center">Loading…</li> : list.length === 0 ? <li className="mx-note">{q ? `No chats match “${q}”.` : "No chats yet. Let someone in, or go knock."}</li> : list.map((c) => {
           const on = picked.includes(c.id);
           return (
             <li key={c.id}>
@@ -213,7 +213,7 @@ export function CallsPanel({ onStartSession, refreshKey }: { onStartSession: () 
         </div>
       ))}
       {calls === null ? <p className="muted center">Loading…</p> : calls.length === 0 ? (
-        <div className="rx-empty"><b>No calls yet</b><p>Call anyone you&apos;re connected with. 1-to-1 calls are free, and ending one never ends the chat.</p></div>
+        <div className="rx-empty"><b>No calls yet</b><p>Call anyone you&apos;re connected with. Always free.</p></div>
       ) : (
         <>
           <h3 className="mx-h">Recent</h3>

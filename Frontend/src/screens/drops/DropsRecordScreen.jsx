@@ -495,7 +495,7 @@ export default function DropsRecordScreen({ navigation, route }) {
                 style={styles.captionInput}
                 value={caption}
                 onChangeText={setCaption}
-                placeholder="Add one line. It makes the silence before they tap more powerful."
+                placeholder="One line before they tap."
                 placeholderTextColor={T.textMute}
                 multiline
                 maxLength={200}

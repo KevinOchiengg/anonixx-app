@@ -258,7 +258,7 @@ export default function VideoEditorModal({ visible, uri, duration, landscape, va
               </View>
             ) : (
               <Text style={st.hint}>
-                {overlays.length ? 'Tap a text on the video to edit or move it.' : `Add a line people read before they hear a word. Up to ${MAX_OVERLAYS}.`}
+                {overlays.length ? 'Tap a text on the video to edit or move it.' : `A line they read first. Up to ${MAX_OVERLAYS}.`}
               </Text>
             )}
           </ScrollView>

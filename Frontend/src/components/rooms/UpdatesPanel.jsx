@@ -102,11 +102,11 @@ const UpdatesPanel = forwardRef(function UpdatesPanel({ navigation, onLiveCount 
         ))}
       </ScrollView>
       {live && !sessions.length ? (
-        <Text style={s.note}>When someone whose Room you're inside goes live, they show up here. Tap a ring to join.</Text>
+        <Text style={s.note}>Rooms you're inside show up here when they go live.</Text>
       ) : null}
       {hosting ? <Text style={s.note}>Tap your ring to end your session.</Text> : null}
       <Text style={[s.h, { marginTop: rp(18) }]}>Your Room</Text>
-      <Text style={s.note}>What people see when they peek, and what they get when you let them in.</Text>
+      <Text style={s.note}>What they see when they peek, and once they’re in.</Text>
     </View>
   );
 

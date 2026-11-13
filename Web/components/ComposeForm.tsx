@@ -288,7 +288,7 @@ function Inner() {
     return (
       <div className="empty">
         <h2>{done === "processing" ? "Almost out there." : "It's live."}</h2>
-        <p>{done === "processing" ? "Your video is being polished up. It lands in the feed in a minute or two, and nobody will know it's you." : "Your confession is out there. Nobody knows it's you."}</p>
+        <p>{done === "processing" ? "Polishing your video. It posts in a minute or two." : "Your confession is out there. Nobody knows it's you."}</p>
         <div className="row">
           <button className="pill" onClick={() => router.push("/")}>Back to the feed</button>
         </div>
@@ -305,7 +305,7 @@ function Inner() {
           <span className="kind-ico" aria-hidden><Flame strokeWidth={2} /></span>
           <span className="kind-body">
             <strong>Guided Link Up</strong>
-            <span>Five short steps: who you are, who you want, when. If someone wants you back, they knock.</span>
+            <span>Who you are, who you want, when. The right one knocks.</span>
             <span className="kind-tags"><em>18+</em><em>{COST.post} coins</em><em>Link up on</em></span>
           </span>
         </button>
@@ -313,7 +313,7 @@ function Inner() {
           <span className="kind-ico" aria-hidden><Feather strokeWidth={2} /></span>
           <span className="kind-body">
             <strong>Quick Confession</strong>
-            <span>Just type it. The thing you can&apos;t say out loud, read and felt, never traced back to you.</span>
+            <span>The thing you can&apos;t say out loud. Never traced back to you.</span>
             <span className="kind-tags"><em>Free</em><em>Text, photo, video or voice</em></span>
           </span>
         </button>
@@ -473,7 +473,7 @@ function Inner() {
       {error ? <div className="err">{error}</div> : null}
 
       <button className="cx-drop" disabled={busy || !confessionOk}>{busy ? (upState?.status === "uploading" ? `Finishing upload… ${upState.pct}%` : "Posting…") : "Drop it  ↗"}</button>
-      <p className="cx-foot">Your identity stays hidden. Always. Don&apos;t share phone numbers, handles or links.</p>
+      <p className="cx-foot">Stay hidden. No numbers, handles or links.</p>
 
       {sheet === "mood" ? (
         <Sheet title="Confession type" onClose={() => setSheet(null)}>
