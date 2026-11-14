@@ -225,8 +225,13 @@ const RailIcon = ({ icon, tint, active }) => {
         borderWidth: 1.5, borderColor: t.line, backgroundColor: 'rgba(10,12,18,0.5)',
       }}
     >
-      {/* Share's dots sit in the icon's corners, so it goes a touch smaller to clear the ring. */}
-      {React.cloneElement(icon, { size: Math.round(chip * (tint === 'share' ? 0.46 : 0.54)), color, ...(filled ? { fill: color } : null) })}
+      {/* The icon draws in its own square (the Svg) inside the circle. Share's dots touch that
+          square's edges, so it's a touch smaller and its square doesn't clip what pokes out. */}
+      {React.cloneElement(icon, {
+        size: Math.round(chip * (tint === 'share' ? 0.46 : 0.54)), color,
+        ...(filled ? { fill: color } : null),
+        ...(tint === 'share' ? { style: { overflow: 'visible' } } : null),
+      })}
     </View>
   );
 };
