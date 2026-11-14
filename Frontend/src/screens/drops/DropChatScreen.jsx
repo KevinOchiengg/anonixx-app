@@ -15,7 +15,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Send, X, Phone, MoreVertical, Mic, Trash2, BellOff } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
-import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
+import { rs, rf, rp, SPACING, FONT, HIT_SLOP } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import PulseLoader from '../../components/common/PulseLoader';
 import VoiceWaveform from '../../components/common/VoiceWaveform';
@@ -87,7 +87,6 @@ export default function DropChatScreen({ route, navigation }) {
   const [messages, setMessages] = useState([]);
   const [connection, setConnection] = useState(null);
   const [chatProfile, setChatProfile] = useState(null);
-  const [activeCall, setActiveCall] = useState(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useDraft(`chat:${connectionId}`, ''); // unsent message survives leaving
   const [sending, setSending] = useState(false);
@@ -119,7 +118,6 @@ export default function DropChatScreen({ route, navigation }) {
       setMessages(data.messages);
       setConnection(data.connection);
       if (data.chat_profile) setChatProfile(data.chat_profile);
-      setActiveCall(data.active_call || null);
       // The Room's welcome sound plays once, the first time a guest opens the chat.
       if (data.welcome_sound && !welcomed.current) {
         welcomed.current = true;
@@ -337,20 +335,6 @@ export default function DropChatScreen({ route, navigation }) {
     ]);
   }, [otherName, directCall]);
 
-  // A group session open in this Room: guests join it from the strip.
-  const handleJoinCall = useCallback(async () => {
-    if (callLoading || !activeCall) return;
-    setCallLoading(true);
-    try {
-      const data = await callsApi.join(activeCall.id);
-      navigation.navigate('DropCall', callParams(data, { isHost: false, other: { name: otherName } }));
-    } catch (err) {
-      toastError(err.message || 'Could not join the session.');
-    } finally {
-      setCallLoading(false);
-    }
-  }, [callLoading, activeCall, navigation, otherName, toastError]);
-
   // ── ⋮ menu ────────────────────────────────────────────────
   const menu = {
     onMute: async (value) => {
@@ -464,8 +448,8 @@ export default function DropChatScreen({ route, navigation }) {
         )}
         right={connection ? (
           <View style={s.headerActions}>
-            <TouchableOpacity style={[s.headerBtn, activeCall && s.headerBtnLive]} onPress={handleCallPress} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel="Call">
-              <Phone size={rs(19)} color={activeCall ? T.primary : T.textMute} strokeWidth={2} />
+            <TouchableOpacity style={s.headerBtn} onPress={handleCallPress} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel="Call">
+              <Phone size={rs(19)} color={T.textMute} strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity style={s.headerBtn} onPress={() => setMenuOpen(true)} hitSlop={HIT_SLOP} accessibilityLabel="More">
               <MoreVertical size={rs(19)} color={T.textMute} strokeWidth={2} />
@@ -475,20 +459,6 @@ export default function DropChatScreen({ route, navigation }) {
       />
 
       <ChatBackground pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN} style={{ flex: 1 }}>
-        {activeCall ? (
-          <View style={s.liveStrip}>
-            <View style={s.liveDot} />
-            <Text style={s.liveText} numberOfLines={1}>
-              {connection?.is_sender ? 'Your session is live' : `${otherName}'s session is live`} · {activeCall.guest_count}/{activeCall.max_guests} in
-            </Text>
-            {!connection?.is_sender ? (
-              <TouchableOpacity style={s.liveJoin} onPress={handleJoinCall} disabled={callLoading} hitSlop={HIT_SLOP}>
-                {callLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.liveJoinText}>Join</Text>}
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ) : null}
-
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
             {messages.length === 0 ? (
@@ -612,17 +582,6 @@ const s = StyleSheet.create({
   hint: { fontSize: rf(11), color: T.textMute },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(14) },
   headerBtn: { width: rs(32), height: rs(32), alignItems: 'center', justifyContent: 'center' },
-  headerBtnLive: { borderRadius: rs(16), borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
-
-  liveStrip: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(6), alignSelf: 'center',
-    marginTop: rp(6), marginBottom: rp(4), paddingHorizontal: rp(12), paddingVertical: rp(6),
-    borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryDim,
-  },
-  liveDot: { width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.online },
-  liveText: { flexShrink: 1, fontSize: rf(11), fontWeight: '700', color: T.primary },
-  liveJoin: { minWidth: rs(56), height: rs(28), paddingHorizontal: rp(12), borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
-  liveJoinText: { fontSize: rf(12), fontWeight: '800', color: '#fff' },
 
   list: { padding: SPACING.md, gap: SPACING.xs, paddingBottom: SPACING.lg },
 

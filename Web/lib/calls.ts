@@ -22,10 +22,6 @@ export const callsApi = {
   direct: (connectionId: string, video: boolean) => post<TokenReply>("/direct", { connection_id: connectionId, video }),
   accept: (id: string) => post<TokenReply>(`/${id}/accept`),
   decline: (id: string) => post(`/${id}/decline`),
-  /** Owner opens a group session; no invite list = everyone inside may join. */
-  startSession: (inviteUserIds: string[] | null, video: boolean) =>
-    post<TokenReply>("/start", { invite_user_ids: inviteUserIds?.length ? inviteUserIds : null, video }),
-  join: (id: string) => post<TokenReply>(`/${id}/join`),
   leave: (id: string) => post(`/${id}/leave`),
   end: (id: string) => post(`/${id}/end`),
   renew: (id: string) => post<{ token: string }>(`/${id}/renew`),

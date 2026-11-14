@@ -396,7 +396,8 @@ async def upgrade_call_capacity(
     current_user_id:  str = Depends(get_current_user_id),
     db                = Depends(get_database),
 ):
-    """Buy a bigger video-call room (above the free 4 guests, up to MAX_GUEST_CAP)."""
+    """Bought seats for group sessions. Group sessions are switched off, so nothing is sold."""
+    raise HTTPException(status_code=410, detail="Group sessions are off, so there are no seats to buy.")
     if data.add_slots <= 0:
         raise HTTPException(status_code=400, detail="add_slots must be positive.")
 

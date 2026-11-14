@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ArrowDownLeft, ArrowUpRight, Link2, Phone, PhoneMissed, Radio, Users, Video,
+  ArrowDownLeft, ArrowUpRight, Phone, PhoneMissed, Users, Video,
 } from 'lucide-react-native';
 import { rs, rf, rp, FONT, SPACING, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
@@ -17,7 +17,6 @@ import { useToast } from '../ui/Toast';
 import { callsApi, callParams } from '../../services/calls';
 import { chatsApi } from '../../services/chats';
 import { Avatar, callTime, duration, st as rowSt } from './ChatBits';
-import { StartSessionSheet } from './LivePanel';
 
 const SEEN_KEY = 'rooms_calls_seen_at';
 const EVENTS = ['drop_call_started', 'drop_call_ended', 'call_incoming', 'call_cancelled', 'call_missed', 'call_declined', 'call_accepted'];
@@ -47,10 +46,9 @@ const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissed
   const { showToast } = useToast();
   const { refreshUnread } = useUnread();
   const [calls, setCalls] = useState(null);
-  const [live, setLive] = useState({ hosting: null, direct: [] });
+  const [live, setLive] = useState({ direct: [] });
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState('');
-  const [starting, setStarting] = useState(false);
   const [myChats, setMyChats] = useState(new Set());
 
   const load = useCallback(async () => {
@@ -85,7 +83,6 @@ const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissed
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useImperativeHandle(ref, () => ({
-    startSession: () => setStarting(true),
     clear: async () => {
       try { await chatsApi.clearCalls(); load(); } catch (e) { showToast({ type: 'error', message: e.message }); }
     },
@@ -113,28 +110,10 @@ const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissed
   }, [load, showToast]);
 
   if (calls === null) return <View style={s.center}><ActivityIndicator color={T.primary} /></View>;
-  const { hosting, direct = [] } = live || {};
+  const { direct = [] } = live || {};
 
   const header = (
     <View>
-      {hosting ? (
-        <View style={rowSt.row}>
-          <View style={[s.bigIcon, s.bigIconLive]}><Radio size={rs(20)} color="#fff" /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={rowSt.name}>Your session is open</Text>
-            <Text style={s.meta}>{hosting.video ? 'Video' : 'Voice'} · {hosting.guest_count}/{hosting.max_guests} in{hosting.invite_only ? ' · invite only' : ''}</Text>
-          </View>
-          <TouchableOpacity style={s.endBtn} onPress={() => end(hosting)} disabled={busy === hosting.id}><Text style={s.endText}>End</Text></TouchableOpacity>
-        </View>
-      ) : (
-        <TouchableOpacity style={rowSt.row} onPress={() => setStarting(true)} activeOpacity={0.7} accessibilityRole="button">
-          <View style={s.bigIcon}><Link2 size={rs(20)} color="#fff" /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={rowSt.name}>Start a session</Text>
-            <Text style={s.meta}>A voice or video room for people you've let in</Text>
-          </View>
-        </TouchableOpacity>
-      )}
       {direct.map((c) => (
         <View key={c.id} style={rowSt.row}>
           <Avatar name={c.other?.name} url={c.other?.avatar_url} seed={c.other?.user_id} />
@@ -196,13 +175,6 @@ const CallsPanel = forwardRef(function CallsPanel({ navigation, active, onMissed
           );
         }}
       />
-      {starting && (
-        <StartSessionSheet
-          onClose={() => setStarting(false)}
-          onStarted={(d) => { setStarting(false); navigation.navigate('DropCall', callParams(d, { isHost: true })); }}
-          navigation={navigation}
-        />
-      )}
     </>
   );
 });
@@ -211,8 +183,6 @@ export default CallsPanel;
 
 const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bigIcon: { width: rs(50), height: rs(50), borderRadius: rs(25), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
-  bigIconLive: { backgroundColor: T.danger },
   section: { fontSize: rf(15), fontFamily: 'DMSans-Bold', color: T.text, paddingHorizontal: SPACING.md, paddingTop: rp(14), paddingBottom: rp(2) },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5), marginTop: rp(3) },
   meta: { fontSize: rf(13), color: T.textSecondary, flexShrink: 1 },

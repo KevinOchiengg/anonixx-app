@@ -27,7 +27,6 @@ type Conn = {
   removable_at?: string | null; other_avatar_url?: string | null; inside_since?: string | null;
   knock_pitch?: string | null; knock_intents?: string[]; pinned?: boolean; archived?: boolean; muted_until?: string | null;
 };
-type ActiveCall = { id: string; guest_count: number; max_guests: number; video?: boolean };
 type Profile = { background_pattern: string; font_style: string; profile_picture_url: string | null; gallery: GalleryItem[] };
 type MenuView = "menu" | "mute" | "report" | "call" | null;
 
@@ -62,7 +61,6 @@ function Inner({ id }: { id: string }) {
   const [toast, setToast] = useState("");
   const [menu, setMenu] = useState<MenuView>(null);
   const [busy, setBusy] = useState(false);
-  const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
   const [room, setRoom] = useState<CallInfo | null>(null);
   const [callBusy, setCallBusy] = useState(false);
   const roomRef = useRef<CallInfo | null>(null);
@@ -86,14 +84,12 @@ function Inner({ id }: { id: string }) {
 
   const load = useCallback(async () => {
     try {
-      const r = await api<{ messages: Msg[]; connection: Conn; chat_profile?: Profile; active_call?: ActiveCall | null }>(
+      const r = await api<{ messages: Msg[]; connection: Conn; chat_profile?: Profile }>(
         `/drops/connections/${id}/messages`,
       );
       setMsgs(r.messages);
       setConn(r.connection);
       if (r.chat_profile) setProfile(r.chat_profile);
-      setActiveCall(r.active_call || null);
-      if (!r.active_call && roomRef.current && roomRef.current.kind !== "direct" && !roomRef.current.isHost) { roomRef.current = null; setRoom(null); }
     } catch (e) {
       setError((e as Error).message);
     }
@@ -224,19 +220,6 @@ function Inner({ id }: { id: string }) {
       setCallBusy(false);
     }
   }
-  // A group session open in this Room: guests join it from the strip.
-  async function joinSession() {
-    if (callBusy || !activeCall) return;
-    setCallBusy(true);
-    setError("");
-    try {
-      openRoom(callInfo(await callsApi.join(activeCall.id), { isHost: false, other: { name: conn?.other_anonymous_name || "Anonymous" } }));
-    } catch (e) {
-      setError((e as Error).message || "Could not join the session.");
-    } finally {
-      setCallBusy(false);
-    }
-  }
 
   // ── ⋮ menu: Mute, Clear chat, Report, Block
   const applyPrefs = (p: Prefs) => setConn((c) => (c ? { ...c, ...p } : c));
@@ -302,7 +285,7 @@ function Inner({ id }: { id: string }) {
             <small className={typing || online ? "" : "dim"}>{typing ? "typing…" : online ? "online" : "click for contact info"}</small>
           </span>
         </button>
-        <button className={`call-btn${activeCall ? " live" : ""}`} onClick={() => toggleMenu("call")} disabled={callBusy || !!room} aria-label={`Call ${name}`} aria-expanded={menu === "call"}>
+        <button className="call-btn" onClick={() => toggleMenu("call")} disabled={callBusy || !!room} aria-label={`Call ${name}`} aria-expanded={menu === "call"}>
           <Phone strokeWidth={2} aria-hidden />
         </button>
         <button className="kebab" onClick={() => toggleMenu("menu")} aria-label="More" aria-expanded={!!menu && menu !== "call"}><EllipsisVertical size={20} strokeWidth={2} aria-hidden /></button>
@@ -336,12 +319,6 @@ function Inner({ id }: { id: string }) {
           </div>
         ) : null}
       </div>
-      {activeCall ? (
-        <div className="call-strip">
-          <i />{conn?.is_sender ? "Your session is live" : `${name}'s session is live`} · {activeCall.guest_count}/{activeCall.max_guests} in
-          {!conn?.is_sender ? <button className="call-join" onClick={joinSession} disabled={callBusy}>{callBusy ? "…" : "Join"}</button> : null}
-        </div>
-      ) : null}
       {room ? <CallRoom info={room} onClose={() => { openRoom(null); load(); }} /> : null}
       {once ? (
         <div className="u-modal" onClick={() => setOnce(null)}>

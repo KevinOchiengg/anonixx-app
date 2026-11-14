@@ -64,7 +64,6 @@ const NOTIFY_ROWS: [keyof Notify, string, string][] = [
   ["knocks", "New knocks", "Someone knocks on your Room"],
   ["messages", "Messages", "New messages in your conversations"],
   ["calls", "Calls", "Incoming and missed calls"],
-  ["sessions", "Group sessions", "Someone you are inside with opens a session"],
   ["previews", "Show message text", "Off: notifications say \"New message\" without the words"],
 ];
 const WELCOME_VISIBILITY = [
@@ -102,9 +101,6 @@ const TABS: [Tab, string][] = [
   ["appearance", "Appearance"], ["privacy", "Privacy"], ["notifications", "Notifications"],
 ];
 
-const SLOT_COST = 25;
-const FREE_GUESTS = 4;
-const MAX_GUESTS = 12;
 const MAX_GALLERY = 3;
 
 const REPORT_REASONS: [string, string][] = [
@@ -121,7 +117,7 @@ function Ava({ src, name }: { src: string | null; name: string }) {
 function Inner() {
   const router = useRouter();
   const params = useSearchParams();
-  const { user, refresh } = useAuth();
+  const { user } = useAuth();
   const initialTab = (params.get("tab") as Tab) || "room";
   const [tab, setTab] = useState<Tab>(TABS.some(([k]) => k === initialTab) ? initialTab : "room");
   const [loading, setLoading] = useState(true);
@@ -135,10 +131,6 @@ function Inner() {
   const [name, setName] = useState("");
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [sound, setSound] = useState("soft-chime");
-  const [callMode, setCallMode] = useState("solo");
-  const [maxGuests, setMaxGuests] = useState(1);
-  const [slots, setSlots] = useState(0);
-  const [buying, setBuying] = useState(false);
   const [theme, setTheme] = useState(DEFAULT_ROOM_THEME);
   const [intro, setIntro] = useState("");
   const [welcome, setWelcome] = useState("");
@@ -172,9 +164,6 @@ function Inner() {
     setName(d.anonymous_name || "");
     setGallery(d.gallery || []);
     setSound(d.welcome_sound || "soft-chime");
-    setCallMode(d.call_mode || "solo");
-    setMaxGuests(d.max_guests || 1);
-    setSlots(d.purchased_slots || 0);
     setTheme(d.room_theme || DEFAULT_ROOM_THEME);
     setIntro(d.intro || "");
     setWelcome(d.welcome_message || "");
@@ -302,24 +291,6 @@ function Inner() {
     setNote("Welcome audio removed.");
   }
 
-  async function buySlots(n: number) {
-    setBuying(true);
-    setError("");
-    setNote("");
-    try {
-      const d = await api<{ max_guests: number; purchased_slots: number; coins_spent: number }>("/chat-profile/call-capacity", {
-        body: { add_slots: n },
-      });
-      setMaxGuests(d.max_guests);
-      setSlots(d.purchased_slots);
-      setNote(`Call room now fits ${d.max_guests} guests. ${d.coins_spent} coins spent.`);
-      refresh();
-    } catch (err) {
-      setError((err as Error).message || "Could not buy slots. Try again.");
-    } finally {
-      setBuying(false);
-    }
-  }
 
   async function save() {
     setSaving(true);
@@ -329,7 +300,7 @@ function Inner() {
       const d = await api<Profile>("/chat-profile/me", {
         method: "PUT",
         body: {
-          background_pattern: pattern, font_style: font, profile_picture_url: pic, welcome_sound: sound, call_mode: callMode,
+          background_pattern: pattern, font_style: font, profile_picture_url: pic, welcome_sound: sound,
           intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
           welcome_autoplay: autoplay, welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
@@ -422,7 +393,6 @@ function Inner() {
 
   if (loading) return <p className="muted center">Opening your Room…</p>;
 
-  const roomLeft = MAX_GUESTS - maxGuests;
   const t = roomThemeById(theme);
   const saveBar = (
     <div className="rs-save">
@@ -558,26 +528,6 @@ function Inner() {
               <button type="button" role="switch" aria-checked={allowVideo} aria-label="Allow video calls" className={`rs-switch${allowVideo ? " on" : ""}`} onClick={() => setAllowVideo(!allowVideo)} />
             </div>
 
-            <p className="rs-h">Group sessions</p>
-            <p className="u-sub" style={{ margin: 0 }}>Go live from Rooms → Live.</p>
-            <div className="u-chips">
-              {[["solo", "One-on-one"], ["multi", "Group room"]].map(([k, l]) => (
-                <button key={k} type="button" className={`u-chip${callMode === k ? " on" : ""}`} onClick={() => setCallMode(k)}>{l}</button>
-              ))}
-            </div>
-            {callMode === "multi" ? (
-              <div className="u-cap">
-                <span>
-                  Fits <b>{maxGuests}</b> guests ({FREE_GUESTS} free{slots ? ` + ${slots} bought` : ""}). Extra slots are {SLOT_COST} coins each, up to {MAX_GUESTS}.
-                </span>
-                {roomLeft > 0 ? (
-                  <button type="button" disabled={buying} onClick={() => { if (window.confirm(`Add one guest seat for ${SLOT_COST} coins?\n\nCharged once, now. Your Room will fit ${maxGuests + 1} guests.`)) buySlots(1); }}>
-                    {buying ? "Buying…" : `Add a seat · ${SLOT_COST} coins`}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-            <p className="rs-info">4 seats free. Going live is free.</p>
             {saveBar}
           </>
         ) : null}

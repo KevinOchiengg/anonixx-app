@@ -9,16 +9,16 @@ import { chatsApi, chatTime, callTime, duration, avatarColor, MUTE_OPTIONS, type
 import CallRoom, { type CallInfo } from "../CallRoom";
 import Sheet from "../Sheet";
 import {
-  Archive, ArrowLeft, BellOff, ChevronDown, Compass, DoorOpen, EllipsisVertical, Link2, MessageSquarePlus, Phone, Pin,
-  Radio, Search, Send, Video, X, Users, PhoneMissed, ArrowUpRight, ArrowDownLeft, type LucideIcon,
+  Archive, ArrowLeft, BellOff, ChevronDown, Compass, DoorOpen, EllipsisVertical, MessageSquarePlus, Phone, Pin,
+  Search, Send, Video, X, Users, PhoneMissed, ArrowUpRight, ArrowDownLeft, type LucideIcon,
 } from "lucide-react";
 
 const ic = (C: LucideIcon) => (s = 20) => <C size={s} strokeWidth={2} aria-hidden />;
 /** Rooms icons: Lucide at stroke 2, the same family as the app. */
 export const Icon = {
   phone: ic(Phone), video: ic(Video), pin: ic(Pin), mute: ic(BellOff), archive: ic(Archive),
-  chat: ic(MessageSquarePlus), door: ic(DoorOpen), link: ic(Link2), chevron: ic(ChevronDown), back: ic(ArrowLeft),
-  search: ic(Search), close: ic(X), dots: ic(EllipsisVertical), send: ic(Send), radio: ic(Radio), compass: ic(Compass),
+  chat: ic(MessageSquarePlus), door: ic(DoorOpen), chevron: ic(ChevronDown), back: ic(ArrowLeft),
+  search: ic(Search), close: ic(X), dots: ic(EllipsisVertical), send: ic(Send), compass: ic(Compass),
 };
 
 export function Ava({ name, url, seed, size = 50, online }: { name?: string; url?: string | null; seed?: string; size?: number; online?: boolean }) {
@@ -147,7 +147,7 @@ function statusLine(c: CallLog) {
 }
 
 /** Rooms → Calls: start a session, calls on now, then the log with call-back. */
-export function CallsPanel({ onStartSession, refreshKey }: { onStartSession: () => void; refreshKey: number }) {
+export function CallsPanel({ refreshKey }: { refreshKey: number }) {
   const [calls, setCalls] = useState<CallLog[] | null>(null);
   const [mine, setMine] = useState<Set<string>>(new Set());
   const [live, setLive] = useState<Awaited<ReturnType<typeof callsApi.live>> | null>(null);
@@ -180,18 +180,6 @@ export function CallsPanel({ onStartSession, refreshKey }: { onStartSession: () 
   return (
     <div>
       {error ? <div className="err pad">{error}</div> : null}
-      {live?.hosting ? (
-        <div className="mx-row static">
-          <span className="mx-ava mx-ava-ic live"><span>{Icon.radio(20)}</span></span>
-          <span className="mx-body"><b>Your session is open</b><small>{live.hosting.video ? "Video" : "Voice"} · {live.hosting.guest_count}/{live.hosting.max_guests} in</small></span>
-          <button className="mx-end" onClick={() => end(live.hosting!.id, false)} disabled={busy === live.hosting.id}>End</button>
-        </div>
-      ) : (
-        <button type="button" className="mx-row" onClick={onStartSession}>
-          <span className="mx-ava mx-ava-ic"><span>{Icon.link(20)}</span></span>
-          <span className="mx-body"><b>Start a session</b><small>A voice or video room for people you&apos;ve let in</small></span>
-        </button>
-      )}
       {(live?.direct || []).map((c) => (
         <div key={c.id} className="mx-row static">
           <Ava name={c.other?.name} url={c.other?.avatar_url} seed={c.other?.user_id} />

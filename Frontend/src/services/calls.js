@@ -28,10 +28,6 @@ export const callsApi = {
   direct: (connectionId, video) => request('/direct', 'POST', { connection_id: connectionId, video: !!video }),
   accept: (id) => request(`/${id}/accept`),
   decline: (id) => request(`/${id}/decline`),
-  /** Owner opens a group session; inviteUserIds empty = everyone inside may join. */
-  startSession: ({ inviteUserIds, video = true } = {}) =>
-    request('/start', 'POST', { invite_user_ids: inviteUserIds?.length ? inviteUserIds : null, video }),
-  join: (id) => request(`/${id}/join`),
   leave: (id) => request(`/${id}/leave`),
   end: (id) => request(`/${id}/end`),
   renew: (id) => request(`/${id}/renew`),

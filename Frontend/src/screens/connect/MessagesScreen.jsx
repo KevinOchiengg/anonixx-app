@@ -1,5 +1,5 @@
 /** The Rooms tab, built like a messenger home. Four swipeable tabs: Chats (everyone you're
- * connected with), Updates (who's live + your Room), Knocks (who's at your door) and Calls
+ * connected with), My Room (the page visitors see), Knocks (who's at your door) and Calls
  * (call log). Long-press chats to pin, mute or archive them. Accepts { section } to open a tab
  * (knocks / connections|chats / live|myroom|updates / calls). */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Archive, ArrowLeft, BellOff, Bell, DoorOpen, MessageSquarePlus, MoreVertical, Phone, Pin, PinOff,
-  Radio, Search, Video, X, Compass, Settings, Menu as MenuIcon, Trash2, Home,
+  Search, X, Compass, Settings, Menu as MenuIcon, Trash2,
 } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -30,7 +30,7 @@ import { ChatRow, st as rowSt } from '../../components/rooms/ChatBits';
 import { chatsApi, MUTE_OPTIONS } from '../../services/chats';
 import { callsApi, callParams } from '../../services/calls';
 
-const TABS = [['chats', 'Chats'], ['updates', 'Updates'], ['knocks', 'Knocks'], ['calls', 'Calls']];
+const TABS = [['chats', 'Chats'], ['updates', 'My Room'], ['knocks', 'Knocks'], ['calls', 'Calls']];
 const SECTION_TO_TAB = { knocks: 'knocks', connections: 'chats', chats: 'chats', live: 'updates', myroom: 'updates', updates: 'updates', calls: 'calls' };
 const FILTERS = [['all', 'All'], ['unread', 'Unread'], ['guests', 'Guests'], ['rooms', 'Their Rooms']];
 
@@ -61,9 +61,7 @@ export default function MessagesScreen({ navigation, route }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [picker, setPicker] = useState(null); // 'chat' | 'call'
   const [missed, setMissed] = useState(0);
-  const [liveCount, setLiveCount] = useState(0);
   const callsRef = useRef(null);
-  const updatesRef = useRef(null);
 
   const goTab = useCallback((key, animated = true) => {
     const i = TABS.findIndex(([k]) => k === key);
@@ -204,14 +202,11 @@ export default function MessagesScreen({ navigation, route }) {
   const onFab = () => {
     if (tab === 'chats') setPicker('chat');
     else if (tab === 'calls') setPicker('call');
-    else if (tab === 'updates') updatesRef.current?.goLive();
   };
 
   const menuItems = [
     tab === 'calls' && { icon: Trash2, label: 'Clear call log', onPress: () => Alert.alert('Clear call log?', 'This only clears it for you.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => callsRef.current?.clear() }]) },
-    tab === 'updates' && { icon: Radio, label: 'Go live', onPress: () => updatesRef.current?.goLive() },
     { icon: Archive, label: `Archived${archived.length ? ` (${archived.length})` : ''}`, onPress: () => navigation.navigate('ArchivedChats') },
-    { icon: Home, label: 'My Room', onPress: () => goTab('updates') },
     { icon: Settings, label: 'Room settings', onPress: () => setSettingsOpen(true) },
     { icon: MenuIcon, label: 'More of Anonixx', onPress: () => setHamburger(true) },
   ].filter(Boolean);
@@ -254,7 +249,7 @@ export default function MessagesScreen({ navigation, route }) {
     </View>
   );
 
-  const counts = { chats: unreadChats, updates: liveCount, knocks: knocks.length, calls: missed };
+  const counts = { chats: unreadChats, knocks: knocks.length, calls: missed };
   const tabW = width / TABS.length;
   const tabBar = !searching && !selecting ? (
     <View style={s.tabs} accessibilityRole="tablist">
@@ -265,9 +260,7 @@ export default function MessagesScreen({ navigation, route }) {
           <TouchableOpacity key={key} style={s.tab} onPress={() => goTab(key)} accessibilityRole="tab" accessibilityState={{ selected: on }}>
             <Text style={[s.tabText, on && s.tabTextOn]}>{label}</Text>
             {n > 0 ? (
-              key === 'updates' ? <View style={s.tabDot} /> : (
-                <View style={[s.tabBadge, key === 'knocks' && s.tabBadgeHot]}><Text style={s.tabBadgeText}>{n > 99 ? '99+' : n}</Text></View>
-              )
+              <View style={[s.tabBadge, key === 'knocks' && s.tabBadgeHot]}><Text style={s.tabBadgeText}>{n > 99 ? '99+' : n}</Text></View>
             ) : null}
           </TouchableOpacity>
         );
@@ -351,12 +344,12 @@ export default function MessagesScreen({ navigation, route }) {
         ) : null}
       />
     ),
-    updates: <UpdatesPanel ref={updatesRef} navigation={navigation} onLiveCount={setLiveCount} />,
+    updates: <UpdatesPanel navigation={navigation} />,
     knocks: <UnlockRequestsScreen embedded navigation={navigation} />,
     calls: <CallsPanel ref={callsRef} navigation={navigation} active={tab === 'calls'} onMissedCount={setMissed} />,
   };
 
-  const FabIcon = tab === 'chats' ? MessageSquarePlus : tab === 'calls' ? Phone : tab === 'updates' ? Video : null;
+  const FabIcon = tab === 'chats' ? MessageSquarePlus : tab === 'calls' ? Phone : null;
 
   return (
     <View style={[s.safe, { paddingTop: insets.top }]}>
@@ -387,7 +380,7 @@ export default function MessagesScreen({ navigation, route }) {
 
       {FabIcon && !selecting && !searching ? (
         <TouchableOpacity style={s.fab} onPress={onFab} activeOpacity={0.85}
-          accessibilityLabel={tab === 'chats' ? 'New chat' : tab === 'calls' ? 'New call' : 'Go live'}>
+          accessibilityLabel={tab === 'chats' ? 'New chat' : 'New call'}>
           <FabIcon size={rs(23)} color="#fff" strokeWidth={2} />
         </TouchableOpacity>
       ) : null}
@@ -413,7 +406,6 @@ export default function MessagesScreen({ navigation, route }) {
         onOpen={(c) => { setPicker(null); navigation.navigate('DropChat', { connectionId: c.id }); }}
         extras={[
           { label: 'Find someone new', hint: 'Browse the feed and knock on a Room', icon: <Compass size={rs(20)} color="#fff" />, onPress: () => { setPicker(null); navigation.navigate('Feed'); } },
-          { label: 'Go live', hint: 'Open a voice or video session in your Room', icon: <Radio size={rs(20)} color="#fff" />, onPress: () => { setPicker(null); goTab('updates'); setTimeout(() => updatesRef.current?.goLive(), 350); } },
         ]}
       />
       <PickChatSheet
@@ -445,7 +437,6 @@ const s = StyleSheet.create({
   tabBadge: { minWidth: rs(18), height: rs(18), borderRadius: rs(9), paddingHorizontal: rp(4), backgroundColor: T.textMuted, alignItems: 'center', justifyContent: 'center' },
   tabBadgeHot: { backgroundColor: T.primary },
   tabBadgeText: { fontSize: rf(10), fontWeight: '800', color: '#fff' },
-  tabDot: { width: rs(7), height: rs(7), borderRadius: rs(4), backgroundColor: T.primary },
   indicator: { position: 'absolute', bottom: -1, left: 0, height: 3, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: T.primary },
   chips: { gap: rp(8), paddingHorizontal: SPACING.md, paddingTop: rp(10), paddingBottom: rp(6) },
   chip: { paddingHorizontal: rp(14), height: rs(32), borderRadius: 999, backgroundColor: T.surface, justifyContent: 'center' },

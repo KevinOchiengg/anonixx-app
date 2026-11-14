@@ -1,6 +1,6 @@
 "use client";
-/** Rooms, built like a messenger home: Chats (everyone you're connected with), Updates (who's
- * live + your Room), Knocks (who's at your door; your sent knocks too) and Calls (the log).
+/** Rooms, built like a messenger home: Chats (everyone you're connected with), My Room (the
+ * page visitors see), Knocks (who's at your door; your sent knocks too) and Calls (the log).
  * Each chat's ⌄ menu (or right-click) pins, mutes or archives it. The ⋮ menu has Archived
  * and every Room setting.
  * ?tab=chats|updates|knocks|sent|calls (old connections / requests / live / myroom still work). */
@@ -17,7 +17,6 @@ import KnockClues, { type KnockClue } from "./KnockClues";
 import CallRoom, { type CallInfo } from "./CallRoom";
 import RoomSettingsMenu from "./rooms/RoomSettingsMenu";
 import UpdatesPanel from "./rooms/UpdatesPanel";
-import { StartSession } from "./rooms/LivePanel";
 import { CallsPanel, ChatRow, Icon, PickChats } from "./rooms/Messenger";
 
 type Req = KnockClue & {
@@ -38,7 +37,7 @@ type Req = KnockClue & {
 type Sent = { id: string; target_type: string; status: string; connection_id: string | null; target_id: string };
 type View = "chats" | "updates" | "knocks" | "sent" | "calls" | "archived";
 type Tab = "chats" | "updates" | "knocks" | "calls";
-const TABS: [Tab, string][] = [["chats", "Chats"], ["updates", "Updates"], ["knocks", "Knocks"], ["calls", "Calls"]];
+const TABS: [Tab, string][] = [["chats", "Chats"], ["updates", "My Room"], ["knocks", "Knocks"], ["calls", "Calls"]];
 const FILTERS = [["all", "All"], ["unread", "Unread"], ["guests", "Guests"], ["rooms", "Their Rooms"]] as const;
 type Filter = (typeof FILTERS)[number][0];
 const FROM_QS: Record<string, View> = {
@@ -162,10 +161,8 @@ export default function InboxPage() {
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
   const [picker, setPicker] = useState<"chat" | "call" | null>(null);
-  const [starting, setStarting] = useState(false);
   const [call, setCall] = useState<CallInfo | null>(null);
   const [missed, setMissed] = useState(0);
-  const [liveCount, setLiveCount] = useState(0);
   const [callsKey, setCallsKey] = useState(0);
 
   const setView = useCallback((v: View) => {
@@ -248,7 +245,7 @@ export default function InboxPage() {
   }, [chats, inbox, archived, filter, q, view]);
 
   const tab: Tab | null = view === "sent" ? "knocks" : view === "archived" ? null : (view as Tab);
-  const counts: Record<Tab, number> = { chats: unreadChats, updates: liveCount, knocks: reqs?.length || 0, calls: missed };
+  const counts: Record<Tab, number> = { chats: unreadChats, updates: 0, knocks: reqs?.length || 0, calls: missed };
 
   const right = searching ? null : (
     <>
@@ -260,9 +257,7 @@ export default function InboxPage() {
             <div className="mx-scrim" onClick={() => setMenu(false)} />
             <div className="mx-menu right" role="menu" onClick={() => setMenu(false)}>
               {view === "calls" ? <button role="menuitem" onClick={async () => { if (window.confirm("Clear your call log? It's only cleared for you.")) { await chatsApi.clearCalls().catch(() => {}); setCallsKey((k) => k + 1); } }}>Clear call log</button> : null}
-              <button role="menuitem" onClick={() => setStarting(true)}>Go live</button>
               <button role="menuitem" onClick={() => setView("archived")}>Archived{archived.length ? ` (${archived.length})` : ""}</button>
-              <button role="menuitem" onClick={() => setView("updates")}>My Room</button>
               <button role="menuitem" onClick={() => setSettings(true)}>Room settings</button>
             </div>
           </>
@@ -315,8 +310,7 @@ export default function InboxPage() {
   );
 
   const fab = view === "chats" ? { label: "New chat", icon: Icon.chat(22), on: () => setPicker("chat") }
-    : view === "calls" ? { label: "New call", icon: Icon.phone(22), on: () => setPicker("call") }
-    : view === "updates" ? { label: "Go live", icon: Icon.video(22), on: () => setStarting(true) } : null;
+    : view === "calls" ? { label: "New call", icon: Icon.phone(22), on: () => setPicker("call") } : null;
 
   return (
     <AppShell title="Rooms" right={right}>
@@ -334,7 +328,7 @@ export default function InboxPage() {
               return (
                 <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setView(k)}>
                   {label}
-                  {n ? (k === "updates" ? <i className="dot" /> : <b className={k === "knocks" ? "hot" : ""}>{n > 99 ? "99+" : n}</b>) : null}
+                  {n ? <b className={k === "knocks" ? "hot" : ""}>{n > 99 ? "99+" : n}</b> : null}
                 </button>
               );
             })}
@@ -342,9 +336,9 @@ export default function InboxPage() {
         )}
         {error ? <div className="err pad">{error}</div> : null}
         {view === "chats" || view === "archived" ? chatsList : null}
-        {view === "updates" ? <UpdatesPanel onGoLive={() => setStarting(true)} onLive={setLiveCount} /> : null}
+        {view === "updates" ? <UpdatesPanel /> : null}
         {view === "knocks" || view === "sent" ? <Knocks view={view} setView={setView} reqs={reqs} sent={sent} reload={load} /> : null}
-        {view === "calls" ? <CallsPanel onStartSession={() => setStarting(true)} refreshKey={callsKey} /> : null}
+        {view === "calls" ? <CallsPanel refreshKey={callsKey} /> : null}
         {fab && !searching ? <button className="mx-fab" onClick={fab.on} aria-label={fab.label} title={fab.label}>{fab.icon}</button> : null}
       </div>
       {picker === "chat" ? (
@@ -353,12 +347,10 @@ export default function InboxPage() {
           onOpen={(c) => router.push(`/chat/${c.id}`)}
           extras={[
             { label: "Find someone new", hint: "Browse the feed and knock on a Room", icon: Icon.compass(20), href: "/" },
-            { label: "Go live", hint: "Open a voice or video session in your Room", icon: Icon.radio(20), onClick: () => { setPicker(null); setStarting(true); } },
           ]}
         />
       ) : null}
       {picker === "call" ? <PickChats mode="call" title="New call" onClose={() => setPicker(null)} onCall={startCall} /> : null}
-      {starting ? <StartSession onClose={() => setStarting(false)} onStarted={(c) => { setStarting(false); setCall(c); }} /> : null}
       {call ? <CallRoom info={call} onClose={() => { setCall(null); setCallsKey((k) => k + 1); }} /> : null}
       {settings ? <RoomSettingsMenu onClose={() => setSettings(false)} /> : null}
     </AppShell>

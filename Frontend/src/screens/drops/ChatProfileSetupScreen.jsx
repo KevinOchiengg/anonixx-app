@@ -11,7 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  Camera, Trash2, Volume2, Video, Users, User, Plus, ChevronLeft, ChevronRight, RefreshCw, Phone, Coins,
+  Camera, Trash2, Volume2, Video, ChevronLeft, ChevronRight, RefreshCw, Phone, Coins,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -59,7 +59,6 @@ const NOTIFY_ROWS = [
   ['knocks', 'New knocks', 'Someone knocks on your Room'],
   ['messages', 'Messages', 'New messages in your conversations'],
   ['calls', 'Calls', 'Incoming and missed calls'],
-  ['sessions', 'Group sessions', 'Someone you are inside with opens a session'],
   ['previews', 'Show message text', 'Off: notifications say "New message" without the words'],
 ];
 const hourLabel = (h) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' });
@@ -89,9 +88,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [anonymousName, setAnonymousName]     = useState('');
   const [gallery, setGallery]                 = useState([]);
   const [welcomeSound, setWelcomeSound]       = useState('soft-chime');
-  const [callMode, setCallMode]               = useState('solo');
-  const [maxGuests, setMaxGuests]             = useState(1);
-  const [buyingSlots, setBuyingSlots]         = useState(false);
   const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
   const [intro, setIntro]                     = useState('');
   const [welcomeMessage, setWelcomeMessage]   = useState('');
@@ -138,8 +134,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setAnonymousName(data.anonymous_name || '');
             setGallery(data.gallery || []);
             setWelcomeSound(data.welcome_sound || 'soft-chime');
-            setCallMode(data.call_mode || 'solo');
-            setMaxGuests(data.max_guests || 1);
             setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
             setIntro(data.intro || '');
             setWelcomeMessage(data.welcome_message || '');
@@ -304,7 +298,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           font_style: fontStyle,
           profile_picture_url: profilePictureUrl,
           welcome_sound: welcomeSound,
-          call_mode: callMode,
           intro,
           welcome_message: welcomeMessage,
           room_status: roomStatus,
@@ -337,7 +330,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     } finally {
       setSaving(false);
     }
-  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeSound, callMode, intro, welcomeMessage, roomStatus,
+  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeSound, intro, welcomeMessage, roomStatus,
       galleryVisibility, knocksOpen, breakHours, doorRule, listing, welcomeAutoplay, welcomeVisibility,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
@@ -447,30 +440,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     ]);
   }, [post, showToast]);
 
-  // Buys call slots right away (separate from Save).
-  const handleBuySlots = useCallback(async (addSlots) => {
-    setBuyingSlots(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/call-capacity`, {
-        method: 'POST',
-        headers: await authHeaders(true),
-        body: JSON.stringify({ add_slots: addSlots }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMaxGuests(data.max_guests);
-        showToast({ type: 'success', message: `Room size is now ${data.max_guests} guests — ${data.coins_spent} coins spent.` });
-      } else if (res.status === 402) {
-        showToast({ type: 'warning', message: data.detail || 'Not enough coins.' });
-      } else {
-        showToast({ type: 'error', message: data.detail || 'Could not buy slots.' });
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Could not buy slots. Try again.' });
-    } finally {
-      setBuyingSlots(false);
-    }
-  }, [authHeaders, showToast]);
 
   const handlePreviewSound = useCallback(async (soundId) => {
     setWelcomeSound(soundId);
@@ -701,59 +670,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           <Switch value={allowVideoCalls} onValueChange={setAllowVideoCalls} trackColor={{ false: T.surfaceAlt, true: T.gold }} thumbColor="#fff" accessibilityLabel="Allow video calls" />
         </View>
 
-        <Text style={styles.sectionLabel}>Group sessions</Text>
-        <Text style={styles.sectionHint}>
-          You open sessions from Rooms → Live, for everyone inside or only the people you pick. One guest at a time, or a group room.
-        </Text>
-        <View style={styles.chipRow}>
-          <TouchableOpacity
-            onPress={() => setCallMode('solo')}
-            style={[styles.chip, callMode === 'solo' && styles.chipActive]}
-            hitSlop={HIT_SLOP}
-          >
-            <User size={rs(12)} color={callMode === 'solo' ? T.primary : T.textMute} />
-            <Text style={[styles.chipText, callMode === 'solo' && styles.chipTextActive]}>One guest at a time</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setCallMode('multi')}
-            style={[styles.chip, callMode === 'multi' && styles.chipActive]}
-            hitSlop={HIT_SLOP}
-          >
-            <Users size={rs(12)} color={callMode === 'multi' ? T.primary : T.textMute} />
-            <Text style={[styles.chipText, callMode === 'multi' && styles.chipTextActive]}>Group room</Text>
-          </TouchableOpacity>
-        </View>
-
-        {callMode === 'multi' && (
-          <View style={styles.capacityCard}>
-            <View style={styles.capacityRow}>
-              <Video size={rs(14)} color={T.primary} />
-              <Text style={styles.capacityText}>
-                Room holds <Text style={{ fontWeight: '700', color: T.text }}>{maxGuests}</Text> guests at once
-              </Text>
-            </View>
-            {maxGuests < 12 ? (
-              <View style={styles.buySlotsRow}>
-                <TouchableOpacity
-                  style={styles.buySlotsBtn}
-                  onPress={() => handleBuySlots(Math.min(2, 12 - maxGuests))}
-                  disabled={buyingSlots}
-                  hitSlop={HIT_SLOP}
-                >
-                  {buyingSlots ? <ActivityIndicator size="small" color={T.primary} /> : (
-                    <>
-                      <Plus size={rs(12)} color={T.primary} />
-                      <Text style={styles.buySlotsText}>{Math.min(2, 12 - maxGuests)} guests — {Math.min(2, 12 - maxGuests) * 25} coins</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <Text style={styles.capacityMaxedText}>Room is at its largest size.</Text>
-            )}
-            <Text style={styles.optionHint}>4 seats free. Extras 25 coins each, one-off, up to 12. Going live is free.</Text>
-          </View>
-        )}
           </>
         )}
 
@@ -1201,20 +1117,6 @@ const styles = StyleSheet.create({
   chipText:   { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textSec },
   chipTextActive: { color: T.primary, fontFamily: 'DMSans-Bold' },
 
-  capacityCard: {
-    backgroundColor: T.surfaceAlt, borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border,
-    padding: rp(14), marginTop: rp(4), marginBottom: rp(10), gap: rp(10),
-  },
-  capacityRow: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
-  capacityText: { fontSize: FONT.sm, color: T.textSec },
-  buySlotsRow: { flexDirection: 'row' },
-  buySlotsBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(6),
-    backgroundColor: T.primaryDim, borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.primaryBorder,
-    paddingHorizontal: rp(14), paddingVertical: rp(8),
-  },
-  buySlotsText: { fontSize: rf(12), fontWeight: '700', color: T.primary },
-  capacityMaxedText: { fontSize: rf(11), color: T.textMute, fontStyle: 'italic' },
 
   galleryRow: { gap: rp(12) },
   galleryItem: {

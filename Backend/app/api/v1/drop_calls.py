@@ -184,6 +184,8 @@ async def start_call(
     current_user_id: str = Depends(get_current_user_id),
     db                = Depends(get_database),
 ):
+    # Going live (group sessions) is switched off; one-on-one calls go through /direct.
+    raise HTTPException(status_code=410, detail="Going live is off. Call them one-on-one from your chat.")
     body = body or StartSessionBody()
     # A host restarting a session replaces any stale one — don't let a
     # forgotten "active" row from a crashed session lock them out forever.
