@@ -11,7 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  Camera, Trash2, Video, ChevronLeft, ChevronRight, RefreshCw, Phone, Coins,
+  Camera, Video, ChevronLeft, ChevronRight, Phone, Coins,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -25,7 +25,7 @@ import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/pa
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel } from '../../config/linkup';
 import {
-  DEFAULT_ROOM_THEME, GALLERY_VISIBILITY, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
+  DEFAULT_ROOM_THEME, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
 } from '../../config/roomThemes';
 import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
 import KnockClues from '../../components/rooms/KnockClues';
@@ -84,12 +84,10 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [fontStyle, setFontStyle]             = useState(DEFAULT_CHAT_FONT);
   const [profilePictureUrl, setProfilePictureUrl] = useState(null);
   const [anonymousName, setAnonymousName]     = useState('');
-  const [gallery, setGallery]                 = useState([]);
   const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
   const [intro, setIntro]                     = useState('');
   const [welcomeMessage, setWelcomeMessage]   = useState('');
   const [roomStatus, setRoomStatus]           = useState('');
-  const [galleryVisibility, setGalleryVisibility] = useState('window');
   const [knocksOpen, setKnocksOpen]           = useState(true);
   // A break's length, picked when knocks go off this visit (null = keep what the server has).
   const [breakHours, setBreakHours]           = useState(null);
@@ -104,7 +102,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [allowVideoCalls, setAllowVideoCalls] = useState(true);
   const [notify, setNotify]                   = useState(null);
   const [history, setHistory]                 = useState([]);
-  const [replacing, setReplacing]             = useState(null);    // gallery slot being replaced
 
   const authHeaders = useCallback(async (json = false) => {
     const token = await AsyncStorage.getItem('token');
@@ -127,12 +124,10 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setFontStyle(data.font_style || DEFAULT_CHAT_FONT);
             setProfilePictureUrl(data.profile_picture_url || null);
             setAnonymousName(data.anonymous_name || '');
-            setGallery(data.gallery || []);
             setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
             setIntro(data.intro || '');
             setWelcomeMessage(data.welcome_message || '');
             setRoomStatus(data.room_status || '');
-            setGalleryVisibility(data.gallery_visibility || 'window');
             setKnocksOpen(data.knocks_open !== false);
             setBreakUntil(data.break_until || null);
             setBreakHours(null);
@@ -178,87 +173,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     }
   }, [authHeaders, showToast]);
 
-  const handleAddGalleryMedia = useCallback(async (replaceIndex = null) => {
-    if (replaceIndex === null && gallery.length >= 3) {
-      showToast({ type: 'info', message: 'Gallery is capped at 3 items — delete one first.' });
-      return;
-    }
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      showToast({ type: 'warning', message: 'Gallery access is needed.' });
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
-      mediaTypes: ['images', 'videos'], quality: 0.85, videoMaxDuration: 90,
-    });
-    if (result.canceled) return;
-
-    setUploading(true);
-    setReplacing(replaceIndex);
-    try {
-      const asset = result.assets[0];
-      const isVideo = asset.type === 'video';
-      const ext = extOf(asset.uri) || (isVideo ? 'mp4' : 'jpg');
-      const isGif = !isVideo && ext === 'gif';
-      const mediaType = isVideo ? 'video' : isGif ? 'gif' : 'image';
-      const mimeType = isVideo ? 'video/mp4' : isGif ? 'image/gif' : 'image/jpeg';
-      const mediaUrl = await uploadViaBackend(asset.uri, isVideo ? 'video' : 'image', mimeType);
-
-      const addRes = await fetch(`${API_BASE_URL}/api/v1/chat-profile/media`, {
-        method: 'POST',
-        headers: await authHeaders(true),
-        body: JSON.stringify({
-          media_url: mediaUrl,
-          media_type: mediaType,
-          duration_seconds: asset.duration ? asset.duration / 1000 : undefined,
-          ...(replaceIndex !== null ? { replace_index: replaceIndex } : {}),
-        }),
-      });
-      if (!addRes.ok) {
-        const err = await addRes.json().catch(() => ({}));
-        throw new Error(err?.detail || 'Could not save media.');
-      }
-      const profile = await addRes.json();
-      setGallery(profile.gallery || []);
-    } catch (e) {
-      showToast({ type: 'error', message: e?.message || 'Could not add media. Check your connection.' });
-    } finally {
-      setUploading(false);
-      setReplacing(null);
-    }
-  }, [gallery.length, authHeaders, showToast]);
-
-  const handleMoveGalleryItem = useCallback(async (from, to) => {
-    if (to < 0 || to >= gallery.length) return;
-    const order = gallery.map((_, i) => i);
-    [order[from], order[to]] = [order[to], order[from]];
-    setGallery(order.map((i) => gallery[i]));   // feels instant; the server confirms
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/media/order`, {
-        method: 'PUT', headers: await authHeaders(true), body: JSON.stringify({ order }),
-      });
-      if (!res.ok) throw new Error();
-      setGallery((await res.json()).gallery || []);
-    } catch {
-      showToast({ type: 'error', message: 'Could not reorder. Try again.' });
-    }
-  }, [gallery, authHeaders, showToast]);
-
-  const handleDeleteGalleryItem = useCallback(async (index) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/media/${index}`, {
-        method: 'DELETE',
-        headers: await authHeaders(),
-      });
-      if (res.ok) {
-        const profile = await res.json();
-        setGallery(profile.gallery || []);
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Could not remove media.' });
-    }
-  }, [authHeaders, showToast]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -273,7 +187,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           intro,
           welcome_message: welcomeMessage,
           room_status: roomStatus,
-          gallery_visibility: galleryVisibility,
           knocks_open: knocksOpen,
           ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}),
           door_rule: doorRule,
@@ -302,7 +215,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
       setSaving(false);
     }
   }, [backgroundPattern, fontStyle, profilePictureUrl, intro, welcomeMessage, roomStatus,
-      galleryVisibility, knocksOpen, breakHours, doorRule, listing, welcomeVisibility,
+      knocksOpen, breakHours, doorRule, listing, welcomeVisibility,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
   // Applies straight away (the picker has its own Apply / Cancel).
@@ -598,56 +511,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         {tab === 'welcome' && (
           <>
 
-        {/* Gallery = the three welcome media, in the order visitors see them. */}
-        <Text style={styles.sectionLabel}>Welcome media ({gallery.length}/3)</Text>
-        <Text style={styles.sectionHint}>
-          Photos, GIFs or short videos on your walls. Arrows reorder, the refresh icon swaps one. Who sees them is set in Privacy.
-        </Text>
-        <View style={styles.galleryRow}>
-          {gallery.map((item, idx) => (
-            <View key={idx} style={styles.galleryItem}>
-              <Image source={{ uri: item.media_url }} style={styles.galleryThumb} />
-              {item.media_type === 'video' && (
-                <View style={styles.galleryBadge}><Text style={styles.galleryBadgeIcon}>▶</Text></View>
-              )}
-              {item.media_type === 'gif' && <Text style={styles.galleryBadgeText}>GIF</Text>}
-              <TouchableOpacity
-                style={styles.galleryDelete}
-                onPress={() => handleDeleteGalleryItem(idx)}
-                hitSlop={HIT_SLOP}
-                accessibilityLabel={`Remove welcome media ${idx + 1}`}
-              >
-                <Trash2 size={rs(14)} color="#fff" />
-              </TouchableOpacity>
-              <View style={styles.galleryTools}>
-                <TouchableOpacity disabled={idx === 0} onPress={() => handleMoveGalleryItem(idx, idx - 1)} hitSlop={HIT_SLOP} accessibilityLabel="Move earlier" style={idx === 0 && { opacity: 0.3 }}>
-                  <ChevronLeft size={rs(16)} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity disabled={uploading} onPress={() => handleAddGalleryMedia(idx)} hitSlop={HIT_SLOP} accessibilityLabel={`Replace welcome media ${idx + 1}`}>
-                  {uploading && replacing === idx ? <ActivityIndicator size="small" color="#fff" /> : <RefreshCw size={rs(14)} color="#fff" />}
-                </TouchableOpacity>
-                <TouchableOpacity disabled={idx === gallery.length - 1} onPress={() => handleMoveGalleryItem(idx, idx + 1)} hitSlop={HIT_SLOP} accessibilityLabel="Move later" style={idx === gallery.length - 1 && { opacity: 0.3 }}>
-                  <ChevronRight size={rs(16)} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-          {gallery.length < 3 && (
-            <TouchableOpacity
-              style={styles.galleryAdd}
-              onPress={() => handleAddGalleryMedia(null)}
-              disabled={uploading}
-              activeOpacity={0.85}
-            >
-              {uploading && replacing === null ? <ActivityIndicator color={T.primary} /> : (
-                <>
-                  <Camera size={rs(20)} color={T.textMute} />
-                  <Text style={styles.galleryAddText}>Add welcome media</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
           </>
         )}
 
@@ -788,22 +651,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
 
         {tab === 'privacy' && (
           <>
-            <Text style={styles.sectionLabel}>Who sees your photos</Text>
-            {GALLERY_VISIBILITY.map((v) => (
-              <TouchableOpacity
-                key={v.id}
-                style={[styles.option, galleryVisibility === v.id && styles.optionOn]}
-                onPress={() => setGalleryVisibility(v.id)}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: galleryVisibility === v.id }}
-              >
-                <View style={[styles.radio, galleryVisibility === v.id && styles.radioOn]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.optionTitle}>{v.label}</Text>
-                  <Text style={styles.optionHint}>{v.hint}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
 
             <Text style={styles.sectionLabel}>Your door</Text>
             <View style={styles.option}>
@@ -905,10 +752,6 @@ const styles = StyleSheet.create({
 
   tabs: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: T.border },
   nextCard: { marginTop: rp(18), padding: rp(14), borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryTint, gap: rp(4) },
-  galleryTools: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: rp(6), paddingVertical: rp(5), backgroundColor: 'rgba(0,0,0,0.55)',
-  },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6), marginBottom: rp(10) },
   linkText: { fontFamily: 'DMSans-Bold', fontSize: rf(13), color: T.gold },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: rp(10), paddingVertical: rp(8) },
@@ -1040,48 +883,6 @@ const styles = StyleSheet.create({
   chipTextActive: { color: T.primary, fontFamily: 'DMSans-Bold' },
 
 
-  galleryRow: { gap: rp(12) },
-  galleryItem: {
-    width:  '100%',
-    height: rs(180),
-    borderRadius: RADIUS.lg,
-    overflow: 'hidden',
-    backgroundColor: T.surfaceAlt,
-    borderWidth: 1,
-    borderColor: T.border,
-  },
-  galleryThumb: { width: '100%', height: '100%' },
-  galleryBadge: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.15)',
-  },
-  galleryBadgeIcon: { color: '#fff', fontSize: rf(30) },
-  galleryBadgeText: {
-    position: 'absolute', bottom: rp(8), left: rp(8),
-    backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff',
-    fontSize: rf(10), fontWeight: '700', letterSpacing: 0.5,
-    paddingHorizontal: rp(6), paddingVertical: rp(3), borderRadius: rs(5),
-  },
-  galleryDelete: {
-    position: 'absolute', top: rp(8), right: rp(8),
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: rs(14), width: rs(28), height: rs(28),
-    alignItems: 'center', justifyContent: 'center',
-  },
-  galleryAdd: {
-    width: '100%',
-    height: rs(56),
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap: rp(8),
-    borderRadius: RADIUS.lg,
-    borderWidth:     1,
-    borderColor:     T.border,
-    borderStyle:     'dashed',
-  },
-  galleryAddText: { fontSize: rf(12), fontWeight: '600', color: T.textMute },
 
   footer: {
     paddingHorizontal: SPACING.md,

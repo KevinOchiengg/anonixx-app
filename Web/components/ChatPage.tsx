@@ -7,7 +7,7 @@ import useDraft from "@/lib/useDraft";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { ChatBackground, FONTS_HREF, fontStyleById, type GalleryItem } from "@/lib/chatTheme";
+import { ChatBackground, FONTS_HREF, fontStyleById } from "@/lib/chatTheme";
 import { uploadFile, type UploadKind } from "@/lib/upload";
 import { connectSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
@@ -26,7 +26,7 @@ type Conn = {
   removable_at?: string | null; other_avatar_url?: string | null; inside_since?: string | null;
   knock_pitch?: string | null; knock_intents?: string[]; pinned?: boolean; archived?: boolean; muted_until?: string | null;
 };
-type Profile = { background_pattern: string; font_style: string; profile_picture_url: string | null; gallery: GalleryItem[] };
+type Profile = { background_pattern: string; font_style: string; profile_picture_url: string | null };
 type MenuView = "menu" | "mute" | "report" | "call" | null;
 
 const REPORT_REASONS: [string, string][] = [

@@ -4,9 +4,8 @@ import Image from "next/image";
 import { api, COST, type Post } from "@/lib/api";
 import Sheet from "./Sheet";
 import { Link2 } from "./feedicons";
-import { MapPin, X } from "lucide-react";
+import { MapPin } from "lucide-react";
 
-type Item = { media_url: string; media_type: string };
 type Profile = {
   user_id: string;
   is_self: boolean;
@@ -21,7 +20,6 @@ type Profile = {
   is_online: boolean;
   last_seen: string | null;
   gender: string | null;
-  gallery?: Item[];
 };
 
 const GENDER: Record<string, string> = { male: "Male", female: "Female", nonbinary: "Non-binary" };
@@ -35,7 +33,6 @@ export default function AuthorSheet({
 }) {
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState("");
-  const [big, setBig] = useState<Item | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -49,7 +46,6 @@ export default function AuthorSheet({
   const avatar = p?.avatar_url || post.avatar_url;
   // Confessions have no Link up on the card; the profile is where you link up off one.
   const canLinkUp = p ? !p.is_self : false;
-  const gallery = (p?.gallery || []).filter((g) => g.media_url);
 
   return (
     <>
@@ -81,19 +77,6 @@ export default function AuthorSheet({
                 ) : null}
               </div>
 
-              {gallery.length ? (
-                <div className="ap-gallery">
-                  {gallery.map((g, i) => (
-                    <button key={i} type="button" onClick={() => setBig(g)} aria-label={`Photo ${i + 1}`}>
-                      {g.media_type === "video" ? (
-                        <><video src={g.media_url} muted playsInline preload="metadata" /><span className="ap-play">▶</span></>
-                      ) : (
-                        <Image src={g.media_url} alt="" width={240} height={320} sizes="33vw" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
 
               <div className="ap-stats">
                 <div><b>{p.confession_count}</b><span>drops</span></div>
@@ -118,16 +101,6 @@ export default function AuthorSheet({
         </div>
       </Sheet>
 
-      {big ? (
-        <div className="ap-lightbox" onClick={() => setBig(null)} role="dialog" aria-modal>
-          {big.media_type === "video" ? (
-            <video src={big.media_url} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
-          ) : (
-            <Image src={big.media_url} alt="" width={1200} height={1500} sizes="100vw" />
-          )}
-          <button type="button" aria-label="Close" onClick={() => setBig(null)}><X size={20} strokeWidth={2} aria-hidden /></button>
-        </div>
-      ) : null}
     </>
   );
 }

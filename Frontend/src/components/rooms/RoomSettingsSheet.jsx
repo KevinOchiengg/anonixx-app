@@ -10,7 +10,7 @@ import T from '../../utils/theme';
 
 export const ROOM_SETTINGS = [
   { tab: 'room', Icon: Palette, title: 'Personalize Room', hint: 'Picture, intro, status, theme, fonts' },
-  { tab: 'welcome', Icon: Sparkles, title: 'Welcome experience', hint: 'Greeting note, welcome audio, three welcome media' },
+  { tab: 'welcome', Icon: Sparkles, title: 'Welcome experience', hint: 'The note they read when you let them in' },
   { tab: 'inside', Icon: Users, title: 'Connections and visitors', hint: "Who's inside, remove, block, report, history" },
   { tab: 'calls', Icon: Phone, title: 'Calls and group sessions', hint: 'Who can call you, group room size' },
   { tab: 'knocks', Icon: DoorOpen, title: 'Knocks and coins', hint: 'Waiting knocks, what a Let In costs them' },

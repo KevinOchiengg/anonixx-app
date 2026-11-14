@@ -170,7 +170,7 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.accountRowBody}>
               <Text style={styles.accountRowLabel}>Your Room</Text>
               <Text style={styles.accountRowDesc}>
-                Theme, intro, gallery, privacy
+                Theme, intro, welcome note, privacy
               </Text>
             </View>
             <ChevronRight size={18} color={THEME.textMuted} />

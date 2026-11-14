@@ -15,23 +15,20 @@ import {
   FONTS,
   FONTS_HREF,
   PATTERNS,
-  type GalleryItem,
 } from "@/lib/chatTheme";
 import { intentLabel } from "@/lib/linkup";
 import {
-  DEFAULT_ROOM_THEME, GALLERY_VISIBILITY, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
+  DEFAULT_ROOM_THEME, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
 } from "@/lib/roomThemes";
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 type Profile = {
   background_pattern?: string;
   font_style?: string;
   profile_picture_url?: string | null;
   anonymous_name?: string;
-  gallery?: GalleryItem[];
   welcome_sound?: string;
   call_mode?: string;
   max_guests?: number;
@@ -40,7 +37,6 @@ type Profile = {
   intro?: string | null;
   welcome_message?: string | null;
   room_status?: string | null;
-  gallery_visibility?: string;
   knocks_open?: boolean;
   break_until?: string | null;
   door_rule?: string;
@@ -96,7 +92,6 @@ const TABS: [Tab, string][] = [
   ["appearance", "Appearance"], ["privacy", "Privacy"], ["notifications", "Notifications"],
 ];
 
-const MAX_GALLERY = 3;
 
 const REPORT_REASONS: [string, string][] = [
   ["abuse", "Harassment or abuse"], ["explicit", "Sexually explicit or unwanted"], ["doxxing", "Shares private info"],
@@ -124,12 +119,10 @@ function Inner() {
   const [font, setFont] = useState(DEFAULT_FONT);
   const [pic, setPic] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [theme, setTheme] = useState(DEFAULT_ROOM_THEME);
   const [intro, setIntro] = useState("");
   const [welcome, setWelcome] = useState("");
   const [status, setStatus] = useState("");
-  const [visibility, setVisibility] = useState("window");
   const [knocksOpen, setKnocksOpen] = useState(true);
   // A break's length, picked when knocks go off this visit (null = keep what the server has).
   const [breakHours, setBreakHours] = useState<number | null>(null);
@@ -145,21 +138,17 @@ function Inner() {
   const [allowVideo, setAllowVideo] = useState(true);
   const [notify, setNotify] = useState<Notify>(NOTIFY_DEFAULTS);
   const [history, setHistory] = useState<Visitor[]>([]);
-  const replaceAt = useRef<number | null>(null);
   const picInput = useRef<HTMLInputElement>(null);
-  const galInput = useRef<HTMLInputElement>(null);
 
   const apply = (d: Profile) => {
     setPattern(d.background_pattern || DEFAULT_PATTERN);
     setFont(d.font_style || DEFAULT_FONT);
     setPic(d.profile_picture_url || null);
     setName(d.anonymous_name || "");
-    setGallery(d.gallery || []);
     setTheme(d.room_theme || DEFAULT_ROOM_THEME);
     setIntro(d.intro || "");
     setWelcome(d.welcome_message || "");
     setStatus(d.room_status || "");
-    setVisibility(d.gallery_visibility || "window");
     setKnocksOpen(d.knocks_open !== false);
     setBreakUntil(d.break_until || null);
     setBreakHours(null);
@@ -219,54 +208,6 @@ function Inner() {
     }
   }
 
-  async function addMedia(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const replaceIndex = replaceAt.current;
-    replaceAt.current = null;
-    if (replaceIndex === null && gallery.length >= MAX_GALLERY) { setError("Gallery is capped at 3 items. Delete one first."); return; }
-    const isVideo = file.type.startsWith("video/");
-    if (!isVideo && !file.type.startsWith("image/")) { setError("Pick a photo, GIF or video."); return; }
-    setUploading(true);
-    setError("");
-    try {
-      const url = await uploadFile(file, isVideo ? "video" : "image");
-      const p = await api<Profile>("/chat-profile/media", {
-        body: {
-          media_url: url, media_type: isVideo ? "video" : file.type === "image/gif" ? "gif" : "image",
-          ...(replaceIndex !== null ? { replace_index: replaceIndex } : {}),
-        },
-      });
-      setGallery(p.gallery || []);
-    } catch (err) {
-      setError((err as Error).message || "Could not add media. Check your connection.");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function removeMedia(i: number) {
-    try {
-      const p = await api<Profile>(`/chat-profile/media/${i}`, { method: "DELETE" });
-      setGallery(p.gallery || []);
-    } catch {
-      setError("Could not remove media.");
-    }
-  }
-
-  async function moveMedia(from: number, to: number) {
-    if (to < 0 || to >= gallery.length) return;
-    const order = gallery.map((_, i) => i);
-    [order[from], order[to]] = [order[to], order[from]];
-    setGallery(order.map((i) => gallery[i]));
-    try {
-      const p = await api<Profile>("/chat-profile/media/order", { method: "PUT", body: { order } });
-      setGallery(p.gallery || []);
-    } catch {
-      setError("Could not reorder. Try again.");
-    }
-  }
 
 
 
@@ -279,7 +220,7 @@ function Inner() {
         method: "PUT",
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic,
-          intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
+          intro, welcome_message: welcome, room_status: status, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
           welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
             knocks: notify.knocks, messages: notify.messages, calls: notify.calls, sessions: notify.sessions, previews: notify.previews,
@@ -453,28 +394,6 @@ function Inner() {
               ))}
             </div>
 
-            <p className="rs-h">Welcome media ({gallery.length}/{MAX_GALLERY})</p>
-            <p className="u-sub" style={{ margin: 0 }}>
-              Photos, GIFs or short videos on your walls, in this order. Who sees them is set in <button type="button" className="u-link-btn" style={{ padding: 0 }} onClick={() => go("privacy")}>Privacy</button>.
-            </p>
-            <input ref={galInput} type="file" accept="image/*,video/*" hidden onChange={addMedia} />
-            <div className="u-gallery">
-              {gallery.map((m, i) => (
-                <div className="u-gal" key={`${m.media_url}-${i}`}>
-                  {m.media_type === "video" ? <video src={m.media_url} muted playsInline preload="metadata" /> : <Image src={m.media_url} alt="" width={92} height={92} />}
-                  {m.media_type !== "image" ? <b>{m.media_type.toUpperCase()}</b> : null}
-                  <button type="button" onClick={() => removeMedia(i)} aria-label={`Remove welcome media ${i + 1}`}><X size={20} strokeWidth={2} aria-hidden /></button>
-                  <span className="u-gal-tools">
-                    <button type="button" disabled={i === 0} onClick={() => moveMedia(i, i - 1)} aria-label="Move earlier"><ChevronLeft size={18} strokeWidth={2} aria-hidden /></button>
-                    <button type="button" disabled={uploading} onClick={() => { replaceAt.current = i; galInput.current?.click(); }} aria-label={`Replace welcome media ${i + 1}`}>↻</button>
-                    <button type="button" disabled={i === gallery.length - 1} onClick={() => moveMedia(i, i + 1)} aria-label="Move later"><ChevronRight size={18} strokeWidth={2} aria-hidden /></button>
-                  </span>
-                </div>
-              ))}
-              {gallery.length < MAX_GALLERY ? (
-                <button type="button" className="u-gal-add" onClick={() => { replaceAt.current = null; galInput.current?.click(); }} disabled={uploading} aria-label="Add welcome media">+</button>
-              ) : null}
-            </div>
 
             {saveBar}
           </>
@@ -634,15 +553,6 @@ function Inner() {
 
         {tab === "privacy" ? (
           <>
-            <p className="rs-h">Who sees your photos</p>
-            <div className="rs-opts" role="radiogroup">
-              {GALLERY_VISIBILITY.map((v) => (
-                <button key={v.id} type="button" role="radio" aria-checked={visibility === v.id} className={`rs-opt${visibility === v.id ? " on" : ""}`} onClick={() => setVisibility(v.id)}>
-                  <i />
-                  <span><b>{v.label}</b><small>{v.hint}</small></span>
-                </button>
-              ))}
-            </div>
 
             <p className="rs-h">Who gets your welcome</p>
             <div className="rs-opts" role="radiogroup" aria-label="Who gets your welcome">

@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft, Flame, Phone, Video, MoreVertical, Mic, Send, Play, Users, Settings,
 } from 'lucide-react-native';
@@ -19,19 +18,11 @@ const SCRIPT = [
   { type: 'text', text: "every room here looks different." },
   { type: 'text', text: "this is what it feels like once you unlock someone's confession — their background, their font, their voice." },
   { type: 'voice', duration: '0:14' },
-  { type: 'text', text: "below is a taste of what a welcome gallery looks like. real ones are set by whoever you unlock." },
 ];
 
 // Fixed bar heights for the demo voice note.
 const DEMO_WAVE = [6, 12, 8, 16, 10, 14, 7, 11, 9, 15, 6, 10];
 
-// Same gradient+symbol placeholder language as DropChatScreen's mood board —
-// standing in here for the "3 medias" a real host would upload themselves.
-const DEMO_GALLERY = [
-  { id: 0, symbol: '🔥', gradient: ['#2a0f18', '#14060a'] },
-  { id: 1, symbol: '🌙', gradient: ['#0a0418', '#02030a'] },
-  { id: 2, symbol: '😈', gradient: ['#1a0824', '#08020c'] },
-];
 
 const DEMO_GUESTS = [
   { name: 'nightowl_92', online: true },
@@ -110,17 +101,6 @@ export default function DemoChatScreen({ navigation }) {
             </View>
           ))}
 
-          <Text style={s.galleryLabel}>welcome gallery — a preview</Text>
-          <View style={s.galleryRow}>
-            {DEMO_GALLERY.map((card) => (
-              <LinearGradient key={card.id} colors={card.gradient} style={s.galleryTile}>
-                <Text style={s.galleryTileSymbol}>{card.symbol}</Text>
-              </LinearGradient>
-            ))}
-          </View>
-          <Text style={s.galleryHint}>
-            up to 3 images, gifs, or clips — whoever you unlock sets their own.
-          </Text>
 
           <TouchableOpacity
             style={s.cta}
@@ -270,22 +250,6 @@ const s = StyleSheet.create({
   voiceBar: { width: rs(2.5), borderRadius: rs(1.5) },
   voiceTime: { fontSize: rf(10), fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
 
-  galleryLabel: {
-    fontSize: rf(10), fontWeight: '700', color: T.textMute,
-    textTransform: 'uppercase', letterSpacing: 1,
-    marginTop: SPACING.md, marginBottom: rp(10), textAlign: 'center',
-  },
-  galleryRow: { flexDirection: 'row', justifyContent: 'center', gap: rp(10) },
-  galleryTile: {
-    width: rs(74), height: rs(74), borderRadius: RADIUS.md,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-  },
-  galleryTileSymbol: { fontSize: rf(26) },
-  galleryHint: {
-    fontSize: rf(11), color: T.textMute, fontStyle: 'italic',
-    textAlign: 'center', marginTop: rp(10),
-  },
 
   cta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(8),

@@ -29,9 +29,6 @@
 .mr-name { font-size: 23px; }
 .mr-status { font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--rt-border); background: var(--rt-tint); }
 .mr-intro { margin: 0; font-size: 14px; line-height: 1.45; color: var(--rt-muted); max-width: 92%; }
-.mr-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-self: stretch; margin-top: 6px; }
-.mr-slot { aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; display: grid; place-items: center; border: 1px solid var(--rt-border); background: var(--rt-surface); color: var(--rt-muted); font-size: 22px; text-decoration: none; }
-.mr-slot img, .mr-slot video { width: 100%; height: 100%; object-fit: cover; }
 .mr-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-self: stretch; margin-top: 8px; }
 .mr-btn { height: 44px; border-radius: 12px; border: 1px solid var(--rt-border-strong); display: grid; place-items: center; color: var(--rt-text); font-size: 14px; font-weight: 700; text-decoration: none; }
 .mr-btn.accent { background: var(--rt-accent); border-color: var(--rt-accent); color: var(--rt-bg); }
@@ -62,9 +59,6 @@
 .rs-hours { display: flex; gap: 12px; }
 .rs-hours label { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .rs-hours select { height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 0 10px; font-size: 15px; }
-.u-gal .u-gal-tools { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; padding: 3px 4px; background: rgba(0, 0, 0, 0.6); }
-.u-gal .u-gal-tools button { position: static; width: 24px; height: 22px; border-radius: 6px; background: transparent; font-size: 15px; line-height: 1; }
-.u-gal .u-gal-tools button:disabled { opacity: 0.3; }
 .pill.danger { color: #ef4444; }
 
 /* Chat: voice notes with a speed control; the session strip's Join */
@@ -122,5 +116,3 @@
 /* Room page: welcome card and the entrance's audio + media */
 .rm-welcome { border-color: var(--rt-border-strong); background: var(--rt-tint); }
 .rm-welcome p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--rt-text); }
-.rm-enter-media { width: 100%; }
-.rm-big { z-index: 70; }

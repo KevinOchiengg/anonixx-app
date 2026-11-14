@@ -1,13 +1,13 @@
 "use client";
 /** Someone's Room, in their theme. After a Let In, the first visit plays the entrance: their
- * welcome note and three welcome media. */
+ * welcome note and a way to start talking. */
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { FONTS_HREF, fontStyleById, type GalleryItem } from "@/lib/chatTheme";
+import { FONTS_HREF, fontStyleById } from "@/lib/chatTheme";
 import { intentLabel, timeLeft } from "@/lib/linkup";
 import { STARTERS, roomThemeById, roomThemeVars, statusLabel } from "@/lib/roomThemes";
 import AppShell from "./AppShell";
@@ -15,14 +15,13 @@ import AgeGate from "./AgeGate";
 import LinkUpSheet from "./LinkUpSheet";
 import Sheet from "./Sheet";
 import KnockClues, { type KnockClue } from "./KnockClues";
-import { Ellipsis, Lock as LockIcon, X } from "lucide-react";
+import { Ellipsis, Lock as LockIcon } from "lucide-react";
 
 type Hookup = { age: number; gender: string | null; area: string; looking_for: string | null; vibes: string[] } | null;
 type Preview = {
   user_id: string;
   room: {
     background_pattern: string; font_style: string; profile_picture_url: string | null; anonymous_name: string;
-    gallery: GalleryItem[]; gallery_hidden: number; gallery_visibility: string;
     room_theme: string; intro: string | null; room_status: string | null; knocks_open: boolean; welcome_message: string | null;
   };
   inside: boolean;
@@ -69,7 +68,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   const [p, setP] = useState<Preview | null>(null);
   const [error, setError] = useState("");
   const [gate, setGate] = useState(false);
-  const [big, setBig] = useState<GalleryItem | null>(null);
   const [sheet, setSheet] = useState(false);
   const [safety, setSafety] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -211,8 +209,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   const cid = p.connection_id;
   const status = statusLabel(room.room_status);
   const h = post?.hookup;
-  const gallery = room.gallery || [];
-  const hidden = room.gallery_hidden || 0;
   const cost = p.linkup_cost;
 
   let bar: React.ReactNode;
@@ -322,30 +318,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
             </section>
           ) : null}
 
-          {gallery.length || hidden ? (
-            <section className="rm-gallery">
-              <div className="rm-label"><span>On the walls</span></div>
-              <div className="rm-grid">
-                {gallery.map((g, k) => (
-                  <button key={k} className="rm-frame" style={{ animationDelay: `${120 + k * 110}ms` }} onClick={() => setBig(g)} aria-label={`Open photo ${k + 1}`}>
-                    {g.media_type === "video"
-                      ? <video src={g.media_url} muted loop autoPlay playsInline />
-                      : <Image src={g.media_url} alt="" width={240} height={320} sizes="33vw" />}
-                  </button>
-                ))}
-                {room.gallery_visibility === "inside" && !own
-                  ? Array.from({ length: hidden }).map((_, k) => (
-                    <span key={`h${k}`} className="rm-frame veiled"><Lock /></span>
-                  ))
-                  : null}
-              </div>
-              {hidden && room.gallery_visibility === "inside" && !own ? (
-                <small className="rm-fine">{name} keeps {hidden === 1 ? "this photo" : "these photos"} for people they let in.</small>
-              ) : null}
-            </section>
-          ) : own ? (
-            <section className="rm-card rm-note">Your walls are bare. <Link href="/chat-setup">Hang up to 3 photos</Link> so visitors know who they&apos;re knocking for.</section>
-          ) : null}
 
           {inc ? (
             <section className="rm-card rm-pitch">
@@ -362,7 +334,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
               <ul>
                 <li>A private conversation with {name}. No timer, no charge per message.</li>
                 <li>Voice and video calls, if {name} opens them.</li>
-                {hidden && room.gallery_visibility === "inside" ? <li>{hidden} more {hidden === 1 ? "photo" : "photos"} {name} saves for people inside.</li> : null}
               </ul>
             </section>
           ) : null}
@@ -378,15 +349,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
               <small>You&apos;re inside.</small>
               <h2 style={font}>Welcome to {name}&apos;s Room.</h2>
               {room.welcome_message ? <blockquote style={font}>&ldquo;{room.welcome_message}&rdquo;</blockquote> : null}
-              {gallery.length ? (
-                <div className="rm-grid rm-enter-media">
-                  {gallery.slice(0, 3).map((g, k) => (
-                    <button key={k} className="rm-frame" style={{ animationDelay: `${300 + k * 110}ms` }} onClick={() => setBig(g)} aria-label={`Open welcome media ${k + 1}`}>
-                      {g.media_type === "video" ? <video src={g.media_url} muted loop autoPlay playsInline /> : <Image src={g.media_url} alt="" width={200} height={260} sizes="30vw" />}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
               <button className="room-cta rm-accent wide" onClick={() => openChat(cid)}>Start the conversation</button>
               <div className="rm-starters">
                 <span>Need an opener? Tap one.</span>
@@ -399,16 +361,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
           </div>
         ) : null}
 
-        {big ? (
-          <div className="u-modal rm-big" onClick={() => setBig(null)}>
-            {big.media_type === "video" ? (
-              <video src={big.media_url} controls autoPlay loop playsInline onClick={(e) => e.stopPropagation()} />
-            ) : (
-              <Image src={big.media_url} alt="" width={800} height={1000} />
-            )}
-            <button className="u-modal-x" aria-label="Close" onClick={() => setBig(null)}><X size={20} strokeWidth={2} aria-hidden /></button>
-          </div>
-        ) : null}
       </div>
 
       {safety ? (

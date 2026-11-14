@@ -233,7 +233,6 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
   // One knock: who (tap to peek at their Room), when, what they said, their clues, then the decision.
   const renderItem = useCallback(({ item }) => {
     const isBusy = busyIds.has(item.id);
-    const thumbs = (item.requester_gallery || []).filter((g) => g.media_url && g.media_type !== 'video').slice(0, 3);
     const name = item.requester_anonymous_name || 'Anonymous';
     return (
       <View style={s.card}>
@@ -255,11 +254,6 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
             <Text style={s.cardName} numberOfLines={1}>{name}</Text>
             <Text style={s.cardMeta} numberOfLines={1}>Knocked {ago(item.created_at)} · tap to peek</Text>
           </View>
-          {thumbs.length > 0 && (
-            <View style={s.rowThumbs}>
-              {thumbs.map((g, k) => <Image key={k} source={{ uri: g.media_url }} style={s.rowThumb} />)}
-            </View>
-          )}
         </TouchableOpacity>
 
         <View style={s.cardQuote}>
@@ -465,8 +459,6 @@ const s = StyleSheet.create({
   rowPitchEmpty: { color: T.textSecondary, fontStyle: 'italic' },
   rowChips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(5) },
   rowChip: { fontSize: rf(10.5), color: T.text, borderWidth: 1, borderColor: T.borderStrong, paddingHorizontal: rp(8), paddingVertical: rp(2), borderRadius: 999 },
-  rowThumbs: { flexDirection: 'row', gap: rp(4) },
-  rowThumb: { width: rs(30), height: rs(40), borderRadius: rs(6), backgroundColor: T.border },
   rowAvatar: {
     width: rs(30), height: rs(30), borderRadius: rs(15),
     backgroundColor: T.avatarBg, alignItems: 'center', justifyContent: 'center',

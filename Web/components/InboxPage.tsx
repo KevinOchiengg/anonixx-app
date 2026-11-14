@@ -27,7 +27,6 @@ type Req = KnockClue & {
   requester_id: string;
   requester_anonymous_name: string;
   requester_avatar_url?: string | null;
-  requester_gallery?: { media_url: string; media_type: string }[];
   pitch?: string | null;
   intents?: string[];
   media_url?: string | null;
@@ -99,7 +98,6 @@ function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"
             <p className="rs-info">Knocking is free. Let them in and their coins move, once. Decline: nothing.</p>
             {reqs.map((r) => {
               const b = busy.has(r.id);
-              const thumbs = (r.requester_gallery || []).slice(0, 3);
               const open = () => router.push(`/room/${r.requester_id}`);
               return (
                 <div className="lr-row" key={r.id} role="button" tabIndex={0} onClick={open} onKeyDown={(e) => e.key === "Enter" && open()}>
@@ -112,11 +110,6 @@ function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"
                     {r.intents?.length ? <span className="room-intents">{r.intents.map((i) => <i key={i}>{intentLabel(i)}</i>)}</span> : null}
                     {r.confession_snippet ? <span className="lr-on">on &ldquo;{r.confession_snippet}&rdquo;</span> : null}
                     <KnockClues k={r} />
-                    {thumbs.length ? (
-                      <span className="lr-thumbs">
-                        {thumbs.map((g, k) => <span key={k}>{g.media_type === "video" ? <video src={g.media_url} muted playsInline preload="metadata" /> : <Image src={g.media_url} alt="" width={34} height={44} />}</span>)}
-                      </span>
-                    ) : null}
                     <span className="lr-acts" onClick={(e) => e.stopPropagation()}>
                       <button className="d" disabled={b} onClick={() => decline(r)}>Decline</button>
                       <button className="a" disabled={b} onClick={() => accept(r)}>{b ? "…" : "Let In"}</button>

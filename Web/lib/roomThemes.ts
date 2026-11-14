@@ -84,12 +84,6 @@ export const ROOM_STATUSES: { id: string; label: string }[] = [
 
 export const statusLabel = (id?: string | null) => ROOM_STATUSES.find((s) => s.id === id)?.label || null;
 
-export const GALLERY_VISIBILITY: { id: string; label: string; hint: string }[] = [
-  { id: "window", label: "Everyone peeking", hint: "Shown through your window before anyone knocks." },
-  { id: "inside", label: "Only people I let in", hint: "Visitors see that you have photos, not the photos." },
-  { id: "only_me", label: "Only me", hint: "Kept private. Letting someone in doesn't change this." },
-];
-
 /** Openers shown after a Let In. Tapping one only fills the box; nothing is sent for you. */
 export const STARTERS = [
   "Your Room said more than your post did.",

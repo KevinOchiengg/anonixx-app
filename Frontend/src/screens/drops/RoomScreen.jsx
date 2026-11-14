@@ -2,7 +2,7 @@
  * they came from and the photos shown to visitors (others appear as a count). The bottom bar
  * follows GET /chat-profile/{userId}/preview: Knock, waiting, their knock to you, closed,
  * Edit Room, or inside. After a Let In, the first visit plays the entrance: the owner's
- * welcome note and their three welcome media.
+ * welcome note and a way to start talking.
  * Params: { userId, postId? } */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -35,24 +35,6 @@ const REPORT_REASONS = [
   ['other', 'Something else'],
 ];
 
-// Own component so useVideoPlayer runs once per frame, never conditionally.
-function Frame({ item, onPress, index, th }) {
-  const isVideo = item.media_type === 'video';
-  const player = useVideoPlayer(isVideo ? { uri: item.media_url } : null, (p) => { p.loop = true; p.muted = true; p.play(); });
-  const enter = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(enter, { toValue: 1, duration: 420, delay: 120 + index * 110, useNativeDriver: true }).start();
-  }, [enter, index]);
-  return (
-    <Animated.View style={[s.frameWrap, { opacity: enter, transform: [{ scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }] }]}>
-      <TouchableOpacity style={[s.frame, { borderColor: th.border, backgroundColor: th.surface }]} onPress={onPress} activeOpacity={0.9} accessibilityLabel={`Open photo ${index + 1}`}>
-        {isVideo
-          ? <VideoView player={player} style={s.fill} contentFit="cover" nativeControls={false} />
-          : <Image source={{ uri: item.media_url }} style={s.fill} />}
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
 
 function FullView({ item, onClose }) {
   const isVideo = item.media_type === 'video';
@@ -75,7 +57,7 @@ function FullView({ item, onClose }) {
 }
 
 
-function Entrance({ th, name, font, welcome, gallery = [], onOpenMedia, onStart, onClose }) {
+function Entrance({ th, name, font, welcome, onStart, onClose }) {
   const door = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -98,11 +80,6 @@ function Entrance({ th, name, font, welcome, gallery = [], onOpenMedia, onStart,
             {welcome ? (
               <View style={[s.quote, { borderColor: th.border, backgroundColor: th.tint }]}>
                 <Text style={[s.quoteText, { color: th.text, fontFamily: font }]}>“{welcome}”</Text>
-              </View>
-            ) : null}
-            {gallery.length ? (
-              <View style={[s.grid, { alignSelf: 'stretch' }]}>
-                {gallery.slice(0, 3).map((g, k) => <Frame key={k} item={g} index={k} th={th} onPress={() => onOpenMedia(g)} />)}
               </View>
             ) : null}
             <TouchableOpacity style={[s.accentBtn, { backgroundColor: th.accent, alignSelf: 'stretch', marginTop: rp(6) }]} onPress={() => onStart(null)}>
@@ -289,9 +266,6 @@ export default function RoomScreen({ route, navigation }) {
   const inc = p.incoming_request;
   const cid = p.connection_id;
   const status = statusLabel(room.room_status);
-  const gallery = room.gallery || [];
-  const hidden = room.gallery_hidden || 0;
-  const veiled = room.gallery_visibility === 'inside' && !own ? hidden : 0;
   const cost = p.linkup_cost;
   const card = { backgroundColor: th.surface, borderColor: th.border };
   const riseStyle = { opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] };
@@ -428,26 +402,6 @@ export default function RoomScreen({ route, navigation }) {
             </Animated.View>
           ) : null}
 
-          {gallery.length || veiled ? (
-            <View>
-              <Text style={[s.label, { color: th.muted, marginBottom: rp(10) }]}>ON THE WALLS</Text>
-              <View style={s.grid}>
-                {gallery.map((g, k) => <Frame key={k} item={g} index={k} th={th} onPress={() => setBig(g)} />)}
-                {Array.from({ length: veiled }).map((_, k) => (
-                  <View key={`v${k}`} style={s.frameWrap}>
-                    <LinearGradient colors={[th.surface, th.bg]} style={[s.frame, s.veiled, { borderColor: th.border }]}>
-                      <Lock size={rs(18)} color={th.accent} strokeWidth={2} />
-                    </LinearGradient>
-                  </View>
-                ))}
-              </View>
-              {veiled ? <Text style={[s.fine, { color: th.muted, textAlign: 'left', marginTop: rp(8) }]}>{name} keeps {veiled === 1 ? 'this photo' : 'these photos'} for people they let in.</Text> : null}
-            </View>
-          ) : own ? (
-            <View style={[s.card, card]}>
-              <Text style={[s.noteText, { color: th.muted }]}>Bare walls. Hang up to 3 photos.</Text>
-            </View>
-          ) : null}
 
           {inc ? (
             <View style={[s.card, { backgroundColor: th.tint, borderColor: th.borderStrong }]}>
@@ -466,7 +420,6 @@ export default function RoomScreen({ route, navigation }) {
               {[
                 `Just you and ${name}. No timer, no per-message fees.`,
                 `Voice and video calls, if ${name} opens them.`,
-                ...(veiled ? [`${veiled} more ${veiled === 1 ? 'photo' : 'photos'} ${name} saves for people inside.`] : []),
               ].map((line) => (
                 <View key={line} style={s.doorRow}>
                   <View style={[s.dot, s.dotSm, { backgroundColor: th.accent, marginTop: rp(7) }]} />
@@ -482,8 +435,6 @@ export default function RoomScreen({ route, navigation }) {
       {entrance && cid ? (
         <Entrance
           th={th} name={name} font={font} welcome={room.welcome_message}
-          gallery={gallery}
-          onOpenMedia={(g) => setBig(g)}
           onStart={(line) => openChat(cid, line)}
           onClose={() => setEntrance(false)}
         />
@@ -529,9 +480,6 @@ const s = StyleSheet.create({
   vibe: { fontSize: rf(11), borderWidth: 1, paddingHorizontal: rp(9), paddingVertical: rp(3), borderRadius: 999 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
-  frameWrap: { width: '31.6%' },
-  frame: { width: '100%', aspectRatio: 3 / 4, borderRadius: rs(14), borderWidth: 1, overflow: 'hidden' },
-  veiled: { alignItems: 'center', justifyContent: 'center' },
   noteText: { fontSize: FONT.sm, lineHeight: FONT.sm * 1.45 },
   pitchMedia: { width: rs(200), height: rs(200), borderRadius: RADIUS.md },
   pitchText: { fontSize: FONT.md, lineHeight: FONT.md * 1.45 },

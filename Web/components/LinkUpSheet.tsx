@@ -14,11 +14,9 @@ import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import { Camera, Flame, X } from "lucide-react";
 
 const MAX_CLUE_VIDEO_SECONDS = 30;
-const MAX_PEEK = 3;
 
 // The host's door rule (Backend unlock_requests.py DOOR_COPY / door_for).
-type Door = { door_rule: "line" | "line_peek" | "voice"; door_copy: string; min_pitch: number; voice_seconds: [number, number];
-  my_room: { media_url: string; media_type: string }[] };
+type Door = { door_rule: "line" | "line_peek" | "voice"; door_copy: string; min_pitch: number; voice_seconds: [number, number] };
 
 type Clue = { file: File; kind: "image" | "video"; url: string; seconds: number };
 
@@ -54,7 +52,6 @@ export default function LinkUpSheet({
   const [intents, setIntents] = useState<string[]>([]);
   const [ageGate, setAgeGate] = useState(false);
   const [door, setDoor] = useState<Door | null>(null);
-  const [peek, setPeek] = useState<string[]>([]);
   const [voice, setVoice] = useState<VoiceDraft>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const balance = user?.coin_balance ?? 0;
@@ -71,12 +68,10 @@ export default function LinkUpSheet({
   const minPitch = door?.min_pitch ?? 3;
   const hasLine = pitch.trim().length >= minPitch;
   const voiceOk = !!voice && voice.seconds >= (door?.voice_seconds?.[0] ?? 2);
-  const hasPeek = peek.length > 0 || !!clue || voiceOk;
+  const hasPeek = !!clue || voiceOk;
   const missing = rule === "voice" ? (voiceOk ? "" : "a voice note")
     : rule === "line_peek" ? [!hasLine && "a line", !hasPeek && "a peek"].filter(Boolean).join(" and ")
     : hasLine ? "" : "a line";
-  const togglePeek = (url: string) =>
-    setPeek((cur) => (cur.includes(url) ? cur.filter((x) => x !== url) : cur.length >= MAX_PEEK ? cur : [...cur, url]));
   useEffect(() => () => { if (clue) URL.revokeObjectURL(clue.url); }, [clue]);
 
   async function pick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -111,7 +106,6 @@ export default function LinkUpSheet({
       if (viaProfile) body.via_profile = true;
       if (pitch.trim()) body.pitch = pitch.trim();
       if (intents.length) body.intents = intents;
-      if (peek.length) body.peek_urls = peek;
       if (voiceOk && voice) {
         try {
           body.voice_url = await uploadFile(voice.blob, "voice");
@@ -207,25 +201,6 @@ export default function LinkUpSheet({
           </div>
         </div>
 
-        {rule !== "line" || (door?.my_room.length ?? 0) > 0 ? (
-          <div className="lu-peek">
-            <label>Show a peek <small>{rule === "line_peek" ? "pick from your Room, or add a photo or voice note below" : "optional"}</small></label>
-            {door && door.my_room.length ? (
-              <div className="lu-peek-grid">
-                {door.my_room.map((g) => (
-                  <button type="button" key={g.media_url} className={peek.includes(g.media_url) ? "on" : ""} onClick={() => togglePeek(g.media_url)}
-                    aria-pressed={peek.includes(g.media_url)} aria-label={g.media_type === "video" ? "Video from your Room" : "Photo from your Room"}>
-                    {g.media_type === "video" ? <video src={g.media_url} muted playsInline preload="metadata" /> : <img src={g.media_url} alt="" />}
-                    {peek.includes(g.media_url) ? <span className="lu-peek-on">✓</span> : null}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="u-hint">Your Room has no photos yet. <Link href="/chat-setup?tab=room">Add some</Link>, or attach one below.</p>
-            )}
-            <small className="u-hint">Only {name} sees what you pick, even if your Room is private. It arrives blurred until they tap, and disappears if they say no.</small>
-          </div>
-        ) : null}
 
         <div className="u-clue">
           <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={pick} />
@@ -238,7 +213,7 @@ export default function LinkUpSheet({
           ) : (
             <button type="button" className="u-clue-add" onClick={() => fileInput.current?.click()}>
               <Camera size={16} strokeWidth={2} aria-hidden />
-              {rule === "line_peek" && !peek.length ? "Or add a photo or short clip" : "Add a photo or short clip (optional)"}
+              {rule === "line_peek" ? "Add a photo or short clip" : "Add a photo or short clip (optional)"}
             </button>
           )}
           <p className="u-hint">A clue of who&apos;s asking. Keep it decent.</p>

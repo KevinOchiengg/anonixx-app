@@ -6,13 +6,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { FONTS_HREF, fontStyleById, type GalleryItem } from "@/lib/chatTheme";
+import { FONTS_HREF, fontStyleById } from "@/lib/chatTheme";
 import { roomThemeById, roomThemeVars, statusLabel } from "@/lib/roomThemes";
 
 type Me = {
   anonymous_name?: string; profile_picture_url?: string | null; room_theme?: string; font_style?: string;
-  room_status?: string | null; intro?: string | null; welcome_message?: string | null; gallery?: GalleryItem[];
-  gallery_visibility?: string;
+  room_status?: string | null; intro?: string | null; welcome_message?: string | null;
   welcome_visibility?: string;
 };
 
@@ -25,10 +24,8 @@ export default function MyRoomPanel() {
   const t = roomThemeById(me.room_theme);
   const name = me.anonymous_name || "Your Room";
   const status = statusLabel(me.room_status);
-  const gallery = me.gallery || [];
   const steps = [
     { done: !!me.welcome_message, label: "Welcome note", hint: me.welcome_message ? `“${me.welcome_message}”` : "The first thing someone reads when you let them in." },
-    { done: gallery.length > 0, label: `Welcome media ${gallery.length}/3`, hint: gallery.length ? (me.gallery_visibility === "inside" ? "Only people inside see them." : me.gallery_visibility === "only_me" ? "Hidden from everyone." : "Everyone peeking sees them.") : "Photos or short videos for your walls." },
   ];
 
   return (
@@ -40,16 +37,6 @@ export default function MyRoomPanel() {
         <b className="mr-name" style={fontStyleById(me.font_style)}>{name}</b>
         {status ? <span className="mr-status">{status}</span> : null}
         <p className="mr-intro" style={fontStyleById(me.font_style)}>{me.intro || "No intro yet. It’s the first thing they read."}</p>
-        <div className="mr-slots">
-          {[0, 1, 2].map((i) => {
-            const g = gallery[i];
-            return (
-              <Link key={i} href="/chat-setup?tab=welcome" className="mr-slot" aria-label={g ? `Welcome media ${i + 1}` : `Add welcome media ${i + 1}`}>
-                {g ? (g.media_type === "video" ? <video src={g.media_url} muted playsInline preload="metadata" /> : <Image src={g.media_url} alt="" width={120} height={160} />) : <span>+</span>}
-              </Link>
-            );
-          })}
-        </div>
         <div className="mr-acts">
           {user?.id ? <Link href={`/room/${user.id}`} className="mr-btn">See it as a visitor</Link> : null}
           <Link href="/chat-setup?tab=appearance" className="mr-btn accent">Personalize</Link>

@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, Eye, ImagePlus, Lock, Mic, Palette, Sparkles } from 'lucide-react-native';
+import { Check, Eye, Lock, Mic, Palette, Sparkles } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, RADIUS } from '../../utils/responsive';
 import T from '../../utils/theme';
 import { API_BASE_URL } from '../../config/api';
@@ -38,11 +38,9 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
   const font = CHAT_FONT_MAP[room.font_style] || CHAT_FONT_MAP[DEFAULT_CHAT_FONT];
   const name = room.anonymous_name || 'Your Room';
   const status = statusLabel(room.room_status);
-  const gallery = room.gallery || [];
   const edit = (tab) => navigation.navigate('ChatProfileSetup', { tab });
   const steps = [
     { done: !!room.welcome_message, label: 'Welcome note', hint: room.welcome_message ? `“${room.welcome_message}”` : 'The first thing someone reads when you let them in.' },
-    { done: gallery.length > 0, label: `Welcome media ${gallery.length}/3`, hint: gallery.length ? (room.gallery_visibility === 'inside' ? 'Only people inside see them.' : room.gallery_visibility === 'only_me' ? 'Hidden from everyone.' : 'Everyone peeking sees them.') : 'Photos or short videos for your walls.' },
   ];
 
   return (
@@ -66,17 +64,6 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
         <Text style={[s.intro, { color: th.muted, fontFamily: font }]} numberOfLines={3}>
           {room.intro || 'No intro yet. It’s the first thing they read.'}
         </Text>
-        <View style={s.slots}>
-          {[0, 1, 2].map((i) => {
-            const g = gallery[i];
-            return (
-              <TouchableOpacity key={i} style={[s.slot, { borderColor: th.border, backgroundColor: th.surface }]} onPress={() => edit('welcome')} accessibilityLabel={g ? `Welcome media ${i + 1}` : `Add welcome media ${i + 1}`}>
-                {g ? <Image source={{ uri: g.media_url }} style={StyleSheet.absoluteFill} /> : <ImagePlus size={rs(18)} color={th.muted} />}
-                {g?.media_type === 'video' ? <Text style={s.slotBadge}>▶</Text> : null}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
         <View style={s.heroActs}>
           <TouchableOpacity style={[s.heroBtn, { borderColor: th.borderStrong }]} onPress={() => me && navigation.navigate('Room', { userId: me })}>
             <Eye size={rs(15)} color={th.text} />
@@ -131,9 +118,6 @@ const s = StyleSheet.create({
   name: { fontSize: rf(23), marginTop: rp(4) },
   status: { fontSize: rf(12), fontWeight: '600', borderWidth: 1, borderRadius: 999, paddingHorizontal: rp(11), paddingVertical: rp(4), overflow: 'hidden' },
   intro: { fontSize: rf(14), lineHeight: rf(20), textAlign: 'center', maxWidth: '92%' },
-  slots: { flexDirection: 'row', gap: rp(8), marginTop: rp(6), alignSelf: 'stretch' },
-  slot: { flex: 1, aspectRatio: 3 / 4, borderRadius: rs(12), borderWidth: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  slotBadge: { position: 'absolute', bottom: rp(6), right: rp(8), color: '#fff', fontSize: rf(11) },
   heroActs: { flexDirection: 'row', gap: rp(8), alignSelf: 'stretch', marginTop: rp(8) },
   heroBtn: { flex: 1, flexDirection: 'row', gap: rp(6), height: rs(44), borderRadius: RADIUS.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   heroBtnText: { fontFamily: 'DMSans-Bold', fontSize: rf(14) },
