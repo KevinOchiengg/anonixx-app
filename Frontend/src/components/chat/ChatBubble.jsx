@@ -13,9 +13,11 @@ import VoiceWaveform from '../common/VoiceWaveform';
 // Reactions (same set the backend accepts). Double-tap a message for the first one.
 export const REACTIONS = ['🔥', '😈', '💋', '🥵', '😂', '🖤'];
 
-// My bubbles: coral into rose. Seen ticks are a bright ice blue so they read on coral.
-export const OWN_GRADIENT = ['#FF6B4F', '#E8456E'];
+// My bubbles: soft gold, with dark ink text. Seen ticks: deep blue on gold, ice blue elsewhere.
+export const OWN_GRADIENT = ['#E6C584', '#C99A52'];
+export const INK = '#1C1609';
 const SEEN = '#A8E6FF';
+const SEEN_ON_GOLD = '#1E3F9C';
 
 // Short label for the reply banner (same idea as the backend's _message_preview_text).
 export function messagePreviewLabel(item) {
@@ -58,14 +60,14 @@ const ReactionRow = React.memo(({ item, onReact }) => {
 });
 
 // Time, and on my messages a tick: one = sent, two in ice blue = seen.
-function Meta({ item, light, overlay }) {
-  const color = overlay ? '#fff' : light ? 'rgba(255,255,255,0.75)' : T.textMute;
+function Meta({ item, onGold, overlay }) {
+  const color = overlay ? '#fff' : onGold ? 'rgba(28,22,9,0.62)' : T.textMute;
   return (
     <View style={[s.meta, overlay && s.metaOverlay]}>
       <Text style={[s.time, { color }]}>{item.time_ago}</Text>
       {item.is_own && !item.deleted ? (
         item.seen
-          ? <CheckCheck size={rs(14)} color={SEEN} strokeWidth={2.4} />
+          ? <CheckCheck size={rs(14)} color={onGold ? SEEN_ON_GOLD : SEEN} strokeWidth={2.4} />
           : <Check size={rs(14)} color={color} strokeWidth={2.4} />
       ) : null}
     </View>
@@ -88,10 +90,10 @@ const ViewOnceBubble = React.memo(({ item, onOpen, onLongPress, corner }) => {
       style={[s.viewOnce, corner, sealed && s.viewOnceSealed, isOwn && s.viewOnceOwn]}
     >
       {item.opened || isOwn
-        ? <Eye size={rs(16)} color={isOwn ? '#fff' : T.textMute} strokeWidth={2} />
+        ? <Eye size={rs(16)} color={isOwn ? INK : T.textMute} strokeWidth={2} />
         : <Lock size={rs(16)} color={T.gold} strokeWidth={2} />}
-      <Text style={[s.viewOnceText, sealed && s.viewOnceTextSealed, isOwn && { color: '#fff' }]}>{label}</Text>
-      <Meta item={item} light={isOwn} />
+      <Text style={[s.viewOnceText, sealed && s.viewOnceTextSealed, isOwn && { color: INK }]}>{label}</Text>
+      <Meta item={item} onGold={isOwn} />
     </GHTouchableOpacity>
   );
 });
@@ -105,7 +107,7 @@ const ReplyQuote = React.memo(({ replyTo, isOwn, otherName }) => (
         {replyTo.is_own ? 'You' : (otherName || 'them')}
       </Text>
       <View style={s.replyQuoteRow}>
-        <PreviewIcon type={replyTo.media_type} color={isOwn ? 'rgba(255,255,255,0.85)' : T.textMute} size={rs(11)} />
+        <PreviewIcon type={replyTo.media_type} color={isOwn ? 'rgba(28,22,9,0.7)' : T.textMute} size={rs(11)} />
         <Text style={[s.replyQuotePreview, isOwn && s.replyQuotePreviewOwn]} numberOfLines={1}>
           {replyTo.preview}
         </Text>
@@ -226,7 +228,7 @@ export default React.memo(function ChatBubble({
       <LinearGradient colors={OWN_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.bubble, s.bubbleOwn, corner]}>
         {quote}
         <Text style={[s.bubbleText, fontFamily && { fontFamily }, s.bubbleTextOwn]}>{item.content}</Text>
-        <Meta item={item} light />
+        <Meta item={item} onGold />
       </LinearGradient>
     );
   } else {
@@ -274,18 +276,18 @@ const s = StyleSheet.create({
     maxWidth: '80%', borderRadius: R, paddingTop: rp(8), paddingBottom: rp(6), paddingHorizontal: rp(13), gap: rp(2),
   },
   bubbleOwn: {
-    shadowColor: '#E8456E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 10, elevation: 3,
+    shadowColor: '#C99A52', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 3,
   },
   bubbleTheir: { backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)' },
   tailOwn: { borderBottomRightRadius: rs(5) },
   tailTheir: { borderBottomLeftRadius: rs(5) },
   bubbleText: { fontFamily: 'DMSans-Regular', fontSize: FONT.md, color: T.text, lineHeight: rf(22), letterSpacing: 0.15 },
-  bubbleTextOwn: { color: '#fff' },
+  bubbleTextOwn: { color: INK },
   meta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: rp(3), marginTop: rp(1) },
   metaOverlay: { position: 'absolute', right: rp(9), bottom: rp(7) },
   time: { fontFamily: 'DMSans-Medium', fontSize: rf(10.5), letterSpacing: 0.2 },
   voiceWrap: { maxWidth: '82%', borderRadius: R, paddingHorizontal: rp(10), paddingTop: rp(8), paddingBottom: rp(6), gap: rp(2) },
-  voiceOwn: { backgroundColor: 'rgba(255,107,79,0.16)', borderWidth: 1, borderColor: 'rgba(255,107,79,0.28)' },
+  voiceOwn: { backgroundColor: 'rgba(217,178,111,0.14)', borderWidth: 1, borderColor: 'rgba(217,178,111,0.32)' },
   voiceTheir: { backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)' },
   mediaBubble: { maxWidth: '70%', borderRadius: R, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   mediaImage: { width: rs(224), height: rs(240), backgroundColor: T.surfaceAlt },
@@ -302,14 +304,14 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', gap: rp(7), backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: rs(10), paddingVertical: rp(6), paddingHorizontal: rp(8), marginBottom: rp(4),
   },
-  replyQuoteOwn: { backgroundColor: 'rgba(0,0,0,0.16)' },
+  replyQuoteOwn: { backgroundColor: 'rgba(28,22,9,0.1)' },
   replyQuoteBar: { width: rs(3), alignSelf: 'stretch', borderRadius: rs(2), backgroundColor: T.primary, minHeight: rs(24) },
-  replyQuoteBarOwn: { backgroundColor: '#fff' },
+  replyQuoteBarOwn: { backgroundColor: INK },
   replyQuoteName: { fontFamily: 'DMSans-Bold', fontSize: rf(11.5), color: T.primary },
-  replyQuoteNameOwn: { color: '#fff' },
+  replyQuoteNameOwn: { color: INK },
   replyQuoteRow: { flexDirection: 'row', alignItems: 'center', gap: rp(4), marginTop: rp(1) },
   replyQuotePreview: { flexShrink: 1, fontFamily: 'DMSans-Regular', fontSize: rf(11.5), color: T.textMute },
-  replyQuotePreviewOwn: { color: 'rgba(255,255,255,0.85)' },
+  replyQuotePreviewOwn: { color: 'rgba(28,22,9,0.7)' },
   deletedText: { fontFamily: 'DMSans-Italic', fontSize: FONT.sm, color: T.textMute },
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: rp(4), paddingVertical: rp(13) },
   typingDot: { width: rs(7), height: rs(7), borderRadius: rs(4), backgroundColor: 'rgba(255,255,255,0.6)' },
@@ -328,7 +330,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
   },
   viewOnceSealed: { borderColor: 'rgba(251,191,36,0.45)', backgroundColor: 'rgba(251,191,36,0.08)' },
-  viewOnceOwn: { backgroundColor: '#E8566A', borderColor: 'transparent' },
+  viewOnceOwn: { backgroundColor: '#D7B06C', borderColor: 'transparent' },
   viewOnceText: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textSec, flexShrink: 1 },
   viewOnceTextSealed: { fontFamily: 'DMSans-Bold', color: T.gold },
 });

@@ -42,8 +42,8 @@
   background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.09); color: var(--fg);
 }
 .chat.u-themed .chat-log .bubble.own {
-  background: linear-gradient(135deg, #ff6b4f, #e8456e); border-color: transparent; color: #fff;
-  box-shadow: 0 4px 14px rgba(232, 69, 110, 0.28);
+  background: linear-gradient(135deg, #e6c584, #c99a52); border-color: transparent; color: #1c1609;
+  box-shadow: 0 4px 14px rgba(201, 154, 82, 0.3);
 }
 .chat.u-themed .chat-log .bubble.end { margin-bottom: 10px; border-bottom-left-radius: 6px; }
 .chat.u-themed .chat-log .bubble.own.end { border-bottom-left-radius: 20px; border-bottom-right-radius: 6px; }
@@ -53,7 +53,8 @@
 @keyframes bubble-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .chat.u-themed .chat-log .bubble.fresh { animation: none; } }
 .b-meta { display: inline-flex; align-items: center; gap: 3px; align-self: flex-end; font-size: 10.5px; font-weight: 500; opacity: 0.75; }
-.bubble.own .b-meta { opacity: 0.85; }
+.bubble.own .b-meta { opacity: 0.7; }
+.bubble.own .b-tick.seen { color: #1e3f9c; }
 .b-tick.seen { color: #a8e6ff; }
 .chat.u-themed .reply-quote { border-left-color: currentColor; background: rgba(0, 0, 0, 0.16); border-radius: 10px; padding: 5px 9px; }
 
@@ -75,7 +76,7 @@
 .chat.u-themed .chat-pill-field input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 10px 4px; border-radius: 0; }
 .chat-send {
   flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; border: 0; cursor: pointer;
-  color: #fff; background: linear-gradient(135deg, #ff6b4f, #e8456e); box-shadow: 0 4px 14px rgba(232, 69, 110, 0.4);
+  color: #1c1609; background: linear-gradient(135deg, #e6c584, #c99a52); box-shadow: 0 4px 14px rgba(201, 154, 82, 0.4);
   transition: transform 0.12s ease;
 }
 .chat-send:active:not(:disabled) { transform: scale(0.9); }
