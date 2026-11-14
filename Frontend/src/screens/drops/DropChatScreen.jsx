@@ -588,7 +588,7 @@ const s = StyleSheet.create({
 
   // Frosted header: back, avatar with an online ring, name and status, call and more.
   header: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
-  headerTint: { backgroundColor: Platform.OS === 'ios' ? 'rgba(18,10,20,0.45)' : 'rgba(18,10,20,0.88)' },
+  headerTint: { backgroundColor: Platform.OS === 'ios' ? 'rgba(10,15,28,0.45)' : 'rgba(10,15,28,0.9)' },
   headerRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8), paddingHorizontal: rp(10) },
   roundBtn: {
     width: rs(38), height: rs(38), borderRadius: rs(19), alignItems: 'center', justifyContent: 'center',
@@ -612,7 +612,7 @@ const s = StyleSheet.create({
   replyBanner: {
     flexDirection: 'row', alignItems: 'center', gap: rp(10), marginHorizontal: rp(12), marginBottom: rp(6),
     paddingHorizontal: rp(12), paddingVertical: rp(9), borderRadius: RADIUS.lg,
-    backgroundColor: 'rgba(24,16,26,0.94)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(18,26,44,0.94)', borderWidth: 1, borderColor: 'rgba(217,178,111,0.16)',
   },
   replyRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5), marginTop: rp(2) },
   replyBar: { width: rs(3), alignSelf: 'stretch', borderRadius: rs(2), backgroundColor: T.primary, minHeight: rs(28) },
