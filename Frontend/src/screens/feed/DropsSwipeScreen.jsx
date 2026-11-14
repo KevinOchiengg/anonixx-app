@@ -207,6 +207,7 @@ const RAIL_TINTS = {
   save:    { c: '#ffd27a', ca: '#ffb81f', bg: 'rgba(255,184,31,0.2)', line: 'rgba(255,210,122,0.4)' },
   more:    { c: '#e8eaf2', ca: '#e8eaf2', bg: 'rgba(255,255,255,0.14)', line: 'rgba(255,255,255,0.28)' },
   share:   { c: '#8fe8de', ca: '#8fe8de', bg: 'rgba(143,232,222,0.16)', line: 'rgba(143,232,222,0.35)' },
+  avatar:  { c: '#c6f08a', ca: '#c6f08a', bg: 'rgba(198,240,138,0.16)', line: 'rgba(198,240,138,0.4)' },
 };
 
 const RailIcon = ({ icon, tint, active }) => {
@@ -224,7 +225,8 @@ const RailIcon = ({ icon, tint, active }) => {
         borderWidth: 1.5, borderColor: t.line, backgroundColor: 'rgba(10,12,18,0.5)',
       }}
     >
-      {React.cloneElement(icon, { size: Math.round(chip * 0.54), color, ...(filled ? { fill: color } : null) })}
+      {/* Share's dots sit in the icon's corners, so it goes a touch smaller to clear the ring. */}
+      {React.cloneElement(icon, { size: Math.round(chip * (tint === 'share' ? 0.46 : 0.54)), color, ...(filled ? { fill: color } : null) })}
     </View>
   );
 };
@@ -1953,12 +1955,12 @@ const sw = StyleSheet.create({
   // Author avatar at the top of the rail, above Like.
   railAvatarRing: {
     width: rs(40), height: rs(40), borderRadius: rs(20),
-    borderWidth: 1.5, borderColor: 'rgba(255,99,74,0.6)', overflow: 'hidden',
+    borderWidth: 1.5, borderColor: RAIL_TINTS.avatar.line, overflow: 'hidden',
     backgroundColor: 'rgba(10,12,18,0.5)', marginBottom: rp(2),
   },
   railAvatarImg: { width: '100%', height: '100%' },
   railAvatarFallback: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  railAvatarInitial: { fontSize: rf(17), fontWeight: '800', color: THEME.primary },
+  railAvatarInitial: { fontSize: rf(17), fontWeight: '800', color: RAIL_TINTS.avatar.c },
 
 
 

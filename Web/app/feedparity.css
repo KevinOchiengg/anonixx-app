@@ -508,12 +508,15 @@
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 .rail button.r-act.on { color: var(--ca); }
-.rail button.r-act.on svg { background: var(--cg); border-color: var(--ca); box-shadow: 0 0 14px var(--cglow); animation: likepop 0.28s ease-out, chipring 0.55s ease-out; }
-.rail button.r-save.on svg { animation: savedrop 0.4s cubic-bezier(0.3, 1.5, 0.5, 1), chipring 0.55s ease-out; }
+/* liked / saved: only the icon changes colour; the circle stays as it is */
+.rail button.r-act.on svg { animation: likepop 0.28s ease-out; }
+.rail button.r-save.on svg { animation: savedrop 0.4s cubic-bezier(0.3, 1.5, 0.5, 1); }
 .r-like { --c: #ff9d8c; --ca: #ff634a; --cb: rgba(255, 99, 74, 0.4); --cg: rgba(255, 99, 74, 0.2); --cglow: rgba(255, 99, 74, 0.55); }
 .r-cmt { --c: #cdd5ff; --cb: rgba(205, 213, 255, 0.32); }
 .r-save { --c: #ffd27a; --ca: #ffb81f; --cb: rgba(255, 210, 122, 0.4); --cg: rgba(255, 184, 31, 0.2); --cglow: rgba(255, 184, 31, 0.5); }
 .r-share { --c: #8fe8de; --cb: rgba(143, 232, 222, 0.35); }
+/* share's dots sit in the icon's corners: more inset so they clear the ring */
+.rail button.r-share svg { padding: calc(var(--chip) * 0.26); }
 @keyframes chipring { from { outline: 0 solid rgba(255, 255, 255, 0.35); outline-offset: 0; } to { outline: 10px solid transparent; outline-offset: 0; } }
 @keyframes savedrop { 0% { transform: translateY(-9px) scale(0.85); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .rail button.r-act.on svg { animation: none; } }
