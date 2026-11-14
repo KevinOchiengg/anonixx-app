@@ -407,7 +407,7 @@ const RailAvatar = ({ post, navigation }) => {
 const posterCache = new Map();
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, onUnlock, headerHeight = 0, knockCost = UNLOCK_COST,
+  commentCount, isOwnPost, onLinkUp, onMore, onShare, navigation, chromeHidden = false, onUnlock, headerHeight = 0, knockCost = UNLOCK_COST,
   speed = 1, onSpeed, onDuration,
 }) => {
   const likedRef = useRef(liked);
@@ -726,7 +726,7 @@ const VideoSlide = ({
             />
             <ActionBtn
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
-              onPress={() => sharePost(post)}
+              onPress={onShare}
             />
             <ViewsStat count={post.views_count} />
           </View>
@@ -761,7 +761,7 @@ const VideoSlide = ({
 // ─── AUDIO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 const AudioSlide = ({
   post, isActive, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, knockCost = UNLOCK_COST,
+  commentCount, isOwnPost, onLinkUp, onMore, onShare, navigation, chromeHidden = false, knockCost = UNLOCK_COST,
 }) => {
   const audioPlayer = useAudioPlayer(null);
   const audioStatus = useAudioPlayerStatus(audioPlayer);
@@ -856,7 +856,7 @@ const AudioSlide = ({
           />
           <ActionBtn
             tint="share" icon={<Share2 size={26} color="#fff" />} count={null}
-            onPress={() => sharePost(post)}
+            onPress={onShare}
           />
           <ViewsStat count={post.views_count} />
         </View>
@@ -947,7 +947,7 @@ const fontOf = (id) => {
 
 const TextSlide = ({
   post, onLike, liked, likesCount, savesCount, onSave, saved, onComment, commentCount,
-  isOwnPost, onLinkUp, onMore, navigation, headerHeight = 0, chromeHidden = false, isActive = false,
+  isOwnPost, onLinkUp, onMore, onShare, navigation, headerHeight = 0, chromeHidden = false, isActive = false,
   knockCost = UNLOCK_COST,
 }) => {
   const [liveUntil, extendLive] = useLiveUntil(post);
@@ -1052,7 +1052,7 @@ const TextSlide = ({
             />
             <ActionBtn
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
-              onPress={() => sharePost(post)}
+              onPress={onShare}
             />
             <ViewsStat count={post.views_count} />
           </View>
@@ -1473,6 +1473,16 @@ export default function DropsSwipeScreen({ navigation, route }) {
     }
   }, [isAuthenticated, navigation, showToast]);
 
+  // Sharing is for members: guests are sent to sign in, like Like and Save.
+  const askToSignIn = useCallback(() => {
+    showToast({ type: 'warning', message: 'Sign in to share it.' });
+    navigation.navigate('AuthNav', { screen: 'Login' });
+  }, [showToast, navigation]);
+  const handleShare = useCallback((post) => {
+    if (!isAuthenticated) { askToSignIn(); return; }
+    sharePost(post);
+  }, [isAuthenticated, askToSignIn]);
+
   // Not interested: gone from this feed now, and the server keeps it out of later pages.
   const handleNotInterested = useCallback(async (post) => {
     setPosts((prev) => prev.filter((p) => p.id !== post.id));
@@ -1693,6 +1703,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       isOwnPost: item.is_own_post || false,
       onLinkUp: () => handleLinkUp(item),
       onMore: (extra) => setPostMenu({ post: item, ...(extra || {}) }),
+      onShare: () => handleShare(item),
       navigation,
       headerHeight,
       chromeHidden: chromeHidden || clearMode,
@@ -1717,7 +1728,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     return <View style={{ height: listHeight, width }}>{slide}</View>;
   }, [
     activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
-    handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress, handleUnlock,
+    handleLike, handleSave, handleLinkUp, handleVote, handleShare, handleMarketOpen, handleAdPress, handleUnlock,
     isAuthenticated, navigation, headerHeight, chromeHidden, clearMode, playSpeed, user?.is_premium, noteDuration,
   ]);
 
@@ -1837,8 +1848,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
         saved={postMenu ? saveMap[postMenu.post.id] || false : false}
         onClose={() => setPostMenu(null)}
         onSave={(p) => handleSave(p.id)}
-        onShare={sharePost}
+        onShare={handleShare}
         onCopyLink={async (p) => {
+          if (!isAuthenticated) { askToSignIn(); return; }
           try { await Clipboard.setStringAsync(dropLink(p)); showToast({ type: 'success', message: 'Link copied.' }); } catch {}
         }}
         onClear={() => setClearMode(true)}

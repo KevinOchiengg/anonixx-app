@@ -474,26 +474,27 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
   }, []);
 
   const share = useCallback(async (post: Post) => {
+    if (!user) { setGate("Sign in to share it."); return; }
     const url = `${window.location.origin}/drop/${post.id}`;
     const text = (post.content || "").trim();
     try {
       if (navigator.share) {
         await navigator.share({ title: "Anonixx", text: text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"` : undefined, url });
-        if (getToken()) api(`/drops/${post.id}/share`, { method: "POST" }).catch(() => {});
-        else fetch(`${API_URL}/drops/${post.id}/share`, { method: "POST", headers: { "X-Device-Id": getDeviceId() } }).catch(() => {});
+        api(`/drops/${post.id}/share`, { method: "POST" }).catch(() => {});
       } else {
         await navigator.clipboard.writeText(url);
         flash("Link copied");
       }
     } catch { /* share sheet dismissed */ }
-  }, [flash]);
+  }, [flash, user]);
 
   // Long-press menu: one speed for every video this visit, Clear display, Copy link, Not interested.
   const [speed, setSpeed] = useState(1);
   const [clear, setClear] = useState(false);
   const copyLink = useCallback(async (post: Post) => {
+    if (!user) { setGate("Sign in to share it."); return; }
     try { await navigator.clipboard.writeText(`${window.location.origin}/drop/${post.id}`); flash("Link copied."); } catch {}
-  }, [flash]);
+  }, [flash, user]);
   const notInterested = useCallback((post: Post) => {
     setPosts((prev) => prev.filter((x) => x.id !== post.id));
     flash("Got it. Less like this.");
