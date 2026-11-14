@@ -15,12 +15,6 @@
 .msg-reactions button.mine { border-color: var(--rose); }
 
 /* top of the thread: the confession, who let who in, the knock; scrolls away */
-.chat-inside { align-self: stretch; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; padding: 14px; border-radius: 16px; border: 1px solid rgba(251, 191, 36, 0.28); background: linear-gradient(135deg, rgba(255, 99, 74, 0.16), rgba(251, 191, 36, 0.06)); font-size: 13.5px; }
-.chat-inside .ci-k { color: var(--gold); margin: 0; letter-spacing: 1.6px; }
-.chat-inside .ci-q { font-size: 15px; }
-.chat-inside p { margin: 0; color: var(--muted); }
-.chat-inside i { color: inherit; font-style: italic; }
-.chat-inside .dim { color: var(--faint); font-weight: 400; }
 .menu button.danger, .msg-actions button.danger { color: var(--danger, #e85d5d); }
 
 /* ── Chat, polished: frosted header and composer, gradient bubbles that group, real icons ── */
@@ -86,9 +80,3 @@
 }
 .chat-send:active:not(:disabled) { transform: scale(0.9); }
 .chat-send:disabled { opacity: 0.5; }
-.chat.u-themed .chat-inside {
-  flex-direction: row; gap: 12px; margin: 2px 0 16px; padding: 14px; border-radius: 18px;
-  border: 1px solid rgba(255, 107, 79, 0.26); background: linear-gradient(135deg, rgba(255, 107, 79, 0.18), rgba(232, 69, 110, 0.06));
-}
-.chat.u-themed .chat-inside .ci-badge { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--rose); background: rgba(255, 107, 79, 0.16); }
-.chat.u-themed .chat-inside .ci-k { display: block; color: var(--rose); margin: 0 0 4px; letter-spacing: 1.6px; }

@@ -23,7 +23,7 @@ import VoiceWaveform from '../../components/common/VoiceWaveform';
 import ChatInputBar from '../../components/common/ChatInputBar';
 import ChatBackground from '../../components/chat/ChatBackground';
 import ChatBubble, { DateSeparator, TypingBubble, PreviewIcon, OWN_GRADIENT, messagePreviewLabel } from '../../components/chat/ChatBubble';
-import { ConfessionCard, EmptyChat } from '../../components/chat/ChatIntro';
+import { EmptyChat } from '../../components/chat/ChatIntro';
 import { ChatMenuSheet, MessageSheet } from '../../components/chat/ChatSheets';
 import ChatMediaViewer from '../../components/chat/ChatMediaViewer';
 import { useToast } from '../../components/ui/Toast';
@@ -490,7 +490,6 @@ export default function DropChatScreen({ route, navigation }) {
                 initialNumToRender={14}
                 maxToRenderPerBatch={10}
                 windowSize={10}
-                ListHeaderComponent={<ConfessionCard connection={connection} />}
                 ListFooterComponent={isOtherTyping ? <TypingBubble /> : null}
                 onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
               />

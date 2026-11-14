@@ -19,7 +19,7 @@ import useVoiceRecorder from "@/lib/useVoiceRecorder";
 import ChatInfo from "./rooms/ChatInfo";
 import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
-import { BellOff, EllipsisVertical, ImagePlus, Mic, Phone, Quote, SendHorizontal, X } from "lucide-react";
+import { BellOff, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, X } from "lucide-react";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
@@ -33,20 +33,6 @@ const REPORT_REASONS: [string, string][] = [
   ["abuse", "Abuse or harassment"], ["spam", "Spam"], ["explicit", "Unwanted explicit content"],
   ["self-harm-concern", "I'm worried about them"], ["other", "Other"],
 ];
-
-// Top of the thread: the confession you're both talking about. Scrolls away with the chat.
-function ConfessionCard({ conn }: { conn: Conn }) {
-  if (!conn.confession) return null;
-  return (
-    <div className="chat-inside">
-      <span className="ci-badge" aria-hidden><Quote size={14} strokeWidth={2.2} /></span>
-      <span>
-        <small className="ci-k">THE CONFESSION</small>
-        <p className="ci-q">{conn.confession}</p>
-      </span>
-    </div>
-  );
-}
 
 function Inner({ id }: { id: string }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -329,7 +315,6 @@ function Inner({ id }: { id: string }) {
         </div>
       ) : null}
       <div className="chat-log" onClick={() => menu && setMenu(null)}>
-        {conn ? <ConfessionCard conn={conn} /> : null}
         {msgs.map((m, i) => (
           <ChatBubble
             key={m.id}
