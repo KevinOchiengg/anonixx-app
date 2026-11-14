@@ -67,6 +67,26 @@ const signal = async (postId, path, body) => {
   } catch {}
 };
 
+// Slow network: a thin line sweeps out from the middle of the bottom edge, over and over,
+// until the video plays again (where the progress line sits).
+function BufferLine() {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(t, { toValue: 1, duration: 900, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[ss.bufferLine, {
+        opacity: t.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.9, 0.6, 0] }),
+        transform: [{ scaleX: t.interpolate({ inputRange: [0, 1], outputRange: [0.05, 1] }) }],
+      }]}
+    />
+  );
+}
+
 const sharePost = async (p) => {
   const text = (p.content || '').trim();
   const quote = text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"\n` : '';
@@ -688,11 +708,7 @@ const VideoSlide = ({
         </GestureDetector>
       )}
 
-      {playerStatus === 'loading' && slowLoad && (
-        <View style={ss.videoLoading} pointerEvents="none">
-          <ActivityIndicator color="rgba(255,255,255,0.45)" size="large" />
-        </View>
-      )}
+      {playerStatus === 'loading' && slowLoad && <BufferLine />}
 
       <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
 
@@ -1944,6 +1960,7 @@ const ss = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)', zIndex: 10,
   },
   progressFill: { height: '100%', backgroundColor: THEME.primary },
+  bufferLine: { position: 'absolute', bottom: 4, left: 0, right: 0, height: 2, backgroundColor: '#fff', zIndex: 11 },
   // Drag-to-scrub: a taller invisible strip catches the finger; while dragging, the line
   // thickens, gets a thumb, and the time shows large in the middle.
   scrubHit: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 18, zIndex: 9 },
@@ -1963,7 +1980,6 @@ const ss = StyleSheet.create({
     paddingHorizontal: rp(14), paddingVertical: rp(6), borderRadius: RADIUS.full, backgroundColor: 'rgba(10,12,20,0.6)',
   },
   fastText: { color: '#fff', fontSize: FONT.sm, fontWeight: '800' },
-  videoLoading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
 });
 
 const as = StyleSheet.create({

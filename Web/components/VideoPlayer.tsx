@@ -36,6 +36,12 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
   const [paused, setPaused] = useState(false);
   const [scrub, setScrub] = useState<number | null>(null); // seconds into the clip while dragging
   const [len, setLen] = useState(0);
+  // Slow network: the TikTok-style line sweeps along the bottom while the video stalls.
+  const [buffering, setBuffering] = useState(false);
+  const bufTimer = useRef<number | null>(null);
+  const stalled = () => { if (bufTimer.current === null) bufTimer.current = window.setTimeout(() => setBuffering(true), 600); };
+  const flowing = () => { if (bufTimer.current !== null) { window.clearTimeout(bufTimer.current); bufTimer.current = null; } setBuffering(false); };
+  useEffect(() => () => { if (bufTimer.current !== null) window.clearTimeout(bufTimer.current); }, []);
   const scrubbing = useRef(false);
   const resume = useRef(false);
   // A tap pauses after TAP_GAP, so a double tap (a like, in Slide) never pauses.
@@ -218,6 +224,11 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
         loop={!end}
         playsInline
         preload="auto"
+        onWaiting={stalled}
+        onStalled={stalled}
+        onPlaying={flowing}
+        onCanPlay={flowing}
+        onPause={flowing}
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
           setLandscape(!fillsFrame(v.videoWidth, v.videoHeight, v.parentElement));
@@ -268,6 +279,7 @@ export default function VideoPlayer({ src, poster, active, near, muted, edit, ra
           onClick={(e) => e.stopPropagation()}
         >
           <span className="vp-progress"><span ref={bar} /></span>
+          {buffering ? <span className="vp-buffer" aria-hidden /> : null}
         </div>
       ) : null}
     </div>
