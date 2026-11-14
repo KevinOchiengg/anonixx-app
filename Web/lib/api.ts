@@ -66,8 +66,7 @@ export type Post = {
 
 export type Sound = { id: string; title: string; mood: string; url: string };
 
-// taste_hint: a guest's strongest interest ("cat:linkup", "topic:gym", "mood:longing"), for the join card.
-export type FeedPage = { posts: Post[]; next_cursor: string | null; has_more: boolean; taste_hint?: string | null };
+export type FeedPage = { posts: Post[]; next_cursor: string | null; has_more: boolean };
 
 // Server-side fetches revalidate so crawlers get fast cached HTML but fresh posts still appear.
 async function get<T>(path: string, revalidate = 60): Promise<T | null> {

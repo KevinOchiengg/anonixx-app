@@ -57,12 +57,6 @@
 /* ---------- end of feed ---------- */
 .limit-slide { align-items: center; justify-content: center; text-align: center; gap: 10px; }
 .limit-moon { font-size: 56px; }
-/* guests: "join so it remembers" card */
-.join-slide h2 { max-width: 300px; font-size: 22px; line-height: 1.25; }
-.join-slide h2 em { font-style: normal; color: var(--rose); }
-.join-slide p { color: var(--muted); }
-.join-slide .join-row { display: flex; gap: 10px; margin-top: 6px; }
-.join-slide small { margin-top: 4px; color: var(--faint); font-size: 12px; }
 .nav-arrows { position: absolute; right: 8px; top: 50%; z-index: 5; display: none; flex-direction: column; gap: 8px; }
 
 /* ---------- comments ---------- */

@@ -75,9 +75,7 @@ async def public_feed(
         page = splice_promoted(page, await fetch_promoted(db, query, now))
 
     posts = [_public_post(p) for p in await batch_format_drops(page, None, db)]
-    # What the guest seems into, for the "join so it remembers" card. Never a poster.
-    hint = next((k for k in taste.pick_keys(viewer_taste) if not k.startswith("creator:")), None)
-    return {"posts": posts, "next_cursor": next_cursor, "has_more": has_more, "taste_hint": hint}
+    return {"posts": posts, "next_cursor": next_cursor, "has_more": has_more}
 
 
 @router.get("/drops/{drop_id}")

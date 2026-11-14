@@ -14,8 +14,7 @@ import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
 import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
-import { Eye, SatelliteDish, Sparkles } from "lucide-react";
-import { CATEGORIES } from "@/lib/confession";
+import { Eye, SatelliteDish } from "lucide-react";
 
 type Item =
   | { kind: "hero" }
@@ -23,8 +22,7 @@ type Item =
   | { kind: "ad"; key: string }
   | { kind: "promo"; key: string; ad: FeedAd }
   | { kind: "market"; key: string; item: MarketTease }
-  | { kind: "status" }
-  | { kind: "join"; key: string };
+  | { kind: "status" };
 
 type AuthedFeed = {
   posts: (Post & { type?: string })[];
@@ -41,20 +39,8 @@ const ADSENSE_ON = Boolean(process.env.NEXT_PUBLIC_ADSENSE_CLIENT && process.env
 const LOCATION_LABELS: Record<string, string> = { country: "Country", county: "Region", sub_county: "Area", estate: "Nearby" };
 const LOAD_AHEAD = 4;
 const CACHE_KEY = "anonixx.feed.cache.v1";
-// Guests: a "join so it remembers" card after JOIN_FIRST posts, then every JOIN_EVERY.
-const JOIN_FIRST = 8;
-const JOIN_EVERY = 25;
+// A guest who's been here before gets their own first page (nothing they've seen twice).
 const RETURNING_KEY = "anonixx.feed.returning";
-
-// "You keep stopping on …" from the guest's strongest interest.
-function hintLabel(hint?: string | null): string | null {
-  if (!hint) return null;
-  const [kind, val] = hint.split(":");
-  if (!val) return null;
-  if (kind === "cat") return CATEGORIES[val as keyof typeof CATEGORIES]?.label ?? null;
-  if (kind === "topic" || kind === "mood") return val.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
-  return null;
-}
 
 type Props = {
   initialPosts: Post[];
@@ -163,7 +149,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     return () => { live = false; };
   }, [fillAfterStart]);
 
-  const [hint, setHint] = useState<string | null>(null);
   useEffect(() => {
     if (!ready || user || startId || fillAfterStart || !initialPosts.length) return;
     let back = false;
@@ -174,7 +159,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       if (!live || authedRef.current || !page || !page.posts.length) return;
       setPosts(page.posts);
       setCursor(page.next_cursor);
-      setHint(page.taste_hint ?? null);
       setReplay([]);
     });
     return () => { live = false; };
@@ -235,9 +219,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       const next = posts[i + 1];
       const calm = post.sensitivity !== "mature" && next?.sensitivity !== "mature";
       if (!calm) return;
-      if (!user && (n === JOIN_FIRST || (n > JOIN_FIRST && (n - JOIN_FIRST) % JOIN_EVERY === 0))) {
-        out.push({ kind: "join", key: `join-${n}` });
-      }
       if (n % MARKET_EVERY === 0 && mIdx < market.length) {
         const m = market[mIdx++];
         out.push({ kind: "market", key: `market-${m.id}`, item: m });
@@ -259,7 +240,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       });
     }
     return out;
-  }, [posts, showHero, replay, ads, market, loadingMore, loadFailed, first, user]);
+  }, [posts, showHero, replay, ads, market, loadingMore, loadFailed, first]);
 
   // Out of new posts (no next page, or the server's session cap): add another replay round
   // as the viewer nears the end, so the scroll never hits a wall.
@@ -346,7 +327,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       } else {
         const page = await loadMoreClient(cursor);
         if (!page) throw new Error("load");
-        if (page.taste_hint) setHint(page.taste_hint);
         setPosts((prev) => {
           const seen = new Set(prev.map((p) => p.id));
           return [...prev, ...page.posts.filter((p) => !seen.has(p.id))];
@@ -558,21 +538,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
             if (it.kind === "ad") return <AdSlot key={it.key} index={i} />;
             if (it.kind === "promo") return <AdSlide key={it.key} ad={it.ad} index={i} />;
             if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;
-            if (it.kind === "join") {
-              const label = hintLabel(hint);
-              return (
-                <section key={it.key} className="slide limit-slide join-slide" data-idx={i}>
-                  <span className="limit-moon" aria-hidden><Sparkles strokeWidth={1.5} /></span>
-                  <h2>{label ? <>You keep stopping on <em>{label}</em>.</> : "Your feed's learning what you like."}</h2>
-                  <p>Join free so it remembers you.</p>
-                  <div className="join-row">
-                    <Link href="/signup" className="pill">Join Anonixx</Link>
-                    <Link href="/login" className="pill ghost">Sign in</Link>
-                  </div>
-                  <small>Or keep scrolling</small>
-                </section>
-              );
-            }
             if (it.kind === "status") {
               const bad = first === "failed" || loadFailed;
               return (

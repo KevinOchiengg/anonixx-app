@@ -2181,9 +2181,6 @@ async def get_drops_feed(
         "session_posts": new_session_posts,
         "next_cursor":   next_cursor,
         "is_guest":      current_user_id is None,
-        # a guest's strongest interest, for the "join so it remembers" card (never a poster)
-        "taste_hint":    None if current_user_id else next(
-            (k for k in taste.pick_keys(viewer_taste) if not k.startswith("creator:")), None),
         "streak":        streak_info,
     }
 
