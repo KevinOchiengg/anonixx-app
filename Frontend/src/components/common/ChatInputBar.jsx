@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0, elevation: 0, paddingTop: rp(6), paddingHorizontal: rp(12), alignItems: 'flex-end',
   },
   inputWrapFloating: {
-    backgroundColor: 'rgba(18,26,44,0.94)', borderColor: 'rgba(217,178,111,0.16)', borderRadius: rs(24),
+    backgroundColor: 'rgba(21,25,36,0.96)', borderColor: 'rgba(255,255,255,0.08)', borderRadius: rs(24),
     paddingHorizontal: rp(8), minHeight: rs(46),
     shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
   },

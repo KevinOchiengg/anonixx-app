@@ -317,9 +317,9 @@ const s = StyleSheet.create({
   reactionRowOwn: { justifyContent: 'flex-end', marginLeft: 0, marginRight: rp(8) },
   reactionPill: {
     flexDirection: 'row', alignItems: 'center', gap: rp(3), paddingHorizontal: rp(7), paddingVertical: rp(2),
-    borderRadius: 999, backgroundColor: '#141c2e', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 999, backgroundColor: '#151924', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
-  reactionPillMine: { borderColor: T.primaryBorder, backgroundColor: '#1c2236' },
+  reactionPillMine: { borderColor: T.primaryBorder, backgroundColor: '#1a1f2e' },
   reactionEmoji: { fontSize: rf(13) },
   reactionCount: { fontFamily: 'DMSans-Bold', fontSize: rf(10), color: T.textSec },
   viewOnce: {
