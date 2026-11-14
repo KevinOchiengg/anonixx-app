@@ -54,5 +54,4 @@ export const STARTERS = [
   "Tell me the part you didn't write.",
 ];
 
-export const MAX_INTRO = 160;
 export const MAX_WELCOME = 280;

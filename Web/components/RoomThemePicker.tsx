@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ROOM_THEMES, roomThemeById, roomThemeVars } from "@/lib/roomThemes";
 
-/** A Room in miniature: glow, avatar, name, intro, three frames and the Knock pill. */
+/** A Room in miniature: glow, avatar, name and the Knock pill. */
 export function RoomMini({ theme, name, big = false }: { theme: string; name?: string; big?: boolean }) {
   return (
     <div className={`rmini${big ? " big" : ""}`} style={roomThemeVars(theme)} aria-hidden>

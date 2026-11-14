@@ -22,7 +22,7 @@ type Preview = {
   user_id: string;
   room: {
     background_pattern: string; font_style: string; profile_picture_url: string | null; anonymous_name: string;
-    room_theme: string; intro: string | null; room_status: string | null; knocks_open: boolean; welcome_message: string | null;
+    room_theme: string; room_status: string | null; knocks_open: boolean; welcome_message: string | null;
   };
   inside: boolean;
   post: { id: string; kind: "hookup" | "confession" | null; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
@@ -283,11 +283,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
             </span>
             <h1 className="rm-name" style={font}>{name}</h1>
             {status ? <span className="rm-status"><i />{status}</span> : null}
-            {room.intro ? (
-              <p className="rm-intro" style={font}>{room.intro}</p>
-            ) : own ? (
-              <Link href="/chat-setup" className="rm-intro empty">Add a line about you. It&apos;s what they read first.</Link>
-            ) : null}
           </section>
 
           {room.welcome_message ? (

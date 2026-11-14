@@ -25,7 +25,7 @@ import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/pa
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel } from '../../config/linkup';
 import {
-  DEFAULT_ROOM_THEME, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
+  DEFAULT_ROOM_THEME, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
 } from '../../config/roomThemes';
 import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
 import KnockClues from '../../components/rooms/KnockClues';
@@ -85,7 +85,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [profilePictureUrl, setProfilePictureUrl] = useState(null);
   const [anonymousName, setAnonymousName]     = useState('');
   const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
-  const [intro, setIntro]                     = useState('');
   const [welcomeMessage, setWelcomeMessage]   = useState('');
   const [roomStatus, setRoomStatus]           = useState('');
   const [knocksOpen, setKnocksOpen]           = useState(true);
@@ -125,7 +124,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setProfilePictureUrl(data.profile_picture_url || null);
             setAnonymousName(data.anonymous_name || '');
             setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
-            setIntro(data.intro || '');
             setWelcomeMessage(data.welcome_message || '');
             setRoomStatus(data.room_status || '');
             setKnocksOpen(data.knocks_open !== false);
@@ -184,7 +182,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           background_pattern: backgroundPattern,
           font_style: fontStyle,
           profile_picture_url: profilePictureUrl,
-          intro,
           welcome_message: welcomeMessage,
           room_status: roomStatus,
           knocks_open: knocksOpen,
@@ -214,7 +211,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     } finally {
       setSaving(false);
     }
-  }, [backgroundPattern, fontStyle, profilePictureUrl, intro, welcomeMessage, roomStatus,
+  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeMessage, roomStatus,
       knocksOpen, breakHours, doorRule, listing, welcomeVisibility,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
@@ -379,17 +376,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         </TouchableOpacity>
         <Text style={styles.avatarHint}>Tap to change</Text>
 
-        <Text style={styles.sectionLabel}>About you</Text>
-        <TextInput
-          style={styles.input}
-          value={intro}
-          onChangeText={(v) => setIntro(v.slice(0, MAX_INTRO))}
-          placeholder="A line that makes them curious…"
-          placeholderTextColor={T.textMute}
-          multiline
-        />
-        <Text style={styles.sectionHint}>{intro.length}/{MAX_INTRO} · everyone peeking sees this. No numbers or handles.</Text>
-
         <Text style={styles.sectionLabel}>Status</Text>
         <View style={styles.chipRow}>
           {[{ id: '', label: 'None' }, ...ROOM_STATUSES].map((st) => (
@@ -431,7 +417,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         </View>
 
         {/* Font */}
-        <Text style={styles.sectionLabel}>Name and intro font</Text>
+        <Text style={styles.sectionLabel}>Name font</Text>
         <View style={styles.chipRow}>
           {CHAT_FONT_OPTIONS.map((f) => (
             <TouchableOpacity

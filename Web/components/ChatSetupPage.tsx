@@ -18,7 +18,7 @@ import {
 } from "@/lib/chatTheme";
 import { intentLabel } from "@/lib/linkup";
 import {
-  DEFAULT_ROOM_THEME, MAX_INTRO, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
+  DEFAULT_ROOM_THEME, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
 } from "@/lib/roomThemes";
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
@@ -34,7 +34,6 @@ type Profile = {
   max_guests?: number;
   purchased_slots?: number;
   room_theme?: string;
-  intro?: string | null;
   welcome_message?: string | null;
   room_status?: string | null;
   knocks_open?: boolean;
@@ -120,7 +119,6 @@ function Inner() {
   const [pic, setPic] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [theme, setTheme] = useState(DEFAULT_ROOM_THEME);
-  const [intro, setIntro] = useState("");
   const [welcome, setWelcome] = useState("");
   const [status, setStatus] = useState("");
   const [knocksOpen, setKnocksOpen] = useState(true);
@@ -146,7 +144,6 @@ function Inner() {
     setPic(d.profile_picture_url || null);
     setName(d.anonymous_name || "");
     setTheme(d.room_theme || DEFAULT_ROOM_THEME);
-    setIntro(d.intro || "");
     setWelcome(d.welcome_message || "");
     setStatus(d.room_status || "");
     setKnocksOpen(d.knocks_open !== false);
@@ -220,7 +217,7 @@ function Inner() {
         method: "PUT",
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic,
-          intro, welcome_message: welcome, room_status: status, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
+          welcome_message: welcome, room_status: status, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
           welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
             knocks: notify.knocks, messages: notify.messages, calls: notify.calls, sessions: notify.sessions, previews: notify.previews,
@@ -352,11 +349,6 @@ function Inner() {
             </button>
             <p className="u-sub" style={{ textAlign: "center", margin: "-8px 0 0" }}>{uploading ? "Uploading…" : name ? `${name} · tap to change picture` : "Tap to change picture"}</p>
 
-            <div className="rs-field">
-              <label htmlFor="rs-intro">About you</label>
-              <textarea id="rs-intro" rows={2} value={intro} maxLength={MAX_INTRO} onChange={(e) => setIntro(e.target.value)} placeholder="A line that makes them curious…" />
-              <small>{intro.length}/{MAX_INTRO} · everyone peeking sees this. No numbers or handles.</small>
-            </div>
 
             <div className="rs-field">
               <label>Status</label>
@@ -528,7 +520,7 @@ function Inner() {
           <>
             <p className="rs-h">Room theme</p>
             <RoomThemePicker saved={theme} name={name} onApply={applyTheme} />
-            <p className="rs-h">Name and intro font</p>
+            <p className="rs-h">Name font</p>
             <div className="u-chips">
               {FONTS.map((f) => (
                 <button key={f.id} type="button" className={`u-chip${font === f.id ? " on" : ""}`} onClick={() => setFont(f.id)}>

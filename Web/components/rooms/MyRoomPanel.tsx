@@ -11,7 +11,7 @@ import { roomThemeById, roomThemeVars, statusLabel } from "@/lib/roomThemes";
 
 type Me = {
   anonymous_name?: string; profile_picture_url?: string | null; room_theme?: string; font_style?: string;
-  room_status?: string | null; intro?: string | null; welcome_message?: string | null;
+  room_status?: string | null; welcome_message?: string | null;
   welcome_visibility?: string;
 };
 
@@ -36,7 +36,6 @@ export default function MyRoomPanel() {
         <span className="mr-ava"><span>{me.profile_picture_url ? <Image src={me.profile_picture_url} alt="" width={86} height={86} /> : name[0].toUpperCase()}</span></span>
         <b className="mr-name" style={fontStyleById(me.font_style)}>{name}</b>
         {status ? <span className="mr-status">{status}</span> : null}
-        <p className="mr-intro" style={fontStyleById(me.font_style)}>{me.intro || "No intro yet. It’s the first thing they read."}</p>
         <div className="mr-acts">
           {user?.id ? <Link href={`/room/${user.id}`} className="mr-btn">See it as a visitor</Link> : null}
           <Link href="/chat-setup?tab=appearance" className="mr-btn accent">Personalize</Link>

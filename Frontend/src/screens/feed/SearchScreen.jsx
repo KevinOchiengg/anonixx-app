@@ -525,7 +525,6 @@ function NearCard({ card, onRoom }) {
         <View style={styles.tags}>{tags.map((t) => <Text key={t} style={styles.tag}>{t}</Text>)}</View>
       )}
       <Text style={styles.cardText} numberOfLines={4}>{post.content}</Text>
-      {!!room.intro && <Text style={styles.intro} numberOfLines={2}>“{room.intro}”</Text>}
       <View style={styles.cardFoot}>
         <View style={styles.cta}><Text style={styles.ctaText}>View Room</Text></View>
         {card.more_posts > 0 && <Text style={styles.meta}>+{card.more_posts} more in their Room</Text>}
@@ -608,7 +607,6 @@ const styles = StyleSheet.create({
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6), marginTop: rp(10) },
   tag: { color: T.text, fontSize: rf(12), backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: rp(8), paddingVertical: rp(3), borderRadius: 10, overflow: 'hidden' },
   cardText: { color: T.text, fontSize: FONT.sm, lineHeight: FONT.sm * 1.5, marginTop: rp(10) },
-  intro: { color: T.textSecondary, fontStyle: 'italic', fontSize: rf(13), marginTop: rp(8) },
   cardFoot: { flexDirection: 'row', alignItems: 'center', gap: rp(10), marginTop: rp(12) },
   cta: { backgroundColor: T.primary, paddingHorizontal: rp(16), height: rs(36), borderRadius: rs(18), justifyContent: 'center' },
   ctaText: { color: '#fff', fontWeight: '800', fontSize: FONT.sm },

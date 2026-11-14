@@ -127,7 +127,7 @@ export default function SettingsScreen({ navigation }) {
           <NavRow
             icon={Palette}
             label="Your Room"
-            desc="Theme, intro, privacy, and who's inside"
+            desc="Theme, privacy, and who's inside"
             onPress={() => navigation.navigate('Main', {
               screen: 'Messages',
               params: { screen: 'ChatProfileSetup' },

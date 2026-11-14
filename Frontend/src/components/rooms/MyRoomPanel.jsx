@@ -1,4 +1,4 @@
-/** Rooms → My Room: your Room as visitors see it (theme, picture, name, status, intro), the
+/** Rooms → My Room: your Room as visitors see it (theme, picture, name, status), the
  * welcome you've set up (note, audio, three media slots) and quick ways to change it.
  * Editing happens in ChatProfileSetup (Your Room); this panel only reads GET /chat-profile/me. */
 import React, { useCallback, useState } from 'react';
@@ -61,9 +61,6 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
         </LinearGradient>
         <Text style={[s.name, { color: th.text, fontFamily: font }]} numberOfLines={1}>{name}</Text>
         {status ? <Text style={[s.status, { color: th.text, borderColor: th.border, backgroundColor: th.tint }]}>{status}</Text> : null}
-        <Text style={[s.intro, { color: th.muted, fontFamily: font }]} numberOfLines={3}>
-          {room.intro || 'No intro yet. It’s the first thing they read.'}
-        </Text>
         <View style={s.heroActs}>
           <TouchableOpacity style={[s.heroBtn, { borderColor: th.borderStrong }]} onPress={() => me && navigation.navigate('Room', { userId: me })}>
             <Eye size={rs(15)} color={th.text} />
@@ -117,7 +114,6 @@ const s = StyleSheet.create({
   initial: { fontSize: rf(32), fontWeight: '800' },
   name: { fontSize: rf(23), marginTop: rp(4) },
   status: { fontSize: rf(12), fontWeight: '600', borderWidth: 1, borderRadius: 999, paddingHorizontal: rp(11), paddingVertical: rp(4), overflow: 'hidden' },
-  intro: { fontSize: rf(14), lineHeight: rf(20), textAlign: 'center', maxWidth: '92%' },
   heroActs: { flexDirection: 'row', gap: rp(8), alignSelf: 'stretch', marginTop: rp(8) },
   heroBtn: { flex: 1, flexDirection: 'row', gap: rp(6), height: rs(44), borderRadius: RADIUS.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   heroBtnText: { fontFamily: 'DMSans-Bold', fontSize: rf(14) },

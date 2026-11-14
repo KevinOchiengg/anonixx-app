@@ -1,4 +1,4 @@
-/** Someone's Room, in their theme. Anyone 18+ can peek: name, picture, status, intro, the post
+/** Someone's Room, in their theme. Anyone 18+ can peek: name, picture, status, the post
  * they came from and the photos shown to visitors (others appear as a count). The bottom bar
  * follows GET /chat-profile/{userId}/preview: Knock, waiting, their knock to you, closed,
  * Edit Room, or inside. After a Let In, the first visit plays the entrance: the owner's
@@ -365,11 +365,6 @@ export default function RoomScreen({ route, navigation }) {
                 <Text style={[s.statusText, { color: th.text }]}>{status}</Text>
               </View>
             ) : null}
-            {room.intro ? (
-              <Text style={[s.intro, { color: th.muted, fontFamily: font }]}>{room.intro}</Text>
-            ) : own ? (
-              <Text style={[s.intro, s.introEmpty, { color: th.muted }]}>Add a line about you. It's what they read first.</Text>
-            ) : null}
           </Animated.View>
 
           {room.welcome_message ? (
@@ -465,8 +460,6 @@ const s = StyleSheet.create({
   name: { marginTop: rp(14), fontSize: rf(27), textAlign: 'center' },
   status: { marginTop: rp(10), flexDirection: 'row', alignItems: 'center', gap: rp(7), borderWidth: 1, borderRadius: 999, paddingHorizontal: rp(11), paddingVertical: rp(5) },
   statusText: { fontSize: rf(12), fontWeight: '600' },
-  intro: { marginTop: rp(12), fontSize: rf(15), lineHeight: rf(22), textAlign: 'center', maxWidth: '88%' },
-  introEmpty: { fontSize: rf(13), textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
 
   card: { borderRadius: rs(20), borderWidth: 1, padding: rp(16), gap: rp(8) },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: rp(8) },

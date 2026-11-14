@@ -20,7 +20,7 @@ import { BrandMark } from "./AppShell";
 type Tab = "near" | "stories";
 type Scope = "close" | "area" | "country" | "anywhere";
 type Place = { scope: Scope; country: string; county: string; sub: string };
-type Room = { user_id: string; listing: string; open: boolean; intro: string | null; room_theme: string; avatar_url: string | null; door_rule: string; anonymous_name?: string | null; place?: string | null };
+type Room = { user_id: string; listing: string; open: boolean; room_theme: string; avatar_url: string | null; door_rule: string; anonymous_name?: string | null; place?: string | null };
 type NearCard = { post: Post; place: string | null; room: Room; more_posts: number };
 type Page<T> = { results: T[]; has_more: boolean; cursor: string | null; gate?: "signin" | "adult"; needs_place?: string; trending_ready?: boolean; loose?: boolean };
 type Chip = { kind: "place" | "country" | "gender" | "fresh" | "topic"; value: string; label: string; country?: string };
@@ -425,7 +425,6 @@ function Near({
                     <Avatar url={r.avatar_url} name={r.anonymous_name} />
                     <b>{r.anonymous_name || "Anonymous"}</b>
                     {r.place ? <small>{r.place}</small> : null}
-                    {r.intro ? <p>{r.intro}</p> : null}
                     <span className={r.open ? "dc-open" : "dc-break"}>{r.open ? "Open" : "Taking a break"}</span>
                   </Link>
                 ))}
@@ -482,7 +481,6 @@ function NearItem({ card }: { card: NearCard }) {
       </div>
       {tags.length ? <div className="dc-tags">{tags.map((t) => <span key={t}>{t}</span>)}</div> : null}
       <Link href={`/drop/${post.id}`} className="dc-text">{post.content}</Link>
-      {room.intro ? <p className="dc-intro">“{room.intro}”</p> : null}
       <div className="dc-acts">
         <Link className="dc-cta" href={`/room/${room.user_id}`} data-track="discover:near:view-room">View Room</Link>
         <Link className="pill" href={`/drop/${post.id}`} data-track="discover:near:read">Read it</Link>
