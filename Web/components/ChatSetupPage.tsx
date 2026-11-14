@@ -9,12 +9,9 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { uploadFile } from "@/lib/upload";
 import {
-  ChatBackground,
   DEFAULT_FONT,
-  DEFAULT_PATTERN,
   FONTS,
   FONTS_HREF,
-  PATTERNS,
 } from "@/lib/chatTheme";
 import { intentLabel } from "@/lib/linkup";
 import {
@@ -25,7 +22,6 @@ import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
 
 type Profile = {
-  background_pattern?: string;
   font_style?: string;
   profile_picture_url?: string | null;
   anonymous_name?: string;
@@ -107,7 +103,6 @@ function Inner() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
-  const [pattern, setPattern] = useState(DEFAULT_PATTERN);
   const [font, setFont] = useState(DEFAULT_FONT);
   const [pic, setPic] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -129,7 +124,6 @@ function Inner() {
   const picInput = useRef<HTMLInputElement>(null);
 
   const apply = (d: Profile) => {
-    setPattern(d.background_pattern || DEFAULT_PATTERN);
     setFont(d.font_style || DEFAULT_FONT);
     setPic(d.profile_picture_url || null);
     setName(d.anonymous_name || "");
@@ -203,7 +197,7 @@ function Inner() {
       const d = await api<Profile>("/chat-profile/me", {
         method: "PUT",
         body: {
-          background_pattern: pattern, font_style: font, profile_picture_url: pic,
+          font_style: font, profile_picture_url: pic,
           knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
           allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
@@ -478,16 +472,6 @@ function Inner() {
                 <button key={f.id} type="button" className={`u-chip${font === f.id ? " on" : ""}`} onClick={() => setFont(f.id)}>
                   <span className="aa" style={{ fontFamily: f.family, fontWeight: f.weight, fontStyle: f.style }}>Aa</span>
                   {f.label}
-                </button>
-              ))}
-            </div>
-            <p className="rs-h">Chat background</p>
-            <p className="u-sub" style={{ margin: 0 }}>Behind your conversations once someone is inside.</p>
-            <div className="u-swatches">
-              {PATTERNS.map((p) => (
-                <button key={p.id} type="button" className={`u-swatch${pattern === p.id ? " on" : ""}`} onClick={() => setPattern(p.id)}>
-                  <span><ChatBackground id={p.id} className="u-bg" /></span>
-                  {p.label}
                 </button>
               ))}
             </div>

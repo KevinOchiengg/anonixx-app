@@ -21,8 +21,7 @@ import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/respons
 import PulseLoader from '../../components/common/PulseLoader';
 import VoiceWaveform from '../../components/common/VoiceWaveform';
 import ChatInputBar from '../../components/common/ChatInputBar';
-import ChatBackground from '../../components/chat/ChatBackground';
-import ChatBubble, { DateSeparator, TypingBubble, PreviewIcon, OWN_GRADIENT, INK, messagePreviewLabel } from '../../components/chat/ChatBubble';
+import ChatBubble, { DateSeparator, TypingBubble, PreviewIcon, OWN_GRADIENT, messagePreviewLabel } from '../../components/chat/ChatBubble';
 import { EmptyChat } from '../../components/chat/ChatIntro';
 import { ChatMenuSheet, MessageSheet } from '../../components/chat/ChatSheets';
 import ChatMediaViewer from '../../components/chat/ChatMediaViewer';
@@ -30,7 +29,6 @@ import { useToast } from '../../components/ui/Toast';
 import { uploadToR2 } from '../../utils/upload';
 import { API_BASE_URL } from '../../config/api';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
-import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
 import useDraft from '../../hooks/useDraft';
@@ -465,7 +463,6 @@ export default function DropChatScreen({ route, navigation }) {
 
   return (
     <View style={s.safe}>
-      <ChatBackground pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN} style={StyleSheet.absoluteFill} />
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
             {messages.length === 0 ? (
@@ -543,15 +540,15 @@ export default function DropChatScreen({ route, navigation }) {
                 accessibilityRole="button"
                 accessibilityLabel={voice.preview ? 'Send voice note' : hasText ? 'Send' : 'Hold to record a voice note'}
                 hitSlop={HIT_SLOP}
-                // A small press bounce; the gold circle matches my bubbles.
+                // A small press bounce; the coral-to-rose circle matches my bubbles.
                 style={({ pressed }) => [s.sendBtn, hasText && sending && { opacity: 0.4 }, (pressed || voice.isRecording) && { transform: [{ scale: voice.isRecording ? 1.12 : 0.9 }] }]}
               >
                 <LinearGradient colors={OWN_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.sendFill}>
                   {(voice.preview ? voice.uploading : hasText ? sending : voice.uploading)
-                    ? <ActivityIndicator size="small" color={INK} />
+                    ? <ActivityIndicator size="small" color="#fff" />
                     : voice.preview || hasText
-                      ? <SendHorizontal size={rs(20)} color={INK} strokeWidth={2.2} />
-                      : <Mic size={rs(21)} color={INK} strokeWidth={2.2} />}
+                      ? <SendHorizontal size={rs(20)} color="#fff" strokeWidth={2.2} />
+                      : <Mic size={rs(21)} color="#fff" strokeWidth={2.2} />}
                 </LinearGradient>
               </Pressable>
             )}
@@ -626,7 +623,7 @@ const s = StyleSheet.create({
   recordHint: { flex: 1, fontFamily: 'DMSans-Italic', fontSize: rf(12), color: T.textMute },
   sendBtn: {
     width: rs(46), height: rs(46), borderRadius: rs(23),
-    shadowColor: '#C99A52', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 5,
+    shadowColor: '#E8456E', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 5,
   },
   sendFill: { flex: 1, borderRadius: rs(23), alignItems: 'center', justifyContent: 'center' },
 });

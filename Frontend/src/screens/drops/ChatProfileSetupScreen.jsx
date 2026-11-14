@@ -17,11 +17,9 @@ import {
 import { T } from '../../utils/colorTokens';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, BUTTON_HEIGHT } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
-import ChatBackground from '../../components/chat/ChatBackground';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { uploadViaBackend } from '../../utils/upload';
-import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel } from '../../config/linkup';
 import {
@@ -75,7 +73,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [saving, setSaving]     = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const [backgroundPattern, setBackgroundPattern] = useState(DEFAULT_BACKGROUND_PATTERN);
   const [fontStyle, setFontStyle]             = useState(DEFAULT_CHAT_FONT);
   const [profilePictureUrl, setProfilePictureUrl] = useState(null);
   const [anonymousName, setAnonymousName]     = useState('');
@@ -111,7 +108,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         if (res.ok) {
           const data = await res.json();
           if (data) {
-            setBackgroundPattern(data.background_pattern || DEFAULT_BACKGROUND_PATTERN);
             setFontStyle(data.font_style || DEFAULT_CHAT_FONT);
             setProfilePictureUrl(data.profile_picture_url || null);
             setAnonymousName(data.anonymous_name || '');
@@ -168,7 +164,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         method: 'PUT',
         headers: await authHeaders(true),
         body: JSON.stringify({
-          background_pattern: backgroundPattern,
           font_style: fontStyle,
           profile_picture_url: profilePictureUrl,
           knocks_open: knocksOpen,
@@ -197,7 +192,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     } finally {
       setSaving(false);
     }
-  }, [backgroundPattern, fontStyle, profilePictureUrl,
+  }, [fontStyle, profilePictureUrl,
       knocksOpen, breakHours, doorRule, listing,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
@@ -370,24 +365,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         <Text style={styles.sectionLabel}>Room theme</Text>
         <RoomThemePicker saved={roomTheme} name={anonymousName} onApply={handleApplyTheme} />
 
-        {/* Background pattern */}
-        <Text style={styles.sectionLabel}>Chat background</Text>
-        <Text style={styles.sectionHint}>Behind your conversations once someone is inside.</Text>
-        <View style={styles.swatchRow}>
-          {BACKGROUND_PATTERNS.map((p) => (
-            <TouchableOpacity
-              key={p.id}
-              onPress={() => setBackgroundPattern(p.id)}
-              activeOpacity={0.85}
-            >
-              <ChatBackground
-                pattern={p.id}
-                style={[styles.patternSwatch, backgroundPattern === p.id && styles.patternSwatchActive]}
-              />
-              <Text style={styles.patternLabel}>{p.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
 
         {/* Font */}
         <Text style={styles.sectionLabel}>Name font</Text>
@@ -754,23 +731,6 @@ const styles = StyleSheet.create({
     marginTop: rp(6),
   },
 
-  swatchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(12) },
-  patternSwatch: {
-    width:  rs(52),
-    height: rs(52),
-    borderRadius: RADIUS.md,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  patternSwatchActive: { borderColor: T.primary },
-  patternLabel: {
-    fontFamily: 'DMSans-Regular',
-    fontSize:   rf(10),
-    color:      T.textMute,
-    textAlign:  'center',
-    marginTop:  rp(4),
-    width:      rs(52),
-  },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
   chip: {
