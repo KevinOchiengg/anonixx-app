@@ -498,7 +498,7 @@
 @media (prefers-reduced-motion: reduce) { .slide.env::after { animation: none; } }
 
 /* ---------- rail actions: tinted glass chips, each action with its own colour ---------- */
-.rail { --chip: clamp(34px, 5.6dvh, 46px); }
+.rail { --chip: clamp(38px, 6.3dvh, 52px); }
 .rail button.r-act { color: var(--c); }
 .rail button.r-act svg {
   box-sizing: border-box; width: var(--chip); height: var(--chip); padding: calc(var(--chip) * 0.2);

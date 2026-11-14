@@ -214,7 +214,7 @@ const RailIcon = ({ icon, tint, active }) => {
   const { height: winH } = useWindowDimensions();
   const t = RAIL_TINTS[tint];
   if (!t) return icon;
-  const chip = Math.max(36, Math.min(46, winH * 0.056));
+  const chip = Math.max(40, Math.min(52, winH * 0.063));
   const color = active ? t.ca : t.c;
   const filled = icon.props.fill && icon.props.fill !== 'none';
   // Active (liked / saved) colours and fills only the icon; the chip stays the same.
@@ -362,7 +362,7 @@ const RailAvatar = ({ post, navigation }) => {
   // A little smaller than the Like / Comment / Save / Share chips (RailIcon): a full photo
   // reads bigger than an icon in the same circle.
   const { height: winH } = useWindowDimensions();
-  const chip = Math.round(Math.max(36, Math.min(46, winH * 0.056)) * 0.8);
+  const chip = Math.round(Math.max(40, Math.min(52, winH * 0.063)) * 0.8);
   return (
   <AuthorProfileTrigger post={post} navigation={navigation}>
     <View style={[sw.railAvatarRing, { width: chip, height: chip, borderRadius: chip / 2 }]}>
