@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
+import { api, getToken, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
@@ -232,6 +232,30 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     setReplay((prev) => [...prev, ...replayRound(posts, prev[prev.length - 1] ?? posts[posts.length - 1]?.id)]);
   }, [exhausted, active, items.length, posts]);
 
+  // How long each drop stays on screen teaches the feed (backend utils/taste.py):
+  // a quick skip, a long look, or a full watch.
+  const dwell = useRef<{ id: string; at: number } | null>(null);
+  const activeId = (() => { const it = items[active]; return it && it.kind === "post" ? it.post.id : null; })();
+  useEffect(() => {
+    if (!user) return;
+    const send = (id: string, ms: number) => {
+      const v = document.querySelector<HTMLVideoElement>(`[data-post="${id}"] video`);
+      const duration = v && Number.isFinite(v.duration) ? v.duration : null;
+      api(`/drops/${id}/watch`, { method: "POST", body: { ms, duration } }).catch(() => {});
+    };
+    const cur = dwell.current;
+    if (cur && cur.id !== activeId) send(cur.id, Date.now() - cur.at);
+    if (!cur || cur.id !== activeId) dwell.current = activeId ? { id: activeId, at: Date.now() } : null;
+    // leaving the page counts as moving on
+    const away = () => {
+      const c = dwell.current;
+      if (document.visibilityState === "hidden" && c) { send(c.id, Date.now() - c.at); dwell.current = null; }
+      else if (document.visibilityState === "visible" && !dwell.current && activeId) dwell.current = { id: activeId, at: Date.now() };
+    };
+    document.addEventListener("visibilitychange", away);
+    return () => document.removeEventListener("visibilitychange", away);
+  }, [activeId, user]);
+
   useEffect(() => {
     const root = scroller.current;
     if (!root) return;
@@ -434,6 +458,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     try {
       if (navigator.share) {
         await navigator.share({ title: "Anonixx", text: text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"` : undefined, url });
+        if (getToken()) api(`/drops/${post.id}/share`, { method: "POST" }).catch(() => {});
       } else {
         await navigator.clipboard.writeText(url);
         flash("Link copied");

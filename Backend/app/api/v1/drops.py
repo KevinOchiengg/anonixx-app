@@ -6,6 +6,8 @@ from bson import ObjectId
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 import httpx
+import base64
+import json
 import logging
 import random
 import re
@@ -24,6 +26,7 @@ from app.services.confession_writer import MONEY as CLARITY_MONEY
 from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode
 from app.utils.fingerprint import fingerprint_hash
 from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted, splice_promoted
+from app.utils import taste
 from app.tasks import scheduled_publisher
 from app.utils import stream
 from app.utils.countries import country_from_header, known_country
@@ -1101,6 +1104,7 @@ async def like_drop(
     )
 
     await update_drop_affinity(current_user_id, drop.get("mood_tag"), "like", db)
+    await taste.record(db, current_user_id, drop, "like")
 
     if drop["sender_id"] != current_user_id:
         await send_push_notification(
@@ -1152,6 +1156,43 @@ async def not_interested(
         {"_id": ObjectId(current_user_id)},
         {"$push": {"not_interested_drop_ids": {"$each": [drop_id], "$slice": -1000}}},
     )
+    await taste.record_id(db, current_user_id, drop_id, "not_interested")
+    return {"ok": True}
+
+
+class WatchBody(BaseModel):
+    ms: int                            # time the drop was on screen
+    duration: Optional[float] = None   # video / voice length in seconds, when known
+
+
+def _viewer_key(user_id: Optional[str], device_id: Optional[str]) -> Optional[str]:
+    """Signed-in user id, else a hashed device id (same key as drop_views)."""
+    return user_id or (f"device:{fingerprint_hash(device_id)}" if device_id else None)
+
+
+@router.post("/{drop_id}/watch")
+async def watch_drop(
+    drop_id: str,
+    body: WatchBody,
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
+    db = Depends(get_database),
+):
+    """How long a drop stayed on screen: a quick skip, a long look or a full watch."""
+    action = taste.watch_action(max(0, body.ms), body.duration)
+    if action:
+        await taste.record_id(db, _viewer_key(current_user_id, x_device_id), drop_id, action)
+    return {"ok": True}
+
+
+@router.post("/{drop_id}/share")
+async def share_drop(
+    drop_id: str,
+    current_user_id: Optional[str] = Depends(get_optional_user_id),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
+    db = Depends(get_database),
+):
+    await taste.record_id(db, _viewer_key(current_user_id, x_device_id), drop_id, "share")
     return {"ok": True}
 
 
@@ -1189,6 +1230,7 @@ async def save_drop(
         if drop:
             saves = max(0, drop.get("saves_count", 0))
             await update_drop_affinity(current_user_id, drop.get("mood_tag"), "save", db)
+            await taste.record(db, current_user_id, drop, "save")
     except Exception:
         pass
 
@@ -1362,6 +1404,7 @@ async def add_to_drop_thread(
     await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$inc": {"thread_count": 1}})
 
     await update_drop_affinity(current_user_id, drop.get("mood_tag"), "comment", db)
+    await taste.record(db, current_user_id, drop, "comment")
 
     if drop["sender_id"] != current_user_id:
         await send_push_notification(
@@ -1718,8 +1761,115 @@ async def track_feed_streak(user_id: str, db) -> dict:
         return {"streak": 1, "is_new_day": True, "message": None}
 
 
-def _score_drop(drop: dict, user_affinities: dict, now: datetime) -> float:
+# ── Seen drops ──
+# drop_views holds one row per viewer per drop, its viewed_at refreshed on every view.
+SEEN_CAP = 5000          # newest seen drops skipped; past this, the oldest can come round again
+RECYCLE_PREFIX = "R="    # cursor once everything's been seen: R=<viewed_at of the last one served>
+
+
+# ── For you: about 70% of each page matches the viewer's taste, 30% is anything else ──
+# Two shuffled streams that never overlap: "taste" = drops with a favourite feature, "explore" =
+# the rest. Favourites are fixed for the visit (they ride in the cursor), so paging stays clean.
+FOR_YOU_PREFIX = "Y="
+TASTE_SHARE = 0.7
+EXPLORE_SLOTS = (2, 5, 9)   # explore positions in a page of 10; the rest are taste
+
+
+def _encode_for_you(keys: list, t_cur, e_cur, t_done: bool, e_done: bool) -> str:
+    raw = json.dumps({"k": keys, "t": t_cur, "e": e_cur, "td": t_done, "ed": e_done}, separators=(",", ":"))
+    return FOR_YOU_PREFIX + base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_for_you(cursor: str) -> dict:
+    try:
+        return json.loads(base64.urlsafe_b64decode(cursor[len(FOR_YOU_PREFIX):].encode()))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Bad cursor.")
+
+
+async def _fetch_for_you(db, query: dict, limit: int, cursor: Optional[str], country, viewer_taste: dict):
+    if cursor and cursor.startswith(FOR_YOU_PREFIX):
+        st = _decode_for_you(cursor)
+    elif cursor:
+        # a plain cursor (the visit began with no taste yet): carry on as before
+        return await fetch_mixed(db, query, limit, cursor, country)
+    else:
+        st = {"k": taste.pick_keys(viewer_taste), "t": None, "e": None, "td": False, "ed": False}
+    match = taste.keys_filter(st["k"])
+    if not match:
+        return await fetch_mixed(db, query, limit, cursor, country)
+
+    t_query = {"$and": [query, match]}
+    e_query = {"$and": [query, {"$nor": [match]}]}
+    cur = {"t": st["t"], "e": st["e"]}
+    done = {"t": bool(st["td"]), "e": bool(st["ed"])}
+    queries = {"t": t_query, "e": e_query}
+
+    async def pull(which: str, n: int) -> list:
+        if n <= 0 or done[which]:
+            return []
+        rows, cur[which], more = await fetch_mixed(db, queries[which], n, cur[which], country)
+        done[which] = not more
+        return rows
+
+    t_rows = await pull("t", round(limit * TASTE_SHARE))
+    e_rows = await pull("e", limit - len(t_rows))
+    if len(t_rows) + len(e_rows) < limit:   # explore ran short: top up with more taste
+        t_rows += await pull("t", limit - len(t_rows) - len(e_rows))
+
+    page = []
+    for i in range(len(t_rows) + len(e_rows)):
+        src = e_rows if (e_rows and (i in EXPLORE_SLOTS or not t_rows)) else t_rows
+        page.append(src.pop(0))
+    has_more = not (done["t"] and done["e"])
+    nxt = _encode_for_you(st["k"], cur["t"], cur["e"], done["t"], done["e"]) if has_more else None
+    return page, nxt, has_more
+
+
+async def _seen_drop_ids(db, viewer_key: str) -> list:
+    rows = await db["drop_views"].find(
+        {"user_id": viewer_key}, {"drop_id": 1, "_id": 0},
+    ).sort("viewed_at", -1).limit(SEEN_CAP).to_list(None)
+    return [ObjectId(r["drop_id"]) for r in rows if ObjectId.is_valid(r.get("drop_id") or "")]
+
+
+async def _recycled_page(db, viewer_key: Optional[str], base_query: dict, limit: int, cursor: str):
+    """Everything's been seen: drops in the order they were last seen, oldest first."""
+    if not viewer_key:
+        return [], None, False
+    after = None
+    raw = cursor[len(RECYCLE_PREFIX):]
+    if raw:
+        try:
+            after = datetime.fromisoformat(raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Bad cursor.")
+    q = {"user_id": viewer_key}
+    if after:
+        q["viewed_at"] = {"$gt": after}
+    batch = limit * 3
+    views = await db["drop_views"].find(q, {"drop_id": 1, "viewed_at": 1}).sort("viewed_at", 1).limit(batch).to_list(None)
+    if not views:
+        return [], None, False
+    ids = [ObjectId(v["drop_id"]) for v in views if ObjectId.is_valid(v.get("drop_id") or "")]
+    found = {d["_id"]: d async for d in db["drops"].find({"$and": [base_query, {"_id": {"$in": ids}}]})}
+    page, last = [], views[-1]["viewed_at"]
+    for v in views:
+        d = found.get(ObjectId(v["drop_id"])) if ObjectId.is_valid(v.get("drop_id") or "") else None
+        if d:
+            page.append(d)
+        if len(page) == limit:
+            last = v["viewed_at"]
+            break
+    more = len(views) == batch or len(page) == limit
+    return page, (f"{RECYCLE_PREFIX}{last.isoformat()}" if more else None), more
+
+
+def _score_drop(drop: dict, user_affinities: dict, now: datetime, viewer_taste: Optional[dict] = None) -> float:
     score = 0.0
+    if viewer_taste:
+        # taste can lift a drop a tier, or drop it one (skips, Not interested)
+        score += max(-20.0, min(taste.score(drop, viewer_taste) * 1.5, 25.0))
     mood = drop.get("mood_tag")
     if mood:
         score += min(user_affinities.get(mood, 0) * 2, 30)
@@ -1740,9 +1890,9 @@ def _score_drop(drop: dict, user_affinities: dict, now: datetime) -> float:
     return score
 
 
-def _weighted_shuffle_drops(drops: list, user_affinities: dict) -> list:
+def _weighted_shuffle_drops(drops: list, user_affinities: dict, viewer_taste: Optional[dict] = None) -> list:
     now = datetime.now(timezone.utc)
-    scored = [(_score_drop(d, user_affinities, now), d) for d in drops]
+    scored = [(_score_drop(d, user_affinities, now, viewer_taste), d) for d in drops]
     high   = [d for s, d in scored if s >= 50]
     medium = [d for s, d in scored if 20 <= s < 50]
     low    = [d for s, d in scored if s < 20]
@@ -1887,6 +2037,7 @@ async def get_drops_feed(
     authorization: Optional[str] = Header(None, alias="Authorization"),
     x_content_mode: Optional[str] = Header(None, alias="X-Content-Mode"),
     x_country: Optional[str] = Header(None, alias="X-Country"),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     db = Depends(get_database),
 ):
     current_user_id = None
@@ -1970,9 +2121,26 @@ async def get_drops_feed(
     scheduled_publisher.nudge(db)
     now = now_utc()
     stream_query = {"$and": [pool_query, not_promoted(now)]} if pool_query else not_promoted(now)
-    page, next_cursor, page_has_more = await fetch_mixed(db, stream_query, drops_to_load, cursor, viewer_country)
 
-    drops = reslot(page, _weighted_shuffle_drops(page, user_affinities))
+    # Never the same drop twice: drops this viewer has already seen (any visit) are skipped.
+    # Once every drop has been seen, the feed carries on with the ones seen longest ago.
+    viewer_key = _viewer_key(current_user_id, x_device_id)
+    viewer_taste = await taste.load(db, viewer_key)
+    if cursor and cursor.startswith(RECYCLE_PREFIX):
+        page, next_cursor, page_has_more = await _recycled_page(db, viewer_key, stream_query, drops_to_load, cursor)
+    else:
+        seen = await _seen_drop_ids(db, viewer_key) if viewer_key else []
+        fresh_query = {"$and": [stream_query, {"_id": {"$nin": seen}}]} if seen else stream_query
+        page, next_cursor, page_has_more = await _fetch_for_you(
+            db, fresh_query, drops_to_load, cursor, viewer_country, viewer_taste,
+        )
+        if not page_has_more and seen:
+            if page:
+                next_cursor, page_has_more = RECYCLE_PREFIX, True
+            else:
+                page, next_cursor, page_has_more = await _recycled_page(db, viewer_key, stream_query, drops_to_load, RECYCLE_PREFIX)
+
+    drops = reslot(page, _weighted_shuffle_drops(page, user_affinities, viewer_taste))
     if not cursor:
         drops = splice_promoted(drops, await fetch_promoted(db, pool_query, now))
     formatted_drops = await batch_format_drops(drops, current_user_id, db)

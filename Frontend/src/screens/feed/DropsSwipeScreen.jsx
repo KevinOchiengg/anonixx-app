@@ -50,11 +50,30 @@ import * as Clipboard from 'expo-clipboard';
 
 // Public web link for a drop; the app opens it too (AppNavigator linking).
 const dropLink = (p) => `https://anonixx.com/drop/${p.id}`;
+// Taste signals (backend utils/taste.py): fire and forget, never in the way of the feed.
+const signal = async (postId, path, body) => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    const deviceId = await getDeviceId().catch(() => null);
+    await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/${path}`, {
+      method: 'POST',
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {}
+};
+
 const sharePost = async (p) => {
   const text = (p.content || '').trim();
-  const quote = text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"
-` : '';
-  try { await Share.share({ message: `${quote}${dropLink(p)}` }); } catch {}
+  const quote = text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"\n` : '';
+  try {
+    const r = await Share.share({ message: `${quote}${dropLink(p)}` });
+    if (r?.action !== Share.dismissedAction) signal(p.id, 'share');
+  } catch {}
 };
 import { fetchBalance } from '../../store/slices/coinsSlice';
 
@@ -389,7 +408,7 @@ const posterCache = new Map();
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, onUnlock, headerHeight = 0, knockCost = UNLOCK_COST,
-  speed = 1, onSpeed,
+  speed = 1, onSpeed, onDuration,
 }) => {
   const likedRef = useRef(liked);
   likedRef.current = liked;
@@ -544,6 +563,8 @@ const VideoSlide = ({
     const t = setTimeout(() => setSlowLoad(true), 700);
     return () => clearTimeout(t);
   }, [isActive, playerStatus]);
+
+  useEffect(() => { if (videoDuration > 0) onDuration?.(post.id, videoDuration); }, [videoDuration, post.id]);
 
   // Hold an edge for 2x until you let go; hold anywhere else for the menu. Drag the bottom line to scrub.
   const [held, setHeld] = useState(false);
@@ -1235,6 +1256,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
       const token = await AsyncStorage.getItem('token');
       const headers = { ...countryHeader() };   // local-first feed (utils/country.js)
       if (token) headers['Authorization'] = `Bearer ${token}`;
+      // Guests: the device id lets the feed skip drops this phone has already seen.
+      const deviceId = await getDeviceId().catch(() => null);
+      if (deviceId) headers['X-Device-Id'] = deviceId;
       const currentOffset = reset ? 0 : sessionPostsRef.current;
       const params = `session_posts=${currentOffset}` +
         (!reset && cursorRef.current ? `&cursor=${encodeURIComponent(cursorRef.current)}` : '');
@@ -1310,6 +1334,19 @@ export default function DropsSwipeScreen({ navigation, route }) {
     }, [route?.params?.refresh])
   );
 
+  // How long each drop stays on screen teaches the feed: a quick skip, a long look, a full watch.
+  const dwellRef = useRef(null);            // { id, at } for the drop on screen
+  const durationsRef = useRef(new Map());   // video length by drop id
+  const noteDuration = useCallback((id, d) => { durationsRef.current.set(id, d); }, []);
+  const flushDwell = useCallback((nextId = null) => {
+    const cur = dwellRef.current;
+    if (cur && cur.id !== nextId) {
+      signal(cur.id, 'watch', { ms: Date.now() - cur.at, duration: durationsRef.current.get(cur.id) || null });
+    }
+    if (!cur || cur.id !== nextId) dwellRef.current = nextId ? { id: nextId, at: Date.now() } : null;
+  }, []);
+  useEffect(() => { if (!screenFocused) flushDwell(null); }, [screenFocused, flushDwell]);
+
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) {
@@ -1318,6 +1355,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       const it = item.item;
       // Only real drops are view-tracked.
       const postId = it && !it.__market && !it.__ad ? it.id : null;
+      flushDwell(postId);
       if (postId && !viewedRef.current.has(postId)) {
         viewedRef.current.add(postId);
         trackView(postId);
@@ -1666,7 +1704,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       slide = (
         <VideoSlide
           {...commonProps} isActive={isActive} isNear={isNear} onUnlock={(o) => handleUnlock(item, o)}
-          speed={playSpeed} onSpeed={setPlaySpeed}
+          speed={playSpeed} onSpeed={setPlaySpeed} onDuration={noteDuration}
         />
       );
     } else if (item.audio_url) {
@@ -1680,7 +1718,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }, [
     activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
     handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress, handleUnlock,
-    isAuthenticated, navigation, headerHeight, chromeHidden, clearMode, playSpeed, user?.is_premium,
+    isAuthenticated, navigation, headerHeight, chromeHidden, clearMode, playSpeed, user?.is_premium, noteDuration,
   ]);
 
   if (!loading && loadError && posts.length === 0) {

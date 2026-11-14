@@ -11,6 +11,7 @@ from bson import ObjectId
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import debit_coins
+from app.utils import taste
 from app.api.v1.drops import _ensure_aware, send_push_notification, AGE_GATE_DETAIL
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
@@ -358,6 +359,7 @@ async def create_unlock_request(
     }
     await db["drop_unlock_requests"].insert_one(req_doc)
     request_id = str(req_doc["_id"])
+    await taste.record_id(db, current_user_id, data.target_id, "knock")   # a knock is the strongest "more like this"
 
     await emit_unlock_request_received(owner_id, {
         "request_id": request_id, "target_type": data.target_type, "target_id": data.target_id,
