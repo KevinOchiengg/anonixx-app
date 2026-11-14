@@ -69,7 +69,7 @@ const signal = async (postId, path, body) => {
 
 // Slow network: a thin line sweeps out from the middle of the bottom edge, over and over,
 // until the video plays again (where the progress line sits).
-function BufferLine() {
+function BufferLine({ style }) {
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.timing(t, { toValue: 1, duration: 900, useNativeDriver: true }));
@@ -79,7 +79,7 @@ function BufferLine() {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[ss.bufferLine, {
+      style={[ss.bufferLine, style, {
         opacity: t.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.9, 0.6, 0] }),
         transform: [{ scaleX: t.interpolate({ inputRange: [0, 1], outputRange: [0.05, 1] }) }],
       }]}
@@ -789,6 +789,15 @@ const AudioSlide = ({
   const progress = duration > 0 ? position / duration : 0;
   const playing = audioStatus.playing;
 
+  // Slow network: the same loading line as videos, after 0.7s of waiting for sound.
+  const waiting = isActive && !!post.audio_url && (audioStatus.isBuffering || !audioStatus.isLoaded);
+  const [slowLoad, setSlowLoad] = useState(false);
+  useEffect(() => {
+    if (!waiting) { setSlowLoad(false); return undefined; }
+    const t = setTimeout(() => setSlowLoad(true), 700);
+    return () => clearTimeout(t);
+  }, [waiting]);
+
   useEffect(() => {
     Animated.timing(progressAnim, { toValue: progress, duration: 100, useNativeDriver: false }).start();
     if (audioStatus.didJustFinish) progressAnim.setValue(0);
@@ -902,6 +911,7 @@ const AudioSlide = ({
 
         <View style={as.progressTrack} pointerEvents="none">
           <Animated.View style={[as.progressFill, { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+          {slowLoad && <BufferLine style={as.bufferOnTrack} />}
         </View>
 
         <View style={as.timeRow} pointerEvents="none">
@@ -2001,6 +2011,7 @@ const as = StyleSheet.create({
   barUnplayed: { backgroundColor: 'rgba(255,255,255,0.15)' },
   barGlow: { shadowColor: THEME.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 6, elevation: 6 },
   progressTrack: { height: 3, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 2, marginBottom: 8, overflow: 'hidden' },
+  bufferOnTrack: { bottom: 0, height: 3 },
   progressFill: { height: '100%', backgroundColor: THEME.primary, borderRadius: 2 },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
   timeText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },

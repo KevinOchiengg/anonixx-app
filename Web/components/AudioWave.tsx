@@ -21,6 +21,12 @@ export default function AudioWave({ src, seed, active }: { src: string; seed: st
   const [t, setT] = useState(0);
   const [dur, setDur] = useState(0);
   const bars = useRef(heights(seed)).current;
+  // Slow network: the same loading line as videos while the sound stalls.
+  const [buffering, setBuffering] = useState(false);
+  const bufTimer = useRef<number | null>(null);
+  const stalled = () => { if (bufTimer.current === null) bufTimer.current = window.setTimeout(() => setBuffering(true), 600); };
+  const flowing = () => { if (bufTimer.current !== null) { window.clearTimeout(bufTimer.current); bufTimer.current = null; } setBuffering(false); };
+  useEffect(() => () => { if (bufTimer.current !== null) window.clearTimeout(bufTimer.current); }, []);
 
   useEffect(() => {
     if (!active && ref.current && !ref.current.paused) ref.current.pause();
@@ -35,7 +41,11 @@ export default function AudioWave({ src, seed, active }: { src: string; seed: st
         src={src}
         preload="metadata"
         onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
+        onPause={() => { setPlaying(false); flowing(); }}
+        onWaiting={stalled}
+        onStalled={stalled}
+        onPlaying={flowing}
+        onCanPlay={flowing}
         onEnded={() => { setPlaying(false); setT(0); }}
         onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)}
         onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
@@ -45,7 +55,7 @@ export default function AudioWave({ src, seed, active }: { src: string; seed: st
           <i key={i} className={i < played ? "played" : ""} style={{ height: h }} />
         ))}
       </div>
-      <div className="wave-track" aria-hidden><span style={{ width: dur ? `${(t / dur) * 100}%` : 0 }} /></div>
+      <div className="wave-track" aria-hidden><span style={{ width: dur ? `${(t / dur) * 100}%` : 0 }} />{buffering ? <i className="vp-buffer" /> : null}</div>
       <div className="wave-time"><span>{fmt(t)}</span><span>{dur ? fmt(dur) : "--:--"}</span></div>
       <button
         className="wave-play"
