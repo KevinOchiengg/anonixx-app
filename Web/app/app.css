@@ -35,6 +35,8 @@
 .apphead {
   flex: none; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center;
   padding: 12px 8px; border-bottom: 1px solid var(--line);
+  /* Its glass blur makes its own layer; lift it so header menus open over the tabs below. */
+  position: relative; z-index: 20;
 }
 .apphead h1 { margin: 0; font-size: 17px; text-align: center; }
 .apphead .back { font-size: 22px; padding: 4px 10px; }
