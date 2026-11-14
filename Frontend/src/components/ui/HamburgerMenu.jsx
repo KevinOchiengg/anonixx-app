@@ -17,6 +17,7 @@ import T from '../../utils/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../ui/Toast';
+import Avatar from '../common/Avatar';
 
 // ─── Row components (module-level, Rule 6) ────────────────────
 const NavRow = React.memo(({ icon: Icon, label, value, onPress, danger }) => (
@@ -60,7 +61,7 @@ const SectionHeader = React.memo(({ title }) => (
 // ─── Main component ───────────────────────────────────────────
 export default function HamburgerMenu({ visible, onClose, navigation }) {
   const insets              = useSafeAreaInsets();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { confirmLogout }   = useLogout(navigation);
   const { showToast }       = useToast();
 
@@ -159,11 +160,23 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.scrollContent}
         >
+          {/* ── You: photo and hidden name; tap to edit them ── */}
+          {isAuthenticated && user ? (
+            <TouchableOpacity style={styles.me} onPress={() => go('EditProfile')} activeOpacity={0.8}>
+              <View style={styles.meRing}>
+                <Avatar uri={user.avatar_url} size={rs(48)} name={user.anonymous_name || user.username} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.meName} numberOfLines={1}>{user.anonymous_name || user.username || 'You'}</Text>
+                <Text style={styles.meHint}>Edit profile</Text>
+              </View>
+              <ChevronRight size={rs(15)} color={T.textMuted} />
+            </TouchableOpacity>
+          ) : null}
+
           {/* ── Account ── */}
           <SectionHeader title="Account" />
           <View style={sec.card}>
-            <NavRow icon={User}  label="Edit Profile"    onPress={() => go('EditProfile')} />
-            <View style={sec.div} />
             <NavRow icon={Lock}  label="Change Password" onPress={() => go('ChangePassword')} />
           </View>
 
@@ -409,6 +422,33 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: rp(16),
+  },
+  me: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             rp(12),
+    marginTop:       rp(12),
+    padding:         rp(12),
+    borderRadius:    RADIUS.md,
+    backgroundColor: T.surfaceAlt,
+    borderWidth:     1,
+    borderColor:     T.border,
+  },
+  meRing: {
+    padding:      2,
+    borderRadius: rs(30),
+    borderWidth:  1.5,
+    borderColor:  T.primary,
+  },
+  meName: {
+    fontSize:   rf(16),
+    fontWeight: '700',
+    color:      T.text,
+  },
+  meHint: {
+    fontSize:  rf(12),
+    color:     T.textSecondary,
+    marginTop: rp(2),
   },
   logoutBtn: {
     flexDirection:     'row',

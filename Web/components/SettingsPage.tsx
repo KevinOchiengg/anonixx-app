@@ -6,14 +6,13 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@/lib/push";
-import { Ban, Bell, Bookmark, ChevronRight, Coins, Crown, FileText, Flag, Gift, Headphones, Lock, MapPin, Megaphone, MessageCircle, Search, ShieldCheck, ShieldEllipsis, ShoppingBag, Sparkles, Trash2, UserRound, Wallet } from "lucide-react";
+import { Ban, Bell, Bookmark, ChevronRight, Coins, Crown, FileText, Flag, Gift, Headphones, Lock, MapPin, Megaphone, MessageCircle, Search, ShieldCheck, ShieldEllipsis, ShoppingBag, Sparkles, Trash2, Wallet } from "lucide-react";
 
 
 function Inner() {
   const { user, logout, refresh } = useAuth();
   // Read after mount: the country cookie isn't available during server render.
   const router = useRouter();
-  const [name, setName] = useState(user?.anonymous_name || "");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [adult, setAdult] = useState(false);
@@ -22,8 +21,6 @@ function Inner() {
   const [busy, setBusy] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [canPush, setCanPush] = useState(false);
-
-  useEffect(() => { setName(user?.anonymous_name || ""); }, [user?.anonymous_name]);
 
   useEffect(() => {
     setCanPush(pushSupported());
@@ -41,18 +38,6 @@ function Inner() {
   }
 
   const say = (n: string, e = "") => { setNote(n); setErr(e); };
-
-  async function rename(e: React.FormEvent) {
-    e.preventDefault();
-    say("");
-    try {
-      await api("/auth/update-profile", { method: "PUT", body: { anonymous_name: name.trim() } });
-      await refresh();
-      say("Name updated.");
-    } catch (x) {
-      say("", (x as Error).message);
-    }
-  }
 
   async function verifyAge(e: React.FormEvent) {
     e.preventDefault();
@@ -84,10 +69,19 @@ function Inner() {
 
   return (
     <div className="pad settings">
-      <div className="who">
-        <strong>{user.anonymous_name || user.username || "You"}</strong>
-        <small>{user.email}</small>
-      </div>
+      <Link href="/profile/edit" className="who me-card">
+        <span className="me-photo">
+          {user.avatar_url
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={user.avatar_url} alt="" />
+            : (user.anonymous_name || user.username || "A")[0].toUpperCase()}
+        </span>
+        <span className="grow">
+          <strong>{user.anonymous_name || user.username || "You"}</strong>
+          <small>Edit profile</small>
+        </span>
+        <ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden />
+      </Link>
       {note ? <div className="ok">{note}</div> : null}
       {err ? <div className="err">{err}</div> : null}
 
@@ -108,19 +102,11 @@ function Inner() {
 
       <h2 className="sec">Profile and privacy</h2>
       <ul className="rows links">
-        <li><Link href="/profile/edit" className="row-item"><span className="ibox"><UserRound size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Edit profile</b><small>Name, photo, gender</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
         <li><Link href="/change-password" className="row-item"><span className="ibox"><Lock size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Change password</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
         <li><Link href="/location" className="row-item"><span className="ibox"><MapPin size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Feed location</b><small>Lean your feed toward people nearby</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
         <li><Link href="/blocked" className="row-item"><span className="ibox"><Ban size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Blocked people</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
         <li><Link href="/moderation" className="row-item"><span className="ibox"><Flag size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Flagged posts</b><small>See what was reported or hidden</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
       </ul>
-
-      <form className="form" onSubmit={rename}>
-        <label className="field">Hidden name
-          <input value={name} maxLength={30} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <button className="btn ghost" disabled={!name.trim() || name.trim() === user.anonymous_name}>Save name</button>
-      </form>
 
       {!user.age_verified ? (
         <form className="form" onSubmit={verifyAge}>
