@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Archive, ArrowLeft, BellOff, Bell, DoorOpen, MessageSquarePlus, MoreVertical, Phone, Pin, PinOff,
-  Radio, Search, Star, Video, X, Compass, Settings, Menu as MenuIcon, Trash2, Home,
+  Radio, Search, Video, X, Compass, Settings, Menu as MenuIcon, Trash2, Home,
 } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, FONT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -210,7 +210,6 @@ export default function MessagesScreen({ navigation, route }) {
   const menuItems = [
     tab === 'calls' && { icon: Trash2, label: 'Clear call log', onPress: () => Alert.alert('Clear call log?', 'This only clears it for you.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => callsRef.current?.clear() }]) },
     tab === 'updates' && { icon: Radio, label: 'Go live', onPress: () => updatesRef.current?.goLive() },
-    { icon: Star, label: 'Starred messages', onPress: () => navigation.navigate('StarredMessages') },
     { icon: Archive, label: `Archived${archived.length ? ` (${archived.length})` : ''}`, onPress: () => navigation.navigate('ArchivedChats') },
     { icon: Home, label: 'My Room', onPress: () => goTab('updates') },
     { icon: Settings, label: 'Room settings', onPress: () => setSettingsOpen(true) },

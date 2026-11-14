@@ -26,7 +26,6 @@ import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import DropChatScreen from '../screens/drops/DropChatScreen';
 import ChatInfoScreen from '../screens/rooms/ChatInfoScreen';
-import StarredMessagesScreen from '../screens/rooms/StarredMessagesScreen';
 import ArchivedChatsScreen from '../screens/rooms/ArchivedChatsScreen';
 import ChatMediaScreen from '../screens/rooms/ChatMediaScreen';
 import MarketScreen from '../screens/market/MarketScreen';
@@ -148,7 +147,6 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="Premium" component={withBackdrop(PremiumScreen)} />
         <Stack.Screen name="DropChat" component={withBackdrop(DropChatScreen, { brand: false })} />
         <Stack.Screen name="ChatInfo" component={withBackdrop(ChatInfoScreen)} />
-        <Stack.Screen name="StarredMessages" component={withBackdrop(StarredMessagesScreen)} />
         <Stack.Screen name="ArchivedChats" component={withBackdrop(ArchivedChatsScreen)} />
         <Stack.Screen name="ChatMedia" component={withBackdrop(ChatMediaScreen)} />
         <Stack.Screen name="DropsCompose" component={withBackdrop(DropsComposeScreen)} />

@@ -31,10 +31,15 @@ export function confirmBlock(userId, onDone, onError) {
   );
 }
 
-const REASONS = [
+export const REPORT_REASONS = [
   ['abuse', 'Abuse or harassment'], ['spam', 'Spam'], ['explicit', 'Unwanted explicit content'],
   ['self-harm-concern', "I'm worried about them"], ['other', 'Other'],
 ];
+const REASONS = REPORT_REASONS;
+
+export const sendReport = (userId, reason) => post(`/users/${userId}/report`, { reason });
+/** Guest only: the confession that got them to pay was fake. An admin reviews it. */
+export const sendFakeReport = (connectionId) => post('/deception-reports', { connection_id: connectionId });
 
 export function confirmReport(userId, onDone, onError) {
   Alert.alert('Report this person', "What's the issue?", [

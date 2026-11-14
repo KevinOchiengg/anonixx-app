@@ -29,7 +29,6 @@ import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
 // Messages
 import MessagesScreen from '../screens/connect/MessagesScreen';
 import ChatInfoScreen from '../screens/rooms/ChatInfoScreen';
-import StarredMessagesScreen from '../screens/rooms/StarredMessagesScreen';
 import ArchivedChatsScreen from '../screens/rooms/ArchivedChatsScreen';
 import ChatMediaScreen from '../screens/rooms/ChatMediaScreen';
 
@@ -124,7 +123,6 @@ function MessagesStack() {
       <Stack.Screen name="DemoChat"     component={withBackdrop(DemoChatScreen, { brand: false })} />
       <Stack.Screen name="ChatProfileSetup" component={withBackdrop(ChatProfileSetupScreen)} />
       <Stack.Screen name="ChatInfo"        component={withBackdrop(ChatInfoScreen)} />
-      <Stack.Screen name="StarredMessages" component={withBackdrop(StarredMessagesScreen)} />
       <Stack.Screen name="ArchivedChats"   component={withBackdrop(ArchivedChatsScreen)} />
       <Stack.Screen name="ChatMedia"       component={withBackdrop(ChatMediaScreen)} />
     </Stack.Navigator>

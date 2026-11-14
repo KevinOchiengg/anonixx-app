@@ -1,28 +1,25 @@
 /** Pick from your chats, messenger-style. Modes:
  *  'open'    tap a chat to open it (New chat), with optional extra rows on top
- *  'call'    voice / video buttons on each row (New call)
- *  'forward' tick up to MAX_FORWARD chats, then send */
+ *  'call'    voice / video buttons on each row (New call) */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Phone, Search, Send, Video } from 'lucide-react-native';
+import { ArrowLeft, Phone, Search, Video } from 'lucide-react-native';
 import { rs, rf, rp, FONT, SPACING, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
-import { chatsApi, MAX_FORWARD } from '../../services/chats';
+import { chatsApi } from '../../services/chats';
 import { Avatar, st as rowSt } from './ChatBits';
 
-export default function PickChatSheet({ visible, mode = 'open', title, subtitle, exclude, extras = [], onClose, onOpen, onCall, onForward }) {
+export default function PickChatSheet({ visible, mode = 'open', title, subtitle, exclude, extras = [], onClose, onOpen, onCall }) {
   const insets = useSafeAreaInsets();
   const [chats, setChats] = useState(null);
   const [q, setQ] = useState('');
-  const [picked, setPicked] = useState([]);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
-    setPicked([]); setQ(''); setBusy(false);
+    setQ('');
     chatsApi.list().then((r) => setChats(r.connections || [])).catch(() => setChats([]));
   }, [visible]);
 
@@ -34,14 +31,6 @@ export default function PickChatSheet({ visible, mode = 'open', title, subtitle,
       .sort((a, b) => (a.other_anonymous_name || '').localeCompare(b.other_anonymous_name || ''));
   }, [chats, q, exclude]);
 
-  const toggle = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= MAX_FORWARD ? p : [...p, id]));
-
-  const send = async () => {
-    if (!picked.length || busy) return;
-    setBusy(true);
-    try { await onForward(picked); } finally { setBusy(false); }
-  };
-
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[s.wrap, { paddingTop: insets.top }]}>
@@ -50,7 +39,7 @@ export default function PickChatSheet({ visible, mode = 'open', title, subtitle,
           <View style={{ flex: 1 }}>
             <Text style={s.title}>{title}</Text>
             <Text style={s.sub}>
-              {mode === 'forward' ? (picked.length ? `${picked.length} of ${MAX_FORWARD} selected` : `Up to ${MAX_FORWARD} chats`) : subtitle || `${list.length} ${list.length === 1 ? 'chat' : 'chats'}`}
+              {subtitle || `${list.length} ${list.length === 1 ? 'chat' : 'chats'}`}
             </Text>
           </View>
         </View>
@@ -79,19 +68,14 @@ export default function PickChatSheet({ visible, mode = 'open', title, subtitle,
               </View>
             ) : null}
             ListEmptyComponent={<Text style={s.empty}>{q ? `No chats match “${q}”.` : 'No chats yet. Let someone in, or go knock.'}</Text>}
-            renderItem={({ item }) => {
-              const on = picked.includes(item.id);
-              return (
+            renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[rowSt.row, on && rowSt.rowSelected]}
+                  style={rowSt.row}
                   activeOpacity={0.7}
-                  onPress={() => (mode === 'forward' ? toggle(item.id) : mode === 'open' ? onOpen(item) : null)}
+                  onPress={() => (mode === 'open' ? onOpen(item) : null)}
                   disabled={mode === 'call'}
                 >
-                  <View>
-                    <Avatar name={item.other_anonymous_name} url={item.other_avatar_url} seed={item.other_user_id} size={rs(46)} />
-                    {on ? <View style={rowSt.check}><Text style={s.tick}>✓</Text></View> : null}
-                  </View>
+                  <Avatar name={item.other_anonymous_name} url={item.other_avatar_url} seed={item.other_user_id} size={rs(46)} />
                   <View style={{ flex: 1 }}>
                     <Text style={rowSt.name} numberOfLines={1}>{item.other_anonymous_name}</Text>
                     <Text style={s.hint} numberOfLines={1}>{item.is_sender ? 'Your guest' : 'You’re inside their Room'}</Text>
@@ -107,15 +91,9 @@ export default function PickChatSheet({ visible, mode = 'open', title, subtitle,
                     </View>
                   ) : null}
                 </TouchableOpacity>
-              );
-            }}
+            )}
           />
         )}
-        {mode === 'forward' && picked.length ? (
-          <TouchableOpacity style={[s.fab, { bottom: insets.bottom + rp(20) }]} onPress={send} disabled={busy} accessibilityLabel="Forward">
-            {busy ? <ActivityIndicator color="#fff" /> : <Send size={rs(22)} color="#fff" />}
-          </TouchableOpacity>
-        ) : null}
       </View>
     </Modal>
   );
@@ -135,10 +113,5 @@ const s = StyleSheet.create({
   section: { fontSize: rf(12.5), fontFamily: 'DMSans-SemiBold', color: T.textSecondary, paddingHorizontal: SPACING.md, paddingTop: rp(10), paddingBottom: rp(4) },
   hint: { fontSize: rf(12.5), color: T.textSecondary, marginTop: rp(2) },
   empty: { textAlign: 'center', color: T.textSecondary, fontSize: FONT.sm, padding: SPACING.xl },
-  tick: { color: '#fff', fontSize: rf(11), fontWeight: '900' },
   callBtns: { flexDirection: 'row', alignItems: 'center', gap: rp(22), paddingRight: rp(4) },
-  fab: {
-    position: 'absolute', right: SPACING.md + rp(4), width: rs(56), height: rs(56), borderRadius: rs(18),
-    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center', elevation: 6,
-  },
 });

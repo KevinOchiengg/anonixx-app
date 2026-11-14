@@ -1,6 +1,6 @@
 /** Contact info for a Room chat (tap the chat header): who they are to you, call buttons,
- * media / links / voice, starred, mute, pin, archive, their Room's welcome media, and the
- * safety actions. Params: { connectionId }. */
+ * media / links / voice, who's inside the Room, mute, pin, archive, their Room's welcome media,
+ * and the safety actions. Params: { connectionId }. */
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View,
@@ -10,7 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Archive, ArrowLeft, BellOff, ChevronRight, DoorOpen, Eraser, Flag, Images, Phone, Pin,
-  ShieldOff, Star, Video, Play,
+  ShieldOff, Video, Play,
 } from 'lucide-react-native';
 import { rs, rf, rp, FONT, SPACING, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
@@ -40,7 +40,7 @@ export default function ChatInfoScreen({ route, navigation }) {
   const { showToast } = useToast();
   const [data, setData] = useState(null);
   const [media, setMedia] = useState(null);
-  const [starred, setStarred] = useState(0);
+  const [guests, setGuests] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -48,10 +48,15 @@ export default function ChatInfoScreen({ route, navigation }) {
       const token = await AsyncStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error();
-      setData(await res.json());
-      const [m, st] = await Promise.all([chatsApi.media(connectionId, 'media'), chatsApi.starred(connectionId)]);
-      setMedia(m);
-      setStarred(st.messages?.length || 0);
+      const d = await res.json();
+      setData(d);
+      setMedia(await chatsApi.media(connectionId, 'media'));
+      // Who's inside the Room (a nice-to-have; quiet if it fails).
+      const host = d.connection?.host_user_id;
+      if (host) {
+        fetch(`${API_BASE_URL}/api/v1/drops/room/${host}/guests`, { headers: { Authorization: `Bearer ${token}` } })
+          .then((r) => (r.ok ? r.json() : null)).then((g) => g && setGuests(g.guests || [])).catch(() => {});
+      }
     } catch {
       showToast({ type: 'error', message: "Couldn't load this chat." });
     }
@@ -148,8 +153,20 @@ export default function ChatInfoScreen({ route, navigation }) {
           </View>
         ) : null}
 
+        {guests?.length ? (
+          <View style={s.card}>
+            <Text style={[s.cardTitle, { marginBottom: rp(6) }]}>{c.is_sender ? 'Inside your Room' : `Inside ${name}'s Room`}</Text>
+            {guests.slice(0, 12).map((g) => (
+              <View key={g.user_id} style={s.guest}>
+                <View style={[s.guestDot, g.is_online && { backgroundColor: T.online }]} />
+                <Text style={s.guestName} numberOfLines={1}>{g.anonymous_name}</Text>
+                <Text style={s.rowValue}>{g.is_online ? 'online' : 'offline'}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <View style={s.group}>
-          <Row icon={Star} label="Starred messages" value={starred ? String(starred) : 'None'} onPress={() => navigation.navigate('StarredMessages', { connectionId, name })} right={<ChevronRight size={rs(18)} color={T.textMuted} />} />
           <Row icon={BellOff} label="Mute notifications" value={mutedLabel(c.muted_until)} onPress={() => pickMute(connectionId, c.muted_until, (p) => setData((d) => ({ ...d, connection: { ...d.connection, ...p } })), fail)} />
           <Row icon={Pin} label="Pin chat" right={<Switch value={!!c.pinned} onValueChange={(v) => setPref({ pinned: v })} trackColor={{ true: T.primary, false: T.border }} thumbColor="#fff" />} />
           <Row icon={Archive} label="Archive chat" right={<Switch value={!!c.archived} onValueChange={(v) => setPref({ archived: v })} trackColor={{ true: T.primary, false: T.border }} thumbColor="#fff" />} />
@@ -193,5 +210,8 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: rp(16), paddingHorizontal: SPACING.md, minHeight: rs(54) },
   rowLabel: { flex: 1, fontSize: FONT.md, color: T.text },
   rowValue: { fontSize: rf(13), color: T.textSecondary },
+  guest: { flexDirection: 'row', alignItems: 'center', gap: rp(10), paddingVertical: rp(7) },
+  guestDot: { width: rs(7), height: rs(7), borderRadius: rs(4), backgroundColor: T.border },
+  guestName: { flex: 1, fontSize: FONT.sm, color: T.text },
   foot: { fontSize: rf(11.5), color: T.textMuted, textAlign: 'center', paddingHorizontal: SPACING.xl, marginTop: rp(18) },
 });

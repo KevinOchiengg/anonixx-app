@@ -23,16 +23,11 @@ async function request(path, method = 'GET', body) {
   return data;
 }
 
-const msg = (cid, mid, action) => `/drops/connections/${cid}/messages/${mid}/${action}`;
-
 export const chatsApi = {
   list: () => request('/drops/connections'),
   /** { pinned?, archived?, mute?: '8h' | '1w' | 'always' | 'off' } — mine only. */
   prefs: (cid, body) => request(`/drops/connections/${cid}/prefs`, 'POST', body),
   clear: (cid) => request(`/drops/connections/${cid}/clear`, 'POST'),
-  star: (cid, mid, starred) => request(msg(cid, mid, 'star'), 'POST', { starred }),
-  forward: (cid, mid, to) => request(msg(cid, mid, 'forward'), 'POST', { to }),
-  starred: (cid) => request(`/drops/connections/starred${cid ? `?connection_id=${cid}` : ''}`),
   /** kind: 'media' | 'voice' | 'links' */
   media: (cid, kind) => request(`/drops/connections/${cid}/media?kind=${kind}`),
   callHistory: () => request('/drop-calls/history'),
@@ -40,4 +35,3 @@ export const chatsApi = {
 };
 
 export const MUTE_OPTIONS = [['8h', '8 hours'], ['1w', '1 week'], ['always', 'Always']];
-export const MAX_FORWARD = 5;

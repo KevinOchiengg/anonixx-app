@@ -1,42 +1,32 @@
-/** Link Up chat between two connected people: inside card, reactions, view-once media,
- * voice notes, replies, calls. */
+/** Link Up chat between two connected people. The screen holds the thread and the
+ * composer; bubbles, sheets, live updates and voice notes live in their own files:
+ * components/chat/{ChatBubble, ChatIntro, ChatSheets, ChatMediaViewer}, hooks/{useChatSocket, useVoiceNote}.
+ * Everything else (media, Room, remove, welcome media) is in Chat info: tap the name. */
 
-import React, {
-  useState, useEffect, useRef, useCallback, useMemo,
-} from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, FlatList,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
-  Animated, Modal, Image, ScrollView, Pressable, Alert,
+  View, Text, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView,
+  ActivityIndicator, Animated, Image, Pressable, Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Swipeable, Pressable as GHPressable, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  useAudioRecorder, RecordingPresets,
-  requestRecordingPermissionsAsync, setAudioModeAsync,
-} from 'expo-audio';
-import {
-  Send, X, Video, Phone, MoreVertical,
-  Mic, Play, Settings, Flag, ShieldOff, Users, AlertTriangle,
-  Reply, Trash2, Lock, Eye, Star, Forward, Copy, Info, BellOff, Eraser, Images,
-} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
+import { Send, X, Phone, MoreVertical, Mic, Trash2, BellOff } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
-import {
-  rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP, SCREEN,
-} from '../../utils/responsive';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import PulseLoader from '../../components/common/PulseLoader';
 import VoiceWaveform from '../../components/common/VoiceWaveform';
 import ChatInputBar from '../../components/common/ChatInputBar';
-import { uploadToR2 } from '../../utils/upload';
 import ChatBackground from '../../components/chat/ChatBackground';
+import ChatBubble, { DateSeparator, TypingBubble, messagePreviewLabel } from '../../components/chat/ChatBubble';
+import { InsideCard, EmptyChat } from '../../components/chat/ChatIntro';
+import { ChatMenuSheet, MessageSheet } from '../../components/chat/ChatSheets';
+import ChatMediaViewer from '../../components/chat/ChatMediaViewer';
 import { useToast } from '../../components/ui/Toast';
+import { uploadToR2 } from '../../utils/upload';
 import { API_BASE_URL } from '../../config/api';
 import { WELCOME_SOUND_MAP } from '../../config/sounds';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
@@ -44,68 +34,26 @@ import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
 import { useSocket } from '../../context/SocketContext';
 import useDraft from '../../hooks/useDraft';
+import useChatSocket from '../../hooks/useChatSocket';
+import useVoiceNote from '../../hooks/useVoiceNote';
 import { callsApi, callParams } from '../../services/calls';
 import { chatsApi } from '../../services/chats';
-import { confirmClear, mutedLabel, pickMute } from '../../services/roomActions';
-import PickChatSheet from '../../components/rooms/PickChatSheet';
-import { intentLabel } from '../../config/linkup';
+import { confirmBlock, confirmClear, sendFakeReport, sendReport } from '../../services/roomActions';
 
 // Fallback poll; messages normally arrive over the socket.
 const POLL_INTERVAL_MS = 25000;
 
-// ─── Quick emoji strip — toggled from the input bar's Smile icon ──
-const QUICK_EMOJIS = ['🔥','😏','💋','🖤','😈','✨','🥵','👀','💦','🍒','😩','🤍'];
-
-// ─── "Today" / "Yesterday" / date separators between message groups ──
-function formatDateLabel(isoString) {
-  if (!isoString) return '';
-  const d = new Date(isoString);
-  if (isNaN(d.getTime())) return '';
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) return 'Today';
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
-}
-
-// Poster frame by swapping the extension to .jpg (only works for older Cloudinary videos).
-function videoPosterUrl(url) {
-  return url ? url.replace(/\.\w+(\?.*)?$/, '.jpg$1') : url;
-}
-
-// Short label for the reply banner (same as the backend's _message_preview_text).
-function messagePreviewLabel(item) {
-  if (!item) return '';
-  if (item.deleted) return 'This message was deleted';
-  if (item.media_type === 'voice') return '🎙 Voice note';
-  if (item.media_type === 'image') return '📷 Photo';
-  if (item.media_type === 'video') return '🎥 Video';
-  return item.content || '';
-}
-
-// Reactions (same set the backend accepts). Double-tap a message for the first one.
-const REACTIONS = ['🔥', '😈', '💋', '🥵', '😂', '🖤'];
-
-// Openers for an empty chat, by side.
-const OPENERS_GUEST = [
-  'What made you post this?',
-  'Tell me the part you left out 😏',
-  'Where are you tonight?',
-  'What would you do if I was there right now?',
-];
-const OPENERS_HOST = [
-  'You knocked. So what caught you?',
-  'Be honest. What did you think when I let you in? 😈',
-  'Tell me something you would never post.',
-  'Where are you right now?',
-];
-
-function sinceLabel(iso) {
+// "Today" / "Yesterday" / date pills between message groups.
+function formatDateLabel(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }
 
 // Avatar fallback colours (same as MessagesScreen).
@@ -113,794 +61,144 @@ const AVATAR_COLORS = ['#C96F53', '#C97B84', '#D98E4A', '#B56576', '#A8674F'];
 function avatarColorFor(seed) {
   if (!seed) return AVATAR_COLORS[0];
   let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
-// ─── Top of the thread: who let who in, when, and the knock that did it.
-const InsideCard = React.memo(({ connection, otherName }) => {
-  if (!connection) return null;
-  const guest = !connection.is_sender;
-  const since = sinceLabel(connection.inside_since);
-  return (
-    <LinearGradient
-      colors={['rgba(255,99,74,0.16)', 'rgba(251,191,36,0.06)']}
-      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-      style={s.insideCard}
-    >
-      <View style={s.insideKickerRow}>
-        <Lock size={rs(11)} color={T.gold} strokeWidth={2} />
-        <Text style={s.insideKicker}>{guest ? "YOU'RE INSIDE" : 'INSIDE YOUR ROOM'}</Text>
-      </View>
-      <Text style={s.insideTitle}>
-        {guest ? `${otherName || 'They'} let you in` : `${otherName || 'They'} knocked and you let them in`}
-        {since ? <Text style={s.insideSince}>{`  ·  ${since}`}</Text> : null}
-      </Text>
-      {!!connection.knock_pitch && (
-        <Text style={s.insidePitch}>
-          {guest ? 'Your knock: ' : 'Their knock: '}
-          <Text style={s.insidePitchQuote}>&ldquo;{connection.knock_pitch}&rdquo;</Text>
-        </Text>
-      )}
-      {!!connection.knock_intents?.length && (
-        <View style={s.insideChips}>
-          {connection.knock_intents.map((i) => <Text key={i} style={s.insideChip}>{intentLabel(i)}</Text>)}
-        </View>
-      )}
-      <Text style={s.insideFoot}>Only the two of you can see this chat.</Text>
-    </LinearGradient>
-  );
-});
+async function authed(path, options = {}) {
+  const token = await AsyncStorage.getItem('token');
+  return fetch(`${API_BASE_URL}/api/v1${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+  });
+}
 
-// ─── Reactions under a message; tap one to add or take back yours.
-const ReactionRow = React.memo(({ item, onReact }) => {
-  if (!item.reactions?.length) return null;
-  return (
-    <View style={[s.reactionRow, item.is_own && s.reactionRowOwn]}>
-      {item.reactions.map((r) => (
-        <TouchableOpacity
-          key={r.emoji}
-          style={[s.reactionPill, r.mine && s.reactionPillMine]}
-          onPress={() => onReact?.(item, r.emoji)}
-          hitSlop={HIT_SLOP}
-          activeOpacity={0.8}
-        >
-          <Text style={s.reactionEmoji}>{r.emoji}</Text>
-          {r.count > 1 && <Text style={s.reactionCount}>{r.count}</Text>}
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-});
-
-// ─── View-once photo/video: sealed until opened, then gone for the receiver.
-const ViewOnceBubble = React.memo(({ item, onOpen, onLongPress }) => {
-  const isOwn = item.is_own;
-  const kind = item.media_type === 'video' ? 'video' : 'photo';
-  let label;
-  if (isOwn) label = item.opened ? `View-once ${kind} · opened` : `View-once ${kind} · not opened yet`;
-  else label = item.opened ? `${kind[0].toUpperCase()}${kind.slice(1)} opened` : `Tap to open · view once`;
-  const sealed = !isOwn && !item.opened;
-  return (
-    <GHTouchableOpacity
-      activeOpacity={0.85}
-      onPress={() => sealed && onOpen?.(item)}
-      onLongPress={onLongPress}
-      style={[s.viewOnce, sealed && s.viewOnceSealed, isOwn && s.viewOnceOwn]}
-    >
-      {item.opened || isOwn
-        ? <Eye size={rs(16)} color={isOwn ? '#fff' : T.textMute} strokeWidth={2} />
-        : <Lock size={rs(16)} color={T.gold} strokeWidth={2} />}
-      <Text style={[s.viewOnceText, sealed && s.viewOnceTextSealed, isOwn && { color: '#fff' }]}>{label}</Text>
-      <Text style={[s.viewOnceTime, isOwn && { color: 'rgba(255,255,255,0.65)' }]}>{item.time_ago}</Text>
-    </GHTouchableOpacity>
-  );
-});
-
-const DateSeparator = React.memo(({ label }) => (
-  <View style={s.dateSeparatorRow}>
-    <Text style={s.dateSeparatorText}>{label}</Text>
-  </View>
-));
-
-// ─── Typing indicator: three dots as a received bubble.
-const TypingBubble = React.memo(() => {
-  const dot1 = useRef(new Animated.Value(0.3)).current;
-  const dot2 = useRef(new Animated.Value(0.3)).current;
-  const dot3 = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    const animate = (dot, delay) => Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(dot, { toValue: 1,   duration: 300, useNativeDriver: true }),
-        Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
-        Animated.delay(600),
-      ]),
-    ).start();
-    animate(dot1, 0);
-    animate(dot2, 200);
-    animate(dot3, 400);
-  }, [dot1, dot2, dot3]);
-
-  return (
-    <View style={s.msgRow}>
-      <View style={[s.bubble, s.bubbleTheir, s.typingBubble]}>
-        {[dot1, dot2, dot3].map((dot, i) => (
-          <Animated.View key={i} style={[s.typingBubbleDot, { opacity: dot }]} />
-        ))}
-      </View>
-    </View>
-  );
-});
-
-// ─── Mood board shown while waiting for a first reply. Abstract on purpose (never real photos).
-const MOOD_SYMBOLS = ['🔥', '😈', '💋', '🖤', '✨', '🌙', '⛓️', '🍒', '😏', '💦', '🌹'];
-const MOOD_GRADIENTS = [
-  ['#2a0f18', '#14060a'],
-  ['#1a0824', '#08020c'],
-  ['#0a0418', '#02030a'],
-  ['#3a0d1f', '#160510'],
-];
-const MOOD_CARDS = Array.from({ length: 33 }, (_, i) => ({
-  id: i,
-  symbol: MOOD_SYMBOLS[i % MOOD_SYMBOLS.length],
-  gradient: MOOD_GRADIENTS[i % MOOD_GRADIENTS.length],
-}));
-
-// ─── Mood board — shown until the other person's first reply arrives ───
-const MoodBoard = React.memo(() => (
-  <View style={s.moodBoardWrap}>
-    <Text style={s.moodBoardLabel}>their mood, while you wait</Text>
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={s.moodBoardScroll}
-    >
-      {MOOD_CARDS.map((card) => (
-        <LinearGradient
-          key={card.id}
-          colors={card.gradient}
-          style={s.moodCard}
-        >
-          <Text style={s.moodCardSymbol}>{card.symbol}</Text>
-        </LinearGradient>
-      ))}
-    </ScrollView>
-  </View>
-));
-
-// ─── Voice note bubble — play/pause + duration, no autoplay ────
-// Shared implementation, see VoiceWaveform.jsx.
-const VoiceBubble = React.memo(({ item }) => (
-  <VoiceWaveform uri={item.media_url} durationSeconds={item.duration_seconds} speed />
-));
-
-// ─── Quoted reply, shown above a reply's content.
-const ReplyQuote = React.memo(({ replyTo, isOwn, otherName }) => (
-  <View style={[s.replyQuote, isOwn && s.replyQuoteOwn]}>
-    <View style={[s.replyQuoteBar, isOwn && s.replyQuoteBarOwn]} />
-    <View style={{ flex: 1 }}>
-      <Text style={[s.replyQuoteName, isOwn && s.replyQuoteNameOwn]} numberOfLines={1}>
-        {replyTo.is_own ? 'You' : (otherName || 'them')}
-      </Text>
-      <Text style={[s.replyQuotePreview, isOwn && s.replyQuotePreviewOwn]} numberOfLines={1}>
-        {replyTo.preview}
-      </Text>
-    </View>
-  </View>
-));
-
-// ─── Message bubble: swipe right to reply, long-press for reply/delete.
-const Bubble = React.memo(({ item, fontFamily, onMediaPress, otherName, onReply, onLongPressMessage, onReact, onOpenViewOnce }) => {
-  const isOwn = item.is_own;
-  const swipeableRef = useRef(null);
-  const lastTapRef = useRef(0);
-
-  // Double-tap a message to react with the first reaction.
-  const handleTap = useCallback(() => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 280 && !item.deleted) {
-      lastTapRef.current = 0;
-      onReact?.(item, REACTIONS[0], true);
-    } else {
-      lastTapRef.current = now;
-    }
-  }, [item, onReact]);
-  // Ticks on my messages: single = sent, double (accent) = seen.
-  const tick = isOwn ? (item.seen ? '✓✓' : '✓') : null;
-  const starMark = item.starred ? '★ ' : '';
-  const fwd = item.forwarded ? <Text style={s.forwardedLabel}>↪ Forwarded</Text> : null;
-
-  const handleSwipeableOpen = useCallback(() => {
-    swipeableRef.current?.close();
-    onReply?.(item);
-  }, [item, onReply]);
-
-  const renderLeftActions = useCallback((progress) => (
-    <Animated.View style={[
-      s.replyActionWrap,
-      { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) },
-    ]}>
-      <Reply size={rs(18)} color={T.primary} strokeWidth={2} />
-    </Animated.View>
-  ), []);
-
-  const handleLongPress = useCallback(() => {
-    if (item.deleted) return;
-    onLongPressMessage?.(item);
-  }, [item, onLongPressMessage]);
-
-  let content;
-
-  if (item.deleted) {
-    // Same container as a normal text bubble (own/received alike) — just
-    // the content replaced, not the shape.
-    content = (
-      <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
-        <Text style={[s.deletedText, isOwn && s.deletedTextOwn]}>
-          This message was deleted
-        </Text>
-      </View>
-    );
-  } else if (item.view_once) {
-    content = <ViewOnceBubble item={item} onOpen={onOpenViewOnce} onLongPress={handleLongPress} />;
-  } else if (item.media_type === 'voice' && item.media_url) {
-    // Voice notes have no bubble background.
-    content = (
-      <View style={s.voiceMessageWrap}>
-        {fwd}
-        <VoiceBubble item={item} />
-        {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
-        <Text style={s.bubbleTime}>
-          {starMark}{item.time_ago}
-          {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
-        </Text>
-      </View>
-    );
-  } else if ((item.media_type === 'image' || item.media_type === 'video') && item.media_url) {
-    const isVideo = item.media_type === 'video';
-    content = (
-      <GHTouchableOpacity
-        activeOpacity={0.9}
-        onPress={() => onMediaPress?.(item)}
-        onLongPress={handleLongPress}
-        style={s.mediaBubble}
-      >
-        {fwd}
-        <View style={s.mediaImageWrap}>
-          <Image
-            source={{ uri: isVideo ? videoPosterUrl(item.media_url) : item.media_url }}
-            style={s.mediaImage}
-            resizeMode="cover"
-          />
-          {isVideo && (
-            <View style={s.videoPlayOverlay}>
-              <Play size={rs(22)} color="#fff" fill="#fff" strokeWidth={0} />
-            </View>
-          )}
-          <Text style={[s.mediaBubbleTime, isOwn && s.mediaBubbleTimeOwn]}>
-            {starMark}{item.time_ago}
-            {tick && <Text style={item.seen ? s.tickSeen : null}> {tick}</Text>}
-          </Text>
-        </View>
-        {item.reply_to && (
-          <View style={s.replyQuoteOnMedia}>
-            <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />
-          </View>
-        )}
-      </GHTouchableOpacity>
-    );
-  } else {
-    // Sent: time inline. Received: time on its own line.
-    content = (
-      <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleTheir]}>
-        {fwd}
-        {isOwn ? (
-          <>
-            <Text style={[s.bubbleText, fontFamily && { fontFamily }, s.bubbleTextOwn]}>
-              {item.content}
-              <Text style={s.bubbleTimeInlineOwn}>
-                {'  '}{starMark}{item.time_ago}
-              </Text>
-              {tick && <Text style={item.seen ? s.tickSeen : s.bubbleTimeInlineOwn}> {tick}</Text>}
-            </Text>
-            {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
-          </>
-        ) : (
-          <>
-            <Text style={[s.bubbleText, fontFamily && { fontFamily }]}>{item.content}</Text>
-            {item.reply_to && <ReplyQuote replyTo={item.reply_to} isOwn={isOwn} otherName={otherName} />}
-            <Text style={s.bubbleTime}>{starMark}{item.time_ago}</Text>
-          </>
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <Swipeable
-      ref={swipeableRef}
-      renderLeftActions={renderLeftActions}
-      onSwipeableOpen={handleSwipeableOpen}
-      overshootLeft={false}
-      leftThreshold={44}
-      enabled={!item.deleted}
-    >
-      <GHPressable onPress={handleTap} onLongPress={handleLongPress} delayLongPress={350}>
-        <View style={[s.msgRow, isOwn && s.msgRowOwn]}>
-          {content}
-        </View>
-        <ReactionRow item={item} onReact={onReact} />
-      </GHPressable>
-    </Swipeable>
-  );
-});
-
-// ─── One page of the welcome gallery — its own component so useVideoPlayer
-// is only ever called once per item, not conditionally inside a .map() ──
-const WelcomeGalleryPage = React.memo(({ item }) => {
-  const isVideo = item?.media_type === 'video' && !!item?.media_url;
-  const player = useVideoPlayer(
-    isVideo ? { uri: item.media_url } : null,
-    (p) => { p.loop = true; p.play(); },
-  );
-
-  if (!item?.media_url) return null;
-
-  return isVideo ? (
-    <VideoView player={player} style={s.welcomeMedia} contentFit="cover" />
-  ) : (
-    // Image handles animated gifs natively — same component for image/gif.
-    <Image source={{ uri: item.media_url }} style={s.welcomeMedia} resizeMode="cover" />
-  );
-});
-
-// ─── Welcome gallery (up to 3 items), shown once to a new visitor.
-const WelcomeGalleryOverlay = React.memo(({ gallery, onDismiss }) => {
-  const [page, setPage] = useState(0);
-  const items = (gallery || []).filter((m) => m?.media_url).slice(0, 3);
-  if (!items.length) return null;
-
-  const handleScroll = (e) => {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN.width);
-    setPage(idx);
-  };
-
-  return (
-    <Modal transparent animationType="fade" visible onRequestClose={onDismiss}>
-      <View style={s.welcomeOverlay}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={handleScroll}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ flexGrow: 1 }}
-        >
-          {items.map((item, idx) => (
-            <TouchableOpacity
-              key={idx}
-              activeOpacity={1}
-              onPress={onDismiss}
-              style={{ width: SCREEN.width, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <WelcomeGalleryPage item={item} />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {items.length > 1 && (
-          <View style={s.welcomeDots} pointerEvents="none">
-            {items.map((_, idx) => (
-              <View key={idx} style={[s.welcomeDot, idx === page && s.welcomeDotActive]} />
-            ))}
-          </View>
-        )}
-
-        <TouchableOpacity style={s.welcomeClose} onPress={onDismiss} hitSlop={HIT_SLOP}>
-          <X size={rs(18)} color="#fff" />
-        </TouchableOpacity>
-
-        <Text style={s.welcomeHint}>
-          {items.length > 1 ? 'swipe to see more · tap to continue' : 'tap anywhere to continue'}
-        </Text>
-      </View>
-    </Modal>
-  );
-});
-
-// ─── Full-screen viewer for a single tapped chat photo/video ───
-const ChatMediaViewer = React.memo(({ media, onClose }) => {
-  const isVideo = media?.media_type === 'video';
-  const player = useVideoPlayer(
-    isVideo && media?.media_url ? { uri: media.media_url } : null,
-    (p) => { p.play(); },
-  );
-
-  if (!media?.media_url) return null;
-
-  return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <View style={s.welcomeOverlay}>
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={onClose}
-          style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}
-        >
-          {isVideo ? (
-            <VideoView player={player} style={s.welcomeMedia} contentFit="contain" nativeControls />
-          ) : (
-            <Image source={{ uri: media.media_url }} style={s.welcomeMedia} resizeMode="contain" />
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity style={s.welcomeClose} onPress={onClose} hitSlop={HIT_SLOP}>
-          <X size={rs(18)} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
-});
-
-// ─── Empty chat ────────────────────────────────────────────────
-const EmptyChat = React.memo(({ connection, otherName, onPickOpener }) => (
-  <ScrollView contentContainerStyle={s.emptyChat} keyboardShouldPersistTaps="handled">
-    <InsideCard connection={connection} otherName={otherName} />
-    <Text style={s.emptyChatText}>You're both anonymous. Say the first thing.</Text>
-    <View style={s.openers}>
-      {(connection?.is_sender ? OPENERS_HOST : OPENERS_GUEST).map((line) => (
-        <TouchableOpacity key={line} style={s.opener} onPress={() => onPickOpener?.(line)} activeOpacity={0.8}>
-          <Text style={s.openerText}>{line}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-    <MoodBoard />
-  </ScrollView>
-));
-
-// ─── Main Screen ───────────────────────────────────────────────
 export default function DropChatScreen({ route, navigation }) {
   const { connectionId } = route.params;
-  const insets          = useSafeAreaInsets();
-  const { showToast }   = useToast();
+  const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const { refreshUnread } = useUnread();
   const { socketService } = useSocket();
 
-  const [messages, setMessages]     = useState([]);
+  const [messages, setMessages] = useState([]);
   const [connection, setConnection] = useState(null);
-  const [loading, setLoading]       = useState(true);
-  const [text, setText]             = useDraft(`chat:${connectionId}`, ''); // unsent message survives leaving
-  const [sending, setSending]       = useState(false);
-  const [showEmojiStrip, setShowEmojiStrip] = useState(false);
+  const [chatProfile, setChatProfile] = useState(null);
+  const [activeCall, setActiveCall] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [text, setText] = useDraft(`chat:${connectionId}`, ''); // unsent message survives leaving
+  const [sending, setSending] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
-  const [viewerMedia, setViewerMedia]       = useState(null);
-  const [isOtherTyping, setIsOtherTyping]   = useState(false);
-  const typingTimeoutRef = useRef(null);
-  const lastTypingEmitRef = useRef(0);
-
-  // ── Reply / delete ────────────────────────────────────────────
-  const [replyingTo, setReplyingTo]     = useState(null); // full message being replied to, or null
-  const [actionSheetItem, setActionSheetItem] = useState(null); // message long-pressed, for the reply/delete sheet
-  const [forwardItem, setForwardItem] = useState(null);        // message being forwarded
-  const inputRef = useRef(null);
-
-  // ── Poster's themed chat surface (per-user chat_profiles doc) ──
-  const [chatProfile, setChatProfile]     = useState(null);
-  const [welcomeGallery, setWelcomeGallery] = useState([]);
-  const [showWelcome, setShowWelcome]     = useState(false);
-  // On-demand re-open of the same gallery, any time — not gated to the
-  // once-only first-open welcome takeover above.
-  const [galleryViewerOpen, setGalleryViewerOpen] = useState(false);
-  // Room video call — polled from the same messages fetch (see
-  // /drop-calls/start and /:id/join for what actually starts it).
-  const [activeCall, setActiveCall]   = useState(null);
+  const [viewerMedia, setViewerMedia] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [sheetItem, setSheetItem] = useState(null);   // long-pressed message
+  const [menuOpen, setMenuOpen] = useState(false);
   const [callLoading, setCallLoading] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [guestList, setGuestList]       = useState([]);
-  const [guestsLoading, setGuestsLoading] = useState(false);
 
-  // ── Voice note recording — press-and-hold mic ──
-  const [isRecording, setIsRecording]     = useState(false);
-  const [recordDuration, setRecordDuration] = useState(0);
-  const [voiceUploading, setVoiceUploading] = useState(false);
-  const [voicePreview, setVoicePreview]   = useState(null);   // { uri, duration } waiting to be sent
-  const recorder        = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recordTimerRef = useRef(null);
-  const pressStartRef  = useRef(0);
-  const recordPulse    = useRef(new Animated.Value(1)).current;
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const lastTypingEmit = useRef(0);
+  const welcomed = useRef(false);
 
-  useEffect(() => {
-    if (!isRecording) { recordPulse.setValue(1); return; }
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(recordPulse, { toValue: 0.3, duration: 550, useNativeDriver: true }),
-        Animated.timing(recordPulse, { toValue: 1,   duration: 550, useNativeDriver: true }),
-      ]),
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [isRecording, recordPulse]);
+  const otherName = connection?.other_anonymous_name || 'Anonymous';
+  const toastError = useCallback((m) => showToast({ type: 'error', message: m || 'Something went wrong.' }), [showToast]);
+  const scrollToEnd = useCallback(() => setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100), []);
 
-  const bubbleFontFamily = useMemo(
-    () => CHAT_FONT_MAP[chatProfile?.font_style] || CHAT_FONT_MAP[DEFAULT_CHAT_FONT],
-    [chatProfile?.font_style]
-  );
+  const isOtherTyping = useChatSocket(socketService, connectionId, setMessages, scrollToEnd);
 
-  const flatListRef  = useRef(null);
-  const fadeAnim     = useRef(new Animated.Value(0)).current;
-  const pollRef      = useRef(null);
-
-  // Fires once, the first time an unlocker opens this chat — see
-  // Frontend/src/config/sounds.js for what welcome_sound ids resolve to.
-  const playWelcomeSound = useCallback(async (soundId) => {
-    const asset = WELCOME_SOUND_MAP[soundId];
-    if (!asset) return; // 'silence', unset, or no bundled asset yet
-    try {
-      const { createAudioPlayer } = await import('expo-audio');
-      const player = createAudioPlayer(asset);
-      player.play();
-    } catch {
-      /* playback unavailable — welcome media/text still shows */
-    }
-  }, []);
-
-  // ── Fetchers ──────────────────────────────────────────────
+  // ── Load + fallback poll ──────────────────────────────────
   const loadMessages = useCallback(async (silent = false) => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res   = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data.messages);
-        setConnection(data.connection);
-        if (data.chat_profile) setChatProfile(data.chat_profile);
-        setActiveCall(data.active_call || null);
-        if ((data.welcome_gallery?.length || data.welcome_sound) && !welcomeGallery.length && !showWelcome) {
-          setWelcomeGallery(data.welcome_gallery || []);
-          setShowWelcome(true);
-          playWelcomeSound(data.welcome_sound);
+      const res = await authed(`/drops/connections/${connectionId}/messages`);
+      if (!res.ok) { if (!silent) toastError("Couldn't load messages."); return; }
+      const data = await res.json();
+      setMessages(data.messages);
+      setConnection(data.connection);
+      if (data.chat_profile) setChatProfile(data.chat_profile);
+      setActiveCall(data.active_call || null);
+      // The Room's welcome sound plays once, the first time a guest opens the chat.
+      if (data.welcome_sound && !welcomed.current) {
+        welcomed.current = true;
+        const asset = WELCOME_SOUND_MAP[data.welcome_sound];
+        if (asset) {
+          import('expo-audio').then(({ createAudioPlayer }) => createAudioPlayer(asset).play()).catch(() => {});
         }
-      } else if (!silent) {
-        showToast({ type: 'error', message: "Couldn't load messages." });
       }
     } catch {
-      if (!silent) {
-        showToast({ type: 'error', message: 'Network error.' });
-      }
+      if (!silent) toastError('Network error.');
     }
-  }, [connectionId, showToast, welcomeGallery.length, showWelcome, playWelcomeSound]);
+  }, [connectionId, toastError]);
 
-  // ── Initial load + polling ────────────────────────────────
   useEffect(() => {
     (async () => {
-      setLoading(true);
       await loadMessages(false);
       setLoading(false);
-      Animated.timing(fadeAnim, {
-        toValue: 1, duration: 320, useNativeDriver: true,
-      }).start();
-      // Opening the chat marks it read server-side (see get_drop_messages) —
-      // nudge the tab badge now instead of waiting up to 30s for the next poll.
-      refreshUnread();
+      Animated.timing(fadeAnim, { toValue: 1, duration: 320, useNativeDriver: true }).start();
+      refreshUnread(); // opening the chat marks it read server-side
     })();
-
-    pollRef.current = setInterval(() => loadMessages(true), POLL_INTERVAL_MS);
-    return () => {
-      clearInterval(pollRef.current);
-      clearInterval(recordTimerRef.current);
-    };
+    const poll = setInterval(() => loadMessages(true), POLL_INTERVAL_MS);
+    return () => clearInterval(poll);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── New messages over the socket (skipping ids we already have).
-  useEffect(() => {
-    const handleNewMessage = ({ connectionId: incomingId, message }) => {
-      if (incomingId !== connectionId) return;
-      setMessages(prev => (
-        prev.some(m => m.id === message.id) ? prev : [...prev, message]
-      ));
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    };
-    socketService.on('new_message', handleNewMessage);
-    return () => socketService.off('new_message', handleNewMessage);
-  }, [connectionId, socketService]);
+  // ── Sending ───────────────────────────────────────────────
+  // Text, photo, video and voice all go through here; a pending reply rides along.
+  const postMessage = useCallback(async (body) => {
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    const res = await authed(`/drops/connections/${connectionId}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ ...body, ...(replyToId && { reply_to_id: replyToId }) }),
+    });
+    if (!res.ok) throw new Error();
+    const sent = await res.json();
+    setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
+    scrollToEnd();
+  }, [connectionId, replyingTo, scrollToEnd]);
 
-  // ── Typing indicator — mirrors MessagesScreen's list-level handling
-  // (same user_typing event, 3s auto-clear), filtered to this connection.
-  useEffect(() => {
-    const handleUserTyping = ({ connectionId: incomingId }) => {
-      if (incomingId !== connectionId) return;
-      setIsOtherTyping(true);
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 3000);
-    };
-    socketService.on('user_typing', handleUserTyping);
-    return () => {
-      socketService.off('user_typing', handleUserTyping);
-      clearTimeout(typingTimeoutRef.current);
-    };
-  }, [connectionId, socketService]);
-
-  // ── Seen ticks going live — the other party just read up to seenAt, so
-  // every one of my own messages sent before that instant flips to seen.
-  useEffect(() => {
-    const handleMessagesSeen = ({ connectionId: incomingId, seenAt }) => {
-      if (incomingId !== connectionId) return;
-      setMessages(prev => prev.map(m => (
-        m.is_own && m.created_at <= seenAt ? { ...m, seen: true } : m
-      )));
-    };
-    socketService.on('messages_seen', handleMessagesSeen);
-    return () => socketService.off('messages_seen', handleMessagesSeen);
-  }, [connectionId, socketService]);
-
-  // ── A message deleted for everyone: show the placeholder now.
-  useEffect(() => {
-    const handleMessageDeleted = ({ connectionId: incomingId, messageId }) => {
-      if (incomingId !== connectionId) return;
-      setMessages(prev => prev.map(m => (
-        m.id === messageId
-          ? { ...m, deleted: true, content: '', media_url: null, media_type: null }
-          : m
-      )));
-    };
-    socketService.on('message_deleted', handleMessageDeleted);
-    return () => socketService.off('message_deleted', handleMessageDeleted);
-  }, [connectionId, socketService]);
-
-  // ── Reactions and view-once opens from the other side, live.
-  useEffect(() => {
-    const handleReaction = ({ connectionId: incomingId, messageId, reactions }) => {
-      if (incomingId !== connectionId) return;
-      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, reactions } : m)));
-    };
-    const handleOpened = ({ connectionId: incomingId, messageId }) => {
-      if (incomingId !== connectionId) return;
-      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, opened: true } : m)));
-    };
-    socketService.on('message_reaction', handleReaction);
-    socketService.on('message_opened', handleOpened);
-    return () => {
-      socketService.off('message_reaction', handleReaction);
-      socketService.off('message_opened', handleOpened);
-    };
-  }, [connectionId, socketService]);
-
-  // Typing signal, at most every 2s.
-  const handleTextChange = useCallback((value) => {
-    setText(value);
-    const now = Date.now();
-    if (now - lastTypingEmitRef.current > 2000) {
-      lastTypingEmitRef.current = now;
-      socketService.emit('typing', { connectionId });
-    }
-  }, [connectionId, socketService]);
-
-  // ── Send ──────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const content = text.trim();
     if (!content) return;
-    const replyToId = replyingTo?.id;
     setText('');
-    setReplyingTo(null);
     setSending(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
-        {
-          method:  'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization:  `Bearer ${token}`,
-          },
-          body: JSON.stringify({ content, ...(replyToId && { reply_to_id: replyToId }) }),
-        },
-      );
-      if (!res.ok) throw new Error();
-      const sent = await res.json();
-      // Add the sent message from the response, no refetch.
-      setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      await postMessage({ content });
     } catch {
-      showToast({ type: 'error', message: 'Failed to send. Try again.' });
+      setText(content);
+      toastError('Failed to send. Try again.');
     } finally {
       setSending(false);
     }
-  }, [text, connectionId, showToast, replyingTo]);
+  }, [text, setText, postMessage, toastError]);
 
-  // ── Voice note — upload direct to R2, then send as a media message. ──
-  const uploadVoice = useCallback(async (uri) => {
-    return uploadToR2(uri, 'audio', 'audio/m4a');
-  }, []);
-
-  const sendVoiceMessage = useCallback(async (mediaUrl, durationSeconds) => {
-    const replyToId = replyingTo?.id;
-    setReplyingTo(null);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
-        {
-          method:  'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization:  `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            media_url: mediaUrl, media_type: 'voice', duration_seconds: durationSeconds,
-            ...(replyToId && { reply_to_id: replyToId }),
-          }),
-        },
-      );
-      if (!res.ok) throw new Error();
-      const sent = await res.json();
-      setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch {
-      showToast({ type: 'error', message: 'Could not send the voice note. Try again.' });
-    }
-  }, [connectionId, showToast, replyingTo]);
-
-  // ── Photos and videos upload straight to R2 (no watermark in private chats).
-  const uploadMedia = useCallback(async (uri, mediaType) => {
-    const resourceType = mediaType === 'video' ? 'video' : 'image';
-    const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
-    return uploadToR2(uri, resourceType, mimeType);
-  }, []);
-
-  const sendMediaMessage = useCallback(async (mediaUrl, mediaType, viewOnce = false) => {
-    const replyToId = replyingTo?.id;
-    setReplyingTo(null);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/message`,
-        {
-          method:  'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization:  `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            media_url: mediaUrl, media_type: mediaType, view_once: viewOnce,
-            ...(replyToId && { reply_to_id: replyToId }),
-          }),
-        },
-      );
-      if (!res.ok) throw new Error();
-      const sent = await res.json();
-      setMessages((prev) => [...prev, { ...sent, is_own: true, seen: false }]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch {
-      showToast({ type: 'error', message: 'Could not send. Try again.' });
-    }
-  }, [connectionId, showToast, replyingTo]);
+  const voice = useVoiceNote({
+    showToast,
+    send: async (uri, duration) => {
+      const url = await uploadToR2(uri, 'audio', 'audio/m4a');
+      if (!url) throw new Error();
+      await postMessage({ media_url: url, media_type: 'voice', duration_seconds: duration });
+    },
+  });
 
   const pickMedia = useCallback(async () => {
     try {
       const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!granted) {
-        showToast({ type: 'warning', message: 'Photo library permission is needed to attach media.' });
-        return;
-      }
+      if (!granted) { showToast({ type: 'warning', message: 'Allow photo access to send media.' }); return; }
       const result = await ImagePicker.launchImageLibraryAsync({
         legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
         mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60,
       });
       if (result.canceled || !result.assets?.length) return;
-
       const asset = result.assets[0];
       const mediaType = asset.type === 'video' ? 'video' : 'image';
       // View once: they can open it a single time, then it's gone for them.
       const viewOnce = await new Promise((resolve) => Alert.alert(
         mediaType === 'video' ? 'Send this video' : 'Send this photo',
-        'They open it once. Then it’s gone.',
+        'View once: they open it once, then it’s gone.',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
           { text: 'View once', onPress: () => resolve(true) },
@@ -910,182 +208,37 @@ export default function DropChatScreen({ route, navigation }) {
       ));
       if (viewOnce === null) return;
       setMediaUploading(true);
-      const url = await uploadMedia(asset.uri, mediaType);
-      setMediaUploading(false);
-      if (url) await sendMediaMessage(url, mediaType, viewOnce);
+      const url = await uploadToR2(asset.uri, mediaType, mediaType === 'video' ? 'video/mp4' : 'image/jpeg');
+      if (url) await postMessage({ media_url: url, media_type: mediaType, view_once: viewOnce });
     } catch (e) {
-      setMediaUploading(false);
-      showToast({ type: 'error', message: e?.message || 'Could not send media.' });
-    }
-  }, [uploadMedia, sendMediaMessage, showToast]);
-
-  const handleVoicePressIn = useCallback(async () => {
-    if (isRecording) return;
-
-    try {
-      const { granted } = await requestRecordingPermissionsAsync();
-      if (!granted) {
-        showToast({ type: 'warning', message: 'Microphone permission is needed to record.' });
-        return;
-      }
-
-      await setAudioModeAsync({
-        allowsRecording:        true,
-        playsInSilentMode:      true,
-        shouldPlayInBackground: false,
-      });
-
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-
-      pressStartRef.current = Date.now();
-      setIsRecording(true);
-      setRecordDuration(0);
-      recordTimerRef.current = setInterval(() => {
-        setRecordDuration((prev) => prev + 1);
-      }, 1000);
-    } catch (e) {
-      setIsRecording(false);
-      clearInterval(recordTimerRef.current);
-      const msg = e?.message || '';
-      if (msg.toLowerCase().includes('permission')) {
-        showToast({ type: 'warning', message: 'Microphone permission denied.' });
-      } else {
-        showToast({ type: 'error', message: `Recording error: ${msg || 'Could not start.'}` });
-      }
-    }
-  }, [isRecording, showToast, recorder]);
-
-  const handleVoicePressOut = useCallback(async () => {
-    if (!isRecording) return;
-
-    clearInterval(recordTimerRef.current);
-    recordTimerRef.current = null;
-    const heldMs = Date.now() - pressStartRef.current;
-
-    try {
-      const durationSeconds = recordDuration;
-      await recorder.stop();
-      const uri = recorder.uri;
-      setIsRecording(false);
-      setRecordDuration(0);
-
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-
-      if (heldMs < 500) {
-        showToast({ type: 'info', message: 'Hold the mic to record, then release to listen back.' });
-        return;
-      }
-      if (!uri) {
-        showToast({ type: 'error', message: 'Recording failed — no audio captured.' });
-        return;
-      }
-      // Listen back first: the preview row plays it, and Send or the bin decides.
-      setVoicePreview({ uri, duration: Math.max(1, durationSeconds) });
-    } catch {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-      setIsRecording(false);
-      setRecordDuration(0);
-      setVoiceUploading(false);
-      showToast({ type: 'error', message: 'Could not send voice note.' });
-    }
-  }, [isRecording, recordDuration, showToast]);
-
-  const sendVoicePreview = useCallback(async () => {
-    if (!voicePreview || voiceUploading) return;
-    const { uri, duration } = voicePreview;
-    setVoiceUploading(true);
-    try {
-      const url = await uploadVoice(uri);
-      if (url) {
-        await sendVoiceMessage(url, duration);
-        setVoicePreview(null);
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Could not send the voice note. Try again.' });
+      toastError(e?.message || 'Could not send. Try again.');
     } finally {
-      setVoiceUploading(false);
+      setMediaUploading(false);
     }
-  }, [voicePreview, voiceUploading, uploadVoice, sendVoiceMessage, showToast]);
+  }, [postMessage, showToast, toastError]);
 
-  // ── Helpers ───────────────────────────────────────────────
-  // Add a date separator when the day changes.
-  const messagesWithDates = useMemo(() => {
-    const out = [];
-    let lastLabel = null;
-    for (const m of messages) {
-      const label = formatDateLabel(m.created_at);
-      if (label && label !== lastLabel) {
-        out.push({ id: `sep-${m.id}`, kind: 'date_separator', label });
-        lastLabel = label;
-      }
-      out.push(m);
+  // Typing signal, at most every 2s.
+  const handleTextChange = useCallback((value) => {
+    setText(value);
+    const now = Date.now();
+    if (now - lastTypingEmit.current > 2000) {
+      lastTypingEmit.current = now;
+      socketService.emit('typing', { connectionId });
     }
-    return out;
-  }, [messages]);
+  }, [connectionId, socketService, setText]);
 
-  const handleMediaPress = useCallback((item) => {
-    setViewerMedia({ media_url: item.media_url, media_type: item.media_type });
-  }, []);
-
-  // ── Reply ─────────────────────────────────────────────────
+  // ── Message actions ───────────────────────────────────────
   const handleReply = useCallback((item) => {
+    setSheetItem(null);
     setReplyingTo(item);
-    setActionSheetItem(null);
     setTimeout(() => inputRef.current?.focus(), 150);
   }, []);
 
-  const handleCancelReply = useCallback(() => setReplyingTo(null), []);
-
-  const handleLongPressMessage = useCallback((item) => {
-    setActionSheetItem(item);
-  }, []);
-
-  // ── Delete: "for me" hides it for you; "for everyone" replaces it for both, live.
-  const handleDeleteMessage = useCallback(async (item, forEveryone) => {
-    setActionSheetItem(null);
-    setMessages(prev => (
-      forEveryone
-        ? prev.map(m => (m.id === item.id
-            ? { ...m, deleted: true, content: '', media_url: null, media_type: null }
-            : m))
-        : prev.filter(m => m.id !== item.id)
-    ));
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages/${item.id}/delete`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body:    JSON.stringify({ for_everyone: forEveryone }),
-        },
-      );
-      if (!res.ok) throw new Error();
-    } catch {
-      showToast({ type: 'error', message: 'Could not delete. Try again.' });
-      loadMessages(true); // resync — the optimistic update above may be wrong
-    }
-  }, [connectionId, showToast, loadMessages]);
-
-  const confirmDeleteForEveryone = useCallback((item) => {
-    Alert.alert(
-      'Delete for everyone?',
-      "They'll see it was deleted. Can't be undone.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => handleDeleteMessage(item, true) },
-      ],
-    );
-  }, [handleDeleteMessage]);
-
   // React: same emoji again takes it back. Updated here first, then saved.
   const handleReact = useCallback(async (item, emoji, fromDoubleTap = false) => {
-    setActionSheetItem(null);
+    setSheetItem(null);
     const mine = item.reactions?.find((r) => r.mine);
-    // A double tap only adds; it never takes a reaction back.
-    if (fromDoubleTap && mine?.emoji === emoji) return;
+    if (fromDoubleTap && mine?.emoji === emoji) return; // a double tap only adds
     const next = (item.reactions || [])
       .map((r) => (r.mine ? { ...r, count: r.count - 1, mine: false } : r))
       .filter((r) => r.count > 0);
@@ -1093,127 +246,96 @@ export default function DropChatScreen({ route, navigation }) {
       const row = next.find((r) => r.emoji === emoji);
       if (row) { row.count += 1; row.mine = true; } else next.push({ emoji, count: 1, mine: true });
     }
-    setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, reactions: next } : m)));
+    setMessages((prev) => prev.map((m) => (m.id === item.id ? { ...m, reactions: next } : m)));
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages/${item.id}/react`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ emoji }),
-        },
-      );
+      const res = await authed(`/drops/connections/${connectionId}/messages/${item.id}/react`, { method: 'POST', body: JSON.stringify({ emoji }) });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, reactions: data.reactions } : m)));
+      setMessages((prev) => prev.map((m) => (m.id === item.id ? { ...m, reactions: data.reactions } : m)));
     } catch {
       loadMessages(true);
     }
   }, [connectionId, loadMessages]);
 
-  // Star: mine only, saved on the server so it shows in Starred messages everywhere.
-  const handleStar = useCallback(async (item) => {
-    setActionSheetItem(null);
-    const next = !item.starred;
-    setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, starred: next } : m)));
-    try {
-      await chatsApi.star(connectionId, item.id, next);
-      showToast({ type: 'success', message: next ? 'Starred. Find it in Starred messages.' : 'Unstarred.' });
-    } catch (e) {
-      setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, starred: !next } : m)));
-      showToast({ type: 'error', message: e.message });
-    }
-  }, [connectionId, showToast]);
-
   const handleCopy = useCallback(async (item) => {
-    setActionSheetItem(null);
+    setSheetItem(null);
     try {
       await Clipboard.setStringAsync(item.content || '');
       showToast({ type: 'success', message: 'Copied.' });
     } catch {
-      showToast({ type: 'error', message: 'Could not copy.' });
+      toastError('Could not copy.');
     }
-  }, [showToast]);
+  }, [showToast, toastError]);
 
-  const handleForward = useCallback(async (to) => {
-    const item = forwardItem;
-    if (!item) return;
+  // "For me" hides it for you; "for everyone" replaces it for both, live.
+  const deleteMessage = useCallback(async (item, forEveryone) => {
+    setMessages((prev) => (forEveryone
+      ? prev.map((m) => (m.id === item.id ? { ...m, deleted: true, content: '', media_url: null, media_type: null } : m))
+      : prev.filter((m) => m.id !== item.id)));
     try {
-      const r = await chatsApi.forward(connectionId, item.id, to);
-      setForwardItem(null);
-      const n = r.sent?.length || 0;
-      showToast({ type: 'success', message: `Forwarded to ${n} ${n === 1 ? 'chat' : 'chats'}${r.skipped?.length ? ` (${r.skipped.length} couldn't receive it)` : ''}.` });
-    } catch (e) {
-      showToast({ type: 'error', message: e.message });
+      const res = await authed(`/drops/connections/${connectionId}/messages/${item.id}/delete`, {
+        method: 'POST', body: JSON.stringify({ for_everyone: forEveryone }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      toastError('Could not delete. Try again.');
+      loadMessages(true);
     }
-  }, [connectionId, forwardItem, showToast]);
+  }, [connectionId, loadMessages, toastError]);
 
-  const openInfo = useCallback(() => navigation.navigate('ChatInfo', { connectionId }), [navigation, connectionId]);
+  const handleDelete = useCallback((item) => {
+    setSheetItem(null);
+    if (!item.is_own) { deleteMessage(item, false); return; }
+    Alert.alert('Delete message?', null, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'For me', onPress: () => deleteMessage(item, false) },
+      { text: 'For everyone', style: 'destructive', onPress: () => deleteMessage(item, true) },
+    ]);
+  }, [deleteMessage]);
 
   const handleOpenViewOnce = useCallback(async (item) => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/drops/connections/${connectionId}/messages/${item.id}/open`,
-        { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
-      );
+      const res = await authed(`/drops/connections/${connectionId}/messages/${item.id}/open`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
-      setMessages(prev => prev.map(m => (m.id === item.id ? { ...m, opened: true } : m)));
-      if (!res.ok || !data.media_url) {
-        showToast({ type: 'info', message: data.detail || 'Already opened.' });
-        return;
-      }
+      setMessages((prev) => prev.map((m) => (m.id === item.id ? { ...m, opened: true } : m)));
+      if (!res.ok || !data.media_url) { showToast({ type: 'info', message: data.detail || 'Already opened.' }); return; }
       setViewerMedia({ media_url: data.media_url, media_type: data.media_type });
     } catch {
-      showToast({ type: 'error', message: 'Could not open it. Try again.' });
+      toastError('Could not open it. Try again.');
     }
-  }, [connectionId, showToast]);
+  }, [connectionId, showToast, toastError]);
+
+  const handleMediaPress = useCallback((item) => setViewerMedia({ media_url: item.media_url, media_type: item.media_type }), []);
 
   const handlePickOpener = useCallback((line) => {
     setText(line);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [setText]);
 
-  const otherName = connection?.other_anonymous_name;
-
-  const renderMessage = useCallback(
-    ({ item }) => item.kind === 'date_separator'
-      ? <DateSeparator label={item.label} />
-      : (
-        <Bubble
-          item={item}
-          fontFamily={bubbleFontFamily}
-          onMediaPress={handleMediaPress}
-          otherName={otherName}
-          onReply={handleReply}
-          onLongPressMessage={handleLongPressMessage}
-          onReact={handleReact}
-          onOpenViewOnce={handleOpenViewOnce}
-        />
-      ),
-    [bubbleFontFamily, handleMediaPress, otherName, handleReply, handleLongPressMessage, handleReact, handleOpenViewOnce],
-  );
-  const keyExtractor  = useCallback((item) => item.id, []);
-
-  const handleDismissWelcome = useCallback(() => setShowWelcome(false), []);
-
-  // Header icons ring the other person (POST /drop-calls/direct). Their Room settings
-  // decide whether they take voice/video calls; the server says so if not.
-  const handleDirectCall = useCallback(async (video) => {
-    if (callLoading || !connectionId) return;
+  // ── Calls ─────────────────────────────────────────────────
+  // One button: pick voice or video. Their Room settings decide what they take; the server says if not.
+  const directCall = useCallback(async (video) => {
+    if (callLoading) return;
     setCallLoading(true);
     try {
       const data = await callsApi.direct(connectionId, video);
       navigation.navigate('DropCall', callParams(data, {
-        other: { name: connection?.other_anonymous_name, avatar_url: chatProfile?.profile_picture_url, ...(data.other || {}) },
+        other: { name: otherName, avatar_url: chatProfile?.profile_picture_url, ...(data.other || {}) },
       }));
     } catch (err) {
       showToast({ type: err.status === 409 || err.status === 403 ? 'info' : 'error', message: err.message || 'Could not start the call.' });
     } finally {
       setCallLoading(false);
     }
-  }, [callLoading, connectionId, connection, chatProfile, navigation, showToast]);
+  }, [callLoading, connectionId, navigation, otherName, chatProfile, showToast]);
+
+  const handleCallPress = useCallback(() => {
+    Alert.alert(`Call ${otherName}`, null, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Voice', onPress: () => directCall(false) },
+      { text: 'Video', onPress: () => directCall(true) },
+    ]);
+  }, [otherName, directCall]);
 
   // A group session open in this Room: guests join it from the strip.
   const handleJoinCall = useCallback(async () => {
@@ -1221,273 +343,90 @@ export default function DropChatScreen({ route, navigation }) {
     setCallLoading(true);
     try {
       const data = await callsApi.join(activeCall.id);
-      navigation.navigate('DropCall', callParams(data, {
-        isHost: false, other: { name: connection?.other_anonymous_name || 'Anonymous' },
-      }));
+      navigation.navigate('DropCall', callParams(data, { isHost: false, other: { name: otherName } }));
     } catch (err) {
-      showToast({ type: 'error', message: err.message || 'Could not join the session.' });
+      toastError(err.message || 'Could not join the session.');
     } finally {
       setCallLoading(false);
     }
-  }, [callLoading, activeCall, navigation, showToast, connection]);
+  }, [callLoading, activeCall, navigation, otherName, toastError]);
 
-  const handlePressAudio = useCallback(() => handleDirectCall(false), [handleDirectCall]);
-  const handlePressVideo = useCallback(() => handleDirectCall(true), [handleDirectCall]);
-
-  // ── 3-dot menu — roster behind the room, host/guest specific actions ──
-  useEffect(() => {
-    if (!showMoreMenu || !connection?.host_user_id) return;
-    (async () => {
-      setGuestsLoading(true);
+  // ── ⋮ menu ────────────────────────────────────────────────
+  const menu = {
+    onMute: async (value) => {
+      setMenuOpen(false);
       try {
-        const token = await AsyncStorage.getItem('token');
-        const res   = await fetch(
-          `${API_BASE_URL}/api/v1/drops/room/${connection.host_user_id}/guests`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setGuestList(data.guests || []);
-        }
-      } catch { /* silent — roster is a nice-to-have in this sheet */ }
-      setGuestsLoading(false);
-    })();
-  }, [showMoreMenu, connection?.host_user_id]);
-
-  const handleOpenSettings = useCallback(() => {
-    setShowMoreMenu(false);
-    navigation.navigate('ChatProfileSetup');
-  }, [navigation]);
-
-  // Owner only (the backend checks too): closes this person's threads in
-  // your Room. They'd have to Knock, be let in, and pay again to come back.
-  const handleRemoveGuest = useCallback(() => {
-    setShowMoreMenu(false);
-    const unlocks = connection?.removable_at ? new Date(connection.removable_at) : null;
-    if (unlocks && unlocks > new Date()) {
-      Alert.alert(
-        'Not yet',
-        `You can remove them from ${unlocks.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Something wrong? Block them now.`,
-        [{ text: 'OK', style: 'cancel' }, { text: 'Block', style: 'destructive', onPress: () => handleBlockHost() }],
-      );
-      return;
-    }
-    Alert.alert(
-      `Remove ${connection?.other_anonymous_name || 'them'} from your Room?`,
-      "The chat closes. They'd have to knock again.",
-      [
+        const prefs = await chatsApi.prefs(connectionId, { mute: value });
+        setConnection((c) => ({ ...c, ...prefs }));
+        showToast({ type: 'success', message: prefs.muted_until ? 'Muted.' : 'Notifications on.' });
+      } catch (e) { toastError(e.message); }
+    },
+    onClear: () => {
+      setMenuOpen(false);
+      confirmClear(connectionId, (m) => { setMessages([]); showToast({ type: 'success', message: m }); }, toastError);
+    },
+    onReport: async (reason) => {
+      setMenuOpen(false);
+      try {
+        await sendReport(connection.other_user_id, reason);
+        showToast({ type: 'success', message: 'Report received. Thank you.' });
+      } catch (e) { toastError(e.message); }
+    },
+    onReportFake: () => {
+      setMenuOpen(false);
+      Alert.alert('Their confession was fake?', "We'll review it. If it was, you get your coins back.", [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove', style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('token');
-              const res = await fetch(`${API_BASE_URL}/api/v1/drops/connections/${connectionId}/remove`, {
-                method: 'POST', headers: { Authorization: `Bearer ${token}` },
-              });
-              const body = await res.json().catch(() => ({}));
-              if (!res.ok) throw new Error(body?.detail?.message || (typeof body?.detail === 'string' ? body.detail : ''));
-              showToast({ type: 'info', message: "Removed. They're outside again." });
-              navigation.goBack();
-            } catch (e) {
-              showToast({ type: 'error', message: e.message || 'Could not remove them. Try again.' });
-            }
-          },
-        },
-      ],
-    );
-  }, [connection, connectionId, navigation, showToast]);
-
-  const handleBlockHost = useCallback(() => {
-    if (!connection?.other_user_id) return;
-    Alert.alert(
-      'Block this person?',
-      "They can't reach you, and you won't see their posts.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block', style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('token');
-              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.other_user_id}/block`, {
-                method: 'POST', headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) throw new Error();
-              setShowMoreMenu(false);
-              showToast({ type: 'success', message: 'User blocked.' });
-              navigation.goBack();
-            } catch {
-              showToast({ type: 'error', message: 'Could not block. Try again.' });
-            }
-          },
-        },
-      ],
-    );
-  }, [connection, navigation, showToast]);
-
-  const handleReportHost = useCallback(() => {
-    if (!connection?.other_user_id) return;
-    const reasons = [
-      { id: 'abuse',             label: 'Abuse or harassment' },
-      { id: 'spam',              label: 'Spam' },
-      { id: 'explicit',          label: 'Unwanted explicit content' },
-      { id: 'self-harm-concern', label: "I'm worried about them" },
-      { id: 'other',             label: 'Other' },
-    ];
-    Alert.alert(
-      'Report this person',
-      "What's the issue?",
-      [
-        ...reasons.map((r) => ({
-          text: r.label,
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('token');
-              const res   = await fetch(`${API_BASE_URL}/api/v1/users/${connection.other_user_id}/report`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body:    JSON.stringify({ reason: r.id }),
-              });
-              if (!res.ok) throw new Error();
-              setShowMoreMenu(false);
-              showToast({ type: 'success', message: 'Report received. Thank you.' });
-            } catch {
-              showToast({ type: 'error', message: 'Could not send report. Try again.' });
-            }
-          },
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
-  }, [connection, showToast]);
-
-  // Only the person who paid to link up can report it as fake; an admin reviews.
-  const handleReportDeceptive = useCallback(() => {
-    if (!connectionId) return;
-    Alert.alert(
-      'This confession was fake?',
-      "We'll review it. If confirmed, you get your coins back and they take a strike.",
-      [
         {
           text: 'Report it', style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('token');
-              const res   = await fetch(`${API_BASE_URL}/api/v1/deception-reports`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body:    JSON.stringify({ connection_id: connectionId }),
-              });
-              const data = await res.json().catch(() => ({}));
-              if (!res.ok) throw new Error(data.detail || 'Could not send report.');
-              setShowMoreMenu(false);
-              showToast({ type: 'success', message: 'Report sent for review.' });
-            } catch (e) {
-              showToast({ type: 'error', message: e.message || 'Could not send report. Try again.' });
-            }
-          },
+          onPress: () => sendFakeReport(connectionId)
+            .then(() => showToast({ type: 'success', message: 'Report sent for review.' }))
+            .catch((e) => toastError(e.message)),
         },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
-  }, [connectionId, showToast]);
+      ]);
+    },
+    onBlock: () => {
+      setMenuOpen(false);
+      confirmBlock(connection.other_user_id, (m) => { showToast({ type: 'success', message: m }); navigation.goBack(); }, toastError);
+    },
+  };
 
-  // Header right: audio / video call icons + 3-dot menu — the room's
-  // controls live in the header now, not a full-width bar.
-  const HeaderRight = useMemo(() => {
-    if (!connection) return null;
-    const callLive = !!activeCall;
-    return (
-      <View style={s.headerActions}>
-        <TouchableOpacity
-          style={[s.headerActionBtn, callLive && s.headerActionBtnLive]}
-          onPress={handlePressAudio}
-          disabled={callLoading}
-          hitSlop={HIT_SLOP}
-          activeOpacity={0.75}
-        >
-          <Phone size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={2} />
-          {callLive && <View style={s.liveDot} />}
-        </TouchableOpacity>
+  // ── Thread ────────────────────────────────────────────────
+  const fontFamily = useMemo(
+    () => CHAT_FONT_MAP[chatProfile?.font_style] || CHAT_FONT_MAP[DEFAULT_CHAT_FONT],
+    [chatProfile?.font_style],
+  );
 
-        <TouchableOpacity
-          style={[s.headerActionBtn, callLive && s.headerActionBtnLive]}
-          onPress={handlePressVideo}
-          disabled={callLoading}
-          hitSlop={HIT_SLOP}
-          activeOpacity={0.75}
-        >
-          <Video size={rs(19)} color={callLive ? T.primary : T.textMute} strokeWidth={2} />
-          {callLive && <View style={s.liveDot} />}
-        </TouchableOpacity>
+  const rows = useMemo(() => {
+    const out = [];
+    let last = null;
+    for (const m of messages) {
+      const label = formatDateLabel(m.created_at);
+      if (label && label !== last) { out.push({ id: `sep-${m.id}`, kind: 'date', label }); last = label; }
+      out.push(m);
+    }
+    return out;
+  }, [messages]);
 
-        <TouchableOpacity
-          style={s.headerActionBtn}
-          onPress={() => setShowMoreMenu(true)}
-          hitSlop={HIT_SLOP}
-          activeOpacity={0.75}
-        >
-          <MoreVertical size={rs(19)} color={T.textMute} strokeWidth={2} />
-        </TouchableOpacity>
-      </View>
-    );
-  }, [connection, activeCall, callLoading, handlePressAudio, handlePressVideo]);
+  const renderRow = useCallback(({ item }) => (item.kind === 'date'
+    ? <DateSeparator label={item.label} />
+    : (
+      <ChatBubble
+        item={item}
+        fontFamily={fontFamily}
+        otherName={otherName}
+        onMediaPress={handleMediaPress}
+        onReply={handleReply}
+        onLongPress={setSheetItem}
+        onReact={handleReact}
+        onOpenViewOnce={handleOpenViewOnce}
+      />
+    )), [fontFamily, otherName, handleMediaPress, handleReply, handleReact, handleOpenViewOnce]);
 
-  const headerTitle = useMemo(() => {
-    if (!connection) return 'Anonymous';
-    return connection.other_anonymous_name || 'Anonymous';
-  }, [connection]);
-
-  // The other person's picture: a guest sees the Room's picture; the owner sees the guest's
-  // own avatar (the chat profile is always the owner's, never the guest's).
+  // A guest sees the Room's picture; the owner sees the guest's own avatar.
   const headerPic = connection?.is_sender
     ? connection?.other_avatar_url
     : (chatProfile?.profile_picture_url || connection?.other_avatar_url);
 
-  // Header centre: avatar, name, and "typing…" or online status. Tap for contact info.
-  const HeaderTitle = useMemo(() => (
-    <TouchableOpacity
-      style={s.headerTitleRow}
-      activeOpacity={0.75}
-      onPress={openInfo}
-      accessibilityRole="button"
-      accessibilityLabel={`${headerTitle}, contact info`}
-    >
-      <View style={s.headerAvatarWrap}>
-        {headerPic ? (
-          <Image source={{ uri: headerPic }} style={s.headerAvatar} />
-        ) : (
-          <View style={[s.headerAvatar, s.headerAvatarInitialWrap, { backgroundColor: avatarColorFor(headerTitle) }]}>
-            <Text style={s.headerAvatarInitialText}>{headerTitle?.[0]?.toUpperCase() || 'A'}</Text>
-          </View>
-        )}
-        {chatProfile?.gallery?.length > 0 && (
-          <View style={s.headerGalleryBadge}>
-            <Text style={s.headerGalleryBadgeText}>{chatProfile.gallery.length}</Text>
-          </View>
-        )}
-      </View>
-      <View style={s.headerTitleTextWrap}>
-        <View style={s.headerNameRow}>
-          <Text style={s.headerTitleName} numberOfLines={1}>{headerTitle}</Text>
-          {connection?.muted_until ? <BellOff size={rs(13)} color={T.textMute} strokeWidth={2} /> : null}
-        </View>
-        {isOtherTyping ? (
-          <Text style={s.headerTypingText}>typing…</Text>
-        ) : connection?.other_is_online ? (
-          <View style={s.headerOnlineRow}>
-            <View style={s.headerOnlineDot} />
-            <Text style={s.headerOnlineText}>online</Text>
-          </View>
-        ) : (
-          <Text style={s.headerHintText}>tap for contact info</Text>
-        )}
-      </View>
-    </TouchableOpacity>
-  ), [chatProfile, headerTitle, headerPic, connection?.other_is_online, connection?.muted_until, isOtherTyping, openInfo]);
-
-  // ── Loading ───────────────────────────────────────────────
   if (loading) {
     return (
       <SafeAreaView style={[s.safe, s.centered]} edges={['top', 'left', 'right']}>
@@ -1496,927 +435,212 @@ export default function DropChatScreen({ route, navigation }) {
     );
   }
 
+  const openInfo = () => navigation.navigate('ChatInfo', { connectionId });
+  const hasText = !!text.trim();
+
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       <DropScreenHeader
-        titleNode={HeaderTitle}
         navigation={navigation}
-        right={HeaderRight}
-      />
-
-      <ChatBackground
-        pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN}
-        style={{ flex: 1 }}
-      >
-
-      {/* Live-call strip (join/start are in the header). */}
-      {activeCall ? (
-        <View style={s.liveStrip}>
-          <View style={s.liveStripDot} />
-          <Text style={[s.liveStripText, { flexShrink: 1 }]} numberOfLines={1}>
-            {connection?.is_sender ? 'Your session is live' : `${otherName}'s session is live`} · {activeCall.guest_count}/{activeCall.max_guests} in
-          </Text>
-          {!connection?.is_sender ? (
-            <TouchableOpacity style={s.liveJoinBtn} onPress={handleJoinCall} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityRole="button">
-              {callLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.liveJoinText}>Join</Text>}
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
-
-      {showWelcome && welcomeGallery.length > 0 && (
-        <WelcomeGalleryOverlay gallery={welcomeGallery} onDismiss={handleDismissWelcome} />
-      )}
-
-      {galleryViewerOpen && (
-        <WelcomeGalleryOverlay
-          gallery={chatProfile?.gallery || []}
-          onDismiss={() => setGalleryViewerOpen(false)}
-        />
-      )}
-
-      {/* Confession banner */}
-      {connection?.confession ? (
-        <View style={s.confessionBanner}>
-          <Text style={s.confessionBannerKicker}>THEIR CONFESSION</Text>
-          <Text style={s.confessionBannerText} numberOfLines={2}>
-            "{connection.confession}"
-          </Text>
-        </View>
-      ) : null}
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
-        <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
-          {messages.length === 0 ? (
-            <EmptyChat connection={connection} otherName={otherName} onPickOpener={handlePickOpener} />
-          ) : (
-            <FlatList
-              ref={flatListRef}
-              data={messagesWithDates}
-              keyExtractor={keyExtractor}
-              renderItem={renderMessage}
-              contentContainerStyle={s.messageList}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              removeClippedSubviews
-              initialNumToRender={14}
-              maxToRenderPerBatch={10}
-              windowSize={10}
-              ListHeaderComponent={<InsideCard connection={connection} otherName={otherName} />}
-              ListFooterComponent={isOtherTyping ? <TypingBubble /> : null}
-              onContentSizeChange={() =>
-                flatListRef.current?.scrollToEnd({ animated: false })
-              }
-            />
-          )}
-        </Animated.View>
-
-        {/* Quick emoji strip — toggled by the Smile icon below */}
-        {showEmojiStrip && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={s.emojiStrip}
-            contentContainerStyle={s.emojiStripContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            {QUICK_EMOJIS.map((e) => (
-              <TouchableOpacity
-                key={e}
-                style={s.emojiStripBtn}
-                onPress={() => setText((t) => t + e)}
-                hitSlop={HIT_SLOP}
-              >
-                <Text style={s.emojiStripEmoji}>{e}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        {/* Reply banner; X cancels the reply. */}
-        {replyingTo && (
-          <View style={s.replyBanner}>
-            <View style={s.replyBannerBar} />
-            <View style={{ flex: 1 }}>
-              <Text style={s.replyBannerName} numberOfLines={1}>
-                {replyingTo.is_own ? 'You' : (otherName || 'them')}
-              </Text>
-              <Text style={s.replyBannerPreview} numberOfLines={1}>
-                {messagePreviewLabel(replyingTo)}
-              </Text>
+        titleNode={(
+          <TouchableOpacity style={s.titleRow} activeOpacity={0.75} onPress={openInfo} accessibilityRole="button" accessibilityLabel={`${otherName}, contact info`}>
+            {headerPic ? (
+              <Image source={{ uri: headerPic }} style={s.avatar} />
+            ) : (
+              <View style={[s.avatar, s.avatarInitial, { backgroundColor: avatarColorFor(otherName) }]}>
+                <Text style={s.avatarInitialText}>{otherName[0]?.toUpperCase() || 'A'}</Text>
+              </View>
+            )}
+            <View style={s.titleText}>
+              <View style={s.nameRow}>
+                <Text style={s.name} numberOfLines={1}>{otherName}</Text>
+                {connection?.muted_until ? <BellOff size={rs(13)} color={T.textMute} strokeWidth={2} /> : null}
+              </View>
+              {isOtherTyping ? <Text style={s.typing}>typing…</Text>
+                : connection?.other_is_online ? <Text style={s.online}>online</Text>
+                  : <Text style={s.hint}>tap for contact info</Text>}
             </View>
-            <TouchableOpacity onPress={handleCancelReply} hitSlop={HIT_SLOP}>
-              <X size={rs(16)} color={T.textMute} strokeWidth={2} />
+          </TouchableOpacity>
+        )}
+        right={connection ? (
+          <View style={s.headerActions}>
+            <TouchableOpacity style={[s.headerBtn, activeCall && s.headerBtnLive]} onPress={handleCallPress} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel="Call">
+              <Phone size={rs(19)} color={activeCall ? T.primary : T.textMute} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.headerBtn} onPress={() => setMenuOpen(true)} hitSlop={HIT_SLOP} accessibilityLabel="More">
+              <MoreVertical size={rs(19)} color={T.textMute} strokeWidth={2} />
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
+      />
 
-        {/* Input: shared ChatInputBar with this screen's hold-to-record button. */}
-        <ChatInputBar
-          inputRef={inputRef}
-          value={text}
-          onChangeText={handleTextChange}
-          placeholder="Drop your desires"
-          maxLength={500}
-          onAttachPress={!isRecording && !voicePreview ? pickMedia : undefined}
-          attachUploading={mediaUploading}
-          onEmojiPress={!isRecording && !voicePreview ? () => setShowEmojiStrip((v) => !v) : undefined}
-          emojiActive={showEmojiStrip}
-          paddingBottom={insets.bottom + rp(8)}
-          recordingContent={isRecording ? (
-            // While recording, the timer replaces the text field.
-            <View style={s.recordingRow}>
-              <Animated.View style={[s.recordDot, { opacity: recordPulse }]} />
-              <Text style={s.recordDurationLabel}>
-                {Math.floor(recordDuration / 60)}:{String(recordDuration % 60).padStart(2, '0')}
-              </Text>
-              <Text style={s.recordHint}>release to listen back</Text>
-            </View>
-          ) : voicePreview ? (
-            // Recorded: listen, then send or bin it.
-            <View style={s.recordingRow}>
-              <TouchableOpacity
-                onPress={() => setVoicePreview(null)} disabled={voiceUploading} hitSlop={HIT_SLOP}
-                accessibilityRole="button" accessibilityLabel="Delete voice note"
-              >
-                <Trash2 size={rs(18)} color={T.textMute} strokeWidth={2} />
+      <ChatBackground pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN} style={{ flex: 1 }}>
+        {activeCall ? (
+          <View style={s.liveStrip}>
+            <View style={s.liveDot} />
+            <Text style={s.liveText} numberOfLines={1}>
+              {connection?.is_sender ? 'Your session is live' : `${otherName}'s session is live`} · {activeCall.guest_count}/{activeCall.max_guests} in
+            </Text>
+            {!connection?.is_sender ? (
+              <TouchableOpacity style={s.liveJoin} onPress={handleJoinCall} disabled={callLoading} hitSlop={HIT_SLOP}>
+                {callLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.liveJoinText}>Join</Text>}
               </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+          <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+            {messages.length === 0 ? (
+              <EmptyChat connection={connection} otherName={otherName} onPickOpener={handlePickOpener} />
+            ) : (
+              <FlatList
+                ref={listRef}
+                data={rows}
+                keyExtractor={(item) => item.id}
+                renderItem={renderRow}
+                contentContainerStyle={s.list}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                removeClippedSubviews
+                initialNumToRender={14}
+                maxToRenderPerBatch={10}
+                windowSize={10}
+                ListHeaderComponent={<InsideCard connection={connection} otherName={otherName} />}
+                ListFooterComponent={isOtherTyping ? <TypingBubble /> : null}
+                onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+              />
+            )}
+          </Animated.View>
+
+          {replyingTo && (
+            <View style={s.replyBanner}>
+              <View style={s.replyBar} />
               <View style={{ flex: 1 }}>
-                <VoiceWaveform uri={voicePreview.uri} durationSeconds={voicePreview.duration} compact />
+                <Text style={s.replyName} numberOfLines={1}>{replyingTo.is_own ? 'You' : otherName}</Text>
+                <Text style={s.replyPreview} numberOfLines={1}>{messagePreviewLabel(replyingTo)}</Text>
               </View>
+              <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={HIT_SLOP} accessibilityLabel="Cancel reply">
+                <X size={rs(16)} color={T.textMute} strokeWidth={2} />
+              </TouchableOpacity>
             </View>
-          ) : null}
-          trailing={
-            // Empty field: hold to record. Text typed: tap to send.
-            <Pressable
-              onPressIn={!text.trim() && !voicePreview ? handleVoicePressIn : undefined}
-              onPressOut={!text.trim() && !voicePreview ? handleVoicePressOut : undefined}
-              onPress={voicePreview ? sendVoicePreview : text.trim() ? handleSend : undefined}
-              disabled={voicePreview ? voiceUploading : text.trim() ? sending : false}
-              accessibilityRole="button"
-              accessibilityLabel={voicePreview ? 'Send voice note' : text.trim() ? 'Send' : 'Hold to record a voice note'}
-              hitSlop={HIT_SLOP}
-              style={({ pressed }) => [
-                s.sendBtn,
-                text.trim() && sending && { opacity: 0.4 },
-                pressed && !isRecording && { opacity: 0.85 },
-              ]}
-            >
-              {voicePreview ? (
-                voiceUploading
+          )}
+
+          <ChatInputBar
+            inputRef={inputRef}
+            value={text}
+            onChangeText={handleTextChange}
+            placeholder="Drop your desires"
+            maxLength={500}
+            onAttachPress={!voice.isRecording && !voice.preview ? pickMedia : undefined}
+            attachUploading={mediaUploading}
+            paddingBottom={insets.bottom + rp(8)}
+            recordingContent={voice.isRecording ? (
+              <View style={s.recordRow}>
+                <Animated.View style={[s.recordDot, { opacity: voice.pulse }]} />
+                <Text style={s.recordTime}>{Math.floor(voice.duration / 60)}:{String(voice.duration % 60).padStart(2, '0')}</Text>
+                <Text style={s.recordHint}>release to listen back</Text>
+              </View>
+            ) : voice.preview ? (
+              <View style={s.recordRow}>
+                <TouchableOpacity onPress={voice.discard} disabled={voice.uploading} hitSlop={HIT_SLOP} accessibilityLabel="Delete voice note">
+                  <Trash2 size={rs(18)} color={T.textMute} strokeWidth={2} />
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <VoiceWaveform uri={voice.preview.uri} durationSeconds={voice.preview.duration} compact />
+                </View>
+              </View>
+            ) : null}
+            trailing={(
+              // Empty field: hold to record. Text typed: tap to send.
+              <Pressable
+                onPressIn={!hasText && !voice.preview ? voice.pressIn : undefined}
+                onPressOut={!hasText && !voice.preview ? voice.pressOut : undefined}
+                onPress={voice.preview ? voice.sendPreview : hasText ? handleSend : undefined}
+                disabled={voice.preview ? voice.uploading : hasText ? sending : false}
+                accessibilityRole="button"
+                accessibilityLabel={voice.preview ? 'Send voice note' : hasText ? 'Send' : 'Hold to record a voice note'}
+                hitSlop={HIT_SLOP}
+                style={({ pressed }) => [s.sendBtn, hasText && sending && { opacity: 0.4 }, pressed && !voice.isRecording && { opacity: 0.85 }]}
+              >
+                {(voice.preview ? voice.uploading : hasText ? sending : voice.uploading)
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Send size={rs(21)} color="#fff" strokeWidth={2} />
-              ) : text.trim() ? (
-                sending
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Send size={rs(21)} color="#fff" strokeWidth={2} />
-              ) : (
-                voiceUploading
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Mic size={rs(22)} color="#fff" strokeWidth={2} />
-              )}
-            </Pressable>
-          }
-        />
-      </KeyboardAvoidingView>
+                  : voice.preview || hasText
+                    ? <Send size={rs(21)} color="#fff" strokeWidth={2} />
+                    : <Mic size={rs(22)} color="#fff" strokeWidth={2} />}
+              </Pressable>
+            )}
+          />
+        </KeyboardAvoidingView>
       </ChatBackground>
 
-      {/* ── 3-dot menu — room roster + host/guest actions ── */}
-      <Modal
-        visible={showMoreMenu}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowMoreMenu(false)}
-      >
-        <TouchableOpacity
-          style={s.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMoreMenu(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
-            <View style={s.modalHandle} />
-            <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); openInfo(); }} hitSlop={HIT_SLOP}>
-              <Info size={rs(16)} color={T.text} strokeWidth={2} />
-              <Text style={s.menuActionText}>Contact info</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); navigation.navigate('ChatMedia', { connectionId, name: headerTitle }); }} hitSlop={HIT_SLOP}>
-              <Images size={rs(16)} color={T.text} strokeWidth={2} />
-              <Text style={s.menuActionText}>Media, links and voice</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); navigation.navigate('StarredMessages', { connectionId, name: headerTitle }); }} hitSlop={HIT_SLOP}>
-              <Star size={rs(16)} color={T.text} strokeWidth={2} />
-              <Text style={s.menuActionText}>Starred messages</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.menuAction}
-              onPress={() => {
-                setShowMoreMenu(false);
-                pickMute(connectionId, connection?.muted_until,
-                  (prefs) => { setConnection(c => ({ ...c, ...prefs })); showToast({ type: 'success', message: prefs.muted_until ? 'Muted.' : 'Notifications on.' }); },
-                  (m) => showToast({ type: 'error', message: m }));
-              }}
-              hitSlop={HIT_SLOP}
-            >
-              <BellOff size={rs(16)} color={T.text} strokeWidth={2} />
-              <Text style={s.menuActionText}>{connection?.muted_until ? `Unmute (muted: ${mutedLabel(connection.muted_until).toLowerCase()})` : 'Mute notifications'}</Text>
-            </TouchableOpacity>
-            {chatProfile?.gallery?.length ? (
-              <TouchableOpacity style={s.menuAction} onPress={() => { setShowMoreMenu(false); setGalleryViewerOpen(true); }} hitSlop={HIT_SLOP}>
-                <Images size={rs(16)} color={T.text} strokeWidth={2} />
-                <Text style={s.menuActionText}>Welcome media ({chatProfile.gallery.length})</Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              style={s.menuAction}
-              onPress={() => {
-                setShowMoreMenu(false);
-                confirmClear(connectionId, (m) => { setMessages([]); showToast({ type: 'success', message: m }); }, (m) => showToast({ type: 'error', message: m }));
-              }}
-              hitSlop={HIT_SLOP}
-            >
-              <Eraser size={rs(16)} color={T.text} strokeWidth={2} />
-              <Text style={s.menuActionText}>Clear chat</Text>
-            </TouchableOpacity>
-            <View style={s.menuDivider} />
-            <View style={s.menuHeaderRow}>
-              <Users size={rs(16)} color={T.textMute} strokeWidth={2} />
-              <Text style={s.menuHeaderText}>
-                {connection?.is_sender ? 'Your room' : `${headerTitle}'s room`}
-              </Text>
-            </View>
-
-            {guestsLoading ? (
-              <ActivityIndicator size="small" color={T.primary} style={{ marginVertical: rp(16) }} />
-            ) : guestList.length > 0 ? (
-              <ScrollView style={s.guestListScroll} showsVerticalScrollIndicator={false}>
-                {guestList.map((g) => (
-                  <View key={g.user_id} style={s.guestRow}>
-                    <View style={s.guestRowLeft}>
-                      <View style={s.guestDotWrap}>
-                        {g.is_online && <View style={s.guestOnlineDot} />}
-                      </View>
-                      <Text style={s.guestName}>{g.anonymous_name}</Text>
-                    </View>
-                    <Text style={s.guestStatus}>{g.is_online ? 'online' : 'offline'}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={s.guestEmptyText}>No one's inside this Room yet.</Text>
-            )}
-
-            <View style={s.menuDivider} />
-
-            {connection?.is_sender ? (
-              <>
-                <TouchableOpacity style={s.menuAction} onPress={handleOpenSettings} hitSlop={HIT_SLOP}>
-                  <Settings size={rs(16)} color={T.text} strokeWidth={2} />
-                  <Text style={s.menuActionText}>Room settings</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.menuAction} onPress={handleRemoveGuest} hitSlop={HIT_SLOP}>
-                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
-                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Remove from Room</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>
-                  <Flag size={rs(16)} color={T.text} strokeWidth={2} />
-                  <Text style={s.menuActionText}>Report</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.menuAction} onPress={handleBlockHost} hitSlop={HIT_SLOP}>
-                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
-                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Block</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <TouchableOpacity style={s.menuAction} onPress={handleReportHost} hitSlop={HIT_SLOP}>
-                  <Flag size={rs(16)} color={T.text} strokeWidth={2} />
-                  <Text style={s.menuActionText}>Report</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.menuAction} onPress={handleReportDeceptive} hitSlop={HIT_SLOP}>
-                  <AlertTriangle size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
-                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>This wasn't real</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.menuAction} onPress={handleBlockHost} hitSlop={HIT_SLOP}>
-                  <ShieldOff size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
-                  <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Block</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            <TouchableOpacity
-              onPress={() => setShowMoreMenu(false)}
-              hitSlop={HIT_SLOP}
-              style={s.cancelBtn}
-            >
-              <Text style={s.cancelBtnText}>Close</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Long-press action sheet — reply / delete for a single message */}
-      <Modal
-        visible={!!actionSheetItem}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActionSheetItem(null)}
-      >
-        <TouchableOpacity
-          style={s.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setActionSheetItem(null)}
-        >
-          <TouchableOpacity activeOpacity={1} style={s.modalSheet}>
-            <View style={s.modalHandle} />
-            <View style={s.sheetReactions}>
-              {REACTIONS.map((e) => {
-                const mine = actionSheetItem?.reactions?.some((r) => r.mine && r.emoji === e);
-                return (
-                  <TouchableOpacity
-                    key={e}
-                    style={[s.sheetReactionBtn, mine && s.sheetReactionBtnMine]}
-                    onPress={() => actionSheetItem && handleReact(actionSheetItem, e)}
-                    hitSlop={HIT_SLOP}
-                  >
-                    <Text style={s.sheetReactionEmoji}>{e}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <TouchableOpacity
-              style={s.menuAction}
-              onPress={() => handleReply(actionSheetItem)}
-              hitSlop={HIT_SLOP}
-            >
-              <Reply size={rs(16)} color={T.text} strokeWidth={2} />
-              <Text style={s.menuActionText}>Reply</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.menuAction} onPress={() => handleStar(actionSheetItem)} hitSlop={HIT_SLOP}>
-              <Star size={rs(16)} color={actionSheetItem?.starred ? T.gold || '#F5B942' : T.text} strokeWidth={2} fill={actionSheetItem?.starred ? T.gold || '#F5B942' : 'transparent'} />
-              <Text style={s.menuActionText}>{actionSheetItem?.starred ? 'Unstar' : 'Star'}</Text>
-            </TouchableOpacity>
-            {!actionSheetItem?.view_once ? (
-              <TouchableOpacity style={s.menuAction} onPress={() => { setForwardItem(actionSheetItem); setActionSheetItem(null); }} hitSlop={HIT_SLOP}>
-                <Forward size={rs(16)} color={T.text} strokeWidth={2} />
-                <Text style={s.menuActionText}>Forward</Text>
-              </TouchableOpacity>
-            ) : null}
-            {actionSheetItem?.content ? (
-              <TouchableOpacity style={s.menuAction} onPress={() => handleCopy(actionSheetItem)} hitSlop={HIT_SLOP}>
-                <Copy size={rs(16)} color={T.text} strokeWidth={2} />
-                <Text style={s.menuActionText}>Copy</Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              style={s.menuAction}
-              onPress={() => handleDeleteMessage(actionSheetItem, false)}
-              hitSlop={HIT_SLOP}
-            >
-              <Trash2 size={rs(16)} color={T.text} strokeWidth={2} />
-              <Text style={s.menuActionText}>Delete for me</Text>
-            </TouchableOpacity>
-            {actionSheetItem?.is_own && (
-              <TouchableOpacity
-                style={s.menuAction}
-                onPress={() => confirmDeleteForEveryone(actionSheetItem)}
-                hitSlop={HIT_SLOP}
-              >
-                <Trash2 size={rs(16)} color={T.error || '#E85D5D'} strokeWidth={2} />
-                <Text style={[s.menuActionText, { color: T.error || '#E85D5D' }]}>Delete for everyone</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              onPress={() => setActionSheetItem(null)}
-              hitSlop={HIT_SLOP}
-              style={s.cancelBtn}
-            >
-              <Text style={s.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {viewerMedia && (
-        <ChatMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />
-      )}
-
-      <PickChatSheet
-        visible={!!forwardItem}
-        mode="forward"
-        title="Forward to…"
-        exclude={connectionId}
-        onClose={() => setForwardItem(null)}
-        onForward={handleForward}
+      <ChatMenuSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        name={otherName}
+        isGuest={!connection?.is_sender}
+        mutedUntil={connection?.muted_until}
+        {...menu}
       />
+      <MessageSheet
+        item={sheetItem}
+        onClose={() => setSheetItem(null)}
+        onReact={handleReact}
+        onReply={handleReply}
+        onCopy={handleCopy}
+        onDelete={handleDelete}
+      />
+      {viewerMedia && <ChatMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />}
     </SafeAreaView>
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  forwardedLabel: { fontSize: rf(11.5), fontStyle: 'italic', color: T.textMute, marginBottom: rp(3) },
-  headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
-  headerHintText: { fontSize: rf(11), color: T.textMute },
-  safe:     { flex: 1, backgroundColor: 'transparent' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   centered: { justifyContent: 'center', alignItems: 'center' },
 
-  // Header title: avatar, name, online line. flex: 1 keeps it next to the back button
-  // instead of shifting with the number of icons on the right.
-  headerTitleRow: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8),
-  },
-  headerAvatarWrap: { position: 'relative', flexShrink: 0 },
-  headerAvatar: {
-    width: rs(34), height: rs(34), borderRadius: rs(17),
-    borderWidth: 1.5, borderColor: T.primaryBorder,
-  },
-  headerAvatarInitialWrap: {
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerAvatarInitialText: { fontSize: rf(14), fontWeight: '800', color: '#fff' },
-  headerGalleryBadge: {
-    position: 'absolute', bottom: -rp(2), right: -rp(2),
-    backgroundColor: T.primary, borderRadius: rs(8),
-    minWidth: rs(15), height: rs(15), paddingHorizontal: rp(3),
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: T.background,
-  },
-  headerGalleryBadgeText: { fontSize: rf(8), fontWeight: '800', color: '#fff' },
-  headerTitleTextWrap: { flexShrink: 1, alignItems: 'flex-start' },
-  headerTitleName: {
-    fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg, color: T.text, letterSpacing: 0.3,
-  },
-  headerOnlineRow: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(4), marginTop: rp(1),
-  },
-  headerOnlineDot: {
-    width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.online,
-  },
-  headerOnlineText: {
-    fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.online,
-  },
-  headerTypingText: {
-    fontFamily: 'DMSans-Italic', fontSize: rf(11), color: T.primary,
-  },
+  // Header: avatar, name, typing/online. flex: 1 keeps it beside the back button.
+  titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8) },
+  avatar: { width: rs(34), height: rs(34), borderRadius: rs(17), borderWidth: 1.5, borderColor: T.primaryBorder },
+  avatarInitial: { alignItems: 'center', justifyContent: 'center' },
+  avatarInitialText: { fontSize: rf(14), fontWeight: '800', color: '#fff' },
+  titleText: { flexShrink: 1, alignItems: 'flex-start' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
+  name: { fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg, color: T.text, letterSpacing: 0.3 },
+  typing: { fontFamily: 'DMSans-Italic', fontSize: rf(11), color: T.primary },
+  online: { fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.online },
+  hint: { fontSize: rf(11), color: T.textMute },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(14) },
+  headerBtn: { width: rs(32), height: rs(32), alignItems: 'center', justifyContent: 'center' },
+  headerBtnLive: { borderRadius: rs(16), borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
+
   liveStrip: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(6),
-    alignSelf: 'center', marginBottom: rp(10),
-    paddingHorizontal: rp(12), paddingVertical: rp(6),
-    borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.primaryBorder,
-    backgroundColor: T.primaryDim,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(6), alignSelf: 'center',
+    marginTop: rp(6), marginBottom: rp(4), paddingHorizontal: rp(12), paddingVertical: rp(6),
+    borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryDim,
   },
-  liveStripDot: {
-    width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.online,
-  },
-  liveStripText: { fontSize: rf(11), fontWeight: '700', color: T.primary },
-  liveJoinBtn: { minWidth: rs(56), height: rs(28), paddingHorizontal: rp(12), borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  liveDot: { width: rs(6), height: rs(6), borderRadius: rs(3), backgroundColor: T.online },
+  liveText: { flexShrink: 1, fontSize: rf(11), fontWeight: '700', color: T.primary },
+  liveJoin: { minWidth: rs(56), height: rs(28), paddingHorizontal: rp(12), borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
   liveJoinText: { fontSize: rf(12), fontWeight: '800', color: '#fff' },
 
-  // Plain icon buttons; only an active call is highlighted.
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(14) },
-  headerActionBtn: {
-    width: rs(32), height: rs(32), alignItems: 'center', justifyContent: 'center',
-    position: 'relative',
-  },
-  headerActionBtnLive: {
-    borderRadius: rs(16), borderWidth: 1,
-    borderColor: T.primaryBorder, backgroundColor: T.primaryDim,
-  },
-  liveDot: {
-    position: 'absolute', top: rp(3), right: rp(3),
-    width: rs(6), height: rs(6), borderRadius: rs(3),
-    backgroundColor: T.online, borderWidth: 1, borderColor: T.background,
-  },
-  welcomeOverlay: {
-    flex:            1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  welcomeMedia: {
-    width:  '88%',
-    height: '70%',
-    borderRadius: RADIUS.lg,
-  },
-  welcomeHint: {
-    marginTop:  rp(16),
-    color:      T.textMute,
-    fontFamily: 'DMSans-Italic',
-    fontSize:   FONT.sm,
-  },
-  welcomeDots: {
-    flexDirection: 'row',
-    gap:           rp(6),
-    marginTop:     rp(14),
-  },
-  welcomeDot: {
-    width: rs(6), height: rs(6), borderRadius: rs(3),
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  welcomeDotActive: { backgroundColor: T.primary, width: rs(16) },
-  welcomeClose: {
-    position: 'absolute', top: rp(50), right: rp(20),
-    width: rs(34), height: rs(34), borderRadius: rs(17),
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  list: { padding: SPACING.md, gap: SPACING.xs, paddingBottom: SPACING.lg },
 
-
-  // Confession banner
-  confessionBanner: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical:   SPACING.sm,
-    backgroundColor:   T.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  confessionBannerKicker: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(9),
-    color:         T.textMute,
-    letterSpacing: 1.8,
-    marginBottom:  rp(3),
-  },
-  confessionBannerText: {
-    fontFamily:    'PlayfairDisplay-Italic',
-    fontSize:      FONT.sm,
-    color:         T.textSec,
-    lineHeight:    rf(20),
-    letterSpacing: 0.2,
-  },
-
-  // Messages list
-  messageList: {
-    padding:       SPACING.md,
-    gap:           SPACING.xs,
-    paddingBottom: SPACING.lg,
-  },
-  dateSeparatorRow: {
-    alignItems: 'center', alignSelf: 'stretch', marginVertical: rp(6),
-  },
-  dateSeparatorText: {
-    fontFamily: 'DMSans-Bold', fontSize: rf(10), color: T.textMute,
-    letterSpacing: 1, textTransform: 'uppercase',
-    backgroundColor: T.surfaceAlt, borderRadius: RADIUS.full,
-    paddingHorizontal: rp(10), paddingVertical: rp(3),
-    overflow: 'hidden',
-  },
-  msgRow:    { flexDirection: 'row', marginBottom: rp(4) },
-  msgRowOwn: { justifyContent: 'flex-end' },
-  // Photo/video bubble with a sharp bottom-right corner.
-  mediaBubble: {
-    maxWidth: '68%', borderRadius: RADIUS.lg, borderBottomRightRadius: rs(4),
-    overflow: 'hidden',
-  },
-  // Keeps the time pinned to the photo when a reply quote sits below it.
-  mediaImageWrap: { position: 'relative' },
-  mediaImage: {
-    width: rs(220), height: rs(220), backgroundColor: T.surfaceAlt,
-  },
-  videoPlayOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
-  },
-  mediaBubbleTime: {
-    position: 'absolute', bottom: rp(6), right: rp(8),
-    fontFamily: 'DMSans-Bold', fontSize: rf(10), color: '#fff',
-    textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3,
-  },
-  mediaBubbleTimeOwn: { color: '#fff' },
-  // Sharp bottom-right corner, like every message container except voice notes.
-  bubble: {
-    maxWidth:               '78%',
-    borderRadius:           RADIUS.lg,
-    borderBottomRightRadius: rs(4),
-    paddingVertical:        rp(8),
-    paddingHorizontal:      rp(12),
-    shadowColor:            '#000',
-    shadowOffset:           { width: 0, height: 2 },
-    shadowOpacity:          0.18,
-    shadowRadius:           6,
-    elevation:              2,
-  },
-  bubbleOwn: {
-    backgroundColor: T.primary,
-  },
-  bubbleTheir: {
-    backgroundColor: T.surface,
-    borderWidth:     1,
-    borderColor:     T.border,
-  },
-  // No background/border here — voice notes render bare, same convention
-  // as mediaBubble below. maxWidth just keeps it from stretching full width.
-  voiceMessageWrap: { maxWidth: '78%' },
-  bubbleText: {
-    fontFamily:    'DMSans-Regular',
-    fontSize:      FONT.md,
-    color:         T.text,
-    lineHeight:    rf(22),
-    letterSpacing: 0.2,
-  },
-  bubbleTextOwn: { color: '#fff' },
-  // Own messages: time flows inline at the end of the text. Received
-  // messages use `bubbleTime` below instead — its own right-aligned line.
-  bubbleTimeInlineOwn: {
-    fontFamily: 'DMSans-Italic',
-    fontSize:   rf(10),
-    color:      'rgba(255,255,255,0.65)',
-  },
-  bubbleTime: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      rf(10),
-    color:         T.textMute,
-    marginTop:     rp(4),
-    textAlign:     'right',
-    letterSpacing: 0.2,
-  },
-  bubbleTimeOwn: { color: 'rgba(255,255,255,0.65)' },
-  // Seen tick, in the accent colour.
-  tickSeen: { color: T.primary, fontFamily: 'DMSans-Bold' },
-
-  // Swipe-to-reply — the icon revealed behind a bubble as it's dragged right.
-  replyActionWrap: {
-    width: rs(56), alignItems: 'center', justifyContent: 'center',
-  },
-
-  // Reply quote inside a bubble: white tint on my bubbles, coral tint on theirs.
-  replyQuote: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: rp(6),
-    backgroundColor: T.primaryDim,
-    borderRadius: rs(8),
-    paddingVertical: rp(5), paddingHorizontal: rp(7),
-    marginTop: rp(6),
-  },
-  replyQuoteOwn: { backgroundColor: 'rgba(255,255,255,0.18)' },
-  replyQuoteBar: {
-    width: rs(3), alignSelf: 'stretch', borderRadius: rs(2),
-    backgroundColor: T.primary, minHeight: rs(24),
-  },
-  replyQuoteBarOwn: { backgroundColor: '#fff' },
-  replyQuoteName: {
-    fontFamily: 'DMSans-Bold', fontSize: rf(11), color: T.primary,
-  },
-  replyQuoteNameOwn: { color: '#fff' },
-  replyQuotePreview: {
-    fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.textMute,
-    marginTop: rp(1),
-  },
-  replyQuotePreviewOwn: { color: 'rgba(255,255,255,0.85)' },
-  // Reply quote below a photo/video bubble.
-  replyQuoteOnMedia: { padding: rp(6) },
-
-  // "This message was deleted" placeholder — same bubble shape, muted
-  // italic text instead of real content.
-  deletedText: {
-    fontFamily: 'DMSans-Italic', fontSize: FONT.md, color: T.textMute,
-  },
-  deletedTextOwn: { color: 'rgba(255,255,255,0.75)' },
-
-  // Reply banner — shown above the composer while replying to a message.
   replyBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(8),
-    paddingHorizontal: rp(16), paddingVertical: rp(8),
-    backgroundColor: T.surfaceAlt,
-    borderTopWidth: 1, borderTopColor: T.border,
+    flexDirection: 'row', alignItems: 'center', gap: rp(8), paddingHorizontal: rp(16), paddingVertical: rp(8),
+    backgroundColor: T.surfaceAlt, borderTopWidth: 1, borderTopColor: T.border,
   },
-  replyBannerBar: {
-    width: rs(3), alignSelf: 'stretch', borderRadius: rs(2),
-    backgroundColor: T.primary, minHeight: rs(28),
-  },
-  replyBannerName: {
-    fontFamily: 'DMSans-Bold', fontSize: rf(12.5), color: T.primary,
-  },
-  replyBannerPreview: {
-    fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute,
-    marginTop: rp(1),
-  },
+  replyBar: { width: rs(3), alignSelf: 'stretch', borderRadius: rs(2), backgroundColor: T.primary, minHeight: rs(28) },
+  replyName: { fontFamily: 'DMSans-Bold', fontSize: rf(12.5), color: T.primary },
+  replyPreview: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute, marginTop: rp(1) },
 
-  // Typing indicator bubble
-  typingBubble: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(4),
-    paddingVertical: rp(12),
-  },
-  typingBubbleDot: {
-    width: rs(6), height: rs(6), borderRadius: rs(3),
-    backgroundColor: T.textMute,
-  },
-
-  // Inside card (top of the thread)
-  insideCard: {
-    alignSelf: 'stretch', borderRadius: RADIUS.lg, padding: rp(14), marginBottom: SPACING.md,
-    borderWidth: 1, borderColor: 'rgba(251,191,36,0.28)', gap: rp(6),
-  },
-  insideKickerRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
-  insideKicker: { fontFamily: 'DMSans-Bold', fontSize: rf(9.5), color: T.gold, letterSpacing: 1.8 },
-  insideTitle: { fontFamily: 'DMSans-Bold', fontSize: FONT.md, color: T.text },
-  insideSince: { fontFamily: 'DMSans-Regular', fontSize: FONT.xs, color: T.textMute },
-  insidePitch: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textSec, lineHeight: rf(19) },
-  insidePitchQuote: { fontFamily: 'PlayfairDisplay-Italic', color: T.text },
-  insideChips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(5) },
-  insideChip: {
-    fontSize: rf(10.5), color: T.text, borderWidth: 1, borderColor: T.primaryBorder,
-    paddingHorizontal: rp(8), paddingVertical: rp(2), borderRadius: 999, overflow: 'hidden',
-  },
-  insideFoot: { fontFamily: 'DMSans-Italic', fontSize: rf(10.5), color: T.textMute },
-
-  // Reactions
-  reactionRow: { flexDirection: 'row', gap: rp(4), marginTop: rp(-2), marginBottom: rp(4), marginLeft: rp(6) },
-  reactionRowOwn: { justifyContent: 'flex-end', marginLeft: 0, marginRight: rp(6) },
-  reactionPill: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(3),
-    paddingHorizontal: rp(7), paddingVertical: rp(2), borderRadius: 999,
-    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
-  },
-  reactionPillMine: { borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
-  reactionEmoji: { fontSize: rf(13) },
-  reactionCount: { fontFamily: 'DMSans-Bold', fontSize: rf(10), color: T.textSec },
-  sheetReactions: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: rp(10), paddingHorizontal: rp(4) },
-  sheetReactionBtn: { width: rs(44), height: rs(44), borderRadius: rs(22), alignItems: 'center', justifyContent: 'center', backgroundColor: T.surfaceAlt },
-  sheetReactionBtnMine: { backgroundColor: T.primaryDim, borderWidth: 1, borderColor: T.primaryBorder },
-  sheetReactionEmoji: { fontSize: rf(22) },
-
-  // View once
-  viewOnce: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(8), maxWidth: '78%',
-    paddingVertical: rp(10), paddingHorizontal: rp(12), borderRadius: RADIUS.lg, borderBottomRightRadius: rs(4),
-    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
-  },
-  viewOnceSealed: { borderColor: 'rgba(251,191,36,0.45)', backgroundColor: 'rgba(251,191,36,0.08)' },
-  viewOnceOwn: { backgroundColor: T.primary, borderColor: T.primary },
-  viewOnceText: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.textSec, flexShrink: 1 },
-  viewOnceTextSealed: { fontFamily: 'DMSans-Bold', color: T.gold },
-  viewOnceTime: { fontFamily: 'DMSans-Italic', fontSize: rf(10), color: T.textMute },
-
-  // Empty chat openers
-  openers: { alignSelf: 'stretch', gap: rp(8), marginTop: SPACING.md },
-  opener: {
-    alignSelf: 'flex-start', paddingHorizontal: rp(14), paddingVertical: rp(9),
-    borderRadius: RADIUS.lg, borderBottomLeftRadius: rs(4),
-    backgroundColor: T.surface, borderWidth: 1, borderColor: T.primaryBorder,
-  },
-  openerText: { fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.text },
-
-  // Empty
-  emptyChat: {
-    flexGrow:       1,
-    alignItems:     'center',
-    justifyContent: 'center',
-    padding:        SPACING.lg,
-  },
-  emptyChatText: {
-    fontFamily:    'DMSans-Italic',
-    fontSize:      FONT.md,
-    color:         T.textSec,
-    textAlign:     'center',
-    lineHeight:    rf(22),
-    letterSpacing: 0.3,
-  },
-
-  // Mood board
-  moodBoardWrap: { marginTop: SPACING.xl, alignSelf: 'stretch' },
-  moodBoardLabel: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(10),
-    color:         T.textMute,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    textAlign:     'center',
-    marginBottom:  rp(10),
-  },
-  moodBoardScroll: {
-    paddingHorizontal: SPACING.md,
-    gap:               rp(8),
-  },
-  moodCard: {
-    width:          rs(56),
-    height:         rs(56),
-    borderRadius:   RADIUS.md,
-    alignItems:     'center',
-    justifyContent: 'center',
-    borderWidth:    1,
-    borderColor:    'rgba(255,255,255,0.06)',
-  },
-  moodCardSymbol: { fontSize: rf(22) },
-
-  // The input bar is <ChatInputBar>; this adds the emoji strip and recording row.
-  emojiStrip: {
-    borderTopWidth: 1, borderTopColor: T.border, backgroundColor: T.background,
-  },
-  emojiStripContent: {
-    paddingHorizontal: SPACING.md, paddingVertical: rp(8), gap: rp(4),
-  },
-  emojiStripBtn: {
-    width: rs(38), height: rs(38), alignItems: 'center', justifyContent: 'center',
-    borderRadius: rs(19), backgroundColor: T.surface,
-  },
-  emojiStripEmoji: { fontSize: rf(20) },
-  // Replaces the text input while recording — nothing to type, so the
-  // timer/hint get the space instead of squeezing in beside a dead field.
-  recordingRow: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8),
-    paddingVertical: rp(10), paddingLeft: rp(4),
-  },
-  recordDot: {
-    width: rs(9), height: rs(9), borderRadius: rs(5),
-    backgroundColor: T.danger,
-  },
-  recordDurationLabel: {
-    fontFamily:    'DMSans-Bold',
-    fontSize:      rf(13),
-    color:         T.text,
-    letterSpacing: 0.5,
-    minWidth:      rs(32),
-  },
-  recordHint: {
-    flex: 1,
-    fontFamily: 'DMSans-Italic',
-    fontSize:   rf(12),
-    color:      T.textMute,
-  },
+  // Replaces the text field while recording or listening back.
+  recordRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8), paddingVertical: rp(10), paddingLeft: rp(4) },
+  recordDot: { width: rs(9), height: rs(9), borderRadius: rs(5), backgroundColor: T.danger },
+  recordTime: { fontFamily: 'DMSans-Bold', fontSize: rf(13), color: T.text, letterSpacing: 0.5, minWidth: rs(32) },
+  recordHint: { flex: 1, fontFamily: 'DMSans-Italic', fontSize: rf(12), color: T.textMute },
   sendBtn: {
-    width:           rs(44),
-    height:          rs(44),
-    borderRadius:    rs(22),
-    backgroundColor: T.primary,
-    alignItems:      'center',
-    justifyContent:  'center',
-    shadowColor:     T.primary,
-    shadowOpacity:   0.35,
-    shadowRadius:    10,
-    shadowOffset:    { width: 0, height: 3 },
-    elevation:       4,
+    width: rs(44), height: rs(44), borderRadius: rs(22), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
+    shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4,
   },
-
-  // ── Shared modal chrome (more-options menu) ──
-  modalOverlay: {
-    flex:            1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    justifyContent:  'flex-end',
-  },
-  modalSheet: {
-    backgroundColor:      T.surface,
-    borderTopLeftRadius:  RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    padding:              SPACING.lg,
-    paddingBottom:        SPACING.xl,
-    borderTopWidth:       1,
-    borderTopColor:       T.border,
-  },
-  modalHandle: {
-    width:           rs(40),
-    height:          rs(4),
-    backgroundColor: T.border,
-    borderRadius:    rs(2),
-    alignSelf:       'center',
-    marginBottom:    SPACING.md,
-  },
-  cancelBtn: { alignItems: 'center', paddingVertical: rp(10) },
-  cancelBtnText: {
-    fontFamily: 'DMSans-Italic',
-    fontSize:   FONT.sm,
-    color:      T.textSec,
-  },
-
-  // 3-dot menu — room roster + actions
-  menuHeaderRow: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(8),
-    marginBottom: SPACING.sm,
-  },
-  menuHeaderText: {
-    fontFamily: 'PlayfairDisplay-Italic', fontSize: rf(16), color: T.text,
-  },
-  guestListScroll: { maxHeight: rs(220), marginBottom: rp(4) },
-  guestRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: rp(9),
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  guestRowLeft: { flexDirection: 'row', alignItems: 'center', gap: rp(8) },
-  guestDotWrap: { width: rs(8), height: rs(8), alignItems: 'center', justifyContent: 'center' },
-  guestOnlineDot: { width: rs(7), height: rs(7), borderRadius: rs(4), backgroundColor: T.online },
-  guestName: {
-    fontFamily: 'DMSans-Regular', fontSize: FONT.sm, color: T.text,
-  },
-  guestStatus: {
-    fontFamily: 'DMSans-Italic', fontSize: rf(11), color: T.textMute,
-  },
-  guestEmptyText: {
-    fontFamily: 'DMSans-Italic', fontSize: FONT.sm, color: T.textMute,
-    textAlign: 'center', paddingVertical: SPACING.md,
-  },
-  menuDivider: { height: 1, backgroundColor: T.border, marginVertical: SPACING.sm },
-  menuAction: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(10),
-    paddingVertical: rp(12),
-  },
-  menuActionText: {
-    fontFamily: 'DMSans-Bold', fontSize: FONT.sm, color: T.text, letterSpacing: 0.2,
-  },
-
 });
