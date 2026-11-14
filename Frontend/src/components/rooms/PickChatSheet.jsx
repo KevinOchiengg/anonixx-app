@@ -76,10 +76,7 @@ export default function PickChatSheet({ visible, mode = 'open', title, subtitle,
                   disabled={mode === 'call'}
                 >
                   <Avatar name={item.other_anonymous_name} url={item.other_avatar_url} seed={item.other_user_id} size={rs(46)} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={rowSt.name} numberOfLines={1}>{item.other_anonymous_name}</Text>
-                    <Text style={s.hint} numberOfLines={1}>{item.is_sender ? 'Your guest' : 'You’re inside their Room'}</Text>
-                  </View>
+                  <Text style={[rowSt.name, { flex: 1 }]} numberOfLines={1}>{item.other_anonymous_name}</Text>
                   {mode === 'call' ? (
                     <View style={s.callBtns}>
                       <TouchableOpacity onPress={() => onCall(item, false)} hitSlop={HIT_SLOP} accessibilityLabel={`Voice call ${item.other_anonymous_name}`}>

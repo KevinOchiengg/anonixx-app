@@ -1,7 +1,7 @@
 /** Link Up chat between two connected people. The screen holds the thread and the
  * composer; bubbles, sheets, live updates and voice notes live in their own files:
  * components/chat/{ChatBubble, ChatIntro, ChatSheets, ChatMediaViewer}, hooks/{useChatSocket, useVoiceNote}.
- * Everything else (media, Room, remove, welcome media) is in Chat info: tap the name. */
+ * Everything else (media, mute, pin, safety) is in Chat info: tap the name. */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -22,7 +22,7 @@ import VoiceWaveform from '../../components/common/VoiceWaveform';
 import ChatInputBar from '../../components/common/ChatInputBar';
 import ChatBackground from '../../components/chat/ChatBackground';
 import ChatBubble, { DateSeparator, TypingBubble, messagePreviewLabel } from '../../components/chat/ChatBubble';
-import { InsideCard, EmptyChat } from '../../components/chat/ChatIntro';
+import { ConfessionCard, EmptyChat } from '../../components/chat/ChatIntro';
 import { ChatMenuSheet, MessageSheet } from '../../components/chat/ChatSheets';
 import ChatMediaViewer from '../../components/chat/ChatMediaViewer';
 import { useToast } from '../../components/ui/Toast';
@@ -462,7 +462,7 @@ export default function DropChatScreen({ route, navigation }) {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
             {messages.length === 0 ? (
-              <EmptyChat connection={connection} otherName={otherName} onPickOpener={handlePickOpener} />
+              <EmptyChat connection={connection} onPickOpener={handlePickOpener} />
             ) : (
               <FlatList
                 ref={listRef}
@@ -476,7 +476,7 @@ export default function DropChatScreen({ route, navigation }) {
                 initialNumToRender={14}
                 maxToRenderPerBatch={10}
                 windowSize={10}
-                ListHeaderComponent={<InsideCard connection={connection} otherName={otherName} />}
+                ListHeaderComponent={<ConfessionCard connection={connection} />}
                 ListFooterComponent={isOtherTyping ? <TypingBubble /> : null}
                 onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
               />

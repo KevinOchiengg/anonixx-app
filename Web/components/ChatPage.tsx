@@ -1,7 +1,7 @@
 "use client";
 /** Link Up chat between two connected people: the thread and the composer. A message's
  * actions live in chat/ChatBubble, voice recording in lib/useVoiceRecorder, and everything
- * else (media, welcome media, Room, pin, archive, remove) in Chat info: click the name. */
+ * else (media, welcome media, mute, pin, archive, safety) in Chat info: click the name. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import useDraft from "@/lib/useDraft";
 import Image from "next/image";
@@ -15,12 +15,11 @@ import AppShell from "./AppShell";
 import CallRoom, { type CallInfo } from "./CallRoom";
 import { callsApi, callInfo } from "@/lib/calls";
 import { chatsApi, mutedLabel, MUTE_OPTIONS, type Prefs } from "@/lib/chats";
-import { intentLabel } from "@/lib/linkup";
 import useVoiceRecorder from "@/lib/useVoiceRecorder";
 import ChatInfo from "./rooms/ChatInfo";
 import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
-import { BellOff, EllipsisVertical, Lock, Mic, Paperclip, Phone, X } from "lucide-react";
+import { BellOff, EllipsisVertical, Mic, Paperclip, Phone, X } from "lucide-react";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
@@ -35,19 +34,13 @@ const REPORT_REASONS: [string, string][] = [
   ["self-harm-concern", "I'm worried about them"], ["other", "Other"],
 ];
 
-// Top of the thread: the confession, who let who in, and the knock. Scrolls away with the chat.
-function InsideCard({ conn }: { conn: Conn }) {
-  const guest = !conn.is_sender;
-  const name = conn.other_anonymous_name || "They";
-  const since = conn.inside_since ? new Date(conn.inside_since).toLocaleDateString([], { day: "numeric", month: "short" }) : "";
+// Top of the thread: the confession you're both talking about. Scrolls away with the chat.
+function ConfessionCard({ conn }: { conn: Conn }) {
+  if (!conn.confession) return null;
   return (
     <div className="chat-inside">
-      <small className="ci-k"><Lock className="inl-ic" size={11} strokeWidth={2} aria-hidden /> {guest ? "YOU'RE INSIDE" : "INSIDE YOUR ROOM"}</small>
-      {conn.confession ? <p className="ci-q">&ldquo;{conn.confession}&rdquo;</p> : null}
-      <b>{guest ? `${name} let you in` : `${name} knocked and you let them in`}{since ? <span className="dim"> · {since}</span> : null}</b>
-      {conn.knock_pitch ? <p>{guest ? "Your knock: " : "Their knock: "}<i>&ldquo;{conn.knock_pitch}&rdquo;</i></p> : null}
-      {conn.knock_intents?.length ? <p className="dim">{conn.knock_intents.map((i) => intentLabel(i)).join(" · ")}</p> : null}
-      <small className="dim">Only the two of you can see this chat.</small>
+      <small className="ci-k">THE CONFESSION</small>
+      <p className="ci-q">&ldquo;{conn.confession}&rdquo;</p>
     </div>
   );
 }
@@ -254,10 +247,10 @@ function Inner({ id }: { id: string }) {
   async function removeFromRoom() {
     const unlocks = conn?.removable_at ? new Date(conn.removable_at) : null;
     if (unlocks && unlocks > new Date()) {
-      setError(`You can remove them from ${unlocks.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Something wrong? Block them now.`);
+      setError(`You can end this chat from ${unlocks.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Something wrong? Block them now.`);
       return;
     }
-    if (!window.confirm(`Remove ${conn?.other_anonymous_name || "them"} from your Room?\n\nThe chat closes. They'd have to knock again.`)) return;
+    if (!window.confirm(`End this chat?\n\nIt closes for you and ${conn?.other_anonymous_name || "them"}. They'd have to knock again.`)) return;
     try { await api(`/drops/connections/${id}/remove`, { method: "POST" }); router.push("/inbox"); }
     catch (e) { setError((e as Error).message); }
   }
@@ -328,7 +321,7 @@ function Inner({ id }: { id: string }) {
         </div>
       ) : null}
       <div className="chat-log" onClick={() => menu && setMenu(null)}>
-        {conn ? <InsideCard conn={conn} /> : null}
+        {conn ? <ConfessionCard conn={conn} /> : null}
         {msgs.map((m) => (
           <ChatBubble
             key={m.id}

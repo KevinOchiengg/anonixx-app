@@ -121,7 +121,7 @@ export function PickChats({ mode, title, exclude, onClose, onOpen, onCall, extra
                 onClick={() => (mode === "open" ? onOpen?.(c) : undefined)}
                 onKeyDown={(e) => { if (e.key === "Enter" && mode === "open") onOpen?.(c); }}>
                 <Ava name={c.other_anonymous_name} url={c.other_avatar_url} seed={c.other_user_id} size={44} />
-                <span className="mx-body"><b>{c.other_anonymous_name}</b><small>{c.is_sender ? "Your guest" : "You’re inside their Room"}</small></span>
+                <span className="mx-body"><b>{c.other_anonymous_name}</b></span>
                 {mode === "call" ? (
                   <span className="mx-callbtns">
                     <button type="button" onClick={() => onCall?.(c, false)} aria-label={`Voice call ${c.other_anonymous_name}`}>{Icon.phone(20)}</button>

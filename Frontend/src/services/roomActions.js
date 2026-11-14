@@ -57,17 +57,17 @@ export function confirmRemove(connection, onDone, onError, onBlockInstead) {
   if (when && when > new Date()) {
     Alert.alert(
       'Not yet',
-      `You can remove them from ${when.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Something wrong? Block them now.`,
+      `You can end this chat from ${when.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Something wrong? Block them now.`,
       [{ text: 'OK', style: 'cancel' }, { text: 'Block', style: 'destructive', onPress: onBlockInstead }],
     );
     return;
   }
   Alert.alert(
-    `Remove ${connection?.other_anonymous_name || 'them'} from your Room?`,
-    "The chat closes. They'd have to knock again.",
+    'End this chat?',
+    `It closes for you and ${connection?.other_anonymous_name || 'them'}. They'd have to knock again.`,
     [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => post(`/drops/connections/${connection.id}/remove`).then(() => onDone("Removed. They're outside again.")).catch((e) => onError(e.message)) },
+      { text: 'End chat', style: 'destructive', onPress: () => post(`/drops/connections/${connection.id}/remove`).then(() => onDone('Chat ended.')).catch((e) => onError(e.message)) },
     ],
   );
 }

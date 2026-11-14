@@ -4,10 +4,8 @@
  * safety actions. */
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { chatsApi, chatTime, mutedLabel, MUTE_OPTIONS, type Prefs, type ThreadItem } from "@/lib/chats";
 import type { GalleryItem } from "@/lib/chatTheme";
-import { intentLabel } from "@/lib/linkup";
 import { Ava, Icon } from "./Messenger";
 import { X } from "lucide-react";
 
@@ -45,7 +43,6 @@ export default function ChatInfo({ id, conn, avatar, gallery, onClose, onPrefs, 
   }
 
   const name = conn.other_anonymous_name || "Anonymous";
-  const since = conn.inside_since ? new Date(conn.inside_since).toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" }) : null;
   const list = items[kind];
 
   return (
@@ -55,23 +52,13 @@ export default function ChatInfo({ id, conn, avatar, gallery, onClose, onPrefs, 
         <div className="ci-hero">
           <Ava name={name} url={conn.other_avatar_url || avatar} seed={conn.other_user_id} size={104} online={conn.other_is_online} />
           <h2>{name}</h2>
-          <p>{conn.is_sender ? `Your guest${since ? ` · let in ${since}` : ""}` : `You're inside their Room${since ? ` · since ${since}` : ""}`}</p>
           <small>{conn.other_is_online ? "online" : "offline"}</small>
           <div className="ci-acts">
             <button onClick={() => onCall(false)}>{Icon.phone(20)}<span>Voice</span></button>
             <button onClick={() => onCall(true)}>{Icon.video(21)}<span>Video</span></button>
-            {conn.other_user_id ? <Link href={`/room/${conn.other_user_id}`}>{Icon.door(20)}<span>Room</span></Link> : null}
           </div>
         </div>
         {error ? <div className="err pad">{error}</div> : null}
-
-        {conn.knock_pitch || conn.knock_intents?.length ? (
-          <div className="ci-card">
-            <small className="ci-k">{conn.is_sender ? "THEIR KNOCK" : "YOUR KNOCK"}</small>
-            {conn.knock_pitch ? <p className="ci-q">&ldquo;{conn.knock_pitch}&rdquo;</p> : null}
-            {conn.knock_intents?.length ? <p className="ci-m">{conn.knock_intents.map((i) => intentLabel(i)).join(" · ")}</p> : null}
-          </div>
-        ) : null}
 
         <div className="ci-card">
           <div className="ci-tabs" role="tablist">
@@ -136,12 +123,11 @@ export default function ChatInfo({ id, conn, avatar, gallery, onClose, onPrefs, 
             <span>{Icon.archive(19)}</span><b>Archive chat</b>
             <button type="button" role="switch" aria-checked={!!conn.archived} aria-label="Archive chat" className={`rs-switch${conn.archived ? " on" : ""}`} onClick={() => pref({ archived: !conn.archived })} />
           </div>
-          {conn.is_sender ? <Link href="/chat-setup" className="ci-row"><span>{Icon.door(19)}</span><b>Your Room settings</b></Link> : null}
         </div>
 
         <div className="ci-group danger">
           <button className="ci-row" onClick={onClear}><b>Clear chat</b></button>
-          {onRemove ? <button className="ci-row" onClick={onRemove}><b>Remove {name} from your Room</b></button> : null}
+          {onRemove ? <button className="ci-row" onClick={onRemove}><b>End this chat</b></button> : null}
           <button className="ci-row" onClick={onBlock}><b>Block {name}</b></button>
           <button className="ci-row" onClick={onReport}><b>Report {name}</b></button>
         </div>
