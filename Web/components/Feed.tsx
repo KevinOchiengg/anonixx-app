@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, getToken, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
+import { api, API_URL, getDeviceId, getToken, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
@@ -14,7 +14,8 @@ import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
 import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
-import { Eye, SatelliteDish } from "lucide-react";
+import { Eye, SatelliteDish, Sparkles } from "lucide-react";
+import { CATEGORIES } from "@/lib/confession";
 
 type Item =
   | { kind: "hero" }
@@ -22,7 +23,8 @@ type Item =
   | { kind: "ad"; key: string }
   | { kind: "promo"; key: string; ad: FeedAd }
   | { kind: "market"; key: string; item: MarketTease }
-  | { kind: "status" };
+  | { kind: "status" }
+  | { kind: "join"; key: string };
 
 type AuthedFeed = {
   posts: (Post & { type?: string })[];
@@ -39,6 +41,20 @@ const ADSENSE_ON = Boolean(process.env.NEXT_PUBLIC_ADSENSE_CLIENT && process.env
 const LOCATION_LABELS: Record<string, string> = { country: "Country", county: "Region", sub_county: "Area", estate: "Nearby" };
 const LOAD_AHEAD = 4;
 const CACHE_KEY = "anonixx.feed.cache.v1";
+// Guests: a "join so it remembers" card after JOIN_FIRST posts, then every JOIN_EVERY.
+const JOIN_FIRST = 8;
+const JOIN_EVERY = 25;
+const RETURNING_KEY = "anonixx.feed.returning";
+
+// "You keep stopping on …" from the guest's strongest interest.
+function hintLabel(hint?: string | null): string | null {
+  if (!hint) return null;
+  const [kind, val] = hint.split(":");
+  if (!val) return null;
+  if (kind === "cat") return CATEGORIES[val as keyof typeof CATEGORIES]?.label ?? null;
+  if (kind === "topic" || kind === "mood") return val.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
+  return null;
+}
 
 type Props = {
   initialPosts: Post[];
@@ -147,6 +163,24 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     return () => { live = false; };
   }, [fillAfterStart]);
 
+  const [hint, setHint] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ready || user || startId || fillAfterStart || !initialPosts.length) return;
+    let back = false;
+    try { back = localStorage.getItem(RETURNING_KEY) === "1"; } catch { /* ignore */ }
+    if (!back) return;
+    let live = true;
+    loadMoreClient(null).then((page) => {
+      if (!live || authedRef.current || !page || !page.posts.length) return;
+      setPosts(page.posts);
+      setCursor(page.next_cursor);
+      setHint(page.taste_hint ?? null);
+      setReplay([]);
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, user]);
+
   const topId = posts[0]?.id;
   useEffect(() => {
     if (authed || !topId) return;
@@ -201,6 +235,9 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       const next = posts[i + 1];
       const calm = post.sensitivity !== "mature" && next?.sensitivity !== "mature";
       if (!calm) return;
+      if (!user && (n === JOIN_FIRST || (n > JOIN_FIRST && (n - JOIN_FIRST) % JOIN_EVERY === 0))) {
+        out.push({ kind: "join", key: `join-${n}` });
+      }
       if (n % MARKET_EVERY === 0 && mIdx < market.length) {
         const m = market[mIdx++];
         out.push({ kind: "market", key: `market-${m.id}`, item: m });
@@ -222,7 +259,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       });
     }
     return out;
-  }, [posts, showHero, replay, ads, market, loadingMore, loadFailed, first]);
+  }, [posts, showHero, replay, ads, market, loadingMore, loadFailed, first, user]);
 
   // Out of new posts (no next page, or the server's session cap): add another replay round
   // as the viewer nears the end, so the scroll never hits a wall.
@@ -237,11 +274,20 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const dwell = useRef<{ id: string; at: number } | null>(null);
   const activeId = (() => { const it = items[active]; return it && it.kind === "post" ? it.post.id : null; })();
   useEffect(() => {
-    if (!user) return;
+    if (!user && activeId) { try { localStorage.setItem(RETURNING_KEY, "1"); } catch { /* ignore */ } }
     const send = (id: string, ms: number) => {
       const v = document.querySelector<HTMLVideoElement>(`[data-post="${id}"] video`);
       const duration = v && Number.isFinite(v.duration) ? v.duration : null;
-      api(`/drops/${id}/watch`, { method: "POST", body: { ms, duration } }).catch(() => {});
+      if (getToken()) {
+        api(`/drops/${id}/watch`, { method: "POST", body: { ms, duration } }).catch(() => {});
+      } else {
+        fetch(`${API_URL}/drops/${id}/watch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Device-Id": getDeviceId() },
+          body: JSON.stringify({ ms, duration }),
+          keepalive: true,
+        }).catch(() => {});
+      }
     };
     const cur = dwell.current;
     if (cur && cur.id !== activeId) send(cur.id, Date.now() - cur.at);
@@ -300,6 +346,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       } else {
         const page = await loadMoreClient(cursor);
         if (!page) throw new Error("load");
+        if (page.taste_hint) setHint(page.taste_hint);
         setPosts((prev) => {
           const seen = new Set(prev.map((p) => p.id));
           return [...prev, ...page.posts.filter((p) => !seen.has(p.id))];
@@ -459,6 +506,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       if (navigator.share) {
         await navigator.share({ title: "Anonixx", text: text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"` : undefined, url });
         if (getToken()) api(`/drops/${post.id}/share`, { method: "POST" }).catch(() => {});
+        else fetch(`${API_URL}/drops/${post.id}/share`, { method: "POST", headers: { "X-Device-Id": getDeviceId() } }).catch(() => {});
       } else {
         await navigator.clipboard.writeText(url);
         flash("Link copied");
@@ -510,6 +558,21 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
             if (it.kind === "ad") return <AdSlot key={it.key} index={i} />;
             if (it.kind === "promo") return <AdSlide key={it.key} ad={it.ad} index={i} />;
             if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;
+            if (it.kind === "join") {
+              const label = hintLabel(hint);
+              return (
+                <section key={it.key} className="slide limit-slide join-slide" data-idx={i}>
+                  <span className="limit-moon" aria-hidden><Sparkles strokeWidth={1.5} /></span>
+                  <h2>{label ? <>You keep stopping on <em>{label}</em>.</> : "Your feed's learning what you like."}</h2>
+                  <p>Join free so it remembers you.</p>
+                  <div className="join-row">
+                    <Link href="/signup" className="pill">Join Anonixx</Link>
+                    <Link href="/login" className="pill ghost">Sign in</Link>
+                  </div>
+                  <small>Or keep scrolling</small>
+                </section>
+              );
+            }
             if (it.kind === "status") {
               const bad = first === "failed" || loadFailed;
               return (

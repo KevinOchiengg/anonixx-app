@@ -6,7 +6,10 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.database import get_database
-from app.api.v1.drops import batch_format_drops, live_filter
+from app.api.v1.drops import (
+    batch_format_drops, live_filter, _viewer_key, _seen_drop_ids, _fetch_for_you, _recycled_page, RECYCLE_PREFIX,
+)
+from app.utils import taste
 from app.utils.content_mode import SAFE_FILTER
 from app.utils.feed_mix import fetch_mixed, not_promoted, fetch_promoted, splice_promoted, fetch_showcase, splice_showcase
 from app.tasks import scheduled_publisher
@@ -39,22 +42,42 @@ async def public_feed(
     cursor: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=20),
     x_country: Optional[str] = Header(None, alias="X-Country"),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     db = Depends(get_database),
 ):
     scheduled_publisher.nudge(db)
     now = datetime.now(timezone.utc)
     query: dict = {**_LIVE, **SAFE_FILTER, **live_filter(now)}   # finished "tonight" hookups drop out
-    page, next_cursor, has_more = await fetch_mixed(
-        db, {"$and": [query, not_promoted(now)]}, limit, cursor, country_from_header(x_country),
-    )
+    stream = {"$and": [query, not_promoted(now)]}
+    country = country_from_header(x_country)
+
+    # A guest with a device id gets the same feed as a member: nothing they've seen comes back,
+    # and it leans toward what they watch (drops.py, utils/taste.py).
+    viewer_key = _viewer_key(None, x_device_id)
+    viewer_taste = await taste.load(db, viewer_key)
+    seen: list = []
+    if cursor and cursor.startswith(RECYCLE_PREFIX):
+        page, next_cursor, has_more = await _recycled_page(db, viewer_key, stream, limit, cursor)
+    else:
+        seen = await _seen_drop_ids(db, viewer_key) if viewer_key else []
+        fresh = {"$and": [stream, {"_id": {"$nin": seen}}]} if seen else stream
+        page, next_cursor, has_more = await _fetch_for_you(db, fresh, limit, cursor, country, viewer_taste)
+        if not has_more and seen:
+            if page:
+                next_cursor, has_more = RECYCLE_PREFIX, True
+            else:
+                page, next_cursor, has_more = await _recycled_page(db, viewer_key, stream, limit, RECYCLE_PREFIX)
     if not cursor:
-        # First page: pinned/boosted drops, then a rotating few of the best recent ones,
-        # so a newcomer's first look is strong content, not just the latest post.
-        page = splice_showcase(page, await fetch_showcase(db, {"$and": [query, not_promoted(now)]}, now))
+        # First page: pinned/boosted drops, and for a newcomer a rotating few of the best recent
+        # ones, so their first look is strong content, not just the latest post.
+        if not seen:
+            page = splice_showcase(page, await fetch_showcase(db, stream, now))
         page = splice_promoted(page, await fetch_promoted(db, query, now))
 
     posts = [_public_post(p) for p in await batch_format_drops(page, None, db)]
-    return {"posts": posts, "next_cursor": next_cursor, "has_more": has_more}
+    # What the guest seems into, for the "join so it remembers" card. Never a poster.
+    hint = next((k for k in taste.pick_keys(viewer_taste) if not k.startswith("creator:")), None)
+    return {"posts": posts, "next_cursor": next_cursor, "has_more": has_more, "taste_hint": hint}
 
 
 @router.get("/drops/{drop_id}")

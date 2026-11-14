@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Play, Search, Share2, ShieldCheck, VolumeX, Music,
+  Bookmark, Coins, Eye, ExternalLink, Sparkles, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Play, Search, Share2, ShieldCheck, VolumeX, Music,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -47,6 +47,20 @@ import FitImage, { FitBackdrop } from '../../components/feed/FitImage';
 import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 import * as Clipboard from 'expo-clipboard';
+
+// Guests: a "join so it remembers" card after JOIN_FIRST drops, then every JOIN_EVERY.
+const JOIN_FIRST = 8;
+const JOIN_EVERY = 25;
+const CATEGORY_LABELS = { curiosity: 'Curiosity', linkup: 'Link Up', vulnerable: 'Vulnerable' };
+// "You keep stopping on …" from the guest's strongest interest ("cat:linkup", "topic:gym").
+const hintLabel = (hint) => {
+  if (!hint) return null;
+  const [kind, val] = hint.split(':');
+  if (!val) return null;
+  if (kind === 'cat') return CATEGORY_LABELS[val] || null;
+  if (kind === 'topic' || kind === 'mood') return val.replace(/[-_]/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  return null;
+};
 
 // Public web link for a drop; the app opens it too (AppNavigator linking).
 const dropLink = (p) => `https://anonixx.com/drop/${p.id}`;
@@ -1225,6 +1239,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [reportPost, setReportPost] = useState(null);
   const [postMenu, setPostMenu] = useState(null);   // { post, speed?, onSpeed? } from a long-press
   const [playSpeed, setPlaySpeed] = useState(1);   // video speed for this session
+  const [tasteHint, setTasteHint] = useState(null);   // a guest's strongest interest, for the join card
   const [clearMode, setClearMode] = useState(false);   // Clear display: only the video
   const [commentSheet, setCommentSheet] = useState({ visible: false, postId: null, isOwner: false });
 
@@ -1278,6 +1293,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       }
 
       const fresh = data.posts || [];
+      if (data.taste_hint !== undefined && (data.taste_hint || reset)) setTasteHint(data.taste_hint || null);
       if (reset) setReplay([]);
       setPosts((prev) => {
         const merged = reset ? fresh : [...prev, ...fresh];
@@ -1354,7 +1370,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       setActiveIndex(item.index);
       const it = item.item;
       // Only real drops are view-tracked.
-      const postId = it && !it.__market && !it.__ad ? it.id : null;
+      const postId = it && !it.__market && !it.__ad && !it.__join ? it.id : null;
       flushDwell(postId);
       if (postId && !viewedRef.current.has(postId)) {
         viewedRef.current.add(postId);
@@ -1565,13 +1581,16 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const data = useMemo(() => {
     const base = linkedPost ? [linkedPost, ...posts.filter((p) => p.id !== linkedPost.id)] : posts;
     let out = base;
-    if (marketFeed.length > 0 || feedAds.length > 0) {
+    if (marketFeed.length > 0 || feedAds.length > 0 || !isAuthenticated) {
       out = [];
       let mIdx = 0;
       let aIdx = 0;
       base.forEach((p, i) => {
         out.push(p);
         const n = i + 1;
+        if (!isAuthenticated && (n === JOIN_FIRST || (n > JOIN_FIRST && (n - JOIN_FIRST) % JOIN_EVERY === 0))) {
+          out.push({ id: `join-${n}`, __join: true });
+        }
         if (n % MARKET_FREQUENCY === 0 && mIdx < marketFeed.length) {
           const m = marketFeed[mIdx++];
           out.push({ id: `market-${m.id}`, __market: m });
@@ -1584,7 +1603,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       });
     }
     return replay.length ? [...out, ...replay] : out;
-  }, [posts, linkedPost, marketFeed, feedAds, replay]);
+  }, [posts, linkedPost, marketFeed, feedAds, replay, isAuthenticated]);
 
   // ── Our own pan drives slide changes so a swipe snaps instantly (native paging always glides).
   // A flick or a drag past SNAP_DRAG moves one slide.
@@ -1653,7 +1672,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     if (data.length > 0 && activeIndex >= data.length - PREFETCH_AHEAD) handleEndReached();
     for (let i = activeIndex + 1; i <= activeIndex + 3 && i < data.length; i++) {
       const it = data[i];
-      if (!it || it.__market || it.__ad) continue;
+      if (!it || it.__market || it.__ad || it.__join) continue;
       [it.image_url, it.card_image_url, ...(it.images || []).map((im) => (typeof im === 'string' ? im : im?.url))]
         .filter(Boolean)
         .forEach((u) => Image.prefetch(u).catch(() => {}));
@@ -1672,6 +1691,27 @@ export default function DropsSwipeScreen({ navigation, route }) {
       return (
         <View style={{ height: listHeight, width }}>
           <AdSlide ad={item.__ad} onPress={handleAdPress} />
+        </View>
+      );
+    }
+    if (item.__join) {
+      const label = hintLabel(tasteHint);
+      return (
+        <View style={[{ height: listHeight, width }, ss.joinSlide]}>
+          <Sparkles size={rs(52)} color={THEME.primary} strokeWidth={1.5} />
+          <Text style={ss.joinTitle}>
+            {label ? <>You keep stopping on <Text style={{ color: THEME.primary }}>{label}</Text>.</> : "Your feed's learning what you like."}
+          </Text>
+          <Text style={ss.joinSub}>Join free so it remembers you.</Text>
+          <View style={ss.joinRow}>
+            <TouchableOpacity style={ss.netBtn} activeOpacity={0.85} onPress={() => navigation.navigate('AuthNav', { screen: 'SignUp' })}>
+              <Text style={ss.netBtnText}>Join Anonixx</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={ss.joinGhost} activeOpacity={0.85} onPress={() => navigation.navigate('AuthNav', { screen: 'Login' })}>
+              <Text style={ss.joinGhostText}>Sign in</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={ss.joinSkip}>Or keep scrolling</Text>
         </View>
       );
     }
@@ -1718,7 +1758,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   }, [
     activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
     handleLike, handleSave, handleLinkUp, handleVote, handleMarketOpen, handleAdPress, handleUnlock,
-    isAuthenticated, navigation, headerHeight, chromeHidden, clearMode, playSpeed, user?.is_premium, noteDuration,
+    isAuthenticated, navigation, headerHeight, chromeHidden, clearMode, playSpeed, user?.is_premium, noteDuration, tasteHint,
   ]);
 
   if (!loading && loadError && posts.length === 0) {
@@ -1870,6 +1910,13 @@ export default function DropsSwipeScreen({ navigation, route }) {
 const ss = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   netTitle: { color: '#fff', fontSize: 20, fontWeight: '700', textAlign: 'center' },
+  joinSlide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 10, backgroundColor: THEME.background },
+  joinTitle: { color: '#fff', fontSize: rf(22), fontWeight: '700', textAlign: 'center', lineHeight: rf(28), marginTop: 6 },
+  joinSub: { color: THEME.textSecondary, fontSize: rf(14), textAlign: 'center' },
+  joinRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  joinGhost: { marginTop: 20, borderRadius: 24, paddingHorizontal: 24, paddingVertical: 11, borderWidth: 1, borderColor: THEME.border },
+  joinGhostText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  joinSkip: { color: THEME.textMuted, fontSize: rf(12), marginTop: 8 },
   netSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center', marginTop: 8 },
   netBtn: { marginTop: 20, backgroundColor: THEME.primary, borderRadius: 24, paddingHorizontal: 28, paddingVertical: 12 },
   netBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },

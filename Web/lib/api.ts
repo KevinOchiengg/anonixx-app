@@ -66,7 +66,8 @@ export type Post = {
 
 export type Sound = { id: string; title: string; mood: string; url: string };
 
-export type FeedPage = { posts: Post[]; next_cursor: string | null; has_more: boolean };
+// taste_hint: a guest's strongest interest ("cat:linkup", "topic:gym", "mood:longing"), for the join card.
+export type FeedPage = { posts: Post[]; next_cursor: string | null; has_more: boolean; taste_hint?: string | null };
 
 // Server-side fetches revalidate so crawlers get fast cached HTML but fresh posts still appear.
 async function get<T>(path: string, revalidate = 60): Promise<T | null> {
@@ -105,7 +106,10 @@ export async function loadMoreClient(cursor?: string | null): Promise<FeedPage |
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 15000);
   try {
-    const res = await fetch(`${API_URL}/public/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { signal: ctl.signal, headers: countryHeader() });
+    // The device id lets the feed skip what this browser has seen and learn what it likes.
+    const res = await fetch(`${API_URL}/public/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, {
+      signal: ctl.signal, headers: { ...countryHeader(), "X-Device-Id": getDeviceId() },
+    });
     return res.ok ? ((await res.json()) as FeedPage) : null;
   } catch {
     return null;
