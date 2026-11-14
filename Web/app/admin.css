@@ -38,9 +38,7 @@
 }
 .adm-label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .adm-big { font-size: 38px; font-weight: 800; }
-.adm-stat { font-size: 26px; font-weight: 800; }
 .adm-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
-.adm-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .adm-link { cursor: pointer; }
 .adm-link:hover { border-color: var(--rose); }
 .adm-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
@@ -102,16 +100,15 @@
 .adm-brand .mark { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--rose); color: #fff; font-size: 17px; flex: none; }
 .adm-sidenav { padding: 4px 12px; flex: 1; }
 .adm-grouptitle { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); padding: 14px 10px 6px; white-space: nowrap; }
-.adm-sidenav a, .adm-sidefoot { display: flex; align-items: center; gap: 12px; padding: 10px; margin-bottom: 2px; border-radius: 12px; color: var(--muted); font-size: 14.5px; font-weight: 600; white-space: nowrap; position: relative; }
-.adm-sidenav a:hover, .adm-sidefoot:hover { background: var(--surface-alt); color: var(--fg); }
+.adm-sidenav a { display: flex; align-items: center; gap: 12px; padding: 10px; margin-bottom: 2px; border-radius: 12px; color: var(--muted); font-size: 14.5px; font-weight: 600; white-space: nowrap; position: relative; }
+.adm-sidenav a:hover { background: var(--surface-alt); color: var(--fg); }
 .adm-sidenav a.on { background: var(--rose); color: #fff; box-shadow: 0 6px 18px -8px var(--rose); }
-.adm-sidenav .ic, .adm-sidefoot .ic { display: grid; place-items: center; flex: none; }
+.adm-sidenav .ic { display: grid; place-items: center; flex: none; }
 .adm-sidenav .bd { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
 .adm-sidenav a.on .bd { background: #fff; color: var(--rose); }
-.adm-sidefoot { margin: 8px 12px 14px; border-top: 1px solid var(--line); border-radius: 12px; }
 @media (min-width: 900px) {
   .adm[data-collapsed="1"] .adm-side .word, .adm[data-collapsed="1"] .adm-side .lb, .adm[data-collapsed="1"] .adm-side .adm-grouptitle { display: none; }
-  .adm[data-collapsed="1"] .adm-sidenav a, .adm[data-collapsed="1"] .adm-sidefoot { justify-content: center; }
+  .adm[data-collapsed="1"] .adm-sidenav a { justify-content: center; }
   .adm[data-collapsed="1"] .adm-sidenav .bd { position: absolute; top: 2px; right: 6px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
   .adm[data-collapsed="1"] .adm-sidehead { justify-content: center; padding: 0; }
 }

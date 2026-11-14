@@ -110,11 +110,6 @@
 .sp-input input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--fg); font-size: 15px; }
 .sp-input button { display: grid; place-items: center; color: var(--muted); }
 .sp-input button svg { width: 16px; height: 16px; }
-.sp-filters { flex: none; padding: 0 14px 8px; }
-.sp-sort { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
-.sp-sort span { margin-right: 4px; font-weight: 700; }
-.sp-sort button { padding: 5px 12px; border-radius: 14px; font-size: 12px; font-weight: 700; text-transform: capitalize; color: var(--muted); background: var(--surface); border: 1px solid var(--line); }
-.sp-sort button.on { color: var(--rose); border-color: rgba(255, 99, 74, 0.5); background: rgba(255, 99, 74, 0.1); }
 .sp-facets { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
 .sp-facets::-webkit-scrollbar { display: none; }
 .facet { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); white-space: nowrap; }
@@ -131,10 +126,7 @@
 .sp-hist svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
 .sp-hist span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-hist button { color: var(--muted); display: grid; place-items: center; }
-.sp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.sp-chips button { padding: 8px 14px; border-radius: 18px; font-size: 13px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); }
 .sp-loading { text-align: center; color: var(--muted); padding: 40px 0; }
-.sp-count { margin: 6px 0 10px; font-size: 12px; color: var(--muted); }
 .sp-card { display: block; margin-bottom: 10px; padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--rose); color: var(--fg); }
 .sp-card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .sp-card .tag { padding: 2px 9px; border-radius: 9px; font-size: 11px; font-weight: 700; background: rgba(255, 99, 74, 0.12); color: var(--rose); }
@@ -144,10 +136,6 @@
 .sp-text.dim { color: var(--muted); }
 .sp-card-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
 .sp-card-foot b { margin-right: auto; color: var(--fg); }
-.sp-empty { text-align: center; padding: 56px 20px; color: var(--muted); }
-.sp-empty svg { width: 44px; height: 44px; opacity: 0.5; }
-.sp-empty b { display: block; margin-top: 10px; font-size: 17px; color: var(--fg); }
-.sp-empty p { margin: 6px 0 0; }
 
 /* ---------- saved ---------- */
 .sv-sky { min-height: 100%; padding: 14px; background:
@@ -306,7 +294,6 @@
 
 /* ---------- media captions: visible "more" toggle, long captions scroll instead of overflowing ---------- */
 .slide.has-media .confession:not(.clamp) { max-height: 38dvh; overflow-y: auto; overscroll-behavior: contain; }
-.more-btn { display: block; margin-top: 4px; padding: 4px 0; background: none; border: 0; color: rgba(255, 255, 255, 0.78); font-size: 13px; font-weight: 800; cursor: pointer; }
 
 /* ---------- rail as clear glass: the video stays visible through it ---------- */
 .rail, .hasnav .rail {
@@ -444,8 +431,6 @@
 .ap-lightbox button { position: absolute; top: 14px; right: 16px; width: 40px; height: 40px; border-radius: 50%; font-size: 28px; line-height: 1; color: #fff; background: rgba(255, 255, 255, 0.12); }
 
 /* Google sign-in */
-.g-or { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; color: var(--faint); font-size: 13px; }
-.g-or::before, .g-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .g-btn { display: flex; justify-content: center; min-height: 44px; margin-bottom: 14px; color-scheme: light; }
 .linkish { background: none; border: 0; padding: 0; color: var(--fg); text-decoration: underline; font: inherit; cursor: pointer; }
 
@@ -517,7 +502,6 @@
 .r-share { --c: #8fe8de; --cb: rgba(143, 232, 222, 0.35); }
 /* share's dots sit in the icon's corners: more inset so they clear the ring */
 .rail button.r-share svg { padding: calc(var(--chip) * 0.26); overflow: visible; }
-@keyframes chipring { from { outline: 0 solid rgba(255, 255, 255, 0.35); outline-offset: 0; } to { outline: 10px solid transparent; outline-offset: 0; } }
 @keyframes savedrop { 0% { transform: translateY(-9px) scale(0.85); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .rail button.r-act.on svg { animation: none; } }
 .r-sound { --c: #e2c4ff; --cb: rgba(226, 196, 255, 0.36); }
@@ -554,8 +538,6 @@
 @keyframes lushine { 0%, 55% { background-position: 220% 0, 0 0; } 100% { background-position: -120% 0, 0 0; } }
 @keyframes luglow { 0%, 100% { box-shadow: 0 6px 18px rgba(255, 99, 74, 0.4); } 50% { box-shadow: 0 8px 28px rgba(255, 99, 74, 0.72); } }
 @media (prefers-reduced-motion: reduce) { .linkup, .slide .linkup { animation: none; } }
-.r-more { --c: #e8eaf2; --cb: rgba(255, 255, 255, 0.28); }
-.rail button.r-more svg circle { r: 1.8px; }
 
 /* ---------- no avatar or name on the feed: caption and poll take the space ---------- */
 .slide.has-media .caption, .hasnav .slide.has-media .caption { padding-top: 64px; }

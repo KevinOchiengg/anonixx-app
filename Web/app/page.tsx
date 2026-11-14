@@ -29,7 +29,9 @@ export default async function Home() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <Feed initialPosts={page?.posts ?? []} initialCursor={page?.next_cursor ?? null} withHero />
+      {/* no intro slide: the feed starts straight away; the h1 stays for search engines */}
+      <h1 className="sr-only">Anonixx: anonymous confessions</h1>
+      <Feed initialPosts={page?.posts ?? []} initialCursor={page?.next_cursor ?? null} />
     </>
   );
 }

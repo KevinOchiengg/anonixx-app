@@ -75,9 +75,6 @@
 .au-row input:-webkit-autofill { -webkit-text-fill-color: var(--au-text); transition: background-color 9999s; }
 .au-eye { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: none; color: var(--au-sub); cursor: pointer; border-radius: 8px; }
 .au-eye svg { width: 20px; height: 20px; }
-.au-dob input { flex: none; width: 44px; text-align: center; }
-.au-dob input.yr { flex: 1; width: auto; }
-.au-dob span { color: var(--au-sub); }
 .au-err { margin: 6px 0 0 4px; font-size: 11px; font-weight: 600; color: var(--au-error); }
 .au-hint { margin: 6px 0 0 4px; font-size: 11px; line-height: 1.4; color: var(--au-mute); }
 .au-alert { margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
@@ -98,7 +95,7 @@
 
 .au-check { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 16px; font-size: 13px; line-height: 1.5; color: var(--au-sub); cursor: pointer; }
 .au-check input { margin-top: 3px; accent-color: var(--au-primary); width: 16px; height: 16px; flex: none; }
-.au-check a, .au-link, .au-alt a { color: var(--au-primary); font-weight: 700; text-decoration: none; }
+.au-check a, .au-alt a { color: var(--au-primary); font-weight: 700; text-decoration: none; }
 
 .au-forgot { align-self: flex-end; margin: -4px 0 4px; padding: 6px 0; font-size: 14px; font-weight: 500; color: var(--au-sub); text-decoration: none; }
 .au-forgot:hover { color: var(--au-text); }

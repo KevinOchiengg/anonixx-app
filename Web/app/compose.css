@@ -1,7 +1,4 @@
 .cx-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 12px 0; display: grid; gap: 10px; }
-.cx-tabs { display: flex; gap: 6px; margin: 12px 0 4px; flex-wrap: wrap; }
-.cx-tabs button { flex: 1; min-width: 70px; padding: 9px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 13px; font-weight: 600; }
-.cx-tabs button.on { color: var(--fg); border-color: var(--rose); background: rgba(255,99,74,0.12); }
 .cx-opt { display: flex; gap: 8px; align-items: center; }
 .cx-opt input { flex: 1; }
 .cx-x { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-alt); color: var(--muted); font-size: 18px; line-height: 1; }
@@ -14,18 +11,6 @@
 .cx-timer { font-size: 28px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
 .cx-timer small { font-size: 13px; color: var(--muted); font-weight: 400; }
 .cx-voice audio { width: 100%; }
-.cx-fonts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.cx-fonts button { padding: 12px 6px; border-radius: 12px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--fg); font-size: 16px; }
-.cx-fonts button.on { border-color: var(--rose); background: rgba(255,99,74,0.12); }
-.cx-intents { display: grid; gap: 8px; margin: 8px 0; }
-.cx-intents button { text-align: left; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); display: grid; gap: 2px; }
-.cx-intents button small { color: var(--muted); font-size: 12px; }
-.cx-intents button.on { border-color: var(--rose); background: rgba(255,99,74,0.12); }
-.cx-fold { border: 1px solid var(--line); border-radius: 16px; margin: 12px 0; background: var(--surface); }
-.cx-fold > summary { padding: 13px 14px; cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; }
-.cx-fold > summary::-webkit-details-marker { display: none; }
-.cx-fold > div { padding: 0 14px 14px; }
-.cx-fold .cx-card { margin: 0; padding: 0; border: 0; background: none; }
 
 .unsent { display: grid; gap: 4px; padding: 12px 14px; margin: 8px 0; border-radius: 14px; background: var(--rose-dim); border: 1px solid var(--rose); }
 .unsent b { font-size: 14px; }
@@ -47,8 +32,6 @@
 .cx-top { display: flex; }
 .cx-switch { background: none; border: 0; padding: 0; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
 .cx-switch:hover { color: var(--fg); }
-.cx-cost { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
-.cx-cost .low, .cx-cost .low a { color: var(--rose); }
 .cx-guide { margin: 4px 2px 0; font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 17px; line-height: 1.4; color: var(--muted); }
 .cx-live { --cx-from: #14060a; --cx-to: #2a0f18; --cx-accent: #FF3B7A; --cx-text: #F6E6EC; --cx-hint: #C48A98; border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: linear-gradient(160deg, var(--cx-from), var(--cx-to)); color: var(--cx-text); box-shadow: 0 18px 40px -22px var(--cx-accent); }
 .cx-zone { padding: 14px 14px 0; }
@@ -99,20 +82,11 @@
 .cx-hear { padding: 9px 12px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--rose); font-weight: 600; font-size: 12px; cursor: pointer; }
 
 /* hookup guided form: "I'm 24 years old, looking for 30 to 35" */
-.gc-ages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 18px 0 6px; font-size: 17px; line-height: 1.4; }
-.gc-ages .hk-field { width: 64px; text-align: center; padding-left: 0; padding-right: 0; }
 /* Optional "I want / I don't want" lines on the hookup form's last question */
-.gc-clarity { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 15px; }
-.gc-clarity span { flex: 0 0 104px; }
-.gc-clarity .hk-field { flex: 1; min-width: 0; }
 
 /* Guided hookup form: five short sections, then a live preview that scrolls with them. */
 /* Only Copy/Continue stay pinned to the bottom. */
 .gc-dock { position: sticky; bottom: 0; z-index: 5; display: grid; gap: 10px; margin: 0 -16px -28px; padding: 12px 16px 16px; background: var(--bg); border-top: 1px solid var(--line); }
-.gc-live { gap: 6px; padding: 12px 16px; box-shadow: none; }
-.gc-live .gc-text { font-size: 15px; }
-.gc-live-head { display: flex; align-items: center; justify-content: space-between; }
-.gc .gc-live-head .gc-hear { border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; }
 .gc-section { display: grid; gap: 12px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
 .gc-section header { display: flex; align-items: flex-start; gap: 10px; }
 .gc-section h3 { margin: 3px 0 0; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; }

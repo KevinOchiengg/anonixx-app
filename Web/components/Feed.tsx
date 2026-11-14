@@ -8,7 +8,6 @@ import Slide from "./Slide";
 import AdSlot from "./AdSlot";
 import { AdSlide, MarketSlide } from "./FeedPromo";
 import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
-import Hero from "./Hero";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
@@ -17,7 +16,6 @@ import ReportSheet from "./ReportSheet";
 import { Eye, SatelliteDish } from "lucide-react";
 
 type Item =
-  | { kind: "hero" }
   | { kind: "post"; post: Post; first: boolean; key?: string }
   | { kind: "ad"; key: string }
   | { kind: "promo"; key: string; ad: FeedAd }
@@ -45,7 +43,6 @@ const RETURNING_KEY = "anonixx.feed.returning";
 type Props = {
   initialPosts: Post[];
   initialCursor: string | null;
-  withHero?: boolean;
   startId?: string;
   /** Load the public feed after the server-rendered posts, in the browser (drop pages). */
   fillAfterStart?: boolean;
@@ -68,7 +65,7 @@ function replayRound(posts: Post[], lastId: string | undefined): string[] {
   return pool;
 }
 
-export default function Feed({ initialPosts, initialCursor, withHero = false, startId, fillAfterStart = false }: Props) {
+export default function Feed({ initialPosts, initialCursor, startId, fillAfterStart = false }: Props) {
   const { user, ready } = useAuth();
   const router = useRouter();
   // Avatars open the person's Room; Link up on a hookup goes through it too, so the pitch lands with context.
@@ -99,7 +96,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
   const [first, setFirst] = useState<"idle" | "loading" | "failed">(initialPosts.length ? "idle" : "loading");
   const [sounds, setSounds] = useState<Sound[]>([]);
 
-  const showHero = withHero && !user;
 
   useEffect(() => {
     if (!ready) return;
@@ -210,11 +206,10 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
 
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [];
-    if (showHero) out.push({ kind: "hero" });
     let mIdx = 0;
     let aIdx = 0;
     posts.forEach((post, i) => {
-      out.push({ kind: "post", post, first: i === 0 && !showHero });
+      out.push({ kind: "post", post, first: i === 0 });
       const n = i + 1;
       const next = posts[i + 1];
       const calm = post.sensitivity !== "mature" && next?.sensitivity !== "mature";
@@ -240,7 +235,7 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
       });
     }
     return out;
-  }, [posts, showHero, replay, ads, market, loadingMore, loadFailed, first]);
+  }, [posts, replay, ads, market, loadingMore, loadFailed, first]);
 
   // Out of new posts (no next page, or the server's session cap): add another replay round
   // as the viewer nears the end, so the scroll never hits a wall.
@@ -304,7 +299,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
     const it = items[active];
     if (!it) return;
     if (it.kind === "post") window.history.replaceState(null, "", `/drop/${it.post.id}`);
-    else if (it.kind === "hero") window.history.replaceState(null, "", "/");
   }, [active, items]);
 
   useEffect(() => {
@@ -534,7 +528,6 @@ export default function Feed({ initialPosts, initialCursor, withHero = false, st
 
         <div className="scroller" ref={scroller}>
           {items.map((it, i) => {
-            if (it.kind === "hero") return <Hero key="hero" index={i} />;
             if (it.kind === "ad") return <AdSlot key={it.key} index={i} />;
             if (it.kind === "promo") return <AdSlide key={it.key} ad={it.ad} index={i} />;
             if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;

@@ -56,9 +56,6 @@
 .balance strong { color: var(--gold); }
 .balance small, .balance span { color: var(--muted); }
 .plan-save { color: var(--gold); }
-
-.tabs { border-bottom-color: rgba(255,255,255,0.06); }
-.tabs button.on { border-color: var(--rose); }
 .tx { border-bottom-color: rgba(255,255,255,0.06); }
 
 .bubble { background: #1e2535; border: 0; border-radius: 18px 18px 18px 4px; color: var(--fg); }
