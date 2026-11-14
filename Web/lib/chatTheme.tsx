@@ -7,8 +7,8 @@ type Overlay =
 export type Pattern = { id: string; label: string; gradient: [string, string]; overlay: Overlay };
 
 export const PATTERNS: Pattern[] = [
-  // The default: warm plum with a soft coral glow (same mood as the site backdrop).
-  { id: "midnight-solid", label: "Midnight", gradient: ["#241321", "#0c0811"], overlay: { kind: "glow", color: "rgba(255,99,74,0.14)" } },
+  // The default: calm midnight navy with a faint gold lattice. Quiet, private, premium.
+  { id: "midnight-solid", label: "Midnight", gradient: ["#121a2c", "#070a14"], overlay: { kind: "lines", color: "rgba(217,178,111,0.07)", size: 56, cross: true } },
   { id: "velvet-dots", label: "Velvet", gradient: ["#2a0f1e", "#12060d"], overlay: { kind: "dots", color: "rgba(255,182,193,0.35)", size: 26 } },
   { id: "smoke-lines", label: "Smoke", gradient: ["#221a2e", "#0e0a16"], overlay: { kind: "lines", color: "rgba(255,255,255,0.06)", size: 36 } },
   { id: "ember-glow", label: "Ember", gradient: ["#2e1408", "#140803"], overlay: { kind: "glow", color: "rgba(255,99,74,0.28)" } },
@@ -80,8 +80,8 @@ export function ChatBackground({ id, className = "u-bg" }: { id?: string | null;
   return (
     <div className={className} aria-hidden style={{ background: `linear-gradient(180deg, ${p.gradient[0]}, ${p.gradient[1]})` }}>
       <div style={{ position: "absolute", inset: 0, ...overlayStyle(p.overlay) }} />
-      {/* Every pattern gets a soft coral glow from the top, so none look flat. */}
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 55% at 50% 0%, rgba(255,99,74,0.13), transparent 70%)" }} />
+      {/* Every pattern gets a soft moonlight glow from the top, so none look flat. */}
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 55% at 50% 0%, rgba(150,180,255,0.11), transparent 70%)" }} />
     </div>
   );
 }

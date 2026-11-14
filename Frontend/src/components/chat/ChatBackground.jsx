@@ -54,9 +54,9 @@ const ChatBackground = React.memo(function ChatBackground({ pattern, style, chil
   return (
     <View style={[styles.fill, style]}>
       <LinearGradient colors={def.gradient} style={StyleSheet.absoluteFill} />
-      {/* Every pattern gets a soft coral glow from the top, so none look flat. */}
+      {/* Every pattern gets a soft moonlight glow from the top, so none look flat. */}
       <LinearGradient
-        colors={['rgba(255,99,74,0.12)', 'rgba(255,99,74,0)']}
+        colors={['rgba(150,180,255,0.10)', 'rgba(150,180,255,0)']}
         style={styles.topGlow}
         pointerEvents="none"
       />

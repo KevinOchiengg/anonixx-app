@@ -131,10 +131,6 @@
 .rm-enter small { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--rt-accent); }
 .rm-enter h2 { margin: 0; font-size: 26px; line-height: 1.2; color: var(--rt-text); }
 .rm-enter blockquote { margin: 4px 0 0; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--rt-border); background: var(--rt-tint); color: var(--rt-text); font-size: 15px; line-height: 1.45; }
-.rm-starters { width: 100%; display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
-.rm-starters span { font-size: 12px; color: var(--rt-muted); margin-bottom: 2px; }
-.rm-starters button { text-align: left; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--rt-border); background: transparent; color: var(--rt-text); font-size: 14px; cursor: pointer; }
-.rm-starters button:hover { border-color: var(--rt-border-strong); background: var(--rt-tint); }
 .rm-enter .u-link-btn { color: var(--rt-muted); }
 
 .rm-empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 60px 24px; }
@@ -233,3 +229,20 @@
 .rs-person-acts .a { background: var(--rose); border-color: var(--rose); color: #fff; }
 .rs-person-acts .danger { color: var(--danger, #ef4444); }
 .rs-save { position: sticky; bottom: 0; padding: 12px 0 calc(4px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--bg) 30%); }
+
+/* The welcome after a Let In: calm midnight and soft gold, the same quiet backdrop as the chat. */
+.rm-enter.luxe { background: #070a14; overflow: hidden; }
+.rm-enter.luxe .rm-enter-bg { position: absolute; inset: 0; }
+.rm-enter.luxe .rm-enter-in { position: relative; z-index: 1; }
+.rm-enter.luxe .rm-enter-door {
+  border-color: rgba(217, 178, 111, 0.45); background: linear-gradient(180deg, #d9b26f, rgba(217, 178, 111, 0));
+  box-shadow: 0 0 40px rgba(217, 178, 111, 0.35);
+}
+.rm-enter.luxe small { color: #d9b26f; }
+.rm-enter.luxe h2 { color: #f4efe6; }
+.rm-enter-sub { margin: 0; color: rgba(244, 239, 230, 0.62); font-size: 14px; letter-spacing: 0.2px; }
+.rm-enter.luxe .rm-gold {
+  margin-top: 10px; border-radius: 999px; background: #d9b26f; color: #0b1020; border-color: #d9b26f;
+  box-shadow: 0 8px 24px rgba(217, 178, 111, 0.3);
+}
+.rm-enter.luxe .u-link-btn { color: rgba(244, 239, 230, 0.62); }

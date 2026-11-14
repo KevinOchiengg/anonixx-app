@@ -24,7 +24,8 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel, timeLeft } from '../../config/linkup';
-import { STARTERS, roomThemeById } from '../../config/roomThemes';
+import { roomThemeById } from '../../config/roomThemes';
+import ChatBackground from '../../components/chat/ChatBackground';
 import KnockClues from '../../components/rooms/KnockClues';
 
 const REPORT_REASONS = [
@@ -57,7 +58,10 @@ function FullView({ item, onClose }) {
 }
 
 
-function Entrance({ th, name, font, onStart, onClose }) {
+// The welcome after a Let In: calm midnight and soft gold, the same quiet backdrop as the chat.
+const LUXE = { text: '#F4EFE6', muted: 'rgba(244,239,230,0.62)', gold: '#D9B26F', ink: '#0b1020' };
+
+function Entrance({ name, font, onStart, onClose }) {
   const door = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -68,26 +72,21 @@ function Entrance({ th, name, font, onStart, onClose }) {
   }, [door, rise]);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={[s.enter, { backgroundColor: th.bg }]}>
-        <LinearGradient colors={[th.glow, 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.6 }} />
+      <View style={s.enter}>
+        <ChatBackground pattern="midnight-solid" style={StyleSheet.absoluteFill} />
         <ScrollView contentContainerStyle={s.enterIn}>
           <Animated.View style={{ opacity: door, transform: [{ scaleY: door.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }) }] }}>
-            <LinearGradient colors={[th.accent, 'transparent']} style={[s.door, { borderColor: th.borderStrong, shadowColor: th.accent }]} />
+            <LinearGradient colors={[LUXE.gold, 'rgba(217,178,111,0)']} style={[s.door, { borderColor: 'rgba(217,178,111,0.45)', shadowColor: LUXE.gold }]} />
           </Animated.View>
           <Animated.View style={{ width: '100%', alignItems: 'center', gap: rp(10), opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>
-            <Text style={[s.enterKicker, { color: th.accent }]}>YOU'RE INSIDE.</Text>
-            <Text style={[s.enterTitle, { color: th.text, fontFamily: font }]}>Welcome to {name}'s Room.</Text>
-            <TouchableOpacity style={[s.accentBtn, { backgroundColor: th.accent, alignSelf: 'stretch', marginTop: rp(6) }]} onPress={() => onStart(null)}>
-              <Text style={[s.accentText, { color: th.bg }]}>Start the conversation</Text>
+            <Text style={[s.enterKicker, { color: LUXE.gold }]}>YOU'RE INSIDE.</Text>
+            <Text style={[s.enterTitle, { color: LUXE.text, fontFamily: font }]}>Welcome to {name}'s Room.</Text>
+            <Text style={[s.enterSub, { color: LUXE.muted }]}>Just the two of you. Take your time.</Text>
+            <TouchableOpacity style={[s.accentBtn, s.goldBtn, { alignSelf: 'stretch', marginTop: rp(10) }]} onPress={onStart} activeOpacity={0.88}>
+              <Text style={[s.accentText, { color: LUXE.ink }]}>Start the conversation</Text>
             </TouchableOpacity>
-            <Text style={[s.startersHint, { color: th.muted }]}>Need an opener? Tap one.</Text>
-            {STARTERS.map((line) => (
-              <TouchableOpacity key={line} style={[s.starter, { borderColor: th.border }]} onPress={() => onStart(line)} activeOpacity={0.8}>
-                <Text style={[s.starterText, { color: th.text }]}>{line}</Text>
-              </TouchableOpacity>
-            ))}
             <TouchableOpacity onPress={onClose} hitSlop={HIT_SLOP}>
-              <Text style={[s.linkText, { color: th.muted }]}>Look around first</Text>
+              <Text style={[s.linkText, { color: LUXE.muted }]}>Look around first</Text>
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
@@ -157,11 +156,7 @@ export default function RoomScreen({ route, navigation }) {
     if (p) Animated.timing(rise, { toValue: 1, duration: 520, useNativeDriver: true }).start();
   }, [p, rise]);
 
-  const openChat = useCallback(async (connectionId, opener) => {
-    if (opener) {
-      // Same key DropChat's useDraft reads, so the opener waits in the box unsent.
-      await AsyncStorage.setItem(`anonixx.draft.chat:${connectionId}`, JSON.stringify({ v: opener, t: Date.now() })).catch(() => {});
-    }
+  const openChat = useCallback((connectionId) => {
     setEntrance(false);
     navigation.navigate('DropChat', { connectionId });
   }, [navigation]);
@@ -410,8 +405,8 @@ export default function RoomScreen({ route, navigation }) {
       </SafeAreaView>
       {entrance && cid ? (
         <Entrance
-          th={th} name={name} font={font}
-          onStart={(line) => openChat(cid, line)}
+          name={name} font={font}
+          onStart={() => openChat(cid)}
           onClose={() => setEntrance(false)}
         />
       ) : null}
@@ -484,8 +479,10 @@ const s = StyleSheet.create({
   door: { width: rs(64), height: rs(92), borderTopLeftRadius: rs(32), borderTopRightRadius: rs(32), borderBottomLeftRadius: rs(6), borderBottomRightRadius: rs(6), borderWidth: 1, shadowOpacity: 0.8, shadowRadius: 30, shadowOffset: { width: 0, height: 0 }, marginBottom: rp(6) },
   enterKicker: { fontSize: rf(12), letterSpacing: 2, fontWeight: '700' },
   enterTitle: { fontSize: rf(25), textAlign: 'center', lineHeight: rf(31) },
-  startersHint: { fontSize: rf(12), textAlign: 'center', marginTop: rp(6) },
-  starter: { alignSelf: 'stretch', borderWidth: 1, borderRadius: rs(12), paddingHorizontal: rp(14), paddingVertical: rp(11) },
-  starterText: { fontSize: FONT.sm },
+  enterSub: { fontSize: FONT.sm, textAlign: 'center', letterSpacing: 0.2 },
+  goldBtn: {
+    backgroundColor: '#D9B26F', borderRadius: RADIUS.full,
+    shadowColor: '#D9B26F', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6,
+  },
   linkText: { fontSize: FONT.sm, paddingVertical: rp(8) },
 });

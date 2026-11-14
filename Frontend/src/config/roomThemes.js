@@ -37,11 +37,3 @@ export const DEFAULT_ROOM_THEME = 'midnight-blue';
 
 export const roomThemeById = (id) => ROOM_THEMES.find((x) => x.id === id) || ROOM_THEMES[0];
 
-/** Openers shown after a Let In. Tapping one only fills the box; nothing is sent for you. */
-export const STARTERS = [
-  'Your Room said more than your post did.',
-  "Okay, I'm in. Now what?",
-  "I've been curious since I saw your post.",
-  "Tell me the part you didn't write.",
-];
-

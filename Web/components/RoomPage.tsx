@@ -9,7 +9,8 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { FONTS_HREF, fontStyleById } from "@/lib/chatTheme";
 import { intentLabel, timeLeft } from "@/lib/linkup";
-import { STARTERS, roomThemeById, roomThemeVars } from "@/lib/roomThemes";
+import { roomThemeById, roomThemeVars } from "@/lib/roomThemes";
+import { ChatBackground } from "@/lib/chatTheme";
 import AppShell from "./AppShell";
 import AgeGate from "./AgeGate";
 import LinkUpSheet from "./LinkUpSheet";
@@ -57,10 +58,6 @@ function markSeen(cid: string) {
 }
 
 
-/** Put an opener in the chat box (ChatPage reads it via useDraft). Never sends. */
-function primeDraft(cid: string, text: string) {
-  try { localStorage.setItem(`anonixx.draft.chat:${cid}`, JSON.stringify({ v: text, t: Date.now() })); } catch { /* ignore */ }
-}
 
 function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   const router = useRouter();
@@ -106,8 +103,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const openChat = useCallback((cid: string, opener?: string) => {
-    if (opener) primeDraft(cid, opener);
+  const openChat = useCallback((cid: string) => {
     router.push(`/chat/${cid}`);
   }, [router]);
 
@@ -329,18 +325,14 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
         {toast ? <div className="room-toast">{toast}</div> : null}
 
         {entrance && cid ? (
-          <div className="rm-enter" role="dialog" aria-modal aria-label={`Welcome to ${name}'s Room`}>
+          <div className="rm-enter luxe" role="dialog" aria-modal aria-label={`Welcome to ${name}'s Room`}>
+            <ChatBackground id="midnight-solid" className="rm-enter-bg" />
             <div className="rm-enter-in">
               <span className="rm-enter-door" aria-hidden />
               <small>You&apos;re inside.</small>
               <h2 style={font}>Welcome to {name}&apos;s Room.</h2>
-              <button className="room-cta rm-accent wide" onClick={() => openChat(cid)}>Start the conversation</button>
-              <div className="rm-starters">
-                <span>Need an opener? Tap one.</span>
-                {STARTERS.map((s) => (
-                  <button key={s} type="button" onClick={() => openChat(cid, s)}>{s}</button>
-                ))}
-              </div>
+              <p className="rm-enter-sub">Just the two of you. Take your time.</p>
+              <button className="room-cta rm-accent wide rm-gold" onClick={() => openChat(cid)}>Start the conversation</button>
               <button className="u-link-btn" onClick={() => setEntrance(false)}>Look around first</button>
             </div>
           </div>

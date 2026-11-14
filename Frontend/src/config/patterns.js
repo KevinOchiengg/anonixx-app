@@ -5,9 +5,9 @@ export const BACKGROUND_PATTERNS = [
   {
     id: 'midnight-solid',
     label: 'Midnight',
-    // The default: warm plum with a soft coral glow (same mood as the website's backdrop).
-    gradient: ['#241321', '#150c18', '#0c0811'],
-    overlay: { kind: 'glow', color: 'rgba(255,99,74,0.14)' },
+    // The default: calm midnight navy with a faint gold lattice. Quiet, private, premium.
+    gradient: ['#121a2c', '#0c1222', '#070a14'],
+    overlay: { kind: 'lines', color: 'rgba(217,178,111,0.07)', count: 12, crosshatch: true },
   },
   {
     id: 'velvet-dots',
