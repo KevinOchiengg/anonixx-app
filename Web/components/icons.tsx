@@ -2,7 +2,7 @@
 // the app uses, at stroke 2. `filled`: solid for liked / saved, a soft fill for the current tab.
 import {
   Bell, Bookmark as LBookmark, DoorOpen, Ellipsis as LMore, Flame as LFlame, Heart as LHeart, House, Inbox as LInbox,
-  MessageSquareMore, Plus as LPlus, Share as LShare, User as LUser,
+  MessageSquareMore, Plus as LPlus, Share2 as LShare, User as LUser,
 } from "lucide-react";
 
 const S = 2;
