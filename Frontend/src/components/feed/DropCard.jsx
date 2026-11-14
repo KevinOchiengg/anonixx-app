@@ -493,12 +493,18 @@ function DropCard({
   }, [isAuthenticated, post.id, showToast]);
 
   const handleShare = useCallback(async () => {
+    if (!isAuthenticated) {
+      showToast({ type: 'warning', message: 'Sign in to share it.' });
+      navigation.navigate('AuthNav', { screen: 'Login' });
+      return;
+    }
     try {
-      const preview  = post.content?.substring(0, 100) ?? '';
-      const ellipsis = (post.content?.length ?? 0) > 100 ? '…' : '';
-      await Share.share({ message: `"${preview}${ellipsis}" — Anonixx` });
+      // Same as the feed's share: the quote, then the drop's link.
+      const text = (post.content || '').trim();
+      const quote = text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"\n` : '';
+      await Share.share({ message: `${quote}https://anonixx.com/drop/${post.id}` });
     } catch {}
-  }, [post.content]);
+  }, [post.content, post.id, isAuthenticated, showToast, navigation]);
 
   const handleReport    = useCallback(() => { setMenuVisible(false); setReportVisible(true); }, []);
 
