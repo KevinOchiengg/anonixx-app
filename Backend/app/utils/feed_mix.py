@@ -9,6 +9,7 @@ keeps the same shuffle.
 Cursor: "s=<seed>;m=<key>|<oid>;t=<key>|<oid>;p=<n>" (+ "l=", "g=", "q=" when local first).
 A missing key = not started, "END" = exhausted.
 """
+import asyncio
 import random
 import time
 from datetime import datetime, timedelta
@@ -120,13 +121,14 @@ async def fetch_mixed(db, base_query: dict, limit: int, cursor: Optional[str], c
     await _fill_rand(db)
     state = _parse(cursor)
     kinds = ("m", "l", "g") if country else ("m", "t")
-    buf: dict = {}
-    for kind in kinds:
+    # The streams don't depend on each other: ask for them all at once (one wait, not several).
+    async def stream(kind: str) -> list:
         if state[kind] == "END":
-            buf[kind] = []
-            continue
+            return []
         pipeline = _stream_pipeline(base_query, kind, state[kind], state["s"], limit, country)
-        buf[kind] = await db["drops"].aggregate(pipeline).to_list(None)
+        return await db["drops"].aggregate(pipeline).to_list(None)
+
+    buf: dict = dict(zip(kinds, await asyncio.gather(*(stream(k) for k in kinds))))
 
     def preference(slot: str, q: int) -> list:
         text = (["l", "g"] if TEXT_PATTERN[q % len(TEXT_PATTERN)] == "l" else ["g", "l"]) if country else ["t"]
@@ -204,13 +206,17 @@ def _showcase_score(d: dict) -> tuple:
 async def fetch_showcase(db, base_query: dict, now: datetime) -> list:
     since = now - timedelta(days=SHOWCASE_DAYS)
     query = {"$and": [base_query, {"created_at": {"$gte": since}}]}
-    rows = await db["drops"].find(query).sort([("likes_count", -1), ("created_at", -1)]).limit(200).to_list(None)
+    # Score on a handful of counters first; only the few picked come back in full.
+    fields = {"likes_count": 1, "thread_count": 1, "saves_count": 1, "unlock_count": 1, "views_count": 1}
+    rows = await db["drops"].find(query, fields).sort([("likes_count", -1), ("created_at", -1)]).limit(200).to_list(None)
     # Something has to have happened on a drop for it to count as one of the best.
     rows = [d for d in rows if _showcase_score(d)[2] > 0]
     if not rows:
         return []
     pool = sorted(rows, key=_showcase_score, reverse=True)[:SHOWCASE_POOL]
-    return random.sample(pool, min(SHOWCASE_COUNT, len(pool)))
+    picks = [d["_id"] for d in random.sample(pool, min(SHOWCASE_COUNT, len(pool)))]
+    full = {d["_id"]: d async for d in db["drops"].find({"_id": {"$in": picks}})}
+    return [full[i] for i in picks if i in full]
 
 
 def splice_showcase(page: list, showcase: list) -> list:

@@ -1812,10 +1812,14 @@ async def _fetch_for_you(db, query: dict, limit: int, cursor: Optional[str], cou
         done[which] = not more
         return rows
 
-    t_rows = await pull("t", round(limit * TASTE_SHARE))
-    e_rows = await pull("e", limit - len(t_rows))
-    if len(t_rows) + len(e_rows) < limit:   # explore ran short: top up with more taste
-        t_rows += await pull("t", limit - len(t_rows) - len(e_rows))
+    want_t = round(limit * TASTE_SHARE)
+    t_rows, e_rows = await asyncio.gather(pull("t", want_t), pull("e", limit - want_t))
+    short = limit - len(t_rows) - len(e_rows)
+    if short > 0 and len(t_rows) < want_t:      # taste ran short: more explore
+        e_rows += await pull("e", short)
+        short = limit - len(t_rows) - len(e_rows)
+    if short > 0:                               # explore ran short: top up with more taste
+        t_rows += await pull("t", short)
 
     page = []
     for i in range(len(t_rows) + len(e_rows)):
@@ -1824,6 +1828,10 @@ async def _fetch_for_you(db, query: dict, limit: int, cursor: Optional[str], cou
     has_more = not (done["t"] and done["e"])
     nxt = _encode_for_you(st["k"], cur["t"], cur["e"], done["t"], done["e"]) if has_more else None
     return page, nxt, has_more
+
+
+async def _none_list() -> list:
+    return []
 
 
 async def _seen_drop_ids(db, viewer_key: str) -> list:
@@ -2125,11 +2133,14 @@ async def get_drops_feed(
     # Never the same drop twice: drops this viewer has already seen (any visit) are skipped.
     # Once every drop has been seen, the feed carries on with the ones seen longest ago.
     viewer_key = _viewer_key(current_user_id, x_device_id)
-    viewer_taste = await taste.load(db, viewer_key)
-    if cursor and cursor.startswith(RECYCLE_PREFIX):
+    recycling = bool(cursor and cursor.startswith(RECYCLE_PREFIX))
+    viewer_taste, seen = await asyncio.gather(
+        taste.load(db, viewer_key),
+        _seen_drop_ids(db, viewer_key) if viewer_key and not recycling else _none_list(),
+    )
+    if recycling:
         page, next_cursor, page_has_more = await _recycled_page(db, viewer_key, stream_query, drops_to_load, cursor)
     else:
-        seen = await _seen_drop_ids(db, viewer_key) if viewer_key else []
         fresh_query = {"$and": [stream_query, {"_id": {"$nin": seen}}]} if seen else stream_query
         page, next_cursor, page_has_more = await _fetch_for_you(
             db, fresh_query, drops_to_load, cursor, viewer_country, viewer_taste,
@@ -2651,8 +2662,10 @@ async def get_drop_connections(
         ],
         "removed_at": None,
     }
-    raw_connections = await db["drop_connections"].find(query).sort("last_message_at", -1).to_list(None)
-    unread_counts = await get_unread_message_counts(db, current_user_id)
+    raw_connections, unread_counts = await asyncio.gather(
+        db["drop_connections"].find(query).sort("last_message_at", -1).to_list(None),
+        get_unread_message_counts(db, current_user_id),
+    )
 
     # The other person's current avatar (it can change after connecting).
     other_ids = set()
@@ -2667,16 +2680,20 @@ async def get_drop_connections(
 
     from app.websockets.events import is_user_online
 
+    # Every chat's last message at once, not one round trip per chat.
+    last_msgs = await asyncio.gather(*(
+        db["drop_messages"].find_one(
+            {"connection_id": str(c["_id"]), "deleted_for": {"$ne": current_user_id}},
+            sort=[("created_at", -1)],
+        ) for c in raw_connections
+    ))
+
     connections = []
-    for conn in raw_connections:
+    for conn, last_msg in zip(raw_connections, last_msgs):
         is_sender = conn["sender_id"] == current_user_id
         other_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
         other_name = conn["unlocker_anonymous_name"] if is_sender else conn["sender_anonymous_name"]
 
-        last_msg = await db["drop_messages"].find_one(
-            {"connection_id": str(conn["_id"]), "deleted_for": {"$ne": current_user_id}},
-            sort=[("created_at", -1)]
-        )
         if not last_msg:
             last_preview = None
         elif last_msg.get("deleted_for_everyone"):
@@ -3029,27 +3046,22 @@ async def get_drop_messages(
     # Opening (and polling) the thread marks it read; the other side is told live.
     read_field = "sender_last_read_at" if is_sender else "unlocker_last_read_at"
     seen_at = now_utc()
-    await db["drop_connections"].update_one(
-        {"_id": ObjectId(connection_id)},
-        {"$set": {read_field: seen_at}}
-    )
-    await emit_messages_seen(other_user_id, connection_id, seen_at.isoformat())
-
-    # The poster's themed chat surface — always the drop's *sender*, since
-    # a chat_profile is reused across every unlocker who chats with them.
-    chat_profile = await db["chat_profiles"].find_one({"user_id": conn["sender_id"]})
     from app.api.v1.chat_profile import gallery_for, room_theme_of
-    # Being let in never shows a gallery the owner keeps to themself.
-    room_gallery = gallery_for(chat_profile, current_user_id, conn["sender_id"], inside=True) if chat_profile else []
-
     from app.api.v1.drop_calls import get_active_call_for_host
-    active_call = await get_active_call_for_host(conn["sender_id"], db, viewer_id=current_user_id)
-
     from app.websockets.events import is_user_online
 
-    # The knock that opened this chat, for the "inside" card at the top.
-    knock = await db["drop_unlock_requests"].find_one(
-        {"connection_id": connection_id}, {"pitch": 1, "intents": 1, "responded_at": 1})
+    # None of these depend on each other: one wait instead of five.
+    # The chat_profile is always the drop's *sender*'s (reused across every unlocker).
+    _, chat_profile, active_call, knock, other_avatar = await asyncio.gather(
+        db["drop_connections"].update_one({"_id": ObjectId(connection_id)}, {"$set": {read_field: seen_at}}),
+        db["chat_profiles"].find_one({"user_id": conn["sender_id"]}),
+        get_active_call_for_host(conn["sender_id"], db, viewer_id=current_user_id),
+        db["drop_unlock_requests"].find_one({"connection_id": connection_id}, {"pitch": 1, "intents": 1, "responded_at": 1}),
+        _avatar_of(db, other_user_id),
+    )
+    await emit_messages_seen(other_user_id, connection_id, seen_at.isoformat())
+    # Being let in never shows a gallery the owner keeps to themself.
+    room_gallery = gallery_for(chat_profile, current_user_id, conn["sender_id"], inside=True) if chat_profile else []
 
     # Welcome gallery and sound, once per unlocker on first open.
     welcome_gallery = []
@@ -3079,7 +3091,7 @@ async def get_drop_messages(
             "message_count": conn.get("message_count", 0),
             "knock_pitch": (knock or {}).get("pitch"),
             "knock_intents": (knock or {}).get("intents") or [],
-            "other_avatar_url": await _avatar_of(db, other_user_id),
+            "other_avatar_url": other_avatar,
             **_prefs_out(conn, current_user_id),
         },
         "chat_profile": {

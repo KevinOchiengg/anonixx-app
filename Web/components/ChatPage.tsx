@@ -80,7 +80,8 @@ function Inner({ id }: { id: string }) {
 
   useEffect(() => {
     load();
-    const t = window.setInterval(load, 4000);
+    // Live updates come over the socket; this slow poll only catches anything it missed.
+    const t = window.setInterval(load, 20000);
     return () => window.clearInterval(t);
   }, [load]);
 

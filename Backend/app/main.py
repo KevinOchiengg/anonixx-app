@@ -1,4 +1,5 @@
 import logging
+import time
 import socketio
 from bson import ObjectId
 from fastapi import FastAPI
@@ -182,8 +183,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     # the browser's tus uploader reads these from POST /upload/stream/tus
-    expose_headers=["Location", "X-Stream-Uid", "Tus-Resumable"],
+    expose_headers=["Location", "X-Stream-Uid", "Tus-Resumable", "Server-Timing"],
 )
+
+
+@app.middleware("http")
+async def server_timing(request, call_next):
+    """How long the server spent on each request (Server-Timing: app;dur=ms), so slow
+    endpoints show up in the browser's network tab and in curl."""
+    started = time.perf_counter()
+    response = await call_next(request)
+    response.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - started) * 1000:.0f}"
+    return response
 
 
 @app.get("/health")
