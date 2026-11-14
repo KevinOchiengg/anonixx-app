@@ -28,7 +28,6 @@ import ChatMediaViewer from '../../components/chat/ChatMediaViewer';
 import { useToast } from '../../components/ui/Toast';
 import { uploadToR2 } from '../../utils/upload';
 import { API_BASE_URL } from '../../config/api';
-import { WELCOME_SOUND_MAP } from '../../config/sounds';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { useUnread } from '../../context/UnreadContext';
@@ -101,7 +100,6 @@ export default function DropChatScreen({ route, navigation }) {
   const listRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const lastTypingEmit = useRef(0);
-  const welcomed = useRef(false);
 
   const otherName = connection?.other_anonymous_name || 'Anonymous';
   const toastError = useCallback((m) => showToast({ type: 'error', message: m || 'Something went wrong.' }), [showToast]);
@@ -118,14 +116,6 @@ export default function DropChatScreen({ route, navigation }) {
       setMessages(data.messages);
       setConnection(data.connection);
       if (data.chat_profile) setChatProfile(data.chat_profile);
-      // The Room's welcome sound plays once, the first time a guest opens the chat.
-      if (data.welcome_sound && !welcomed.current) {
-        welcomed.current = true;
-        const asset = WELCOME_SOUND_MAP[data.welcome_sound];
-        if (asset) {
-          import('expo-audio').then(({ createAudioPlayer }) => createAudioPlayer(asset).play()).catch(() => {});
-        }
-      }
     } catch {
       if (!silent) toastError('Network error.');
     }

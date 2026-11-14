@@ -15,7 +15,6 @@ import {
   FONTS,
   FONTS_HREF,
   PATTERNS,
-  SOUNDS,
   type GalleryItem,
 } from "@/lib/chatTheme";
 import { intentLabel } from "@/lib/linkup";
@@ -130,7 +129,6 @@ function Inner() {
   const [pic, setPic] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
-  const [sound, setSound] = useState("soft-chime");
   const [theme, setTheme] = useState(DEFAULT_ROOM_THEME);
   const [intro, setIntro] = useState("");
   const [welcome, setWelcome] = useState("");
@@ -163,7 +161,6 @@ function Inner() {
     setPic(d.profile_picture_url || null);
     setName(d.anonymous_name || "");
     setGallery(d.gallery || []);
-    setSound(d.welcome_sound || "soft-chime");
     setTheme(d.room_theme || DEFAULT_ROOM_THEME);
     setIntro(d.intro || "");
     setWelcome(d.welcome_message || "");
@@ -300,7 +297,7 @@ function Inner() {
       const d = await api<Profile>("/chat-profile/me", {
         method: "PUT",
         body: {
-          background_pattern: pattern, font_style: font, profile_picture_url: pic, welcome_sound: sound,
+          background_pattern: pattern, font_style: font, profile_picture_url: pic,
           intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
           welcome_autoplay: autoplay, welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
@@ -505,13 +502,6 @@ function Inner() {
               ) : null}
             </div>
 
-            <p className="rs-h">Entrance chime</p>
-            <p className="u-sub" style={{ margin: 0 }}>A chime when someone you let in walks in for the first time.</p>
-            <div className="u-chips">
-              {SOUNDS.map((s) => (
-                <button key={s.id} type="button" className={`u-chip${sound === s.id ? " on" : ""}`} onClick={() => setSound(s.id)}>{s.label}</button>
-              ))}
-            </div>
             {saveBar}
           </>
         ) : null}

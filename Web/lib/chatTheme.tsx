@@ -34,13 +34,6 @@ export const FONTS: { id: string; label: string; family: string; weight?: number
 
 export const DEFAULT_FONT = "clean-regular";
 
-export const SOUNDS = [
-  { id: "soft-chime", label: "Soft Chime" },
-  { id: "warm-bell", label: "Warm Bell" },
-  { id: "gentle-hum", label: "Gentle Hum" },
-  { id: "silence", label: "No sound" },
-];
-
 export const FONTS_HREF =
   "https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Dancing+Script&family=Fraunces:ital@0;1&family=Montserrat:wght@800&display=swap";
 

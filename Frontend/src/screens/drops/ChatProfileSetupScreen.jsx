@@ -11,7 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  Camera, Trash2, Volume2, Video, ChevronLeft, ChevronRight, RefreshCw, Phone, Coins,
+  Camera, Trash2, Video, ChevronLeft, ChevronRight, RefreshCw, Phone, Coins,
 } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
@@ -21,7 +21,6 @@ import ChatBackground from '../../components/chat/ChatBackground';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { uploadViaBackend } from '../../utils/upload';
-import { WELCOME_SOUND_OPTIONS, WELCOME_SOUND_MAP } from '../../config/sounds';
 import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/patterns';
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel } from '../../config/linkup';
@@ -87,7 +86,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [profilePictureUrl, setProfilePictureUrl] = useState(null);
   const [anonymousName, setAnonymousName]     = useState('');
   const [gallery, setGallery]                 = useState([]);
-  const [welcomeSound, setWelcomeSound]       = useState('soft-chime');
   const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
   const [intro, setIntro]                     = useState('');
   const [welcomeMessage, setWelcomeMessage]   = useState('');
@@ -133,7 +131,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setProfilePictureUrl(data.profile_picture_url || null);
             setAnonymousName(data.anonymous_name || '');
             setGallery(data.gallery || []);
-            setWelcomeSound(data.welcome_sound || 'soft-chime');
             setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
             setIntro(data.intro || '');
             setWelcomeMessage(data.welcome_message || '');
@@ -297,7 +294,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           background_pattern: backgroundPattern,
           font_style: fontStyle,
           profile_picture_url: profilePictureUrl,
-          welcome_sound: welcomeSound,
           intro,
           welcome_message: welcomeMessage,
           room_status: roomStatus,
@@ -330,7 +326,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     } finally {
       setSaving(false);
     }
-  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeSound, intro, welcomeMessage, roomStatus,
+  }, [backgroundPattern, fontStyle, profilePictureUrl, intro, welcomeMessage, roomStatus,
       galleryVisibility, knocksOpen, breakHours, doorRule, listing, welcomeAutoplay, welcomeVisibility,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
@@ -440,19 +436,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     ]);
   }, [post, showToast]);
 
-
-  const handlePreviewSound = useCallback(async (soundId) => {
-    setWelcomeSound(soundId);
-    const asset = WELCOME_SOUND_MAP[soundId];
-    if (!asset) return; // no bundled file yet — silent, selection still saves fine
-    try {
-      const { createAudioPlayer } = await import('expo-audio');
-      const player = createAudioPlayer(asset);
-      player.play();
-    } catch {
-      /* playback unavailable — selection itself still works */
-    }
-  }, []);
 
   if (loading) {
     return (
@@ -626,26 +609,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           </TouchableOpacity>
         ))}
 
-        {/* Entrance chime — plays once for someone you've just let in */}
-        <Text style={styles.sectionLabel}>Entrance chime</Text>
-        <Text style={styles.sectionHint}>
-          A short sound when someone you let in opens your Room for the first time{welcomeAudio ? ' (your welcome audio plays instead when it is on)' : ''}.
-        </Text>
-        <View style={styles.chipRow}>
-          {WELCOME_SOUND_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.id}
-              onPress={() => handlePreviewSound(opt.id)}
-              style={[styles.chip, welcomeSound === opt.id && styles.chipActive]}
-              hitSlop={HIT_SLOP}
-            >
-              {opt.id !== 'silence' && (
-                <Volume2 size={rs(12)} color={welcomeSound === opt.id ? T.primary : T.textMute} />
-              )}
-              <Text style={[styles.chipText, welcomeSound === opt.id && styles.chipTextActive]}>{opt.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
 
           </>
         )}
