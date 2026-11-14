@@ -544,10 +544,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
                       <button className="pill" onClick={tryAgain}>Try again</button>
                     </>
                   ) : (
-                    <div className="sk" aria-label="Loading">
-                      <i className="sk-av" /><i className="sk-line w60" /><i className="sk-line" /><i className="sk-line w80" /><i className="sk-line w40" />
-                      <p>Finding more confessions…</p>
-                    </div>
+                    <span className="vp-buffer" role="status" aria-label="Loading" />
                   )}
                 </section>
               );

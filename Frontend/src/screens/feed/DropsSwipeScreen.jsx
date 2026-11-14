@@ -1771,11 +1771,12 @@ export default function DropsSwipeScreen({ navigation, route }) {
     );
   }
 
+  // First load: a dark screen and the same loading line as a buffering video.
   if (loading && posts.length === 0) {
     return (
-      <View style={[ss.container, { alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={ss.container} accessibilityLabel="Loading">
         <StatusBar barStyle="light-content" backgroundColor="#000" />
-        <ActivityIndicator color={THEME.primary} size="large" />
+        <BufferLine />
       </View>
     );
   }
