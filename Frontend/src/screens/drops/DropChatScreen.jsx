@@ -297,11 +297,6 @@ export default function DropChatScreen({ route, navigation }) {
 
   const handleMediaPress = useCallback((item) => setViewerMedia({ media_url: item.media_url, media_type: item.media_type }), []);
 
-  const handlePickOpener = useCallback((line) => {
-    setText(line);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, [setText]);
-
   // ── Calls ─────────────────────────────────────────────────
   // One button: pick voice or video. Their Room settings decide what they take; the server says if not.
   const directCall = useCallback(async (video) => {
@@ -475,7 +470,7 @@ export default function DropChatScreen({ route, navigation }) {
           <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
             {messages.length === 0 ? (
               <View style={{ flex: 1, paddingTop: headerH }}>
-                <EmptyChat connection={connection} onPickOpener={handlePickOpener} />
+                <EmptyChat />
               </View>
             ) : (
               <FlatList
