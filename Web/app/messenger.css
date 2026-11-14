@@ -84,16 +84,6 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .mx-dir.miss { color: #ef4444; }
 .mx-dir.ok { color: var(--ok, #34d399); }
 .mx-updates { padding-bottom: 8px; }
-.mx-rings { display: flex; gap: 14px; overflow-x: auto; padding: 0 16px 6px; scrollbar-width: none; }
-.mx-ring { flex: none; width: 74px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: inherit; }
-.mx-ring-o { position: relative; width: 66px; height: 66px; border-radius: 50%; padding: 3px; border: 1.5px solid var(--line); }
-.mx-ring-o.live { border: 0; background: linear-gradient(135deg, var(--rose), var(--gold)); }
-.mx-ring-o > span { width: 100%; height: 100%; border-radius: 50%; overflow: hidden; border: 2px solid var(--bg); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 22px; background: var(--surface-alt); }
-.mx-ring-o > span img { width: 100%; height: 100%; object-fit: cover; }
-.mx-ring-b { position: absolute; right: 0; bottom: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--rose); border: 2px solid var(--bg); color: #fff; font-style: normal; font-weight: 900; font-size: 14px; line-height: 18px; text-align: center; }
-.mx-ring-b.live { background: #ef4444; font-size: 9px; }
-.mx-ring b { font-size: 12px; font-weight: 600; max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
-.mx-ring small { font-size: 10.5px; color: var(--muted); max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mx-headbtn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; color: inherit; }
 .u-head-t small.dim { color: var(--faint); }
 .mx-muted { font-style: normal; font-size: 12px; }
@@ -117,7 +107,6 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .ci-k { display: block; font-size: 10.5px; letter-spacing: 1px; color: var(--rose); font-weight: 800; margin-bottom: 6px; }
 .ci-q { margin: 0; font-style: italic; font-size: 14px; line-height: 1.5; }
 .ci-m { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-.ci-h { display: block; font-size: 15px; margin-bottom: 4px; }
 .ci-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .ci-tabs button { flex: 1; height: 32px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--surface-alt); }
 .ci-tabs button.on { background: var(--rose-dim); color: var(--rose); }

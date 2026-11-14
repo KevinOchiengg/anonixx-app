@@ -2,9 +2,7 @@
  * they came from and the photos shown to visitors (others appear as a count). The bottom bar
  * follows GET /chat-profile/{userId}/preview: Knock, waiting, their knock to you, closed,
  * Edit Room, or inside. After a Let In, the first visit plays the entrance: the owner's
- * welcome note, their three welcome media and their welcome audio (played once only if the
- * owner turned autoplay on, at the phone's volume and never through silent mode; always
- * replayable by tap).
+ * welcome note and their three welcome media.
  * Params: { userId, postId? } */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -17,8 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
-import { ChevronLeft, Lock, MoreHorizontal, Pause, Play, RotateCcw, X } from 'lucide-react-native';
+import { ChevronLeft, Lock, MoreHorizontal, X } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
@@ -29,7 +26,6 @@ import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel, timeLeft } from '../../config/linkup';
 import { STARTERS, roomThemeById, statusLabel } from '../../config/roomThemes';
 import KnockClues from '../../components/rooms/KnockClues';
-import VoiceWaveform from '../../components/common/VoiceWaveform';
 
 const REPORT_REASONS = [
   ['abuse', 'Harassment or abuse'],
@@ -78,46 +74,8 @@ function FullView({ item, onClose }) {
   );
 }
 
-// The welcome audio on the entrance: a big play / replay button. Autoplay (owner's choice)
-// starts once after the door opens, without overriding the phone's silent switch.
-function WelcomeVoice({ th, url, seconds, autoplay }) {
-  const player = useAudioPlayer(url ? { uri: url } : null);
-  const status = useAudioPlayerStatus(player);
-  const [done, setDone] = useState(false);
-  useEffect(() => {
-    if (!autoplay || !url) return undefined;
-    const t = setTimeout(() => {
-      setAudioModeAsync({ playsInSilentMode: false, allowsRecording: false })
-        .then(() => player.play())
-        .catch(() => {});
-    }, 1100);
-    return () => clearTimeout(t);
-  }, [autoplay, url, player]);
-  useEffect(() => { if (status.didJustFinish) setDone(true); }, [status.didJustFinish]);
-  useEffect(() => () => { try { player.pause(); } catch { /* released */ } }, [player]);
-  const toggle = async () => {
-    try {
-      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });   // they tapped: play it
-      if (done) { setDone(false); await player.seekTo(0); player.play(); return; }
-      if (status.playing) player.pause(); else player.play();
-    } catch { /* playback unavailable */ }
-  };
-  const total = status.duration || seconds || 0;
-  const left = Math.max(0, Math.round(total - (status.currentTime || 0)));
-  const Icon = status.playing ? Pause : done ? RotateCcw : Play;
-  return (
-    <TouchableOpacity style={[s.voice, { borderColor: th.borderStrong, backgroundColor: th.tint }]} onPress={toggle} activeOpacity={0.85}
-      accessibilityRole="button" accessibilityLabel={status.playing ? 'Pause welcome audio' : 'Play welcome audio'}>
-      <View style={[s.voiceBtn, { backgroundColor: th.accent }]}><Icon size={rs(18)} color={th.bg} fill={Icon === RotateCcw ? 'none' : th.bg} /></View>
-      <View style={{ flex: 1 }}>
-        <Text style={[s.voiceTitle, { color: th.text }]}>{status.playing ? 'Playing their welcome…' : done ? 'Play it again' : 'Their welcome, in their voice'}</Text>
-        <Text style={[s.voiceSub, { color: th.muted }]}>{total ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Tap to listen'}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
 
-function Entrance({ th, name, font, welcome, audio, gallery = [], onOpenMedia, onStart, onClose }) {
+function Entrance({ th, name, font, welcome, gallery = [], onOpenMedia, onStart, onClose }) {
   const door = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -142,7 +100,6 @@ function Entrance({ th, name, font, welcome, audio, gallery = [], onOpenMedia, o
                 <Text style={[s.quoteText, { color: th.text, fontFamily: font }]}>“{welcome}”</Text>
               </View>
             ) : null}
-            {audio?.url ? <WelcomeVoice th={th} url={audio.url} seconds={audio.seconds} autoplay={audio.autoplay} /> : null}
             {gallery.length ? (
               <View style={[s.grid, { alignSelf: 'stretch' }]}>
                 {gallery.slice(0, 3).map((g, k) => <Frame key={k} item={g} index={k} th={th} onPress={() => onOpenMedia(g)} />)}
@@ -441,11 +398,10 @@ export default function RoomScreen({ route, navigation }) {
             ) : null}
           </Animated.View>
 
-          {room.welcome_message || room.welcome_audio_url ? (
+          {room.welcome_message ? (
             <Animated.View style={[s.card, { backgroundColor: th.tint, borderColor: th.borderStrong }, riseStyle]}>
               <Text style={[s.label, { color: th.muted }]}>{own ? 'YOUR WELCOME' : cid ? `${name.toUpperCase()}'S WELCOME` : 'A WORD AT THE DOOR'}</Text>
-              {room.welcome_message ? <Text style={[s.pitchText, { color: th.text, fontFamily: font }]}>“{room.welcome_message}”</Text> : null}
-              {room.welcome_audio_url ? <VoiceWaveform uri={room.welcome_audio_url} durationSeconds={room.welcome_audio_seconds || 0} speed /> : null}
+              <Text style={[s.pitchText, { color: th.text, fontFamily: font }]}>“{room.welcome_message}”</Text>
             </Animated.View>
           ) : null}
 
@@ -526,7 +482,6 @@ export default function RoomScreen({ route, navigation }) {
       {entrance && cid ? (
         <Entrance
           th={th} name={name} font={font} welcome={room.welcome_message}
-          audio={room.welcome_audio_url ? { url: room.welcome_audio_url, seconds: room.welcome_audio_seconds, autoplay: !!room.welcome_autoplay } : null}
           gallery={gallery}
           onOpenMedia={(g) => setBig(g)}
           onStart={(line) => openChat(cid, line)}
@@ -615,8 +570,4 @@ const s = StyleSheet.create({
   starter: { alignSelf: 'stretch', borderWidth: 1, borderRadius: rs(12), paddingHorizontal: rp(14), paddingVertical: rp(11) },
   starterText: { fontSize: FONT.sm },
   linkText: { fontSize: FONT.sm, paddingVertical: rp(8) },
-  voice: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: rp(12), borderWidth: 1, borderRadius: rs(16), padding: rp(12) },
-  voiceBtn: { width: rs(46), height: rs(46), borderRadius: rs(23), alignItems: 'center', justifyContent: 'center' },
-  voiceTitle: { fontSize: FONT.sm, fontWeight: '700' },
-  voiceSub: { fontSize: rf(12), marginTop: rp(2) },
 });

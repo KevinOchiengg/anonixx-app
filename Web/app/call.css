@@ -24,5 +24,3 @@
 .call-btn.live { color: var(--rose); background: var(--rose-dim); }
 .call-btn.live i { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--rose); }
 .call-btn:disabled { opacity: 0.5; }
-.call-strip { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 6px 12px; font-size: 12px; background: var(--rose-dim); color: var(--rose); }
-.call-strip i { width: 8px; height: 8px; border-radius: 50%; background: var(--rose); }

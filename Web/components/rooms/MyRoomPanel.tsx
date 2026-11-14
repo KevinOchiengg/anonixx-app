@@ -12,8 +12,8 @@ import { roomThemeById, roomThemeVars, statusLabel } from "@/lib/roomThemes";
 type Me = {
   anonymous_name?: string; profile_picture_url?: string | null; room_theme?: string; font_style?: string;
   room_status?: string | null; intro?: string | null; welcome_message?: string | null; gallery?: GalleryItem[];
-  gallery_visibility?: string; welcome_audio_url?: string | null; welcome_audio_seconds?: number | null;
-  welcome_autoplay?: boolean; welcome_visibility?: string;
+  gallery_visibility?: string;
+  welcome_visibility?: string;
 };
 
 export default function MyRoomPanel() {
@@ -28,7 +28,6 @@ export default function MyRoomPanel() {
   const gallery = me.gallery || [];
   const steps = [
     { done: !!me.welcome_message, label: "Welcome note", hint: me.welcome_message ? `“${me.welcome_message}”` : "The first thing someone reads when you let them in." },
-    { done: !!me.welcome_audio_url, label: "Welcome audio", hint: me.welcome_audio_url ? `${Math.round(me.welcome_audio_seconds || 0)}s greeting · ${me.welcome_autoplay ? "plays on entry" : "tap to play"}` : "Say hello in your own voice, up to a minute." },
     { done: gallery.length > 0, label: `Welcome media ${gallery.length}/3`, hint: gallery.length ? (me.gallery_visibility === "inside" ? "Only people inside see them." : me.gallery_visibility === "only_me" ? "Hidden from everyone." : "Everyone peeking sees them.") : "Photos or short videos for your walls." },
   ];
 
@@ -68,7 +67,7 @@ export default function MyRoomPanel() {
       </div>
       <Link href="/chat-setup?tab=welcome" className="u-cta mr-cta">{steps.every((s) => s.done) ? "Edit your welcome" : "Set up your welcome"}</Link>
       <p className="rs-info">
-        {me.welcome_visibility === "window" ? "Your welcome note and audio play for anyone peeking." : "Only people you let in see this."} Change who sees what in{" "}
+        {me.welcome_visibility === "window" ? "Anyone peeking reads your welcome note." : "Only people you let in see this."} Change who sees what in{" "}
         <Link href="/chat-setup?tab=privacy">Privacy</Link>.
       </p>
     </div>

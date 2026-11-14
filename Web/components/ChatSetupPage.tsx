@@ -24,7 +24,6 @@ import {
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
-import WelcomeAudio from "./rooms/WelcomeAudio";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 type Profile = {
@@ -46,9 +45,6 @@ type Profile = {
   break_until?: string | null;
   door_rule?: string;
   listing?: string;
-  welcome_audio_url?: string | null;
-  welcome_audio_seconds?: number | null;
-  welcome_autoplay?: boolean;
   welcome_visibility?: string;
   allow_audio_calls?: boolean;
   allow_video_calls?: boolean;
@@ -66,8 +62,8 @@ const NOTIFY_ROWS: [keyof Notify, string, string][] = [
   ["previews", "Show message text", "Off: notifications say \"New message\" without the words"],
 ];
 const WELCOME_VISIBILITY = [
-  { id: "inside", label: "Only people I let in", hint: "Your note and audio wait behind the door. The default." },
-  { id: "window", label: "Everyone peeking", hint: "Visitors hear and read this before they knock." },
+  { id: "inside", label: "Only people I let in", hint: "Your note waits behind the door. The default." },
+  { id: "window", label: "Everyone peeking", hint: "Visitors read this before they knock." },
 ];
 type Visitor = { user_id: string; anonymous_name: string; avatar_url: string | null; status: string; let_in_at: string };
 const hourLabel = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
@@ -144,8 +140,6 @@ function Inner() {
   const [inside, setInside] = useState<Conn[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [reporting, setReporting] = useState<Conn | null>(null);
-  const [welcomeAudio, setWelcomeAudio] = useState<{ url: string; seconds?: number | null } | null>(null);
-  const [autoplay, setAutoplay] = useState(false);
   const [welcomeVis, setWelcomeVis] = useState("inside");
   const [allowAudio, setAllowAudio] = useState(true);
   const [allowVideo, setAllowVideo] = useState(true);
@@ -171,8 +165,6 @@ function Inner() {
     setBreakHours(null);
     setDoorRule(d.door_rule || "line_peek");
     setListing(d.listing || "limited");
-    setWelcomeAudio(d.welcome_audio_url ? { url: d.welcome_audio_url, seconds: d.welcome_audio_seconds } : null);
-    setAutoplay(!!d.welcome_autoplay);
     setWelcomeVis(d.welcome_visibility || "inside");
     setAllowAudio(d.allow_audio_calls !== false);
     setAllowVideo(d.allow_video_calls !== false);
@@ -276,17 +268,6 @@ function Inner() {
     }
   }
 
-  // Saved straight away (outside Save): the welcome audio and its removal.
-  async function saveAudio(url: string, seconds: number | null) {
-    const d = await api<Profile>("/chat-profile/me", { method: "PUT", body: { welcome_audio_url: url, ...(seconds ? { welcome_audio_seconds: seconds } : {}) } });
-    setWelcomeAudio(d.welcome_audio_url ? { url: d.welcome_audio_url, seconds: d.welcome_audio_seconds } : null);
-    setNote("Welcome audio saved.");
-  }
-  async function removeAudio() {
-    await api<Profile>("/chat-profile/me", { method: "PUT", body: { welcome_audio_url: "" } });
-    setWelcomeAudio(null);
-    setNote("Welcome audio removed.");
-  }
 
 
   async function save() {
@@ -299,7 +280,7 @@ function Inner() {
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic,
           intro, welcome_message: welcome, room_status: status, gallery_visibility: visibility, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
-          welcome_autoplay: autoplay, welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
+          welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
             knocks: notify.knocks, messages: notify.messages, calls: notify.calls, sessions: notify.sessions, previews: notify.previews,
             ...(notify.quiet_start !== null && notify.quiet_end !== null ? { quiet_start: notify.quiet_start, quiet_end: notify.quiet_end } : { quiet_start: -1, quiet_end: -1 }),
@@ -460,13 +441,6 @@ function Inner() {
               <label htmlFor="rs-welcome">Welcome note</label>
               <textarea id="rs-welcome" rows={3} value={welcome} maxLength={MAX_WELCOME} onChange={(e) => setWelcome(e.target.value)} placeholder="What they read the moment you let them in…" />
               <small>{welcome.length}/{MAX_WELCOME} · {welcomeVis === "window" ? "everyone peeking sees this." : "only people you let in see this."}</small>
-            </div>
-
-            <p className="rs-h">Welcome audio</p>
-            <WelcomeAudio saved={welcomeAudio} onSave={saveAudio} onRemove={removeAudio} />
-            <div className="rs-toggle">
-              <span><b>Play it when they walk in</b><small>Plays once on their first visit, if their browser allows sound. Off: they press play.</small></span>
-              <button type="button" role="switch" aria-checked={autoplay} aria-label="Play welcome audio on entry" className={`rs-switch${autoplay ? " on" : ""}`} onClick={() => setAutoplay(!autoplay)} />
             </div>
 
             <p className="rs-h">Who gets your welcome</p>

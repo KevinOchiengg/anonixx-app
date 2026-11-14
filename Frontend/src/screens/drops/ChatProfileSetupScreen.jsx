@@ -29,7 +29,6 @@ import {
 } from '../../config/roomThemes';
 import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
 import KnockClues from '../../components/rooms/KnockClues';
-import WelcomeAudioEditor from '../../components/rooms/WelcomeAudioEditor';
 
 // What a Knock on this Room must carry (Backend chat_profile.py DOOR_RULES).
 const DOOR_RULES = [
@@ -51,8 +50,8 @@ const TABS = [
 ];
 // Who hears/reads the welcome (Backend chat_profile.py WELCOME_VISIBILITY).
 const WELCOME_VISIBILITY = [
-  { id: 'inside', label: 'Only people I let in', hint: 'Your note and audio wait behind the door. The default.' },
-  { id: 'window', label: 'Everyone peeking', hint: 'Visitors hear and read this before they knock.' },
+  { id: 'inside', label: 'Only people I let in', hint: 'Your note waits behind the door. The default.' },
+  { id: 'window', label: 'Everyone peeking', hint: 'Visitors read this before they knock.' },
 ];
 const NOTIFY_ROWS = [
   ['knocks', 'New knocks', 'Someone knocks on your Room'],
@@ -100,8 +99,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [knocks, setKnocks]                   = useState(null);
   const [inside, setInside]                   = useState(null);
   const [personBusy, setPersonBusy]           = useState(null);
-  const [welcomeAudio, setWelcomeAudio]       = useState(null);    // { url, seconds }
-  const [welcomeAutoplay, setWelcomeAutoplay] = useState(false);
   const [welcomeVisibility, setWelcomeVisibility] = useState('inside');
   const [allowAudioCalls, setAllowAudioCalls] = useState(true);
   const [allowVideoCalls, setAllowVideoCalls] = useState(true);
@@ -141,8 +138,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setBreakHours(null);
             setDoorRule(data.door_rule || 'line_peek');
             setListing(data.listing || 'limited');
-            setWelcomeAudio(data.welcome_audio_url ? { url: data.welcome_audio_url, seconds: data.welcome_audio_seconds } : null);
-            setWelcomeAutoplay(!!data.welcome_autoplay);
             setWelcomeVisibility(data.welcome_visibility || 'inside');
             setAllowAudioCalls(data.allow_audio_calls !== false);
             setAllowVideoCalls(data.allow_video_calls !== false);
@@ -250,25 +245,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     }
   }, [gallery, authHeaders, showToast]);
 
-  // Saves straight away (outside the Save button): welcome audio and its removal.
-  const putProfile = useCallback(async (body) => {
-    const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/me`, {
-      method: 'PUT', headers: await authHeaders(true), body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not save. Try again.');
-    return data;
-  }, [authHeaders]);
-  const saveWelcomeAudio = useCallback(async (url, seconds) => {
-    const d = await putProfile({ welcome_audio_url: url, ...(seconds ? { welcome_audio_seconds: seconds } : {}) });
-    setWelcomeAudio(d.welcome_audio_url ? { url: d.welcome_audio_url, seconds: d.welcome_audio_seconds } : null);
-  }, [putProfile]);
-  const removeWelcomeAudio = useCallback(async () => {
-    await putProfile({ welcome_audio_url: '' });
-    setWelcomeAudio(null);
-    showToast({ type: 'info', message: 'Welcome audio removed.' });
-  }, [putProfile, showToast]);
-
   const handleDeleteGalleryItem = useCallback(async (index) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/media/${index}`, {
@@ -302,7 +278,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}),
           door_rule: doorRule,
           listing,
-          welcome_autoplay: welcomeAutoplay,
           welcome_visibility: welcomeVisibility,
           allow_audio_calls: allowAudioCalls,
           allow_video_calls: allowVideoCalls,
@@ -327,7 +302,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
       setSaving(false);
     }
   }, [backgroundPattern, fontStyle, profilePictureUrl, intro, welcomeMessage, roomStatus,
-      galleryVisibility, knocksOpen, breakHours, doorRule, listing, welcomeAutoplay, welcomeVisibility,
+      galleryVisibility, knocksOpen, breakHours, doorRule, listing, welcomeVisibility,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
   // Applies straight away (the picker has its own Apply / Cancel).
@@ -575,22 +550,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         <Text style={styles.sectionHint}>
           {welcomeMessage.length}/{MAX_WELCOME} · {welcomeVisibility === 'window' ? 'everyone peeking sees this.' : 'only people you let in see this.'}
         </Text>
-
-        <Text style={styles.sectionLabel}>Welcome audio</Text>
-        <WelcomeAudioEditor saved={welcomeAudio} onSave={saveWelcomeAudio} onRemove={removeWelcomeAudio} />
-        <View style={[styles.option, { marginTop: rp(8) }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.optionTitle}>Play it when they walk in</Text>
-            <Text style={styles.optionHint}>Plays once on their first visit, never in silent mode. Off: they tap to play.</Text>
-          </View>
-          <Switch
-            value={welcomeAutoplay}
-            onValueChange={setWelcomeAutoplay}
-            trackColor={{ false: T.surfaceAlt, true: T.gold }}
-            thumbColor="#fff"
-            accessibilityLabel="Play welcome audio on entry"
-          />
-        </View>
 
         <Text style={styles.sectionLabel}>Who gets your welcome</Text>
         {WELCOME_VISIBILITY.map((v) => (

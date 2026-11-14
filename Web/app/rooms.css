@@ -8,34 +8,11 @@
 .rx-empty b { font-size: 18px; }
 .rx-empty p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; max-width: 320px; }
 .rx-empty .u-cta { width: auto; height: 44px; padding: 0 20px; font-size: 15px; margin-top: 10px; }
-.rx-empty-ico { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--rose-dim); color: var(--rose); font-size: 26px; margin-bottom: 6px; }
 .rx-door { position: relative; width: 54px; height: 78px; border-radius: 27px 27px 6px 6px; border: 1.5px solid color-mix(in srgb, var(--rose) 40%, transparent); background: color-mix(in srgb, var(--rose) 8%, transparent); margin-bottom: 10px; }
 .rx-door i { position: absolute; right: 9px; top: 44px; width: 6px; height: 6px; border-radius: 50%; background: var(--rose); }
 
 /* Live */
-.lv-panel { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 90px; }
 .lv-label { margin: 10px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
-.lv-card, .lv-start {
-  display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line);
-  text-align: left; color: var(--fg); width: 100%;
-}
-.lv-card.live { border-color: color-mix(in srgb, var(--rose) 30%, transparent); background: color-mix(in srgb, var(--rose) 7%, var(--surface)); }
-.lv-start { border-style: dashed; border-color: color-mix(in srgb, var(--rose) 35%, transparent); background: transparent; cursor: pointer; }
-.lv-ava { flex: none; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--surface-alt); color: var(--rose); font-weight: 700; border: 1.5px solid color-mix(in srgb, var(--rose) 30%, transparent); }
-.lv-ava img { width: 100%; height: 100%; object-fit: cover; }
-.lv-ava.icon { background: var(--rose-dim); border: 0; font-size: 18px; }
-.lv-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.lv-t b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lv-t small { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
-.lv-join, .lv-ghost { flex: none; height: 36px; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; }
-.lv-join { background: var(--rose); color: #fff; border: 0; }
-.lv-ghost { background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: var(--fg); }
-.lv-ghost.danger { color: #ef4444; }
-.lv-join:disabled, .lv-ghost:disabled { opacity: 0.5; cursor: default; }
-.lv-sheet { display: flex; flex-direction: column; gap: 12px; }
-.lv-sheet .u-segs { padding: 0; }
-.lv-pick { display: flex; align-items: center; gap: 12px; cursor: pointer; }
-.lv-pick input { width: 20px; height: 20px; accent-color: var(--rose); }
 
 /* My Room */
 .mr { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 90px; }
@@ -88,13 +65,6 @@
 .u-gal .u-gal-tools { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; padding: 3px 4px; background: rgba(0, 0, 0, 0.6); }
 .u-gal .u-gal-tools button { position: static; width: 24px; height: 22px; border-radius: 6px; background: transparent; font-size: 15px; line-height: 1; }
 .u-gal .u-gal-tools button:disabled { opacity: 0.3; }
-.wa-box { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
-.wa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.wa-row.rec { gap: 10px; }
-.wa-row.rec b { font-size: 18px; font-variant-numeric: tabular-nums; }
-.wa-row.rec small { color: var(--muted); margin-right: auto; }
-.wa-audio { width: 100%; height: 40px; }
-.wa-hint { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 .pill.danger { color: #ef4444; }
 
 /* Chat: voice notes with a speed control; the session strip's Join */
@@ -102,7 +72,6 @@
 .vn audio { max-width: 220px; height: 36px; }
 .vn-rate { flex: none; min-width: 34px; height: 24px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.1); color: var(--fg); font-size: 11px; font-weight: 800; cursor: pointer; }
 .vn-preview { height: 36px; min-width: 0; }
-.call-join { margin-left: 6px; height: 26px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--rose); color: #fff; font-size: 12px; font-weight: 800; cursor: pointer; }
 
 /* Calls: ringing stage, people panel */
 .cr { background: var(--bg); }
@@ -153,14 +122,5 @@
 /* Room page: welcome card and the entrance's audio + media */
 .rm-welcome { border-color: var(--rt-border-strong); background: var(--rt-tint); }
 .rm-welcome p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--rt-text); }
-.rm-voice {
-  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border-radius: 16px; text-align: left; cursor: pointer;
-  border: 1px solid var(--rt-border-strong); background: var(--rt-tint); color: var(--rt-text);
-}
-.rm-voice audio { display: none; }
-.rm-voice i { flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--rt-accent); color: var(--rt-bg); font-style: normal; font-size: 15px; font-weight: 800; }
-.rm-voice span { display: flex; flex-direction: column; gap: 2px; }
-.rm-voice b { font-size: 14px; }
-.rm-voice small { font-size: 12px; color: var(--rt-muted); }
 .rm-enter-media { width: 100%; }
 .rm-big { z-index: 70; }

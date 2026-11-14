@@ -1,8 +1,7 @@
 "use client";
 /** Someone's Room, in their theme. After a Let In, the first visit plays the entrance: their
- * welcome note, three welcome media and welcome audio (tried once if the owner turned autoplay
- * on and the browser allows sound; always playable by hand). */
-import { useCallback, useEffect, useRef, useState } from "react";
+ * welcome note and three welcome media. */
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,7 +15,7 @@ import AgeGate from "./AgeGate";
 import LinkUpSheet from "./LinkUpSheet";
 import Sheet from "./Sheet";
 import KnockClues, { type KnockClue } from "./KnockClues";
-import { Ellipsis, Lock as LockIcon, Pause, Play, RotateCcw, X } from "lucide-react";
+import { Ellipsis, Lock as LockIcon, X } from "lucide-react";
 
 type Hookup = { age: number; gender: string | null; area: string; looking_for: string | null; vibes: string[] } | null;
 type Preview = {
@@ -25,7 +24,6 @@ type Preview = {
     background_pattern: string; font_style: string; profile_picture_url: string | null; anonymous_name: string;
     gallery: GalleryItem[]; gallery_hidden: number; gallery_visibility: string;
     room_theme: string; intro: string | null; room_status: string | null; knocks_open: boolean; welcome_message: string | null;
-    welcome_audio_url?: string | null; welcome_audio_seconds?: number | null; welcome_autoplay?: boolean;
   };
   inside: boolean;
   post: { id: string; kind: "hookup" | "confession" | null; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
@@ -59,37 +57,6 @@ function markSeen(cid: string) {
   try { localStorage.setItem(seenKey(cid), "1"); } catch { /* storage blocked: it just plays again */ }
 }
 
-/** The owner's welcome audio: a play / replay button. autoplay tries once; a browser that
- * blocks sound just leaves the button. */
-function WelcomeVoice({ url, seconds, autoplay }: { url: string; seconds?: number | null; autoplay?: boolean }) {
-  const el = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [done, setDone] = useState(false);
-  const [left, setLeft] = useState(Math.round(seconds || 0));
-  useEffect(() => {
-    if (!autoplay) return;
-    const t = window.setTimeout(() => { el.current?.play().catch(() => { /* needs a tap */ }); }, 1100);
-    return () => window.clearTimeout(t);
-  }, [autoplay]);
-  const toggle = () => {
-    const a = el.current;
-    if (!a) return;
-    if (done) { a.currentTime = 0; setDone(false); }
-    if (a.paused) a.play().catch(() => {}); else a.pause();
-  };
-  return (
-    <button type="button" className="rm-voice" onClick={toggle} aria-label={playing ? "Pause welcome audio" : "Play welcome audio"}>
-      <audio
-        ref={el} src={url} preload="metadata"
-        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
-        onEnded={() => { setPlaying(false); setDone(true); }}
-        onTimeUpdate={(e) => { const a = e.currentTarget; if (Number.isFinite(a.duration)) setLeft(Math.max(0, Math.round(a.duration - a.currentTime))); }}
-      />
-      <i aria-hidden>{playing ? <Pause size={16} fill="currentColor" strokeWidth={0} /> : done ? <RotateCcw size={16} strokeWidth={2.2} /> : <Play size={16} fill="currentColor" strokeWidth={0} />}</i>
-      <span><b>{playing ? "Playing their welcome…" : done ? "Play it again" : "Their welcome, in their voice"}</b><small>{left ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Tap to listen"}</small></span>
-    </button>
-  );
-}
 
 /** Put an opener in the chat box (ChatPage reads it via useDraft). Never sends. */
 function primeDraft(cid: string, text: string) {
@@ -327,11 +294,10 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
             ) : null}
           </section>
 
-          {room.welcome_message || room.welcome_audio_url ? (
+          {room.welcome_message ? (
             <section className="rm-card rm-welcome">
               <div className="rm-label"><span>{own ? "Your welcome" : cid ? `${name}'s welcome` : "A word at the door"}</span></div>
-              {room.welcome_message ? <p style={font}>&ldquo;{room.welcome_message}&rdquo;</p> : null}
-              {room.welcome_audio_url && !entrance ? <WelcomeVoice url={room.welcome_audio_url} seconds={room.welcome_audio_seconds} /> : null}
+              <p style={font}>&ldquo;{room.welcome_message}&rdquo;</p>
             </section>
           ) : null}
 
@@ -412,7 +378,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
               <small>You&apos;re inside.</small>
               <h2 style={font}>Welcome to {name}&apos;s Room.</h2>
               {room.welcome_message ? <blockquote style={font}>&ldquo;{room.welcome_message}&rdquo;</blockquote> : null}
-              {room.welcome_audio_url ? <WelcomeVoice url={room.welcome_audio_url} seconds={room.welcome_audio_seconds} autoplay={room.welcome_autoplay} /> : null}
               {gallery.length ? (
                 <div className="rm-grid rm-enter-media">
                   {gallery.slice(0, 3).map((g, k) => (

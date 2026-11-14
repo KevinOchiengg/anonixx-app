@@ -42,7 +42,6 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
   const edit = (tab) => navigation.navigate('ChatProfileSetup', { tab });
   const steps = [
     { done: !!room.welcome_message, label: 'Welcome note', hint: room.welcome_message ? `“${room.welcome_message}”` : 'The first thing someone reads when you let them in.' },
-    { done: !!room.welcome_audio_url, label: 'Welcome audio', hint: room.welcome_audio_url ? `${Math.round(room.welcome_audio_seconds || 0)}s greeting · ${room.welcome_autoplay ? 'plays on entry' : 'tap to play'}` : 'Say hello in your own voice, up to a minute.' },
     { done: gallery.length > 0, label: `Welcome media ${gallery.length}/3`, hint: gallery.length ? (room.gallery_visibility === 'inside' ? 'Only people inside see them.' : room.gallery_visibility === 'only_me' ? 'Hidden from everyone.' : 'Everyone peeking sees them.') : 'Photos or short videos for your walls.' },
   ];
 
@@ -112,7 +111,7 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
         <Lock size={rs(14)} color={T.textSecondary} />
         <Text style={s.noteText}>
           {room.welcome_visibility === 'window'
-            ? 'Your welcome note and audio play for anyone peeking.'
+            ? 'Anyone peeking reads your welcome note.'
             : 'Only people you let in see this.'}
           {' '}Change who sees what in Privacy.
         </Text>
