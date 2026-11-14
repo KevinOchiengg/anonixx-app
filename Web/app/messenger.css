@@ -76,8 +76,6 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .mx-fab:hover { filter: brightness(1.08); }
 .mx-search { display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px; margin: 4px 0 8px; border-radius: 999px; background: var(--surface); color: var(--muted); }
 .mx-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--fg); font-size: 15px; }
-.mx-check { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--faint); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; color: #fff; }
-.mx-check.on { background: var(--rose); border-color: var(--rose); }
 .mx-callbtns { display: flex; gap: 18px; color: var(--rose); }
 .mx-callbtns button { display: flex; color: inherit; }
 .mx-end { flex: none; height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); color: #ef4444; font-weight: 700; font-size: 13px; }
@@ -96,19 +94,9 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .mx-ring-b.live { background: #ef4444; font-size: 9px; }
 .mx-ring b { font-size: 12px; font-weight: 600; max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
 .mx-ring small { font-size: 10.5px; color: var(--muted); max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mx-starred { list-style: none; margin: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 14px; }
-.mx-st-meta { display: flex; gap: 8px; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
-.mx-st-meta b { flex: 1; font-weight: 600; }
-.mx-st-bub { position: relative; display: flex; flex-direction: column; gap: 6px; max-width: 88%; padding: 10px 26px 10px 12px; border-radius: 14px; background: var(--surface); color: var(--fg); text-decoration: none; font-size: 14px; }
-.mx-st-bub.own { margin-left: auto; background: rgba(255, 99, 74, 0.14); }
-.mx-st-bub img { border-radius: 10px; max-width: 100%; }
-.mx-st-bub i { position: absolute; right: 9px; bottom: 7px; font-style: normal; color: var(--gold); font-size: 12px; }
-.mx-st-un { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.mx-st-bub.own + .mx-st-un { display: block; margin-left: auto; }
 .mx-headbtn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; color: inherit; }
 .u-head-t small.dim { color: var(--faint); }
 .mx-muted { font-style: normal; font-size: 12px; }
-.mx-fwd { display: block; font-size: 11.5px; font-style: italic; color: var(--muted); margin-bottom: 2px; }
 .bubble .mx-tick { margin: 0 0 0 2px; }
 .menu button.sub { padding-left: 28px; font-size: 13px; color: var(--muted); }
 
@@ -158,7 +146,6 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .ibox svg { width: 18px; height: 18px; }
 .row-chev { flex: none; color: var(--faint); }
 .inl-ic { display: inline-block; vertical-align: -2px; flex: none; }
-.inl-ic.star { color: var(--gold); margin-right: 3px; }
 .mx-muted { display: inline-block; vertical-align: -1px; margin-left: 5px; color: var(--faint); }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
 .icon-btn:hover:not(:disabled) { color: var(--rose); }
@@ -170,7 +157,6 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .limit-moon svg { width: 56px; height: 56px; }
 .cmt-empty span svg { color: var(--faint); }
 .mx-dir { display: inline-flex; vertical-align: -2px; }
-.mx-st-bub i { display: inline-flex; }
 
 /* ── Coral drops show through: sticky bars are tinted glass, full-screen layers carry the drops ── */
 .apphead, .mx-tabs, .mx-searchbar, .rs-tabs {

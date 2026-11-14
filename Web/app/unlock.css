@@ -69,20 +69,9 @@
 .u-head-t small { font-size: 11px; }
 .chat.u-themed .bubble { background: #1e2535; border-color: transparent; }
 .chat.u-themed .bubble.own { background: var(--rose); }
-.chat.u-themed .chat-origin { background: rgba(11, 15, 24, 0.4); }
 .chat.u-themed .chat-input, .chat.u-themed .reply-bar { background: rgba(11, 15, 24, 0.7); backdrop-filter: blur(8px); }
-.menu .u-menu-link { padding: 12px 20px; display: block; }
 
 /* welcome gallery */
-.u-welcome { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
-.u-welcome-track { width: min(100%, 460px); flex: 1; max-height: 78%; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
-.u-welcome-track::-webkit-scrollbar { display: none; }
-.u-welcome-track > div { flex: none; width: 100%; scroll-snap-align: center; display: flex; align-items: center; justify-content: center; }
-.u-welcome-track img, .u-welcome-track video { max-width: 100%; max-height: 100%; object-fit: contain; }
-.u-welcome-dots { display: flex; gap: 6px; }
-.u-welcome-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.3); }
-.u-welcome-dots i.on { background: #fff; }
-.u-welcome p { margin: 0; font-size: 12px; color: var(--muted); }
 
 /* ── Chat interface setup ── */
 .u-swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }

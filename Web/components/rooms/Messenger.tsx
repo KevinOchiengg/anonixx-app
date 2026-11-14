@@ -1,22 +1,22 @@
 "use client";
 /** Shared messenger pieces for Rooms on the web: avatar, a chat row with its ⌄ menu, the chat
- * picker (New chat / New call / Forward), and the Calls log. Same behaviour as the app. */
+ * picker (New chat / New call), and the Calls log. Same behaviour as the app. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { callsApi, callInfo } from "@/lib/calls";
-import { chatsApi, chatTime, callTime, duration, avatarColor, MUTE_OPTIONS, MAX_FORWARD, type Chat, type CallLog } from "@/lib/chats";
+import { chatsApi, chatTime, callTime, duration, avatarColor, MUTE_OPTIONS, type Chat, type CallLog } from "@/lib/chats";
 import CallRoom, { type CallInfo } from "../CallRoom";
 import Sheet from "../Sheet";
 import {
   Archive, ArrowLeft, BellOff, ChevronDown, Compass, DoorOpen, EllipsisVertical, Link2, MessageSquarePlus, Phone, Pin,
-  Radio, Search, Send, Star, Video, X, Users, PhoneMissed, ArrowUpRight, ArrowDownLeft, type LucideIcon,
+  Radio, Search, Send, Video, X, Users, PhoneMissed, ArrowUpRight, ArrowDownLeft, type LucideIcon,
 } from "lucide-react";
 
 const ic = (C: LucideIcon) => (s = 20) => <C size={s} strokeWidth={2} aria-hidden />;
 /** Rooms icons: Lucide at stroke 2, the same family as the app. */
 export const Icon = {
-  phone: ic(Phone), video: ic(Video), pin: ic(Pin), mute: ic(BellOff), archive: ic(Archive), star: ic(Star),
+  phone: ic(Phone), video: ic(Video), pin: ic(Pin), mute: ic(BellOff), archive: ic(Archive),
   chat: ic(MessageSquarePlus), door: ic(DoorOpen), link: ic(Link2), chevron: ic(ChevronDown), back: ic(ArrowLeft),
   search: ic(Search), close: ic(X), dots: ic(EllipsisVertical), send: ic(Send), radio: ic(Radio), compass: ic(Compass),
 };
@@ -89,26 +89,22 @@ export function ChatRow({ c, href, onPrefs, onOpen }: { c: Chat; href?: string; 
   );
 }
 
-/** New chat (open), New call (voice/video buttons) or Forward (tick up to 5). */
-export function PickChats({ mode, title, exclude, onClose, onOpen, onCall, onForward, extras }: {
-  mode: "open" | "call" | "forward"; title: string; exclude?: string; onClose: () => void;
-  onOpen?: (c: Chat) => void; onCall?: (c: Chat, video: boolean) => void; onForward?: (ids: string[]) => Promise<void>;
+/** New chat (open) or New call (voice/video buttons). */
+export function PickChats({ mode, title, exclude, onClose, onOpen, onCall, extras }: {
+  mode: "open" | "call"; title: string; exclude?: string; onClose: () => void;
+  onOpen?: (c: Chat) => void; onCall?: (c: Chat, video: boolean) => void;
   extras?: { label: string; hint: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
 }) {
   const [chats, setChats] = useState<Chat[] | null>(null);
   const [q, setQ] = useState("");
-  const [picked, setPicked] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
   useEffect(() => { chatsApi.list().then((r) => setChats(r.connections)).catch(() => setChats([])); }, []);
   const list = useMemo(() => (chats || [])
     .filter((c) => c.id !== exclude && (!q.trim() || c.other_anonymous_name.toLowerCase().includes(q.trim().toLowerCase())))
     .sort((a, b) => a.other_anonymous_name.localeCompare(b.other_anonymous_name)), [chats, q, exclude]);
-  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= MAX_FORWARD ? p : [...p, id]));
 
   return (
     <Sheet title={title} onClose={onClose} tall>
       <label className="mx-search">{Icon.search(16)}<input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name" /></label>
-      {mode === "forward" ? <p className="mx-note">{picked.length ? `${picked.length} of ${MAX_FORWARD} selected` : `Pick up to ${MAX_FORWARD} chats`}</p> : null}
       <ul className="mx-pick">
         {!q && extras?.map((x) => (
           <li key={x.label}>
@@ -119,16 +115,13 @@ export function PickChats({ mode, title, exclude, onClose, onOpen, onCall, onFor
             )}
           </li>
         ))}
-        {chats === null ? <li className="muted center">Loading…</li> : list.length === 0 ? <li className="mx-note">{q ? `No chats match “${q}”.` : "No chats yet. Let someone in, or go knock."}</li> : list.map((c) => {
-          const on = picked.includes(c.id);
-          return (
+        {chats === null ? <li className="muted center">Loading…</li> : list.length === 0 ? <li className="mx-note">{q ? `No chats match “${q}”.` : "No chats yet. Let someone in, or go knock."}</li> : list.map((c) => (
             <li key={c.id}>
-              <div className={`mx-row${on ? " sel" : ""}`} role={mode === "call" ? undefined : "button"} tabIndex={mode === "call" ? undefined : 0}
-                onClick={() => (mode === "forward" ? toggle(c.id) : mode === "open" ? onOpen?.(c) : undefined)}
-                onKeyDown={(e) => { if (e.key === "Enter") { if (mode === "forward") toggle(c.id); else if (mode === "open") onOpen?.(c); } }}>
+              <div className="mx-row" role={mode === "call" ? undefined : "button"} tabIndex={mode === "call" ? undefined : 0}
+                onClick={() => (mode === "open" ? onOpen?.(c) : undefined)}
+                onKeyDown={(e) => { if (e.key === "Enter" && mode === "open") onOpen?.(c); }}>
                 <Ava name={c.other_anonymous_name} url={c.other_avatar_url} seed={c.other_user_id} size={44} />
                 <span className="mx-body"><b>{c.other_anonymous_name}</b><small>{c.is_sender ? "Your guest" : "You’re inside their Room"}</small></span>
-                {mode === "forward" ? <span className={`mx-check${on ? " on" : ""}`} aria-hidden>{on ? "✓" : ""}</span> : null}
                 {mode === "call" ? (
                   <span className="mx-callbtns">
                     <button type="button" onClick={() => onCall?.(c, false)} aria-label={`Voice call ${c.other_anonymous_name}`}>{Icon.phone(20)}</button>
@@ -137,14 +130,8 @@ export function PickChats({ mode, title, exclude, onClose, onOpen, onCall, onFor
                 ) : null}
               </div>
             </li>
-          );
-        })}
+        ))}
       </ul>
-      {mode === "forward" ? (
-        <button className="u-cta" disabled={!picked.length || busy} onClick={async () => { setBusy(true); try { await onForward?.(picked); } finally { setBusy(false); } }}>
-          {busy ? "Forwarding…" : `Forward${picked.length ? ` to ${picked.length}` : ""}`}
-        </button>
-      ) : null}
     </Sheet>
   );
 }

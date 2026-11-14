@@ -133,7 +133,6 @@
 .kebab { margin-left: auto; font-size: 22px; line-height: 1; padding: 0 6px; }
 .menu { position: absolute; right: 12px; top: 100%; z-index: 10; display: grid; background: var(--surface-alt); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .menu button { padding: 12px 20px; text-align: left; }
-.chat-origin { flex: none; padding: 10px 20px; font-size: 13px; color: var(--muted); font-style: italic; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 8px; }
 .bubble { max-width: 80%; align-self: flex-start; padding: 9px 13px; border-radius: 16px 16px 16px 4px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; line-height: 1.4; overflow-wrap: anywhere; }
 .bubble.own { align-self: flex-end; background: var(--rose); border-color: var(--rose); border-radius: 16px 16px 4px 16px; }

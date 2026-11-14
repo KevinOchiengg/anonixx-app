@@ -1,8 +1,8 @@
 "use client";
 /** Rooms, built like a messenger home: Chats (everyone you're connected with), Updates (who's
  * live + your Room), Knocks (who's at your door; your sent knocks too) and Calls (the log).
- * Each chat's ⌄ menu (or right-click) pins, mutes or archives it. The ⋮ menu has Starred,
- * Archived and every Room setting.
+ * Each chat's ⌄ menu (or right-click) pins, mutes or archives it. The ⋮ menu has Archived
+ * and every Room setting.
  * ?tab=chats|updates|knocks|sent|calls (old connections / requests / live / myroom still work). */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { intentLabel } from "@/lib/linkup";
 import { callsApi, callInfo } from "@/lib/calls";
-import { chatsApi, chatTime, type Chat, type ThreadItem } from "@/lib/chats";
+import { chatsApi, chatTime, type Chat } from "@/lib/chats";
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import CallRoom, { type CallInfo } from "./CallRoom";
@@ -19,7 +19,6 @@ import RoomSettingsMenu from "./rooms/RoomSettingsMenu";
 import UpdatesPanel from "./rooms/UpdatesPanel";
 import { StartSession } from "./rooms/LivePanel";
 import { CallsPanel, ChatRow, Icon, PickChats } from "./rooms/Messenger";
-import { Star } from "lucide-react";
 
 type Req = KnockClue & {
   id: string;
@@ -37,14 +36,14 @@ type Req = KnockClue & {
   created_at?: string;
 };
 type Sent = { id: string; target_type: string; status: string; connection_id: string | null; target_id: string };
-type View = "chats" | "updates" | "knocks" | "sent" | "calls" | "archived" | "starred";
+type View = "chats" | "updates" | "knocks" | "sent" | "calls" | "archived";
 type Tab = "chats" | "updates" | "knocks" | "calls";
 const TABS: [Tab, string][] = [["chats", "Chats"], ["updates", "Updates"], ["knocks", "Knocks"], ["calls", "Calls"]];
 const FILTERS = [["all", "All"], ["unread", "Unread"], ["guests", "Guests"], ["rooms", "Their Rooms"]] as const;
 type Filter = (typeof FILTERS)[number][0];
 const FROM_QS: Record<string, View> = {
   chats: "chats", connections: "chats", updates: "updates", live: "updates", myroom: "updates",
-  knocks: "knocks", requests: "knocks", sent: "sent", calls: "calls", archived: "archived", starred: "starred",
+  knocks: "knocks", requests: "knocks", sent: "sent", calls: "calls", archived: "archived",
 };
 
 function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"; setView: (v: View) => void; reqs: Req[] | null; sent: Sent[] | null; reload: () => void }) {
@@ -149,38 +148,6 @@ function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"
   );
 }
 
-function Starred({ back }: { back: () => void }) {
-  const [items, setItems] = useState<ThreadItem[] | null>(null);
-  const load = useCallback(() => { chatsApi.starred().then((r) => setItems(r.messages)).catch(() => setItems([])); }, []);
-  useEffect(() => { load(); }, [load]);
-  async function unstar(m: ThreadItem) {
-    setItems((x) => (x || []).filter((i) => i.id !== m.id));
-    try { await chatsApi.star(m.connection_id, m.id, false); } catch { load(); }
-  }
-  return (
-    <div>
-      <button className="mx-backrow" onClick={back}>{Icon.back(18)} Starred messages</button>
-      {items === null ? <p className="muted center">Loading…</p> : items.length === 0 ? (
-        <div className="rx-empty"><b>No starred messages</b><p>Star a message to keep it here. Only you see them.</p></div>
-      ) : (
-        <ul className="mx-starred">
-          {items.map((m) => (
-            <li key={m.id}>
-              <div className="mx-st-meta"><b>{m.is_own ? `You ▸ ${m.other_anonymous_name}` : `${m.other_anonymous_name} ▸ You`}</b><time>{chatTime(m.created_at)}</time></div>
-              <Link href={`/chat/${m.connection_id}`} className={`mx-st-bub${m.is_own ? " own" : ""}`}>
-                {m.media_type === "image" && m.media_url ? <Image src={m.media_url} alt="" width={220} height={220} style={{ height: "auto" }} /> : null}
-                {m.media_type && m.media_type !== "image" ? <span>{m.preview}</span> : null}
-                {m.content ? <span>{m.content}</span> : null}
-                <i aria-hidden><Star size={12} fill="currentColor" strokeWidth={2} /></i>
-              </Link>
-              <button className="mx-st-un" onClick={() => unstar(m)}>Unstar</button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export default function InboxPage() {
   const router = useRouter();
@@ -280,7 +247,7 @@ export default function InboxPage() {
     });
   }, [chats, inbox, archived, filter, q, view]);
 
-  const tab: Tab | null = view === "sent" ? "knocks" : view === "archived" || view === "starred" ? null : (view as Tab);
+  const tab: Tab | null = view === "sent" ? "knocks" : view === "archived" ? null : (view as Tab);
   const counts: Record<Tab, number> = { chats: unreadChats, updates: liveCount, knocks: reqs?.length || 0, calls: missed };
 
   const right = searching ? null : (
@@ -294,7 +261,6 @@ export default function InboxPage() {
             <div className="mx-menu right" role="menu" onClick={() => setMenu(false)}>
               {view === "calls" ? <button role="menuitem" onClick={async () => { if (window.confirm("Clear your call log? It's only cleared for you.")) { await chatsApi.clearCalls().catch(() => {}); setCallsKey((k) => k + 1); } }}>Clear call log</button> : null}
               <button role="menuitem" onClick={() => setStarting(true)}>Go live</button>
-              <button role="menuitem" onClick={() => setView("starred")}>Starred messages</button>
               <button role="menuitem" onClick={() => setView("archived")}>Archived{archived.length ? ` (${archived.length})` : ""}</button>
               <button role="menuitem" onClick={() => setView("updates")}>My Room</button>
               <button role="menuitem" onClick={() => setSettings(true)}>Room settings</button>
@@ -376,7 +342,6 @@ export default function InboxPage() {
         )}
         {error ? <div className="err pad">{error}</div> : null}
         {view === "chats" || view === "archived" ? chatsList : null}
-        {view === "starred" ? <Starred back={() => setView("chats")} /> : null}
         {view === "updates" ? <UpdatesPanel onGoLive={() => setStarting(true)} onLive={setLiveCount} /> : null}
         {view === "knocks" || view === "sent" ? <Knocks view={view} setView={setView} reqs={reqs} sent={sent} reload={load} /> : null}
         {view === "calls" ? <CallsPanel onStartSession={() => setStarting(true)} refreshKey={callsKey} /> : null}

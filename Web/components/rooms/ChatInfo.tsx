@@ -1,13 +1,15 @@
 "use client";
 /** Contact info for a Room chat, over the chat (click the chat header): who they are to you,
- * call buttons, media / voice / links, starred, mute, pin, archive, and the safety actions. */
+ * call buttons, media / voice / links, their Room's welcome media, mute, pin, archive, and the
+ * safety actions. */
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { chatsApi, chatTime, mutedLabel, MUTE_OPTIONS, type Prefs, type ThreadItem } from "@/lib/chats";
+import type { GalleryItem } from "@/lib/chatTheme";
 import { intentLabel } from "@/lib/linkup";
 import { Ava, Icon } from "./Messenger";
-import { Star, X } from "lucide-react";
+import { X } from "lucide-react";
 
 export type InfoConn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; other_avatar_url?: string | null;
@@ -16,23 +18,21 @@ export type InfoConn = {
 };
 type Kind = "media" | "voice" | "links";
 
-export default function ChatInfo({ id, conn, avatar, onClose, onPrefs, onCall, onClear, onBlock, onReport, onRemove }: {
-  id: string; conn: InfoConn; avatar?: string | null; onClose: () => void; onPrefs: (p: Prefs) => void;
+export default function ChatInfo({ id, conn, avatar, gallery, onClose, onPrefs, onCall, onClear, onBlock, onReport, onRemove }: {
+  id: string; conn: InfoConn; avatar?: string | null; gallery?: GalleryItem[]; onClose: () => void; onPrefs: (p: Prefs) => void;
   onCall: (video: boolean) => void; onClear: () => void; onBlock: () => void; onReport: () => void; onRemove?: () => void;
 }) {
   const [kind, setKind] = useState<Kind>("media");
   const [items, setItems] = useState<Record<string, ThreadItem[]>>({});
   const [counts, setCounts] = useState<{ media: number; voice: number; links: number } | null>(null);
-  const [starred, setStarred] = useState<ThreadItem[] | null>(null);
   const [muteOpen, setMuteOpen] = useState(false);
-  const [open, setOpen] = useState<ThreadItem | null>(null);
+  const [open, setOpen] = useState<{ media_url: string | null; media_type: string | null } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (items[kind]) return;
     chatsApi.media(id, kind).then((r) => { setItems((x) => ({ ...x, [kind]: r.items })); setCounts(r.counts); }).catch(() => setItems((x) => ({ ...x, [kind]: [] })));
   }, [id, kind, items]);
-  useEffect(() => { chatsApi.starred(id).then((r) => setStarred(r.messages)).catch(() => setStarred([])); }, [id]);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", esc);
@@ -106,12 +106,19 @@ export default function ChatInfo({ id, conn, avatar, onClose, onPrefs, onCall, o
           )}
         </div>
 
-        <div className="ci-card">
-          <b className="ci-h">Starred messages{starred?.length ? ` · ${starred.length}` : ""}</b>
-          {!starred ? null : starred.length === 0 ? <p className="ci-m">Star a message from its actions to keep it here.</p> : (
-            <ul className="ci-rows">{starred.slice(0, 5).map((m) => <li key={m.id}><small>{m.is_own ? "You" : name} · {chatTime(m.created_at)}</small><span><Star className="inl-ic star" size={12} fill="currentColor" strokeWidth={2} aria-hidden /> {m.content || m.preview}</span></li>)}</ul>
-          )}
-        </div>
+        {gallery?.length ? (
+          <div className="ci-card">
+            <b className="ci-h">Their welcome media</b>
+            <div className="ci-grid">
+              {gallery.slice(0, 3).map((g, i) => (
+                <button key={i} onClick={() => setOpen(g)} aria-label={g.media_type === "video" ? "Open video" : "Open photo"}>
+                  {g.media_type === "video" ? <video src={g.media_url} muted preload="metadata" playsInline /> : <Image src={g.media_url} alt="" width={140} height={140} />}
+                  {g.media_type === "video" ? <i>▶</i> : null}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="ci-group">
           <div className="ci-row">

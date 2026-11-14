@@ -13,3 +13,12 @@
 .msg-reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .msg-reactions button { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.25); color: #fff; border: 1px solid transparent; }
 .msg-reactions button.mine { border-color: var(--rose); }
+
+/* top of the thread: the confession, who let who in, the knock; scrolls away */
+.chat-inside { align-self: stretch; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; padding: 14px; border-radius: 16px; border: 1px solid rgba(251, 191, 36, 0.28); background: linear-gradient(135deg, rgba(255, 99, 74, 0.16), rgba(251, 191, 36, 0.06)); font-size: 13.5px; }
+.chat-inside .ci-k { color: var(--gold); margin: 0; letter-spacing: 1.6px; }
+.chat-inside .ci-q { font-size: 15px; }
+.chat-inside p { margin: 0; color: var(--muted); }
+.chat-inside i { color: inherit; font-style: italic; }
+.chat-inside .dim { color: var(--faint); font-weight: 400; }
+.menu button.danger, .msg-actions button.danger { color: var(--danger, #e85d5d); }

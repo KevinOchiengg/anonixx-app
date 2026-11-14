@@ -33,15 +33,10 @@ export type CallLog = {
   duration_seconds: number | null; connection_id?: string | null; guest_count?: number | null; other: Person | null;
 };
 
-const m = (cid: string, mid: string, a: string) => `/drops/connections/${cid}/messages/${mid}/${a}`;
-
 export const chatsApi = {
   list: () => api<{ connections: Chat[] }>("/drops/connections"),
   prefs: (cid: string, body: { pinned?: boolean; archived?: boolean; mute?: string }) => api<Prefs>(`/drops/connections/${cid}/prefs`, { body }),
   clear: (cid: string) => api(`/drops/connections/${cid}/clear`, { method: "POST" }),
-  star: (cid: string, mid: string, starred: boolean) => api(m(cid, mid, "star"), { body: { starred } }),
-  forward: (cid: string, mid: string, to: string[]) => api<{ sent: string[]; skipped: string[] }>(m(cid, mid, "forward"), { body: { to } }),
-  starred: (cid?: string) => api<{ messages: ThreadItem[] }>(`/drops/connections/starred${cid ? `?connection_id=${cid}` : ""}`),
   media: (cid: string, kind: "media" | "voice" | "links") =>
     api<{ items: ThreadItem[]; counts: { media: number; voice: number; links: number } }>(`/drops/connections/${cid}/media?kind=${kind}`),
   callHistory: () => api<{ calls: CallLog[] }>("/drop-calls/history"),
@@ -49,7 +44,6 @@ export const chatsApi = {
 };
 
 export const MUTE_OPTIONS: [string, string][] = [["8h", "8 hours"], ["1w", "1 week"], ["always", "Always"]];
-export const MAX_FORWARD = 5;
 
 function toDate(iso?: string | null) {
   if (!iso) return null;
