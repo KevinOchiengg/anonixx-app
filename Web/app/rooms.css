@@ -12,33 +12,9 @@
 .rx-door i { position: absolute; right: 9px; top: 44px; width: 6px; height: 6px; border-radius: 50%; background: var(--rose); }
 
 /* Live */
-.lv-label { margin: 10px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 
 /* My Room */
 .mr { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 90px; }
-.mr-hero {
-  position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px;
-  border-radius: 22px; border: 1px solid var(--rt-border); background: var(--rt-bg); color: var(--rt-text); text-align: center;
-}
-.mr-hero::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(120% 60% at 50% -10%, var(--rt-glow), transparent 65%); }
-.mr-hero > * { position: relative; }
-.mr-kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--rt-muted); }
-.mr-ava { width: 92px; height: 92px; border-radius: 50%; padding: 3px; background: linear-gradient(135deg, var(--rt-accent), var(--rt-accent2)); }
-.mr-ava span { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; border: 3px solid var(--rt-bg); background: var(--rt-surface); color: var(--rt-accent); font-size: 32px; font-weight: 800; }
-.mr-ava img { width: 100%; height: 100%; object-fit: cover; }
-.mr-name { font-size: 23px; }
-.mr-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-self: stretch; margin-top: 8px; }
-.mr-btn { height: 44px; border-radius: 12px; border: 1px solid var(--rt-border-strong); display: grid; place-items: center; color: var(--rt-text); font-size: 14px; font-weight: 700; text-decoration: none; }
-.mr-btn.accent { background: var(--rt-accent); border-color: var(--rt-accent); color: var(--rt-bg); }
-.mr-steps { border-radius: 16px; background: var(--surface); border: 1px solid var(--line); padding: 0 14px; }
-.mr-step { display: flex; gap: 12px; align-items: center; padding: 13px 0; color: var(--fg); text-decoration: none; }
-.mr-step + .mr-step { border-top: 1px solid var(--line); }
-.mr-step i { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.14); display: grid; place-items: center; font-style: normal; font-size: 13px; }
-.mr-step i.on { background: #4CAF50; border-color: #4CAF50; color: #fff; }
-.mr-step span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.mr-step b { font-size: 15px; }
-.mr-step small { font-size: 12.5px; color: var(--muted); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.mr-cta { text-decoration: none; font-size: 16px; }
 
 /* Room settings menu */
 .rsm { display: flex; flex-direction: column; }
@@ -50,8 +26,6 @@
 .rsm-row i { font-style: normal; color: var(--faint); font-size: 20px; }
 
 /* Your Room: extras */
-.rs-next { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px; margin-top: 18px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--rose) 30%, transparent); background: var(--rose-dim); color: var(--fg); cursor: pointer; }
-.rs-next small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
 .rs-person.past { opacity: 0.85; }
 .rs-person-acts button.later { color: var(--faint); }
 .rs-hours { display: flex; gap: 12px; }
@@ -112,5 +86,3 @@
 @media (prefers-reduced-motion: reduce) { .ic-ava::after { animation: none; } }
 
 /* Room page: welcome card and the entrance's audio + media */
-.rm-welcome { border-color: var(--rt-border-strong); background: var(--rt-tint); }
-.rm-welcome p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--rt-text); }

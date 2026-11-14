@@ -25,7 +25,7 @@ import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/pa
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel } from '../../config/linkup';
 import {
-  DEFAULT_ROOM_THEME, MAX_WELCOME, roomThemeById,
+  DEFAULT_ROOM_THEME, roomThemeById,
 } from '../../config/roomThemes';
 import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
 import KnockClues from '../../components/rooms/KnockClues';
@@ -45,13 +45,8 @@ const LISTINGS = [
 ];
 
 const TABS = [
-  ['room', 'My Room'], ['welcome', 'Welcome'], ['knocks', 'Knocks'], ['inside', 'Inside'], ['calls', 'Calls'],
+  ['room', 'My Room'], ['knocks', 'Knocks'], ['inside', 'Inside'], ['calls', 'Calls'],
   ['appearance', 'Appearance'], ['privacy', 'Privacy'], ['notifications', 'Notifications'],
-];
-// Who hears/reads the welcome (Backend chat_profile.py WELCOME_VISIBILITY).
-const WELCOME_VISIBILITY = [
-  { id: 'inside', label: 'Only people I let in', hint: 'Your note waits behind the door. The default.' },
-  { id: 'window', label: 'Everyone peeking', hint: 'Visitors read this before they knock.' },
 ];
 const NOTIFY_ROWS = [
   ['knocks', 'New knocks', 'Someone knocks on your Room'],
@@ -74,7 +69,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const me = useSelector((state) => state.auth.user?.id);
-  const [tab, setTab] = useState(route?.params?.tab || 'room');
+  const [tab, setTab] = useState(TABS.some(([k]) => k === route?.params?.tab) ? route.params.tab : 'room');
 
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -85,7 +80,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [profilePictureUrl, setProfilePictureUrl] = useState(null);
   const [anonymousName, setAnonymousName]     = useState('');
   const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
-  const [welcomeMessage, setWelcomeMessage]   = useState('');
   const [knocksOpen, setKnocksOpen]           = useState(true);
   // A break's length, picked when knocks go off this visit (null = keep what the server has).
   const [breakHours, setBreakHours]           = useState(null);
@@ -95,7 +89,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [knocks, setKnocks]                   = useState(null);
   const [inside, setInside]                   = useState(null);
   const [personBusy, setPersonBusy]           = useState(null);
-  const [welcomeVisibility, setWelcomeVisibility] = useState('inside');
   const [allowAudioCalls, setAllowAudioCalls] = useState(true);
   const [allowVideoCalls, setAllowVideoCalls] = useState(true);
   const [notify, setNotify]                   = useState(null);
@@ -123,13 +116,11 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setProfilePictureUrl(data.profile_picture_url || null);
             setAnonymousName(data.anonymous_name || '');
             setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
-            setWelcomeMessage(data.welcome_message || '');
             setKnocksOpen(data.knocks_open !== false);
             setBreakUntil(data.break_until || null);
             setBreakHours(null);
             setDoorRule(data.door_rule || 'line_peek');
             setListing(data.listing || 'limited');
-            setWelcomeVisibility(data.welcome_visibility || 'inside');
             setAllowAudioCalls(data.allow_audio_calls !== false);
             setAllowVideoCalls(data.allow_video_calls !== false);
             setNotify(data.notify || { knocks: true, messages: true, calls: true, sessions: true, previews: true, quiet_start: null, quiet_end: null });
@@ -180,12 +171,10 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           background_pattern: backgroundPattern,
           font_style: fontStyle,
           profile_picture_url: profilePictureUrl,
-          welcome_message: welcomeMessage,
           knocks_open: knocksOpen,
           ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}),
           door_rule: doorRule,
           listing,
-          welcome_visibility: welcomeVisibility,
           allow_audio_calls: allowAudioCalls,
           allow_video_calls: allowVideoCalls,
           ...(notify ? {
@@ -208,8 +197,8 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     } finally {
       setSaving(false);
     }
-  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeMessage,
-      knocksOpen, breakHours, doorRule, listing, welcomeVisibility,
+  }, [backgroundPattern, fontStyle, profilePictureUrl,
+      knocksOpen, breakHours, doorRule, listing,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
   // Applies straight away (the picker has its own Apply / Cancel).
@@ -373,10 +362,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         </TouchableOpacity>
         <Text style={styles.avatarHint}>Tap to change</Text>
 
-        <TouchableOpacity style={styles.nextCard} onPress={() => setTab('welcome')} activeOpacity={0.85}>
-          <Text style={styles.optionTitle}>Your welcome</Text>
-          <Text style={styles.optionHint}>What people get once you let them in.</Text>
-        </TouchableOpacity>
           </>
         )}
 
@@ -423,41 +408,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           </>
         )}
 
-        {tab === 'welcome' && (
-          <>
-        <Text style={styles.sectionLabel}>Welcome note</Text>
-        <TextInput
-          style={[styles.input, { minHeight: rs(84) }]}
-          value={welcomeMessage}
-          onChangeText={(v) => setWelcomeMessage(v.slice(0, MAX_WELCOME))}
-          placeholder="What they read the moment you let them in…"
-          placeholderTextColor={T.textMute}
-          multiline
-        />
-        <Text style={styles.sectionHint}>
-          {welcomeMessage.length}/{MAX_WELCOME} · {welcomeVisibility === 'window' ? 'everyone peeking sees this.' : 'only people you let in see this.'}
-        </Text>
-
-        <Text style={styles.sectionLabel}>Who gets your welcome</Text>
-        {WELCOME_VISIBILITY.map((v) => (
-          <TouchableOpacity
-            key={v.id}
-            style={[styles.option, welcomeVisibility === v.id && styles.optionOn]}
-            onPress={() => setWelcomeVisibility(v.id)}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: welcomeVisibility === v.id }}
-          >
-            <View style={[styles.radio, welcomeVisibility === v.id && styles.radioOn]} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.optionTitle}>{v.label}</Text>
-              <Text style={styles.optionHint}>{v.hint}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-
-
-          </>
-        )}
 
         {tab === 'calls' && (
           <>
@@ -478,12 +428,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           </View>
           <Switch value={allowVideoCalls} onValueChange={setAllowVideoCalls} trackColor={{ false: T.surfaceAlt, true: T.gold }} thumbColor="#fff" accessibilityLabel="Allow video calls" />
         </View>
-
-          </>
-        )}
-
-        {tab === 'welcome' && (
-          <>
 
           </>
         )}
@@ -702,7 +646,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
         )}
       </ScrollView>
 
-      {['room', 'welcome', 'calls', 'appearance', 'privacy', 'notifications'].includes(tab) && (
+      {['room', 'calls', 'appearance', 'privacy', 'notifications'].includes(tab) && (
       <View style={[styles.footer, { paddingBottom: insets.bottom + rp(12) }]}>
         <TouchableOpacity
           style={styles.saveBtn}

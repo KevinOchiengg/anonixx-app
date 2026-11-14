@@ -18,7 +18,7 @@ import {
 } from "@/lib/chatTheme";
 import { intentLabel } from "@/lib/linkup";
 import {
-  DEFAULT_ROOM_THEME, MAX_WELCOME, roomThemeById,
+  DEFAULT_ROOM_THEME, roomThemeById,
 } from "@/lib/roomThemes";
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
@@ -34,12 +34,10 @@ type Profile = {
   max_guests?: number;
   purchased_slots?: number;
   room_theme?: string;
-  welcome_message?: string | null;
   knocks_open?: boolean;
   break_until?: string | null;
   door_rule?: string;
   listing?: string;
-  welcome_visibility?: string;
   allow_audio_calls?: boolean;
   allow_video_calls?: boolean;
   notify?: Notify;
@@ -54,10 +52,6 @@ const NOTIFY_ROWS: [keyof Notify, string, string][] = [
   ["messages", "Messages", "New messages in your conversations"],
   ["calls", "Calls", "Incoming and missed calls"],
   ["previews", "Show message text", "Off: notifications say \"New message\" without the words"],
-];
-const WELCOME_VISIBILITY = [
-  { id: "inside", label: "Only people I let in", hint: "Your note waits behind the door. The default." },
-  { id: "window", label: "Everyone peeking", hint: "Visitors read this before they knock." },
 ];
 type Visitor = { user_id: string; anonymous_name: string; avatar_url: string | null; status: string; let_in_at: string };
 const hourLabel = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
@@ -84,9 +78,9 @@ type Conn = {
   is_sender: boolean; last_message: string | null; last_message_at: string; removable_at?: string | null;
 };
 
-type Tab = "room" | "welcome" | "knocks" | "inside" | "calls" | "appearance" | "privacy" | "notifications";
+type Tab = "room" | "knocks" | "inside" | "calls" | "appearance" | "privacy" | "notifications";
 const TABS: [Tab, string][] = [
-  ["room", "My Room"], ["welcome", "Welcome"], ["knocks", "Knocks"], ["inside", "Inside"], ["calls", "Calls"],
+  ["room", "My Room"], ["knocks", "Knocks"], ["inside", "Inside"], ["calls", "Calls"],
   ["appearance", "Appearance"], ["privacy", "Privacy"], ["notifications", "Notifications"],
 ];
 
@@ -118,7 +112,6 @@ function Inner() {
   const [pic, setPic] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [theme, setTheme] = useState(DEFAULT_ROOM_THEME);
-  const [welcome, setWelcome] = useState("");
   const [knocksOpen, setKnocksOpen] = useState(true);
   // A break's length, picked when knocks go off this visit (null = keep what the server has).
   const [breakHours, setBreakHours] = useState<number | null>(null);
@@ -129,7 +122,6 @@ function Inner() {
   const [inside, setInside] = useState<Conn[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [reporting, setReporting] = useState<Conn | null>(null);
-  const [welcomeVis, setWelcomeVis] = useState("inside");
   const [allowAudio, setAllowAudio] = useState(true);
   const [allowVideo, setAllowVideo] = useState(true);
   const [notify, setNotify] = useState<Notify>(NOTIFY_DEFAULTS);
@@ -142,13 +134,11 @@ function Inner() {
     setPic(d.profile_picture_url || null);
     setName(d.anonymous_name || "");
     setTheme(d.room_theme || DEFAULT_ROOM_THEME);
-    setWelcome(d.welcome_message || "");
     setKnocksOpen(d.knocks_open !== false);
     setBreakUntil(d.break_until || null);
     setBreakHours(null);
     setDoorRule(d.door_rule || "line_peek");
     setListing(d.listing || "limited");
-    setWelcomeVis(d.welcome_visibility || "inside");
     setAllowAudio(d.allow_audio_calls !== false);
     setAllowVideo(d.allow_video_calls !== false);
     setNotify({ ...NOTIFY_DEFAULTS, ...(d.notify || {}) });
@@ -214,8 +204,8 @@ function Inner() {
         method: "PUT",
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic,
-          welcome_message: welcome, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
-          welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
+          knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
+          allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
             knocks: notify.knocks, messages: notify.messages, calls: notify.calls, sessions: notify.sessions, previews: notify.previews,
             ...(notify.quiet_start !== null && notify.quiet_end !== null ? { quiet_start: notify.quiet_start, quiet_end: notify.quiet_end } : { quiet_start: -1, quiet_end: -1 }),
@@ -348,36 +338,10 @@ function Inner() {
 
 
 
-            <button type="button" className="rs-next" onClick={() => go("welcome")}>
-              <b>Your welcome</b>
-              <small>What people get once you let them in.</small>
-            </button>
             {saveBar}
           </>
         ) : null}
 
-        {tab === "welcome" ? (
-          <>
-            <div className="rs-field">
-              <label htmlFor="rs-welcome">Welcome note</label>
-              <textarea id="rs-welcome" rows={3} value={welcome} maxLength={MAX_WELCOME} onChange={(e) => setWelcome(e.target.value)} placeholder="What they read the moment you let them in…" />
-              <small>{welcome.length}/{MAX_WELCOME} · {welcomeVis === "window" ? "everyone peeking sees this." : "only people you let in see this."}</small>
-            </div>
-
-            <p className="rs-h">Who gets your welcome</p>
-            <div className="rs-opts" role="radiogroup" aria-label="Who gets your welcome">
-              {WELCOME_VISIBILITY.map((v) => (
-                <button key={v.id} type="button" role="radio" aria-checked={welcomeVis === v.id} className={`rs-opt${welcomeVis === v.id ? " on" : ""}`} onClick={() => setWelcomeVis(v.id)}>
-                  <i />
-                  <span><b>{v.label}</b><small>{v.hint}</small></span>
-                </button>
-              ))}
-            </div>
-
-
-            {saveBar}
-          </>
-        ) : null}
 
         {tab === "calls" ? (
           <>
@@ -533,16 +497,6 @@ function Inner() {
 
         {tab === "privacy" ? (
           <>
-
-            <p className="rs-h">Who gets your welcome</p>
-            <div className="rs-opts" role="radiogroup" aria-label="Who gets your welcome">
-              {WELCOME_VISIBILITY.map((v) => (
-                <button key={v.id} type="button" role="radio" aria-checked={welcomeVis === v.id} className={`rs-opt${welcomeVis === v.id ? " on" : ""}`} onClick={() => setWelcomeVis(v.id)}>
-                  <i />
-                  <span><b>{v.label}</b><small>{v.hint}</small></span>
-                </button>
-              ))}
-            </div>
 
             <p className="rs-h">Your door</p>
             <div className="rs-toggle">

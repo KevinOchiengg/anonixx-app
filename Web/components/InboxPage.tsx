@@ -1,9 +1,9 @@
 "use client";
-/** Rooms, built like a messenger home: Chats (everyone you're connected with), My Room (the
- * page visitors see), Knocks (who's at your door; your sent knocks too) and Calls (the log).
+/** Rooms, built like a messenger home: Chats (everyone you're connected with), Knocks (who's at
+ * your door; your sent knocks too) and Calls (the log).
  * Each chat's ⌄ menu (or right-click) pins, mutes or archives it. The ⋮ menu has Archived
  * and every Room setting.
- * ?tab=chats|updates|knocks|sent|calls (old connections / requests / live / myroom still work). */
+ * ?tab=chats|knocks|sent|calls (old connections / requests still work; updates / live / myroom open Chats). */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -16,7 +16,6 @@ import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import CallRoom, { type CallInfo } from "./CallRoom";
 import RoomSettingsMenu from "./rooms/RoomSettingsMenu";
-import UpdatesPanel from "./rooms/UpdatesPanel";
 import { CallsPanel, ChatRow, Icon, PickChats } from "./rooms/Messenger";
 
 type Req = KnockClue & {
@@ -34,13 +33,13 @@ type Req = KnockClue & {
   created_at?: string;
 };
 type Sent = { id: string; target_type: string; status: string; connection_id: string | null; target_id: string };
-type View = "chats" | "updates" | "knocks" | "sent" | "calls" | "archived";
-type Tab = "chats" | "updates" | "knocks" | "calls";
-const TABS: [Tab, string][] = [["chats", "Chats"], ["updates", "My Room"], ["knocks", "Knocks"], ["calls", "Calls"]];
-const FILTERS = [["all", "All"], ["unread", "Unread"], ["guests", "Guests"], ["rooms", "Their Rooms"]] as const;
+type View = "chats" | "knocks" | "sent" | "calls" | "archived";
+type Tab = "chats" | "knocks" | "calls";
+const TABS: [Tab, string][] = [["chats", "Chats"], ["knocks", "Knocks"], ["calls", "Calls"]];
+const FILTERS = [["all", "All"], ["unread", "Unread"]] as const;
 type Filter = (typeof FILTERS)[number][0];
 const FROM_QS: Record<string, View> = {
-  chats: "chats", connections: "chats", updates: "updates", live: "updates", myroom: "updates",
+  chats: "chats", connections: "chats", updates: "chats", live: "chats", myroom: "chats",
   knocks: "knocks", requests: "knocks", sent: "sent", calls: "calls", archived: "archived",
 };
 
@@ -230,15 +229,13 @@ export default function InboxPage() {
     const base = view === "archived" ? archived : q ? chats || [] : inbox;
     return base.filter((c) => {
       if (filter === "unread" && !(c.unread_count > 0)) return false;
-      if (filter === "guests" && !c.is_sender) return false;
-      if (filter === "rooms" && c.is_sender) return false;
       if (!q) return true;
       return c.other_anonymous_name?.toLowerCase().includes(q) || c.last_message?.toLowerCase().includes(q) || c.confession?.toLowerCase().includes(q);
     });
   }, [chats, inbox, archived, filter, q, view]);
 
   const tab: Tab | null = view === "sent" ? "knocks" : view === "archived" ? null : (view as Tab);
-  const counts: Record<Tab, number> = { chats: unreadChats, updates: 0, knocks: reqs?.length || 0, calls: missed };
+  const counts: Record<Tab, number> = { chats: unreadChats, knocks: reqs?.length || 0, calls: missed };
 
   const right = searching ? null : (
     <>
@@ -285,7 +282,7 @@ export default function InboxPage() {
       {chats === null ? <p className="muted center">Loading…</p> : shown.length === 0 ? (
         q ? <div className="u-empty">No chats match “{query.trim()}”.</div>
           : view === "archived" ? <div className="rx-empty"><b>No archived chats</b><p>Archive a chat to tuck it away here.</p></div>
-          : filter !== "all" ? <div className="u-empty">{filter === "unread" ? "You’re all caught up." : filter === "guests" ? "Nobody you’ve let in yet." : "You’re not inside anyone’s Room yet."}</div>
+          : filter !== "all" ? <div className="u-empty">You’re all caught up.</div>
           : (
             <div className="rx-empty">
               <b>No chats yet</b>
@@ -329,7 +326,6 @@ export default function InboxPage() {
         )}
         {error ? <div className="err pad">{error}</div> : null}
         {view === "chats" || view === "archived" ? chatsList : null}
-        {view === "updates" ? <UpdatesPanel /> : null}
         {view === "knocks" || view === "sent" ? <Knocks view={view} setView={setView} reqs={reqs} sent={sent} reload={load} /> : null}
         {view === "calls" ? <CallsPanel refreshKey={callsKey} /> : null}
         {fab && !searching ? <button className="mx-fab" onClick={fab.on} aria-label={fab.label} title={fab.label}>{fab.icon}</button> : null}

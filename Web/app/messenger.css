@@ -83,7 +83,6 @@ button.mx-row, a.mx-row, div.mx-row[role="button"] { cursor: pointer; }
 .mx-dir { font-style: normal; font-weight: 800; color: var(--faint); }
 .mx-dir.miss { color: #ef4444; }
 .mx-dir.ok { color: var(--ok, #34d399); }
-.mx-updates { padding-bottom: 8px; }
 .mx-headbtn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; color: inherit; }
 .u-head-t small.dim { color: var(--faint); }
 .mx-muted { font-style: normal; font-size: 12px; }

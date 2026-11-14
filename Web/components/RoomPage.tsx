@@ -1,6 +1,6 @@
 "use client";
 /** Someone's Room, in their theme. After a Let In, the first visit plays the entrance: their
- * welcome note and a way to start talking. */
+ * way to start talking. */
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,7 +22,7 @@ type Preview = {
   user_id: string;
   room: {
     background_pattern: string; font_style: string; profile_picture_url: string | null; anonymous_name: string;
-    room_theme: string; knocks_open: boolean; welcome_message: string | null;
+    room_theme: string; knocks_open: boolean;
   };
   inside: boolean;
   post: { id: string; kind: "hookup" | "confession" | null; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
@@ -283,13 +283,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
             <h1 className="rm-name" style={font}>{name}</h1>
           </section>
 
-          {room.welcome_message ? (
-            <section className="rm-card rm-welcome">
-              <div className="rm-label"><span>{own ? "Your welcome" : cid ? `${name}'s welcome` : "A word at the door"}</span></div>
-              <p style={font}>&ldquo;{room.welcome_message}&rdquo;</p>
-            </section>
-          ) : null}
-
           {post ? (
             <section className={`rm-card rm-post${live ? "" : " ended"}`}>
               <div className="rm-label">
@@ -341,7 +334,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
               <span className="rm-enter-door" aria-hidden />
               <small>You&apos;re inside.</small>
               <h2 style={font}>Welcome to {name}&apos;s Room.</h2>
-              {room.welcome_message ? <blockquote style={font}>&ldquo;{room.welcome_message}&rdquo;</blockquote> : null}
               <button className="room-cta rm-accent wide" onClick={() => openChat(cid)}>Start the conversation</button>
               <div className="rm-starters">
                 <span>Need an opener? Tap one.</span>

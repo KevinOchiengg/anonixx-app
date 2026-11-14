@@ -203,12 +203,8 @@
 .rs-hero-t b { font-family: var(--font-serif), Georgia, serif; font-size: 20px; font-weight: 400; }
 .rs-hero-t span { font-size: 13px; color: var(--muted); line-height: 1.4; }
 .rs-hero-t a { align-self: flex-start; }
-.rs-field { display: flex; flex-direction: column; gap: 6px; }
-.rs-field label, .rs-h { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.rs-h { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .rs-h { margin: 6px 0 -4px; }
-.rs-field textarea, .rs-field input { width: 100%; resize: none; padding: 12px 14px; border-radius: 14px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--fg); font: inherit; font-size: 15px; line-height: 1.4; }
-.rs-field textarea:focus, .rs-field input:focus { outline: none; border-color: var(--gold); }
-.rs-field small { font-size: 11px; color: var(--faint, var(--muted)); }
 .rs-opts { display: grid; gap: 8px; }
 .rs-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
 .rs-opt.on { border-color: var(--gold); background: rgba(251, 191, 36, 0.06); }

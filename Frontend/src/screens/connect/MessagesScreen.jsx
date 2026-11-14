@@ -1,7 +1,7 @@
-/** The Rooms tab, built like a messenger home. Four swipeable tabs: Chats (everyone you're
- * connected with), My Room (the page visitors see), Knocks (who's at your door) and Calls
- * (call log). Long-press chats to pin, mute or archive them. Accepts { section } to open a tab
- * (knocks / connections|chats / live|myroom|updates / calls). */
+/** The Rooms tab, built like a messenger home. Three swipeable tabs: Chats (everyone you're
+ * connected with), Knocks (who's at your door) and Calls (call log). Long-press chats to pin,
+ * mute or archive them. Accepts { section } to open a tab (knocks / connections|chats / calls;
+ * old live|myroom|updates links open Chats). */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Animated, BackHandler, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text,
@@ -23,16 +23,15 @@ import { useUnread } from '../../context/UnreadContext';
 import T from '../../utils/theme';
 import UnlockRequestsScreen from '../drops/UnlockRequestsScreen';
 import RoomSettingsSheet from '../../components/rooms/RoomSettingsSheet';
-import UpdatesPanel from '../../components/rooms/UpdatesPanel';
 import CallsPanel from '../../components/rooms/CallsPanel';
 import PickChatSheet from '../../components/rooms/PickChatSheet';
 import { ChatRow, st as rowSt } from '../../components/rooms/ChatBits';
 import { chatsApi, MUTE_OPTIONS } from '../../services/chats';
 import { callsApi, callParams } from '../../services/calls';
 
-const TABS = [['chats', 'Chats'], ['updates', 'My Room'], ['knocks', 'Knocks'], ['calls', 'Calls']];
-const SECTION_TO_TAB = { knocks: 'knocks', connections: 'chats', chats: 'chats', live: 'updates', myroom: 'updates', updates: 'updates', calls: 'calls' };
-const FILTERS = [['all', 'All'], ['unread', 'Unread'], ['guests', 'Guests'], ['rooms', 'Their Rooms']];
+const TABS = [['chats', 'Chats'], ['knocks', 'Knocks'], ['calls', 'Calls']];
+const SECTION_TO_TAB = { knocks: 'knocks', connections: 'chats', chats: 'chats', live: 'chats', myroom: 'chats', updates: 'chats', calls: 'calls' };
+const FILTERS = [['all', 'All'], ['unread', 'Unread']];
 
 export default function MessagesScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -146,8 +145,6 @@ export default function MessagesScreen({ navigation, route }) {
     const base = q ? chats || [] : inbox;
     return base.filter((c) => {
       if (filter === 'unread' && !(c.unread_count > 0)) return false;
-      if (filter === 'guests' && !c.is_sender) return false;
-      if (filter === 'rooms' && c.is_sender) return false;
       if (!q) return true;
       return c.other_anonymous_name?.toLowerCase().includes(q)
         || c.last_message?.toLowerCase().includes(q)
@@ -304,7 +301,7 @@ export default function MessagesScreen({ navigation, route }) {
   ) : query ? (
     <Text style={s.emptyText}>No chats match “{query.trim()}”.</Text>
   ) : filter !== 'all' ? (
-    <Text style={s.emptyText}>{filter === 'unread' ? 'You’re all caught up.' : filter === 'guests' ? 'Nobody you’ve let in yet.' : 'You’re not inside anyone’s Room yet.'}</Text>
+    <Text style={s.emptyText}>You’re all caught up.</Text>
   ) : (
     <View style={s.empty}>
       <View style={s.emptyIcon}><MessageSquarePlus size={rs(28)} color={T.primary} /></View>
@@ -344,7 +341,6 @@ export default function MessagesScreen({ navigation, route }) {
         ) : null}
       />
     ),
-    updates: <UpdatesPanel navigation={navigation} />,
     knocks: <UnlockRequestsScreen embedded navigation={navigation} />,
     calls: <CallsPanel ref={callsRef} navigation={navigation} active={tab === 'calls'} onMissedCount={setMissed} />,
   };

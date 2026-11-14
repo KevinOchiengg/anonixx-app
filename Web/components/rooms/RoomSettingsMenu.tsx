@@ -7,7 +7,6 @@ import { ChevronRight } from "lucide-react";
 
 export const ROOM_SETTINGS: { tab: string; title: string; hint: string }[] = [
   { tab: "room", title: "Personalize Room", hint: "Picture, theme, fonts" },
-  { tab: "welcome", title: "Welcome experience", hint: "The note they read when you let them in" },
   { tab: "inside", title: "Connections and visitors", hint: "Who's inside, remove, block, report, history" },
   { tab: "calls", title: "Calls and group sessions", hint: "Who can call you, group room size" },
   { tab: "knocks", title: "Knocks and coins", hint: "Waiting knocks, what a Let In costs them" },

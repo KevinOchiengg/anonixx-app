@@ -1,8 +1,8 @@
 /** Someone's Room, in their theme. Anyone 18+ can peek: name, picture, the post
  * they came from and the photos shown to visitors (others appear as a count). The bottom bar
  * follows GET /chat-profile/{userId}/preview: Knock, waiting, their knock to you, closed,
- * Edit Room, or inside. After a Let In, the first visit plays the entrance: the owner's
- * welcome note and a way to start talking.
+ * Edit Room, or inside. After a Let In, the first visit plays the entrance and a way to
+ * start talking.
  * Params: { userId, postId? } */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -57,7 +57,7 @@ function FullView({ item, onClose }) {
 }
 
 
-function Entrance({ th, name, font, welcome, onStart, onClose }) {
+function Entrance({ th, name, font, onStart, onClose }) {
   const door = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -77,11 +77,6 @@ function Entrance({ th, name, font, welcome, onStart, onClose }) {
           <Animated.View style={{ width: '100%', alignItems: 'center', gap: rp(10), opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>
             <Text style={[s.enterKicker, { color: th.accent }]}>YOU'RE INSIDE.</Text>
             <Text style={[s.enterTitle, { color: th.text, fontFamily: font }]}>Welcome to {name}'s Room.</Text>
-            {welcome ? (
-              <View style={[s.quote, { borderColor: th.border, backgroundColor: th.tint }]}>
-                <Text style={[s.quoteText, { color: th.text, fontFamily: font }]}>“{welcome}”</Text>
-              </View>
-            ) : null}
             <TouchableOpacity style={[s.accentBtn, { backgroundColor: th.accent, alignSelf: 'stretch', marginTop: rp(6) }]} onPress={() => onStart(null)}>
               <Text style={[s.accentText, { color: th.bg }]}>Start the conversation</Text>
             </TouchableOpacity>
@@ -360,13 +355,6 @@ export default function RoomScreen({ route, navigation }) {
             <Text style={[s.name, { color: th.text, fontFamily: font }]} numberOfLines={2}>{name}</Text>
           </Animated.View>
 
-          {room.welcome_message ? (
-            <Animated.View style={[s.card, { backgroundColor: th.tint, borderColor: th.borderStrong }, riseStyle]}>
-              <Text style={[s.label, { color: th.muted }]}>{own ? 'YOUR WELCOME' : cid ? `${name.toUpperCase()}'S WELCOME` : 'A WORD AT THE DOOR'}</Text>
-              <Text style={[s.pitchText, { color: th.text, fontFamily: font }]}>“{room.welcome_message}”</Text>
-            </Animated.View>
-          ) : null}
-
           {post ? (
             <Animated.View style={[s.card, card, !live && { opacity: 0.7 }, riseStyle]}>
               <View style={s.labelRow}>
@@ -422,7 +410,7 @@ export default function RoomScreen({ route, navigation }) {
       </SafeAreaView>
       {entrance && cid ? (
         <Entrance
-          th={th} name={name} font={font} welcome={room.welcome_message}
+          th={th} name={name} font={font}
           onStart={(line) => openChat(cid, line)}
           onClose={() => setEntrance(false)}
         />
@@ -496,8 +484,6 @@ const s = StyleSheet.create({
   door: { width: rs(64), height: rs(92), borderTopLeftRadius: rs(32), borderTopRightRadius: rs(32), borderBottomLeftRadius: rs(6), borderBottomRightRadius: rs(6), borderWidth: 1, shadowOpacity: 0.8, shadowRadius: 30, shadowOffset: { width: 0, height: 0 }, marginBottom: rp(6) },
   enterKicker: { fontSize: rf(12), letterSpacing: 2, fontWeight: '700' },
   enterTitle: { fontSize: rf(25), textAlign: 'center', lineHeight: rf(31) },
-  quote: { alignSelf: 'stretch', borderWidth: 1, borderRadius: rs(14), padding: rp(14) },
-  quoteText: { fontSize: FONT.md, lineHeight: FONT.md * 1.45 },
   startersHint: { fontSize: rf(12), textAlign: 'center', marginTop: rp(6) },
   starter: { alignSelf: 'stretch', borderWidth: 1, borderRadius: rs(12), paddingHorizontal: rp(14), paddingVertical: rp(11) },
   starterText: { fontSize: FONT.sm },
