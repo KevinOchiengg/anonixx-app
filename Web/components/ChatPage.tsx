@@ -19,7 +19,7 @@ import useVoiceRecorder from "@/lib/useVoiceRecorder";
 import ChatInfo from "./rooms/ChatInfo";
 import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
-import { BellOff, EllipsisVertical, Mic, Paperclip, Phone, X } from "lucide-react";
+import { BellOff, EllipsisVertical, ImagePlus, Mic, Phone, Quote, SendHorizontal, X } from "lucide-react";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
@@ -39,8 +39,11 @@ function ConfessionCard({ conn }: { conn: Conn }) {
   if (!conn.confession) return null;
   return (
     <div className="chat-inside">
-      <small className="ci-k">THE CONFESSION</small>
-      <p className="ci-q">&ldquo;{conn.confession}&rdquo;</p>
+      <span className="ci-badge" aria-hidden><Quote size={14} strokeWidth={2.2} /></span>
+      <span>
+        <small className="ci-k">THE CONFESSION</small>
+        <p className="ci-q">{conn.confession}</p>
+      </span>
     </div>
   );
 }
@@ -65,6 +68,7 @@ function Inner({ id }: { id: string }) {
   const [presence, setPresence] = useState<boolean | null>(null);
   const [sockUp, setSockUp] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const seenIds = useRef<Set<string> | null>(null);   // here when the chat opened: these don't animate in
   const bottom = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
   const sock = useRef<Socket | null>(null);
@@ -127,6 +131,10 @@ function Inner({ id }: { id: string }) {
     return () => { so.off("user_online", on); so.off("user_offline", off); };
   }, [otherId, sockUp]);
   useEffect(() => { setPresence(null); }, [conn?.other_is_online]);
+
+  useEffect(() => {
+    if (conn && seenIds.current === null) seenIds.current = new Set(msgs.map((m) => m.id));
+  }, [conn, msgs]);
 
   useEffect(() => {
     if (msgs.length !== lastCount.current) {
@@ -278,10 +286,10 @@ function Inner({ id }: { id: string }) {
             <small className={typing || online ? "" : "dim"}>{typing ? "typing…" : online ? "online" : "click for contact info"}</small>
           </span>
         </button>
-        <button className="call-btn" onClick={() => toggleMenu("call")} disabled={callBusy || !!room} aria-label={`Call ${name}`} aria-expanded={menu === "call"}>
-          <Phone strokeWidth={2} aria-hidden />
+        <button className="chat-round" onClick={() => toggleMenu("call")} disabled={callBusy || !!room} aria-label={`Call ${name}`} aria-expanded={menu === "call"}>
+          <Phone size={18} strokeWidth={2} aria-hidden />
         </button>
-        <button className="kebab" onClick={() => toggleMenu("menu")} aria-label="More" aria-expanded={!!menu && menu !== "call"}><EllipsisVertical size={20} strokeWidth={2} aria-hidden /></button>
+        <button className="chat-round" onClick={() => toggleMenu("menu")} aria-label="More" aria-expanded={!!menu && menu !== "call"}><EllipsisVertical size={18} strokeWidth={2} aria-hidden /></button>
         {menu ? (
           <div className="menu" role="menu">
             {menu === "call" ? (
@@ -322,10 +330,12 @@ function Inner({ id }: { id: string }) {
       ) : null}
       <div className="chat-log" onClick={() => menu && setMenu(null)}>
         {conn ? <ConfessionCard conn={conn} /> : null}
-        {msgs.map((m) => (
+        {msgs.map((m, i) => (
           <ChatBubble
             key={m.id}
             m={m}
+            end={!msgs[i + 1] || !!msgs[i + 1].is_own !== !!m.is_own}
+            fresh={!!seenIds.current && !seenIds.current.has(m.id)}
             otherName={conn?.other_anonymous_name || "Them"}
             open={sel === m.id}
             onToggle={() => setSel(sel === m.id ? null : m.id)}
@@ -352,7 +362,7 @@ function Inner({ id }: { id: string }) {
       ) : null}
       {replyTo ? (
         <div className="reply-bar">
-          <span>Replying to: {replyTo.content || replyTo.media_type || "message"}</span>
+          <span><b>Replying to {replyTo.is_own ? "yourself" : name}</b><small>{replyTo.content || (replyTo.media_type === "voice" ? "Voice note" : replyTo.media_type === "image" ? "Photo" : replyTo.media_type === "video" ? "Video" : "Message")}</small></span>
           <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><X size={20} strokeWidth={2} aria-hidden /></button>
         </div>
       ) : null}
@@ -370,14 +380,16 @@ function Inner({ id }: { id: string }) {
           <button type="button" className="pill" onClick={sendVoice} disabled={busy}>{busy ? "Sending…" : "Send"}</button>
         </div>
       ) : (
-        <form className="chat-input" onSubmit={send}>
+        <form className="chat-input chat-pill" onSubmit={send}>
           <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={pickFile} />
-          <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photo or video"><Paperclip size={20} strokeWidth={2} aria-hidden /></button>
-          <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
+          <span className="chat-pill-field">
+            <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photo or video"><ImagePlus size={20} strokeWidth={2} aria-hidden /></button>
+            <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
+          </span>
           {text.trim() ? (
-            <button className="pill" disabled={busy}>Send</button>
+            <button className="chat-send" disabled={busy} aria-label="Send"><SendHorizontal size={19} strokeWidth={2.2} aria-hidden /></button>
           ) : (
-            <button type="button" className="icon-btn" onClick={() => { setError(""); void voice.start(); }} disabled={busy} aria-label="Record voice note"><Mic size={20} strokeWidth={2} aria-hidden /></button>
+            <button type="button" className="chat-send" onClick={() => { setError(""); void voice.start(); }} disabled={busy} aria-label="Record voice note"><Mic size={19} strokeWidth={2.2} aria-hidden /></button>
           )}
         </form>
       )}

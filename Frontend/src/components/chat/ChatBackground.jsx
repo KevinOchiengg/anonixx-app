@@ -54,6 +54,12 @@ const ChatBackground = React.memo(function ChatBackground({ pattern, style, chil
   return (
     <View style={[styles.fill, style]}>
       <LinearGradient colors={def.gradient} style={StyleSheet.absoluteFill} />
+      {/* Every pattern gets a soft coral glow from the top, so none look flat. */}
+      <LinearGradient
+        colors={['rgba(255,99,74,0.12)', 'rgba(255,99,74,0)']}
+        style={styles.topGlow}
+        pointerEvents="none"
+      />
 
       {def.overlay?.kind === 'dots' || def.overlay?.kind === 'noise' ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -113,6 +119,7 @@ export default ChatBackground;
 
 const styles = StyleSheet.create({
   fill: { overflow: 'hidden' },
+  topGlow: { position: 'absolute', top: 0, left: 0, right: 0, height: '45%' },
   glow: {
     position: 'absolute', width: '80%', aspectRatio: 1, borderRadius: 999,
   },

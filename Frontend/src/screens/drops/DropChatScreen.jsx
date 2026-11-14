@@ -6,22 +6,23 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView,
-  ActivityIndicator, Animated, Image, Pressable, Alert,
+  ActivityIndicator, Animated, Image, Pressable, Alert, Platform,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
-import { Send, X, Phone, MoreVertical, Mic, Trash2, BellOff } from 'lucide-react-native';
+import { SendHorizontal, X, Phone, MoreVertical, Mic, Trash2, BellOff, ChevronLeft } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
-import { rs, rf, rp, SPACING, FONT, HIT_SLOP } from '../../utils/responsive';
-import DropScreenHeader from '../../components/drops/DropScreenHeader';
+import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import PulseLoader from '../../components/common/PulseLoader';
 import VoiceWaveform from '../../components/common/VoiceWaveform';
 import ChatInputBar from '../../components/common/ChatInputBar';
 import ChatBackground from '../../components/chat/ChatBackground';
-import ChatBubble, { DateSeparator, TypingBubble, messagePreviewLabel } from '../../components/chat/ChatBubble';
+import ChatBubble, { DateSeparator, TypingBubble, PreviewIcon, OWN_GRADIENT, messagePreviewLabel } from '../../components/chat/ChatBubble';
 import { ConfessionCard, EmptyChat } from '../../components/chat/ChatIntro';
 import { ChatMenuSheet, MessageSheet } from '../../components/chat/ChatSheets';
 import ChatMediaViewer from '../../components/chat/ChatMediaViewer';
@@ -100,6 +101,7 @@ export default function DropChatScreen({ route, navigation }) {
   const listRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const lastTypingEmit = useRef(0);
+  const seenIds = useRef(null);   // messages already here when the chat opened (they don't animate in)
 
   const otherName = connection?.other_anonymous_name || 'Anonymous';
   const toastError = useCallback((m) => showToast({ type: 'error', message: m || 'Something went wrong.' }), [showToast]);
@@ -381,11 +383,18 @@ export default function DropChatScreen({ route, navigation }) {
     return out;
   }, [messages]);
 
-  const renderRow = useCallback(({ item }) => (item.kind === 'date'
+  useEffect(() => {
+    if (!loading && seenIds.current === null) seenIds.current = new Set(messages.map((m) => m.id));
+  }, [loading, messages]);
+
+  // A run of messages from one side ends where the next row is the other side or a date pill.
+  const renderRow = useCallback(({ item, index }) => (item.kind === 'date'
     ? <DateSeparator label={item.label} />
     : (
       <ChatBubble
         item={item}
+        groupEnd={!rows[index + 1] || rows[index + 1].kind === 'date' || !!rows[index + 1].is_own !== !!item.is_own}
+        fresh={!!seenIds.current && !seenIds.current.has(item.id)}
         fontFamily={fontFamily}
         otherName={otherName}
         onMediaPress={handleMediaPress}
@@ -394,7 +403,7 @@ export default function DropChatScreen({ route, navigation }) {
         onReact={handleReact}
         onOpenViewOnce={handleOpenViewOnce}
       />
-    )), [fontFamily, otherName, handleMediaPress, handleReply, handleReact, handleOpenViewOnce]);
+    )), [rows, fontFamily, otherName, handleMediaPress, handleReply, handleReact, handleOpenViewOnce]);
 
   // A guest sees the Room's picture; the owner sees the guest's own avatar.
   const headerPic = connection?.is_sender
@@ -411,13 +420,22 @@ export default function DropChatScreen({ route, navigation }) {
 
   const openInfo = () => navigation.navigate('ChatInfo', { connectionId });
   const hasText = !!text.trim();
+  const online = !!connection?.other_is_online;
+  const headerH = insets.top + HEADER_H;
 
-  return (
-    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
-      <DropScreenHeader
-        navigation={navigation}
-        titleNode={(
-          <TouchableOpacity style={s.titleRow} activeOpacity={0.75} onPress={openInfo} accessibilityRole="button" accessibilityLabel={`${otherName}, contact info`}>
+  // Frosted bar the thread scrolls under (real blur on iOS, tinted glass on Android).
+  const header = (
+    <View style={[s.header, { paddingTop: insets.top, height: headerH }]}>
+      {Platform.OS === 'ios'
+        ? <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+        : null}
+      <View style={[StyleSheet.absoluteFill, s.headerTint]} />
+      <View style={s.headerRow}>
+        <TouchableOpacity style={s.roundBtn} onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} accessibilityLabel="Back">
+          <ChevronLeft size={rs(22)} color={T.text} strokeWidth={2.2} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.titleRow} activeOpacity={0.75} onPress={openInfo} accessibilityRole="button" accessibilityLabel={`${otherName}, contact info`}>
+          <View style={[s.avatarRing, online && s.avatarRingOn]}>
             {headerPic ? (
               <Image source={{ uri: headerPic }} style={s.avatar} />
             ) : (
@@ -425,41 +443,47 @@ export default function DropChatScreen({ route, navigation }) {
                 <Text style={s.avatarInitialText}>{otherName[0]?.toUpperCase() || 'A'}</Text>
               </View>
             )}
-            <View style={s.titleText}>
-              <View style={s.nameRow}>
-                <Text style={s.name} numberOfLines={1}>{otherName}</Text>
-                {connection?.muted_until ? <BellOff size={rs(13)} color={T.textMute} strokeWidth={2} /> : null}
-              </View>
-              {isOtherTyping ? <Text style={s.typing}>typing…</Text>
-                : connection?.other_is_online ? <Text style={s.online}>online</Text>
-                  : <Text style={s.hint}>tap for contact info</Text>}
-            </View>
-          </TouchableOpacity>
-        )}
-        right={connection ? (
-          <View style={s.headerActions}>
-            <TouchableOpacity style={s.headerBtn} onPress={handleCallPress} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel="Call">
-              <Phone size={rs(19)} color={T.textMute} strokeWidth={2} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.headerBtn} onPress={() => setMenuOpen(true)} hitSlop={HIT_SLOP} accessibilityLabel="More">
-              <MoreVertical size={rs(19)} color={T.textMute} strokeWidth={2} />
-            </TouchableOpacity>
           </View>
+          <View style={s.titleText}>
+            <View style={s.nameRow}>
+              <Text style={s.name} numberOfLines={1}>{otherName}</Text>
+              {connection?.muted_until ? <BellOff size={rs(13)} color={T.textMute} strokeWidth={2} /> : null}
+            </View>
+            {isOtherTyping ? <Text style={s.typing}>typing…</Text>
+              : online ? <Text style={s.online}>online</Text>
+                : <Text style={s.hint}>tap for contact info</Text>}
+          </View>
+        </TouchableOpacity>
+        {connection ? (
+          <>
+            <TouchableOpacity style={s.roundBtn} onPress={handleCallPress} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel="Call">
+              <Phone size={rs(18)} color={T.text} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.roundBtn} onPress={() => setMenuOpen(true)} hitSlop={HIT_SLOP} accessibilityLabel="More">
+              <MoreVertical size={rs(18)} color={T.text} strokeWidth={2} />
+            </TouchableOpacity>
+          </>
         ) : null}
-      />
+      </View>
+    </View>
+  );
 
-      <ChatBackground pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN} style={{ flex: 1 }}>
+  return (
+    <View style={s.safe}>
+      <ChatBackground pattern={chatProfile?.background_pattern || DEFAULT_BACKGROUND_PATTERN} style={StyleSheet.absoluteFill} />
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
             {messages.length === 0 ? (
-              <EmptyChat connection={connection} onPickOpener={handlePickOpener} />
+              <View style={{ flex: 1, paddingTop: headerH }}>
+                <EmptyChat connection={connection} onPickOpener={handlePickOpener} />
+              </View>
             ) : (
               <FlatList
                 ref={listRef}
                 data={rows}
                 keyExtractor={(item) => item.id}
                 renderItem={renderRow}
-                contentContainerStyle={s.list}
+                contentContainerStyle={[s.list, { paddingTop: headerH + rp(10) }]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 removeClippedSubviews
@@ -477,8 +501,11 @@ export default function DropChatScreen({ route, navigation }) {
             <View style={s.replyBanner}>
               <View style={s.replyBar} />
               <View style={{ flex: 1 }}>
-                <Text style={s.replyName} numberOfLines={1}>{replyingTo.is_own ? 'You' : otherName}</Text>
-                <Text style={s.replyPreview} numberOfLines={1}>{messagePreviewLabel(replyingTo)}</Text>
+                <Text style={s.replyName} numberOfLines={1}>Replying to {replyingTo.is_own ? 'yourself' : otherName}</Text>
+                <View style={s.replyRow}>
+                  <PreviewIcon type={replyingTo.media_type} color={T.textMute} />
+                  <Text style={s.replyPreview} numberOfLines={1}>{messagePreviewLabel(replyingTo)}</Text>
+                </View>
               </View>
               <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={HIT_SLOP} accessibilityLabel="Cancel reply">
                 <X size={rs(16)} color={T.textMute} strokeWidth={2} />
@@ -494,6 +521,7 @@ export default function DropChatScreen({ route, navigation }) {
             maxLength={500}
             onAttachPress={!voice.isRecording && !voice.preview ? pickMedia : undefined}
             attachUploading={mediaUploading}
+            floating
             paddingBottom={insets.bottom + rp(8)}
             recordingContent={voice.isRecording ? (
               <View style={s.recordRow}>
@@ -521,18 +549,21 @@ export default function DropChatScreen({ route, navigation }) {
                 accessibilityRole="button"
                 accessibilityLabel={voice.preview ? 'Send voice note' : hasText ? 'Send' : 'Hold to record a voice note'}
                 hitSlop={HIT_SLOP}
-                style={({ pressed }) => [s.sendBtn, hasText && sending && { opacity: 0.4 }, pressed && !voice.isRecording && { opacity: 0.85 }]}
+                // A small press bounce; the coral-to-rose circle matches my bubbles.
+                style={({ pressed }) => [s.sendBtn, hasText && sending && { opacity: 0.4 }, (pressed || voice.isRecording) && { transform: [{ scale: voice.isRecording ? 1.12 : 0.9 }] }]}
               >
-                {(voice.preview ? voice.uploading : hasText ? sending : voice.uploading)
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : voice.preview || hasText
-                    ? <Send size={rs(21)} color="#fff" strokeWidth={2} />
-                    : <Mic size={rs(22)} color="#fff" strokeWidth={2} />}
+                <LinearGradient colors={OWN_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.sendFill}>
+                  {(voice.preview ? voice.uploading : hasText ? sending : voice.uploading)
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : voice.preview || hasText
+                      ? <SendHorizontal size={rs(20)} color="#fff" strokeWidth={2.2} />
+                      : <Mic size={rs(21)} color="#fff" strokeWidth={2.2} />}
+                </LinearGradient>
               </Pressable>
             )}
           />
         </KeyboardAvoidingView>
-      </ChatBackground>
+      {header}
 
       <ChatMenuSheet
         visible={menuOpen}
@@ -551,34 +582,45 @@ export default function DropChatScreen({ route, navigation }) {
         onDelete={handleDelete}
       />
       {viewerMedia && <ChatMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />}
-    </SafeAreaView>
+    </View>
   );
 }
+
+const HEADER_H = rs(60);
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: 'transparent' },
   centered: { justifyContent: 'center', alignItems: 'center' },
 
-  // Header: avatar, name, typing/online. flex: 1 keeps it beside the back button.
-  titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8) },
-  avatar: { width: rs(34), height: rs(34), borderRadius: rs(17), borderWidth: 1.5, borderColor: T.primaryBorder },
+  // Frosted header: back, avatar with an online ring, name and status, call and more.
+  header: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
+  headerTint: { backgroundColor: Platform.OS === 'ios' ? 'rgba(18,10,20,0.45)' : 'rgba(18,10,20,0.88)' },
+  headerRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(8), paddingHorizontal: rp(10) },
+  roundBtn: {
+    width: rs(38), height: rs(38), borderRadius: rs(19), alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(10), marginLeft: rp(2) },
+  avatarRing: { padding: rs(2), borderRadius: rs(22), borderWidth: 2, borderColor: 'rgba(255,255,255,0.12)' },
+  avatarRingOn: { borderColor: T.online },
+  avatar: { width: rs(36), height: rs(36), borderRadius: rs(18) },
   avatarInitial: { alignItems: 'center', justifyContent: 'center' },
-  avatarInitialText: { fontSize: rf(14), fontWeight: '800', color: '#fff' },
+  avatarInitialText: { fontSize: rf(15), fontFamily: 'DMSans-Bold', color: '#fff' },
   titleText: { flexShrink: 1, alignItems: 'flex-start' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
-  name: { fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg, color: T.text, letterSpacing: 0.3 },
-  typing: { fontFamily: 'DMSans-Italic', fontSize: rf(11), color: T.primary },
-  online: { fontFamily: 'DMSans-Regular', fontSize: rf(11), color: T.online },
-  hint: { fontSize: rf(11), color: T.textMute },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: rp(14) },
-  headerBtn: { width: rs(32), height: rs(32), alignItems: 'center', justifyContent: 'center' },
+  name: { fontFamily: 'DMSans-SemiBold', fontSize: rf(16.5), color: T.text, letterSpacing: 0.1 },
+  typing: { fontFamily: 'DMSans-Medium', fontSize: rf(12), color: T.primary },
+  online: { fontFamily: 'DMSans-Medium', fontSize: rf(12), color: T.online },
+  hint: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute },
 
-  list: { padding: SPACING.md, gap: SPACING.xs, paddingBottom: SPACING.lg },
+  list: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.md },
 
   replyBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(8), paddingHorizontal: rp(16), paddingVertical: rp(8),
-    backgroundColor: T.surfaceAlt, borderTopWidth: 1, borderTopColor: T.border,
+    flexDirection: 'row', alignItems: 'center', gap: rp(10), marginHorizontal: rp(12), marginBottom: rp(6),
+    paddingHorizontal: rp(12), paddingVertical: rp(9), borderRadius: RADIUS.lg,
+    backgroundColor: 'rgba(24,16,26,0.94)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
+  replyRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5), marginTop: rp(2) },
   replyBar: { width: rs(3), alignSelf: 'stretch', borderRadius: rs(2), backgroundColor: T.primary, minHeight: rs(28) },
   replyName: { fontFamily: 'DMSans-Bold', fontSize: rf(12.5), color: T.primary },
   replyPreview: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute, marginTop: rp(1) },
@@ -589,7 +631,8 @@ const s = StyleSheet.create({
   recordTime: { fontFamily: 'DMSans-Bold', fontSize: rf(13), color: T.text, letterSpacing: 0.5, minWidth: rs(32) },
   recordHint: { flex: 1, fontFamily: 'DMSans-Italic', fontSize: rf(12), color: T.textMute },
   sendBtn: {
-    width: rs(44), height: rs(44), borderRadius: rs(22), backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
-    shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4,
+    width: rs(46), height: rs(46), borderRadius: rs(23),
+    shadowColor: '#E8456E', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 5,
   },
+  sendFill: { flex: 1, borderRadius: rs(23), alignItems: 'center', justifyContent: 'center' },
 });

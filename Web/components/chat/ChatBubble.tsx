@@ -2,7 +2,7 @@
 /** One message in a Room chat. Click it for reactions, Reply, Copy and Delete. */
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { Lock } from "lucide-react";
+import { Check, CheckCheck, Lock } from "lucide-react";
 
 export type Msg = {
   id: string;
@@ -40,8 +40,8 @@ function VoiceNote({ src }: { src: string }) {
   );
 }
 
-export default function ChatBubble({ m, otherName, open, onToggle, onReact, onReply, onCopy, onDelete, onOpenOnce }: {
-  m: Msg; otherName: string; open: boolean; onToggle: () => void;
+export default function ChatBubble({ m, otherName, open, end = true, fresh = false, onToggle, onReact, onReply, onCopy, onDelete, onOpenOnce }: {
+  m: Msg; otherName: string; open: boolean; end?: boolean; fresh?: boolean; onToggle: () => void;
   onReact: (m: Msg, emoji: string) => void; onReply: (m: Msg) => void; onCopy: (m: Msg) => void;
   onDelete: (m: Msg, forEveryone: boolean) => void; onOpenOnce: (m: Msg) => void;
 }) {
@@ -50,7 +50,7 @@ export default function ChatBubble({ m, otherName, open, onToggle, onReact, onRe
   const media = !m.deleted && !m.view_once && m.media_url ? m.media_type : null;
 
   return (
-    <div className={`bubble${m.is_own ? " own" : ""}`} onClick={() => { if (!m.deleted) { setAsking(false); onToggle(); } }}>
+    <div className={`bubble${m.is_own ? " own" : ""}${end ? " end" : ""}${fresh ? " fresh" : ""}${media === "image" || media === "video" ? " media" : ""}`} onClick={() => { if (!m.deleted) { setAsking(false); onToggle(); } }}>
       {m.reply_to && !m.deleted ? (
         <div className="reply-quote">{m.reply_to.is_own ? "You" : otherName}: {m.reply_to.preview || m.reply_to.media_type}</div>
       ) : null}
@@ -64,7 +64,7 @@ export default function ChatBubble({ m, otherName, open, onToggle, onReact, onRe
       {media === "video" ? <video src={m.media_url!} controls preload="metadata" playsInline onClick={(e) => e.stopPropagation()} /> : null}
       {media === "voice" ? <VoiceNote src={m.media_url!} /> : null}
       {!m.deleted && m.content ? <span>{m.content}</span> : null}
-      <small>{m.time_ago}{m.is_own && !m.deleted ? <span className={`mx-tick${m.seen ? " seen" : ""}`}> {m.seen ? "✓✓" : "✓"}</span> : null}</small>
+      <small className="b-meta">{m.time_ago}{m.is_own && !m.deleted ? (m.seen ? <CheckCheck className="b-tick seen" size={14} strokeWidth={2.4} aria-label="Seen" /> : <Check className="b-tick" size={14} strokeWidth={2.4} aria-label="Sent" />) : null}</small>
       {m.reactions?.length ? (
         <div className="msg-reactions" onClick={(e) => e.stopPropagation()}>
           {m.reactions.map((r) => (

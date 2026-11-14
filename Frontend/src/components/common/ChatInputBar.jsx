@@ -4,7 +4,7 @@ import React from 'react';
 import {
   View, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet,
 } from 'react-native';
-import { Paperclip, Send, Smile } from 'lucide-react-native';
+import { ImagePlus, Paperclip, Send, Smile } from 'lucide-react-native';
 import T from '../../utils/theme';
 import {
   rs, rp, FONT, RADIUS, SPACING, HIT_SLOP,
@@ -20,10 +20,11 @@ export default function ChatInputBar({
   recordingContent,
   trailing,
   paddingBottom = 0,
+  floating = false,   // chat: a frosted pill lifted off the bottom, no card behind it
 }) {
   return (
-    <View style={[styles.inputBar, { paddingBottom }]}>
-      <View style={styles.inputWrap}>
+    <View style={[styles.inputBar, floating && styles.inputBarFloating, { paddingBottom }]}>
+      <View style={[styles.inputWrap, floating && styles.inputWrapFloating]}>
         {recordingContent ? recordingContent : (
           <>
             <TextInput
@@ -49,7 +50,9 @@ export default function ChatInputBar({
               >
                 {attachUploading
                   ? <ActivityIndicator size="small" color={T.primary} />
-                  : <Paperclip size={rs(21)} color={T.textMute} strokeWidth={2} />}
+                  : floating
+                    ? <ImagePlus size={rs(21)} color={T.textSecondary} strokeWidth={2} />
+                    : <Paperclip size={rs(21)} color={T.textMute} strokeWidth={2} />}
               </TouchableOpacity>
             )}
             {!!onEmojiPress && (
@@ -104,6 +107,15 @@ const styles = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'flex-end',
     backgroundColor: T.surfaceDark, borderRadius: RADIUS.xl,
     borderWidth: 1, borderColor: T.border, paddingHorizontal: rp(4),
+  },
+  inputBarFloating: {
+    backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0,
+    shadowOpacity: 0, elevation: 0, paddingTop: rp(6), paddingHorizontal: rp(12), alignItems: 'flex-end',
+  },
+  inputWrapFloating: {
+    backgroundColor: 'rgba(24,16,26,0.94)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: rs(24),
+    paddingHorizontal: rp(8), minHeight: rs(46),
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
   },
   input: {
     flex: 1, paddingHorizontal: rp(4), paddingVertical: rp(10),
