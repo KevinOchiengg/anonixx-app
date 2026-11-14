@@ -9,7 +9,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { FONTS_HREF, fontStyleById } from "@/lib/chatTheme";
 import { intentLabel, timeLeft } from "@/lib/linkup";
-import { STARTERS, roomThemeById, roomThemeVars, statusLabel } from "@/lib/roomThemes";
+import { STARTERS, roomThemeById, roomThemeVars } from "@/lib/roomThemes";
 import AppShell from "./AppShell";
 import AgeGate from "./AgeGate";
 import LinkUpSheet from "./LinkUpSheet";
@@ -22,7 +22,7 @@ type Preview = {
   user_id: string;
   room: {
     background_pattern: string; font_style: string; profile_picture_url: string | null; anonymous_name: string;
-    room_theme: string; room_status: string | null; knocks_open: boolean; welcome_message: string | null;
+    room_theme: string; knocks_open: boolean; welcome_message: string | null;
   };
   inside: boolean;
   post: { id: string; kind: "hookup" | "confession" | null; content: string; hookup: Hookup; live_until: string | null; live: boolean; linkup_count: number } | null;
@@ -207,7 +207,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   const isConfession = post?.kind === "confession";
   const inc = p.incoming_request;
   const cid = p.connection_id;
-  const status = statusLabel(room.room_status);
   const h = post?.hookup;
   const cost = p.linkup_cost;
 
@@ -282,7 +281,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
               <span>{pic ? <Image src={pic} alt="" width={104} height={104} /> : name[0]?.toUpperCase() || "A"}</span>
             </span>
             <h1 className="rm-name" style={font}>{name}</h1>
-            {status ? <span className="rm-status"><i />{status}</span> : null}
           </section>
 
           {room.welcome_message ? (

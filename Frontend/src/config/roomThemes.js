@@ -37,15 +37,6 @@ export const DEFAULT_ROOM_THEME = 'midnight-blue';
 
 export const roomThemeById = (id) => ROOM_THEMES.find((x) => x.id === id) || ROOM_THEMES[0];
 
-export const ROOM_STATUSES = [
-  { id: 'open', label: 'Open to knocks' },
-  { id: 'late', label: 'Up late' },
-  { id: 'quiet', label: 'Quiet tonight' },
-  { id: 'away', label: 'Away for now' },
-];
-
-export const statusLabel = (id) => ROOM_STATUSES.find((s) => s.id === id)?.label || null;
-
 /** Openers shown after a Let In. Tapping one only fills the box; nothing is sent for you. */
 export const STARTERS = [
   'Your Room said more than your post did.',

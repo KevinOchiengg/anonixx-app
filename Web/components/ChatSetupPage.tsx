@@ -18,7 +18,7 @@ import {
 } from "@/lib/chatTheme";
 import { intentLabel } from "@/lib/linkup";
 import {
-  DEFAULT_ROOM_THEME, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
+  DEFAULT_ROOM_THEME, MAX_WELCOME, roomThemeById,
 } from "@/lib/roomThemes";
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
@@ -35,7 +35,6 @@ type Profile = {
   purchased_slots?: number;
   room_theme?: string;
   welcome_message?: string | null;
-  room_status?: string | null;
   knocks_open?: boolean;
   break_until?: string | null;
   door_rule?: string;
@@ -120,7 +119,6 @@ function Inner() {
   const [name, setName] = useState("");
   const [theme, setTheme] = useState(DEFAULT_ROOM_THEME);
   const [welcome, setWelcome] = useState("");
-  const [status, setStatus] = useState("");
   const [knocksOpen, setKnocksOpen] = useState(true);
   // A break's length, picked when knocks go off this visit (null = keep what the server has).
   const [breakHours, setBreakHours] = useState<number | null>(null);
@@ -145,7 +143,6 @@ function Inner() {
     setName(d.anonymous_name || "");
     setTheme(d.room_theme || DEFAULT_ROOM_THEME);
     setWelcome(d.welcome_message || "");
-    setStatus(d.room_status || "");
     setKnocksOpen(d.knocks_open !== false);
     setBreakUntil(d.break_until || null);
     setBreakHours(null);
@@ -217,7 +214,7 @@ function Inner() {
         method: "PUT",
         body: {
           background_pattern: pattern, font_style: font, profile_picture_url: pic,
-          welcome_message: welcome, room_status: status, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
+          welcome_message: welcome, knocks_open: knocksOpen, ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}), door_rule: doorRule, listing,
           welcome_visibility: welcomeVis, allow_audio_calls: allowAudio, allow_video_calls: allowVideo,
           notify: {
             knocks: notify.knocks, messages: notify.messages, calls: notify.calls, sessions: notify.sessions, previews: notify.previews,
@@ -350,15 +347,6 @@ function Inner() {
             <p className="u-sub" style={{ textAlign: "center", margin: "-8px 0 0" }}>{uploading ? "Uploading…" : name ? `${name} · tap to change picture` : "Tap to change picture"}</p>
 
 
-            <div className="rs-field">
-              <label>Status</label>
-              <div className="u-chips">
-                <button type="button" className={`u-chip${!status ? " on" : ""}`} onClick={() => setStatus("")}>None</button>
-                {ROOM_STATUSES.map((s) => (
-                  <button key={s.id} type="button" className={`u-chip${status === s.id ? " on" : ""}`} onClick={() => setStatus(s.id)}>{s.label}</button>
-                ))}
-              </div>
-            </div>
 
             <button type="button" className="rs-next" onClick={() => go("welcome")}>
               <b>Your welcome</b>

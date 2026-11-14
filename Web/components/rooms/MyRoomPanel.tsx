@@ -7,11 +7,11 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { FONTS_HREF, fontStyleById } from "@/lib/chatTheme";
-import { roomThemeById, roomThemeVars, statusLabel } from "@/lib/roomThemes";
+import { roomThemeById, roomThemeVars } from "@/lib/roomThemes";
 
 type Me = {
   anonymous_name?: string; profile_picture_url?: string | null; room_theme?: string; font_style?: string;
-  room_status?: string | null; welcome_message?: string | null;
+  welcome_message?: string | null;
   welcome_visibility?: string;
 };
 
@@ -23,7 +23,6 @@ export default function MyRoomPanel() {
 
   const t = roomThemeById(me.room_theme);
   const name = me.anonymous_name || "Your Room";
-  const status = statusLabel(me.room_status);
   const steps = [
     { done: !!me.welcome_message, label: "Welcome note", hint: me.welcome_message ? `“${me.welcome_message}”` : "The first thing someone reads when you let them in." },
   ];
@@ -35,7 +34,6 @@ export default function MyRoomPanel() {
         <small className="mr-kicker">{t.room}</small>
         <span className="mr-ava"><span>{me.profile_picture_url ? <Image src={me.profile_picture_url} alt="" width={86} height={86} /> : name[0].toUpperCase()}</span></span>
         <b className="mr-name" style={fontStyleById(me.font_style)}>{name}</b>
-        {status ? <span className="mr-status">{status}</span> : null}
         <div className="mr-acts">
           {user?.id ? <Link href={`/room/${user.id}`} className="mr-btn">See it as a visitor</Link> : null}
           <Link href="/chat-setup?tab=appearance" className="mr-btn accent">Personalize</Link>

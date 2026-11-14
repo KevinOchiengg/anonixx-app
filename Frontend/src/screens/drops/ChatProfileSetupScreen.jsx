@@ -25,7 +25,7 @@ import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND_PATTERN } from '../../config/pa
 import { CHAT_FONT_OPTIONS, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel } from '../../config/linkup';
 import {
-  DEFAULT_ROOM_THEME, MAX_WELCOME, ROOM_STATUSES, roomThemeById,
+  DEFAULT_ROOM_THEME, MAX_WELCOME, roomThemeById,
 } from '../../config/roomThemes';
 import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
 import KnockClues from '../../components/rooms/KnockClues';
@@ -86,7 +86,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
   const [anonymousName, setAnonymousName]     = useState('');
   const [roomTheme, setRoomTheme]             = useState(DEFAULT_ROOM_THEME);
   const [welcomeMessage, setWelcomeMessage]   = useState('');
-  const [roomStatus, setRoomStatus]           = useState('');
   const [knocksOpen, setKnocksOpen]           = useState(true);
   // A break's length, picked when knocks go off this visit (null = keep what the server has).
   const [breakHours, setBreakHours]           = useState(null);
@@ -125,7 +124,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
             setAnonymousName(data.anonymous_name || '');
             setRoomTheme(data.room_theme || DEFAULT_ROOM_THEME);
             setWelcomeMessage(data.welcome_message || '');
-            setRoomStatus(data.room_status || '');
             setKnocksOpen(data.knocks_open !== false);
             setBreakUntil(data.break_until || null);
             setBreakHours(null);
@@ -183,7 +181,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           font_style: fontStyle,
           profile_picture_url: profilePictureUrl,
           welcome_message: welcomeMessage,
-          room_status: roomStatus,
           knocks_open: knocksOpen,
           ...(!knocksOpen && breakHours !== null ? { break_hours: breakHours } : {}),
           door_rule: doorRule,
@@ -211,7 +208,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
     } finally {
       setSaving(false);
     }
-  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeMessage, roomStatus,
+  }, [backgroundPattern, fontStyle, profilePictureUrl, welcomeMessage,
       knocksOpen, breakHours, doorRule, listing, welcomeVisibility,
       allowAudioCalls, allowVideoCalls, notify, authHeaders, showToast]);
 
@@ -375,15 +372,6 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
           </View>
         </TouchableOpacity>
         <Text style={styles.avatarHint}>Tap to change</Text>
-
-        <Text style={styles.sectionLabel}>Status</Text>
-        <View style={styles.chipRow}>
-          {[{ id: '', label: 'None' }, ...ROOM_STATUSES].map((st) => (
-            <TouchableOpacity key={st.id || 'none'} onPress={() => setRoomStatus(st.id)} style={[styles.chip, roomStatus === st.id && styles.chipActive]} hitSlop={HIT_SLOP}>
-              <Text style={[styles.chipText, roomStatus === st.id && styles.chipTextActive]}>{st.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
 
         <TouchableOpacity style={styles.nextCard} onPress={() => setTab('welcome')} activeOpacity={0.85}>
           <Text style={styles.optionTitle}>Your welcome</Text>

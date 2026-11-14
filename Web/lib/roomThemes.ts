@@ -75,14 +75,6 @@ export function roomThemeVars(id?: string | null): CSSProperties {
   } as CSSProperties;
 }
 
-export const ROOM_STATUSES: { id: string; label: string }[] = [
-  { id: "open", label: "Open to knocks" },
-  { id: "late", label: "Up late" },
-  { id: "quiet", label: "Quiet tonight" },
-  { id: "away", label: "Away for now" },
-];
-
-export const statusLabel = (id?: string | null) => ROOM_STATUSES.find((s) => s.id === id)?.label || null;
 
 /** Openers shown after a Let In. Tapping one only fills the box; nothing is sent for you. */
 export const STARTERS = [

@@ -1,4 +1,4 @@
-/** Rooms → My Room: your Room as visitors see it (theme, picture, name, status), the
+/** Rooms → My Room: your Room as visitors see it (theme, picture, name), the
  * welcome you've set up (note, audio, three media slots) and quick ways to change it.
  * Editing happens in ChatProfileSetup (Your Room); this panel only reads GET /chat-profile/me. */
 import React, { useCallback, useState } from 'react';
@@ -14,7 +14,7 @@ import { rs, rf, rp, SPACING, RADIUS } from '../../utils/responsive';
 import T from '../../utils/theme';
 import { API_BASE_URL } from '../../config/api';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
-import { roomThemeById, statusLabel } from '../../config/roomThemes';
+import { roomThemeById } from '../../config/roomThemes';
 
 export default function MyRoomPanel({ navigation, header, onRefresh }) {
   const me = useSelector((state) => state.auth.user?.id);
@@ -37,7 +37,6 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
   const th = roomThemeById(room.room_theme);
   const font = CHAT_FONT_MAP[room.font_style] || CHAT_FONT_MAP[DEFAULT_CHAT_FONT];
   const name = room.anonymous_name || 'Your Room';
-  const status = statusLabel(room.room_status);
   const edit = (tab) => navigation.navigate('ChatProfileSetup', { tab });
   const steps = [
     { done: !!room.welcome_message, label: 'Welcome note', hint: room.welcome_message ? `“${room.welcome_message}”` : 'The first thing someone reads when you let them in.' },
@@ -60,7 +59,6 @@ export default function MyRoomPanel({ navigation, header, onRefresh }) {
           </View>
         </LinearGradient>
         <Text style={[s.name, { color: th.text, fontFamily: font }]} numberOfLines={1}>{name}</Text>
-        {status ? <Text style={[s.status, { color: th.text, borderColor: th.border, backgroundColor: th.tint }]}>{status}</Text> : null}
         <View style={s.heroActs}>
           <TouchableOpacity style={[s.heroBtn, { borderColor: th.borderStrong }]} onPress={() => me && navigation.navigate('Room', { userId: me })}>
             <Eye size={rs(15)} color={th.text} />
@@ -113,7 +111,6 @@ const s = StyleSheet.create({
   ava: { flex: 1, borderRadius: rs(43), borderWidth: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   initial: { fontSize: rf(32), fontWeight: '800' },
   name: { fontSize: rf(23), marginTop: rp(4) },
-  status: { fontSize: rf(12), fontWeight: '600', borderWidth: 1, borderRadius: 999, paddingHorizontal: rp(11), paddingVertical: rp(4), overflow: 'hidden' },
   heroActs: { flexDirection: 'row', gap: rp(8), alignSelf: 'stretch', marginTop: rp(8) },
   heroBtn: { flex: 1, flexDirection: 'row', gap: rp(6), height: rs(44), borderRadius: RADIUS.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   heroBtnText: { fontFamily: 'DMSans-Bold', fontSize: rf(14) },

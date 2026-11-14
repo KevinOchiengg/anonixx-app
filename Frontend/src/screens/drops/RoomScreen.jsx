@@ -1,4 +1,4 @@
-/** Someone's Room, in their theme. Anyone 18+ can peek: name, picture, status, the post
+/** Someone's Room, in their theme. Anyone 18+ can peek: name, picture, the post
  * they came from and the photos shown to visitors (others appear as a count). The bottom bar
  * follows GET /chat-profile/{userId}/preview: Knock, waiting, their knock to you, closed,
  * Edit Room, or inside. After a Let In, the first visit plays the entrance: the owner's
@@ -24,7 +24,7 @@ import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
 import { CHAT_FONT_MAP, DEFAULT_CHAT_FONT } from '../../config/fonts';
 import { intentLabel, timeLeft } from '../../config/linkup';
-import { STARTERS, roomThemeById, statusLabel } from '../../config/roomThemes';
+import { STARTERS, roomThemeById } from '../../config/roomThemes';
 import KnockClues from '../../components/rooms/KnockClues';
 
 const REPORT_REASONS = [
@@ -265,7 +265,6 @@ export default function RoomScreen({ route, navigation }) {
   const h = post?.hookup;
   const inc = p.incoming_request;
   const cid = p.connection_id;
-  const status = statusLabel(room.room_status);
   const cost = p.linkup_cost;
   const card = { backgroundColor: th.surface, borderColor: th.border };
   const riseStyle = { opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] };
@@ -359,12 +358,6 @@ export default function RoomScreen({ route, navigation }) {
               </View>
             </LinearGradient>
             <Text style={[s.name, { color: th.text, fontFamily: font }]} numberOfLines={2}>{name}</Text>
-            {status ? (
-              <View style={[s.status, { borderColor: th.border, backgroundColor: th.tint }]}>
-                <View style={[s.dot, s.dotSm, { backgroundColor: th.accent2 }]} />
-                <Text style={[s.statusText, { color: th.text }]}>{status}</Text>
-              </View>
-            ) : null}
           </Animated.View>
 
           {room.welcome_message ? (
@@ -458,8 +451,6 @@ const s = StyleSheet.create({
   ava: { flex: 1, borderRadius: rs(53), borderWidth: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   initial: { fontSize: rf(38), fontWeight: '700' },
   name: { marginTop: rp(14), fontSize: rf(27), textAlign: 'center' },
-  status: { marginTop: rp(10), flexDirection: 'row', alignItems: 'center', gap: rp(7), borderWidth: 1, borderRadius: 999, paddingHorizontal: rp(11), paddingVertical: rp(5) },
-  statusText: { fontSize: rf(12), fontWeight: '600' },
 
   card: { borderRadius: rs(20), borderWidth: 1, padding: rp(16), gap: rp(8) },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: rp(8) },
