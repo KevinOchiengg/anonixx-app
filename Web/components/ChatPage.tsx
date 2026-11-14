@@ -1,7 +1,7 @@
 "use client";
 /** Link Up chat between two connected people: the thread and the composer. A message's
  * actions live in chat/ChatBubble, voice recording in lib/useVoiceRecorder, and everything
- * else (media, welcome media, mute, pin, archive, safety) in Chat info: click the name. */
+ * else (media, mute, pin, archive, safety) in Chat info: click the name. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import useDraft from "@/lib/useDraft";
 import Image from "next/image";
@@ -342,7 +342,7 @@ function Inner({ id }: { id: string }) {
       {toast ? <div className="ic-note" role="status">{toast}</div> : null}
       {info && conn ? (
         <ChatInfo
-          id={id} conn={conn} avatar={profile?.profile_picture_url} gallery={conn.is_sender ? undefined : profile?.gallery}
+          id={id} conn={conn} avatar={profile?.profile_picture_url}
           onClose={() => setInfo(false)} onPrefs={applyPrefs}
           onCall={(video) => { setInfo(false); void call(video); }}
           onClear={clearChat} onBlock={block}

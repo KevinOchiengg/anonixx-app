@@ -1,11 +1,9 @@
 "use client";
 /** Contact info for a Room chat, over the chat (click the chat header): who they are to you,
- * call buttons, media / voice / links, their Room's welcome media, mute, pin, archive, and the
- * safety actions. */
+ * call buttons, media / voice / links, mute, pin, archive, and the safety actions. */
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { chatsApi, chatTime, mutedLabel, MUTE_OPTIONS, type Prefs, type ThreadItem } from "@/lib/chats";
-import type { GalleryItem } from "@/lib/chatTheme";
 import { Ava, Icon } from "./Messenger";
 import { X } from "lucide-react";
 
@@ -16,8 +14,8 @@ export type InfoConn = {
 };
 type Kind = "media" | "voice" | "links";
 
-export default function ChatInfo({ id, conn, avatar, gallery, onClose, onPrefs, onCall, onClear, onBlock, onReport, onRemove }: {
-  id: string; conn: InfoConn; avatar?: string | null; gallery?: GalleryItem[]; onClose: () => void; onPrefs: (p: Prefs) => void;
+export default function ChatInfo({ id, conn, avatar, onClose, onPrefs, onCall, onClear, onBlock, onReport, onRemove }: {
+  id: string; conn: InfoConn; avatar?: string | null; onClose: () => void; onPrefs: (p: Prefs) => void;
   onCall: (video: boolean) => void; onClear: () => void; onBlock: () => void; onReport: () => void; onRemove?: () => void;
 }) {
   const [kind, setKind] = useState<Kind>("media");
@@ -93,19 +91,6 @@ export default function ChatInfo({ id, conn, avatar, gallery, onClose, onPrefs, 
           )}
         </div>
 
-        {gallery?.length ? (
-          <div className="ci-card">
-            <b className="ci-h">Their welcome media</b>
-            <div className="ci-grid">
-              {gallery.slice(0, 3).map((g, i) => (
-                <button key={i} onClick={() => setOpen(g)} aria-label={g.media_type === "video" ? "Open video" : "Open photo"}>
-                  {g.media_type === "video" ? <video src={g.media_url} muted preload="metadata" playsInline /> : <Image src={g.media_url} alt="" width={140} height={140} />}
-                  {g.media_type === "video" ? <i>▶</i> : null}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         <div className="ci-group">
           <div className="ci-row">

@@ -1,5 +1,5 @@
 /** Contact info for a chat (tap the chat header): who they are, call buttons, media / links /
- * voice, their welcome media, mute, pin, archive, and the safety actions. Params: { connectionId }. */
+ * voice, mute, pin, archive, and the safety actions. Params: { connectionId }. */
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View,
@@ -121,16 +121,6 @@ export default function ChatInfoScreen({ route, navigation }) {
           ) : <Text style={s.cardMeta}>Shared photos and videos land here.</Text>}
         </View>
 
-        {!c.is_sender && prof.gallery?.length ? (
-          <View style={s.card}>
-            <Text style={[s.cardTitle, { marginBottom: rp(10) }]}>Their welcome media</Text>
-            <View style={{ flexDirection: 'row', gap: rp(8) }}>
-              {prof.gallery.slice(0, 3).map((g, i) => (
-                <Image key={i} source={{ uri: g.media_type === 'video' ? poster(g.media_url) : g.media_url }} style={[s.thumb, { flex: 1, height: rs(120) }]} />
-              ))}
-            </View>
-          </View>
-        ) : null}
 
 
         <View style={s.group}>
