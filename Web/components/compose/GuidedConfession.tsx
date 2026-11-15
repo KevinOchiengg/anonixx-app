@@ -18,7 +18,6 @@ const MY_AGE_KEY = "anonixx.hookup.age";
 const SAVE_KEY = GUIDED_SAVE_KEY;
 const MAX = 500;
 const NOTE_MAX = 200;
-const CLARITY_MAX = 120; // "Expectations", same cap as the API
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const GENDERS: [string, string][] = [["woman", "woman"], ["man", "man"], ["other", "person"]];
@@ -389,9 +388,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
               <textarea rows={3} maxLength={NOTE_MAX} value={a.note} onChange={(e) => set({ note: e.target.value })} placeholder="Write something personal you'd like them to know." aria-label="Personal message (optional)" />
               <span>{NOTE_MAX - a.note.length}</span>
             </div>
-            <h3 className="gc-label">Expectations <span className="hk-opt">optional</span></h3>
-            <input className="hk-field" maxLength={CLARITY_MAX} value={a.want} onChange={(e) => set({ want: e.target.value })} placeholder="Drinks first, somewhere public, no rush…" aria-label="Expectations (optional)" />
-            <p className="hk-hint">No names, numbers, socials or money. Link up is how you meet.</p>
           </Section>
 
           {/* Live preview, right under section 5: the feed card as it will look, rewriting itself as they answer. */}

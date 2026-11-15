@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { useAudioPlayer } from 'expo-audio';
 import { useDispatch, useSelector } from 'react-redux';
-import { ChevronLeft, MapPin, RefreshCw, Check, Copy, Lock } from 'lucide-react-native';
+import { ChevronLeft, MapPin, RefreshCw, Check, Copy } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../ui/Toast';
@@ -43,7 +43,6 @@ const FRESH_HINT = {
 };
 const WAITING = ['listening to what you said…', 'finding your words…', 'keeping it yours…'];
 const NOTE_MAX = 200;
-const CLARITY_MAX = 120;   // "Expectations", same cap as the API
 
 const EMPTY = {
   age: '', gender: null, area: '', appearance: '',
@@ -434,12 +433,6 @@ export default function GuidedConfession({ navigation, onBack }) {
             />
             <Text style={s.counter}>{NOTE_MAX - a.note.length}</Text>
           </View>
-          <Label optional>Expectations</Label>
-          <Field value={a.want} onChangeText={(v) => set({ want: v.slice(0, CLARITY_MAX) })} placeholder="Drinks first, somewhere public, no rush…" accessibilityLabel="Expectations (optional)" />
-          <View style={s.privacyRow}>
-            <Lock size={rs(12)} color={T.textMute} />
-            <Text style={s.privacy}>No names, numbers, socials or money. Link up is how you meet.</Text>
-          </View>
         </Section>
 
         {/* Live preview: the feed card as it will look, rewriting itself as they answer. */}
@@ -655,8 +648,6 @@ const s = StyleSheet.create({
   noteBox: { borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.primaryBorder, backgroundColor: T.primaryTint, padding: rp(12) },
   noteInput: { minHeight: rs(80), color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.md, lineHeight: rf(23) },
   counter: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, textAlign: 'right' },
-  privacyRow: { flexDirection: 'row', alignItems: 'center', gap: rs(6) },
-  privacy: { flex: 1, color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs },
 
   card: { borderRadius: RADIUS.xl, borderWidth: 1, borderColor: T.primaryBorder, padding: SPACING.lg, gap: SPACING.sm },
   cardKicker: { color: T.primary, fontFamily: 'DMSans-Bold', fontSize: FONT.xs, letterSpacing: 1.5 },
