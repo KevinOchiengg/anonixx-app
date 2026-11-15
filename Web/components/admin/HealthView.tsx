@@ -23,9 +23,7 @@ export default function HealthPage() {
 
   return (
     <>
-      <div className="adm-pagehead">
-        <div><h2>System health</h2><p>{d ? (d.ok ? "Everything looks fine." : "Something needs a look.") : "Checking…"} {d ? <span className="muted small">Checked {fmtDate(d.checked_at)}</span> : null}</p></div>
-      </div>
+      <p>{d ? (d.ok ? "Everything looks fine." : "Something needs a look.") : "Checking…"} {d ? <span className="muted small">Checked {fmtDate(d.checked_at)}</span> : null}</p>
       {err ? <p className="err">{err}</p> : null}
       {d ? (
         <div className="adm-dash">

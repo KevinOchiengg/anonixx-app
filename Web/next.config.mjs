@@ -10,6 +10,15 @@ const MEDIA_HOST = process.env.NEXT_PUBLIC_MEDIA_HOST;
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Admin pages merged into others; old links (alerts, bookmarks) still land.
+  async redirects() {
+    return [
+      { source: "/admin/kanban", destination: "/admin/refunds?tab=board", permanent: false },
+      { source: "/admin/deception-reports", destination: "/admin/moderation?tab=deception", permanent: false },
+      { source: "/admin/health", destination: "/admin/alerts?tab=health", permanent: false },
+      { source: "/admin/calendar", destination: "/admin/post", permanent: false },
+    ];
+  },
   images: {
     remotePatterns: [
       ...(MEDIA_HOST ? [{ protocol: "https", hostname: MEDIA_HOST }] : []),

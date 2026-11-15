@@ -35,7 +35,6 @@ export default function AdminDeception() {
 
   return (
     <>
-      <h2>Deception reports</h2>
       <p className="muted small">Fake confession claims. Confirm refunds the person who linked up and strikes the poster.</p>
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted">Loading…</p> : data.reports.length === 0 ? <p className="muted">No pending reports.</p> : (

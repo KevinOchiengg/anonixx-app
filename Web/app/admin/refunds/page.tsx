@@ -2,25 +2,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
-import { Badge, Pager, Tabs, fmtDate } from "@/components/admin/bits";
+import { Badge, Pager, Tabs, fmtDate, useTab } from "@/components/admin/bits";
+import RefundBoard from "@/components/admin/RefundBoard";
 
 type R = {
   id: string; user_name: string | null; user_email: string | null; user_balance: number;
   coins: number | null; kes: number | null; reason: string | null; status: string; note: string | null; created_at: string | null;
 };
 type Page = { total: number; refunds: R[] };
-const STATUSES = ["pending", "accepted", "rejected", "all"] as const;
+const STATUSES = ["pending", "accepted", "rejected", "all", "board"] as const;
 const LIMIT = 30;
 
 export default function AdminRefunds() {
   const { isSuper } = useAdminRole();
-  const [status, setStatus] = useState<(typeof STATUSES)[number]>("pending");
+  const [status, setStatus] = useTab(STATUSES);
   const [skip, setSkip] = useState(0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (status === "board") return;
     try {
       setData(await api<Page>(`/admin/refunds?status=${status}&skip=${skip}&limit=${LIMIT}`));
       setError("");
@@ -45,6 +47,7 @@ export default function AdminRefunds() {
       <h2>Refund requests</h2>
       {!isSuper ? <p className="muted small">View only — a super admin decides.</p> : null}
       <Tabs value={status} options={STATUSES} onChange={(v) => { setSkip(0); setStatus(v); }} />
+      {status === "board" ? <RefundBoard /> : <>
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted">Loading…</p> : data.refunds.length === 0 ? <p className="muted">No {status === "all" ? "" : status} requests.</p> : (
         <div className="adm-list">
@@ -71,6 +74,7 @@ export default function AdminRefunds() {
         </div>
       )}
       {data ? <Pager skip={skip} limit={LIMIT} total={data.total} onSkip={setSkip} /> : null}
+      </>}
     </>
   );
 }

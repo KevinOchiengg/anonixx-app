@@ -56,12 +56,7 @@ export default function RefundBoard() {
 
   return (
     <>
-      <div className="adm-pagehead">
-        <div>
-          <h2>Refund board</h2>
-          <p>{isSuper ? "Drag a pending request into Accepted or Rejected, or use the buttons." : "View only. A super admin decides."}</p>
-        </div>
-      </div>
+      {isSuper ? <p className="muted small">Drag a pending request into Accepted or Rejected, or use the buttons.</p> : null}
       {error ? <p className="err">{error}</p> : null}
       <div className="adm-board">
         {COLS.map((c) => {

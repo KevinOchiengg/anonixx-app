@@ -66,13 +66,13 @@ async def check_alerts(db) -> None:
     pub_failed = await db["publisher_queue"].count_documents({"status": "failed", "_id": {"$gte": _oid_at(now - timedelta(hours=6))}})
     if pub_failed >= 3:
         await raise_alert(db, "publisher_failing", "warn", "Social auto-posting is failing",
-                          f"{pub_failed} posts to TikTok/Instagram/Facebook/Telegram failed in 6 hours.", "/admin/health")
+                          f"{pub_failed} posts to TikTok/Instagram/Facebook/Telegram failed in 6 hours.", "/admin/alerts?tab=health")
 
     sched_failed = await db["scheduled_drops"].count_documents({"status": "failed", "updated_at": {"$gte": now - timedelta(hours=6)}}) \
         or await db["scheduled_drops"].count_documents({"status": "failed", "created_at": {"$gte": now - timedelta(hours=6)}})
     if sched_failed:
         await raise_alert(db, "scheduled_failed", "warn", "A scheduled drop didn't publish",
-                          f"{sched_failed} scheduled drop(s) failed. Open the calendar to retry.", "/admin/calendar")
+                          f"{sched_failed} scheduled drop(s) failed. Open Post a drop to retry.", "/admin/post")
 
     flagged = await db["drops"].count_documents({"flagged_at": {"$gte": now - timedelta(hours=1)}})
     if flagged >= 5:

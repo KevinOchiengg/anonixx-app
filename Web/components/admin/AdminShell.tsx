@@ -5,10 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
-  IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic, IcFlag,
-  IcCalendar, IcKanban, IcMenu, IcBell, IcClose, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList,
+  IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic,
+  IcMenu, IcBell, IcClose, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList,
 } from "./adminicons";
 import { useKeepPlace } from "./keepPlace";
+import CommandPalette from "./CommandPalette";
 import "../../app/admin.css";
 
 // `scope` = what the admin's role must cover (Backend/app/dependencies.py ADMIN_ROLES);
@@ -22,7 +23,6 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/admin/visitors", label: "Visitors", icon: <IcEye />, superOnly: true },
       { href: "/admin/growth", label: "Growth", icon: <IcTrendUp />, scope: "growth" },
       { href: "/admin/money", label: "Money", icon: <IcCoin />, scope: "finance" },
-      { href: "/admin/alerts", label: "Alerts", icon: <IcBell /> },
     ],
   },
   {
@@ -42,27 +42,26 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/admin/refunds", label: "Refunds", icon: <IcRefund />, scope: "finance" },
       { href: "/admin/support", label: "Support", icon: <IcChat />, scope: "support" },
       { href: "/admin/ads", label: "Ads", icon: <IcMegaphone />, scope: "content" },
-      { href: "/admin/deception-reports", label: "Deception", icon: <IcFlag />, scope: "moderation" },
-    ],
-  },
-  {
-    title: "Apps",
-    items: [
-      { href: "/admin/kanban", label: "Refund board", icon: <IcKanban />, scope: "finance" },
-      { href: "/admin/calendar", label: "Calendar", icon: <IcCalendar />, scope: "content" },
     ],
   },
   {
     title: "System",
     items: [
-      { href: "/admin/health", label: "Health", icon: <IcPulse />, scope: "system" },
+      { href: "/admin/alerts", label: "System", icon: <IcPulse /> },
       { href: "/admin/audit", label: "Activity log", icon: <IcList />, superOnly: true },
     ],
   },
 ];
 
-type Role = { isSuper: boolean };
-const RoleCtx = createContext<Role>({ isSuper: false });
+// Views inside merged pages, so search can jump straight to them.
+const EXTRA: NavItem[] = [
+  { href: "/admin/refunds?tab=board", label: "Refund board", icon: null, scope: "finance" },
+  { href: "/admin/moderation?tab=deception", label: "Deception reports", icon: null, scope: "moderation" },
+  { href: "/admin/alerts?tab=health", label: "System health", icon: null, scope: "system" },
+];
+
+type Role = { isSuper: boolean; can: (scope: string) => boolean };
+const RoleCtx = createContext<Role>({ isSuper: false, can: () => false });
 export const useAdminRole = () => useContext(RoleCtx);
 
 type Alerts = { refunds: number; chats: number; system: number };
@@ -84,6 +83,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"" | "bell">("");
+  const [cmd, setCmd] = useState(false);
   const [alerts, setAlerts] = useState<Alerts>({ refunds: 0, chats: 0, system: 0 });
   const [scopes, setScopes] = useState<string[]>(["*"]);
   const can = (n: NavItem) => (n.superOnly ? isSuper : !n.scope || scopes.includes("*") || scopes.includes(n.scope));
@@ -100,6 +100,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     try { localStorage.setItem(THEME_KEY, JSON.stringify({ collapsed })); } catch {}
   }, [loaded, collapsed]);
   useEffect(() => { setOpen(false); setPanel(""); }, [path]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmd((c) => !c); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -145,11 +152,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   const total = alerts.refunds + alerts.chats + alerts.system;
   const active = (href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(`${href}/`));
-  const badge = (href: string) => (href === "/admin/refunds" || href === "/admin/kanban" ? alerts.refunds : href === "/admin/support" ? alerts.chats : 0);
+  const badge = (href: string) => (href === "/admin/refunds" ? alerts.refunds : href === "/admin/support" ? alerts.chats : href === "/admin/alerts" ? alerts.system : 0);
   const initial = (user?.anonymous_name || user?.email || "A").charAt(0).toUpperCase();
 
   return (
-    <RoleCtx.Provider value={{ isSuper }}>
+    <RoleCtx.Provider value={{ isSuper, can: (sc) => scopes.includes("*") || scopes.includes(sc) }}>
       <div className="adm" data-collapsed={collapsed ? "1" : "0"} data-open={open ? "1" : "0"}>
         <div className="adm-backdrop" onClick={() => setOpen(false)} />
         <aside className="adm-side">
@@ -184,6 +191,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               aria-label="Toggle menu"
               onClick={() => (window.matchMedia("(min-width: 900px)").matches ? setCollapsed((c) => !c) : setOpen(true))}
             ><IcMenu /></button>
+            <button type="button" className="adm-cmd-open" onClick={() => setCmd(true)} aria-label="Search admin"><span>Search…</span><kbd>Ctrl K</kbd></button>
             <div className="adm-spacer" />
             <div className="adm-pop">
               <button type="button" className="adm-iconbtn" aria-label="Alerts" onClick={() => setPanel(panel === "bell" ? "" : "bell")}>
@@ -203,6 +211,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           </header>
           <main className="adm-main">{children}</main>
         </div>
+        <CommandPalette pages={[...GROUPS.flatMap((g) => g.items), ...EXTRA].filter(can)} open={cmd} onClose={() => setCmd(false)} />
 
       </div>
     </RoleCtx.Provider>

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { Badge, fmtDate } from "@/components/admin/bits";
 import { Donut, LineChart, Spark } from "@/components/admin/charts";
-import { IcCoin, IcDash, IcPost, IcPosts, IcRefund, IcShield, IcUsers, IcChat } from "@/components/admin/adminicons";
+import { IcCoin, IcPosts, IcRefund, IcShield, IcUsers } from "@/components/admin/adminicons";
+import Inbox from "@/components/admin/Inbox";
 
 type Stats = {
   users: { total: number; active_last_30d: number; banned: number; verified: number; premium: number; admins: number };
@@ -81,6 +82,8 @@ export default function AdminOverview() {
       {error ? <p className="err">{error}</p> : null}
 
       <div className="adm-dash">
+        <Inbox />
+
         <div className="adm-panel adm-earn w4">
           <div className="adm-label">Total revenue</div>
           <div className="adm-big">${(rev?.total_usd ?? 0).toFixed(2)}</div>
@@ -137,7 +140,7 @@ export default function AdminOverview() {
           {u ? <Donut parts={parts} total={u.total} label="users" /> : <p className="muted small">Loading…</p>}
         </div>
 
-        <div className="adm-panel w7">
+        <div className="adm-panel">
           <div className="adm-panel-head"><h3>Recent coin activity</h3><Link href="/admin/users" className="muted small">Users →</Link></div>
           {txns.length ? (
             <ul className="adm-feed">
@@ -156,15 +159,6 @@ export default function AdminOverview() {
           ) : <p className="adm-empty">No coin activity yet.</p>}
         </div>
 
-        <div className="adm-panel w5">
-          <h3>Quick actions</h3>
-          <div className="adm-quick">
-            <Link href="/admin/post"><span className="ic"><IcPost /></span>Post a drop</Link>
-            <Link href="/admin/moderation"><span className="ic"><IcShield /></span>Moderation</Link>
-            <Link href="/admin/support"><span className="ic"><IcChat /></span>Support</Link>
-            <Link href="/admin/kanban"><span className="ic"><IcDash /></span>Refund board</Link>
-          </div>
-        </div>
       </div>
     </>
   );

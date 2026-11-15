@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Badge, Pager, fmtDate } from "@/components/admin/bits";
+import { Badge, Pager, Tabs, fmtDate, useTab } from "@/components/admin/bits";
+import DeceptionReports from "@/components/admin/DeceptionReports";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 
 type D = DropMedia & {
@@ -13,8 +14,10 @@ type D = DropMedia & {
 const riskTone = (n: number) => (n >= 70 ? "hi" : n >= 40 ? "mid" : "lo");
 type Page = { total: number; skip: number; limit: number; drops: D[] };
 const LIMIT = 20;
+const VIEWS = ["flagged posts", "deception"] as const;
 
 export default function AdminModeration() {
+  const [view, setView] = useTab(VIEWS);
   const [skip, setSkip] = useState(0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
@@ -49,11 +52,13 @@ export default function AdminModeration() {
     <>
       <div className="adm-pagehead">
         <div>
-          <h2>Moderation queue</h2>
-          <p className="muted small">Posts flagged by reports or hidden for self-harm concern, riskiest first. The risk score is an AI first read (or a rule-based guess when AI is off); you make the call. Dismiss keeps the post up; delete removes it.</p>
+          <h2>Moderation</h2>
         </div>
-        <button className="adm-btn" disabled={busy === "score"} onClick={async () => { setBusy("score"); try { await api("/admin/moderation-queue/score", { method: "POST" }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); } }}>{busy === "score" ? "Scoring…" : "Score now"}</button>
+        {view === "deception" ? null : <button className="adm-btn" disabled={busy === "score"} onClick={async () => { setBusy("score"); try { await api("/admin/moderation-queue/score", { method: "POST" }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); } }}>{busy === "score" ? "Scoring…" : "Score now"}</button>}
       </div>
+      <Tabs value={view} options={VIEWS} onChange={setView} />
+      {view === "deception" ? <DeceptionReports /> : <>
+      <p className="muted small">Flagged by reports or hidden for self-harm concern, riskiest first. The risk score is a first read; you make the call. Dismiss keeps the post up; delete removes it.</p>
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted">Loading…</p> : data.drops.length === 0 ? <p className="muted">Nothing waiting. All clear.</p> : (
         <div className="adm-list">
@@ -80,6 +85,7 @@ export default function AdminModeration() {
         </div>
       )}
       {data ? <Pager skip={data.skip} limit={data.limit} total={data.total} onSkip={setSkip} /> : null}
+      </>}
     </>
   );
 }

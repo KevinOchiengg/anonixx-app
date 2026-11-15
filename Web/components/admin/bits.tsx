@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 
 export const fmtDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
 
@@ -33,6 +34,22 @@ export function Tabs<T extends string>({
       ))}
     </div>
   );
+}
+
+/** Tab state kept in ?tab=, so a link can open a tab directly. */
+export function useTab<T extends string>(options: readonly T[]): [T, (v: T) => void] {
+  const [tab, setTab] = useState<T>(options[0]);
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab") as T | null;
+    if (t && options.includes(t)) setTab(t);
+  }, [options]);
+  const pick = (v: T) => {
+    setTab(v);
+    const u = new URL(window.location.href);
+    if (v === options[0]) u.searchParams.delete("tab"); else u.searchParams.set("tab", v);
+    window.history.replaceState(null, "", u);
+  };
+  return [tab, pick];
 }
 
 export function Badge({ children, tone }: { children: React.ReactNode; tone?: "ok" | "bad" | "warn" }) {

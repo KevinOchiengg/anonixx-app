@@ -2,11 +2,17 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { fmtDate } from "@/components/admin/bits";
+import { Tabs, fmtDate, useTab } from "@/components/admin/bits";
+import HealthView from "@/components/admin/HealthView";
+import { useAdminRole } from "@/components/admin/AdminShell";
 
 type Alert = { id: string; type: string; level: "good" | "warn" | "bad"; title: string; body: string; link: string | null; created_at: string | null; dismissed: boolean };
 
-export default function AlertsPage() {
+const VIEWS = ["alerts", "health"] as const;
+
+export default function SystemPage() {
+  const { can } = useAdminRole();
+  const [view, setView] = useTab(VIEWS);
   const [all, setAll] = useState(false);
   const [list, setList] = useState<Alert[] | null>(null);
   const [err, setErr] = useState("");
@@ -20,11 +26,13 @@ export default function AlertsPage() {
     <>
       <div className="adm-pagehead">
         <div>
-          <h2>Alerts</h2>
-          <p>Checked every 15 minutes: signups stopping, payments failing, auto-posting breaking, reports or traffic spiking. Super admins also get each one by push and email, plus a morning summary.</p>
+          <h2>System</h2>
         </div>
-        <label className="small"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show handled</label>
+        {view === "health" ? null : <label className="small"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show handled</label>}
       </div>
+      {can("system") ? <Tabs value={view} options={VIEWS} onChange={setView} /> : null}
+      {view === "health" && can("system") ? <HealthView /> : <>
+      <p className="muted small">Checked every 15 minutes: signups stopping, payments failing, auto-posting breaking, reports or traffic spiking. Super admins also get each by push and email.</p>
       {err ? <p className="err">{err}</p> : null}
       {!list ? <p className="muted small">Loading…</p> : list.length === 0 ? <p className="adm-empty">All quiet. Nothing needs you right now.</p> : (
         <div className="adm-list">
@@ -44,6 +52,7 @@ export default function AlertsPage() {
           ))}
         </div>
       )}
+      </>}
     </>
   );
 }

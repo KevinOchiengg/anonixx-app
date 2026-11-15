@@ -18,6 +18,10 @@ export default function AdminUsers() {
   const { isSuper } = useAdminRole();
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    const q0 = new URLSearchParams(window.location.search).get("q");
+    if (q0) { setQ(q0); setSearch(q0); }
+  }, []);
   const [skip, setSkip] = useState(0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");

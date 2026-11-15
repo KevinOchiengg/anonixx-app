@@ -19,6 +19,10 @@ const LIMIT = 20;
 export default function AdminPosts() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    const q0 = new URLSearchParams(window.location.search).get("q");
+    if (q0) { setQ(q0); setSearch(q0); }
+  }, []);
   const [sort, setSort] = useState("recent");
   const [skip, setSkip] = useState(0);
   const [data, setData] = useState<Page | null>(null);

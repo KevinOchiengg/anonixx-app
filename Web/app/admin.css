@@ -156,10 +156,21 @@
 .adm-feed .amt { font-weight: 800; }
 .adm-feed .amt.pos { color: #34d399; }
 .adm-feed .amt.neg { color: #ff7b7b; }
-.adm-quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-.adm-quick a { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: var(--surface-alt); font-weight: 700; font-size: 14px; }
-.adm-quick a:hover { outline: 1.5px solid var(--rose); }
-.adm-quick .ic { color: var(--rose); display: grid; }
+/* ---------- Ctrl+K search ---------- */
+.adm-cmd-open { display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 260px; flex: 1; margin-left: 8px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
+.adm-cmd-open span { flex: 1; text-align: left; }
+.adm-cmd-open kbd { font: inherit; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--surface-alt); }
+.adm-cmd { position: fixed; inset: 0; z-index: 80; background: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
+.adm-cmd-box { width: min(560px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6); }
+.adm-cmd-box input { width: 100%; padding: 16px 18px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: inherit; font-size: 16px; outline: none; }
+.adm-cmd-box ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
+.adm-cmd-box li.muted { padding: 12px; }
+.adm-cmd-box button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 0; border-radius: 10px; background: none; color: var(--fg); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.adm-cmd-box button.on { background: var(--surface-alt); }
+.adm-cmd-box button em { font-style: normal; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+@media (max-width: 600px) { .adm-cmd-open kbd { display: none; } }
+.adm-inbox li { flex-wrap: wrap; }
+.adm-inbox .wh { min-width: 160px; }
 
 /* kanban */
 .adm-board { display: grid; grid-template-columns: repeat(3, minmax(260px, 1fr)); gap: 14px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
@@ -177,21 +188,6 @@
 .adm-empty { text-align: center; color: var(--faint); font-size: 13px; padding: 24px 8px; }
 
 /* calendar */
-.adm-cal { display: grid; gap: 10px; }
-.adm-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
-.adm-cal-dow { text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 4px 0; }
-.adm-day { aspect-ratio: 1 / 0.82; min-height: 54px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); padding: 6px 7px; display: flex; flex-direction: column; justify-content: space-between; text-align: left; color: var(--fg); cursor: pointer; font: inherit; position: relative; overflow: hidden; }
-.adm-day:disabled { opacity: 0.3; cursor: default; }
-.adm-day .n { font-size: 12px; font-weight: 700; color: var(--muted); }
-.adm-day .c { font-size: 15px; font-weight: 800; }
-.adm-day.today .n { color: var(--rose); }
-.adm-day.sel { outline: 2px solid var(--rose); }
-.adm-day::before { content: ""; position: absolute; inset: 0; background: var(--rose); opacity: var(--heat, 0); pointer-events: none; }
-.adm-day > * { position: relative; }
-.adm-daybox { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.adm-daybox div { background: var(--surface-alt); border-radius: 14px; padding: 12px; display: grid; gap: 2px; }
-.adm-daybox b { font-size: 22px; }
-.adm-daybox span { font-size: 12px; color: var(--muted); }
 
 .adm-seg-sm { display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-alt); }
 .adm-seg-sm button { padding: 5px 11px; border-radius: 8px; border: 0; background: none; color: var(--muted); font-weight: 700; font-size: 12.5px; cursor: pointer; }
