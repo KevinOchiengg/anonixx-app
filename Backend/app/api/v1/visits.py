@@ -5,6 +5,7 @@ Privacy: a visitor is a random browser id, never tied to an account. No IPs, ref
 only, search text reduced to known terms. Events kept 180 days, visitors a year. Bots and
 Do-Not-Track browsers are skipped.
 """
+import asyncio
 import json
 import re
 import time
@@ -263,77 +264,72 @@ async def _group(db, match: dict, field: str, n=12, visitors=True):
     return _top(await db[EVENTS].aggregate(pipe).to_list(n), n)
 
 
-@router.get("/admin/visitors", summary="Site visitors: traffic, sources, searches and interests (super admin)")
-async def visitors_overview(
-    days: int = Query(7, ge=1, le=180),
-    admin_id: str = Depends(require_super_admin),
-    db=Depends(get_database),
-):
-    now = _now()
-    since = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    base = {"created_at": {"$gte": since}}
-    views_m = {**base, "type": "view"}
-
-    vids = await db[EVENTS].distinct("vid", base)
-    sessions = await db[EVENTS].aggregate([
-        {"$match": base},
-        {"$group": {"_id": "$sid", "views": {"$sum": {"$cond": [{"$eq": ["$type", "view"]}, 1, 0]}},
-                    "start": {"$min": "$created_at"}, "end": {"$max": "$created_at"}}},
-    ]).to_list(None)
-    n_sessions = len(sessions)
-    views = sum(s["views"] for s in sessions)
-    bounces = sum(1 for s in sessions if s["views"] <= 1)
-    durations = [(s["end"] - s["start"]).total_seconds() for s in sessions if s["views"] > 1]
+async def _period(db, since, until) -> dict:
+    """Headline numbers for one window [since, until)."""
+    base = {"created_at": {"$gte": since, "$lt": until}}
+    vids, sessions = await asyncio.gather(
+        db[EVENTS].distinct("vid", base),
+        db[EVENTS].aggregate([
+            {"$match": base},
+            {"$group": {"_id": "$sid", "views": {"$sum": {"$cond": [{"$eq": ["$type", "view"]}, 1, 0]}},
+                        "start": {"$min": "$created_at"}, "end": {"$max": "$created_at"}}},
+        ]).to_list(None),
+    )
+    n = len(sessions)
+    views = sum(x["views"] for x in sessions)
+    bounces = sum(1 for x in sessions if x["views"] <= 1)
+    durations = [(x["end"] - x["start"]).total_seconds() for x in sessions if x["views"] > 1]
     returning = await db[VISITORS].count_documents({"_id": {"$in": vids}, "first_seen": {"$lt": since}}) if vids else 0
-    live_since = now - timedelta(minutes=LIVE_MINUTES)
-    live = await db[EVENTS].aggregate([
-        {"$match": {"created_at": {"$gte": live_since}}},
-        {"$sort": {"created_at": 1}},
-        {"$group": {"_id": "$vid", "path": {"$last": "$path"}, "country": {"$last": "$country"}, "device": {"$last": "$device"}}},
-    ]).to_list(200)
+    return {
+        "visitors": len(vids), "new_visitors": len(vids) - returning, "returning_visitors": returning,
+        "sessions": n, "views": views,
+        "pages_per_session": round(views / n, 1) if n else 0,
+        "bounce_rate": round(100 * bounces / n) if n else 0,
+        "avg_session_seconds": round(sum(durations) / len(durations)) if durations else 0,
+    }
 
-    # Daily series, in UTC days.
+
+async def _series(db, views_m, since, days) -> dict:
     daily = await db[EVENTS].aggregate([
         {"$match": views_m},
         {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
                     "views": {"$sum": 1}, "v": {"$addToSet": "$vid"}}},
     ]).to_list(None)
     by_day = {d["_id"]: d for d in daily}
-    labels, s_visitors, s_views = [], [], []
+    labels, vis, vws = [], [], []
     for i in range(days):
         day = (since + timedelta(days=i)).strftime("%Y-%m-%d")
-        labels.append(day[5:])
         d = by_day.get(day)
-        s_visitors.append(len(d["v"]) if d else 0)
-        s_views.append(d["views"] if d else 0)
+        labels.append(day[5:])
+        vis.append(len(d["v"]) if d else 0)
+        vws.append(d["views"] if d else 0)
+    return {"labels": labels, "visitors": vis, "views": vws}
 
-    # Time on page, by path (from "leave" events).
-    dwell = await db[EVENTS].aggregate([
-        {"$match": {**base, "type": "leave"}},
-        # A page hidden and shown again sends more than one "leave": add them up per visit first.
-        {"$group": {"_id": {"sid": "$sid", "path": "$path"}, "ms": {"$sum": "$ms"}}},
-        {"$group": {"_id": "$_id.path", "avg": {"$avg": "$ms"}, "n": {"$sum": 1}}},
-        {"$match": {"n": {"$gte": 2}}},
-        {"$sort": {"avg": -1}}, {"$limit": 10},
-    ]).to_list(10)
 
-    # Drops people open: what content pulls them in.
-    drop_rows = await db[EVENTS].aggregate([
+async def _funnel(db, base, views_m) -> dict:
+    visitors, saw, signed, searched = await asyncio.gather(
+        db[EVENTS].distinct("vid", base),
+        db[EVENTS].distinct("vid", {**views_m, "path": {"$in": ["/signup", "/join"]}}),
+        db[EVENTS].distinct("vid", {**base, "type": "signup"}),
+        db[EVENTS].distinct("vid", {**base, "type": "search"}),
+    )
+    return {"visitors": len(visitors), "searched": len(searched), "saw_signup": len(saw), "signed_up": len(signed)}
+
+
+async def _drops_pull(db, views_m) -> dict:
+    """Drops people open: what content pulls them in."""
+    rows = await db[EVENTS].aggregate([
         {"$match": {**views_m, "path": {"$regex": "^/drop/"}}},
         {"$group": {"_id": "$path", "count": {"$sum": 1}, "v": {"$addToSet": "$vid"}}},
         {"$sort": {"count": -1}}, {"$limit": 200},
     ]).to_list(200)
-    ids = []
-    for r in drop_rows:
-        m = DROP_PATH.match(r["_id"])
-        if m:
-            ids.append(ObjectId(m.group(1)))
+    ids = [ObjectId(m.group(1)) for r in rows if (m := DROP_PATH.match(r["_id"]))]
     drops = {}
     if ids:
         async for d in db["drops"].find({"_id": {"$in": ids}}, {"confession": 1, "content": 1, "kind": 1, "mood_tag": 1, "category": 1}):
             drops[str(d["_id"])] = d
-    top_drops, kinds, moods = [], defaultdict(int), defaultdict(int)
-    for r in drop_rows:
+    top, kinds, moods = [], defaultdict(int), defaultdict(int)
+    for r in rows:
         m = DROP_PATH.match(r["_id"])
         d = drops.get(m.group(1)) if m else None
         kind = (d or {}).get("kind") or "confession"
@@ -341,70 +337,110 @@ async def visitors_overview(
         kinds[kind] += r["count"]
         if mood:
             moods[mood] += r["count"]
-        if len(top_drops) < 10:
+        if len(top) < 10:
             text = (d or {}).get("confession") or (d or {}).get("content") or ""
-            top_drops.append({
-                "id": m.group(1) if m else None, "views": r["count"], "visitors": len(r["v"]),
-                "kind": kind, "mood": mood,
+            top.append({
+                "id": m.group(1) if m else None, "views": r["count"], "visitors": len(r["v"]), "kind": kind, "mood": mood,
                 "teaser": (text[:110] + "…") if len(text) > 110 else (text or "(deleted or media-only)"),
             })
+    rank = lambda c: sorted([{"key": k, "count": v} for k, v in c.items()], key=lambda x: -x["count"])
+    return {"top_drops": top, "interest_kinds": rank(kinds), "interest_moods": rank(moods)[:10]}
 
-    # Funnel: visitors → saw signup → signed up.
-    saw_signup = len(await db[EVENTS].distinct("vid", {**views_m, "path": {"$in": ["/signup", "/join"]}}))
-    signups = len(await db[EVENTS].distinct("vid", {**base, "type": "signup"}))
-    searchers = len(await db[EVENTS].distinct("vid", {**base, "type": "search"}))
 
-    zero = await db[EVENTS].aggregate([
+async def _dwell(db, base) -> list:
+    rows = await db[EVENTS].aggregate([
+        {"$match": {**base, "type": "leave"}},
+        # A page hidden and shown again sends more than one "leave": add them up per visit first.
+        {"$group": {"_id": {"sid": "$sid", "path": "$path"}, "ms": {"$sum": "$ms"}}},
+        {"$group": {"_id": "$_id.path", "avg": {"$avg": "$ms"}, "n": {"$sum": 1}}},
+        {"$match": {"n": {"$gte": 2}}},
+        {"$sort": {"avg": -1}}, {"$limit": 10},
+    ]).to_list(10)
+    return [{"key": d["_id"], "seconds": round(d["avg"] / 1000), "count": d["n"]} for d in rows]
+
+
+async def _zero(db, base) -> list:
+    rows = await db[EVENTS].aggregate([
         {"$match": {**base, "type": "search", "q": {"$exists": True}, "results": 0}},
         {"$group": {"_id": "$q", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}}, {"$limit": 12},
     ]).to_list(12)
+    return [{"key": z["_id"], "count": z["count"]} for z in rows]
 
-    return {
-        "days": days,
-        "summary": {
-            "visitors": len(vids),
-            "new_visitors": len(vids) - returning,
-            "returning_visitors": returning,
-            "sessions": n_sessions,
-            "views": views,
-            "pages_per_session": round(views / n_sessions, 1) if n_sessions else 0,
-            "bounce_rate": round(100 * bounces / n_sessions) if n_sessions else 0,
-            "avg_session_seconds": round(sum(durations) / len(durations)) if durations else 0,
-            "live_now": len(live),
-        },
-        "live": [{"vid": l["_id"], "path": l["path"], "country": l.get("country"), "device": l.get("device")} for l in live[:20]],
-        "series": {"labels": labels, "visitors": s_visitors, "views": s_views},
-        "pages": await _group(db, views_m, "path", 15),
-        "landing": await _group(db, {**views_m, "landing": True}, "path", 10),
-        "referrers": await _group(db, views_m, "ref", 10),
-        "campaigns": await _group(db, views_m, "utm.campaign", 10),
-        "sources": await _group(db, views_m, "utm.source", 10),
-        "countries": await _group(db, views_m, "country", 15),
-        "devices": await _group(db, views_m, "device", 5),
-        "browsers": await _group(db, views_m, "browser", 6),
-        "searches": await _group(db, {**base, "type": "search"}, "q", 20),
-        "search_themes": await _group(db, {**base, "type": "search"}, "theme", 8),
-        "search_places": await _group(db, {**base, "type": "search"}, "place", 10),
-        "zero_result_searches": [{"key": z["_id"], "count": z["count"]} for z in zero],
-        "clicks": await _group(db, {**base, "type": "click"}, "target", 15),
-        "dwell": [{"key": d["_id"], "seconds": round(d["avg"] / 1000), "count": d["n"]} for d in dwell],
-        "top_drops": top_drops,
-        "interest_kinds": sorted([{"key": k, "count": v} for k, v in kinds.items()], key=lambda x: -x["count"]),
-        "interest_moods": sorted([{"key": k, "count": v} for k, v in moods.items()], key=lambda x: -x["count"])[:10],
-        "funnel": {"visitors": len(vids), "searched": searchers, "saw_signup": saw_signup, "signed_up": signups},
-        "recent": [
-            {
-                "vid": v["_id"], "first_seen": v.get("first_seen"), "last_seen": v.get("last_seen"),
-                "country": v.get("country"), "device": v.get("device"), "browser": v.get("browser"),
-                "views": v.get("views", 0), "sessions": v.get("sessions", 0),
-                "first_path": v.get("first_path"), "first_ref": v.get("first_ref"),
-                "last_path": v.get("last_path"), "signed_up": bool(v.get("signed_up_at")),
-                "signed_in": bool(v.get("signed_in")),
-            }
-            async for v in db[VISITORS].find({"last_seen": {"$gte": since}}).sort("last_seen", -1).limit(30)
-        ],
-    }
+
+async def _recent(db, since) -> list:
+    return [
+        {
+            "vid": v["_id"], "first_seen": v.get("first_seen"), "last_seen": v.get("last_seen"),
+            "country": v.get("country"), "device": v.get("device"), "browser": v.get("browser"),
+            "views": v.get("views", 0), "sessions": v.get("sessions", 0),
+            "first_path": v.get("first_path"), "first_ref": v.get("first_ref"),
+            "last_path": v.get("last_path"), "signed_up": bool(v.get("signed_up_at")),
+            "signed_in": bool(v.get("signed_in")),
+        }
+        async for v in db[VISITORS].find({"last_seen": {"$gte": since}}).sort("last_seen", -1).limit(30)
+    ]
+
+
+VISITOR_TABS = ("overview", "content", "search", "sources", "recent")
+
+
+@router.get("/admin/visitors", summary="Site visitors, one tab at a time (super admin)")
+async def visitors_overview(
+    days: int = Query(7, ge=1, le=180),
+    tab: str = Query("overview"),
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    if tab not in VISITOR_TABS:
+        raise HTTPException(400, "Unknown tab")
+    now = _now()
+    since = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    base = {"created_at": {"$gte": since}}
+    views_m = {**base, "type": "view"}
+    search_m = {**base, "type": "search"}
+
+    # Only what the open tab shows, all asked for at once.
+    jobs: dict = {}
+    if tab == "overview":
+        span = now - since
+        jobs = {
+            "summary": _period(db, since, now + timedelta(seconds=1)),
+            # The same length of time just before, for the "vs last period" arrows.
+            "previous": _period(db, since - span, now - span),
+            "series": _series(db, views_m, since, days),
+            "funnel": _funnel(db, base, views_m),
+        }
+    elif tab == "content":
+        jobs = {
+            "drops": _drops_pull(db, views_m),
+            "pages": _group(db, views_m, "path", 15),
+            "landing": _group(db, {**views_m, "landing": True}, "path", 10),
+            "clicks": _group(db, {**base, "type": "click"}, "target", 15),
+            "dwell": _dwell(db, base),
+        }
+    elif tab == "search":
+        jobs = {
+            "searches": _group(db, search_m, "q", 20),
+            "search_themes": _group(db, search_m, "theme", 8),
+            "search_places": _group(db, search_m, "place", 10),
+            "zero_result_searches": _zero(db, base),
+        }
+    elif tab == "sources":
+        jobs = {
+            "referrers": _group(db, views_m, "ref", 10),
+            "campaigns": _group(db, views_m, "utm.campaign", 10),
+            "sources": _group(db, views_m, "utm.source", 10),
+            "countries": _group(db, views_m, "country", 15),
+            "devices": _group(db, views_m, "device", 5),
+            "browsers": _group(db, views_m, "browser", 6),
+        }
+    else:
+        jobs = {"recent": _recent(db, since)}
+
+    out = dict(zip(jobs, await asyncio.gather(*jobs.values())))
+    out.update(out.pop("drops", {}))
+    return {"days": days, "tab": tab, **out}
 
 
 def _teaser(d) -> str:

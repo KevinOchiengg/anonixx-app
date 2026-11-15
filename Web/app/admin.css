@@ -129,6 +129,9 @@
 .adm-kpi .ico { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 8px; background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); }
 .adm-kpi .v { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
 .adm-kpi .l { font-size: 13px; color: var(--muted); }
+.adm-delta { margin-left: 6px; font-size: 11px; font-weight: 800; color: var(--muted); }
+.adm-delta.up { color: #34d399; }
+.adm-delta.down { color: #ff7b7b; }
 .adm-kpi .s { font-size: 12px; font-weight: 700; color: var(--k); }
 .adm-kpi .adm-spark { position: absolute; right: 12px; top: 14px; width: 84px; height: 30px; opacity: 0.9; }
 .adm-chart { position: relative; }
