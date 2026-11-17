@@ -5,7 +5,7 @@ import hashlib
 from typing import Literal
 
 # ── Platform type ────────────────────────────────────────────────────────────
-Platform = Literal["tiktok", "facebook", "instagram", "telegram"]
+Platform = Literal["tiktok", "facebook", "instagram", "x"]
 
 # ── Opening hooks (rotated) ───────────────────────────────────────────────────
 _GENERIC_EMOJI = "💬"
@@ -52,13 +52,6 @@ _INSTAGRAM_CTAS: list[str] = [
     "your confession is safe with us.\n\nanonixx.com",
 ]
 
-_TELEGRAM_CTAS: list[str] = [
-    "Someone's waiting to hear from you. Unlock the full confession on Anonixx → anonixx.com",
-    "This is only part of it. The rest is on Anonixx → anonixx.com",
-    "Real people, real confessions, completely anonymous. → anonixx.com",
-    "You can respond to this one — anonymously — on Anonixx → anonixx.com",
-    "Thousands are confessing right now on Anonixx → anonixx.com",
-]
 
 # ── Hashtag banks ─────────────────────────────────────────────────────────────
 _TIKTOK_TAGS = "#anonixx #anonymous #confession #mentalhealth #anonymousconfessions #secrets #vulnerability"
@@ -94,8 +87,8 @@ def _hook(seed: str) -> str:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def build_caption(confession: str, platform: Platform) -> str:
-    """Caption for `platform` ("tiktok", "facebook", "instagram", "telegram"), within its length limit."""
+def build_caption(confession: str, platform: Platform, link: str = "https://anonixx.com") -> str:
+    """Caption for `platform` ("tiktok", "facebook", "instagram", "x"), within its length limit."""
     confession = (confession or "").strip()
     hook       = _hook(confession)
 
@@ -105,8 +98,8 @@ def build_caption(confession: str, platform: Platform) -> str:
         return _facebook_caption(confession, hook)
     if platform == "instagram":
         return _instagram_caption(confession, hook)
-    if platform == "telegram":
-        return _telegram_caption(confession, hook)
+    if platform == "x":
+        return _x_caption(confession, hook, link)
 
     # Fallback — should never happen
     return _tiktok_caption(confession, hook)
@@ -169,13 +162,11 @@ def _instagram_caption(confession: str, hook: str) -> str:
     return body[:2200]
 
 
-def _telegram_caption(confession: str, hook: str) -> str:
-    """Telegram: hook, confession, CTA; no hashtags."""
-    cta = _pick(_TELEGRAM_CTAS, confession[-20:])
-    tg_hook = hook[0].upper() + hook[1:] if hook else hook
-    body = (
-        f"{tg_hook}\n\n"
-        f'{_GENERIC_EMOJI} "{confession}"\n\n'
-        f"{cta}"
-    )
-    return body[:1024]
+def _x_caption(confession: str, hook: str, link: str) -> str:
+    """X: hook, a short quote, the drop's link, two hashtags; within 280 (a link counts as 23)."""
+    x_hook = hook[0].upper() + hook[1:] if hook else hook
+    tags = "#anonixx #confession"
+    room = 280 - 23 - len(tags) - len(x_hook) - 12   # quotes, line breaks and a little slack for emoji
+    quote = confession if len(confession) <= room else confession[: max(0, room - 1)].rstrip() + "…"
+    parts = [x_hook, f'"{quote}"' if quote and room > 20 else "", link, tags]
+    return "\n\n".join(p for p in parts if p)

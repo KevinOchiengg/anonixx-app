@@ -386,6 +386,8 @@ async def health(
         "Video uploads (Cloudflare Stream)": stream.is_configured(),
         "TikTok auto-post": _set(getattr(settings, "TIKTOK_ACCESS_TOKEN", "")),
         "Facebook auto-post": _set(getattr(settings, "FACEBOOK_PAGE_ACCESS_TOKEN", "")),
+        "Instagram auto-post": _set(getattr(settings, "INSTAGRAM_ACCOUNT_ID", "")),
+        "X auto-post": bool(settings.X_API_KEY and settings.X_ACCESS_TOKEN),
         "Stripe": _set(getattr(settings, "STRIPE_SECRET_KEY", "")),
         "Super admins set (SUPER_ADMIN_EMAILS)": bool(settings.SUPER_ADMIN_EMAILS.strip()),
     }

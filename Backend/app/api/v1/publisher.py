@@ -12,7 +12,7 @@ from app.tasks.publisher_worker import publisher_worker
 from app.services.tiktok_publisher    import tiktok_publisher
 from app.services.facebook_publisher  import facebook_publisher
 from app.services.instagram_publisher import instagram_publisher
-from app.services.telegram_publisher  import telegram_publisher
+from app.services.x_publisher         import x_publisher
 
 from app.dependencies import require_scope
 router = APIRouter(prefix="/publisher", tags=["publisher"])
@@ -106,5 +106,5 @@ async def publisher_health(_= Depends(get_current_user_id)):
         "tiktok":    tiktok_publisher.is_configured(),
         "facebook":  facebook_publisher.is_configured(),
         "instagram": instagram_publisher.is_configured(),
-        "telegram":  telegram_publisher.is_configured(),
+        "x":         x_publisher.is_configured(),
     }

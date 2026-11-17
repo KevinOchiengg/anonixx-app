@@ -8,7 +8,7 @@ export type Category = "curiosity" | "linkup" | "vulnerable";
 
 // Tints are existing theme variables only (globals.css): violet, rose, fg.
 export const CATEGORIES: Record<Category, { label: string; tint: string }> = {
-  curiosity: { label: "Curiosity", tint: "var(--violet)" },
+  curiosity: { label: "Confession", tint: "var(--violet)" },
   linkup: { label: "Link Up", tint: "var(--rose)" },
   vulnerable: { label: "Vulnerable", tint: "var(--fg)" },
 };

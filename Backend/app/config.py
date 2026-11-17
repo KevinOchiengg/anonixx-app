@@ -113,10 +113,12 @@ class Settings(BaseSettings):
     # Instagram business account linked to the Facebook Page (uses the same token)
     INSTAGRAM_ACCOUNT_ID: str = "your-instagram-account-id-here"
 
-    # Telegram — Bot API token + the Anonixx channel it posts into
-    # Create a bot via @BotFather, add it as admin to the channel
-    TELEGRAM_BOT_TOKEN:  str = "your-telegram-bot-token-here"
-    TELEGRAM_CHANNEL_ID: str = "your-telegram-channel-id-here"  # e.g. "@anonixx" or "-100123456789"
+    # X (Twitter) — OAuth 1.0a keys of a developer app with Read and Write permission,
+    # generated while signed in as the Anonixx X account.
+    X_API_KEY:             str = ""
+    X_API_SECRET:          str = ""
+    X_ACCESS_TOKEN:        str = ""
+    X_ACCESS_TOKEN_SECRET: str = ""
 
     # APP
     BASE_URL: str = "http://localhost:8000"

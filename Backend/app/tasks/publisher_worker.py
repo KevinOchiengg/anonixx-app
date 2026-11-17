@@ -1,5 +1,5 @@
-"""Publishes queued drops to TikTok, Facebook, Instagram and Telegram at the same time.
-Facebook, Instagram and Telegram post the teaser card when there is one; TikTok posts the
+"""Publishes queued drops to TikTok, Facebook, Instagram and X at the same time.
+Facebook, Instagram and X post the teaser card when there is one; TikTok posts the
 real media. Queue status: posted | partial | failed (retried) | failed_permanent."""
 
 import asyncio
@@ -11,7 +11,7 @@ from app.database import get_database
 from app.services.tiktok_publisher    import tiktok_publisher
 from app.services.facebook_publisher  import facebook_publisher
 from app.services.instagram_publisher import instagram_publisher, PlatformSkipped
-from app.services.telegram_publisher  import telegram_publisher
+from app.services.x_publisher         import x_publisher
 from app.utils.content_mode import socials_safe
 
 log = logging.getLogger(__name__)
@@ -184,7 +184,7 @@ class PublisherWorker:
         media_type   = (entry.get("media_type") or "text").lower()
         confession   = entry.get("confession") or ""
         media_url    = entry.get("media_url")
-        # Facebook/Instagram/Telegram post the teaser card when there is one.
+        # Facebook/Instagram/X post the teaser card when there is one.
         teaser_url   = entry.get("teaser_image_url")
 
         # Build coroutines for each configured platform.
@@ -202,14 +202,14 @@ class PublisherWorker:
         if instagram_publisher.is_configured():
             coros["instagram"] = self._call_instagram(media_type, confession, media_url, teaser_url)
 
-        if telegram_publisher.is_configured():
-            coros["telegram"] = self._call_telegram(media_type, confession, media_url, teaser_url)
+        if x_publisher.is_configured():
+            coros["x"] = self._call_x(media_type, confession, media_url, teaser_url, entry.get("drop_id"))
 
         if not coros:
             raise RuntimeError(
                 "No social platforms are configured. "
                 "Set at least one of TIKTOK_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN / "
-                "TELEGRAM_BOT_TOKEN in your .env file."
+                "X_API_KEY in your .env file."
             )
 
         # Run all platforms concurrently.
@@ -307,28 +307,15 @@ class PublisherWorker:
         # text — Instagram does not support text-only posts
         return await instagram_publisher.post_text(confession=confession)
 
-    async def _call_telegram(
-        self, media_type: str, confession: str, media_url: str | None, teaser_url: str | None
+    async def _call_x(
+        self, media_type: str, confession: str, media_url: str | None, teaser_url: str | None, drop_id: str | None
     ):
-        if teaser_url:
-            return await telegram_publisher.post_image(
-                image_url=teaser_url, confession=confession,
-            )
-        if media_type == "video":
-            if not media_url:
-                raise ValueError("Video drop missing media_url.")
-            return await telegram_publisher.post_video(
-                video_url=media_url, confession=confession,
-            )
-        if media_type == "image":
-            if not media_url:
-                raise ValueError("Image drop missing media_url.")
-            return await telegram_publisher.post_image(
-                image_url=media_url, confession=confession,
-            )
-        if not confession.strip():
-            raise ValueError("Text drop has no confession content.")
-        return await telegram_publisher.post_text(confession=confession)
+        link = f"https://anonixx.com/drop/{drop_id}" if drop_id else "https://anonixx.com"
+        # The teaser card, else the image itself; a video without a card goes out as text + link.
+        image = teaser_url or (media_url if media_type == "image" else None)
+        if not image and not confession.strip():
+            raise ValueError("Drop has no text or image for X.")
+        return await x_publisher.post(confession=confession, link=link, image_url=image)
 
 
 # ── Singleton ────────────────────────────────────────────────────
