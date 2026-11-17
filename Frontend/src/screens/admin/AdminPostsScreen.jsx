@@ -135,10 +135,12 @@ export default function AdminPostsScreen({ navigation, route }) {
       setPosts((prev) => prev.map((p) => (p.id === editing.id ? { ...p, confession: data.confession, confession_full: data.confession } : p)));
       setEditing(null);
       showToast({ type: 'success', message: 'Drop updated.' });
+      // From the feed's pencil: straight back to the drop.
+      if (only) navigation.goBack();
     } else {
       showToast({ type: 'error', message: data?.detail || 'Could not save.' });
     }
-  }, [editing, showToast]);
+  }, [editing, showToast, only, navigation]);
 
   const confirmDelete = useCallback((post) => {
     Alert.alert('Delete this post?', 'This removes it for everyone and can\'t be undone.', [
@@ -149,8 +151,8 @@ export default function AdminPostsScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={a.safe} edges={['top', 'left', 'right']}>
-      <AdminHeader title={`Posts (${total})`} onBack={() => navigation.goBack()} />
-      <View style={a.searchRow}>
+      <AdminHeader title={only ? 'Edit drop' : `Posts (${total})`} onBack={() => navigation.goBack()} />
+      {only ? null : <View style={a.searchRow}>
         <Search size={rs(15)} color={T.textMuted} />
         <TextInput
           value={query}
@@ -160,19 +162,22 @@ export default function AdminPostsScreen({ navigation, route }) {
           style={a.searchInput}
           autoCapitalize="none"
         />
-      </View>
+      </View>}
       {only ? (
         <TouchableOpacity onPress={() => { setOnly(null); setEditing(null); }} style={st.onlyRow} activeOpacity={0.8}>
-          <Text style={st.onlyText}>Showing one drop. <Text style={{ color: T.primary }}>Show all posts</Text></Text>
+          <Text style={st.onlyText}>
+            {posts[0] && !posts[0].is_admin_drop ? 'Only Anonixx drops can be edited. ' : 'Save takes you back to the drop. '}
+            <Text style={{ color: T.primary }}>All posts</Text>
+          </Text>
         </TouchableOpacity>
       ) : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.sortBar} contentContainerStyle={st.sortRow}>
+      {only ? null : <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.sortBar} contentContainerStyle={st.sortRow}>
         {SORTS.map(([k, l]) => (
           <TouchableOpacity key={k} onPress={() => setSort(k)} style={[st.sortChip, sort === k && st.sortChipOn]} activeOpacity={0.8}>
             <Text style={[st.sortText, sort === k && st.sortTextOn]}>{l}</Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </ScrollView>}
       {loading ? (
         <View style={a.centered}><ActivityIndicator color={T.primary} size="large" /></View>
       ) : (

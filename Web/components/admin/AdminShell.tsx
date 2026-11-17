@@ -144,7 +144,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   // No gate screen: signed out goes straight to sign in (and back here after);
   // a signed-in account without admin access goes to the feed.
   useEffect(() => {
-    if (state === "login") router.replace(`/login?next=${encodeURIComponent(path)}`);
+    if (state === "login") router.replace(`/login?next=${encodeURIComponent(path + window.location.search)}`);
     else if (state === "denied") router.replace("/");
   }, [state, path, router]);
 

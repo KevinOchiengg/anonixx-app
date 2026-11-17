@@ -24,9 +24,11 @@ export default function AdminPosts() {
     const q0 = u.get("q");
     if (q0) { setQ(q0); setSearch(q0); }
     if (u.get("edit")) setOnly(u.get("edit"));
+    setReady(true);
   }, []);
-  // ?edit=<id> (the pencil on a drop in the feed): just that drop, open for editing.
+  // ?edit=<id> (the pencil on a drop in the feed): that one drop, open in the editor.
   const [only, setOnly] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const [sort, setSort] = useState("recent");
   const [skip, setSkip] = useState(0);
   const [data, setData] = useState<Page | null>(null);
@@ -51,7 +53,7 @@ export default function AdminPosts() {
     }
   }, [skip, search, sort, only]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (ready) load(); }, [load, ready]);
 
   async function remove(d: D) {
     if (!window.confirm("Delete this post for everyone? This cannot be undone.")) return;
@@ -74,21 +76,31 @@ export default function AdminPosts() {
     try {
       await api(`/admin/drops/${editing.id}`, { method: "PATCH", body: { confession: editing.text.trim() } });
       setEditing(null);
+      // From the feed's pencil: back to the drop once it's saved.
+      if (only && window.history.length > 1) { window.history.back(); return; }
       await load();
     } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }
 
   return (
     <>
-      <h2>Posts</h2>
-      {only ? <p className="muted small">Showing one drop. <button type="button" className="adm-linkbtn" onClick={() => { setOnly(null); setEditing(null); window.history.replaceState(null, "", "/admin/posts"); }}>Show all posts</button></p> : null}
-      <form className="adm-search" onSubmit={(e) => { e.preventDefault(); setSkip(0); setSearch(q.trim()); }}>
+      {only ? (
+        <div className="adm-pagehead">
+          <div><h2>Edit drop</h2><p className="muted small">Save takes you back to the drop.</p></div>
+          <div className="adm-actions">
+            <button type="button" className="adm-btn" onClick={() => window.history.back()}>Back</button>
+            <button type="button" className="adm-btn" onClick={() => { setOnly(null); setEditing(null); window.history.replaceState(null, "", "/admin/posts"); }}>All posts</button>
+          </div>
+        </div>
+      ) : <h2>Posts</h2>}
+      {only && data?.drops[0] && !data.drops[0].is_admin_drop ? <p className="muted small">Only Anonixx drops can be edited. People&apos;s own drops stay as they wrote them.</p> : null}
+      {only ? null : <form className="adm-search" onSubmit={(e) => { e.preventDefault(); setSkip(0); setSearch(q.trim()); }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search post text" />
         <button className="adm-btn primary">Search</button>
         <select className="adm-select" value={sort} onChange={(e) => { setSkip(0); setSort(e.target.value); }} aria-label="Sort posts">
           {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
-      </form>
+      </form>}
       {error ? <p className="err">{error}</p> : null}
       {!data ? <p className="muted">Loading…</p> : data.drops.length === 0 ? <p className="muted">No posts found.</p> : (
         <div className="adm-list">
@@ -162,7 +174,7 @@ export default function AdminPosts() {
           ))}
         </div>
       )}
-      {data ? <Pager skip={data.skip} limit={data.limit} total={data.total} onSkip={setSkip} /> : null}
+      {data && !only ? <Pager skip={data.skip} limit={data.limit} total={data.total} onSkip={setSkip} /> : null}
     </>
   );
 }
