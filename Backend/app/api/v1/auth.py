@@ -83,6 +83,7 @@ class UserResponse(BaseModel):
     bio:            Optional[str] = None
     avatar_url:     Optional[str] = None
     is_admin:       bool = False
+    is_super_admin: bool = False
     is_premium:     bool = False
     premium_until:  Optional[str] = None
     has_password:   bool = True
