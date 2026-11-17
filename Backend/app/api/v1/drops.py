@@ -23,7 +23,7 @@ from app.utils.location import build_location, build_feed_location_filter, build
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
 from app.services.confession_writer import MONEY as CLARITY_MONEY
-from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode
+from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode, socials_safe
 from app.utils.fingerprint import fingerprint_hash
 from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted, splice_promoted
 from app.utils import taste
@@ -714,8 +714,8 @@ async def create_drop(
         if parts:
             recognition_hint = parts[0].lower()[:16]
 
-    # Sharing to socials is the poster's choice; on unless they opted out.
-    publisher_opt_in = (data.publisher_opt_in is not False)
+    # Sharing to socials is the poster's choice: only when they ticked it.
+    publisher_opt_in = data.publisher_opt_in is True
 
     # Paid drop: super admin only, and only a Stream video the pipeline has already locked.
     paywall_doc = None
@@ -897,9 +897,10 @@ async def create_drop(
     await db["drops"].insert_one(drop)
     drop_id_str = str(drop["_id"])
 
-    # ── Auto-queue for Anonixx socials (unless targeted, flagged or opted out).
+    # ── Queue for Anonixx socials: opted in, public, visible, and never link-up or mature.
     if (
         publisher_opt_in
+        and socials_safe(drop)
         and not data.target_user_id
         and drop["moderation_status"] == "visible"
     ):
@@ -3614,6 +3615,9 @@ async def publish_drop(
 
     if drop.get("moderation_status") == "hidden":
         raise HTTPException(status_code=400, detail="This drop is under review and cannot be published.")
+
+    if not socials_safe(drop):
+        raise HTTPException(status_code=400, detail="Link up and 18+ drops stay on Anonixx.")
 
     if drop.get("published_at"):
         return {"message": "Already published", "published_at": drop["published_at"].isoformat()}

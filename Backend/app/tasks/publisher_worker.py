@@ -12,6 +12,7 @@ from app.services.tiktok_publisher    import tiktok_publisher
 from app.services.facebook_publisher  import facebook_publisher
 from app.services.instagram_publisher import instagram_publisher, PlatformSkipped
 from app.services.telegram_publisher  import telegram_publisher
+from app.utils.content_mode import socials_safe
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +107,18 @@ class PublisherWorker:
         )
         if locked.modified_count == 0:
             return   # another task already claimed this entry
+
+        # Never post link-up or mature drops, even ones queued before this rule.
+        from bson import ObjectId
+        try:
+            drop = await db["drops"].find_one({"_id": ObjectId(entry.get("drop_id"))}, {"kind": 1, "sensitivity": 1})
+        except Exception:
+            drop = None
+        if not drop or not socials_safe(drop):
+            await db["publisher_queue"].update_one(
+                {"_id": eid}, {"$set": {"status": "skipped", "error": "link up / 18+ or deleted: stays on Anonixx", "processed_at": _now()}},
+            )
+            return
 
         try:
             platform_results, platform_errors = await self._dispatch_all(entry)

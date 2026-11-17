@@ -350,8 +350,8 @@ export default function DropsComposeScreen({ navigation, route }) {
   // ── Tag a specific user (optional — drop still hits marketplace) ─
   const [taggedUser, setTaggedUser] = useState(null);
 
-  // ── Share to Anonixx socials: on by default (opt out).
-  const [publisherOptIn, setPublisherOptIn] = useState(true);
+  // ── Share to Anonixx socials: off until the poster ticks it.
+  const [publisherOptIn, setPublisherOptIn] = useState(false);
 
   // ── Location (country/county from lists, the rest free text) and font style.
   const [locationCountry, setLocationCountry] = useState('');
@@ -1129,7 +1129,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               active={!publisherOptIn}
               onPress={() => { dismissToolbarHint(); setActiveSheet('more'); }}
               label="Share"
-              a11yLabel="Share to Anonixx socials — on by default, anonymous"
+              a11yLabel="Share to Anonixx socials, anonymous"
             >
               <Share2 size={rs(18)} color={T.textMute} />
             </ToolIcon>

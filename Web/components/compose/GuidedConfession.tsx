@@ -286,7 +286,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           },
           mood_tag: "longing",
           sensitivity: "mature",
-          publisher_opt_in: true,
+          publisher_opt_in: false,
           ...(a.sound ? { sound_id: a.sound } : {}),
         },
       });

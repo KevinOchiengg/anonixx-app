@@ -346,7 +346,7 @@ export default function GuidedConfession({ navigation, onBack }) {
         mood_tag: 'longing',
         sensitivity: 'mature',
         font_style: 'classic',
-        publisher_opt_in: true,
+        publisher_opt_in: false,
         ...(a.sound ? { sound_id: a.sound } : {}),
       });
       if (res.status === 403 && isAgeGate(data)) { setAgeGate(true); return; }

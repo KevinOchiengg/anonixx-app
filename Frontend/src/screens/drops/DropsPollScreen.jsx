@@ -46,7 +46,7 @@ export default function DropsPollScreen({ navigation, route }) {
 
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions,  setPollOptions]  = useState(['', '']);
-  const [publisherOptIn, setPublisherOptIn] = useState(true);
+  const [publisherOptIn, setPublisherOptIn] = useState(false);
   const [sending, setSending] = useState(false);
 
   // Supporting photo — optional, supplements the question+options the same

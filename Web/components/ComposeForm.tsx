@@ -81,7 +81,7 @@ function Inner() {
   const [hearing, setHearing] = useState("");
   const preview = useRef<HTMLAudioElement | null>(null);
   const [place, setPlace] = useState<LocationDraft>({ country: "", county: "", subCounty: "", estate: "" });
-  const [shareOut, setShareOut] = useState(true);
+  const [shareOut, setShareOut] = useState(false);
   const [promptIx, setPromptIx] = useState(0);
   // Quick Confession extras, all optional: an opening line (the feed headline), a category,
   // and the AI reword (keeps their meaning; POST /guided/reword).

@@ -38,3 +38,9 @@ def apply_content_mode(query: dict, allow_mature: bool) -> dict:
     if allow_mature:
         return query
     return {"$and": [query, SAFE_FILTER]} if query else dict(SAFE_FILTER)
+
+
+def socials_safe(drop: dict) -> bool:
+    """Whether a drop may go to Anonixx's public social pages. Link-up (hookup)
+    and mature drops never do, whatever the poster ticked."""
+    return drop.get("kind") != "hookup" and drop.get("sensitivity") != "mature"
