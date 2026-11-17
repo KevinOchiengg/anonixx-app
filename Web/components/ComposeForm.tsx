@@ -83,7 +83,7 @@ function Inner() {
   const [place, setPlace] = useState<LocationDraft>({ country: "", county: "", subCounty: "", estate: "" });
   const [shareOut, setShareOut] = useState(false);
   const [promptIx, setPromptIx] = useState(0);
-  // Quick Confession extras, all optional: an opening line (the feed headline), a category,
+  // General Confession extras, all optional: an opening line (the feed headline), a category,
   // and the AI reword (keeps their meaning; POST /guided/reword).
   const [hook, setHook] = useState("");
   const [category, setCategory] = useState<Picked>(null);
@@ -304,7 +304,7 @@ function Inner() {
         <button type="button" className="kind-card" onClick={() => setKind("hookup")}>
           <span className="kind-ico" aria-hidden><Flame strokeWidth={2} /></span>
           <span className="kind-body">
-            <strong>Guided Link Up</strong>
+            <strong>Hookup confession</strong>
             <span>Who you are, who you want, when. The right one knocks.</span>
             <span className="kind-tags"><em>18+</em><em>{COST.post} coins</em><em>Link up on</em></span>
           </span>
@@ -312,7 +312,7 @@ function Inner() {
         <button type="button" className="kind-card" onClick={() => setKind("confession")}>
           <span className="kind-ico" aria-hidden><Feather strokeWidth={2} /></span>
           <span className="kind-body">
-            <strong>Quick Confession</strong>
+            <strong>General Confession</strong>
             <span>The thing you can&apos;t say out loud. Never traced back to you.</span>
             <span className="kind-tags"><em>Free</em><em>Text, photo, video or voice</em></span>
           </span>
@@ -351,7 +351,7 @@ function Inner() {
   return (
     <form className="cx-form" onSubmit={submit}>
       <div className="cx-top">
-        <button type="button" className="cx-switch" onClick={() => setKind(null)}>Quick Confession · change</button>
+        <button type="button" className="cx-switch" onClick={() => setKind(null)}>General Confession · change</button>
       </div>
 
       {unsent ? (
@@ -411,7 +411,7 @@ function Inner() {
 
       <div className={`cx-count${left <= 20 ? (left <= 0 ? " bad" : " warn") : ""}`}>{left}</div>
 
-      {/* Quick Confession extras: category, reword, and how it lands in the feed. */}
+      {/* General Confession extras: category, reword, and how it lands in the feed. */}
       {mode === "text" ? (
         <div className="qc">
           <p className="qc-label">Category<small>optional</small></p>

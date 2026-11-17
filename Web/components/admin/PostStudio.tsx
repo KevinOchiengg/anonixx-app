@@ -18,7 +18,6 @@ import VideoEditor from "../compose/VideoEditor";
 import VideoPlayer from "../VideoPlayer";
 import { defaultEdit, isMeaningful, type VideoEdit } from "@/lib/videoEdit";
 import { IconText, IconImages, IconVideo, IconMic, IconPoll } from "../compose/toolicons";
-import { TAG_GROUPS, TOP_TAGS } from "@/lib/adminTags";
 import "../../app/poststudio.css";
 import { Upload, X } from "lucide-react";
 
@@ -32,7 +31,6 @@ const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode 
 ];
 
 const THEME = { from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC" };
-const MAX_TAGS = 10;
 
 const MAX_TEXT = 500;
 const MAX_IMG_MB = 5;
@@ -56,10 +54,6 @@ export default function PostStudio() {
   const [voice, setVoice] = useState<VoiceDraft>(null);
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
-  const [name, setName] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagDraft, setTagDraft] = useState("");
-  const [tagGroup, setTagGroup] = useState<string | null>(null); // open picker section, null = collapsed
   const [mature, setMature] = useState(false);
   const [share, setShare] = useState(true);
   const [place, setPlace] = useState<LocationDraft>(EMPTY_PLACE);
@@ -91,14 +85,11 @@ export default function PostStudio() {
   const urls = useRef<string[]>([]);
 
   useEffect(() => {
-    try { setName(localStorage.getItem("anonixx_post_as") || ""); } catch {}
     // "Draft" on a search nobody found an answer for (Visitors page) brings its words here.
     const topic = new URLSearchParams(window.location.search).get("topic");
     if (topic) {
       const t = topic.trim().toLowerCase().slice(0, 30);
-      if (t) setTags((l) => (l.includes(t) ? l : [...l, t]));
-      setText((cur) => cur || "");
-      setTopicNote(t);
+      if (t) setTopicNote(t);
     }
   }, []);
   const [topicNote, setTopicNote] = useState("");
@@ -109,10 +100,7 @@ export default function PostStudio() {
       .then((r) => setBestTimes(r.enough_data ? r.suggestions.slice(0, 3) : []))
       .catch(() => {});
   }, []);
-  useEffect(() => {
-    try { localStorage.setItem("anonixx_post_as", name); } catch {}
-  }, [name]);
-  const poster = name.trim() || "Anonixx";
+  const poster = "Anonixx";
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
   useEffect(() => {
     api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => {});
@@ -151,32 +139,6 @@ export default function PostStudio() {
     const url = URL.createObjectURL(file);
     urls.current.push(url);
     return { file, url };
-  }
-
-  function addTag(raw: string) {
-    const parts = raw.split(",").map((t) => t.trim().replace(/^#/, "").split(" ").filter(Boolean).join(" ").toLowerCase().slice(0, 30)).filter(Boolean);
-    if (!parts.length) return;
-    setTags((l) => {
-      const next = [...l];
-      for (const t of parts) if (!next.includes(t) && next.length < MAX_TAGS) next.push(t);
-      return next;
-    });
-    setTagDraft("");
-  }
-
-  // Picker chips toggle: tap to add, tap again to remove.
-  function toggleTag(t: string) {
-    if (tags.includes(t)) setTags((l) => l.filter((x) => x !== t));
-    else addTag(t);
-  }
-
-  function pickChip(t: string) {
-    const on = tags.includes(t);
-    return (
-      <button key={t} type="button" className={on ? "on" : ""} aria-pressed={on} onClick={() => toggleTag(t)} disabled={!on && tags.length >= MAX_TAGS}>
-        {on ? "✓" : "+"} {t}
-      </button>
-    );
   }
 
   function chooseFormat(f: Format) {
@@ -304,11 +266,10 @@ export default function PostStudio() {
       setBusy(later ? "Scheduling…" : "Publishing…");
       const body = {
           kind: "confession",
-          ...(name.trim() ? { display_name: name.trim() } : {}),
           // the API needs some text on every drop; a poll's question stands in for a caption
           confession: text.trim() || (format === "poll" ? question.trim() : undefined),
           font_style: "classic",
-          ...(tags.length ? { tags } : {}),
+          ...(topicNote ? { tags: [topicNote] } : {}),
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: share,
           ...(place.country.trim() ? { location_country: place.country.trim() } : {}),
@@ -352,7 +313,7 @@ export default function PostStudio() {
     bgRef.current?.cancel(); setBg(null);
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
-    setTags([]); setTagDraft(""); setTagGroup(null); setMature(false); setError(""); setPublished(null);
+    setTopicNote(""); setMature(false); setError(""); setPublished(null);
     setCoverAt(null); setSoundId(""); setMuteOriginal(false); setPromo(""); setLater(false); setLaterAt(""); setCopied(false);
   }
 
@@ -438,17 +399,9 @@ export default function PostStudio() {
       <div className="ps-head">
         <div>
           <h2>Post a drop</h2>
-          <p>Free, no coins. Shows in the feed under the name below.</p>
+          <p>Free, no coins. Shows in the feed as Anonixx.</p>
         </div>
       </div>
-
-      <section className="ps-sec ps-as">
-        <label className="ps-text">
-          <span>Post as</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} placeholder="Anonixx" />
-        </label>
-        <p className="ps-help">Give the page a personality, like SweetSpot or Midnight Confessions. Leave it empty to post as Anonixx.</p>
-      </section>
 
       <ScheduledDrops refresh={schedRefresh} />
 
@@ -469,6 +422,7 @@ export default function PostStudio() {
 
           <section className="ps-sec">
             <h3><i>2</i> Content</h3>
+            {topicNote ? <p className="ps-help">People searched “{topicNote}” and found nothing. Write the drop they were looking for; it&apos;ll come up for that search.</p> : null}
 
             {format === "photo" || format === "video" ? (
               <>
@@ -552,51 +506,7 @@ export default function PostStudio() {
           </section>
 
           <section className="ps-sec">
-            <h3><i>3</i> Search keywords</h3>
-            {topicNote ? <p className="ps-help">People searched “{topicNote}” and found nothing. Write the drop they were looking for; the keyword is added.</p> : null}
-            <p className="ps-help">When someone searches Anonixx, these words (and your caption) are what find this drop. Add what people would type.</p>
-            <div className="ps-tags">
-              {tags.map((t) => (
-                <span key={t} className="ps-tag">#{t}<button type="button" aria-label={`Remove ${t}`} onClick={() => setTags((l) => l.filter((x) => x !== t))}><X size={20} strokeWidth={2} aria-hidden /></button></span>
-              ))}
-              {tags.length < MAX_TAGS ? (
-                <input
-                  type="text"
-                  value={tagDraft}
-                  maxLength={30}
-                  placeholder={tags.length ? "Add another…" : "Type a keyword, press Enter"}
-                  onChange={(e) => { if (e.target.value.includes(",")) addTag(e.target.value); else setTagDraft(e.target.value); }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") { e.preventDefault(); addTag(tagDraft); }
-                    else if (e.key === "Backspace" && !tagDraft && tags.length) setTags((l) => l.slice(0, -1));
-                  }}
-                  onBlur={() => addTag(tagDraft)}
-                />
-              ) : null}
-            </div>
-            <div className="ps-pick">
-              <b>Quick picks</b>
-              <div className="ps-suggest">{TOP_TAGS.map(pickChip)}</div>
-              <div className="ps-pick-tabs" role="tablist">
-                {TAG_GROUPS.map((g) => {
-                  const n = g.tags.filter((t) => tags.includes(t)).length;
-                  const open = tagGroup === g.name;
-                  return (
-                    <button key={g.name} type="button" role="tab" aria-selected={open} className={open ? "on" : ""} onClick={() => setTagGroup(open ? null : g.name)}>
-                      {g.name}{n ? <em>{n}</em> : null}
-                    </button>
-                  );
-                })}
-              </div>
-              {tagGroup ? (
-                <div className="ps-suggest">{(TAG_GROUPS.find((g) => g.name === tagGroup)?.tags || []).map(pickChip)}</div>
-              ) : null}
-            </div>
-            <small className="ps-help">{tags.length}/{MAX_TAGS} keywords{!tags.length && !text.trim() && format !== "poll" ? " · with no caption or keywords, this drop can't be found by search." : ""}</small>
-          </section>
-
-          <section className="ps-sec">
-            <h3><i>4</i> Reach</h3>
+            <h3><i>3</i> Reach</h3>
             <label className="ps-switch">
               <span><b>Share to Anonixx socials</b><small>Eligible for our official accounts.</small></span>
               <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} />
@@ -612,7 +522,7 @@ export default function PostStudio() {
           </section>
 
           <section className="ps-sec ps-spot">
-            <h3><i>5</i> Spotlight <em className="ps-pro">admin</em></h3>
+            <h3><i>4</i> Spotlight <em className="ps-pro">admin</em></h3>
             <p className="ps-help">Extras that make a drop stop the scroll and travel further.</p>
 
             {format === "video" ? (

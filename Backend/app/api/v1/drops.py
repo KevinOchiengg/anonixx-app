@@ -2254,6 +2254,7 @@ async def search_drops(
             {"sender_anonymous_name": rx},
             {"tags":                  rx},
             {"poll.question":         rx},
+            {"video_edit.overlays.text": rx},
         ]
 
     if valid_mood:
