@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Play, Search, Share2, ShieldCheck, VolumeX, Music,
+  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Pencil, Play, Search, Share2, ShieldCheck, VolumeX, Music,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -35,6 +35,7 @@ import PostMenuSheet from '../../components/feed/PostMenuSheet';
 import { HeartBursts, useDoubleTapLike } from '../../components/feed/DoubleTapLike';
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
+import { apiFetch } from '../admin/adminShared';
 import { getDeviceId } from '../../utils/deviceId';
 import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
@@ -246,6 +247,7 @@ const RAIL_TINTS = {
   save:    { c: '#ffd27a', ca: '#ffb81f', bg: 'rgba(255,184,31,0.2)', line: 'rgba(255,210,122,0.4)' },
   more:    { c: '#e8eaf2', ca: '#e8eaf2', bg: 'rgba(255,255,255,0.14)', line: 'rgba(255,255,255,0.28)' },
   share:   { c: '#8fe8de', ca: '#8fe8de', bg: 'rgba(143,232,222,0.16)', line: 'rgba(143,232,222,0.35)' },
+  edit:    { c: '#ffd9a8', ca: '#ffd9a8', bg: 'rgba(255,217,168,0.16)', line: 'rgba(255,217,168,0.38)' },
   avatar:  { c: '#c6f08a', ca: '#c6f08a', bg: 'rgba(198,240,138,0.16)', line: 'rgba(198,240,138,0.4)' },
 };
 
@@ -354,6 +356,30 @@ const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef, tint }) => 
     )}
   </GHPressable>
 );
+
+// Super admin only: a pencil on Anonixx drops that opens it for editing.
+// Asked once per signed-in admin (the sign-in user doesn't carry the flag).
+let superCheck = { id: null, p: null };
+const useIsSuperAdmin = () => {
+  const user = useSelector((st) => st.auth.user);
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    if (!user?.is_admin) { setOk(false); return undefined; }
+    if (superCheck.id !== user.id) {
+      superCheck = { id: user.id, p: apiFetch('/admin/me').then((r) => Boolean(r.ok && r.data?.is_super_admin)).catch(() => false) };
+    }
+    let live = true;
+    superCheck.p.then((v) => { if (live) setOk(v); });
+    return () => { live = false; };
+  }, [user?.id, user?.is_admin]);
+  return ok;
+};
+
+const EditRailBtn = ({ post, navigation }) => {
+  const isSuper = useIsSuperAdmin();
+  if (!isSuper || !post?.is_admin_drop) return null;
+  return <ActionBtn tint="edit" icon={<Pencil size={28} color="#fff" />} count={null} onPress={() => navigation.navigate('AdminPosts', { editId: post.id })} />;
+};
 
 // View count in the rail (not tappable).
 const ViewsStat = React.memo(({ count }) => {
@@ -744,6 +770,7 @@ const VideoSlide = ({
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
               onPress={onShare}
             />
+            <EditRailBtn post={post} navigation={navigation} />
             <ViewsStat count={post.views_count} />
           </View>
 
@@ -883,6 +910,7 @@ const AudioSlide = ({
             tint="share" icon={<Share2 size={26} color="#fff" />} count={null}
             onPress={onShare}
           />
+          <EditRailBtn post={post} navigation={navigation} />
           <ViewsStat count={post.views_count} />
         </View>
       )}
@@ -1080,6 +1108,7 @@ const TextSlide = ({
               tint="share" icon={<Share2 size={28} color="#fff" />} count={null}
               onPress={onShare}
             />
+            <EditRailBtn post={post} navigation={navigation} />
             <ViewsStat count={post.views_count} />
           </View>
 
@@ -1157,6 +1186,7 @@ const PollSlide = ({
               icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
               tint="save" count={savesCount} onPress={onSave} active={saved}
             />
+            <EditRailBtn post={post} navigation={navigation} />
             <ViewsStat count={post.views_count} />
           </View>
 

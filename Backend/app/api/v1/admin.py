@@ -397,6 +397,7 @@ async def list_drops(
     skip:   int           = Query(0,  ge=0),
     limit:  int           = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None, description="Filter by confession text"),
+    id:     Optional[str] = Query(None, description="Just this one drop"),
     sort:   str           = Query("recent", description="recent | views | likes | comments | engagement"),
     admin_id: str = Depends(require_admin),
     db=Depends(get_database),
@@ -404,6 +405,10 @@ async def list_drops(
     query = {}
     if search:
         query["confession"] = {"$regex": search, "$options": "i"}
+    if id:
+        if not ObjectId.is_valid(id):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
+        query["_id"] = ObjectId(id)
 
     total = await db["drops"].count_documents(query)
     pipeline = [{"$match": query}]

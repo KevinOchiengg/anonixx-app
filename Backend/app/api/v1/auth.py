@@ -16,7 +16,7 @@ import random
 from app.database import get_database
 from app.utils.user_tz import save_tz
 from app.config import settings
-from app.dependencies import get_current_user_id
+from app.dependencies import get_current_user_id, is_super_admin_user
 from app.utils.coin_service import credit_coins
 from app.utils.email import send_password_reset_otp
 
@@ -481,6 +481,7 @@ async def get_current_user(
         "created_at":     user["created_at"].isoformat(),
         "age_verified":            user.get("age_verified", False),
         "is_admin":       bool(user.get("is_admin", False)),
+        "is_super_admin": is_super_admin_user(user),
         "is_premium":     _premium_running(user),
         "premium_until":  user["premium_until"].isoformat() if user.get("premium_until") else None,
         "has_password":   user.get("has_password", True),

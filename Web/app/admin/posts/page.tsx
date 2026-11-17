@@ -20,9 +20,13 @@ export default function AdminPosts() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   useEffect(() => {
-    const q0 = new URLSearchParams(window.location.search).get("q");
+    const u = new URLSearchParams(window.location.search);
+    const q0 = u.get("q");
     if (q0) { setQ(q0); setSearch(q0); }
+    if (u.get("edit")) setOnly(u.get("edit"));
   }, []);
+  // ?edit=<id> (the pencil on a drop in the feed): just that drop, open for editing.
+  const [only, setOnly] = useState<string | null>(null);
   const [sort, setSort] = useState("recent");
   const [skip, setSkip] = useState(0);
   const [data, setData] = useState<Page | null>(null);
@@ -35,13 +39,17 @@ export default function AdminPosts() {
     try {
       const p = new URLSearchParams({ skip: String(skip), limit: String(LIMIT) });
       if (search) p.set("search", search);
+      if (only) p.set("id", only);
       p.set("sort", sort);
-      setData(await api<Page>(`/admin/drops?${p}`));
+      const page = await api<Page>(`/admin/drops?${p}`);
+      setData(page);
+      const hit = only ? page.drops.find((x) => x.id === only) : null;
+      if (hit?.is_admin_drop) setEditing((e) => e ?? { id: hit.id, text: hit.confession_full ?? hit.confession });
       setError("");
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [skip, search, sort]);
+  }, [skip, search, sort, only]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -73,6 +81,7 @@ export default function AdminPosts() {
   return (
     <>
       <h2>Posts</h2>
+      {only ? <p className="muted small">Showing one drop. <button type="button" className="adm-linkbtn" onClick={() => { setOnly(null); setEditing(null); window.history.replaceState(null, "", "/admin/posts"); }}>Show all posts</button></p> : null}
       <form className="adm-search" onSubmit={(e) => { e.preventDefault(); setSkip(0); setSearch(q.trim()); }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search post text" />
         <button className="adm-btn primary">Search</button>

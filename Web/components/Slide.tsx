@@ -16,7 +16,7 @@ import Sheet from "./Sheet";
 import { DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 import ConfessionCard from "./ConfessionCard";
 import { CATEGORIES, categoryOf } from "@/lib/confession";
-import { Bookmark as LBookmark, EyeOff, Flag as LFlag, Gauge, Heart as HeartFill, Link2 as LLink2, Lock, Maximize, Share2 } from "lucide-react";
+import { Bookmark as LBookmark, EyeOff, Flag as LFlag, Gauge, Heart as HeartFill, Link2 as LLink2, Lock, Maximize, Pencil, Share2 } from "lucide-react";
 
 type Props = {
   post: Post;
@@ -543,6 +543,11 @@ export default function Slide({
         <button onClick={() => onShare(post)} aria-label="Share" className="r-act r-share">
           <Share />
         </button>
+        {user?.is_super_admin && post.is_admin_drop ? (
+          <button onClick={() => { window.location.href = `/admin/posts?edit=${post.id}`; }} aria-label="Edit drop" title="Edit drop" className="r-act r-edit">
+            <Pencil aria-hidden />
+          </button>
+        ) : null}
         {muted && ((videoSrc && !slides && !mature) || ambient) ? (
           <button onClick={onToggleMute} aria-label="Turn sound on" className="sound-rail r-act r-sound">
             <SoundOff />

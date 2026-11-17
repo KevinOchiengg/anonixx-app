@@ -208,6 +208,7 @@ export type AuthUser = {
   avatar_url: string | null;
   bio?: string | null;
   is_admin: boolean;
+  is_super_admin?: boolean;
   coin_balance: number;
   age_verified: boolean;
   is_premium?: boolean;

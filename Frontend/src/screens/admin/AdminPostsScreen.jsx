@@ -19,7 +19,7 @@ function Stat({ n, label, hot }) {
   );
 }
 
-const PostRow = React.memo(({ item, onDelete }) => (
+const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onSave, onCancel, saving }) => (
   <View style={a.card}>
     <Text style={a.cardMeta}>
       {item.is_admin_drop ? 'Anonixx' : (item.author || 'Anonymous')}
@@ -27,7 +27,14 @@ const PostRow = React.memo(({ item, onDelete }) => (
       {item.report_count ? ` · ${item.report_count} reports` : ''}
       {item.moderation_status ? ` · ${item.moderation_status}` : ''}
     </Text>
-    <Text style={a.cardBody} numberOfLines={4}>{item.confession || '(no text)'}</Text>
+    {editing != null ? (
+      <TextInput
+        style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={500} autoFocus
+        placeholder="Post text" placeholderTextColor={T.textMuted}
+      />
+    ) : (
+      <Text style={a.cardBody} numberOfLines={4}>{item.confession || '(no text)'}</Text>
+    )}
     {item.stats && (
       <View style={st.stats}>
         <Stat n={item.stats.views} label="views" />
@@ -41,20 +48,42 @@ const PostRow = React.memo(({ item, onDelete }) => (
     )}
     <Text style={a.cardMeta}>{item.created_at ? new Date(item.created_at).toLocaleString() : ''}</Text>
     <View style={a.actionRow}>
-      <TouchableOpacity style={[a.btn, a.btnDanger]} onPress={() => onDelete(item)} activeOpacity={0.85}>
-        <Text style={[a.btnText, { color: '#EF4444' }]}>Delete post</Text>
-      </TouchableOpacity>
+      {editing != null ? (
+        <>
+          <TouchableOpacity style={a.btn} onPress={onCancel} activeOpacity={0.85}>
+            <Text style={a.btnText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={a.btn} onPress={onSave} disabled={saving || !editing.trim()} activeOpacity={0.85}>
+            <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/500`}</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          {item.is_admin_drop ? (
+            <TouchableOpacity style={a.btn} onPress={() => onEdit(item)} activeOpacity={0.85}>
+              <Text style={a.btnText}>Edit</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={[a.btn, a.btnDanger]} onPress={() => onDelete(item)} activeOpacity={0.85}>
+            <Text style={[a.btnText, { color: '#EF4444' }]}>Delete post</Text>
+          </TouchableOpacity>
+        </>
+      )}
     </View>
   </View>
 ));
 
-export default function AdminPostsScreen({ navigation }) {
+export default function AdminPostsScreen({ navigation, route }) {
   const { showToast } = useToast();
   const [posts, setPosts]     = useState([]);
   const [total, setTotal]     = useState(0);
   const [query, setQuery]     = useState('');
   const [loading, setLoading] = useState(true);
   const [sort, setSort]       = useState('recent');
+  // From the pencil on a drop in the feed: just that drop, open for editing.
+  const [only, setOnly]       = useState(route?.params?.editId || null);
+  const [editing, setEditing] = useState(null); // { id, text }
+  const [saving, setSaving]   = useState(false);
   const timer = useRef(null);
 
   const load = useCallback(async (search = '') => {
@@ -62,14 +91,19 @@ export default function AdminPostsScreen({ navigation }) {
     try {
       const params = new URLSearchParams({ limit: '50', sort });
       if (search.trim()) params.set('search', search.trim());
+      if (only) params.set('id', only);
       const { ok, data } = await apiFetch(`/admin/drops?${params}`);
-      if (ok) { setPosts(data.drops || []); setTotal(data.total || 0); }
+      if (ok) {
+        setPosts(data.drops || []); setTotal(data.total || 0);
+        const hit = only ? (data.drops || []).find((p) => p.id === only) : null;
+        if (hit?.is_admin_drop) setEditing((e) => e || { id: hit.id, text: hit.confession_full ?? hit.confession ?? '' });
+      }
     } catch {
       showToast({ type: 'error', message: 'Could not load posts.' });
     } finally {
       setLoading(false);
     }
-  }, [showToast, sort]);
+  }, [showToast, sort, only]);
 
   useEffect(() => { load(query); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -88,6 +122,23 @@ export default function AdminPostsScreen({ navigation }) {
       showToast({ type: 'error', message: data?.detail || 'Could not delete.' });
     }
   }, [showToast]);
+
+  const startEdit = useCallback((post) => setEditing({ id: post.id, text: post.confession_full ?? post.confession ?? '' }), []);
+  const changeEdit = useCallback((text) => setEditing((e) => (e ? { ...e, text } : e)), []);
+  const cancelEdit = useCallback(() => setEditing(null), []);
+  const saveEdit = useCallback(async () => {
+    if (!editing?.text.trim()) return;
+    setSaving(true);
+    const { ok, data } = await apiFetch(`/admin/drops/${editing.id}`, { method: 'PATCH', body: { confession: editing.text.trim() } });
+    setSaving(false);
+    if (ok) {
+      setPosts((prev) => prev.map((p) => (p.id === editing.id ? { ...p, confession: data.confession, confession_full: data.confession } : p)));
+      setEditing(null);
+      showToast({ type: 'success', message: 'Drop updated.' });
+    } else {
+      showToast({ type: 'error', message: data?.detail || 'Could not save.' });
+    }
+  }, [editing, showToast]);
 
   const confirmDelete = useCallback((post) => {
     Alert.alert('Delete this post?', 'This removes it for everyone and can\'t be undone.', [
@@ -110,6 +161,11 @@ export default function AdminPostsScreen({ navigation }) {
           autoCapitalize="none"
         />
       </View>
+      {only ? (
+        <TouchableOpacity onPress={() => { setOnly(null); setEditing(null); }} style={st.onlyRow} activeOpacity={0.8}>
+          <Text style={st.onlyText}>Showing one drop. <Text style={{ color: T.primary }}>Show all posts</Text></Text>
+        </TouchableOpacity>
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.sortBar} contentContainerStyle={st.sortRow}>
         {SORTS.map(([k, l]) => (
           <TouchableOpacity key={k} onPress={() => setSort(k)} style={[st.sortChip, sort === k && st.sortChipOn]} activeOpacity={0.8}>
@@ -123,7 +179,15 @@ export default function AdminPostsScreen({ navigation }) {
         <FlatList
           data={posts}
           keyExtractor={(p) => p.id}
-          renderItem={({ item }) => <PostRow item={item} onDelete={confirmDelete} />}
+          renderItem={({ item }) => (
+            <PostRow
+              item={item} onDelete={confirmDelete} onEdit={startEdit}
+              editing={editing?.id === item.id ? editing.text : null}
+              onChangeText={changeEdit} onSave={saveEdit} onCancel={cancelEdit} saving={saving}
+            />
+          )}
+          extraData={editing}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={a.listContent}
           ListEmptyComponent={<Text style={a.emptyText}>No posts found.</Text>}
         />
@@ -133,6 +197,9 @@ export default function AdminPostsScreen({ navigation }) {
 }
 
 const st = StyleSheet.create({
+  edit: { minHeight: rs(96), color: T.text, fontSize: rf(14), lineHeight: rf(20), textAlignVertical: 'top', borderWidth: 1, borderColor: T.border, borderRadius: RADIUS.md, padding: rp(10), backgroundColor: 'rgba(255,255,255,0.03)' },
+  onlyRow: { paddingHorizontal: rp(16), paddingVertical: rp(6) },
+  onlyText: { fontSize: rf(12), color: T.textSecondary },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6), marginTop: rp(2) },
   stat: { paddingHorizontal: rp(8), paddingVertical: rp(3), borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.border, backgroundColor: 'rgba(255,255,255,0.03)' },
   statHot: { borderColor: T.primaryBorder, backgroundColor: T.primaryTint },
