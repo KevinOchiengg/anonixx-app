@@ -1,0 +1,39 @@
+/* My posts (components/MyPostsPage.tsx) */
+.mp { display: grid; gap: 12px; padding: 16px; max-width: 640px; margin: 0 auto; }
+.mp-sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.mp-sum div { display: grid; gap: 2px; padding: 12px 8px; text-align: center; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.mp-sum b { font-size: 18px; }
+.mp-sum span { font-size: 11.5px; color: var(--muted); }
+.mp-card { display: grid; gap: 10px; padding: 14px; border-radius: 18px; background: var(--bg-edge); border: 1px solid var(--line); }
+.mp-card.hk { border-color: color-mix(in srgb, var(--rose) 28%, transparent); background: radial-gradient(90% 70% at 0% 0%, color-mix(in srgb, var(--rose) 10%, transparent), transparent 70%), var(--bg-edge); }
+.mp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.mp-kind { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--violet); }
+.mp-card.hk .mp-kind { color: var(--rose); }
+.mp-when { color: var(--muted); }
+.mp-text { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font: italic 16px/1.5 Georgia, "Times New Roman", serif; color: var(--fg); white-space: pre-wrap; }
+.mp-edit { display: grid; gap: 8px; }
+.mp-edit textarea { width: 100%; min-height: 120px; padding: 10px 12px; border-radius: 12px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--fg); font: italic 16px/1.5 Georgia, serif; resize: vertical; outline: none; }
+.mp-edit textarea:focus { border-color: var(--rose); }
+.mp-row { display: flex; align-items: center; gap: 8px; }
+.mp-row small { margin-right: auto; color: var(--muted); font-size: 12px; }
+.mp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mp-chips:empty { display: none; }
+.mp-chips span { padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--surface-alt); color: var(--muted); }
+.mp-chips .live { color: #34d399; background: rgba(52, 211, 153, 0.1); }
+.mp-chips .boost { color: var(--rose); background: color-mix(in srgb, var(--rose) 14%, transparent); }
+.mp-chips .warn { color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
+.mp-stats { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+.mp-stat { display: inline-flex; align-items: center; gap: 5px; }
+.mp-stat svg { width: 15px; height: 15px; }
+.mp-actions { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.mp-actions button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.mp-actions button svg { width: 15px; height: 15px; }
+.mp-actions button.hot { border-color: transparent; background: var(--rose); color: #fff; }
+.mp-actions button.del { margin-left: auto; color: var(--muted); }
+.mp-actions button:disabled { opacity: .5; cursor: default; }
+.mp-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 13.5px; }
+.mp-confirm span { margin-right: auto; }
+.mp-skel { height: 150px; border-radius: 18px; background: var(--surface); animation: mp-pulse 1.2s ease-in-out infinite alternate; }
+@keyframes mp-pulse { to { opacity: .5; } }
+.mp-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--line); font-size: 13.5px; }
+@media (max-width: 380px) { .mp-sum { grid-template-columns: repeat(2, 1fr); } }

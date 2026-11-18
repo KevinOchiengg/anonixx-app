@@ -23,6 +23,7 @@ import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import DashboardScreen from '../screens/profile/DashboardScreen';
 import PremiumScreen from '../screens/profile/PremiumScreen';
 import SavedPostsScreen from '../screens/feed/SavedPostsScreen';
+import MyPostsScreen from '../screens/profile/MyPostsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import DropChatScreen from '../screens/drops/DropChatScreen';
 import ChatInfoScreen from '../screens/rooms/ChatInfoScreen';
@@ -178,6 +179,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="ChangePassword" component={withBackdrop(ChangePasswordScreen)} />
         <Stack.Screen name="DeleteAccount"  component={withBackdrop(DeleteAccountScreen)} />
         <Stack.Screen name="SavedDrops"     component={withBackdrop(SavedPostsScreen)} />
+        <Stack.Screen name="MyPosts" component={withBackdrop(MyPostsScreen)} />
         <Stack.Screen name="Coins"          component={withBackdrop(CoinsScreen)} />
         <Stack.Screen name="Referral"       component={withBackdrop(ReferralScreen)} />
         <Stack.Screen name="Legal"          component={withBackdrop(LegalScreen)} />

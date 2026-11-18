@@ -173,10 +173,15 @@ def not_promoted(now: datetime) -> dict:
 
 
 async def fetch_promoted(db, base_query: dict, now: datetime) -> list:
-    live = {"promo_until": {"$gt": now}}
-    query = {"$and": [base_query, live]} if base_query else live
-    rows = await db["drops"].find(query).sort([("created_at", -1)]).limit(MAX_PROMOTED).to_list(None)
-    return sorted(rows, key=lambda d: d.get("promo_kind") != "pin")
+    """Pinned drops first (newest), then a random pick of boosted ones, so every paid
+    boost gets its turn when there are more than the slots."""
+    def q(extra: dict) -> dict:
+        live = {"promo_until": {"$gt": now}, **extra}
+        return {"$and": [base_query, live]} if base_query else live
+    pins = await db["drops"].find(q({"promo_kind": "pin"})).sort([("created_at", -1)]).limit(MAX_PROMOTED).to_list(None)
+    room = MAX_PROMOTED - len(pins)
+    boosts = await db["drops"].aggregate([{"$match": q({"promo_kind": {"$ne": "pin"}})}, {"$sample": {"size": room}}]).to_list(None) if room > 0 else []
+    return pins + boosts
 
 
 def splice_promoted(page: list, promoted: list) -> list:

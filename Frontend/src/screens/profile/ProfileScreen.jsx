@@ -8,7 +8,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
-  Settings, Edit, Lock, Palette, ChevronRight, LayoutDashboard, Crown,
+  Settings, Edit, Lock, Palette, ChevronRight, LayoutDashboard, LayoutList, Crown,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient'
 import { useDispatch, useSelector } from 'react-redux'
@@ -94,6 +94,21 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.statLabel}>Streak</Text>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.dashboardCard}
+          onPress={() => navigation.navigate('MyPosts')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.dashboardIconWrap}>
+            <LayoutList size={20} color={THEME.primary} strokeWidth={2} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dashboardTitle}>My Posts</Text>
+            <Text style={styles.dashboardSubtitle}>Views, edits and boosts</Text>
+          </View>
+          <ChevronRight size={20} color={THEME.textMuted} />
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.dashboardCard}

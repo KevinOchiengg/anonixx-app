@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, compact } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
-import { Bookmark, ChevronRight, Coins, Crown, Headphones, Lock, Settings, ShieldCheck, Wallet } from "lucide-react";
+import { Bookmark, ChevronRight, Coins, Crown, Headphones, LayoutList, Lock, Settings, ShieldCheck, Wallet } from "lucide-react";
 
 function Inner() {
   const { user } = useAuth();
@@ -67,6 +67,7 @@ function Inner() {
       <h2 className="sec">ACCOUNT</h2>
       <ul className="rows links">
         <li><Link href="/change-password" className="row-item"><span className="ibox"><Lock size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Email &amp; password</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
+        <li><Link href="/my-posts" className="row-item"><span className="ibox rose"><LayoutList size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>My posts</b><small>Views, edits and boosts</small></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
         <li><Link href="/saved" className="row-item"><span className="ibox"><Bookmark size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Saved posts</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
         <li><Link href="/support" className="row-item"><span className="ibox"><Headphones size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Support</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>
         <li><Link href="/settings" className="row-item"><span className="ibox"><Settings size={18} strokeWidth={2} aria-hidden /></span><span className="grow"><b>Settings</b></span><ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden /></Link></li>

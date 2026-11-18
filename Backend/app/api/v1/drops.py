@@ -2304,6 +2304,17 @@ async def get_my_drops(
     'My Drops' section (edit/delete live there, not in the public feed)."""
     cursor = db["drops"].find({"sender_id": current_user_id}).sort("created_at", -1)
     drops = await cursor.to_list(200)
+    ids = [str(d["_id"]) for d in drops]
+
+    async def counts(coll, match, key):
+        rows = db[coll].aggregate([{"$match": match}, {"$group": {"_id": f"${key}", "n": {"$sum": 1}}}])
+        return {r["_id"]: r["n"] async for r in rows}
+
+    comment_counts, knock_counts = await asyncio.gather(
+        counts("drop_threads", {"drop_id": {"$in": ids}}, "drop_id"),
+        counts("drop_unlock_requests", {"target_id": {"$in": ids}}, "target_id"),
+    )
+    now = now_utc()
 
     total_views = 0
     total_likes = 0
@@ -2314,6 +2325,9 @@ async def get_my_drops(
         likes = drop.get("likes_count", 0)
         total_views += views
         total_likes += likes
+        did = str(drop["_id"])
+        live_until = _aware(drop["live_until"]) if drop.get("live_until") else None
+        promo_until = _aware(drop["promo_until"]) if drop.get("promo_until") else None
         formatted.append({
             "id":           str(drop["_id"]),
             "content":      drop.get("confession") or "",
@@ -2328,14 +2342,65 @@ async def get_my_drops(
             "kind":         drop.get("kind"),
             "topics":       drop.get("topics") or [],
             "time_ago":     get_time_ago(created_at) if created_at else "",
+            "comments_count": comment_counts.get(did, 0),
+            "knocks_count":   knock_counts.get(did, 0),
+            "live_until":     live_until.isoformat() if live_until else None,
+            "is_live":        bool(live_until and live_until > now),
+            "boosted_until":  promo_until.isoformat() if promo_until and promo_until > now else None,
+            "under_review":   drop.get("moderation_status") == "hidden",
         })
 
     return {
+        "boost_cost":  BOOST_COST,
+        "boost_hours": BOOST_HOURS,
         "posts":       formatted,
         "total_posts": len(formatted),
         "total_views": total_views,
         "total_likes": total_likes,
     }
+
+
+BOOST_COST  = 9    # coins, everyone pays (premium included)
+BOOST_HOURS = 24
+
+
+@router.post("/{drop_id}/boost")
+async def boost_hookup(
+    drop_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Owner pays BOOST_COST coins to lift a live hookup post higher in the feed for
+    BOOST_HOURS (stacks onto a boost that's still running)."""
+    if not ObjectId.is_valid(drop_id):
+        raise HTTPException(status_code=400, detail="Invalid drop ID.")
+    drop = await db["drops"].find_one({"_id": ObjectId(drop_id)})
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found.")
+    if drop.get("sender_id") != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only boost your own posts.")
+    if drop.get("kind") != "hookup":
+        raise HTTPException(status_code=400, detail="Only hookup confessions can be boosted.")
+    if drop.get("moderation_status") == "hidden":
+        raise HTTPException(status_code=400, detail="This post is under review.")
+    now = now_utc()
+    if not drop.get("live_until") or _aware(drop["live_until"]) <= now:
+        raise HTTPException(status_code=400, detail="This post has ended. Add more time first.")
+    current = _aware(drop["promo_until"]) if drop.get("promo_until") else None
+    if current and current > now and drop.get("promo_kind") == "pin":
+        raise HTTPException(status_code=400, detail="This post is already pinned.")
+    try:
+        balance = await debit_coins(
+            db=db, user_id=current_user_id, amount=BOOST_COST,
+            reason="drop_boost", description="Boosted a hookup confession", meta={"drop_id": drop_id},
+        )
+    except ValueError as e:
+        if "Insufficient" in str(e):
+            raise HTTPException(status_code=402, detail=f"Not enough coins. A boost costs {BOOST_COST} coins.")
+        raise HTTPException(status_code=404, detail="User not found.")
+    until = max(current or now, now) + timedelta(hours=BOOST_HOURS)
+    await db["drops"].update_one({"_id": drop["_id"]}, {"$set": {"promo_kind": "boost", "promo_until": until}})
+    return {"boosted_until": until.isoformat(), "coin_balance": balance}
 
 
 @router.post("/{drop_id}/extend")
