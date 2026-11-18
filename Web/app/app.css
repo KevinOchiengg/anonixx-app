@@ -281,6 +281,6 @@
 .gc-label { margin: 6px 0 0; font-size: 14px; font-weight: 700; }
 .gc-chips button { display: inline-flex; align-items: center; padding: 10px 15px; }
 .gc-chips button.on { background: var(--rose-dim); border-color: var(--rose); color: var(--fg); }
-.gc-card { display: grid; gap: 14px; padding: 22px; border-radius: 20px; border: 1px solid rgba(255,99,74,0.25); background: linear-gradient(160deg, #1d1018, #120a10); box-shadow: 0 10px 40px rgba(255,99,74,0.08); }
+.gc-card { display: grid; gap: 14px; padding: 16px; border-radius: 18px; border: 1px solid color-mix(in srgb, var(--rose) 28%, transparent); background: radial-gradient(90% 70% at 0% 0%, color-mix(in srgb, var(--rose) 14%, transparent), transparent 70%), var(--bg-edge); }
 .gc-card textarea { margin: 0; font: italic 18px/1.55 Georgia, "Times New Roman", serif; color: var(--fg); white-space: pre-wrap; }
 .gc-card textarea { width: 100%; min-height: 150px; background: none; border: 0; resize: vertical; outline: none; }

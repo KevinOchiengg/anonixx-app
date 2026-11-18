@@ -254,7 +254,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
         <Chips label="Hosting" options={HOSTING} isOn={(k) => a.hosting === k} onPick={(k) => set({ hosting: a.hosting === k ? null : k })} />
       </Section>
 
-      <Section n={5} title="In your own words" sub="Nobody writes it for you. It stays anonymous." done={sections[4]}>
+      <Section n={5} title="Your confession" sub="Introduce yourself and say what you're looking for, in your own words. Your identity stays private." done={sections[4]}>
         <div className="gc-card">
           <textarea rows={6} maxLength={MAX} value={text} onChange={(e) => setText(e.target.value)} placeholder="Hello, I'm… Say who you are, who you want and when." aria-label="Your confession" />
           <span className="hk-hint" style={{ justifySelf: "end" }}>{MAX - text.length}</span>

@@ -19,7 +19,7 @@ import { countryHeader } from '../../utils/country';
 import { awardMilestone, fetchBalance } from '../../store/slices/coinsSlice';
 import { WANTS, MEET_WHEN, FRESH_FOR_WHEN } from '../../utils/hookupDraft';
 import AgeGate from './AgeGate';
-import { ConfessionPreview, linkUpFacts } from '../feed/ConfessionCard';
+import { ConfessionPreview, linkUpFacts, alpha } from '../feed/ConfessionCard';
 import T from '../../utils/theme';
 
 // Must match DROP_POST_COST in Backend/app/api/v1/drops.py.
@@ -300,8 +300,9 @@ export default function GuidedConfession({ navigation, onBack }) {
           </View>
         </Section>
 
-        <Section n={5} title="In your own words" sub="Nobody writes it for you. It stays anonymous." done={!!text.trim()}>
-          <LinearGradient colors={['#1d1018', '#120a10']} style={s.card}>
+        <Section n={5} title="Your confession" sub="Introduce yourself and say what you're looking for, in your own words. Your identity stays private." done={!!text.trim()}>
+          <View style={s.card}>
+            <LinearGradient pointerEvents="none" colors={[alpha(T.primary, 0.14), 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 0.8 }} style={StyleSheet.absoluteFill} />
             <TextInput
               style={s.cardInput}
               value={text}
@@ -312,7 +313,7 @@ export default function GuidedConfession({ navigation, onBack }) {
               textAlignVertical="top"
             />
             <Text style={[s.counter, { alignSelf: 'flex-end' }]}>{MAX_CHARS - text.length}</Text>
-          </LinearGradient>
+          </View>
         </Section>
 
         {/* Live preview: the feed card as it will look, with their words as they type. */}
@@ -428,7 +429,8 @@ const s = StyleSheet.create({
 
   counter: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, textAlign: 'right' },
 
-  card: { borderRadius: RADIUS.xl, borderWidth: 1, borderColor: T.primaryBorder, padding: SPACING.lg, gap: SPACING.sm },
+  // Same surface as the live preview card below it.
+  card: { overflow: 'hidden', borderRadius: RADIUS.lg, borderWidth: 1, borderColor: alpha(T.primary, 0.28), backgroundColor: T.surfaceDark, padding: rp(16), gap: SPACING.sm },
   cardInput: { minHeight: rs(170), color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg, lineHeight: rf(28) },
 
   footer: { paddingTop: SPACING.lg, gap: SPACING.xs },
