@@ -15,7 +15,7 @@ from app.utils.contact_filter import contains_contact_info
 from app.utils.moderation import violates_policy
 
 TONES = ("vulnerable", "playful", "mysterious", "direct")
-MIN_WORDS, MAX_WORDS = 40, 75
+MIN_WORDS, MAX_WORDS = 25, 70
 
 # Models that accept server-side refusal fallbacks ("default" routing).
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
@@ -28,14 +28,10 @@ _TONE_NOTES = {
 }
 
 _OPENINGS = [
-    "open on the craving itself, as a feeling in the body or the night",
-    "open mid-thought, as if the reader walked in on you thinking out loud",
-    "open with the small private detail they shared, then widen out",
-    "open with a short question aimed at the one person meant to read this",
-    "open with the time or the place, a scene rather than a statement",
-    "open with what you are tired of, then turn toward what you want instead",
-    "open with an admission you would only make anonymously",
-    "open with the kind of person you are when no one is watching",
+    'greet with "Hello", then age and area: "I am 31, living in ..."',
+    'greet with "Hi", then "a <age> year old <woman/man> from ..."',
+    'greet with "Hey there", then age and area in a few words',
+    'greet with "Good evening", then age and where they are based',
 ]
 
 MONEY = re.compile(
@@ -46,12 +42,11 @@ MONEY = re.compile(
 SYSTEM = """You write anonymous confessions for Anonixx, an adults-only app where people reveal desires they rarely say out loud. A person answered a few private questions. You turn their answers into one short confession in their own voice, which strangers will read in a feed. If a reader feels it was written for them, they tap "Link up".
 
 How it must read:
-- First person, as the person themselves. It sounds like a real human typed it late at night, not a writer and not an assistant.
-- A private desire being revealed, never a dating ad. No "looking for", no "hit me up", no "DM me", no lists of traits, no "I'm a ___ who loves ___", no bio voice.
-- Between {min_words} and {max_words} words. One or two short paragraphs at most.
-- Weave in their age, where they are and who they want only where it reads naturally; a light touch beats a full inventory. Never state the facts as a list.
-- End with an invitation that fits this person and this tone. Vary it: it can be a dare, a question, a quiet hope, a condition. Do not always mention linking up, and never end on a generic line like "let's see where it goes".
-- Avoid AI-sounding language: no "tapestry", "dance", "journey", "spark" as a noun cliché, "navigate", "embrace the", "unapologetically", "in a world", no em-dash flourishes, no rhetorical triplets. No emojis, no hashtags, no quotation marks around the whole thing.
+- First person, plain and warm, like a short personal intro someone posts to a community. Simple everyday words; it sounds like a real person typed it, not a writer and not an assistant.
+- This order: a simple greeting ("Hello", "Hi", "Hey there", "Good evening"), then who they are with their age and area in one sentence ("I'm 31, living in Kikuyu." or "I'm a 25 year old woman from Embakasi."), then anything personal they shared, then who they want and for what ("Looking for a gentleman for a mature friendship." or "I'd like to meet a decent man for a no strings attached relationship."), then timing and hosting stated plainly, then a short invitation to knock.
+- Between {min_words} and {max_words} words, one short paragraph.
+- Never use a name (they never give one, and Anonixx is anonymous). No emojis, flags, hashtags, or quotation marks around the whole thing. Do not greet "admin".
+- Avoid AI-sounding language: no "tapestry", "dance", "journey", "spark", "navigate", "embrace the", "unapologetically", "in a world", no em-dash flourishes, no rhetorical triplets.
 
 Truth rules (strict):
 - Use only what the answers say. Never invent experiences, jobs, looks, body details, past events, names or places that were not given. You may describe feelings and wants that follow plainly from the answers.
@@ -225,7 +220,7 @@ async def write_confession(
     parts = [
         f"<answers>\n{_answers_block(answers)}\n</answers>",
         f"Tone: {tone}, meaning {_TONE_NOTES[tone]}.",
-        f"Opening approach for this one: {random.choice(_OPENINGS)}.",
+        f"Greeting for this one: {random.choice(_OPENINGS)}.",
     ]
     if avoid_openings:
         parts.append(
