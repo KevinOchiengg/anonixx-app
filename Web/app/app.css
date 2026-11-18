@@ -278,22 +278,9 @@
 .gc-progress { flex: 1; display: flex; gap: 5px; }
 .gc-progress i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.12); transition: background .3s; }
 .gc-progress i.on { background: var(--rose); }
-.gc-step { display: grid; gap: 12px; animation: gc-in .38s ease both; }
-@keyframes gc-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .gc-step { animation: none; } }
-.gc-q { margin: 6px 0 0; font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: 400; font-size: 28px; line-height: 1.25; }
-.gc-sub { margin: -4px 0 8px; font-size: 14px; color: var(--muted); line-height: 1.5; }
 .gc-label { margin: 6px 0 0; font-size: 14px; font-weight: 700; }
 .gc-chips button { display: inline-flex; align-items: center; padding: 10px 15px; }
 .gc-chips button.on { background: var(--rose-dim); border-color: var(--rose); color: var(--fg); }
-.gc-sound { display: inline-flex; align-items: center; gap: 4px; }
-.gc-chips .gc-hear { padding: 6px 8px; border: 0; background: none; color: var(--rose); font-size: 12px; font-weight: 700; }
-.gc-secret { position: relative; border-radius: 16px; border: 1px solid rgba(255,99,74,0.25); background: rgba(255,99,74,0.06); padding: 14px; }
-.gc-secret textarea { width: 100%; background: none; border: 0; resize: none; color: var(--fg); font: italic 18px/1.5 Georgia, "Times New Roman", serif; outline: none; }
-.gc-secret span { position: absolute; right: 12px; bottom: 8px; font-size: 12px; color: var(--faint); }
 .gc-card { display: grid; gap: 14px; padding: 22px; border-radius: 20px; border: 1px solid rgba(255,99,74,0.25); background: linear-gradient(160deg, #1d1018, #120a10); box-shadow: 0 10px 40px rgba(255,99,74,0.08); }
-.gc-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.14em; color: var(--rose); }
 .gc-card textarea { margin: 0; font: italic 18px/1.55 Georgia, "Times New Roman", serif; color: var(--fg); white-space: pre-wrap; }
 .gc-card textarea { width: 100%; min-height: 150px; background: none; border: 0; resize: vertical; outline: none; }
-.gc-wait { margin: 0; min-height: 150px; display: grid; place-items: center; font: italic 16px Georgia, serif; color: var(--muted); animation: gc-pulse 1.8s ease-in-out infinite; }
-@keyframes gc-pulse { 50% { opacity: .45; } }

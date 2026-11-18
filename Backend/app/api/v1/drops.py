@@ -778,8 +778,8 @@ async def create_drop(
             "url": sound_doc.get("url", ""),
             "mute_original": bool(data.sound_mute_original) and data.media_type == "video",
         }
-    elif kind == "confession" and not is_admin_drop and not data.media_url and not images_data and not poll_data:
-        # Plain text confessions get a track from the library, picked at random.
+    elif kind in ("confession", "hookup") and not is_admin_drop and not data.media_url and not images_data and not poll_data:
+        # Text confessions and hookups get a track from the library, picked at random.
         picked = await db["sounds"].aggregate([{"$match": {"active": True}}, {"$sample": {"size": 1}}]).to_list(1)
         if picked:
             sound = {"id": str(picked[0]["_id"]), "title": picked[0].get("title", ""),

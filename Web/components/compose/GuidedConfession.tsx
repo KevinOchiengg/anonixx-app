@@ -1,11 +1,11 @@
 "use client";
-/** Guided hookup composer: four short sections on one page with a live preview of the
- * card, then the poster writes the confession in their own words, adds a sound and posts.
+/** Guided hookup composer: five short sections on one page: the answers for the
+ * card, the confession in their own words and the live preview, all on one page. The server picks the sound.
  * Progress is saved as it changes. Same as the app's GuidedConfession.jsx. */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, ApiError, COST, type Sound } from "@/lib/api";
+import { api, ApiError, COST } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { FRESH_FOR_WHEN, MEET_WHEN, WANTS, type DraftAnswers } from "@/lib/hookupDraft";
 import AgeGate from "../AgeGate";
@@ -28,14 +28,13 @@ const FRESH_HINT: Record<string, string> = {
   flexible: "It's up for 7 days. Renew it when it runs out.",
 };
 
-type Answers = DraftAnswers & { sound: string; soundOff: boolean };
+type Answers = DraftAnswers;
 const EMPTY: Answers = {
   age: "", gender: null, area: "",
   lookingFor: "anyone", ageMin: "", ageMax: "",
   wants: [],
   when: "tonight", hosting: null,
   note: "", want: "", dontWant: "",
-  sound: "", soundOff: false,   // the sound is picked at random unless they turn it off
 };
 
 const digits = (v: string) => v.replace(/\D/g, "").slice(0, 2);
@@ -90,7 +89,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const { user, refresh } = useAuth();
   const router = useRouter();
   const [a, setA] = useState<Answers>(EMPTY);
-  const [phase, setPhase] = useState<"form" | "review">("form");
   const [ready, setReady] = useState(false);
   const set = (patch: Partial<Answers>) => setA((cur) => ({ ...cur, ...patch }));
 
@@ -99,9 +97,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState("");
   const [ageGate, setAgeGate] = useState(false);
   const [done, setDone] = useState(false);
-  const [sounds, setSounds] = useState<Sound[] | null>(null);
-  const [hearing, setHearing] = useState("");
-  const preview = useRef<HTMLAudioElement | null>(null);
 
   // The chips the feed card will show, from the answers so far.
   const previewFacts = useMemo(() => {
@@ -113,71 +108,34 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     }, null);
   }, [a]);
 
-  // A random sound behind it, unless they chose "No sound". Shuffle rolls another.
-  const shuffleSound = useCallback(() => {
-    if (!sounds?.length) return;
-    setA((cur) => {
-      const pool = sounds.length > 1 ? sounds.filter((x) => x.id !== cur.sound) : sounds;
-      return { ...cur, sound: pool[Math.floor(Math.random() * pool.length)].id, soundOff: false };
-    });
-  }, [sounds]);
-  useEffect(() => {
-    if (!ready || !sounds?.length || a.soundOff) return;
-    if (!a.sound || !sounds.some((x) => x.id === a.sound)) shuffleSound();
-  }, [ready, sounds, a.sound, a.soundOff, shuffleSound]);
   const problem = formProblem(a);
 
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
       if (saved?.a) setA({ ...EMPTY, ...saved.a, wants: Array.isArray(saved.a.wants) ? saved.a.wants : [] });
-      if (saved?.phase === "review") setPhase("review");
       if (typeof saved?.text === "string") setText(saved.text);
       const myAge = localStorage.getItem(MY_AGE_KEY);
       if (myAge && /^\d{2}$/.test(myAge)) setA((cur) => (cur.age ? cur : { ...cur, age: myAge }));
     } catch { /* storage unavailable or corrupt */ }
     setReady(true);
-    api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => setSounds([]));
   }, []);
-
-  // A sound preview stops when the poster leaves the review or the page.
-  useEffect(() => {
-    if (phase === "review") return;
-    preview.current?.pause();
-    setHearing("");
-  }, [phase]);
-  useEffect(() => () => preview.current?.pause(), []);
-  function hear(s: Sound) {
-    preview.current?.pause();
-    if (hearing === s.id) { setHearing(""); return; }
-    const el = new Audio(s.url);
-    el.onended = () => setHearing("");
-    el.play().catch(() => setHearing(""));
-    preview.current = el;
-    setHearing(s.id);
-  }
 
   useEffect(() => {
     if (!ready || done) return;
     const t = setTimeout(() => {
-      const started = phase !== "form" || !!text || JSON.stringify(a) !== JSON.stringify(EMPTY);
+      const started = !!text || JSON.stringify(a) !== JSON.stringify(EMPTY);
       try {
-        if (started) localStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, phase, text }));
+        if (started) localStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, text }));
         else localStorage.removeItem(SAVE_KEY);
       } catch { /* ignore */ }
     }, 300);
     return () => clearTimeout(t);
-  }, [a, phase, text, ready, done]);
-
-  function toReview() {
-    if (problem) return;
-    setPhase("review");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  }, [a, text, ready, done]);
 
   async function publish() {
     const body = text.trim();
-    if (!body) return;
+    if (!body || problem) return;
     setPosting(true);
     setError("");
     try {
@@ -207,7 +165,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           mood_tag: "longing",
           sensitivity: "mature",
           publisher_opt_in: false,
-          ...(a.sound ? { sound_id: a.sound } : {}),
         },
       });
       try { localStorage.removeItem(SAVE_KEY); localStorage.setItem(MY_AGE_KEY, a.age); } catch { /* ignore */ }
@@ -232,134 +189,92 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   }
   if (ageGate) return <div className="form pad"><AgeGate onDone={() => setAgeGate(false)} /></div>;
 
-  const onReview = phase === "review";
   const short = (user?.coin_balance ?? 0) < COST.post;
   const sections = [
     !problem,
     !!a.ageMin || !!a.ageMax || a.lookingFor !== "anyone",
     a.wants.length > 0,
     !!a.when,
+    !!text.trim(),
   ];
   const doneCount = sections.filter(Boolean).length;
-  const pickedSound = a.sound ? sounds?.find((x) => x.id === a.sound) : undefined;
+  const missing = problem || (!text.trim() ? "Write your confession above." : "");
 
   return (
     <div className="form pad gc">
       <div className="gc-top">
-        <button type="button" className="linkish" onClick={() => (onReview ? setPhase("form") : onBack())}>← {onReview ? "Back" : "Change"}</button>
-        <div className="gc-progress" aria-label={onReview ? "Ready to drop" : `${doneCount} of 4 sections filled`}>
-          {sections.map((on, i) => <i key={i} className={onReview || on ? "on" : ""} />)}
+        <button type="button" className="linkish" onClick={onBack}>← Change</button>
+        <div className="gc-progress" aria-label={`${doneCount} of 5 sections filled`}>
+          {sections.map((on, i) => <i key={i} className={on ? "on" : ""} />)}
         </div>
       </div>
 
-      {!onReview ? (
-        <>
-          <Section n={1} title="About me" done={sections[0]}>
-            <div className="gc-row gc-lead"><span>I&apos;m a</span><Chips label="I am" options={GENDERS} isOn={(k) => a.gender === k} onPick={(k) => set({ gender: a.gender === k ? null : k })} /></div>
-            <label className="gc-field"><span>Age</span>
-              <input className="hk-field gc-age" inputMode="numeric" value={a.age} onChange={(e) => set({ age: digits(e.target.value) })} placeholder="Your age" />
-            </label>
-            <label className="gc-field"><span>Location</span>
-              <input className="hk-field" maxLength={60} value={a.area} onChange={(e) => set({ area: e.target.value })} placeholder="Your town or area" />
-            </label>
-          </Section>
+      <Section n={1} title="About me" done={sections[0]}>
+        <div className="gc-row gc-lead"><span>I&apos;m a</span><Chips label="I am" options={GENDERS} isOn={(k) => a.gender === k} onPick={(k) => set({ gender: a.gender === k ? null : k })} /></div>
+        <label className="gc-field"><span>Age</span>
+          <input className="hk-field gc-age" inputMode="numeric" value={a.age} onChange={(e) => set({ age: digits(e.target.value) })} placeholder="Your age" />
+        </label>
+        <label className="gc-field"><span>Location</span>
+          <input className="hk-field" maxLength={60} value={a.area} onChange={(e) => set({ area: e.target.value })} placeholder="Your town or area" />
+        </label>
+      </Section>
 
-          <Section n={2} title="Who I'm looking for" done={sections[1]}>
-            <div className="gc-row gc-lead"><span>I&apos;m looking for</span><Chips label="Looking for" options={LOOKING} isOn={(k) => a.lookingFor === k} onPick={(k) => set({ lookingFor: k })} /></div>
-            <div className="gc-field"><span>Preferred age range <span className="hk-opt">optional</span></span>
-              <div className="gc-row gc-range">
-                <input className="hk-field gc-age" inputMode="numeric" value={a.ageMin} onChange={(e) => set({ ageMin: digits(e.target.value) })} placeholder="Min" aria-label="Minimum age" />
-                <span>to</span>
-                <input className="hk-field gc-age" inputMode="numeric" value={a.ageMax} onChange={(e) => set({ ageMax: digits(e.target.value) })} placeholder="Max" aria-label="Maximum age" />
-              </div>
-            </div>
-          </Section>
-
-          <Section n={3} title="What I'm looking for" sub="Tick up to three." done={sections[2]}>
-            <div className="gc-checks" role="group" aria-label="What you're looking for">
-              {WANTS.filter(([k]) => k !== "on our terms").map(([k, l]) => (
-                <label key={k} className={`gc-checkrow${a.wants.includes(k) ? " on" : ""}`}>
-                  <input type="checkbox" checked={a.wants.includes(k)} onChange={() => set({ wants: toggleIn(a.wants, k, 3) })} />
-                  {l}
-                </label>
-              ))}
-            </div>
-          </Section>
-
-          <Section n={4} title="When I'd like to meet" sub={FRESH_HINT[FRESH_FOR_WHEN[a.when]]} done={sections[3]}>
-            <div className="gc-checks" role="radiogroup" aria-label="When">
-              {MEET_WHEN.map(([k, l]) => (
-                <label key={k} className={`gc-checkrow${a.when === k ? " on" : ""}`}>
-                  <input type="radio" name="gc-when" checked={a.when === k} onChange={() => set({ when: k })} />
-                  {l}
-                </label>
-              ))}
-            </div>
-            <h3 className="gc-label">Hosting <span className="hk-opt">optional</span></h3>
-            <Chips label="Hosting" options={HOSTING} isOn={(k) => a.hosting === k} onPick={(k) => set({ hosting: a.hosting === k ? null : k })} />
-          </Section>
-
-          {/* Live preview: the feed card's details as they answer; the words come next, from them. */}
-          <p className="cc-kicker">live preview</p>
-          <ConfessionPreview
-            category="linkup"
-            text=""
-            facts={previewFacts}
-            placeholder="Your words go here. You'll write them next."
-          />
-        </>
-      ) : (
-        <div className="gc-step">
-          <h2 className="gc-q">Now say it in your own words.</h2>
-          <p className="gc-sub">Nobody writes it for you. It stays anonymous either way.</p>
-          <div className="gc-card">
-            <span className="gc-kicker">your confession</span>
-            <textarea rows={7} maxLength={MAX} value={text} onChange={(e) => setText(e.target.value)} placeholder="Hello, I'm… Say who you are, who you want and when." aria-label="Your confession" autoFocus />
-            <span className="hk-hint" style={{ justifySelf: "end" }}>{MAX - text.length}</span>
+      <Section n={2} title="Who I'm looking for" done={sections[1]}>
+        <div className="gc-row gc-lead"><span>I&apos;m looking for</span><Chips label="Looking for" options={LOOKING} isOn={(k) => a.lookingFor === k} onPick={(k) => set({ lookingFor: k })} /></div>
+        <div className="gc-field"><span>Preferred age range <span className="hk-opt">optional</span></span>
+          <div className="gc-row gc-range">
+            <input className="hk-field gc-age" inputMode="numeric" value={a.ageMin} onChange={(e) => set({ ageMin: digits(e.target.value) })} placeholder="Min" aria-label="Minimum age" />
+            <span>to</span>
+            <input className="hk-field gc-age" inputMode="numeric" value={a.ageMax} onChange={(e) => set({ ageMax: digits(e.target.value) })} placeholder="Max" aria-label="Maximum age" />
           </div>
-          <h3 className="gc-label">A sound behind it</h3>
-          {sounds === null ? <p className="hk-hint">Loading sounds…</p> : sounds.length === 0 ? (
-            <p className="hk-hint">No sounds yet. Yours goes out quiet, which works too.</p>
-          ) : (
-            <>
-              <div className="chips gc-chips gc-sounds" role="group" aria-label="Sound">
-                {pickedSound ? (
-                  <span className="gc-sound">
-                    <button type="button" className="on" onClick={() => hear(pickedSound)}>♪ {pickedSound.title}</button>
-                    <button type="button" className="gc-hear" onClick={() => hear(pickedSound)} aria-label={hearing === pickedSound.id ? `Stop ${pickedSound.title}` : `Listen to ${pickedSound.title}`}>{hearing === pickedSound.id ? "stop" : "listen"}</button>
-                  </span>
-                ) : null}
-                <button type="button" onClick={shuffleSound}>{pickedSound ? "Shuffle" : "Pick one for me"}</button>
-                <button type="button" aria-pressed={!a.sound} className={!a.sound ? "on" : ""} onClick={() => { preview.current?.pause(); setHearing(""); set({ sound: "", soundOff: true }); }}>No sound</button>
-              </div>
-              <p className="hk-hint">{pickedSound ? "Plays softly while they read yours." : "Yours goes out quiet."}</p>
-            </>
-          )}
-          <p className="hk-hint">{FRESH_HINT[FRESH_FOR_WHEN[a.when]]} Your Room and chats stay either way.{pickedSound ? `  ♪ ${pickedSound.title}` : ""}</p>
-          <h3 className="gc-label">How it shows in the feed</h3>
-          <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Say it the way you'd whisper it to them…" />
         </div>
-      )}
+      </Section>
+
+      <Section n={3} title="What I'm looking for" sub="Tick up to three." done={sections[2]}>
+        <div className="gc-checks" role="group" aria-label="What you're looking for">
+          {WANTS.filter(([k]) => k !== "on our terms").map(([k, l]) => (
+            <label key={k} className={`gc-checkrow${a.wants.includes(k) ? " on" : ""}`}>
+              <input type="checkbox" checked={a.wants.includes(k)} onChange={() => set({ wants: toggleIn(a.wants, k, 3) })} />
+              {l}
+            </label>
+          ))}
+        </div>
+      </Section>
+
+      <Section n={4} title="When I'd like to meet" sub={FRESH_HINT[FRESH_FOR_WHEN[a.when]]} done={sections[3]}>
+        <div className="gc-checks" role="radiogroup" aria-label="When">
+          {MEET_WHEN.map(([k, l]) => (
+            <label key={k} className={`gc-checkrow${a.when === k ? " on" : ""}`}>
+              <input type="radio" name="gc-when" checked={a.when === k} onChange={() => set({ when: k })} />
+              {l}
+            </label>
+          ))}
+        </div>
+        <h3 className="gc-label">Hosting <span className="hk-opt">optional</span></h3>
+        <Chips label="Hosting" options={HOSTING} isOn={(k) => a.hosting === k} onPick={(k) => set({ hosting: a.hosting === k ? null : k })} />
+      </Section>
+
+      <Section n={5} title="In your own words" sub="Nobody writes it for you. It stays anonymous." done={sections[4]}>
+        <div className="gc-card">
+          <textarea rows={6} maxLength={MAX} value={text} onChange={(e) => setText(e.target.value)} placeholder="Hello, I'm… Say who you are, who you want and when." aria-label="Your confession" />
+          <span className="hk-hint" style={{ justifySelf: "end" }}>{MAX - text.length}</span>
+        </div>
+      </Section>
+
+      <p className="cc-kicker">live preview</p>
+      <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Your words show up here as you type." />
 
       {error ? <div className="err">{error}</div> : null}
       <div className="gc-dock">
-      <div className="hk-foot">
-        <div className="gc-foot-row">
-          {onReview ? (
-            <button className="btn" disabled={!text.trim() || posting} onClick={publish}>{posting ? "Dropping…" : `Drop it · ${COST.post} coins`}</button>
-          ) : (
-            <button className="btn" disabled={!!problem} onClick={toReview}>Continue</button>
+        <div className="hk-foot">
+          <button className="btn" disabled={!!missing || posting} onClick={publish}>{posting ? "Dropping…" : `Drop it · ${COST.post} coins`}</button>
+          {missing ? <p className="hk-missing">{missing}</p> : (
+            <p className="muted small">
+              18+ only. Free with a subscription. You have {user?.coin_balance ?? 0} coins.
+              {short ? <> <Link href="/coins">Get coins</Link></> : null}
+            </p>
           )}
         </div>
-        {onReview ? (
-          <p className="muted small">
-            18+ only. Free with a subscription. You have {user?.coin_balance ?? 0} coins.
-            {short ? <> <Link href="/coins">Get coins</Link></> : null}
-          </p>
-        ) : (
-          problem ? <p className="hk-missing">{problem}</p> : null
-        )}
-      </div>
       </div>
     </div>
   );

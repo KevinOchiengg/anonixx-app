@@ -47,8 +47,6 @@
 .gc-row .hk-field { flex: 1; min-width: 0; }
 .gc-row .gc-age { flex: none; width: 76px; text-align: center; }
 .gc-range span { color: var(--muted); font-size: 14px; }
-.gc-foot-row { display: flex; gap: 10px; }
-.gc-foot-row .btn { flex: 1; }
 .gc-lead { flex-wrap: wrap; }
 .gc-lead > span { font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 19px; }
 .gc-field { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }

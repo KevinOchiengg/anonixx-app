@@ -1,15 +1,14 @@
-/** Guided hookup composer: five short sections on one screen with a live preview of the
- * card, then the poster writes the confession in their own words, adds a sound and posts.
+/** Guided hookup composer, one screen: four short sections for the card, the confession in
+ * their own words, then the live preview and Drop. The server picks the sound.
  * Progress is saved as it changes. Posts via POST /drops (kind="hookup") with all the usual checks. */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Animated,
-  ActivityIndicator, KeyboardAvoidingView, Keyboard,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
+  ActivityIndicator, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAudioPlayer } from 'expo-audio';
 import { useDispatch, useSelector } from 'react-redux';
 import { ChevronLeft, MapPin, Check } from 'lucide-react-native';
 
@@ -47,7 +46,6 @@ const EMPTY = {
   wants: [],
   when: 'tonight', hosting: null,
   note: '', want: '', dontWant: '',
-  sound: '', soundOff: false,   // the sound is picked at random unless they turn it off
 };
 
 const digits = (v) => v.replace(/\D/g, '').slice(0, 2);
@@ -150,16 +148,12 @@ export default function GuidedConfession({ navigation, onBack }) {
   const coinBalance = useSelector((state) => state.coins.balance);
 
   const [a, setA] = useState(EMPTY);
-  const [phase, setPhase] = useState('form');      // 'form' | 'review'
   const [ready, setReady] = useState(false);
   const set = (patch) => setA((cur) => ({ ...cur, ...patch }));
 
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
   const [ageGate, setAgeGate] = useState(false);
-  const [sounds, setSounds] = useState(null);
-  const [hearing, setHearing] = useState('');
-  const preview = useAudioPlayer(null);
 
   // The chips the feed card will show, from the answers so far.
   const previewFacts = useMemo(() => {
@@ -171,18 +165,6 @@ export default function GuidedConfession({ navigation, onBack }) {
     }, null);
   }, [a]);
 
-  // A random sound behind it, unless they chose "No sound". Shuffle rolls another.
-  const shuffleSound = useCallback(() => {
-    if (!sounds?.length) return;
-    setA((cur) => {
-      const pool = sounds.length > 1 ? sounds.filter((x) => x.id !== cur.sound) : sounds;
-      return { ...cur, sound: pool[Math.floor(Math.random() * pool.length)].id, soundOff: false };
-    });
-  }, [sounds]);
-  useEffect(() => {
-    if (!ready || !sounds?.length || a.soundOff) return;
-    if (!a.sound || !sounds.some((x) => x.id === a.sound)) shuffleSound();
-  }, [ready, sounds, a.sound, a.soundOff, shuffleSound]);
   const problem = formProblem(a);
 
   // ── Restore and save answers ────────────────────────────────
@@ -191,7 +173,6 @@ export default function GuidedConfession({ navigation, onBack }) {
       try {
         const saved = JSON.parse(await AsyncStorage.getItem(SAVE_KEY) || 'null');
         if (saved?.a) setA({ ...EMPTY, ...saved.a, wants: Array.isArray(saved.a.wants) ? saved.a.wants : [] });
-        if (saved?.phase === 'review') setPhase('review');
         if (typeof saved?.text === 'string') setText(saved.text);
         const myAge = await AsyncStorage.getItem(MY_AGE_KEY);
         if (myAge && /^\d{2}$/.test(myAge)) setA((cur) => (cur.age ? cur : { ...cur, age: myAge }));
@@ -199,49 +180,25 @@ export default function GuidedConfession({ navigation, onBack }) {
       setReady(true);
     })();
     dispatch(fetchBalance());
-    authedFetch('/sounds').then(({ res, data }) => setSounds(res.ok ? data.sounds || [] : [])).catch(() => setSounds([]));
   }, [dispatch]);
 
   useEffect(() => {
     if (!ready) return undefined;
     const t = setTimeout(() => {
-      const started = phase !== 'form' || !!text || JSON.stringify(a) !== JSON.stringify(EMPTY);
+      const started = !!text || JSON.stringify(a) !== JSON.stringify(EMPTY);
       (started
-        ? AsyncStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, phase, text }))
+        ? AsyncStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, text }))
         : AsyncStorage.removeItem(SAVE_KEY)
       ).catch(() => {});
     }, 300);
     return () => clearTimeout(t);
-  }, [a, phase, text, ready]);
-
-  // A sound preview stops when they leave the review.
-  useEffect(() => { if (phase !== 'review' && hearing) { preview.pause(); setHearing(''); } }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
-  const hear = useCallback((snd) => {
-    if (hearing === snd.id) { preview.pause(); setHearing(''); return; }
-    preview.replace({ uri: snd.url });
-    preview.play();
-    setHearing(snd.id);
-  }, [hearing, preview]);
-
-  // ── Phase change ────────────────────────────────────────────
-  const fade = useRef(new Animated.Value(1)).current;
-  const goTo = useCallback((next) => {
-    Keyboard.dismiss();
-    Animated.timing(fade, { toValue: 0, duration: 140, useNativeDriver: true }).start(() => {
-      setPhase(next);
-      Animated.timing(fade, { toValue: 1, duration: 320, useNativeDriver: true }).start();
-    });
-  }, [fade]);
-
-  const toReview = () => {
-    if (problem) return;
-    goTo('review');
-  };
+  }, [a, text, ready]);
 
 
   // ── Publish ─────────────────────────────────────────────────
   const publish = useCallback(async () => {
     const body = text.trim();
+    if (problem) return;
     if (!body) { showToast({ type: 'warning', message: 'Say something first. Even one honest line.' }); return; }
     setPosting(true);
     try {
@@ -271,7 +228,6 @@ export default function GuidedConfession({ navigation, onBack }) {
         sensitivity: 'mature',
         font_style: 'classic',
         publisher_opt_in: false,
-        ...(a.sound ? { sound_id: a.sound } : {}),
       });
       if (res.status === 403 && isAgeGate(data)) { setAgeGate(true); return; }
       if (res.status === 402) {
@@ -289,7 +245,7 @@ export default function GuidedConfession({ navigation, onBack }) {
     } finally {
       setPosting(false);
     }
-  }, [a, text, dispatch, navigation, showToast]);
+  }, [a, text, problem, dispatch, navigation, showToast]);
 
   // ── Form ────────────────────────────────────────────────────
   const aboutDone = !problem;
@@ -344,63 +300,25 @@ export default function GuidedConfession({ navigation, onBack }) {
           </View>
         </Section>
 
-        {/* Live preview: the feed card's details as they answer; the words come next, from them. */}
+        <Section n={5} title="In your own words" sub="Nobody writes it for you. It stays anonymous." done={!!text.trim()}>
+          <LinearGradient colors={['#1d1018', '#120a10']} style={s.card}>
+            <TextInput
+              style={s.cardInput}
+              value={text}
+              onChangeText={(v) => setText(v.slice(0, MAX_CHARS))}
+              placeholder="Hello, I'm… Say who you are, who you want and when."
+              placeholderTextColor={T.textMute}
+              multiline
+              textAlignVertical="top"
+            />
+            <Text style={[s.counter, { alignSelf: 'flex-end' }]}>{MAX_CHARS - text.length}</Text>
+          </LinearGradient>
+        </Section>
+
+        {/* Live preview: the feed card as it will look, with their words as they type. */}
         <Text style={s.previewKicker}>live preview</Text>
-        <ConfessionPreview
-          category="linkup"
-          text=""
-          facts={previewFacts}
-          placeholder="Your words go here. You'll write them next."
-        />
+        <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Your words show up here as you type." />
       </>
-    );
-  }
-
-  // ── Review ──────────────────────────────────────────────────
-  const pickedSound = a.sound && sounds ? sounds.find((x) => x.id === a.sound) : null;
-  function renderReview() {
-    return (
-      <View style={s.group}>
-        <Text style={s.title}>Now say it in your own words.</Text>
-        <Text style={s.sub}>Nobody writes it for you. It stays anonymous either way.</Text>
-        <LinearGradient colors={['#1d1018', '#120a10']} style={s.card}>
-          <Text style={s.cardKicker}>your confession</Text>
-          <TextInput
-            style={s.cardInput}
-            value={text}
-            onChangeText={(v) => setText(v.slice(0, MAX_CHARS))}
-            placeholder="Hello, I'm… Say who you are, who you want and when."
-            placeholderTextColor={T.textMute}
-            multiline
-            autoFocus
-            textAlignVertical="top"
-          />
-          <Text style={[s.counter, { alignSelf: 'flex-end' }]}>{MAX_CHARS - text.length}</Text>
-        </LinearGradient>
-
-        <Label>A sound behind it</Label>
-        {sounds === null ? <ActivityIndicator color={T.primary} /> : sounds.length === 0 ? (
-          <Text style={s.hint}>No sounds yet. Yours goes out quiet, which works too.</Text>
-        ) : (
-          <>
-            <View style={s.chips}>
-              {pickedSound && <Chip label={`♪ ${pickedSound.title}`} active onPress={() => hear(pickedSound)} />}
-              {pickedSound && (
-                <TouchableOpacity onPress={() => hear(pickedSound)} hitSlop={HIT_SLOP} style={s.soundRow}>
-                  <Text style={s.link}>{hearing === pickedSound.id ? 'stop' : 'listen'}</Text>
-                </TouchableOpacity>
-              )}
-              <Chip label={pickedSound ? 'Shuffle' : 'Pick one for me'} active={false} onPress={shuffleSound} />
-              <Chip label="No sound" active={!a.sound} onPress={() => { if (hearing) { preview.pause(); setHearing(''); } set({ sound: '', soundOff: true }); }} />
-            </View>
-            <Text style={s.hint}>{pickedSound ? 'Plays softly while they read yours.' : 'Yours goes out quiet.'}</Text>
-          </>
-        )}
-        <Text style={s.hint}>{FRESH_HINT[FRESH_FOR_WHEN[a.when]]} Your Room and chats stay either way.{pickedSound ? `  ♪ ${pickedSound.title}` : ''}</Text>
-
-        <Label>How it shows in the feed</Label>
-        <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Say it the way you'd whisper it to them…" />
-      </View>
     );
   }
 
@@ -415,45 +333,37 @@ export default function GuidedConfession({ navigation, onBack }) {
     );
   }
 
-  const onReview = phase === 'review';
-  const doneCount = [aboutDone, !!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone', a.wants.length > 0, !!a.when].filter(Boolean).length;
+  const doneCount = [aboutDone, !!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone', a.wants.length > 0, !!a.when, !!text.trim()].filter(Boolean).length;
+  const missing = problem || (!text.trim() ? 'Write your confession above.' : '');
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={s.header}>
-          <TouchableOpacity onPress={onReview ? () => goTo('form') : onBack} hitSlop={HIT_SLOP} accessibilityLabel="Back">
+          <TouchableOpacity onPress={onBack} hitSlop={HIT_SLOP} accessibilityLabel="Back">
             <ChevronLeft size={rs(24)} color={T.text} />
           </TouchableOpacity>
-          <Text style={s.headerTitle}>{onReview ? 'Ready to drop' : 'Link up'}</Text>
+          <Text style={s.headerTitle}>Hookup confession</Text>
           <View style={s.progress}>
-            {[0, 1, 2, 3].map((i) => <View key={i} style={[s.seg, (onReview || i < doneCount) && s.segOn]} />)}
+            {[0, 1, 2, 3, 4].map((i) => <View key={i} style={[s.seg, i < doneCount && s.segOn]} />)}
           </View>
         </View>
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <Animated.View style={{ opacity: fade }}>
-            {onReview ? renderReview() : renderForm()}
-          </Animated.View>
+          {renderForm()}
           <View style={s.footer}>
             <View style={s.footRow}>
-              {onReview ? (
-                <TouchableOpacity
-                  style={[s.primaryBtn, (!text.trim() || posting) && s.primaryOff]}
-                  onPress={publish}
-                  disabled={!text.trim() || posting}
-                  activeOpacity={0.85}
-                >
-                  {posting ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>Drop it · {POST_COST} coins</Text>}
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={[s.primaryBtn, !!problem && s.primaryOff]} onPress={toReview} disabled={!!problem} activeOpacity={0.85}>
-                  <Text style={s.primaryText}>Continue</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[s.primaryBtn, (!!missing || posting) && s.primaryOff]}
+                onPress={publish}
+                disabled={!!missing || posting}
+                activeOpacity={0.85}
+              >
+                {posting ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>Drop it · {POST_COST} coins</Text>}
+              </TouchableOpacity>
             </View>
             <Text style={s.footNote}>
-              {onReview ? `18+ only. Balance ${coinBalance ?? 0}.` : problem || ''}
-              {onReview && coinBalance < POST_COST ? <Text style={s.link} onPress={() => navigation.navigate('Coins')}>  Top up</Text> : null}
+              {missing || `18+ only. Balance ${coinBalance ?? 0}.`}
+              {!missing && coinBalance < POST_COST ? <Text style={s.link} onPress={() => navigation.navigate('Coins')}>  Top up</Text> : null}
             </Text>
           </View>
         </ScrollView>
@@ -492,15 +402,12 @@ const s = StyleSheet.create({
   radioDot: { width: rs(8), height: rs(8), borderRadius: rs(4), backgroundColor: '#fff' },
   sectionSub: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, marginTop: rs(2), lineHeight: rf(17) },
 
-  title: { color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.xxl, lineHeight: rf(36) },
-  sub: { color: T.textSecondary, fontFamily: 'DMSans-Regular', fontSize: FONT.sm, lineHeight: rf(20), marginBottom: SPACING.sm },
 
   group: { gap: SPACING.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   inline: { color: T.textSecondary, fontFamily: 'DMSans-Regular', fontSize: FONT.sm },
   label: { color: T.text, fontFamily: 'DMSans-SemiBold', fontSize: FONT.sm, marginTop: SPACING.sm },
   optional: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs },
-  hint: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, lineHeight: rf(17) },
 
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   chip: {
@@ -511,7 +418,6 @@ const s = StyleSheet.create({
   chipOn: { borderColor: T.primary, backgroundColor: T.primaryDim },
   chipText: { color: T.textSecondary, fontFamily: 'DMSans-SemiBold', fontSize: FONT.sm },
   chipTextOn: { color: T.text },
-  soundRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6) },
 
   field: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
@@ -523,7 +429,6 @@ const s = StyleSheet.create({
   counter: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, textAlign: 'right' },
 
   card: { borderRadius: RADIUS.xl, borderWidth: 1, borderColor: T.primaryBorder, padding: SPACING.lg, gap: SPACING.sm },
-  cardKicker: { color: T.primary, fontFamily: 'DMSans-Bold', fontSize: FONT.xs, letterSpacing: 1.5 },
   cardInput: { minHeight: rs(170), color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg, lineHeight: rf(28) },
 
   footer: { paddingTop: SPACING.lg, gap: SPACING.xs },
