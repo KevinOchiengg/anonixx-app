@@ -36,7 +36,7 @@
 
 /* Guided hookup form: five short sections, then a live preview that scrolls with them. */
 /* Only Copy/Continue stay pinned to the bottom. */
-.gc-dock { position: sticky; bottom: 0; z-index: 5; display: grid; gap: 10px; margin: 0 -16px -28px; padding: 12px 16px 16px; background: var(--bg); border-top: 1px solid var(--line); }
+.gc-dock { display: grid; gap: 10px; margin-top: 14px; }
 .gc-section { display: grid; gap: 12px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
 .gc-section header { display: flex; align-items: flex-start; gap: 10px; }
 .gc-section h3 { margin: 3px 0 0; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; }

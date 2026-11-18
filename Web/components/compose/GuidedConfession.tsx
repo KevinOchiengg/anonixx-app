@@ -1,13 +1,13 @@
 "use client";
-/** Guided hookup composer: five short sections on one page with a live preview of the
- * confession, then a review to tweak it (or let the AI writer reword it), add a sound and post.
+/** Guided hookup composer: four short sections on one page with a live preview of the
+ * card, then the poster writes the confession in their own words, adds a sound and posts.
  * Progress is saved as it changes. Same as the app's GuidedConfession.jsx. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, COST, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { hookupDraft, FRESH_FOR_WHEN, MEET_WHEN, WANTS, type DraftAnswers } from "@/lib/hookupDraft";
+import { FRESH_FOR_WHEN, MEET_WHEN, WANTS, type DraftAnswers } from "@/lib/hookupDraft";
 import AgeGate from "../AgeGate";
 import { ConfessionPreview } from "../ConfessionCard";
 import { linkUpFacts } from "@/lib/confession";
@@ -17,18 +17,15 @@ export const GUIDED_SAVE_KEY = "anonixx.drops.guided.v1";
 const MY_AGE_KEY = "anonixx.hookup.age";
 const SAVE_KEY = GUIDED_SAVE_KEY;
 const MAX = 500;
-const NOTE_MAX = 200;
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const GENDERS: [string, string][] = [["woman", "woman"], ["man", "man"], ["other", "person"]];
 const LOOKING: [string, string][] = [["man", "man"], ["woman", "woman"], ["anyone", "anyone"]];
-const TONES: [string, string][] = [["direct", "Direct"], ["mysterious", "Mysterious"], ["playful", "Playful"], ["vulnerable", "Vulnerable"]];
 const FRESH_HINT: Record<string, string> = {
   tonight: "It's up for 12 hours. You can add more, up to 2 days.",
   week: "It's up for 7 days.",
   flexible: "It's up for 7 days. Renew it when it runs out.",
 };
-const WAITING = ["listening to what you said…", "finding your words…", "keeping it yours…"];
 
 type Answers = DraftAnswers & { sound: string; soundOff: boolean };
 const EMPTY: Answers = {
@@ -93,29 +90,18 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
   const router = useRouter();
   const [a, setA] = useState<Answers>(EMPTY);
   const [phase, setPhase] = useState<"form" | "review">("form");
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1000));
   const [ready, setReady] = useState(false);
   const set = (patch: Partial<Answers>) => setA((cur) => ({ ...cur, ...patch }));
 
-  const [writer, setWriter] = useState<{ enabled: boolean | null; remaining: number | null }>({ enabled: null, remaining: null });
   const [text, setText] = useState("");
-  const [baseText, setBaseText] = useState("");   // what the review started from, to tell edits apart
-  const [tone, setTone] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<string[]>([]);
-  const [aiText, setAiText] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState("");
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
   const [ageGate, setAgeGate] = useState(false);
-  const [waitIx, setWaitIx] = useState(0);
   const [done, setDone] = useState(false);
   const [sounds, setSounds] = useState<Sound[] | null>(null);
   const [hearing, setHearing] = useState("");
   const preview = useRef<HTMLAudioElement | null>(null);
 
-  const draft = useMemo(() => hookupDraft(a, seed), [a, seed]);
   // The chips the feed card will show, from the answers so far.
   const previewFacts = useMemo(() => {
     const [lo, hi] = wantedRange(a);
@@ -145,19 +131,11 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
       const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
       if (saved?.a) setA({ ...EMPTY, ...saved.a, wants: Array.isArray(saved.a.wants) ? saved.a.wants : [] });
       if (saved?.phase === "review") setPhase("review");
-      if (typeof saved?.seed === "number") setSeed(saved.seed);
       if (typeof saved?.text === "string") setText(saved.text);
-      if (typeof saved?.baseText === "string") setBaseText(saved.baseText);
-      if (typeof saved?.aiText === "string") setAiText(saved.aiText);
-      if (typeof saved?.tone === "string") setTone(saved.tone);
-      if (Array.isArray(saved?.drafts)) setDrafts(saved.drafts.slice(-4));
       const myAge = localStorage.getItem(MY_AGE_KEY);
       if (myAge && /^\d{2}$/.test(myAge)) setA((cur) => (cur.age ? cur : { ...cur, age: myAge }));
     } catch { /* storage unavailable or corrupt */ }
     setReady(true);
-    api<{ enabled: boolean; remaining: number }>("/guided/status")
-      .then((r) => setWriter({ enabled: r.enabled, remaining: r.remaining }))
-      .catch(() => setWriter({ enabled: false, remaining: null }));
     api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => setSounds([]));
   }, []);
 
@@ -183,72 +161,17 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     const t = setTimeout(() => {
       const started = phase !== "form" || !!text || JSON.stringify(a) !== JSON.stringify(EMPTY);
       try {
-        if (started) localStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, phase, seed, text, baseText, aiText, tone, drafts }));
+        if (started) localStorage.setItem(SAVE_KEY, JSON.stringify({ started, a, phase, text }));
         else localStorage.removeItem(SAVE_KEY);
       } catch { /* ignore */ }
     }, 300);
     return () => clearTimeout(t);
-  }, [a, phase, seed, text, baseText, aiText, tone, drafts, ready, done]);
-
-  useEffect(() => {
-    if (!generating) return;
-    const t = setInterval(() => setWaitIx((i) => (i + 1) % WAITING.length), 1800);
-    return () => clearInterval(t);
-  }, [generating]);
-
-  const generate = useCallback(async (withTone: string) => {
-    setGenerating(true);
-    setGenError("");
-    try {
-      const [lo, hi] = wantedRange(a);
-      const r = await api<{ confession: string; tone: string; remaining: number }>("/guided/generate", {
-        body: {
-          age: Number(a.age),
-          gender: a.gender,
-          area: a.area.trim(),
-          looking_for: a.lookingFor,
-          age_min: lo,
-          age_max: hi,
-          connection: a.wants,
-          meet_when: a.when,
-          hosting: a.hosting,
-          public_first: a.publicFirst,
-          secret: a.note.trim() || null,
-          want: a.want.trim() || null,
-          dont_want: a.dontWant.trim() || null,
-          tone: withTone,
-          previous: drafts,
-        },
-      });
-      setText(r.confession);
-      setBaseText(r.confession);
-      setAiText(r.confession);
-      setTone(r.tone);
-      setDrafts((d) => [...d, r.confession].slice(-4));
-      setWriter((w) => ({ ...w, remaining: r.remaining }));
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "age_verification_required") { setAgeGate(true); return; }
-      if (e instanceof ApiError && e.status === 503) setWriter((w) => ({ ...w, enabled: false }));
-      setGenError((e as Error).message);
-    } finally {
-      setGenerating(false);
-    }
-  }, [a, drafts]);
+  }, [a, phase, text, ready, done]);
 
   function toReview() {
     if (problem) return;
-    // Keep their own edits; otherwise start from the live draft as it is now.
-    if (!text.trim() || text === baseText) { setText(draft); setBaseText(draft); setAiText(""); }
     setPhase("review");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(phase === "review" ? text : draft);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch { /* clipboard blocked: nothing to do */ }
   }
 
   async function publish() {
@@ -277,9 +200,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
               public_first: a.publicFirst,
               want: a.want.trim() || null,
               dont_want: a.dontWant.trim() || null,
-              tone: aiText ? tone : null,
-              ai_generated: !!aiText,
-              edited: body !== baseText.trim(),
+              tone: null,
+              ai_generated: false,
             },
           },
           mood_tag: "longing",
@@ -317,7 +239,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     !!a.ageMin || !!a.ageMax || a.lookingFor !== "anyone",
     a.wants.length > 0,
     !!a.when,
-    !!a.note.trim() || !!a.want.trim(),
   ];
   const doneCount = sections.filter(Boolean).length;
   const pickedSound = a.sound ? sounds?.find((x) => x.id === a.sound) : undefined;
@@ -326,7 +247,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     <div className="form pad gc">
       <div className="gc-top">
         <button type="button" className="linkish" onClick={() => (onReview ? setPhase("form") : onBack())}>← {onReview ? "Back" : "Change"}</button>
-        <div className="gc-progress" aria-label={onReview ? "Ready to drop" : `${doneCount} of 5 sections filled`}>
+        <div className="gc-progress" aria-label={onReview ? "Ready to drop" : `${doneCount} of 4 sections filled`}>
           {sections.map((on, i) => <i key={i} className={onReview || on ? "on" : ""} />)}
         </div>
       </div>
@@ -376,44 +297,24 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             </div>
           </Section>
 
-          <Section n={5} title="Anything else?" sub="Anything they should know first." optional done={sections[4]}>
-            <h3 className="gc-label">Personal message <span className="hk-opt">optional</span></h3>
-            <div className="gc-secret">
-              <textarea rows={3} maxLength={NOTE_MAX} value={a.note} onChange={(e) => set({ note: e.target.value })} placeholder="Write something personal you'd like them to know." aria-label="Personal message (optional)" />
-              <span>{NOTE_MAX - a.note.length}</span>
-            </div>
-          </Section>
-
-          {/* Live preview, right under section 5: the feed card as it will look, rewriting itself as they answer. */}
+          {/* Live preview: the feed card's details as they answer; the words come next, from them. */}
           <p className="cc-kicker">live preview</p>
           <ConfessionPreview
             category="linkup"
-            text={draft}
+            text=""
             facts={previewFacts}
-            right={<button type="button" className="gc-hear" onClick={() => setSeed((x) => x + 1)}>↻ new wording</button>}
+            placeholder="Your words go here. You'll write them next."
           />
         </>
       ) : (
         <div className="gc-step">
-          <h2 className="gc-q">This is how it reads.</h2>
-          <p className="gc-sub">Change any word. It stays anonymous either way.</p>
+          <h2 className="gc-q">Now say it in your own words.</h2>
+          <p className="gc-sub">Nobody writes it for you. It stays anonymous either way.</p>
           <div className="gc-card">
             <span className="gc-kicker">your confession</span>
-            {generating ? <p className="gc-wait">{WAITING[waitIx]}</p> : (
-              <textarea rows={7} maxLength={MAX} value={text} onChange={(e) => setText(e.target.value)} placeholder="Say it the way you'd whisper it to them…" aria-label="Your confession" />
-            )}
+            <textarea rows={7} maxLength={MAX} value={text} onChange={(e) => setText(e.target.value)} placeholder="Hello, I'm… Say who you are, who you want and when." aria-label="Your confession" autoFocus />
             <span className="hk-hint" style={{ justifySelf: "end" }}>{MAX - text.length}</span>
           </div>
-          {genError ? <p className="hk-missing">{genError}</p> : null}
-          {writer.enabled ? (
-            <>
-              <h3 className="gc-label">Reword it for me <span className="hk-opt">optional</span></h3>
-              <Chips label="Tone" options={TONES} isOn={(k) => tone === k && !!aiText} onPick={(k) => { if (!generating) generate(k); }} />
-              <p className="hk-hint">It keeps your details and adds none.{writer.remaining != null ? ` ${writer.remaining} rewordings left today.` : ""}</p>
-            </>
-          ) : null}
-          <h3 className="gc-label">How it shows in the feed</h3>
-          <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Say it the way you'd whisper it to them…" />
           <h3 className="gc-label">A sound behind it</h3>
           {sounds === null ? <p className="hk-hint">Loading sounds…</p> : sounds.length === 0 ? (
             <p className="hk-hint">No sounds yet. Yours goes out quiet, which works too.</p>
@@ -433,6 +334,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             </>
           )}
           <p className="hk-hint">{FRESH_HINT[FRESH_FOR_WHEN[a.when]]} Your Room and chats stay either way.{pickedSound ? `  ♪ ${pickedSound.title}` : ""}</p>
+          <h3 className="gc-label">How it shows in the feed</h3>
+          <ConfessionPreview category="linkup" text={text} facts={previewFacts} placeholder="Say it the way you'd whisper it to them…" />
         </div>
       )}
 
@@ -440,9 +343,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
       <div className="gc-dock">
       <div className="hk-foot">
         <div className="gc-foot-row">
-          <button type="button" className="pill" disabled={onReview ? !text.trim() : !!problem} onClick={copy}>{copied ? "Copied" : "Copy"}</button>
           {onReview ? (
-            <button className="btn" disabled={!text.trim() || posting || generating} onClick={publish}>{posting ? "Dropping…" : `Drop it · ${COST.post} coins`}</button>
+            <button className="btn" disabled={!text.trim() || posting} onClick={publish}>{posting ? "Dropping…" : `Drop it · ${COST.post} coins`}</button>
           ) : (
             <button className="btn" disabled={!!problem} onClick={toReview}>Continue</button>
           )}
