@@ -34,7 +34,7 @@ export type Post = {
   topics?: string[] | null;
   hookup?: {
     age: number; gender: string | null; area: string; looking_for: string | null; age_min: number | null; age_max: number | null; vibes: string[]; fresh_window?: string | null;
-    guided?: { craving: string | null; traits: string[]; hosting: string | null; public_first: boolean; tone: string | null; ai_generated: boolean; meet_when?: string | null } | null;
+    guided?: { craving: string | null; traits: string[]; hosting: string | null; public_first?: boolean; tone: string | null; ai_generated: boolean; meet_when?: string | null } | null;
   } | null;
   sensitivity: "general" | "mature";
   media_url: string | null;

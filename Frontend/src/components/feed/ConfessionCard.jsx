@@ -44,7 +44,7 @@ export function splitConfession(text) {
   return { head: parts.hook, body: parts.rest };
 }
 
-const HOSTING = { can_host: 'can host', can_travel: 'can travel', either: 'host or travel' };
+const HOSTING = { can_host: 'can host', can_travel: 'you host', either: 'host or travel' };
 const WHEN = { asap: 'ASAP', today: 'Today', tonight: 'Tonight', week: 'This week', flexible: 'Flexible' };
 const FRESH = { tonight: 'Tonight', weekend: 'This weekend', week: 'This week', flexible: 'Flexible' };
 const TOPIC_LABEL = (t) => (t === 'growth' ? 'Personal growth' : t.charAt(0).toUpperCase() + t.slice(1));
@@ -66,7 +66,6 @@ export function linkUpFacts(h, liveUntil) {
     who ? { text: `${who}${range ? ` ${range}` : ''}` } : null,
     ...(h.vibes || []).slice(0, 2).map((v) => ({ text: v })),
     HOSTING[h.guided?.hosting] ? { text: HOSTING[h.guided.hosting] } : null,
-    h.guided?.public_first ? { text: 'public first' } : null,
   ].filter(Boolean);
 }
 
@@ -85,14 +84,7 @@ export const KnockButton = React.memo(({ name, cost, onPress, compact }) => (
       style={[k.btn, compact && k.btnCompact]}
     >
       <View style={k.labelCol}>
-        <Text style={k.label} numberOfLines={2}>
-          Knock{name ? ' on ' : ''}{name ? <Text style={k.name}>{name}</Text> : null}{name ? "'s door" : ''}
-        </Text>
-        {!compact && (
-          <Text style={k.sub}>
-            {cost ? `Free to knock · ${cost} coins only if they let you in` : 'Free for you · they decide who comes in'}
-          </Text>
-        )}
+        <Text style={k.label} numberOfLines={1}>Knock</Text>
       </View>
       <View style={k.cost}>
         <Coins size={rs(13)} color={T.gold} />
@@ -310,8 +302,6 @@ const k = StyleSheet.create({
   btnCompact: { paddingVertical: rp(10), borderRadius: RADIUS.full },
   labelCol: { flex: 1, minWidth: 0 },
   label: { fontFamily: 'DMSans-Bold', fontSize: rf(16), color: '#fff' },
-  name: { fontFamily: 'DMSans-Bold' },
-  sub: { fontFamily: 'DMSans-Regular', fontSize: rf(12.5), color: 'rgba(255,255,255,0.86)', marginTop: rp(2) },
   cost: {
     flexDirection: 'row', alignItems: 'center', gap: rp(4),
     backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: RADIUS.full, paddingHorizontal: rp(9), paddingVertical: rp(5),

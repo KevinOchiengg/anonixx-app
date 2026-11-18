@@ -32,7 +32,7 @@ export const topicLabel = (t: string) => (t === "growth" ? "Personal growth" : t
 
 export type Fact = { text: string; hot?: boolean };
 
-const HOSTING: Record<string, string> = { can_host: "can host", can_travel: "can travel", either: "host or travel" };
+const HOSTING: Record<string, string> = { can_host: "can host", can_travel: "you host", either: "host or travel" };
 const WHEN: Record<string, string> = { asap: "ASAP", today: "Today", tonight: "Tonight", week: "This week", flexible: "Flexible" };
 const FRESH: Record<string, string> = { tonight: "Tonight", weekend: "This weekend", week: "This week", flexible: "Flexible" };
 
@@ -53,7 +53,6 @@ export function linkUpFacts(h: Post["hookup"] | null | undefined, liveUntil: str
     who ? { text: `${who}${range ? ` ${range}` : ""}` } : null,
     ...(h.vibes || []).slice(0, 2).map((v) => ({ text: v })),
     h.guided?.hosting && HOSTING[h.guided.hosting] ? { text: HOSTING[h.guided.hosting] } : null,
-    h.guided?.public_first ? { text: "public first" } : null,
   ];
   return out.filter((f): f is Fact => Boolean(f));
 }

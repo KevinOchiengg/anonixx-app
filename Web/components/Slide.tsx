@@ -318,10 +318,10 @@ export default function Slide({
       title={knockCost ? `Free to knock. ${knockCost} coins only if they let you in.` : "Free for you."}
     >
       {post.kind === "hookup" ? <HeartFill className="lu-heart" fill="currentColor" strokeWidth={2} aria-hidden /> : <Link2 />}
-      <span className="lu-label">Knock{post.anonymous_name ? <> on <b>{post.anonymous_name}</b>&apos;s door</> : null}</span>
+      <span className="lu-label">Knock</span>
       <span className="coin-cost">
         <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" fill="currentColor" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" fill="none" stroke="#7a4a00" strokeWidth="1.6" strokeLinecap="round" /></svg>
-        {knockCost ? <>{knockCost}<span className="when">if let in</span></> : "Free"}
+        {knockCost || "Free"}
       </span>
     </button>
   );

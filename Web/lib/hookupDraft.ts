@@ -21,6 +21,6 @@ export const FRESH_FOR_WHEN: Record<string, string> = { asap: 'tonight', today: 
 export type DraftAnswers = {
   age: string; gender: string | null; area: string; appearance?: string;
   lookingFor: string; ageMin: string; ageMax: string; wants: string[];
-  when: string; hosting: string | null; publicFirst: boolean;
+  when: string; hosting: string | null;
   note: string; want: string; dontWant: string;
 };

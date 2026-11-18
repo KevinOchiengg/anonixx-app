@@ -22,7 +22,7 @@ function parse(iso: string) {
 }
 
 // Compact facts from a hookup post (age, area, who, hosting), so the confession never has to list them.
-const HOSTING_TAG: Record<string, string> = { can_host: "can host", can_travel: "can travel", either: "host or travel" };
+const HOSTING_TAG: Record<string, string> = { can_host: "can host", can_travel: "you host", either: "host or travel" };
 export function hookupTags(h: Post["hookup"]): string[] {
   if (!h) return [];
   const wanted = !h.age_min && !h.age_max ? "" : h.age_min && h.age_min === h.age_max ? `${h.age_min}` : `${h.age_min || 18}–${h.age_max || 99}`;
@@ -33,7 +33,6 @@ export function hookupTags(h: Post["hookup"]): string[] {
     h.area || null,
     who ? who + range : null,
     (h.guided?.hosting && HOSTING_TAG[h.guided.hosting]) || null,
-    h.guided?.public_first ? "public first" : null,
   ].filter((x): x is string => Boolean(x));
 }
 

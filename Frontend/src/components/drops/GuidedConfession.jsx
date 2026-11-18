@@ -34,6 +34,7 @@ const MAX_CHARS = 500;
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const GENDERS = [['woman', 'woman'], ['man', 'man'], ['other', 'person']];
 const LOOKING = [['man', 'man'], ['woman', 'woman'], ['anyone', 'anyone']];
+const HOSTING = [['can_host', 'I can host'], ['can_travel', 'You host']];
 const FRESH_HINT = {
   tonight: "It's up for 12 hours. You can add more, up to 2 days.",
   week: "It's up for 7 days.",
@@ -44,7 +45,7 @@ const EMPTY = {
   age: '', gender: null, area: '',
   lookingFor: 'anyone', ageMin: '', ageMax: '',
   wants: [],
-  when: 'tonight', hosting: null, publicFirst: false,
+  when: 'tonight', hosting: null,
   note: '', want: '', dontWant: '',
   sound: '', soundOff: false,   // the sound is picked at random unless they turn it off
 };
@@ -166,7 +167,7 @@ export default function GuidedConfession({ navigation, onBack }) {
     return linkUpFacts({
       age: a.age ? Number(a.age) : null, gender: a.gender, area: a.area.trim(),
       looking_for: a.lookingFor, age_min: lo, age_max: hi, vibes: a.wants,
-      guided: { meet_when: a.when, hosting: a.hosting, public_first: a.publicFirst },
+      guided: { meet_when: a.when, hosting: a.hosting },
     }, null);
   }, [a]);
 
@@ -259,7 +260,6 @@ export default function GuidedConfession({ navigation, onBack }) {
           guided: {
             meet_when: a.when,
             hosting: a.hosting,
-            public_first: a.publicFirst,
             want: a.want.trim() || null,
             dont_want: a.dontWant.trim() || null,
             tone: null,
@@ -338,6 +338,10 @@ export default function GuidedConfession({ navigation, onBack }) {
 
         <Section n={4} title="When I'd like to meet" sub={FRESH_HINT[FRESH_FOR_WHEN[a.when]]} done={!!a.when}>
           {MEET_WHEN.map(([k, l]) => <CheckRow key={k} label={l} radio on={a.when === k} onPress={() => set({ when: k })} />)}
+          <Label optional>Hosting</Label>
+          <View style={s.chips}>
+            {HOSTING.map(([k, l]) => <Chip key={k} label={l} active={a.hosting === k} onPress={() => set({ hosting: a.hosting === k ? null : k })} />)}
+          </View>
         </Section>
 
         {/* Live preview: the feed card's details as they answer; the words come next, from them. */}
@@ -448,7 +452,7 @@ export default function GuidedConfession({ navigation, onBack }) {
               )}
             </View>
             <Text style={s.footNote}>
-              {onReview ? `18+ only. Balance ${coinBalance ?? 0}.` : problem || 'Everything else is optional.'}
+              {onReview ? `18+ only. Balance ${coinBalance ?? 0}.` : problem || ''}
               {onReview && coinBalance < POST_COST ? <Text style={s.link} onPress={() => navigation.navigate('Coins')}>  Top up</Text> : null}
             </Text>
           </View>

@@ -165,6 +165,7 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart, cost = UNLOCK_COS
     <Animated.View style={[sw.linkUpWrap, wide && { alignSelf: 'stretch' }, { transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] }) }] }]}>
       <TouchableOpacity
         onPress={onPress} activeOpacity={0.85} hitSlop={HIT_SLOP} accessibilityRole="button"
+        accessibilityLabel={`Knock on ${name || 'their'} door`}
         accessibilityHint={cost ? `Free to knock. ${cost} coins only if they let you in.` : 'Free for you.'}
       >
         <LinearGradient
@@ -172,12 +173,10 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart, cost = UNLOCK_COS
           style={[sw.linkUpBtn, wide && { justifyContent: 'center' }]}
         >
           {heart ? <Heart size={rs(16)} color="#fff" fill="#fff" strokeWidth={2} /> : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
-          <Text style={sw.linkUpBtnText} numberOfLines={1}>
-            Knock{name ? ' on ' : ''}{name ? <Text style={{ fontWeight: '900' }}>{name}</Text> : null}{name ? "'s door" : ''}
-          </Text>
+          <Text style={sw.linkUpBtnText} numberOfLines={1}>Knock</Text>
           <View style={sw.linkUpCostPill}>
             <Coins size={rs(12)} color="#ffc93c" />
-            <Text style={sw.linkUpCostText}>{cost ? `${cost} if let in` : 'Free'}</Text>
+            <Text style={sw.linkUpCostText}>{cost || 'Free'}</Text>
           </View>
         </LinearGradient>
       </TouchableOpacity>
@@ -197,7 +196,6 @@ const hookupTags = (h) => {
     h.area || null,
     who ? who + range : null,
     HOSTING_TAG[h.guided?.hosting] || null,
-    h.guided?.public_first ? 'public first' : null,
   ].filter(Boolean);
 };
 // Hookup posts are live for 12h; the owner can extend (up to 48h).

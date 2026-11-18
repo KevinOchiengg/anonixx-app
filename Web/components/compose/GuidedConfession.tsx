@@ -21,6 +21,7 @@ const MAX = 500;
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const GENDERS: [string, string][] = [["woman", "woman"], ["man", "man"], ["other", "person"]];
 const LOOKING: [string, string][] = [["man", "man"], ["woman", "woman"], ["anyone", "anyone"]];
+const HOSTING: [string, string][] = [["can_host", "I can host"], ["can_travel", "You host"]];
 const FRESH_HINT: Record<string, string> = {
   tonight: "It's up for 12 hours. You can add more, up to 2 days.",
   week: "It's up for 7 days.",
@@ -32,7 +33,7 @@ const EMPTY: Answers = {
   age: "", gender: null, area: "",
   lookingFor: "anyone", ageMin: "", ageMax: "",
   wants: [],
-  when: "tonight", hosting: null, publicFirst: false,
+  when: "tonight", hosting: null,
   note: "", want: "", dontWant: "",
   sound: "", soundOff: false,   // the sound is picked at random unless they turn it off
 };
@@ -108,7 +109,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
     return linkUpFacts({
       age: Number(a.age) || 0, gender: a.gender, area: a.area.trim(), looking_for: a.lookingFor,
       age_min: lo, age_max: hi, vibes: a.wants,
-      guided: { craving: null, traits: [], hosting: a.hosting, public_first: a.publicFirst, tone: null, ai_generated: false, meet_when: a.when },
+      guided: { craving: null, traits: [], hosting: a.hosting, tone: null, ai_generated: false, meet_when: a.when },
     }, null);
   }, [a]);
 
@@ -197,7 +198,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             guided: {
               meet_when: a.when,
               hosting: a.hosting,
-              public_first: a.publicFirst,
               want: a.want.trim() || null,
               dont_want: a.dontWant.trim() || null,
               tone: null,
@@ -295,6 +295,8 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
                 </label>
               ))}
             </div>
+            <h3 className="gc-label">Hosting <span className="hk-opt">optional</span></h3>
+            <Chips label="Hosting" options={HOSTING} isOn={(k) => a.hosting === k} onPick={(k) => set({ hosting: a.hosting === k ? null : k })} />
           </Section>
 
           {/* Live preview: the feed card's details as they answer; the words come next, from them. */}
@@ -355,7 +357,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             {short ? <> <Link href="/coins">Get coins</Link></> : null}
           </p>
         ) : (
-          <p className={problem ? "hk-missing" : "muted small"}>{problem || "Everything else is optional."}</p>
+          problem ? <p className="hk-missing">{problem}</p> : null
         )}
       </div>
       </div>

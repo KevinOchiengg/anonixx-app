@@ -24,14 +24,13 @@ function Coin() {
   return <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" fill="currentColor" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" fill="none" stroke="#7a4a00" strokeWidth="1.6" strokeLinecap="round" /></svg>;
 }
 
-/** Knock CTA: says what a knock is and what it costs before anyone taps. cost 0 = free (Premium). */
+/** Knock CTA: "Knock" and the price; the rest is in the tooltip. cost 0 = free (Premium). */
 export function KnockCta({ name, cost, onClick }: { name: string | null; cost: number; onClick: () => void }) {
   return (
-    <button type="button" className="cc-knock" onClick={onClick}>
-      <span className="cc-knock-text">
-        <b>Knock{name ? <> on <em>{name}</em>&apos;s door</> : null}</b>
-        <small>{cost ? `Free to knock · ${cost} coins only if they let you in` : "Free for you · they decide who comes in"}</small>
-      </span>
+    <button type="button" className="cc-knock" onClick={onClick}
+      aria-label={`Knock on ${name || "their"} door`}
+      title={cost ? `Free to knock. ${cost} coins only if they let you in.` : "Free for you."}>
+      <span className="cc-knock-text"><b>Knock</b></span>
       <span className="cc-knock-cost" aria-label={cost ? `${cost} coins if they let you in` : "Free"}><Coin />{cost || "Free"}</span>
     </button>
   );
