@@ -16,7 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useDispatch } from 'react-redux';
 import {
   ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
-  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, Feather, Music,
+  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, Feather, MessageSquareLock, Music,
 } from 'lucide-react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useAudioPlayer } from 'expo-audio';
@@ -230,7 +230,7 @@ function OptionSheet({ visible, title, onClose, children }) {
 }
 
 // ─── Hookups use the guided flow (GuidedConfession.jsx); this screen is for regular confessions.
-function KindChooser({ onPick, onBack }) {
+function KindChooser({ isAdmin, onPick, onBack }) {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       <View style={s.header}>
@@ -256,13 +256,13 @@ function KindChooser({ onPick, onBack }) {
           </View>
         </TouchableOpacity>
         <TouchableOpacity style={s.kindCard} activeOpacity={0.85} onPress={() => onPick('confession')}>
-          <View style={s.kindIcon}><Feather size={rs(20)} color={T.primary} /></View>
+          <View style={s.kindIcon}><MessageSquareLock size={rs(20)} color={T.primary} /></View>
           <View style={{ flex: 1, gap: rp(4) }}>
             <Text style={s.kindCardTitle}>General Confession</Text>
             <Text style={s.kindCardSub}>The thing you can't say out loud. Never traced back to you.</Text>
             <View style={s.kindTags}>
               <Text style={s.kindTag}>Free</Text>
-              <Text style={s.kindTag}>Text, photo, video or voice</Text>
+              <Text style={s.kindTag}>{isAdmin ? 'Text, photo, video or voice' : 'Text'}</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -745,6 +745,13 @@ export default function DropsComposeScreen({ navigation, route }) {
         font_style: fontStyle,
         ...(isSuperAdmin && paidPrice && isVideo ? { paywall_price: paidPrice, preview_seconds: PAID_PREVIEW_SECONDS } : {}),
       };
+      // Everyone but admins posts just their words (an old draft may still hold extras).
+      if (!isAdmin && kind !== 'hookup') {
+        ['topics', 'category', 'recognition_hint', 'target_user_id', 'sound_id',
+          'location_country', 'location_county', 'location_sub_county', 'location_estate'].forEach((k) => delete body[k]);
+        body.confession = text.trim() || undefined;
+        body.publisher_opt_in = false;
+      }
 
       // A Stream video, or anything an admin schedules, goes through the scheduled
       // queue: the server publishes it when the clip is ready / at the chosen time.
@@ -842,7 +849,7 @@ export default function DropsComposeScreen({ navigation, route }) {
 
   // ─────────────────────────────────────────────────────────────
   if (!kind) {
-    return <KindChooser onPick={setKind} onBack={() => navigation.goBack()} />;
+    return <KindChooser isAdmin={isAdmin} onPick={setKind} onBack={() => navigation.goBack()} />;
   }
   if (kind === 'hookup') {
     return <GuidedConfession navigation={navigation} onBack={() => setKind(null)} />;
@@ -914,7 +921,7 @@ export default function DropsComposeScreen({ navigation, route }) {
           )}
 
           {/* One-time toolbar hint; any tap dismisses it. */}
-          {showToolbarHint && (
+          {isAdmin && showToolbarHint && (
             <TouchableOpacity style={s.hintBubble} onPress={dismissToolbarHint} activeOpacity={0.85}>
               <Text style={s.hintBubbleText}>
                 Tap an icon on the card below to add a photo, set your mood, tag someone & more.
@@ -923,7 +930,8 @@ export default function DropsComposeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
-          {/* Optional opening line: the first thing they read, shown as the feed headline. */}
+          {/* Optional opening line (admins): the first thing they read, shown as the feed headline. */}
+          {isAdmin && (
           <View style={s.hookField}>
             <TextInput
               style={s.hookInput}
@@ -937,6 +945,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             />
             {!!hook && <Text style={s.hookCount}>{HOOK_MAX - hook.length}</Text>}
           </View>
+          )}
 
           {/* Type straight into the card; the toolbar is attached below it as one card. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
@@ -956,12 +965,12 @@ export default function DropsComposeScreen({ navigation, route }) {
               placeholder={placeholder}
               maxLength={bodyMax}
               fontStyle={fontStyle}
-              // Square bottom corners: the toolbar sits flush below.
-              flushBottom
+              // Square bottom corners: the toolbar sits flush below (admins only).
+              flushBottom={isAdmin}
             />
 
             {/* Shuffle the placeholder line (only while empty). */}
-            {!text && !!intentPrompts && (
+            {isAdmin && !text && !!intentPrompts && (
               <TouchableOpacity
                 style={s.shuffleBtn}
                 onPress={handleShufflePrompt}
@@ -973,7 +982,9 @@ export default function DropsComposeScreen({ navigation, route }) {
               </TouchableOpacity>
             )}
 
-            {/* Toolbar: one labelled icon per extra; a dot marks what's set. */}
+            {/* Toolbar (admins): one labelled icon per extra; a dot marks what's set.
+                Everyone else just types; a sound is picked for them on the server. */}
+            {isAdmin && (
             <View style={s.toolbar}>
             {isAdmin && (
             <ToolIcon
@@ -1100,6 +1111,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               <Share2 size={rs(18)} color={T.textMute} />
             </ToolIcon>
             </View>
+            )}
           </Animated.View>
 
           {/* Extra photos, each removable. */}
@@ -1134,8 +1146,8 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* General Confession extras: category, reword, and how it lands in the feed. */}
-          {format === 'text' && (
+          {/* General Confession extras (admins): category, reword, and how it lands in the feed. */}
+          {isAdmin && format === 'text' && (
             <View style={s.qc}>
               <Text style={s.qcLabel}>Category <Text style={s.qcOptional}>optional</Text></Text>
               <View style={s.qcChips}>
@@ -1197,7 +1209,7 @@ export default function DropsComposeScreen({ navigation, route }) {
           )}
 
           {/* Dangerous edge warning — spec section 10 */}
-          {edge && (
+          {isAdmin && edge && (
             <View style={s.edgeWarn}>
               <AlertTriangle size={rs(14)} color={T.warn} />
               <View style={{ flex: 1 }}>

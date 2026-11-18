@@ -45,7 +45,7 @@ const WAITING = ['listening to what you said…', 'finding your words…', 'keep
 const NOTE_MAX = 200;
 
 const EMPTY = {
-  age: '', gender: null, area: '', appearance: '',
+  age: '', gender: null, area: '',
   lookingFor: 'anyone', ageMin: '', ageMax: '',
   wants: [],
   when: 'tonight', hosting: null, publicFirst: false,
@@ -282,7 +282,6 @@ export default function GuidedConfession({ navigation, onBack }) {
         age: Number(a.age),
         gender: a.gender,
         area: a.area.trim(),
-        appearance: a.appearance.trim() || null,
         looking_for: a.lookingFor,
         age_min: lo,
         age_max: hi,
@@ -331,7 +330,6 @@ export default function GuidedConfession({ navigation, onBack }) {
           vibes: a.wants,
           fresh_window: FRESH_FOR_WHEN[a.when] || 'tonight',
           guided: {
-            appearance: a.appearance.trim() || null,
             meet_when: a.when,
             hosting: a.hosting,
             public_first: a.publicFirst,
@@ -389,9 +387,6 @@ export default function GuidedConfession({ navigation, onBack }) {
             placeholder="Your town or area"
             accessibilityLabel="Your town or area"
           />
-          <Label optional>Appearance</Label>
-          <Field value={a.appearance} onChangeText={(v) => set({ appearance: v.slice(0, 60) })} placeholder="How would you describe yourself?" accessibilityLabel="Appearance (optional)" />
-          <Text style={s.hint}>Only your age and area show on your card.</Text>
         </Section>
 
         <Section n={2} title="Who I'm looking for" done={!!a.ageMin || !!a.ageMax || a.lookingFor !== 'anyone'}>

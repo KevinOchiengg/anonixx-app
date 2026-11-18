@@ -118,26 +118,4 @@
 .cc-kicker { margin: 6px 0 -2px; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
 
 /* ---------- General Confession extras (ComposeForm) ---------- */
-.qc-hook {
-  display: flex; align-items: center; gap: 10px; padding: 0 14px; margin-bottom: 10px; border-radius: 12px;
-  background: var(--surface); border: 1px solid rgba(255, 255, 255, 0.12);
-}
-.qc-hook input { flex: 1; min-width: 0; padding: 13px 0; border: 0; outline: 0; background: none; color: var(--fg); font: inherit; font-size: 16px; font-weight: 700; }
-.qc-hook input::placeholder { color: var(--faint); font-weight: 600; }
-.qc-hook small { color: var(--faint); font-size: 12px; }
-.qc-hook:focus-within { border-color: color-mix(in srgb, var(--rose) 55%, transparent); }
-.qc { display: grid; gap: 10px; margin: 6px 0 16px; }
-.qc-label { margin: 6px 0 0; font-size: 14px; font-weight: 600; color: var(--fg); }
-.qc-label small { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--faint); }
-.qc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.qc-chips button {
-  min-height: 38px; padding: 0 14px; border-radius: 999px; font-size: 14px; font-weight: 600;
-  color: var(--muted); background: var(--surface); border: 1px solid rgba(255, 255, 255, 0.12);
-}
-.qc-chips button.on { color: var(--qc-tint, var(--fg)); border-color: var(--qc-tint, var(--rose)); background: var(--surface-alt); }
-.qc-chips button:disabled { opacity: 0.45; cursor: default; }
-.qc-chips button.busy { opacity: 1; color: var(--rose); }
-.qc-hint { margin: 0; font-size: 12px; line-height: 1.45; color: var(--faint); }
-.qc-hint button { margin-left: 6px; color: var(--rose); font-weight: 700; font-size: 12px; }
-.qc-hint.bad { color: #FB923C; }
 .cc-preview-top .gc-hear { border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; }

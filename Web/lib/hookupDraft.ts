@@ -35,7 +35,7 @@ const WHEN_LINES: Record<string, string[]> = {
 const CLOSERS = ["If that's you, knock.", 'Knock if you felt that.', 'You know what to do if this is you.', 'If you read this twice, knock.'];
 
 export type DraftAnswers = {
-  age: string; gender: string | null; area: string; appearance: string;
+  age: string; gender: string | null; area: string; appearance?: string;
   lookingFor: string; ageMin: string; ageMax: string; wants: string[];
   when: string; hosting: string | null; publicFirst: boolean;
   note: string; want: string; dontWant: string;

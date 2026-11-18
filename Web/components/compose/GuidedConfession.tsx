@@ -32,7 +32,7 @@ const WAITING = ["listening to what you said…", "finding your words…", "keep
 
 type Answers = DraftAnswers & { sound: string; soundOff: boolean };
 const EMPTY: Answers = {
-  age: "", gender: null, area: "", appearance: "",
+  age: "", gender: null, area: "",
   lookingFor: "anyone", ageMin: "", ageMax: "",
   wants: [],
   when: "tonight", hosting: null, publicFirst: false,
@@ -206,7 +206,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           age: Number(a.age),
           gender: a.gender,
           area: a.area.trim(),
-          appearance: a.appearance.trim() || null,
           looking_for: a.lookingFor,
           age_min: lo,
           age_max: hi,
@@ -273,7 +272,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             vibes: a.wants,
             fresh_window: FRESH_FOR_WHEN[a.when] || "tonight",
             guided: {
-              appearance: a.appearance.trim() || null,
               meet_when: a.when,
               hosting: a.hosting,
               public_first: a.publicFirst,
@@ -343,10 +341,6 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
             <label className="gc-field"><span>Location</span>
               <input className="hk-field" maxLength={60} value={a.area} onChange={(e) => set({ area: e.target.value })} placeholder="Your town or area" />
             </label>
-            <label className="gc-field"><span>Appearance <span className="hk-opt">optional</span></span>
-              <input className="hk-field" maxLength={60} value={a.appearance} onChange={(e) => set({ appearance: e.target.value })} placeholder="How would you describe yourself?" />
-            </label>
-            <p className="hk-hint">Only your age and area show on your card.</p>
           </Section>
 
           <Section n={2} title="Who I'm looking for" done={sections[1]}>

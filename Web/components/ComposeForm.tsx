@@ -1,151 +1,38 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, COST, type Sound } from "@/lib/api";
+import { api, COST } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { uploadFile } from "@/lib/upload";
 import AppShell from "./AppShell";
-import MediaPicker, { type MediaDraft } from "./compose/MediaPicker";
-import { isMeaningful } from "@/lib/videoEdit";
-import { queueStreamDrop } from "@/lib/streamVideo";
-import { useBgUpload, type BgUpload } from "@/lib/bgUpload";
-import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
-import PollEditor, { type PollDraft } from "./compose/PollEditor";
-import TagUser, { type Tagged } from "./compose/TagUser";
-import LocationFields, { type LocationDraft } from "./compose/LocationFields";
-import TopicPicker from "./compose/TopicPicker";
-import Sheet from "./Sheet";
-import { DEFAULT_DROP_FONT, DROP_FONTS, DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 import GuidedConfession, { GUIDED_SAVE_KEY } from "./compose/GuidedConfession";
-import { ConfessionPreview } from "./ConfessionCard";
-import { CATEGORIES, autoCategory, topicLabel } from "@/lib/confession";
-import {
-  IconImages, IconSparkles, IconUserPlus, IconPin, IconMic, IconPoll, IconShare, IconShuffle, IconX, IconWarn, IconMusic,
-} from "./compose/toolicons";
-import { Feather, Flame } from "lucide-react";
+import { Flame, MessageSquareLock } from "lucide-react";
 
-const MODES = [["text", "Text"], ["media", "Photo / Video"], ["voice", "Voice"], ["poll", "Poll"]] as const;
-type Mode = (typeof MODES)[number][0];
 const MAX = 500;
 const DRAFT_KEY = "anonixx.drops.draft.v1";
-const HOOK_MAX = 100;
-// AI reword styles; ids match HOOKUP_TONES in Backend/app/api/v1/drops.py.
-const REWORD_STYLES = [["direct", "Direct"], ["mysterious", "Mysterious"], ["playful", "Playful"], ["vulnerable", "Vulnerable"]] as const;
-const REWORD_MIN_WORDS = 4;
-type Picked = "curiosity" | "vulnerable" | null;
-const INTENTS = {
-  "meet-me": { label: "Meet Me", sub: "looking for something real", mood: "longing", from: "#12070c", to: "#2a121b", accent: "#FF6B8A", text: "#FBE8ED", hint: "#C98A9B" },
-  "skeleton-in-the-closet": { label: "Skeleton In The Closet", sub: "secrets don't stay buried", mood: "untold", from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC", hint: "#C48A98" },
-  "just-tonight": { label: "Just Tonight", sub: "no strings attached affair", mood: "horny", from: "#0a0000", to: "#2b0505", accent: "#FF1744", text: "#FFE4E4", hint: "#C97A7A" },
-} as const;
-type IntentId = keyof typeof INTENTS;
-const PROMPTS: Record<IntentId, string[]> = {
-  "meet-me": ["I keep hoping the right person reads this—", "If you're out there and tired of games too—", "I want someone who actually stays. Here's why—", "Nobody's asked what I really want in a long time—"],
-  "skeleton-in-the-closet": ["I've never told anyone this—", "Something I've been carrying alone—", "If you knew this about me—", "The thing I think about at 3am—"],
-  "just-tonight": ["Tonight I don't want to think, I just want—", "No names, no promises, just—", "I'm free tonight and I want—", "Something impulsive I can't stop thinking about—"],
-};
-const EDGE = [/\bkill\b/i, /\bsuicide\b/i, /\bend it\b/i, /\bhate (myself|him|her|them)\b/i, /\bcheat(?:ed|ing)?\b/i, /\baffair\b/i, /\bleave (him|her|them)\b/i];
-function detectEdge(t: string): "raw" | "long" | null {
-  if (t.length < 20) return null;
-  if (EDGE.some((re) => re.test(t))) return "raw";
-  return t.length > 200 ? "long" : null;
-}
+// The card look every General Confession gets (no picker).
+const THEME = { from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC", hint: "#C48A98" };
 
 function Inner() {
   const { user, refresh } = useAuth();
   const router = useRouter();
+  const [kind, setKind] = useState<"hookup" | "confession" | null>(null);
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<Mode>("text");
-  const [media, setMedia] = useState<MediaDraft>(null);
-  // a picked video uploads in the background (lib/bgUpload.ts): show it, and stop it if we leave
-  const upState = useBgUpload(media?.kind === "video" ? media.upload ?? null : null);
-  const uploadRef = useRef<BgUpload | null | undefined>(null);
-  uploadRef.current = media?.upload;
-  useEffect(() => () => uploadRef.current?.cancel(), []);
-  const [voice, setVoice] = useState<VoiceDraft>(null);
-  const [poll, setPoll] = useState<PollDraft>({ question: "", options: ["", ""] });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState<"" | "live" | "processing">("");
-  const [kind, setKind] = useState<"hookup" | "confession" | null>(null);
-  const [tagged, setTagged] = useState<Tagged>(null);
-  const [hint, setHint] = useState("");
-  const [unsent, setUnsent] = useState(false);
-  const [intent, setIntent] = useState<IntentId>("skeleton-in-the-closet");
-  const [font, setFont] = useState<string>(DEFAULT_DROP_FONT);
-  const fontIx = Math.max(0, DROP_FONTS.findIndex((f) => f.id === font));
-  const [sheet, setSheet] = useState<"mood" | "feeling" | "sound" | "tag" | "place" | "share" | null>(null);
-  const [topics, setTopics] = useState<string[]>([]);
-  const [sounds, setSounds] = useState<Sound[] | null>(null);
-  const [soundId, setSoundId] = useState("");
-  const [hearing, setHearing] = useState("");
-  const preview = useRef<HTMLAudioElement | null>(null);
-  const [place, setPlace] = useState<LocationDraft>({ country: "", county: "", subCounty: "", estate: "" });
-  const [shareOut, setShareOut] = useState(false);
-  const [promptIx, setPromptIx] = useState(0);
-  // General Confession extras, all optional: an opening line (the feed headline), a category,
-  // and the AI reword (keeps their meaning; POST /guided/reword).
-  const [hook, setHook] = useState("");
-  const [category, setCategory] = useState<Picked>(null);
-  const [writer, setWriter] = useState<{ enabled: boolean; remaining: number | null }>({ enabled: false, remaining: null });
-  const [rewording, setRewording] = useState("");
-  const [rewordStyle, setRewordStyle] = useState("");
-  const [rewordError, setRewordError] = useState("");
-  const [beforeReword, setBeforeReword] = useState<{ hook: string; text: string } | null>(null);
-  useEffect(() => {
-    if (!user) return;
-    api<{ enabled: boolean; remaining: number }>("/guided/status")
-      .then((r) => setWriter({ enabled: !!r.enabled, remaining: r.remaining }))
-      .catch(() => {});
-  }, [user]);
-  const area_ = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { setPromptIx(Math.floor(Math.random() * 4)); }, [intent]);
-  useEffect(() => {
-    const el = area_.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [text, mode, kind]);
-  // The Sounds library loads the first time the Sound sheet opens; a preview stops when it closes.
-  useEffect(() => {
-    if (sheet !== "sound" || sounds) return;
-    api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => setSounds([]));
-  }, [sheet, sounds]);
-  useEffect(() => {
-    if (sheet === "sound") return;
-    preview.current?.pause();
-    setHearing("");
-  }, [sheet]);
-  useEffect(() => () => preview.current?.pause(), []);
-  function hear(s: Sound) {
-    preview.current?.pause();
-    if (hearing === s.id) { setHearing(""); return; }
-    const a = new Audio(s.url);
-    a.onended = () => setHearing("");
-    a.play().catch(() => setHearing(""));
-    preview.current = a;
-    setHearing(s.id);
-  }
+  const [done, setDone] = useState(false);
+  const area = useRef<HTMLTextAreaElement>(null);
   const draftReady = useRef(false);
+
   useEffect(() => {
     if (user?.is_admin) router.replace("/admin/post");
   }, [user?.is_admin, router]);
+
+  // Bring back an unsent confession, or a half-done hookup.
   useEffect(() => {
     try {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
-      if (d && typeof d === "object") {
-        if (typeof d.text === "string") setText(d.text);
-        if (typeof d.hook === "string") setHook(d.hook.slice(0, HOOK_MAX));
-        if (d.category === "curiosity" || d.category === "vulnerable") setCategory(d.category);
-        if (typeof d.hint === "string") setHint(d.hint);
-        if (typeof d.intent === "string" && d.intent in INTENTS) setIntent(d.intent as IntentId);
-        if (d.place && typeof d.place === "object") setPlace({ country: "", county: "", subCounty: "", estate: "", ...d.place });
-        if (typeof d.shareOut === "boolean") setShareOut(d.shareOut);
-        if (d.tagged && typeof d.tagged === "object") setTagged(d.tagged);
-        if (typeof d.text === "string" && d.text.trim()) { setUnsent(true); setKind("confession"); }
-      }
-      // No confession in progress but a hookup half-done: reopen the guided flow.
-      if (!(typeof d?.text === "string" && d.text.trim()) && JSON.parse(localStorage.getItem(GUIDED_SAVE_KEY) || "null")?.started) setKind("hookup");
+      if (typeof d?.text === "string" && d.text.trim()) { setText(d.text.slice(0, MAX)); setKind("confession"); }
+      else if (JSON.parse(localStorage.getItem(GUIDED_SAVE_KEY) || "null")?.started) setKind("hookup");
     } catch { /* storage unavailable or corrupt draft */ }
     draftReady.current = true;
   }, []);
@@ -153,130 +40,36 @@ function Inner() {
   useEffect(() => {
     if (!draftReady.current || done) return;
     const t = setTimeout(() => {
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, hook, category, hint, intent, place, shareOut, tagged })); } catch { /* ignore */ }
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text })); } catch { /* ignore */ }
     }, 400);
     return () => clearTimeout(t);
-  }, [text, hook, category, hint, intent, place, shareOut, tagged, done]);
+  }, [text, done]);
 
-  function discardDraft() {
-    setText("");
-    setHook("");
-    setCategory(null);
-    setHint("");
-    setTagged(null);
-    setPlace({ country: "", county: "", subCounty: "", estate: "" });
-    setUnsent(false);
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
-  }
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [text, kind]);
 
-  // The opening line goes first, on its own line: the feed shows it as the headline.
-  const fullText = [hook.trim(), text.trim()].filter(Boolean).join("\n");
-  const wordCount = fullText ? fullText.split(/\s+/).length : 0;
-  async function reword(style: string) {
-    if (rewording || wordCount < REWORD_MIN_WORDS) return;
-    setRewording(style);
-    setRewordError("");
-    try {
-      const r = await api<{ confession: string; style: string; remaining: number }>("/guided/reword", { body: { text: fullText, style } });
-      setBeforeReword((b) => b || { hook, text });
-      const out = (r.confession || "").trim();
-      const nl = out.indexOf("\n");
-      // Keep the opening line separate when the reword kept one.
-      if (hook.trim() && nl > 0) { setHook(out.slice(0, nl).trim().slice(0, HOOK_MAX)); setText(out.slice(nl + 1).trim()); }
-      else { setHook(""); setText(out); }
-      setRewordStyle(r.style || style);
-      setWriter((w) => ({ ...w, remaining: r.remaining }));
-    } catch (e) {
-      if ((e as { status?: number }).status === 503) setWriter((w) => ({ ...w, enabled: false }));
-      setRewordError((e as Error).message || "Couldn't reword it this time.");
-    } finally {
-      setRewording("");
-    }
-  }
-  function undoReword() {
-    if (!beforeReword) return;
-    setHook(beforeReword.hook);
-    setText(beforeReword.text);
-    setBeforeReword(null);
-    setRewordStyle("");
-  }
-
-  const pollOpts = poll.options.map((o) => o.trim()).filter(Boolean);
-  const confessionOk =
-    mode === "poll" ? poll.question.trim().length > 0 && pollOpts.length >= 2
-    : mode === "voice" ? !!voice
-    : mode === "media" ? !!media
-    : !!fullText && fullText.length <= MAX;
-  const theme = INTENTS[intent];
-  const edge = detectEdge(text);
-  const placed = [place.estate, place.subCounty, place.county, place.country].some((v) => v.trim());
-  function pickMode(m: Mode) {
-    setMode(mode === m ? "text" : m);
-  }
+  const body = text.trim();
+  const left = MAX - text.length;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!confessionOk) return;
+    if (!body || busy) return;
     setBusy(true);
     setError("");
     try {
-      let payload: Record<string, unknown> = {};
-      let streamUid = "";
-      if (kind === "confession") {
-        if (mode === "media" && media?.kind === "video" && media.upload) {
-          // Uploading since it was picked (lib/bgUpload.ts); this just waits for it to finish.
-          const uploaded = await media.upload.wait();
-          const overlays = media.edit?.overlays.filter((o) => o.text.trim()) ?? [];
-          if ("streamUid" in uploaded) {
-            // Stream: the backend cuts the window out, watermarks it and posts it when ready.
-            streamUid = uploaded.streamUid;
-            payload = { media_type: "video", ...(media.edit && overlays.length ? { video_edit: { ...media.edit, overlays } } : {}) };
-          } else {
-            const edit = isMeaningful(media.edit, media.duration ?? 0) ? { ...media.edit, overlays } : null;
-            payload = { media_type: "video", media_url: uploaded.url, ...(edit ? { video_edit: edit } : {}) };
-          }
-        } else if (mode === "media" && media) {
-          const urls: string[] = [];
-          for (const f of media.files) urls.push(await uploadFile(f, media.kind));
-          const edit = media.kind === "video" && isMeaningful(media.edit, media.duration ?? 0)
-            ? { ...media.edit, overlays: media.edit.overlays.filter((o) => o.text.trim()) } : null;
-          payload = media.kind === "video" ? { media_type: "video", media_url: urls[0], ...(edit ? { video_edit: edit } : {}) }
-            : urls.length > 1 ? { images: urls } : { media_type: "image", media_url: urls[0] };
-        } else if (mode === "voice" && voice) {
-          payload = {
-            media_type: "voice",
-            media_url: await uploadFile(voice.blob, "voice"),
-            duration_seconds: voice.seconds,
-            waveform_data: voice.waveform,
-          };
-        } else if (mode === "poll") {
-          payload = { poll: { question: poll.question.trim(), options: pollOpts.slice(0, 4) } };
-        }
-      }
-      const body = {
-          kind: "confession",
-          confession: fullText || undefined,
-          intent,
-          mood_tag: theme.mood,
-          ...(topics.length ? { topics } : {}),
-          ...(category ? { category } : {}),
-          font_style: font,
-          sensitivity: "general",
-          publisher_opt_in: shareOut,
-          ...(place.country.trim() ? { location_country: place.country.trim() } : {}),
-          ...(place.county.trim() ? { location_county: place.county.trim() } : {}),
-          ...(place.subCounty.trim() ? { location_sub_county: place.subCounty.trim() } : {}),
-          ...(place.estate.trim() ? { location_estate: place.estate.trim() } : {}),
-          ...(soundId && mode !== "voice" ? { sound_id: soundId } : {}),
-          ...(tagged ? { target_user_id: tagged.id } : {}),
-          ...(tagged && hint.trim() ? { recognition_hint: hint.trim().toLowerCase() } : {}),
-          ...payload,
-        };
-      if (streamUid && media) await queueStreamDrop(body, streamUid, media.edit ?? null, null);
-      else await api("/drops", { body });
+      await api("/drops", {
+        body: {
+          kind: "confession", confession: body, intent: "skeleton-in-the-closet", mood_tag: "untold",
+          sensitivity: "general", publisher_opt_in: false,
+        },
+      });
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       refresh();
-      setDone(streamUid ? "processing" : "live");
+      setDone(true);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -287,8 +80,8 @@ function Inner() {
   if (done) {
     return (
       <div className="empty">
-        <h2>{done === "processing" ? "Almost out there." : "It's live."}</h2>
-        <p>{done === "processing" ? "Polishing your video. It posts in a minute or two." : "Your confession is out there. Nobody knows it's you."}</p>
+        <h2>It&apos;s live.</h2>
+        <p>Your confession is out there. Nobody knows it&apos;s you.</p>
         <div className="row">
           <button className="pill" onClick={() => router.push("/")}>Back to the feed</button>
         </div>
@@ -310,11 +103,11 @@ function Inner() {
           </span>
         </button>
         <button type="button" className="kind-card" onClick={() => setKind("confession")}>
-          <span className="kind-ico" aria-hidden><Feather strokeWidth={2} /></span>
+          <span className="kind-ico" aria-hidden><MessageSquareLock strokeWidth={2} /></span>
           <span className="kind-body">
             <strong>General Confession</strong>
             <span>The thing you can&apos;t say out loud. Never traced back to you.</span>
-            <span className="kind-tags"><em>Free</em><em>Text, photo, video or voice</em></span>
+            <span className="kind-tags"><em>Free</em><em>Text</em></span>
           </span>
         </button>
       </div>
@@ -323,30 +116,9 @@ function Inner() {
 
   if (kind === "hookup") return <GuidedConfession onBack={() => setKind(null)} />;
 
-  const admin = Boolean(user?.is_admin);
-  const prompts = PROMPTS[intent];
-  const bodyMax = MAX - (hook.trim() ? hook.trim().length + 1 : 0);
-  const left = bodyMax - text.length;
-  const previewCategory = autoCategory(category, topics, fullText);
   const cardVars = {
-    "--cx-from": theme.from, "--cx-to": theme.to, "--cx-accent": theme.accent, "--cx-text": theme.text, "--cx-hint": theme.hint,
+    "--cx-from": THEME.from, "--cx-to": THEME.to, "--cx-accent": THEME.accent, "--cx-text": THEME.text, "--cx-hint": THEME.hint,
   } as React.CSSProperties;
-  const hasMedia = mode === "media" && !!media;
-  const tools: { key: string; label: string; icon: React.ReactNode; on: boolean; show: boolean; act: () => void }[] = [
-    { key: "photo", label: hasMedia ? "Remove" : "Photo", icon: hasMedia ? <IconX /> : <IconImages />, on: mode === "media", show: admin,
-      act: () => { if (hasMedia) { media?.upload?.cancel(); setMedia(null); setMode("text"); } else pickMode("media"); } },
-    { key: "sound", label: "Sound", icon: <IconMusic />, on: !!soundId, show: mode !== "voice", act: () => setSheet("sound") },
-    // Text drops: each tap moves to the next font, shown live in the box.
-    { key: "font", label: DROP_FONTS[fontIx].label, icon: <span style={{ ...dropFontStyle(font), fontSize: 15 }}>Aa</span>, on: font !== DEFAULT_DROP_FONT, show: !hasMedia && mode === "text",
-      act: () => setFont(DROP_FONTS[(fontIx + 1) % DROP_FONTS.length].id) },
-    { key: "mood", label: "Mood", icon: <IconSparkles />, on: false, show: true, act: () => setSheet("mood") },
-    { key: "feeling", label: topics.length ? `Feeling · ${topics.length}` : "Feeling", icon: <IconSparkles />, on: topics.length > 0, show: true, act: () => setSheet("feeling") },
-    { key: "tag", label: "Tag", icon: <IconUserPlus />, on: !!tagged, show: true, act: () => setSheet("tag") },
-    { key: "place", label: "Place", icon: <IconPin />, on: placed, show: true, act: () => setSheet("place") },
-    { key: "voice", label: "Voice", icon: <IconMic />, on: mode === "voice", show: admin, act: () => pickMode("voice") },
-    { key: "poll", label: "Poll", icon: <IconPoll />, on: mode === "poll", show: admin, act: () => pickMode("poll") },
-    { key: "share", label: "Share", icon: <IconShare />, on: !shareOut, show: true, act: () => setSheet("share") },
-  ];
 
   return (
     <form className="cx-form" onSubmit={submit}>
@@ -354,187 +126,26 @@ function Inner() {
         <button type="button" className="cx-switch" onClick={() => setKind(null)}>General Confession · change</button>
       </div>
 
-      {unsent ? (
-        <div className="unsent">
-          <b>You almost sent this to them…</b>
-          <span>Still here. Still waiting to be sent.</span>
-          <div className="row">
-            <button type="button" className="pill" onClick={() => setUnsent(false)}>Continue</button>
-            <button type="button" className="pill ghost" onClick={discardDraft}>Discard</button>
-          </div>
-        </div>
-      ) : null}
-
-      {!text ? <p className="cx-guide">Say what you can&apos;t say out loud. Nobody will know it&apos;s you.</p> : null}
-
-      {/* Optional opening line: the first thing they read, shown as the feed headline. */}
-      <label className="qc-hook">
-        <input
-          value={hook}
-          onChange={(e) => setHook(e.target.value.replace(/\n/g, " ").slice(0, HOOK_MAX))}
-          maxLength={HOOK_MAX}
-          placeholder="Opening line, optional. The first thing they read."
-          aria-label="Opening line (optional)"
-        />
-        {hook ? <small>{HOOK_MAX - hook.length}</small> : null}
-      </label>
-
       <div className="cx-live" style={cardVars}>
-        {mode === "media" ? <div className="cx-zone"><MediaPicker value={media} onChange={setMedia} onError={setError} /></div> : null}
-        {mode === "voice" ? <div className="cx-zone"><VoiceRecorder value={voice} onChange={setVoice} onError={setError} /></div> : null}
-        {mode === "poll" ? <div className="cx-zone"><PollEditor value={poll} onChange={setPoll} /></div> : null}
         <div className="cx-write">
-          <link rel="stylesheet" href={DROP_FONTS_HREF} precedence="default" />
           <textarea
-            ref={area_}
-            style={mode === "text" ? dropFontStyle(font) : undefined}
-            rows={mode === "text" ? 4 : 2}
-            maxLength={bodyMax}
+            ref={area}
+            rows={5}
+            maxLength={MAX}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={mode === "text" ? prompts[promptIx % prompts.length] : "Add a caption (optional)"}
+            placeholder="Say what you can't say out loud."
             aria-label="Your confession"
+            autoFocus
           />
-          {!text && mode === "text" ? (
-            <button type="button" className="cx-shuffle" aria-label="Try another opening line" onClick={() => setPromptIx((i) => i + 1)}><IconShuffle /></button>
-          ) : null}
-        </div>
-        <div className="cx-toolbar" role="toolbar" aria-label="Add to your drop">
-          {tools.filter((t) => t.show).map((t) => (
-            <button type="button" key={t.key} className={t.on ? "on" : ""} onClick={t.act} aria-label={t.label}>
-              <span className="g">{t.icon}{t.on ? <i /> : null}</span>
-              <span className="l">{t.label}</span>
-            </button>
-          ))}
         </div>
       </div>
 
       <div className={`cx-count${left <= 20 ? (left <= 0 ? " bad" : " warn") : ""}`}>{left}</div>
-
-      {/* General Confession extras: category, reword, and how it lands in the feed. */}
-      {mode === "text" ? (
-        <div className="qc">
-          <p className="qc-label">Category<small>optional</small></p>
-          <div className="qc-chips" role="radiogroup" aria-label="Category">
-            {([[null, "Let Anonixx pick"], ["curiosity", CATEGORIES.curiosity.label], ["vulnerable", CATEGORIES.vulnerable.label]] as [Picked, string][]).map(([id, label]) => (
-              <button
-                type="button" key={label} role="radio" aria-checked={category === id}
-                className={category === id ? "on" : ""}
-                style={id ? ({ "--qc-tint": CATEGORIES[id].tint } as React.CSSProperties) : undefined}
-                onClick={() => setCategory(id)}
-              >{label}</button>
-            ))}
-          </div>
-
-          {writer.enabled && wordCount >= REWORD_MIN_WORDS ? (
-            <>
-              <p className="qc-label">Reword it for me<small>optional</small></p>
-              <div className="qc-chips">
-                {REWORD_STYLES.map(([id, label]) => (
-                  <button
-                    type="button" key={id} disabled={!!rewording}
-                    className={`${rewordStyle === id ? "on" : ""}${rewording === id ? " busy" : ""}`}
-                    onClick={() => reword(id)}
-                  >{rewording === id ? "Rewording…" : label}</button>
-                ))}
-              </div>
-              <p className="qc-hint">
-                Same story, same details, new voice. Nothing gets added.
-                {writer.remaining != null ? ` ${writer.remaining} left today.` : ""}
-                {beforeReword ? <button type="button" onClick={undoReword}>Undo</button> : null}
-              </p>
-              {rewordError ? <p className="qc-hint bad">{rewordError}</p> : null}
-            </>
-          ) : null}
-
-          <p className="qc-label">How it shows in the feed</p>
-          <ConfessionPreview
-            category={previewCategory}
-            text={fullText}
-            name={user?.anonymous_name}
-            facts={topics.slice(0, 3).map((t) => ({ text: topicLabel(t) }))}
-          />
-        </div>
-      ) : null}
-
-      {edge ? (
-        <div className="cx-edge">
-          <IconWarn />
-          <div>
-            {edge === "long" ? <p>That&apos;s a lot to send at once. Shorter confessions hit harder.</p> : (
-              <>
-                <b>This could change everything between you two.</b>
-                <p>No taking it back once it&apos;s sent.</p>
-              </>
-            )}
-          </div>
-        </div>
-      ) : null}
       {error ? <div className="err">{error}</div> : null}
 
-      <button className="cx-drop" disabled={busy || !confessionOk}>{busy ? (upState?.status === "uploading" ? `Finishing upload… ${upState.pct}%` : "Posting…") : "Drop it  ↗"}</button>
+      <button className="cx-drop" disabled={busy || !body}>{busy ? "Posting…" : "Drop it  ↗"}</button>
       <p className="cx-foot">Stay hidden. No numbers, handles or links.</p>
-
-      {sheet === "mood" ? (
-        <Sheet title="Confession type" onClose={() => setSheet(null)}>
-          <p className="cx-sub">You want it. They want it. Drop it, get found.</p>
-          <div className="cx-moods">
-            {(Object.keys(INTENTS) as IntentId[]).map((id) => (
-              <button type="button" key={id} className={intent === id ? "on" : ""} onClick={() => { setIntent(id); setSheet(null); }}
-                style={{ "--cx-from": INTENTS[id].from, "--cx-to": INTENTS[id].to, "--cx-accent": INTENTS[id].accent } as React.CSSProperties}>
-                <span className="tile" />
-                <b>{INTENTS[id].label}</b>
-                <small>{INTENTS[id].sub}</small>
-              </button>
-            ))}
-          </div>
-        </Sheet>
-      ) : null}
-      {sheet === "sound" ? (
-        <Sheet title="Sound" onClose={() => setSheet(null)}>
-          <p className="cx-sub">Set the mood. It plays softly behind your words.</p>
-          {!sounds ? <p className="muted small">Loading…</p> : sounds.length === 0 ? <p className="muted small">No sounds yet. Check back soon.</p> : (
-            <div className="cx-sounds">
-              <button type="button" className={!soundId ? "on" : ""} onClick={() => setSoundId("")}><b>No sound</b></button>
-              {sounds.map((s) => (
-                <div key={s.id} className={`cx-sound${soundId === s.id ? " on" : ""}`}>
-                  <button type="button" onClick={() => setSoundId(s.id)}><b>{s.title}</b><small>{s.mood === "any" ? "any mood" : s.mood}</small></button>
-                  <button type="button" className="cx-hear" onClick={() => hear(s)} aria-label={hearing === s.id ? `Stop ${s.title}` : `Listen to ${s.title}`}>{hearing === s.id ? "stop" : "listen"}</button>
-                </div>
-              ))}
-            </div>
-          )}
-          <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
-        </Sheet>
-      ) : null}
-      {sheet === "tag" ? (
-        <Sheet title="Tag someone" onClose={() => setSheet(null)} tall>
-          <TagUser value={tagged} onChange={setTagged} hint={hint} onHint={setHint} />
-          <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
-        </Sheet>
-      ) : null}
-      {sheet === "feeling" ? (
-        <Sheet title="Mood and topic" onClose={() => setSheet(null)} tall>
-          <TopicPicker value={topics} onChange={setTopics} />
-          <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
-        </Sheet>
-      ) : null}
-      {sheet === "place" ? (
-        <Sheet title="Location" onClose={() => setSheet(null)} tall>
-          <p className="cx-sub">Nearby people find your drop faster. Totally optional.</p>
-          <LocationFields value={place} onChange={setPlace} />
-          <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
-        </Sheet>
-      ) : null}
-      {sheet === "share" ? (
-        <Sheet title="Share to socials" onClose={() => setSheet(null)}>
-          <label className="cx-toggle">
-            <span><b>Share to Anonixx socials</b><small>Anonymous. Your identity never leaves Anonixx.</small></span>
-            <input type="checkbox" checked={shareOut} onChange={(e) => setShareOut(e.target.checked)} />
-          </label>
-          <button type="button" className="cx-done" onClick={() => setSheet(null)}>Done</button>
-        </Sheet>
-      ) : null}
     </form>
   );
 }

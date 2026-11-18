@@ -16,14 +16,6 @@ export const CATEGORIES: Record<Category, { label: string; tint: string }> = {
 export const categoryOf = (post: Pick<Post, "category" | "kind">): Category =>
   post.category && post.category in CATEGORIES ? post.category : post.kind === "hookup" ? "linkup" : "curiosity";
 
-// Mirrors drop_category() in Backend/app/api/v1/drops.py, for the composer preview.
-const VULNERABLE_TOPICS = ["heartbreak", "regret", "betrayal", "anger", "relief", "confusion", "growth", "family"];
-const VULNERABLE_WORDS = /\b(cry|cried|crying|tears|hurt|hurts|hurting|alone|lonely|loneliness|scared|afraid|depress\w*|anxious|anxiety|heartbr\w*|broke my heart|ashamed|shame|guilt\w*|grief|griev\w*|numb|empty inside|miss (?:him|her|them|you)|lost my|healing|forgive)\b/i;
-export function autoCategory(picked: Category | null, topics: string[], text: string): Category {
-  if (picked) return picked;
-  return topics.some((t) => VULNERABLE_TOPICS.includes(t)) || VULNERABLE_WORDS.test(text) ? "vulnerable" : "curiosity";
-}
-
 /** Headline + body. A real first sentence or line is the headline; a short confession is all
  * headline; a long run-on with no sentence break is all body. */
 export function splitConfession(text: string): { head: string; body: string } {
