@@ -14,6 +14,7 @@ import { ChatBackground } from "@/lib/chatTheme";
 import AppShell from "./AppShell";
 import AgeGate from "./AgeGate";
 import LinkUpSheet from "./LinkUpSheet";
+import { useKnock } from "./KnockPay";
 import Sheet from "./Sheet";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import { Ellipsis, Lock as LockIcon } from "lucide-react";
@@ -69,6 +70,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   const [safety, setSafety] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
+  const { knock: knockIn, ui: knockUi } = useKnock(setToast);
   const [entrance, setEntrance] = useState(false);
   const [, tick] = useState(0);
 
@@ -245,11 +247,11 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   } else if (live && post) {
     bar = (
       <div className="rm-bar knock">
-        <button className="rm-knock" onClick={() => setSheet(true)}>
-          <span className="rm-knock-t">Knock on {name}&apos;s door</span>
-          <em>Free to knock</em>
+        <button className="rm-knock" onClick={() => knockIn({ id: post.id, anonymous_name: name })}>
+          <span className="rm-knock-t">Knock</span>
+          <em>{cost ? `${cost} coins` : "Free"}</em>
         </button>
-        <small>{cost ? `${cost} coins only if ${name} lets you in. Otherwise, nothing.` : "Free for you. Nothing is charged."}</small>
+        <small>{cost ? `You go straight in. No reply in 24 hours and your ${cost} coins come back.` : "Free for you. You go straight in."}</small>
       </div>
     );
   } else {
@@ -351,6 +353,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
         </Sheet>
       ) : null}
 
+      {knockUi}
       {sheet && post ? (
         <LinkUpSheet
           post={{ id: post.id, anonymous_name: name, avatar_url: pic, content: post.content }}

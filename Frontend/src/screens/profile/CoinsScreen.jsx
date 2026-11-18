@@ -43,6 +43,7 @@ import DailyRewardBanner       from '../../components/rewards/DailyRewardBanner'
 import MpesaPaymentSheet       from '../../components/payments/MpesaPaymentSheet';
 import StripePaymentSheet      from '../../components/payments/StripePaymentSheet';
 import { useToast } from '../../components/ui/Toast';
+import { payIn, LINKUP_COST } from '../../utils/knock';
 import {
   USE_PLAY_BILLING, COIN_PACKS, buyCoins, fetchCoinPrices, recoverCoinPurchases, isCancelled,
 } from '../../utils/playBilling';
@@ -331,7 +332,10 @@ const packStyles = StyleSheet.create({
 });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-export default function CoinsScreen({ navigation }) {
+export default function CoinsScreen({ navigation, route }) {
+  // Sent here by a Knock that was short on coins: once the top-up lands, walk them in.
+  const knockFor = route?.params?.knockFor || null;
+  const walking = React.useRef(false);
   const dispatch = useDispatch();
   const { balance, transactions, streak, loading, geoConfig } =
     useSelector((state) => state.coins);
@@ -345,6 +349,15 @@ export default function CoinsScreen({ navigation }) {
     dispatch(fetchStreak());
     dispatch(fetchGeoConfig());
   }, []);
+
+  useEffect(() => {
+    if (!knockFor || walking.current || (balance ?? 0) < (knockFor.cost || LINKUP_COST)) return;
+    walking.current = true;
+    payIn(knockFor.id).then((r) => {
+      if (r.connectionId) navigation.replace('DropChat', { connectionId: r.connectionId });
+      else walking.current = false;
+    });
+  }, [knockFor, balance, navigation]);
 
   const refreshWallet = useCallback(() => {
     dispatch(fetchBalance());
@@ -362,6 +375,13 @@ export default function CoinsScreen({ navigation }) {
 
   const ListHeader = useMemo(() => (
     <>
+      {!!knockFor && (
+        <View style={styles.knockBanner}>
+          <Text style={styles.knockBannerText}>
+            Top up {knockFor.cost || LINKUP_COST} coins to link up{knockFor.name ? ` with ${knockFor.name}` : ''}. You go straight in once it's paid.
+          </Text>
+        </View>
+      )}
       <WalletHeader
         balance={balance}
         streak={streak}
@@ -376,7 +396,7 @@ export default function CoinsScreen({ navigation }) {
         <Text style={styles.sectionSub}>{transactions.length} records</Text>
       </View>
     </>
-  ), [balance, streak, geoConfig, transactions.length, handleMpesa, handleStripe, refreshWallet]);
+  ), [balance, streak, geoConfig, transactions.length, handleMpesa, handleStripe, refreshWallet, knockFor]);
 
   const ListEmpty = useMemo(() => (
     <View style={styles.emptyWrap}>
@@ -444,6 +464,8 @@ export default function CoinsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  knockBanner: { marginHorizontal: 16, marginTop: 8, marginBottom: 4, padding: 14, borderRadius: 14, backgroundColor: 'rgba(255,99,74,0.12)', borderWidth: 1, borderColor: 'rgba(255,99,74,0.35)' },
+  knockBannerText: { color: THEME.text, fontSize: rf(14), fontWeight: '600', lineHeight: rf(20) },
   container: { flex: 1, backgroundColor: 'transparent' },
   navbar: {
     flexDirection:     'row',

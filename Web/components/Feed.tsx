@@ -11,6 +11,7 @@ import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
+import { useKnock } from "./KnockPay";
 import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
 import { Eye, SatelliteDish } from "lucide-react";
@@ -68,9 +69,9 @@ function replayRound(posts: Post[], lastId: string | undefined): string[] {
 export default function Feed({ initialPosts, initialCursor, startId, fillAfterStart = false }: Props) {
   const { user, ready } = useAuth();
   const router = useRouter();
-  // Avatars open the person's Room; Link up on a hookup goes through it too, so the pitch lands with context.
+  // Avatars open the person's Room; Knock on a hookup pays and goes straight into the chat.
   const openRoom = (p: Post) => (p.user_id && !p.is_admin_drop ? router.push(`/room/${p.user_id}?post=${p.id}`) : setProfileFor(p));
-  const linkUp = (p: Post) => (p.kind === "hookup" && p.user_id ? router.push(`/room/${p.user_id}?post=${p.id}`) : setLinkFor(p));
+  const linkUp = (p: Post) => (p.kind === "hookup" ? knockIn(p) : setLinkFor(p));
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [authed, setAuthed] = useState(false);
@@ -81,6 +82,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
   const [muted, setMuted] = useState(true);
   const [gate, setGate] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const { knock: knockIn, ui: knockUi } = useKnock((m) => { setToast(m); window.setTimeout(() => setToast(null), 2400); });
   const [commentsFor, setCommentsFor] = useState<Post | null>(null);
   const [linkFor, setLinkFor] = useState<Post | null>(null);
   const [profileFor, setProfileFor] = useState<Post | null>(null);
@@ -608,6 +610,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
         ) : null}
         {profileFor ? <AuthorSheet post={profileFor} onClose={() => setProfileFor(null)} onLinkUp={setLinkFor} /> : null}
         {/* a confession has no card Link up, so one landing here came through AuthorSheet */}
+        {knockUi}
         {linkFor ? <LinkUpSheet post={linkFor} onClose={() => setLinkFor(null)} viaProfile={linkFor.kind === "confession"} /> : null}
         {reportFor ? (
           <ReportSheet

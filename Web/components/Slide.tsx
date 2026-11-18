@@ -315,7 +315,7 @@ export default function Slide({
     <button
       className="linkup"
       onClick={knock}
-      title={knockCost ? `Free to knock. ${knockCost} coins only if they let you in.` : "Free for you."}
+      title={knockCost ? `${knockCost} coins. You go straight in; no reply in 24 hours and they come back.` : "Free for you."}
     >
       {post.kind === "hookup" ? <HeartFill className="lu-heart" fill="currentColor" strokeWidth={2} aria-hidden /> : <Link2 />}
       <span className="lu-label">Knock</span>

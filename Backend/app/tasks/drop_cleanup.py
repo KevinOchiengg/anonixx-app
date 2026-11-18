@@ -48,6 +48,13 @@ class DropCleanupWorker:
                 await self.sweep()
             except Exception:
                 log.exception("DropCleanupWorker: unhandled sweep error")
+            try:
+                from app.api.v1.unlock_requests import refund_silent_knocks
+                n = await refund_silent_knocks(await get_database())
+                if n:
+                    log.info("Refunded %d unanswered Link Ups", n)
+            except Exception:
+                log.exception("DropCleanupWorker: refund sweep error")
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     async def sweep(self) -> int:

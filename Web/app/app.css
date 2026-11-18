@@ -284,3 +284,9 @@
 .gc-card { display: grid; gap: 14px; padding: 16px; border-radius: 18px; border: 1px solid color-mix(in srgb, var(--rose) 28%, transparent); background: radial-gradient(90% 70% at 0% 0%, color-mix(in srgb, var(--rose) 14%, transparent), transparent 70%), var(--bg-edge); }
 .gc-card textarea { margin: 0; font: italic 18px/1.55 Georgia, "Times New Roman", serif; color: var(--fg); white-space: pre-wrap; }
 .gc-card textarea { width: 100%; min-height: 150px; background: none; border: 0; resize: vertical; outline: none; }
+
+/* One-tap Knock pay sheet (components/KnockPay.tsx) */
+.kp { display: grid; gap: 12px; padding: 4px 2px 8px; }
+.kp h3 { margin: 0; font-size: 18px; }
+.kp p { margin: 0; }
+.kp .btn { width: 100%; text-align: center; }

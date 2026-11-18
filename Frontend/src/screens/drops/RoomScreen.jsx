@@ -27,6 +27,7 @@ import { intentLabel, timeLeft } from '../../config/linkup';
 import { roomThemeById } from '../../config/roomThemes';
 import ChatBackground from '../../components/chat/ChatBackground';
 import KnockClues from '../../components/rooms/KnockClues';
+import { knockIn } from '../../utils/knock';
 
 const REPORT_REASONS = [
   ['abuse', 'Harassment or abuse'],
@@ -308,16 +309,16 @@ export default function RoomScreen({ route, navigation }) {
       <View style={{ flex: 1, gap: rp(8) }}>
         <TouchableOpacity
           activeOpacity={0.88}
-          accessibilityLabel={`Knock on ${name}'s door, free to knock`}
-          onPress={() => navigation.navigate('PostUnlock', { post: { id: post.id, anonymous_name: name, avatar_url: pic, content: post.content }, fromRoom: true })}
+          accessibilityLabel={`Knock on ${name}'s door`}
+          onPress={() => knockIn(navigation, { id: post.id, anonymous_name: name, avatar_url: pic, content: post.content }, showToast)}
         >
           <LinearGradient colors={[th.accent, th.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1.6, y: 1 }} style={s.knock}>
-            <Text style={[s.knockText, { color: th.bg }]} numberOfLines={1}>Knock on {name}'s door</Text>
-            <View style={[s.freePill, { backgroundColor: th.bg }]}><Text style={[s.freeText, { color: th.text }]}>Free to knock</Text></View>
+            <Text style={[s.knockText, { color: th.bg }]} numberOfLines={1}>Knock</Text>
+            <View style={[s.freePill, { backgroundColor: th.bg }]}><Text style={[s.freeText, { color: th.text }]}>{cost ? `${cost} coins` : 'Free'}</Text></View>
           </LinearGradient>
         </TouchableOpacity>
         <Text style={[s.fine, { color: th.muted }]}>
-          {cost ? `${cost} coins only if ${name} lets you in. Otherwise, nothing.` : 'Free for you. Nothing is charged.'}
+          {cost ? `You go straight in. No reply in 24 hours and your ${cost} coins come back.` : 'Free for you. You go straight in.'}
         </Text>
       </View>
     );

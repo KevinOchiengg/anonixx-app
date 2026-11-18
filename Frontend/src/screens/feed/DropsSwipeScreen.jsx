@@ -36,6 +36,7 @@ import { HeartBursts, useDoubleTapLike } from '../../components/feed/DoubleTapLi
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { apiFetch } from '../admin/adminShared';
+import { knockIn } from '../../utils/knock';
 import { getDeviceId } from '../../utils/deviceId';
 import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
@@ -1587,10 +1588,8 @@ export default function DropsSwipeScreen({ navigation, route }) {
       showToast({ type: 'warning', message: 'Sign in to knock.' });
       return;
     }
-    if (post.kind === 'hookup' && post.user_id) {
-      navigation.navigate('Room', { userId: post.user_id, postId: post.id });
-      return;
-    }
+    // Hookups: one tap pays and goes straight into the chat (or to Coins first).
+    if (post.kind === 'hookup') { knockIn(navigation, post, showToast); return; }
     navigation.navigate('PostUnlock', { post });
   }, [isAuthenticated, navigation, showToast]);
 

@@ -129,7 +129,7 @@ export default function LinkUpSheet({
       }
       const r = await api<{ already_unlocked?: boolean; mutual?: boolean; connection_id?: string }>("/unlock-requests", { body });
       clearPitch();
-      if ((r.already_unlocked || r.mutual) && r.connection_id) {
+      if (r.connection_id) {
         router.push(`/chat/${r.connection_id}`);
         return;
       }
@@ -138,7 +138,7 @@ export default function LinkUpSheet({
       setSent(true);
     } catch (e) {
       if (e instanceof ApiError && e.code === "age_verification_required") { setAgeGate(true); return; }
-      setError(e instanceof ApiError && e.status === 402 ? "Top up first. Coins only move if they let you in." : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 402 ? "Top up first, then you go straight in." : (e as Error).message);
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,6 @@
-"""Knocks: a request to get into someone's Room. Free to send; the owner Lets In or Declines,
-and coins move only on Let In (re-checked atomically, so no overdraw or double charge).
-Resolved knocks are kept so people can knock again later."""
+"""Knocks: one tap pays the Link Up fee and opens the poster's Room chat straight away.
+If the poster never replies within REFUND_AFTER_HOURS the coins go back on their own
+(refund_silent_knocks, run by the hourly cleanup worker). Mutual knocks connect free."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from bson import ObjectId
 
 from app.database import get_database
 from app.dependencies import get_current_user_id
-from app.utils.coin_service import debit_coins
+from app.utils.coin_service import debit_coins, credit_coins
 from app.utils import taste
 from app.api.v1.drops import _ensure_aware, send_push_notification, AGE_GATE_DETAIL
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
@@ -19,6 +19,8 @@ from app.api.v1.chat_profile import door_rule_of, gallery_for, is_blocked_betwee
 
 # Unanswered knocks expire on their own after this many days.
 REQUEST_EXPIRY_DAYS = 7
+# A paid knock is refunded if the poster hasn't written in the chat by then.
+REFUND_AFTER_HOURS = 24
 from app.websockets.unlock_requests import (
     emit_unlock_request_received,
     emit_unlock_request_accepted,
@@ -268,13 +270,8 @@ async def create_unlock_request(
                 raise HTTPException(status_code=400, detail="A peek can only show things from your own Room.")
             peek.append({"media_url": url, "media_type": g.get("media_type") or "image"})
 
-    # The host's door rule.
+    # One tap in: the door rule no longer blocks a knock (a line or peek still goes along if given).
     rule = door_rule_of(owner_room)
-    has_line = len(pitch or "") >= MIN_PITCH_CHARS
-    has_peek = bool(peek or data.media_url or data.voice_url)
-    ok = {"line": has_line, "line_peek": has_line and has_peek, "voice": bool(data.voice_url)}[rule]
-    if not ok:
-        raise HTTPException(status_code=400, detail={"code": "door_rule", "door_rule": rule, "message": DOOR_COPY[rule]})
     if doc.get("is_admin_drop"):
         raise HTTPException(status_code=400, detail="This drop can't be unlocked.")
     if doc.get("kind") == "confession" and not data.via_profile:
@@ -302,37 +299,18 @@ async def create_unlock_request(
         )
         return {"already_unlocked": True, "connection_id": connection_id}
 
-    existing_pending = await db["drop_unlock_requests"].find_one({
-        "target_type": data.target_type, "target_id": data.target_id,
-        "requester_id": current_user_id, "status": "pending",
-    })
-    if existing_pending:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "You already have a pending request for this confession.",
-                "request_id": str(existing_pending["_id"]),
-            },
-        )
-
-    # A Knock is free to send, but only from someone who could pay if let
-    # in. Accept checks again atomically; this just stops dead-end knocks.
-    from app.api.v1.drops import unlock_cost_for
-    cost = await unlock_cost_for(current_user_id, db)
-    if cost > 0 and (requester or {}).get("coin_balance", 0) < cost:
-        raise HTTPException(
-            status_code=402,
-            detail=f"You need {cost} coins to knock. Nothing is charged unless they let you in.",
-        )
-
     requester_name = requester.get("anonymous_name", "Anonymous") if requester else "Anonymous"
 
-    # Mutual link up: they already asked to link up with you. Connect both of you
-    # now, free — the "match" moment.
+    # Mutual link up: they already knocked on you. Connect both of you now, free.
     mutual = await _try_mutual(data, doc, owner_id, current_user_id, requester_name, pitch, intents, db)
     if mutual:
         return mutual
 
+    # Pay and walk in. A knock still waiting from before is folded into this one.
+    await db["drop_unlock_requests"].update_many(
+        {"target_id": data.target_id, "requester_id": current_user_id, "status": "pending"},
+        {"$set": {"status": "cancelled", "responded_at": now_utc(), **CLUE_CLEARED}},
+    )
     req_doc = {
         "_id": ObjectId(),
         "target_type": data.target_type,
@@ -341,7 +319,7 @@ async def create_unlock_request(
         "requester_id": current_user_id,
         "requester_anonymous_name": requester_name,
         "confession_snippet": snippet,
-        "payment_method": data.payment_method,
+        "payment_method": "coins",
         "media_url": data.media_url,
         "media_type": data.media_type,
         "media_duration": data.media_duration,
@@ -351,31 +329,77 @@ async def create_unlock_request(
         "voice_url": data.voice_url,
         "voice_duration": data.voice_duration if data.voice_url else None,
         "door_rule": rule,
-        "status": "pending",
+        "status": "accepting",
         "connection_id": None,
         "created_at": now_utc(),
         "responded_at": None,
-        "expires_at": expires_at,
+        "expires_at": now_utc() + timedelta(days=REQUEST_EXPIRY_DAYS),
     }
+    from app.api.v1.drops import unlock_cost_for
+    cost = await unlock_cost_for(current_user_id, db)
+    try:
+        connection_id = await _charge_and_complete(req_doc, doc, db)
+    except ValueError as e:
+        if "insufficient" in str(e).lower():
+            raise HTTPException(status_code=402, detail={
+                "code": "coins_short", "cost": cost, "balance": (requester or {}).get("coin_balance", 0),
+                "message": f"Link Up is {cost} coins. Top up to go in.",
+            })
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    now = now_utc()
+    req_doc.update({
+        "status": "accepted", "paid_in": True, "cost": cost, "connection_id": connection_id, "responded_at": now,
+        "refund_due_at": now + timedelta(hours=REFUND_AFTER_HOURS) if cost > 0 else None, "refunded": False,
+    })
     await db["drop_unlock_requests"].insert_one(req_doc)
     request_id = str(req_doc["_id"])
     await taste.record_id(db, current_user_id, data.target_id, "knock")   # a knock is the strongest "more like this"
 
-    await emit_unlock_request_received(owner_id, {
-        "request_id": request_id, "target_type": data.target_type, "target_id": data.target_id,
-        "requester_anonymous_name": requester_name,
-    })
+    await emit_unlock_request_accepted(owner_id, {"request_id": request_id, "connection_id": connection_id})
     await send_push_notification(
         owner_id,
-        f"{requester_name} knocked on your Room 🔥",
-        f"“{pitch}”" if pitch else "Peek through their window, then let them in or decline.",
+        f"{requester_name} is in your Room \U0001F525",
+        f"\u201c{pitch}\u201d" if pitch else "They linked up on your post. Say hi.",
         db,
-        data={"type": "linkup_request", "request_id": request_id, "url": f"/inbox?request={request_id}"},
+        data={"type": "linkup_in", "connection_id": connection_id, "url": f"/chat/{connection_id}"},
         category="linkup_request",
         kind="knock",
     )
+    return {"status": "accepted", "request_id": request_id, "connection_id": connection_id,
+            "room_user_id": owner_id, "cost": cost, "refund_after_hours": REFUND_AFTER_HOURS if cost > 0 else None}
 
-    return {"request_id": request_id, "status": "pending", "expires_at": expires_at.isoformat()}
+
+async def refund_silent_knocks(db, limit: int = 200) -> int:
+    """Give the coins back on paid knocks where the poster never wrote in the chat."""
+    now = now_utc()
+    done = 0
+    rows = await db["drop_unlock_requests"].find(
+        {"paid_in": True, "refunded": False, "refund_due_at": {"$ne": None, "$lte": now}},
+    ).limit(limit).to_list(None)
+    for r in rows:
+        replied = await db["drop_messages"].count_documents(
+            {"connection_id": r.get("connection_id"), "sender_id": r["owner_id"]}, limit=1,
+        )
+        if replied:
+            await db["drop_unlock_requests"].update_one({"_id": r["_id"]}, {"$set": {"refund_due_at": None}})
+            continue
+        claimed = await db["drop_unlock_requests"].find_one_and_update(
+            {"_id": r["_id"], "refunded": False}, {"$set": {"refunded": True, "refunded_at": now}},
+        )
+        if not claimed or not r.get("cost"):
+            continue
+        await credit_coins(
+            db=db, user_id=r["requester_id"], amount=r["cost"], reason="linkup_refund",
+            description="Link Up refunded: no reply in 24 hours", meta={"request_id": str(r["_id"])},
+        )
+        await send_push_notification(
+            r["requester_id"], "Your coins are back",
+            f"They didn't reply in {REFUND_AFTER_HOURS} hours, so your {r['cost']} coins were returned.", db,
+            data={"type": "linkup_refund", "url": "/coins"},
+        )
+        done += 1
+    return done
 
 
 async def _try_mutual(data, doc, owner_id, requester_id, requester_name, pitch, intents, db) -> Optional[dict]:
