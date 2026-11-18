@@ -268,7 +268,7 @@ export default function Slide({
   }
 
   // Double tap likes (never unlikes); each further quick tap adds a heart where it lands.
-  function mediaTap(e: React.MouseEvent<HTMLDivElement>) {
+  function mediaTap(e: React.MouseEvent<HTMLElement>) {
     const now = Date.now();
     if (now - lastTap.current < TAP_GAP) {
       const box = e.currentTarget.getBoundingClientRect();
@@ -384,11 +384,18 @@ export default function Slide({
       onPointerLeave={pressEnd}
       onClickCapture={(e) => { if (pressed.current) { pressed.current = false; e.stopPropagation(); e.preventDefault(); } }}
       onContextMenu={(e) => { if (press.current || pressed.current) e.preventDefault(); }}
+      // Text drops: double tap anywhere on the slide likes it too (taps on buttons and links don't count).
+      onClick={hasMedia ? undefined : (e) => { if (!(e.target as HTMLElement).closest("button, a, input, textarea, select, [role=button]")) mediaTap(e); }}
       className={`slide${clear ? " clear" : ""} ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${card ? " cc-slide" : textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
       style={card ? ({ "--cc-tint": CATEGORIES[category].tint } as React.CSSProperties) : undefined}
       data-idx={index}
       data-post={post.id}
     >
+      {!hasMedia && burst ? (
+        <span key={burst.id} className="heart-burst" style={{ left: burst.x, top: burst.y, ["--rot" as string]: `${burst.rot}deg` }} aria-hidden>
+          <Heart filled />
+        </span>
+      ) : null}
       {hasMedia ? (
         <div className="media" onClick={mediaTap}>
           {burst ? (
