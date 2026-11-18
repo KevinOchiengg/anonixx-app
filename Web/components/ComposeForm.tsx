@@ -9,8 +9,6 @@ import { Flame, MessageSquareLock } from "lucide-react";
 
 const MAX = 500;
 const DRAFT_KEY = "anonixx.drops.draft.v1";
-// The card look every General Confession gets (no picker).
-const THEME = { from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC", hint: "#C48A98" };
 
 function Inner() {
   const { user, refresh } = useAuth();
@@ -116,17 +114,14 @@ function Inner() {
 
   if (kind === "hookup") return <GuidedConfession onBack={() => setKind(null)} />;
 
-  const cardVars = {
-    "--cx-from": THEME.from, "--cx-to": THEME.to, "--cx-accent": THEME.accent, "--cx-text": THEME.text, "--cx-hint": THEME.hint,
-  } as React.CSSProperties;
-
   return (
     <form className="cx-form" onSubmit={submit}>
       <div className="cx-top">
         <button type="button" className="cx-switch" onClick={() => setKind(null)}>General Confession · change</button>
       </div>
 
-      <div className="cx-live" style={cardVars}>
+      {/* Same surface as the hookup composer's box and live preview. */}
+      <div className="gc-card">
         <div className="cx-write">
           <textarea
             ref={area}

@@ -18,10 +18,9 @@
 .cx-top { display: flex; }
 .cx-switch { background: none; border: 0; padding: 0; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
 .cx-switch:hover { color: var(--fg); }
-.cx-live { --cx-from: #14060a; --cx-to: #2a0f18; --cx-accent: #FF3B7A; --cx-text: #F6E6EC; --cx-hint: #C48A98; border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: linear-gradient(160deg, var(--cx-from), var(--cx-to)); color: var(--cx-text); box-shadow: 0 18px 40px -22px var(--cx-accent); }
-.cx-write { position: relative; padding: 20px 20px 14px; }
-.cx-write textarea { display: block; width: 100%; min-height: 120px; resize: none; overflow: hidden; background: none; border: 0; outline: 0; padding: 0 28px 0 0; color: var(--cx-text); font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 22px; line-height: 1.45; }
-.cx-write textarea::placeholder { color: var(--cx-hint); opacity: 0.8; }
+.cx-write { position: relative; }
+.cx-write textarea { display: block; width: 100%; min-height: 120px; resize: none; overflow: hidden; background: none; border: 0; outline: 0; padding: 0; color: var(--fg); font-family: var(--font-serif), Georgia, serif; font-style: italic; font-size: 20px; line-height: 1.5; }
+.cx-write textarea::placeholder { color: var(--muted); opacity: 0.8; }
 .cx-count { text-align: right; font-size: 12px; color: var(--faint); margin-top: -4px; font-variant-numeric: tabular-nums; }
 .cx-count.warn { color: #f5b042; }
 .cx-count.bad { color: #ff5a5a; }

@@ -28,7 +28,7 @@ import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
 import TopicPicker from '../../components/drops/TopicPicker';
 import GuidedConfession, { GUIDED_SAVE_KEY } from '../../components/drops/GuidedConfession';
-import { CATEGORIES, ConfessionPreview } from '../../components/feed/ConfessionCard';
+import { CATEGORIES, ConfessionPreview, alpha } from '../../components/feed/ConfessionCard';
 
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -949,6 +949,22 @@ export default function DropsComposeScreen({ navigation, route }) {
 
           {/* Type straight into the card; the toolbar is attached below it as one card. */}
           <Animated.View style={[s.cardWrap, { opacity: fade }]}>
+            {!isAdmin ? (
+              // Regular posters: a plain box on the same surface as the hookup composer's live preview.
+              <View style={s.plainCard}>
+                <LinearGradient pointerEvents="none" colors={[alpha(T.primary, 0.14), 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 0.8 }} style={StyleSheet.absoluteFill} />
+                <TextInput
+                  style={s.plainInput}
+                  value={text}
+                  onChangeText={setText}
+                  placeholder="Say what you can't say out loud."
+                  placeholderTextColor={T.textMute}
+                  maxLength={bodyMax}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+            ) : (
             <DropCardRenderer
               confession={text}
               moodTag={moodTag}
@@ -968,6 +984,7 @@ export default function DropsComposeScreen({ navigation, route }) {
               // Square bottom corners: the toolbar sits flush below (admins only).
               flushBottom={isAdmin}
             />
+            )}
 
             {/* Shuffle the placeholder line (only while empty). */}
             {isAdmin && !text && !!intentPrompts && (
@@ -1473,6 +1490,8 @@ const SpotChip = ({ label, on, onPress, disabled }) => (
 
 // ─── Styles ────────────────────────────────────────────────────
 const s = StyleSheet.create({
+  plainCard: { overflow: 'hidden', borderRadius: RADIUS.lg, borderWidth: 1, borderColor: alpha(T.primary, 0.28), backgroundColor: T.surfaceDark, padding: rp(16) },
+  plainInput: { minHeight: rs(150), color: T.text, fontFamily: 'PlayfairDisplay-Italic', fontSize: FONT.lg, lineHeight: rf(28) },
   spotLabel: { fontSize: FONT.sm, fontWeight: '800', color: T.text, marginTop: rp(14), marginBottom: rp(8) },
   spotChips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8), marginBottom: rp(8) },
   spotChip: { paddingHorizontal: rp(12), paddingVertical: rp(7), borderRadius: RADIUS.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', maxWidth: rs(220) },
