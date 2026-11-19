@@ -294,7 +294,7 @@ function Inner({ id }: { id: string }) {
             {online ? <em /> : null}
           </span>
           <span className="u-head-t">
-            <b>{name}{conn?.muted_until ? <BellOff className="mx-muted" size={13} strokeWidth={2} aria-label="Muted" /> : null}</b>
+            <b><span className="u-name">{name}</span>{conn?.muted_until ? <BellOff className="mx-muted" size={13} strokeWidth={2} aria-label="Muted" /> : null}</b>
             {typing || online ? <small>{typing ? "typing…" : "online"}</small> : null}
           </span>
         </button>

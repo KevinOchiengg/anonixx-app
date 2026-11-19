@@ -614,9 +614,9 @@ const s = StyleSheet.create({
   avatar: { width: rs(36), height: rs(36), borderRadius: rs(18) },
   avatarInitial: { alignItems: 'center', justifyContent: 'center', backgroundColor: T.background },
   avatarInitialText: { fontSize: rf(17), fontFamily: 'PlayfairDisplay-Italic', color: T.primary },
-  titleText: { flexShrink: 1, alignItems: 'flex-start' },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
-  name: { fontFamily: 'DMSans-SemiBold', fontSize: rf(16.5), color: T.text, letterSpacing: 0.1 },
+  titleText: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5), maxWidth: '100%' },
+  name: { flexShrink: 1, fontFamily: 'DMSans-SemiBold', fontSize: rf(16.5), color: T.text, letterSpacing: 0.1 },   // long names end in …
   typing: { fontFamily: 'DMSans-Medium', fontSize: rf(12), color: T.primary },
   online: { fontFamily: 'DMSans-Medium', fontSize: rf(12), color: T.online },
 
