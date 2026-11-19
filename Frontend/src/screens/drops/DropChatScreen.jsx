@@ -55,15 +55,6 @@ function formatDateLabel(iso) {
   return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }
 
-// Avatar fallback colours (same as MessagesScreen).
-const AVATAR_COLORS = ['#C96F53', '#C97B84', '#D98E4A', '#B56576', '#A8674F'];
-function avatarColorFor(seed) {
-  if (!seed) return AVATAR_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
 async function authed(path, options = {}) {
   const token = await AsyncStorage.getItem('token');
   return fetch(`${API_BASE_URL}/api/v1${path}`, {
@@ -433,14 +424,20 @@ export default function DropChatScreen({ route, navigation }) {
           <ChevronLeft size={rs(22)} color={T.text} strokeWidth={2.2} />
         </TouchableOpacity>
         <TouchableOpacity style={s.titleRow} activeOpacity={0.75} onPress={openInfo} accessibilityRole="button" accessibilityLabel={`${otherName}, contact info`}>
-          <View style={[s.avatarRing, online && s.avatarRingOn]}>
-            {headerPic ? (
-              <Image source={{ uri: headerPic }} style={s.avatar} />
-            ) : (
-              <View style={[s.avatar, s.avatarInitial, { backgroundColor: avatarColorFor(otherName) }]}>
-                <Text style={s.avatarInitialText}>{otherName[0]?.toUpperCase() || 'A'}</Text>
+          {/* Coral ring, a thin dark gap, then the photo (or a coral initial); green dot when online. */}
+          <View>
+            <LinearGradient colors={['#ff8a73', T.primary, '#e8456e']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.avatarRing}>
+              <View style={s.avatarGap}>
+                {headerPic ? (
+                  <Image source={{ uri: headerPic }} style={s.avatar} />
+                ) : (
+                  <LinearGradient colors={['rgba(255,138,115,0.35)', 'rgba(232,69,110,0.35)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.avatar, s.avatarInitial]}>
+                    <Text style={s.avatarInitialText}>{otherName[0]?.toUpperCase() || 'A'}</Text>
+                  </LinearGradient>
+                )}
               </View>
-            )}
+            </LinearGradient>
+            {online && <View style={s.onlineDot} />}
           </View>
           <View style={s.titleText}>
             <View style={s.nameRow}>
@@ -449,7 +446,7 @@ export default function DropChatScreen({ route, navigation }) {
             </View>
             {isOtherTyping ? <Text style={s.typing}>typing…</Text>
               : online ? <Text style={s.online}>online</Text>
-                : <Text style={s.hint}>tap for contact info</Text>}
+                : null}
           </View>
         </TouchableOpacity>
         {connection ? (
@@ -601,17 +598,17 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(10), marginLeft: rp(2) },
-  avatarRing: { padding: rs(2), borderRadius: rs(22), borderWidth: 2, borderColor: 'rgba(255,255,255,0.12)' },
-  avatarRingOn: { borderColor: T.online },
+  avatarRing: { padding: rs(2), borderRadius: rs(24), shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
+  avatarGap: { padding: rs(2), borderRadius: rs(22), backgroundColor: '#0b0f18' },
+  onlineDot: { position: 'absolute', right: -rs(1), bottom: -rs(1), width: rs(12), height: rs(12), borderRadius: rs(6), backgroundColor: T.online, borderWidth: 2.5, borderColor: '#0b0f18' },
   avatar: { width: rs(36), height: rs(36), borderRadius: rs(18) },
   avatarInitial: { alignItems: 'center', justifyContent: 'center' },
-  avatarInitialText: { fontSize: rf(15), fontFamily: 'DMSans-Bold', color: '#fff' },
+  avatarInitialText: { fontSize: rf(17), fontFamily: 'PlayfairDisplay-Italic', color: '#fff' },
   titleText: { flexShrink: 1, alignItems: 'flex-start' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
   name: { fontFamily: 'DMSans-SemiBold', fontSize: rf(16.5), color: T.text, letterSpacing: 0.1 },
   typing: { fontFamily: 'DMSans-Medium', fontSize: rf(12), color: T.primary },
   online: { fontFamily: 'DMSans-Medium', fontSize: rf(12), color: T.online },
-  hint: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute },
 
   list: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.md },
 
