@@ -17,6 +17,7 @@ import { callsApi, callInfo } from "@/lib/calls";
 import { chatsApi, mutedLabel, MUTE_OPTIONS, type Prefs } from "@/lib/chats";
 import useVoiceRecorder from "@/lib/useVoiceRecorder";
 import ChatInfo from "./rooms/ChatInfo";
+import CameraSheet from "./chat/CameraSheet";
 import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
 import { BellOff, Camera, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, X } from "lucide-react";
@@ -56,7 +57,7 @@ function Inner({ id }: { id: string }) {
   const [presence, setPresence] = useState<boolean | null>(null);
   const [sockUp, setSockUp] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const cameraInput = useRef<HTMLInputElement>(null);
+  const [cam, setCam] = useState(false);   // live camera: take a photo or video now
   const seenIds = useRef<Set<string> | null>(null);   // here when the chat opened: these don't animate in
   const bottom = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
@@ -166,6 +167,10 @@ function Inner({ id }: { id: string }) {
   function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files || []);
     e.target.value = "";
+    sendFiles(picked);
+  }
+
+  function sendFiles(picked: File[]) {
     if (!picked.length) return;
     const files = picked
       .map((file) => ({ file, kind: (file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : null) as UploadKind | null }))
@@ -353,6 +358,7 @@ function Inner({ id }: { id: string }) {
         <div ref={bottom} />
       </div>
       {error ? <div className="err pad">{error}</div> : null}
+      {cam ? <CameraSheet onClose={() => setCam(false)} onShot={(f) => { setCam(false); sendFiles([f]); }} /> : null}
       {sending ? <div className="chat-sending" role="status">{sending.done < sending.total ? `Uploading ${sending.done + 1} of ${sending.total}…` : `Sending ${sending.total}…`}</div> : null}
       {toast ? <div className="ic-note" role="status">{toast}</div> : null}
       {info && conn ? (
@@ -387,11 +393,9 @@ function Inner({ id }: { id: string }) {
       ) : (
         <form className="chat-input chat-pill" onSubmit={send}>
           <input ref={fileInput} type="file" accept="image/*,video/*" multiple hidden onChange={pickFile} />
-          {/* On phones this opens the camera straight away: take a photo or a video now. */}
-          <input ref={cameraInput} type="file" accept="image/*,video/*" capture="environment" hidden onChange={pickFile} />
           <span className="chat-pill-field">
             <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photos or videos"><ImagePlus size={20} strokeWidth={2} aria-hidden /></button>
-            <button type="button" className="icon-btn" onClick={() => cameraInput.current?.click()} disabled={busy} aria-label="Take a photo or video"><Camera size={20} strokeWidth={2} aria-hidden /></button>
+            <button type="button" className="icon-btn" onClick={() => setCam(true)} disabled={busy} aria-label="Take a photo or video"><Camera size={20} strokeWidth={2} aria-hidden /></button>
             <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
           </span>
           {text.trim() ? (
