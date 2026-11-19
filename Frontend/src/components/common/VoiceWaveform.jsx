@@ -173,7 +173,6 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
       <View style={[styles.bars, { height: barBoxHeight }]}>
         {heights.map((h, i) => {
           const isLit = (playing || progress > 0) && i <= activeBar;
-          const isHead = isLit && i === activeBar;
           const litColor = BAR_COLORS[i];
           const near = playing && Math.abs(i - activeBar) <= RIPPLE;
           const phase = (i % 4) / 4;
@@ -195,13 +194,6 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
                   height: `${h * 100}%`,
                   backgroundColor: litColor,
                   opacity: isLit ? 1 : 0.32,
-                },
-                isHead && {
-                  shadowColor: litColor,
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.9,
-                  shadowRadius: 4,
-                  elevation: 4,
                 },
               ]}
             />

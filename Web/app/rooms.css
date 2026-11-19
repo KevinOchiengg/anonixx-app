@@ -40,16 +40,16 @@
 .vn-play { flex: none; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1.5px solid var(--rose); border-radius: 50%; background: color-mix(in srgb, var(--rose) 16%, transparent); color: var(--rose); cursor: pointer; }
 .vn-play svg { margin-left: 1px; }
 .vn.playing .vn-play { background: var(--rose); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--rose) 22%, transparent); }
-/* Mirrored around the middle, colour flowing along it (--c per bar); played bars glow. */
+/* Mirrored around the middle, colour flowing along it (--c per bar); played bars light up. */
 .vn-bars { position: relative; flex: 1; min-width: 0; height: 34px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
 .vn-bars::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255, 255, 255, 0.08); }
 .vn-bars i { position: relative; width: 2px; min-height: 2px; border-radius: 2px; background: var(--c, var(--rose)); opacity: 0.32; transform-origin: center; transition: opacity 0.15s ease; }
-.vn-bars i.lit { opacity: 1; box-shadow: 0 0 6px color-mix(in srgb, var(--c, var(--rose)) 55%, transparent); }
+.vn-bars i.lit { opacity: 1; }
 .vn-bars i.wave { animation: vn-wave 0.9s ease-in-out infinite; }
 @keyframes vn-wave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(var(--lift, 1.5)); } }
 .vn-time { flex: none; min-width: 30px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; opacity: 0.8; text-align: right; }
 .bubble.own .vn-bars i { background: #fff; opacity: 0.4; }
-.bubble.own .vn-bars i.lit { opacity: 1; box-shadow: 0 0 6px rgba(255, 255, 255, 0.5); }
+.bubble.own .vn-bars i.lit { opacity: 1; }
 .bubble.own .vn-play { border-color: #fff; color: #fff; background: rgba(255, 255, 255, 0.18); }
 .bubble.own .vn.playing .vn-play { background: #fff; color: var(--rose); }
 @media (prefers-reduced-motion: reduce) { .vn-bars i.wave { animation: none; } }
