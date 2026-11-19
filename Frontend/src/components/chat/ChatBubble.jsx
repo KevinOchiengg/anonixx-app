@@ -293,7 +293,8 @@ const s = StyleSheet.create({
   videoPlayOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   playCircle: {
     width: rs(48), height: rs(48), borderRadius: rs(24), alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', paddingLeft: rp(3),
+    backgroundColor: T.primary, borderWidth: 3, borderColor: 'rgba(255,99,74,0.3)', paddingLeft: rp(3),
+    shadowColor: T.primary, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6,
   },
   quoteOnMedia: { padding: rp(6), backgroundColor: 'rgba(0,0,0,0.35)' },
   replyActionWrap: { width: rs(56), alignItems: 'center', justifyContent: 'center' },

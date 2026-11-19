@@ -4,7 +4,7 @@ import React from 'react';
 import {
   View, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet,
 } from 'react-native';
-import { ImagePlus, Paperclip, Send, Smile } from 'lucide-react-native';
+import { Camera, ImagePlus, Paperclip, Send, Smile } from 'lucide-react-native';
 import T from '../../utils/theme';
 import {
   rs, rp, FONT, RADIUS, SPACING, HIT_SLOP,
@@ -14,6 +14,7 @@ export default function ChatInputBar({
   inputRef, value, onChangeText, onFocus, onBlur, placeholder,
   editable = true, maxLength = 500,
   onAttachPress, attachUploading = false, attachDisabled = false,
+  onCameraPress,   // take a photo or video right now
   onEmojiPress, emojiActive = false,
   // Swaps out the text field entirely (e.g. a "recording…" row) without
   // the caller having to reimplement the pill around it.
@@ -53,6 +54,18 @@ export default function ChatInputBar({
                   : floating
                     ? <ImagePlus size={rs(21)} color={T.textSecondary} strokeWidth={2} />
                     : <Paperclip size={rs(21)} color={T.textMute} strokeWidth={2} />}
+              </TouchableOpacity>
+            )}
+            {!!onCameraPress && !attachUploading && (
+              <TouchableOpacity
+                style={styles.mediaBtn}
+                onPress={onCameraPress}
+                disabled={attachDisabled}
+                hitSlop={HIT_SLOP}
+                activeOpacity={0.75}
+                accessibilityLabel="Take a photo or video"
+              >
+                <Camera size={rs(21)} color={floating ? T.textSecondary : T.textMute} strokeWidth={2} />
               </TouchableOpacity>
             )}
             {!!onEmojiPress && (

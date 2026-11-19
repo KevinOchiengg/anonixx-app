@@ -19,7 +19,7 @@ import useVoiceRecorder from "@/lib/useVoiceRecorder";
 import ChatInfo from "./rooms/ChatInfo";
 import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
-import { BellOff, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, X } from "lucide-react";
+import { BellOff, Camera, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, X } from "lucide-react";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
@@ -29,6 +29,7 @@ type Conn = {
 type Profile = { font_style: string; profile_picture_url: string | null };
 type MenuView = "menu" | "mute" | "report" | "call" | null;
 
+const MAX_MEDIA = 10;   // photos and videos sent in one go
 const REPORT_REASONS: [string, string][] = [
   ["abuse", "Abuse or harassment"], ["spam", "Spam"], ["explicit", "Unwanted explicit content"],
   ["self-harm-concern", "I'm worried about them"], ["other", "Other"],
@@ -42,6 +43,7 @@ function Inner({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [menu, setMenu] = useState<MenuView>(null);
+  const [sending, setSending] = useState<{ done: number; total: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [room, setRoom] = useState<CallInfo | null>(null);
   const [callBusy, setCallBusy] = useState(false);
@@ -54,6 +56,7 @@ function Inner({ id }: { id: string }) {
   const [presence, setPresence] = useState<boolean | null>(null);
   const [sockUp, setSockUp] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
   const seenIds = useRef<Set<string> | null>(null);   // here when the chat opened: these don't animate in
   const bottom = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
@@ -140,10 +143,10 @@ function Inner({ id }: { id: string }) {
   }
 
   // ── Sending: text, photo, video and voice; a pending reply rides along.
-  async function post(body: Record<string, unknown>) {
+  async function post(body: Record<string, unknown>, reload = true) {
     await api(`/drops/connections/${id}/message`, { body: { content: "", ...body, ...(replyTo ? { reply_to_id: replyTo.id } : {}) } });
     setReplyTo(null);
-    await load();
+    if (reload) await load();
   }
 
   async function run(fn: () => Promise<void>) {
@@ -159,13 +162,29 @@ function Inner({ id }: { id: string }) {
     void run(async () => { await post({ content }); setText(""); });
   }
 
+  // Several photos and videos at once: they upload together, then go out in the order picked.
   function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const picked = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file) return;
-    const kind: UploadKind | null = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : null;
-    if (!kind) { setError("Pick a photo or a video."); return; }
-    void run(async () => post({ media_url: await uploadFile(file, kind), media_type: kind }));
+    if (!picked.length) return;
+    const files = picked
+      .map((file) => ({ file, kind: (file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : null) as UploadKind | null }))
+      .filter((f): f is { file: File; kind: UploadKind } => !!f.kind)
+      .slice(0, MAX_MEDIA);
+    if (!files.length) { setError("Pick photos or videos."); return; }
+    if (picked.length > MAX_MEDIA) setError(`Up to ${MAX_MEDIA} at a time. Sending the first ${MAX_MEDIA}.`);
+    void run(async () => {
+      setSending({ done: 0, total: files.length });
+      let done = 0;
+      const urls = await Promise.all(files.map(async (f) => {
+        const url = await uploadFile(f.file, f.kind);
+        setSending({ done: ++done, total: files.length });
+        return url;
+      }));
+      for (let i = 0; i < files.length; i++) await post({ media_url: urls[i], media_type: files[i].kind }, false);
+      setSending(null);
+      await load();
+    }).finally(() => setSending(null));
   }
 
   function sendVoice() {
@@ -334,6 +353,7 @@ function Inner({ id }: { id: string }) {
         <div ref={bottom} />
       </div>
       {error ? <div className="err pad">{error}</div> : null}
+      {sending ? <div className="chat-sending" role="status">{sending.done < sending.total ? `Uploading ${sending.done + 1} of ${sending.total}…` : `Sending ${sending.total}…`}</div> : null}
       {toast ? <div className="ic-note" role="status">{toast}</div> : null}
       {info && conn ? (
         <ChatInfo
@@ -366,9 +386,12 @@ function Inner({ id }: { id: string }) {
         </div>
       ) : (
         <form className="chat-input chat-pill" onSubmit={send}>
-          <input ref={fileInput} type="file" accept="image/*,video/*" hidden onChange={pickFile} />
+          <input ref={fileInput} type="file" accept="image/*,video/*" multiple hidden onChange={pickFile} />
+          {/* On phones this opens the camera straight away: take a photo or a video now. */}
+          <input ref={cameraInput} type="file" accept="image/*,video/*" capture="environment" hidden onChange={pickFile} />
           <span className="chat-pill-field">
-            <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photo or video"><ImagePlus size={20} strokeWidth={2} aria-hidden /></button>
+            <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photos or videos"><ImagePlus size={20} strokeWidth={2} aria-hidden /></button>
+            <button type="button" className="icon-btn" onClick={() => cameraInput.current?.click()} disabled={busy} aria-label="Take a photo or video"><Camera size={20} strokeWidth={2} aria-hidden /></button>
             <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
           </span>
           {text.trim() ? (

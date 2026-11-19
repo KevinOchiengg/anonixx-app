@@ -39,6 +39,7 @@ import { chatsApi } from '../../services/chats';
 import { confirmBlock, confirmClear, sendFakeReport, sendReport } from '../../services/roomActions';
 
 // Fallback poll; messages normally arrive over the socket.
+const MAX_MEDIA = 10;   // photos and videos sent in one go
 const POLL_INTERVAL_MS = 25000;
 
 // "Today" / "Yesterday" / date pills between message groups.
@@ -172,20 +173,26 @@ export default function DropChatScreen({ route, navigation }) {
     },
   });
 
-  const pickMedia = useCallback(async () => {
+  // Gallery (several at once) or the camera (a photo or video taken now) both end up here.
+  const pickMedia = useCallback(async (fromCamera = false) => {
     try {
-      const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!granted) { showToast({ type: 'warning', message: 'Allow photo access to send media.' }); return; }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
-        mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60,
-      });
+      const ask = fromCamera ? ImagePicker.requestCameraPermissionsAsync : ImagePicker.requestMediaLibraryPermissionsAsync;
+      const { granted } = await ask();
+      if (!granted) { showToast({ type: 'warning', message: fromCamera ? 'Allow camera access to take one.' : 'Allow photo access to send media.' }); return; }
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60 })
+        : await ImagePicker.launchImageLibraryAsync({
+          legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
+          mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: 60,
+          allowsMultipleSelection: true, selectionLimit: MAX_MEDIA, orderedSelection: true,
+        });
       if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      const mediaType = asset.type === 'video' ? 'video' : 'image';
+      const assets = result.assets.slice(0, MAX_MEDIA);
+      const kindOf = (a) => (a.type === 'video' ? 'video' : 'image');
+      const one = assets.length === 1;
       // View once: they can open it a single time, then it's gone for them.
       const viewOnce = await new Promise((resolve) => Alert.alert(
-        mediaType === 'video' ? 'Send this video' : 'Send this photo',
+        one ? (kindOf(assets[0]) === 'video' ? 'Send this video' : 'Send this photo') : `Send ${assets.length} photos and videos`,
         'View once: they open it once, then it’s gone.',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
@@ -196,8 +203,14 @@ export default function DropChatScreen({ route, navigation }) {
       ));
       if (viewOnce === null) return;
       setMediaUploading(true);
-      const url = await uploadToR2(asset.uri, mediaType, mediaType === 'video' ? 'video/mp4' : 'image/jpeg');
-      if (url) await postMessage({ media_url: url, media_type: mediaType, view_once: viewOnce });
+      // Upload together, then send in the order they were picked.
+      const urls = await Promise.all(assets.map((a) => uploadToR2(a.uri, kindOf(a), kindOf(a) === 'video' ? 'video/mp4' : 'image/jpeg').catch(() => null)));
+      let failed = 0;
+      for (let i = 0; i < assets.length; i++) {
+        if (urls[i]) await postMessage({ media_url: urls[i], media_type: kindOf(assets[i]), view_once: viewOnce });
+        else failed += 1;
+      }
+      if (failed) toastError(failed === assets.length ? 'Could not send. Try again.' : `${failed} didn't upload. Try those again.`);
     } catch (e) {
       toastError(e?.message || 'Could not send. Try again.');
     } finally {
@@ -510,7 +523,8 @@ export default function DropChatScreen({ route, navigation }) {
             onChangeText={handleTextChange}
             placeholder="Drop your desires"
             maxLength={500}
-            onAttachPress={!voice.isRecording && !voice.preview ? pickMedia : undefined}
+            onAttachPress={!voice.isRecording && !voice.preview ? () => pickMedia(false) : undefined}
+            onCameraPress={!voice.isRecording && !voice.preview ? () => pickMedia(true) : undefined}
             attachUploading={mediaUploading}
             floating
             paddingBottom={insets.bottom + rp(8)}

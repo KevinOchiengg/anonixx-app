@@ -80,3 +80,35 @@
 }
 .chat-send:active:not(:disabled) { transform: scale(0.9); }
 .chat-send:disabled { opacity: 0.5; }
+
+/* Chat photos/videos: a small frame in the thread, full screen on tap (ChatBubble). */
+.bubble .b-thumb { position: relative; display: block; width: 220px; max-width: 100%; height: 260px; padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: rgba(0, 0, 0, 0.35); cursor: zoom-in; }
+.bubble .b-thumb img, .bubble .b-thumb video { width: 100%; height: 100%; object-fit: cover; border-radius: 0; pointer-events: none; }
+.bubble .b-play { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(135deg, #ff8a73, var(--rose)); color: #fff; box-shadow: 0 6px 20px rgba(255, 99, 74, 0.45), 0 0 0 4px rgba(255, 99, 74, 0.18); }
+.bubble .b-play svg { margin-left: 3px; }
+.b-viewer { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.92); cursor: zoom-out; }
+.b-viewer img, .b-viewer video { max-width: 100%; max-height: calc(100dvh - 32px); border-radius: 8px; cursor: default; }
+.b-viewer-x { position: absolute; top: 14px; right: 14px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+/* Anonixx video player (components/chat/BrandVideo.tsx) */
+.bv { position: relative; max-width: 100%; max-height: calc(100dvh - 32px); display: grid; border-radius: 12px; overflow: hidden; background: #000; cursor: default; }
+.b-viewer .bv video { max-height: calc(100dvh - 32px); width: 100%; border-radius: 0; }
+.bv-big { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: linear-gradient(135deg, #ff8a73, var(--rose)); color: #fff; box-shadow: 0 10px 30px rgba(255, 99, 74, 0.5), 0 0 0 6px rgba(255, 99, 74, 0.18); cursor: pointer; }
+.bv-big svg { width: 32px; height: 32px; margin-left: 4px; }
+.bv-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 22px 14px 12px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); color: #fff; }
+.bv-bar button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; cursor: pointer; }
+.bv-bar button svg { width: 20px; height: 20px; }
+.bv-bar button:first-child { background: var(--rose); }
+.bv-bar button:first-child svg { width: 16px; height: 16px; }
+.bv-track { position: relative; flex: 1; height: 18px; cursor: pointer; touch-action: none; }
+.bv-track::before { content: ""; position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.25); }
+.bv-track i { position: absolute; left: 0; top: 7px; height: 4px; border-radius: 2px; background: var(--rose); }
+.bv-track b { position: absolute; top: 3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(255, 99, 74, 0.5); }
+.bv-time { font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.85; white-space: nowrap; }
+
+.chat-sending { padding: 6px 16px; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+/* Swipe right to reply (ChatBubble) */
+.bubble { touch-action: pan-y; transition: transform 0.18s ease; }
+.bubble.dragging { transition: none; user-select: none; }
+.b-swipe { position: absolute; left: -42px; top: 50%; width: 32px; height: 32px; margin-top: -16px; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 99, 74, 0.14); color: var(--rose); pointer-events: none; }
