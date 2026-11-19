@@ -132,3 +132,5 @@
 .cam-shutter i { width: 62px; height: 62px; border-radius: 50%; background: #fff; transition: all 0.2s ease; }
 .cam-shutter.vid i { background: var(--rose); }
 .cam-shutter.vid.on i { width: 30px; height: 30px; border-radius: 8px; }
+.chat-back { flex: none; display: grid; place-items: center; width: 36px; height: 36px; margin-right: -4px; border-radius: 50%; color: var(--fg); }
+.chat-back:hover { background: rgba(255, 255, 255, 0.06); }

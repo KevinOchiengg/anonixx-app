@@ -2,6 +2,7 @@
 /** Link Up chat between two connected people: the thread and the composer. A message's
  * actions live in chat/ChatBubble, voice recording in lib/useVoiceRecorder, and everything
  * else (media, mute, pin, archive, safety) in Chat info: click the name. */
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import useDraft from "@/lib/useDraft";
 import Image from "next/image";
@@ -20,7 +21,7 @@ import ChatInfo from "./rooms/ChatInfo";
 import CameraSheet from "./chat/CameraSheet";
 import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
-import { BellOff, Camera, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, X } from "lucide-react";
+import { ArrowLeft, BellOff, Camera, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, Video, X } from "lucide-react";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
@@ -28,7 +29,7 @@ type Conn = {
   knock_pitch?: string | null; knock_intents?: string[]; pinned?: boolean; archived?: boolean; muted_until?: string | null;
 };
 type Profile = { font_style: string; profile_picture_url: string | null };
-type MenuView = "menu" | "mute" | "report" | "call" | null;
+type MenuView = "menu" | "mute" | "report" | null;
 
 const MAX_MEDIA = 10;   // photos and videos sent in one go
 const REPORT_REASONS: [string, string][] = [
@@ -278,12 +279,13 @@ function Inner({ id }: { id: string }) {
   const online = presence ?? !!conn?.other_is_online;
   // A guest sees the Room's picture; the owner sees the guest's own avatar (the chat profile is the owner's).
   const pic = conn?.is_sender ? conn?.other_avatar_url : (profile?.profile_picture_url || conn?.other_avatar_url);
-  const toggleMenu = (v: MenuView) => setMenu((cur) => (cur === v || (v === "menu" && cur && cur !== "call") ? null : v));
+  const toggleMenu = (v: MenuView) => setMenu((cur) => (cur === v || (v === "menu" && cur) ? null : v));
 
   return (
     <div className="chat u-themed" style={fontStyleById(profile?.font_style)}>
       <link rel="stylesheet" href={FONTS_HREF} precedence="default" />
       <div className="chat-head u-chat-head">
+        <Link href="/inbox" className="chat-back" aria-label="Back to Rooms"><ArrowLeft size={22} strokeWidth={2} aria-hidden /></Link>
         <button type="button" className="mx-headbtn" onClick={() => setInfo(true)} aria-label={`${name}, contact info`}>
           <span className="u-ava">
             <span style={pic ? undefined : { background: "var(--rose-dim)", color: "var(--rose)" }}>
@@ -296,18 +298,16 @@ function Inner({ id }: { id: string }) {
             <small className={typing || online ? "" : "dim"}>{typing ? "typing…" : online ? "online" : "click for contact info"}</small>
           </span>
         </button>
-        <button className="chat-round" onClick={() => toggleMenu("call")} disabled={callBusy || !!room} aria-label={`Call ${name}`} aria-expanded={menu === "call"}>
+        <button className="chat-round" onClick={() => call(true)} disabled={callBusy || !!room} aria-label={`Video call ${name}`}>
+          <Video size={19} strokeWidth={2} aria-hidden />
+        </button>
+        <button className="chat-round" onClick={() => call(false)} disabled={callBusy || !!room} aria-label={`Voice call ${name}`}>
           <Phone size={18} strokeWidth={2} aria-hidden />
         </button>
-        <button className="chat-round" onClick={() => toggleMenu("menu")} aria-label="More" aria-expanded={!!menu && menu !== "call"}><EllipsisVertical size={18} strokeWidth={2} aria-hidden /></button>
+        <button className="chat-round" onClick={() => toggleMenu("menu")} aria-label="More" aria-expanded={!!menu}><EllipsisVertical size={18} strokeWidth={2} aria-hidden /></button>
         {menu ? (
           <div className="menu" role="menu">
-            {menu === "call" ? (
-              <>
-                <button onClick={() => call(false)}>Voice call</button>
-                <button onClick={() => call(true)}>Video call</button>
-              </>
-            ) : menu === "mute" ? (
+            {menu === "mute" ? (
               <>
                 <button className="sub" onClick={() => setMenu("menu")}>‹ Mute for</button>
                 {MUTE_OPTIONS.map(([v, l]) => <button key={v} onClick={() => mute(v)}>{l}</button>)}
@@ -411,7 +411,7 @@ function Inner({ id }: { id: string }) {
 
 export default function ChatPage({ id }: { id: string }) {
   return (
-    <AppShell brand={false} title="Chat" back="/inbox">
+    <AppShell brand={false} title="" header={false}>
       <Inner id={id} />
     </AppShell>
   );

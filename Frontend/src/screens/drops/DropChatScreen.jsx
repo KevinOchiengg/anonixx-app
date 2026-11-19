@@ -14,7 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
-import { SendHorizontal, X, Phone, MoreVertical, Mic, Trash2, BellOff, ChevronLeft } from 'lucide-react-native';
+import { SendHorizontal, X, Phone, Video, MoreVertical, Mic, Trash2, BellOff, ChevronLeft } from 'lucide-react-native';
 
 import { T } from '../../utils/colorTokens';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
@@ -325,14 +325,6 @@ export default function DropChatScreen({ route, navigation }) {
     }
   }, [callLoading, connectionId, navigation, otherName, chatProfile, showToast]);
 
-  const handleCallPress = useCallback(() => {
-    Alert.alert(`Call ${otherName}`, null, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Voice', onPress: () => directCall(false) },
-      { text: 'Video', onPress: () => directCall(true) },
-    ]);
-  }, [otherName, directCall]);
-
   // ── ⋮ menu ────────────────────────────────────────────────
   const menu = {
     onMute: async (value) => {
@@ -462,7 +454,10 @@ export default function DropChatScreen({ route, navigation }) {
         </TouchableOpacity>
         {connection ? (
           <>
-            <TouchableOpacity style={s.roundBtn} onPress={handleCallPress} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel="Call">
+            <TouchableOpacity style={s.roundBtn} onPress={() => directCall(true)} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel={`Video call ${otherName}`}>
+              <Video size={rs(19)} color={T.text} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.roundBtn} onPress={() => directCall(false)} disabled={callLoading} hitSlop={HIT_SLOP} accessibilityLabel={`Voice call ${otherName}`}>
               <Phone size={rs(18)} color={T.text} strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity style={s.roundBtn} onPress={() => setMenuOpen(true)} hitSlop={HIT_SLOP} accessibilityLabel="More">

@@ -16,6 +16,7 @@ export default function AppShell({
   right,
   children,
   brand = true,
+  header = true,
 }: {
   title: string;
   back?: string;
@@ -23,6 +24,8 @@ export default function AppShell({
   children: React.ReactNode;
   /** Show the coral brand mark above the header (off inside chats and Rooms). */
   brand?: boolean;
+  /** Hide the title bar (chats draw their own header with the back arrow). */
+  header?: boolean;
 }) {
   const { user, ready } = useAuth();
   const path = usePathname() || "/";
@@ -31,13 +34,13 @@ export default function AppShell({
     <div className="stage">
       <div className="phone hasnav">
         {brand ? <BrandMark /> : null}
-        <header className="apphead">
+        {header ? <header className="apphead">
           {back ? <Link href={back} className="back" aria-label="Back">
             <ArrowLeft size={20} strokeWidth={2} aria-hidden />
           </Link> : <span />}
           <h1>{title}</h1>
           <span className="apphead-right">{right}</span>
-        </header>
+        </header> : null}
         <div className="pagebody">
           {!ready ? (
             <p className="muted center">Loading…</p>
