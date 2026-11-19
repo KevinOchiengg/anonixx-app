@@ -89,7 +89,7 @@ function VoiceNote({ src, seconds }: { src: string; seconds?: number | null }) {
       <span className="vn-bars" onClick={seek} role="slider" aria-label="Seek" aria-valuemin={0} aria-valuemax={Math.round(dur)} aria-valuenow={Math.round(t)}>
         {heights.map((h, i) => {
           const near = playing && Math.abs(i - head) <= 4;
-          return <i key={i} className={`${i <= head && (playing || t > 0) ? "lit" : ""}${near ? " wave" : ""}`}
+          return <i key={i} className={`${i <= head && (playing || t > 0) ? "lit" : ""}${near ? " vn-ripple" : ""}`}
             style={{ height: `${h * 100}%`, ["--c" as string]: vnColor(i), ...(near ? { animationDelay: `${(i % 4) * -0.22}s`, ["--lift" as string]: String(1 + (1 - Math.abs(i - head) / 5) * 0.6) } : {}) }} />;
         })}
       </span>

@@ -28,9 +28,9 @@ a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
 
 /* ── Stage: phone-width column, centred on desktop ── */
-.stage { height: 100dvh; display: flex; justify-content: center; background: var(--bg-edge); }
+.stage { height: var(--app-h, 100dvh); display: flex; justify-content: center; background: var(--bg-edge); }
 .phone {
-  position: relative; width: 100%; max-width: 480px; height: 100dvh;
+  position: relative; width: 100%; max-width: 480px; height: var(--app-h, 100dvh);
   /* Original dark base with coral star splashes (public/bg-drops.svg, mirrored in the app's CoralBackdrop). */
   background: url("/bg-drops.svg") center / cover no-repeat, var(--bg); overflow: hidden;
 }

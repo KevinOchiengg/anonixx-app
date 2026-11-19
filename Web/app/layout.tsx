@@ -19,6 +19,7 @@ import { AuthProvider } from "@/lib/auth";
 import OfflineBar from "@/components/OfflineBar";
 import VisitTracker from "@/components/VisitTracker";
 import IncomingCall from "@/components/IncomingCall";
+import KeyboardViewport from "@/components/KeyboardViewport";
 
 const ADSENSE = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
 
@@ -48,6 +49,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#0b0f18",
+  // Android Chrome: the keyboard shrinks the page, so inputs stay above it.
+  interactiveWidget: "resizes-content",
 };
 
 // Brand serif (same face as the app's display font): caption hooks, text-only
@@ -64,6 +67,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </AuthProvider>
         <OfflineBar />
         <VisitTracker />
+        <KeyboardViewport />
         {ADSENSE ? (
           <Script
             async

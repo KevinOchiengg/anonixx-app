@@ -45,14 +45,14 @@
 .vn-bars::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255, 255, 255, 0.08); }
 .vn-bars i { position: relative; width: 2px; min-height: 2px; border-radius: 2px; background: var(--c, var(--rose)); opacity: 0.32; transform-origin: center; transition: opacity 0.15s ease; }
 .vn-bars i.lit { opacity: 1; }
-.vn-bars i.wave { animation: vn-wave 0.9s ease-in-out infinite; }
+.vn-bars i.vn-ripple { animation: vn-wave 0.9s ease-in-out infinite; }
 @keyframes vn-wave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(var(--lift, 1.5)); } }
 .vn-time { flex: none; min-width: 30px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; opacity: 0.8; text-align: right; }
 .bubble.own .vn-bars i { background: #fff; opacity: 0.4; }
 .bubble.own .vn-bars i.lit { opacity: 1; }
 .bubble.own .vn-play { border-color: #fff; color: #fff; background: rgba(255, 255, 255, 0.18); }
 .bubble.own .vn.playing .vn-play { background: #fff; color: var(--rose); }
-@media (prefers-reduced-motion: reduce) { .vn-bars i.wave { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .vn-bars i.vn-ripple { animation: none; } }
 .vn-rate { flex: none; min-width: 34px; height: 24px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.1); color: var(--fg); font-size: 11px; font-weight: 800; cursor: pointer; }
 .vn-preview { height: 36px; min-width: 0; }
 
