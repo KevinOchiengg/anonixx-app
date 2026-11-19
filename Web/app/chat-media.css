@@ -67,12 +67,12 @@
 
 .chat.u-themed .chat-input.chat-pill { gap: 10px; padding: 8px 12px 12px; border: 0; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .chat-pill-field {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 4px; min-height: 46px;
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 0 4px 0 14px; min-height: 46px;
   border-radius: 24px; background: rgba(21, 25, 36, 0.96); border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 .chat-pill-field:focus-within { border-color: rgba(255, 107, 79, 0.5); }
-.chat.u-themed .chat-pill-field input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 10px 4px; border-radius: 0; }
+.chat.u-themed .chat-pill-field input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 10px 2px; border-radius: 0; }
 .chat-send {
   flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; border: 0; cursor: pointer;
   color: #fff; background: linear-gradient(135deg, #ff6b4f, #e8456e); box-shadow: 0 4px 14px rgba(232, 69, 110, 0.4);

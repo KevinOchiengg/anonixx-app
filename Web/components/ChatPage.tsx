@@ -394,9 +394,9 @@ function Inner({ id }: { id: string }) {
         <form className="chat-input chat-pill" onSubmit={send}>
           <input ref={fileInput} type="file" accept="image/*,video/*" multiple hidden onChange={pickFile} />
           <span className="chat-pill-field">
+            <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
             <button type="button" className="icon-btn" onClick={() => fileInput.current?.click()} disabled={busy} aria-label="Attach photos or videos"><ImagePlus size={20} strokeWidth={2} aria-hidden /></button>
             <button type="button" className="icon-btn" onClick={() => setCam(true)} disabled={busy} aria-label="Take a photo or video"><Camera size={20} strokeWidth={2} aria-hidden /></button>
-            <input value={text} onChange={(e) => onType(e.target.value)} placeholder="Say something…" maxLength={1000} />
           </span>
           {text.trim() ? (
             <button className="chat-send" disabled={busy} aria-label="Send"><SendHorizontal size={19} strokeWidth={2.2} aria-hidden /></button>
