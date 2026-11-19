@@ -43,15 +43,15 @@
 
 .chat.u-themed .chat-log { gap: 2px; padding: 14px 14px 10px; }
 .chat.u-themed .chat-log .bubble {
-  max-width: 78%; padding: 8px 13px 6px; gap: 2px; border-radius: 20px; line-height: 1.45;
+  max-width: 80%; padding: 6px 9px 7px; gap: 2px; border-radius: 10px; font-size: 15px; line-height: 1.35;
   background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.09); color: var(--fg);
 }
 .chat.u-themed .chat-log .bubble.own {
   background: linear-gradient(135deg, #ff6b4f, #e8456e); border-color: transparent; color: #fff;
   box-shadow: 0 4px 14px rgba(232, 69, 110, 0.28);
 }
-.chat.u-themed .chat-log .bubble.end { margin-bottom: 10px; border-bottom-left-radius: 6px; }
-.chat.u-themed .chat-log .bubble.own.end { border-bottom-left-radius: 20px; border-bottom-right-radius: 6px; }
+.chat.u-themed .chat-log .bubble.end { margin-bottom: 8px; border-bottom-left-radius: 3px; }
+.chat.u-themed .chat-log .bubble.own.end { border-bottom-left-radius: 10px; border-bottom-right-radius: 3px; }
 .chat.u-themed .chat-log .bubble.media { padding: 4px; }
 .chat.u-themed .chat-log .bubble.media .b-meta { padding: 0 6px 2px; }
 .chat.u-themed .chat-log .bubble.fresh { animation: bubble-in 0.24s ease-out; }
@@ -140,3 +140,10 @@
 .chat-back { flex: none; display: grid; place-items: center; width: 36px; height: 36px; margin-right: -4px; border-radius: 50%; color: var(--fg); }
 .chat-back:hover { background: rgba(255, 255, 255, 0.06); }
 .b-swipe.del { left: auto; right: -42px; background: rgba(232, 93, 93, 0.16); color: #e85d5d; }
+
+/* WhatsApp-style text bubble: the time sits in the bottom-right corner of the last line. */
+.chat.u-themed .chat-log .bubble.txt { display: block; }
+.chat.u-themed .chat-log .bubble.txt > span { white-space: pre-wrap; }
+.chat.u-themed .chat-log .bubble.txt .b-meta { float: right; position: relative; top: 6px; margin: 0 0 0 10px; line-height: 1; }
+.chat.u-themed .chat-log .bubble.txt .reply-quote { display: block; margin-bottom: 4px; }
+.chat.u-themed .chat-log .bubble.txt .msg-reactions, .chat.u-themed .chat-log .bubble.txt .msg-actions { clear: both; }

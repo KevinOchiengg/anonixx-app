@@ -58,10 +58,10 @@ const ReactionRow = React.memo(({ item, onReact }) => {
 });
 
 // Time, and on my messages a tick: one = sent, two in ice blue = seen.
-function Meta({ item, light, overlay }) {
+function Meta({ item, light, overlay, inline }) {
   const color = overlay ? '#fff' : light ? 'rgba(255,255,255,0.75)' : T.textMute;
   return (
-    <View style={[s.meta, overlay && s.metaOverlay]}>
+    <View style={[s.meta, overlay && s.metaOverlay, inline && s.metaInline]}>
       <Text style={[s.time, { color }]}>{item.time_ago}</Text>
       {item.is_own && !item.deleted ? (
         item.seen
@@ -70,6 +70,13 @@ function Meta({ item, light, overlay }) {
       ) : null}
     </View>
   );
+}
+
+// WhatsApp-style: invisible room at the end of the text, so the time can sit in the
+// bottom-right corner of the last line (it drops to its own line only when that's full).
+function metaRoom(item) {
+  const px = (item.time_ago || '').length * 6 + (item.is_own ? 20 : 0) + 10;
+  return ' '.repeat(Math.ceil(px / 4));
 }
 
 // View-once photo/video: sealed until opened, then gone for the receiver.
@@ -233,16 +240,16 @@ export default React.memo(function ChatBubble({
     content = (
       <LinearGradient colors={OWN_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.bubble, s.bubbleOwn, corner]}>
         {quote}
-        <Text style={[s.bubbleText, fontFamily && { fontFamily }, s.bubbleTextOwn]}>{item.content}</Text>
-        <Meta item={item} light />
+        <Text style={[s.bubbleText, fontFamily && { fontFamily }, s.bubbleTextOwn]}>{item.content}<Text style={s.metaRoom}>{metaRoom(item)}</Text></Text>
+        <Meta item={item} light inline />
       </LinearGradient>
     );
   } else {
     content = (
       <View style={[s.bubble, s.bubbleTheir, corner]}>
         {quote}
-        <Text style={[s.bubbleText, fontFamily && { fontFamily }]}>{item.content}</Text>
-        <Meta item={item} />
+        <Text style={[s.bubbleText, fontFamily && { fontFamily }]}>{item.content}<Text style={s.metaRoom}>{metaRoom(item)}</Text></Text>
+        <Meta item={item} inline />
       </View>
     );
   }
@@ -282,18 +289,20 @@ const s = StyleSheet.create({
   msgRowOwn: { justifyContent: 'flex-end' },
   groupEnd: { marginBottom: rp(10) },
   bubble: {
-    maxWidth: '80%', borderRadius: R, paddingTop: rp(8), paddingBottom: rp(6), paddingHorizontal: rp(13), gap: rp(2),
+    maxWidth: '80%', borderRadius: rs(10), paddingTop: rp(6), paddingBottom: rp(7), paddingHorizontal: rp(9), gap: rp(2),   // WhatsApp proportions
   },
   bubbleOwn: {
     shadowColor: '#E8456E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 10, elevation: 3,
   },
   bubbleTheir: { backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)' },
-  tailOwn: { borderBottomRightRadius: rs(5) },
-  tailTheir: { borderBottomLeftRadius: rs(5) },
-  bubbleText: { fontFamily: 'DMSans-Regular', fontSize: FONT.md, color: T.text, lineHeight: rf(22), letterSpacing: 0.15 },
+  tailOwn: { borderBottomRightRadius: rs(3) },
+  tailTheir: { borderBottomLeftRadius: rs(3) },
+  bubbleText: { fontFamily: 'DMSans-Regular', fontSize: rf(15), color: T.text, lineHeight: rf(20.5), letterSpacing: 0.1 },
+  metaRoom: { fontSize: rf(15), color: 'transparent' },
   bubbleTextOwn: { color: '#fff' },
   meta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: rp(3), marginTop: rp(1) },
   metaOverlay: { position: 'absolute', right: rp(9), bottom: rp(7) },
+  metaInline: { position: 'absolute', right: rp(8), bottom: rp(5), marginTop: 0 },
   time: { fontFamily: 'DMSans-Medium', fontSize: rf(10.5), letterSpacing: 0.2 },
   voiceWrap: { maxWidth: '82%', borderRadius: R, paddingHorizontal: rp(10), paddingTop: rp(8), paddingBottom: rp(6), gap: rp(2) },
   voiceOwn: { backgroundColor: 'rgba(255,107,79,0.16)', borderWidth: 1, borderColor: 'rgba(255,107,79,0.28)' },

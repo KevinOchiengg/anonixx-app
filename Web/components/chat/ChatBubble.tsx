@@ -145,7 +145,7 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
 
   return (
     <div
-      className={`bubble${m.is_own ? " own" : ""}${end ? " end" : ""}${fresh ? " fresh" : ""}${media === "image" || media === "video" ? " media" : ""}${dx ? " dragging" : ""}`}
+      className={`bubble${m.is_own ? " own" : ""}${end ? " end" : ""}${fresh ? " fresh" : ""}${media === "image" || media === "video" ? " media" : ""}${!media && !m.view_once ? " txt" : ""}${dx ? " dragging" : ""}`}
       style={dx ? { transform: `translateX(${dx}px)` } : undefined}
       {...swipe}
       onClick={() => { if (swiped.current) { swiped.current = false; return; } if (!m.deleted) { setAsking(false); onToggle(); } }}
