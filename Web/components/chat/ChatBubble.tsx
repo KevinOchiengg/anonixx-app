@@ -1,10 +1,10 @@
 "use client";
-/** One message in a Room chat. Click it for reactions, Reply, Copy and Delete; swipe it right to reply. */
-import { useRef, useState } from "react";
+/** One message in a Room chat. Click it for reactions, Reply, Copy and Delete; swipe it right to reply, left to delete. */
+import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import BrandVideo from "./BrandVideo";
-import { Check, CheckCheck, Lock, Play, Reply, X } from "lucide-react";
+import { Check, CheckCheck, Lock, Pause, Play, Reply, Trash2, X } from "lucide-react";
 
 export type Msg = {
   id: string;
@@ -25,18 +25,59 @@ export type Msg = {
 
 export const REACTIONS = ["🔥", "😈", "💋", "🥵", "😂", "🖤"];
 
-// A voice note with a 1x / 1.5x / 2x control.
-function VoiceNote({ src }: { src: string }) {
+// A voice note: coral play button, coral bars that fill as it plays and ripple around the
+// playhead, time, and a 1x / 1.5x / 2x control. Bar heights are seeded from the URL.
+const VN_BARS = 28;
+function vnHeights(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return Array.from({ length: VN_BARS }, () => { h = (h * 1103515245 + 12345) >>> 0; return 0.28 + (((h >>> 8) % 1000) / 1000) * 0.72; });
+}
+const vnTime = (s: number) => (Number.isFinite(s) ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}` : "0:00");
+
+function VoiceNote({ src, seconds }: { src: string; seconds?: number | null }) {
   const el = useRef<HTMLAudioElement>(null);
   const [rate, setRate] = useState(1);
+  const [playing, setPlaying] = useState(false);
+  const [t, setT] = useState(0);
+  const [dur, setDur] = useState(seconds || 0);
+  const heights = useMemo(() => vnHeights(src), [src]);
   const next = () => {
     const r = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
     setRate(r);
     if (el.current) el.current.playbackRate = r;
   };
+  const toggle = () => {
+    const a = el.current;
+    if (!a) return;
+    if (a.paused) { document.querySelectorAll("audio").forEach((o) => { if (o !== a) o.pause(); }); a.playbackRate = rate; a.play().catch(() => {}); }
+    else a.pause();
+  };
+  const seek = (e: React.MouseEvent<HTMLSpanElement>) => {
+    const a = el.current;
+    if (!a || !dur) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    a.currentTime = Math.max(0, Math.min(dur, ((e.clientX - box.left) / box.width) * dur));
+  };
+  const head = dur ? Math.round((t / dur) * (VN_BARS - 1)) : -1;
   return (
-    <span className="vn" onClick={(e) => e.stopPropagation()}>
-      <audio ref={el} src={src} controls preload="none" onPlay={() => { if (el.current) el.current.playbackRate = rate; }} />
+    <span className={`vn${playing ? " playing" : ""}`} onClick={(e) => e.stopPropagation()}>
+      <audio ref={el} src={src} preload="metadata"
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setT(0); }}
+        onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => { if (Number.isFinite(e.currentTarget.duration)) setDur(e.currentTarget.duration); }} />
+      <button type="button" className="vn-play" onClick={toggle} aria-label={playing ? "Pause voice note" : "Play voice note"}>
+        {playing ? <Pause size={14} fill="currentColor" strokeWidth={0} aria-hidden /> : <Play size={14} fill="currentColor" strokeWidth={0} aria-hidden />}
+      </button>
+      <span className="vn-bars" onClick={seek} role="slider" aria-label="Seek" aria-valuemin={0} aria-valuemax={Math.round(dur)} aria-valuenow={Math.round(t)}>
+        {heights.map((h, i) => {
+          const near = playing && Math.abs(i - head) <= 4;
+          return <i key={i} className={`${i <= head && (playing || t > 0) ? "lit" : ""}${near ? " wave" : ""}`}
+            style={{ height: `${h * 100}%`, ...(near ? { animationDelay: `${(i % 4) * -0.22}s`, ["--lift" as string]: String(1 + (1 - Math.abs(i - head) / 5) * 0.6) } : {}) }} />;
+        })}
+      </span>
+      <small className="vn-time">{vnTime(playing || t > 0 ? t : dur)}</small>
       <button type="button" className="vn-rate" onClick={next} aria-label={`Playback speed ${rate} times`}>{rate}×</button>
     </span>
   );
@@ -51,7 +92,7 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
   const [asking, setAsking] = useState(false);
   // Photos and videos show as a small frame; tap opens them full screen.
   const [viewing, setViewing] = useState(false);
-  // Swipe right to reply, like WhatsApp: past REPLY_AT it snaps back and opens the reply.
+  // Swipe right to reply (like WhatsApp), left to delete: past REPLY_AT it snaps back and acts.
   const drag = useRef<{ x: number; y: number; on: boolean } | null>(null);
   const swiped = useRef(false);
   const [dx, setDx] = useState(0);
@@ -67,16 +108,17 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
       const mx = e.clientX - d.x, my = e.clientY - d.y;
       if (!d.on) {
         if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { drag.current = null; return; }
-        if (mx > 10) { d.on = true; e.currentTarget.setPointerCapture(e.pointerId); }
+        if (Math.abs(mx) > 10) { d.on = true; e.currentTarget.setPointerCapture(e.pointerId); }
         else return;
       }
-      setDx(Math.max(0, Math.min(90, mx)));
+      setDx(Math.max(-90, Math.min(90, mx)));
     },
     onPointerUp: () => {
       if (drag.current?.on) {
         swiped.current = true;
         window.setTimeout(() => { swiped.current = false; }, 0);   // only the click right after the swipe is skipped
         if (dx >= REPLY_AT) { onReply(m); navigator.vibrate?.(10); }
+        else if (dx <= -REPLY_AT) { setAsking(true); if (!open) onToggle(); navigator.vibrate?.(10); }
       }
       drag.current = null;
       setDx(0);
@@ -92,7 +134,12 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
       {...swipe}
       onClick={() => { if (swiped.current) { swiped.current = false; return; } if (!m.deleted) { setAsking(false); onToggle(); } }}
     >
-      {dx ? <span className="b-swipe" style={{ opacity: Math.min(1, dx / REPLY_AT), transform: `scale(${dx >= REPLY_AT ? 1.15 : 0.8 + (dx / REPLY_AT) * 0.2})` }} aria-hidden><Reply size={16} strokeWidth={2} /></span> : null}
+      {dx ? (
+        <span className={`b-swipe${dx < 0 ? " del" : ""}`} aria-hidden
+          style={{ opacity: Math.min(1, Math.abs(dx) / REPLY_AT), transform: `scale(${Math.abs(dx) >= REPLY_AT ? 1.15 : 0.8 + (Math.abs(dx) / REPLY_AT) * 0.2})` }}>
+          {dx > 0 ? <Reply size={16} strokeWidth={2} /> : <Trash2 size={16} strokeWidth={2} />}
+        </span>
+      ) : null}
       {m.reply_to && !m.deleted ? (
         <div className="reply-quote">{m.reply_to.is_own ? "You" : otherName}: {m.reply_to.preview || m.reply_to.media_type}</div>
       ) : null}
@@ -118,7 +165,7 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
             : <img src={m.media_url!} alt="" onClick={(e) => e.stopPropagation()} />}
         </div>
       , document.body) : null}
-      {media === "voice" ? <VoiceNote src={m.media_url!} /> : null}
+      {media === "voice" ? <VoiceNote src={m.media_url!} seconds={m.duration_seconds} /> : null}
       {!m.deleted && m.content ? <span>{m.content}</span> : null}
       <small className="b-meta">{m.time_ago}{m.is_own && !m.deleted ? (m.seen ? <CheckCheck className="b-tick seen" size={14} strokeWidth={2.4} aria-label="Seen" /> : <Check className="b-tick" size={14} strokeWidth={2.4} aria-label="Sent" />) : null}</small>
       {m.reactions?.length ? (
@@ -133,7 +180,7 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
           {asking ? (
             <>
               <button onClick={() => onDelete(m, false)}>Delete for me</button>
-              <button className="danger" onClick={() => onDelete(m, true)}>Delete for everyone</button>
+              {m.is_own ? <button className="danger" onClick={() => onDelete(m, true)}>Delete for everyone</button> : null}
               <button onClick={() => setAsking(false)}>Cancel</button>
             </>
           ) : (

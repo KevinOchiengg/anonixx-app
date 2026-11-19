@@ -285,6 +285,15 @@ export default function DropChatScreen({ route, navigation }) {
     ]);
   }, [deleteMessage]);
 
+  // Swipe left: their messages ask first (deleting is instant from the menu); yours offer for me / everyone.
+  const handleSwipeDelete = useCallback((item) => {
+    if (item.is_own) { handleDelete(item); return; }
+    Alert.alert('Delete this message for you?', null, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteMessage(item, false) },
+    ]);
+  }, [handleDelete, deleteMessage]);
+
   const handleOpenViewOnce = useCallback(async (item) => {
     try {
       const res = await authed(`/drops/connections/${connectionId}/messages/${item.id}/open`, { method: 'POST' });
@@ -391,8 +400,9 @@ export default function DropChatScreen({ route, navigation }) {
         onLongPress={setSheetItem}
         onReact={handleReact}
         onOpenViewOnce={handleOpenViewOnce}
+        onSwipeDelete={handleSwipeDelete}
       />
-    )), [rows, fontFamily, otherName, handleMediaPress, handleReply, handleReact, handleOpenViewOnce]);
+    )), [rows, fontFamily, otherName, handleMediaPress, handleReply, handleReact, handleOpenViewOnce, handleSwipeDelete]);
 
   // A guest sees the Room's picture; the owner sees the guest's own avatar.
   const headerPic = connection?.is_sender

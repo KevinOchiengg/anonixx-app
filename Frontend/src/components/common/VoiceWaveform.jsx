@@ -1,8 +1,9 @@
 /** The one voice-note player (cards, chat, comments). Resets the audio session out of
  * recording mode and waits until ready before playing. Bar heights are seeded from the URL,
- * not real audio. `speed` adds a 1x / 1.5x / 2x control (chat voice notes). */
+ * not real audio. While it plays, the bars around the playhead ripple like a live wave.
+ * `speed` adds a 1x / 1.5x / 2x control (chat voice notes). */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Play, Pause } from 'lucide-react-native';
 import T from '../../utils/theme';
@@ -133,6 +134,16 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
 
   const dimColor = 'rgba(255,255,255,0.14)';
 
+  // One looping clock drives the ripple; each bar near the playhead reads it at its own phase.
+  const wave = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!playing) { wave.stopAnimation(); wave.setValue(0); return undefined; }
+    const loop = Animated.loop(Animated.timing(wave, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [playing, wave]);
+  const RIPPLE = 4;   // bars either side of the playhead that move
+
   const barBoxHeight = compact ? rs(18) : rs(26);
   const btnSize = compact ? rs(26) : rs(32);
   // Thin fixed-width bars spaced out, not thick flex blocks.
@@ -157,10 +168,20 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
           const isLit = (playing || progress > 0) && i <= activeBar;
           const isHead = isLit && i === activeBar;
           const litColor = CORAL_SHADES[i % CORAL_SHADES.length];
+          const near = playing && Math.abs(i - activeBar) <= RIPPLE;
+          const phase = (i % 4) / 4;
+          const lift = 1 - Math.abs(i - activeBar) / (RIPPLE + 1);   // strongest at the playhead
+          const scale = near ? wave.interpolate({
+            inputRange: [0, 0.25, 0.5, 0.75, 1].map((x) => x),
+            outputRange: [0, 1, 0, 1, 0].map((_, k) => {
+              const v = Math.sin(((k / 4) + phase) * Math.PI * 2);
+              return 1 + lift * 0.55 * v;
+            }),
+          }) : 1;
           return (
-            <View
+            <Animated.View
               key={i}
-              style={[
+              style={[{ transform: [{ scaleY: scale }] },
                 styles.bar,
                 {
                   width: barWidth,

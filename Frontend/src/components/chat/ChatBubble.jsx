@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Swipeable, Pressable as GHPressable, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
-import { Check, CheckCheck, Eye, Image as ImageIcon, Lock, Mic, Play, Reply, Video } from 'lucide-react-native';
+import { Check, CheckCheck, Eye, Image as ImageIcon, Lock, Mic, Play, Reply, Trash2, Video } from 'lucide-react-native';
 import { T } from '../../utils/colorTokens';
 import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import VoiceWaveform from '../common/VoiceWaveform';
@@ -145,7 +145,7 @@ export const TypingBubble = React.memo(() => {
 
 export default React.memo(function ChatBubble({
   item, fontFamily, otherName, groupEnd = true, fresh = false,
-  onMediaPress, onReply, onLongPress, onReact, onOpenViewOnce,
+  onMediaPress, onReply, onLongPress, onReact, onOpenViewOnce, onSwipeDelete,
 }) {
   const isOwn = item.is_own;
   const swipeRef = useRef(null);
@@ -167,10 +167,18 @@ export default React.memo(function ChatBubble({
     }
   }, [item, onReact]);
 
-  const handleSwipeOpen = useCallback(() => {
+  // Swipe right to reply, left to delete; either way the bubble springs back.
+  const handleSwipeOpen = useCallback((direction) => {
     swipeRef.current?.close();
-    onReply?.(item);
-  }, [item, onReply]);
+    if (direction === 'right') onSwipeDelete?.(item);
+    else onReply?.(item);
+  }, [item, onReply, onSwipeDelete]);
+
+  const renderRightActions = useCallback((progress) => (
+    <Animated.View style={[s.replyActionWrap, { opacity: progress }]}>
+      <View style={[s.replyActionCircle, s.deleteActionCircle]}><Trash2 size={rs(16)} color={T.error || '#e85d5d'} strokeWidth={2} /></View>
+    </Animated.View>
+  ), []);
 
   const renderLeftActions = useCallback((progress) => (
     <Animated.View style={[s.replyActionWrap, { opacity: progress }]}>
@@ -244,9 +252,12 @@ export default React.memo(function ChatBubble({
       <Swipeable
         ref={swipeRef}
         renderLeftActions={renderLeftActions}
+        renderRightActions={onSwipeDelete ? renderRightActions : undefined}
         onSwipeableOpen={handleSwipeOpen}
         overshootLeft={false}
+        overshootRight={false}
         leftThreshold={44}
+        rightThreshold={44}
         enabled={!item.deleted}
       >
         <GHPressable onPress={handleTap} onLongPress={handleLongPress} delayLongPress={350}>
@@ -298,6 +309,7 @@ const s = StyleSheet.create({
   },
   quoteOnMedia: { padding: rp(6), backgroundColor: 'rgba(0,0,0,0.35)' },
   replyActionWrap: { width: rs(56), alignItems: 'center', justifyContent: 'center' },
+  deleteActionCircle: { backgroundColor: 'rgba(232,93,93,0.16)' },
   replyActionCircle: { width: rs(32), height: rs(32), borderRadius: rs(16), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,99,74,0.14)' },
   replyQuote: {
     flexDirection: 'row', alignItems: 'flex-start', gap: rp(7), backgroundColor: 'rgba(255,255,255,0.06)',

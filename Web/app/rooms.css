@@ -34,8 +34,25 @@
 .pill.danger { color: #ef4444; }
 
 /* Chat: voice notes with a speed control; the session strip's Join */
-.vn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
-.vn audio { max-width: 220px; height: 36px; }
+/* Voice note (chat/ChatBubble VoiceNote): coral wave that ripples around the playhead. */
+.vn { display: inline-flex; align-items: center; gap: 10px; width: 250px; max-width: 100%; padding: 2px 0; }
+.vn audio { display: none; }
+.vn-play { flex: none; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1.5px solid var(--rose); border-radius: 50%; background: color-mix(in srgb, var(--rose) 16%, transparent); color: var(--rose); cursor: pointer; }
+.vn-play svg { margin-left: 1px; }
+.vn.playing .vn-play { background: var(--rose); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--rose) 22%, transparent); }
+.vn-bars { flex: 1; min-width: 0; height: 28px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.vn-bars i { width: 2.5px; min-height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); transform-origin: center; transition: background 0.15s ease; }
+.vn-bars i.lit { background: var(--rose); }
+.vn-bars i.lit:nth-child(3n) { background: #ff9376; }
+.vn-bars i.lit:nth-child(4n) { background: #e14f3a; }
+.vn-bars i.wave { animation: vn-wave 0.9s ease-in-out infinite; }
+@keyframes vn-wave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(var(--lift, 1.5)); } }
+.vn-time { flex: none; min-width: 30px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; opacity: 0.8; text-align: right; }
+.bubble.own .vn-bars i { background: rgba(255, 255, 255, 0.3); }
+.bubble.own .vn-bars i.lit { background: #fff; }
+.bubble.own .vn-play { border-color: #fff; color: #fff; background: rgba(255, 255, 255, 0.18); }
+.bubble.own .vn.playing .vn-play { background: #fff; color: var(--rose); }
+@media (prefers-reduced-motion: reduce) { .vn-bars i.wave { animation: none; } }
 .vn-rate { flex: none; min-width: 34px; height: 24px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.1); color: var(--fg); font-size: 11px; font-weight: 800; cursor: pointer; }
 .vn-preview { height: 36px; min-width: 0; }
 
