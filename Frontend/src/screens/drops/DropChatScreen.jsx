@@ -431,9 +431,9 @@ export default function DropChatScreen({ route, navigation }) {
                 {headerPic ? (
                   <Image source={{ uri: headerPic }} style={s.avatar} />
                 ) : (
-                  <LinearGradient colors={['rgba(255,138,115,0.35)', 'rgba(232,69,110,0.35)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.avatar, s.avatarInitial]}>
+                  <View style={[s.avatar, s.avatarInitial]}>
                     <Text style={s.avatarInitialText}>{otherName[0]?.toUpperCase() || 'A'}</Text>
-                  </LinearGradient>
+                  </View>
                 )}
               </View>
             </LinearGradient>
@@ -599,11 +599,11 @@ const s = StyleSheet.create({
   },
   titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(10), marginLeft: rp(2) },
   avatarRing: { padding: rs(2), borderRadius: rs(24), shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
-  avatarGap: { padding: rs(2), borderRadius: rs(22), backgroundColor: '#0b0f18' },
-  onlineDot: { position: 'absolute', right: -rs(1), bottom: -rs(1), width: rs(12), height: rs(12), borderRadius: rs(6), backgroundColor: T.online, borderWidth: 2.5, borderColor: '#0b0f18' },
+  avatarGap: { padding: rs(2), borderRadius: rs(22), backgroundColor: T.background },   // same as the bottom nav
+  onlineDot: { position: 'absolute', right: -rs(1), bottom: -rs(1), width: rs(12), height: rs(12), borderRadius: rs(6), backgroundColor: T.online, borderWidth: 2.5, borderColor: T.background },
   avatar: { width: rs(36), height: rs(36), borderRadius: rs(18) },
-  avatarInitial: { alignItems: 'center', justifyContent: 'center' },
-  avatarInitialText: { fontSize: rf(17), fontFamily: 'PlayfairDisplay-Italic', color: '#fff' },
+  avatarInitial: { alignItems: 'center', justifyContent: 'center', backgroundColor: T.background },
+  avatarInitialText: { fontSize: rf(17), fontFamily: 'PlayfairDisplay-Italic', color: T.primary },
   titleText: { flexShrink: 1, alignItems: 'flex-start' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5) },
   name: { fontFamily: 'DMSans-SemiBold', fontSize: rf(16.5), color: T.text, letterSpacing: 0.1 },
