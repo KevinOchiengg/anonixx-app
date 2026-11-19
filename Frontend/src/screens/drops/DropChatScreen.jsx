@@ -287,6 +287,13 @@ export default function DropChatScreen({ route, navigation }) {
 
   // Swipe left: their messages ask first (deleting is instant from the menu); yours offer for me / everyone.
   const handleSwipeDelete = useCallback((item) => {
+    if (item.deleted) {
+      Alert.alert('Remove this from your chat?', null, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => deleteMessage(item, false) },
+      ]);
+      return;
+    }
     if (item.is_own) { handleDelete(item); return; }
     Alert.alert('Delete this message for you?', null, [
       { text: 'Cancel', style: 'cancel' },

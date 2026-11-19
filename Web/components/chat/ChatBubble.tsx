@@ -113,7 +113,7 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
   const swiped = useRef(false);
   const [dx, setDx] = useState(0);
   const REPLY_AT = 56;
-  const swipe = m.deleted ? {} : {
+  const swipe = {
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       drag.current = { x: e.clientX, y: e.clientY, on: false };
@@ -127,13 +127,13 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
         if (Math.abs(mx) > 10) { d.on = true; e.currentTarget.setPointerCapture(e.pointerId); }
         else return;
       }
-      setDx(Math.max(-90, Math.min(90, mx)));
+      setDx(Math.max(-90, Math.min(m.deleted ? 0 : 90, mx)));   // a deleted message only swipes left (remove)
     },
     onPointerUp: () => {
       if (drag.current?.on) {
         swiped.current = true;
         window.setTimeout(() => { swiped.current = false; }, 0);   // only the click right after the swipe is skipped
-        if (dx >= REPLY_AT) { onReply(m); navigator.vibrate?.(10); }
+        if (dx >= REPLY_AT && !m.deleted) { onReply(m); navigator.vibrate?.(10); }
         else if (dx <= -REPLY_AT) { setAsking(true); if (!open) onToggle(); navigator.vibrate?.(10); }
       }
       drag.current = null;
@@ -148,7 +148,7 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
       className={`bubble${m.is_own ? " own" : ""}${end ? " end" : ""}${fresh ? " fresh" : ""}${media === "image" || media === "video" ? " media" : ""}${!media && !m.view_once ? " txt" : ""}${dx ? " dragging" : ""}`}
       style={dx ? { transform: `translateX(${dx}px)` } : undefined}
       {...swipe}
-      onClick={() => { if (swiped.current) { swiped.current = false; return; } if (!m.deleted) { setAsking(false); onToggle(); } }}
+      onClick={() => { if (swiped.current) { swiped.current = false; return; } setAsking(!!m.deleted); onToggle(); }}
     >
       {dx ? (
         <span className={`b-swipe${dx < 0 ? " del" : ""}`} aria-hidden
@@ -195,8 +195,8 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
         <div className="msg-actions" onClick={(e) => e.stopPropagation()}>
           {asking ? (
             <>
-              <button onClick={() => onDelete(m, false)}>Delete for me</button>
-              {m.is_own ? <button className="danger" onClick={() => onDelete(m, true)}>Delete for everyone</button> : null}
+              <button onClick={() => onDelete(m, false)}>{m.deleted ? "Remove" : "Delete for me"}</button>
+              {m.is_own && !m.deleted ? <button className="danger" onClick={() => onDelete(m, true)}>Delete for everyone</button> : null}
               <button onClick={() => setAsking(false)}>Cancel</button>
             </>
           ) : (

@@ -193,9 +193,11 @@ export default React.memo(function ChatBubble({
     </Animated.View>
   ), []);
 
+  // A deleted message ("This message was deleted") can still be removed: long press or swipe left.
   const handleLongPress = useCallback(() => {
-    if (!item.deleted) onLongPress?.(item);
-  }, [item, onLongPress]);
+    if (item.deleted) onSwipeDelete?.(item);
+    else onLongPress?.(item);
+  }, [item, onLongPress, onSwipeDelete]);
 
   // Only the last message of a run gets the pointed corner.
   const corner = groupEnd ? (isOwn ? s.tailOwn : s.tailTheir) : null;
@@ -258,14 +260,14 @@ export default React.memo(function ChatBubble({
     <Animated.View style={{ opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}>
       <Swipeable
         ref={swipeRef}
-        renderLeftActions={renderLeftActions}
+        renderLeftActions={item.deleted ? undefined : renderLeftActions}
         renderRightActions={onSwipeDelete ? renderRightActions : undefined}
         onSwipeableOpen={handleSwipeOpen}
         overshootLeft={false}
         overshootRight={false}
         leftThreshold={44}
         rightThreshold={44}
-        enabled={!item.deleted}
+        enabled
       >
         <GHPressable onPress={handleTap} onLongPress={handleLongPress} delayLongPress={350}>
           <View style={[s.msgRow, isOwn && s.msgRowOwn, groupEnd && s.groupEnd]}>{content}</View>
