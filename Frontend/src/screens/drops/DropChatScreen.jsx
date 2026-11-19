@@ -608,12 +608,12 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: rp(10), marginLeft: rp(2) },
-  avatarRing: { padding: rs(2), borderRadius: rs(24), shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
-  avatarGap: { padding: rs(2), borderRadius: rs(22), backgroundColor: T.background },   // same as the bottom nav
-  onlineDot: { position: 'absolute', right: -rs(1), bottom: -rs(1), width: rs(12), height: rs(12), borderRadius: rs(6), backgroundColor: T.online, borderWidth: 2.5, borderColor: T.background },
-  avatar: { width: rs(36), height: rs(36), borderRadius: rs(18) },
+  avatarRing: { padding: rs(1.5), borderRadius: rs(20), shadowColor: T.primary, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
+  avatarGap: { padding: rs(1.5), borderRadius: rs(19), backgroundColor: T.background },   // same as the bottom nav
+  onlineDot: { position: 'absolute', right: -rs(1), bottom: -rs(1), width: rs(10), height: rs(10), borderRadius: rs(5), backgroundColor: T.online, borderWidth: 2.5, borderColor: T.background },
+  avatar: { width: rs(32), height: rs(32), borderRadius: rs(16) },   // ~38 with the ring, WhatsApp size
   avatarInitial: { alignItems: 'center', justifyContent: 'center', backgroundColor: T.background },
-  avatarInitialText: { fontSize: rf(17), fontFamily: 'PlayfairDisplay-Italic', color: T.primary },
+  avatarInitialText: { fontSize: rf(15), fontFamily: 'PlayfairDisplay-Italic', color: T.primary },
   titleText: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: rp(5), maxWidth: '100%' },
   name: { flexShrink: 1, fontFamily: 'DMSans-SemiBold', fontSize: rf(16.5), color: T.text, letterSpacing: 0.1 },   // long names end in …
