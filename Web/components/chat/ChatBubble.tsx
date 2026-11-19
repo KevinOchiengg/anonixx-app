@@ -27,11 +27,27 @@ export const REACTIONS = ["🔥", "😈", "💋", "🥵", "😂", "🖤"];
 
 // A voice note: coral play button, coral bars that fill as it plays and ripple around the
 // playhead, time, and a 1x / 1.5x / 2x control. Bar heights are seeded from the URL.
-const VN_BARS = 28;
+// Shaped like a real recording: a few loud bursts that fade out, quiet chatter in between,
+// mirrored around the middle; the colour flows pink → coral → amber → gold → coral → pink.
+const VN_BARS = 46;
+const VN_STOPS = ["#e8456e", "#ff634a", "#ff9376", "#f0a868", "#ffc93c", "#ff634a", "#e8456e"];
 function vnHeights(seed: string) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return Array.from({ length: VN_BARS }, () => { h = (h * 1103515245 + 12345) >>> 0; return 0.28 + (((h >>> 8) % 1000) / 1000) * 0.72; });
+  const rnd = () => { h = (h * 1103515245 + 12345) >>> 0; return ((h >>> 8) % 1000) / 1000; };
+  const bursts = Array.from({ length: 3 + Math.floor(rnd() * 2) }, () => ({ at: Math.floor(rnd() * VN_BARS), amp: 0.55 + rnd() * 0.45 }));
+  return Array.from({ length: VN_BARS }, (_, i) => {
+    const peak = Math.max(...bursts.map((b) => (i >= b.at ? b.amp * Math.exp(-(i - b.at) / 3.2) : b.amp * Math.exp(-(b.at - i) / 0.9))));
+    return Math.min(1, Math.max(0.1, 0.12 + rnd() * 0.16 + peak * (0.7 + rnd() * 0.3)));
+  });
+}
+function vnColor(i: number) {
+  const x = (i / (VN_BARS - 1)) * (VN_STOPS.length - 1);
+  const k = Math.min(VN_STOPS.length - 2, Math.floor(x));
+  const f = x - k;
+  const a = VN_STOPS[k], b = VN_STOPS[k + 1];
+  const mix = (o: number) => Math.round(parseInt(a.slice(o, o + 2), 16) * (1 - f) + parseInt(b.slice(o, o + 2), 16) * f);
+  return `rgb(${mix(1)}, ${mix(3)}, ${mix(5)})`;
 }
 const vnTime = (s: number) => (Number.isFinite(s) ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}` : "0:00");
 
@@ -74,7 +90,7 @@ function VoiceNote({ src, seconds }: { src: string; seconds?: number | null }) {
         {heights.map((h, i) => {
           const near = playing && Math.abs(i - head) <= 4;
           return <i key={i} className={`${i <= head && (playing || t > 0) ? "lit" : ""}${near ? " wave" : ""}`}
-            style={{ height: `${h * 100}%`, ...(near ? { animationDelay: `${(i % 4) * -0.22}s`, ["--lift" as string]: String(1 + (1 - Math.abs(i - head) / 5) * 0.6) } : {}) }} />;
+            style={{ height: `${h * 100}%`, ["--c" as string]: vnColor(i), ...(near ? { animationDelay: `${(i % 4) * -0.22}s`, ["--lift" as string]: String(1 + (1 - Math.abs(i - head) / 5) * 0.6) } : {}) }} />;
         })}
       </span>
       <small className="vn-time">{vnTime(playing || t > 0 ? t : dur)}</small>

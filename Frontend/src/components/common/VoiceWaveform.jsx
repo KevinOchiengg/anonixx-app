@@ -10,26 +10,34 @@ import T from '../../utils/theme';
 import { rs, rf, rp } from '../../utils/responsive';
 import { useToast } from '../ui/Toast';
 
-const BAR_COUNT = 28;
+const BAR_COUNT = 46;
 const SPEEDS = [1, 1.5, 2];
 
 // Shared across all players, so starting one clip pauses the other.
 let activePlayer = null;
 
-// Coral shades, cycled by bar index.
-const CORAL_SHADES = [T.primary, '#E14F3A', '#FF9376', '#F0A868', '#C93F2B'];
+// The colour flows along the wave: pink → coral → amber → gold → coral → pink (web twin: ChatBubble.tsx).
+const STOPS = ['#e8456e', '#ff634a', '#ff9376', '#f0a868', '#ffc93c', '#ff634a', '#e8456e'];
+function barColor(i) {
+  const x = (i / (BAR_COUNT - 1)) * (STOPS.length - 1);
+  const k = Math.min(STOPS.length - 2, Math.floor(x));
+  const f = x - k;
+  const mix = (o) => Math.round(parseInt(STOPS[k].slice(o, o + 2), 16) * (1 - f) + parseInt(STOPS[k + 1].slice(o, o + 2), 16) * f);
+  return `rgb(${mix(1)}, ${mix(3)}, ${mix(5)})`;
+}
+const BAR_COLORS = Array.from({ length: BAR_COUNT }, (_, i) => barColor(i));
 
+// Shaped like a real recording: a few loud bursts that fade out, quiet chatter in between.
 function barHeightsFor(seed) {
   const str = seed || 'x';
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  const heights = [];
-  for (let i = 0; i < BAR_COUNT; i++) {
-    h = (h * 1103515245 + 12345) >>> 0;
-    const t = ((h >>> 8) % 1000) / 1000;
-    heights.push(0.28 + t * 0.72); // 28%–100% of the track height
-  }
-  return heights;
+  const rnd = () => { h = (h * 1103515245 + 12345) >>> 0; return ((h >>> 8) % 1000) / 1000; };
+  const bursts = Array.from({ length: 3 + Math.floor(rnd() * 2) }, () => ({ at: Math.floor(rnd() * BAR_COUNT), amp: 0.55 + rnd() * 0.45 }));
+  return Array.from({ length: BAR_COUNT }, (_, i) => {
+    const peak = Math.max(...bursts.map((b) => (i >= b.at ? b.amp * Math.exp(-(i - b.at) / 3.2) : b.amp * Math.exp(-(b.at - i) / 0.9))));
+    return Math.min(1, Math.max(0.1, 0.12 + rnd() * 0.16 + peak * (0.7 + rnd() * 0.3)));
+  });
 }
 
 function fmt(secs) {
@@ -132,7 +140,6 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
   const activeBar  = Math.round(progress * (BAR_COUNT - 1));
   const showingElapsed = playing || (status.currentTime || 0) > 0;
 
-  const dimColor = 'rgba(255,255,255,0.14)';
 
   // One looping clock drives the ripple; each bar near the playhead reads it at its own phase.
   const wave = useRef(new Animated.Value(0)).current;
@@ -144,10 +151,10 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
   }, [playing, wave]);
   const RIPPLE = 4;   // bars either side of the playhead that move
 
-  const barBoxHeight = compact ? rs(18) : rs(26);
+  const barBoxHeight = compact ? rs(20) : rs(32);
   const btnSize = compact ? rs(26) : rs(32);
   // Thin fixed-width bars spaced out, not thick flex blocks.
-  const barWidth = compact ? rs(1.5) : rs(2);
+  const barWidth = compact ? rs(1.2) : rs(1.8);
 
   return (
     <TouchableOpacity
@@ -167,7 +174,7 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
         {heights.map((h, i) => {
           const isLit = (playing || progress > 0) && i <= activeBar;
           const isHead = isLit && i === activeBar;
-          const litColor = CORAL_SHADES[i % CORAL_SHADES.length];
+          const litColor = BAR_COLORS[i];
           const near = playing && Math.abs(i - activeBar) <= RIPPLE;
           const phase = (i % 4) / 4;
           const lift = 1 - Math.abs(i - activeBar) / (RIPPLE + 1);   // strongest at the playhead
@@ -186,7 +193,8 @@ export default function VoiceWaveform({ uri, durationSeconds = 0, compact = fals
                 {
                   width: barWidth,
                   height: `${h * 100}%`,
-                  backgroundColor: isLit ? litColor : dimColor,
+                  backgroundColor: litColor,
+                  opacity: isLit ? 1 : 0.32,
                 },
                 isHead && {
                   shadowColor: litColor,
