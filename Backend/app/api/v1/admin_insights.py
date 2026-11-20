@@ -450,6 +450,82 @@ async def audit_log(
     } for r in rows]}
 
 
+# ─── Link ups / knocks ───────────────────────────────────────────────────────
+
+@router.get("/admin/linkups", summary="Who knocked / linked up on whom, newest first (super admin)")
+async def linkups(
+    q: Optional[str] = Query(None, max_length=60, description="name, username or email of either side"),
+    status: Optional[str] = Query(None, max_length=20, description="accepted | pending | declined | refunded"),
+    days: int = Query(30, ge=1, le=365),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    match: dict = {"created_at": {"$gte": _now() - timedelta(days=days)}, "status": {"$nin": ["cancelled", "accepting"]}}
+    if status == "refunded":
+        match["refunded"] = True
+    elif status in ("accepted", "pending", "declined", "expired"):
+        match["status"] = status
+    if q and q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        ids = [str(u["_id"]) async for u in db["users"].find(
+            {"$or": [{"anonymous_name": rx}, {"username": rx}, {"email": rx}]}, {"_id": 1},
+        ).limit(200)]
+        if ObjectId.is_valid(q.strip()):
+            ids.append(q.strip())
+        match["$or"] = [{"requester_id": {"$in": ids}}, {"owner_id": {"$in": ids}}]
+
+    total = await db["drop_unlock_requests"].count_documents(match)
+    rows = await db["drop_unlock_requests"].find(match).sort("created_at", -1).skip(skip).limit(limit).to_list(None)
+    uids = {r.get(k) for r in rows for k in ("requester_id", "owner_id") if ObjectId.is_valid(r.get(k) or "")}
+    users = {str(u["_id"]): u async for u in db["users"].find(
+        {"_id": {"$in": [ObjectId(x) for x in uids]}},
+        {"anonymous_name": 1, "username": 1, "email": 1, "avatar_url": 1, "is_active": 1, "gender": 1, "created_at": 1},
+    )}
+    conn_ids = [r["connection_id"] for r in rows if r.get("connection_id")]
+    replied = set()
+    if conn_ids:
+        for c in await db["drop_messages"].aggregate([
+            {"$match": {"connection_id": {"$in": conn_ids}}},
+            {"$group": {"_id": {"c": "$connection_id", "s": "$sender_id"}}},
+        ]).to_list(None):
+            replied.add((c["_id"]["c"], c["_id"]["s"]))
+
+    def person(uid):
+        u = users.get(uid or "", {})
+        return {"id": uid, "name": u.get("anonymous_name"), "username": u.get("username"), "email": u.get("email"),
+                "avatar_url": u.get("avatar_url"), "gender": u.get("gender"), "banned": u.get("is_active") is False,
+                "joined": _iso(u.get("created_at"))}
+
+    paid = await db["drop_unlock_requests"].aggregate([
+        {"$match": {**match, "paid_in": True}},
+        {"$group": {"_id": None, "coins": {"$sum": {"$cond": ["$refunded", 0, {"$ifNull": ["$cost", 0]}]}},
+                    "people": {"$addToSet": "$requester_id"}}},
+    ]).to_list(None)
+    agg = paid[0] if paid else {"coins": 0, "people": []}
+    return {
+        "total": total, "skip": skip, "limit": limit,
+        "summary": {"coins_kept": agg["coins"], "unique_senders": len(agg["people"])},
+        "linkups": [{
+            "id": str(r["_id"]),
+            "sender": person(r.get("requester_id")),
+            "poster": person(r.get("owner_id")),
+            "drop_id": r.get("target_id") if r.get("target_type") == "drop" else None,
+            "snippet": (r.get("confession_snippet") or "")[:140],
+            "pitch": r.get("pitch"),
+            "status": r.get("status"),
+            "paid": bool(r.get("paid_in")),
+            "cost": r.get("cost") or 0,
+            "refunded": bool(r.get("refunded")),
+            "poster_replied": (r.get("connection_id"), r.get("owner_id")) in replied,
+            "sender_wrote": (r.get("connection_id"), r.get("requester_id")) in replied,
+            "connection_id": r.get("connection_id"),
+            "created_at": _iso(r.get("created_at")),
+        } for r in rows],
+    }
+
+
 # ─── One user, everything ────────────────────────────────────────────────────
 
 @router.get("/admin/users/{user_id}/full", summary="Everything about one user, for moderation and refunds")

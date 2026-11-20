@@ -268,3 +268,21 @@
 .adm-risk.hi { background: rgba(255, 93, 108, 0.18); color: #ff5d6c; }
 .adm-risk.mid { background: rgba(245, 158, 11, 0.18); color: #F59E0B; }
 .adm-risk.lo { background: rgba(52, 211, 153, 0.16); color: #34d399; }
+
+/* Link ups (super admin) */
+.lu-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.lu-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.lu-stats .adm-card { display: grid; gap: 4px; }
+.lu-stats small { opacity: .7; }
+.lu-stats b { font-size: 22px; }
+.lu-who { display: flex; gap: 10px; align-items: center; min-width: 180px; }
+.lu-who img, .lu-av { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex: none; }
+.lu-av { display: grid; place-items: center; background: rgba(255,99,74,.16); color: #ff634a; font-weight: 700; }
+.lu-who > div { display: grid; gap: 1px; min-width: 0; }
+.lu-who small { opacity: .75; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lu-ban, .lu-tag { margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-style: normal; background: rgba(255,255,255,.08); }
+.lu-tag { margin-left: 0; }
+.lu-tag.accepted { background: rgba(52,199,89,.16); color: #34c759; }
+.lu-tag.declined, .lu-ban { background: rgba(255,59,48,.14); color: #ff6b61; }
+.lu-post { max-width: 260px; }
+.lu-post q { display: block; margin-top: 4px; opacity: .75; font-style: italic; }

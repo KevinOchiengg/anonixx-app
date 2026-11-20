@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic,
-  IcMenu, IcBell, IcClose, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList,
+  IcMenu, IcBell, IcClose, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList, IcKnock,
 } from "./adminicons";
 import { useKeepPlace } from "./keepPlace";
 import CommandPalette from "./CommandPalette";
@@ -37,6 +37,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Manage",
     items: [
       { href: "/admin/users", label: "Users", icon: <IcUsers /> },
+      { href: "/admin/linkups", label: "Link ups", icon: <IcKnock />, superOnly: true },
       { href: "/admin/posts", label: "Posts", icon: <IcPosts /> },
       { href: "/admin/moderation", label: "Moderation", icon: <IcShield />, scope: "moderation" },
       { href: "/admin/refunds", label: "Refunds", icon: <IcRefund />, scope: "finance" },
