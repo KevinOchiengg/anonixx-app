@@ -146,7 +146,7 @@ async def generate(
         {"kind": "hookup", "hookup.guided.ai_generated": True, "confession": {"$ne": None}},
         {"confession": 1},
     ).sort("created_at", -1).limit(RECENT_OPENINGS).to_list(RECENT_OPENINGS)
-    previous = [" ".join(p.split())[:500] for p in (data.previous or []) if p and p.strip()][-DRAFT_MEMORY:]
+    previous = [" ".join(p.split())[:900] for p in (data.previous or []) if p and p.strip()][-DRAFT_MEMORY:]
 
     tone = data.tone if data.tone in HOOKUP_TONES else "vulnerable"
     try:
@@ -165,7 +165,7 @@ async def generate(
 
 
 class RewordRequest(BaseModel):
-    text: str = Field(..., max_length=500)
+    text: str = Field(..., max_length=900)
     style: str = "direct"   # one of HOOKUP_TONES: direct | mysterious | playful | vulnerable
 
 

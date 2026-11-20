@@ -117,7 +117,7 @@ export default function AdminPosts() {
               <AdminMedia media={d} open={editing?.id === d.id} />
               {editing?.id === d.id ? (
                 <textarea
-                  className="adm-edit" rows={4} maxLength={500} autoFocus value={editing.text}
+                  className="adm-edit" rows={4} maxLength={900} autoFocus value={editing.text}
                   onChange={(e) => setEditing({ id: d.id, text: e.target.value })} aria-label="Post text"
                 />
               ) : <p className="adm-text">{d.confession || "[no text]"}</p>}
@@ -149,7 +149,7 @@ export default function AdminPosts() {
                 </div>
               ) : null}
               <div className="adm-foot">
-                <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/500` : fmtDate(d.created_at)}</span>
+                <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/900` : fmtDate(d.created_at)}</span>
                 <div className="adm-actions">
                   {editing?.id === d.id ? (
                     <>

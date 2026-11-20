@@ -32,7 +32,7 @@ const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode 
 
 const THEME = { from: "#14060a", to: "#2a0f18", accent: "#FF3B7A", text: "#F6E6EC" };
 
-const MAX_TEXT = 500;
+const MAX_TEXT = 900;
 const MAX_IMG_MB = 5;
 // The original goes up untouched (trim is applied at playback), so this has to leave
 // room for a long phone video that gets cut down to three minutes.

@@ -18,7 +18,7 @@ type Mine = {
 };
 type Data = { posts: Mine[]; total_views: number; total_likes: number; boost_cost: number; boost_hours: number };
 
-const MAX = 500;
+const MAX = 900;
 
 function Stat({ icon, n, label }: { icon: React.ReactNode; n: number; label: string }) {
   return <span className="mp-stat" title={label} aria-label={`${n} ${label}`}>{icon}{compact(n)}</span>;

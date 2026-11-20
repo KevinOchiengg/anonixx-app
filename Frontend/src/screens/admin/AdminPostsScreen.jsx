@@ -29,7 +29,7 @@ const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onS
     </Text>
     {editing != null ? (
       <TextInput
-        style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={500} autoFocus
+        style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={900} autoFocus
         placeholder="Post text" placeholderTextColor={T.textMuted}
       />
     ) : (

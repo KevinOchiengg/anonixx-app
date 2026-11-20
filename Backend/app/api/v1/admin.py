@@ -503,8 +503,8 @@ async def edit_admin_drop(
     text = data.confession.strip()
     if not text:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text cannot be empty")
-    if len(text) > 500:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text must be 500 characters or fewer")
+    if len(text) > 900:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text must be 900 characters or fewer")
 
     try:
         oid = ObjectId(drop_id)
