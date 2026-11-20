@@ -312,6 +312,8 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [mediaKind, setMediaKind] = useState(null); // 'image' | 'video' — set from the picked asset
   // Extra photos; with mediaUri they become the drop's `images`.
   const [extraImageUris, setExtraImageUris] = useState([]);
+  // Admin: more videos picked together; each posts as its own drop. [{ uri, duration, size, thumb }]
+  const [extraVideos, setExtraVideos] = useState([]);
   const [loading,  setLoading]  = useState(false);
 
   // ── Video editing (admin) — trim window, text overlays, cover frame ──
@@ -554,9 +556,31 @@ export default function DropsComposeScreen({ navigation, route }) {
         quality:              0.85,
         allowsEditing:        false,
         allowsMultipleSelection: true,
-        selectionLimit:       9,
+        selectionLimit:       isAdmin ? 10 : 9,
       });
       if (result.canceled) return;
+      setExtraVideos([]);
+
+      // Admin picked several videos: the first gets the editor, the rest post as their own drops.
+      const vids = result.assets.filter((a) => a.type === 'video');
+      if (isAdmin && vids.length > 1) {
+        const [first, ...rest] = vids;
+        const duration = (first.duration || 0) / 1000;
+        setMediaUri(first.uri);
+        setMediaKind('video');
+        setExtraImageUris([]);
+        setVideoMeta({ duration, size: first.fileSize || 0, landscape: (first.width || 0) > (first.height || 0) * 1.05 });
+        setVideoEdit(duration ? defaultEdit(duration) : null);
+        setCoverAt(null);
+        const extras = await Promise.all(rest.map(async (a) => {
+          let thumb = null;
+          try { thumb = (await VideoThumbnails.getThumbnailAsync(a.uri, { time: 0, quality: 0.6 })).uri; } catch {}
+          return { uri: a.uri, duration: (a.duration || 0) / 1000, size: a.fileSize || 0, thumb };
+        }));
+        setExtraVideos(extras);
+        showToast({ type: 'info', message: `${vids.length} videos. Each posts as its own drop.` });
+        return;
+      }
 
       if (result.assets.length === 1) {
         const asset = result.assets[0];
@@ -590,12 +614,13 @@ export default function DropsComposeScreen({ navigation, route }) {
     } catch {
       showToast({ type: 'error', message: 'Could not open gallery.' });
     }
-  }, [showToast]);
+  }, [showToast, isAdmin]);
 
   const handleClearMedia = useCallback(() => {
     setMediaUri(null);
     setMediaKind(null);
     setExtraImageUris([]);
+    setExtraVideos([]);
     setVideoMeta(null);
     setVideoEdit(null);
     setCoverAt(null);
@@ -756,17 +781,50 @@ export default function DropsComposeScreen({ navigation, route }) {
       // A Stream video, or anything an admin schedules, goes through the scheduled
       // queue: the server publishes it when the clip is ready / at the chosen time.
       const later = isAdmin && publishAt && new Date(publishAt).getTime() > Date.now() + 60e3 ? publishAt : null;
+
+      // Extra videos (admin): same settings, their own video, each its own drop.
+      const batch = isAdmin && isVideo ? extraVideos : [];
+      const postExtras = async () => {
+        const base = { ...body };
+        ['media_type', 'media_url', 'video_edit', 'cover_url', 'images', 'paywall_price', 'preview_seconds'].forEach((k) => delete base[k]);
+        const useStream = await streamEnabled();
+        for (let i = 0; i < batch.length; i++) {
+          const v = batch[i];
+          showToast({ type: 'info', message: `Uploading video ${i + 2} of ${batch.length + 1}…` });
+          const vEdit = v.duration ? defaultEdit(v.duration) : null;
+          let cover = null;
+          try { cover = await uploadToR2(v.thumb || (await VideoThumbnails.getThumbnailAsync(v.uri, { time: 0, quality: 0.8 })).uri, 'image', 'image/jpeg'); } catch {}
+          const extra = { ...base, media_type: 'video', ...(cover ? { cover_url: cover } : {}) };
+          if (useStream && (!v.size || v.size <= STREAM_DIRECT_MAX_BYTES)) {
+            const uid = await uploadToStream(v.uri);
+            await queueDrop(extra, { publishAt: later, stream: { uid, start: vEdit?.start ?? 0, end: vEdit?.end ?? null } });
+            continue;
+          }
+          extra.media_url = await uploadToR2(v.uri, 'video', Platform.OS === 'ios' ? 'video/quicktime' : 'video/mp4');
+          if (isMeaningful(vEdit, v.duration)) extra.video_edit = vEdit;
+          if (later) { await queueDrop(extra, { publishAt: later, stream: null }); continue; }
+          const r = await fetch(`${API_BASE_URL}/api/v1/drops`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...countryHeader() },
+            body: JSON.stringify(extra),
+          });
+          if (!r.ok) throw new Error(`Video ${i + 2} didn't post. The others before it did.`);
+        }
+      };
+
       if (streamUid || later) {
         await queueDrop(body, {
           publishAt: later,
           stream: streamUid ? { uid: streamUid, start: edit?.start ?? 0, end: edit?.end ?? null } : null,
         });
+        await postExtras();
+        setExtraVideos([]);
         await AsyncStorage.removeItem(DRAFT_KEY);
         setText('');
         Keyboard.dismiss();
         showToast({
           type: 'success',
-          title: later ? 'Queued.' : 'Almost out there.',
+          title: later ? (batch.length ? `${batch.length + 1} drops queued.` : 'Queued.') : 'Almost out there.',
           message: later
             ? `Goes live ${whenLabel(later)}.`
             : 'Polishing your video. It posts in a minute or two.',
@@ -801,6 +859,8 @@ export default function DropsComposeScreen({ navigation, route }) {
       const data = await res.json();
       const id   = data?.id;
       if (!id) throw new Error('No drop ID returned.');
+      await postExtras();
+      setExtraVideos([]);
 
       // The server queues eligible drops for socials automatically.
 
@@ -811,7 +871,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       Keyboard.dismiss();
       showToast({
         type: 'success',
-        title: 'Dropped.',
+        title: batch.length ? `${batch.length + 1} drops posted.` : 'Dropped.',
         message: 'The quiet just got louder.',
       });
       dispatch(awardMilestone('first_drop'));
@@ -830,7 +890,7 @@ export default function DropsComposeScreen({ navigation, route }) {
     format, text, fullText, category, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, storyTopics, paidPrice, isSuperAdmin,
-    isAdmin, videoEdit, videoMeta, coverAt, soundId, muteOriginal, promo, promoHours, publishAt,
+    isAdmin, videoEdit, videoMeta, coverAt, soundId, extraVideos, muteOriginal, promo, promoHours, publishAt,
     dispatch, navigation, showToast,
   ]);
 
@@ -1153,6 +1213,32 @@ export default function DropsComposeScreen({ navigation, route }) {
                 </View>
               ))}
               <Text style={s.extraImagesCount}>{extraImageUris.length + 1} photos</Text>
+            </ScrollView>
+          )}
+
+          {/* Extra videos (admin): each posts as its own drop. */}
+          {extraVideos.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={s.extraImagesStrip}
+              contentContainerStyle={s.extraImagesStripContent}
+            >
+              {extraVideos.map((v) => (
+                <View key={v.uri} style={s.extraImageTile}>
+                  {v.thumb ? <Image source={{ uri: v.thumb }} style={s.extraImageThumb} /> : <View style={[s.extraImageThumb, { backgroundColor: '#000' }]} />}
+                  <TouchableOpacity
+                    style={s.extraImageRemove}
+                    onPress={() => setExtraVideos((l) => l.filter((x) => x.uri !== v.uri))}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.85}
+                    accessibilityLabel="Remove video"
+                  >
+                    <X size={rs(10)} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <Text style={s.extraImagesCount}>{extraVideos.length + 1} videos · each its own drop</Text>
             </ScrollView>
           )}
 

@@ -154,3 +154,11 @@
 .ps-drop .ps-drop-ic svg { width: 26px; height: 26px; }
 .ps-drop .up-specs span { font-size: 11.5px; }
 .ps-video { justify-items: stretch; }
+
+/* several videos at once: each posts as its own drop */
+.ps-batch { display: grid; gap: 10px; width: 100%; padding-top: 6px; }
+.ps-batch-item { position: relative; display: grid; grid-template-columns: 72px 1fr; gap: 10px; align-items: start; }
+.ps-video .ps-batch-item video { width: 72px; height: 96px; object-fit: cover; border-radius: 10px; background: #000; max-height: none; }
+.ps-batch-item > div { display: grid; gap: 8px; min-width: 0; }
+.ps-batch-item input { width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: inherit; font: inherit; font-size: 14px; }
+.ps-batch-item .rm { position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; display: grid; place-items: center; cursor: pointer; }

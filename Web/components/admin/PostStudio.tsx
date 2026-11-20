@@ -40,7 +40,10 @@ const MAX_VID_MB = 500;
 const EMPTY_PLACE: LocationDraft = { country: "", county: "", subCounty: "", estate: "" };
 
 type Pick = { file: File; url: string };
-type Done = { id?: string; scheduledFor?: string; finishing?: boolean };
+type Done = { id?: string; scheduledFor?: string; finishing?: boolean; count?: number };
+// Extra videos picked together: each one posts as its own drop (own id), sharing the settings.
+type Extra = { key: string; pick: Pick; up: BgUpload; len: number; caption: string };
+const MAX_BATCH = 10;
 
 const PROMO_HOURS: [number, string][] = [[6, "6 hours"], [24, "1 day"], [72, "3 days"], [168, "7 days"]];
 
@@ -65,6 +68,11 @@ export default function PostStudio() {
   const bgRef = useRef<BgUpload | null>(null);
   bgRef.current = bg;
   useEffect(() => () => bgRef.current?.cancel(), []);
+  const [extras, setExtras] = useState<Extra[]>([]);
+  const extrasRef = useRef<Extra[]>([]);
+  extrasRef.current = extras;
+  useEffect(() => () => extrasRef.current.forEach((x) => x.up.cancel()), []);
+  const replacing = useRef(false);
   const [error, setError] = useState("");
   const [published, setPublished] = useState<Done | null>(null);
   const [drag, setDrag] = useState(false);
@@ -132,7 +140,13 @@ export default function PostStudio() {
     : "";
   const laterMissing = later && (!laterAt || new Date(laterAt).getTime() < Date.now() + 60000) ? "Pick a time at least a minute from now." : "";
   const bgState = useBgUpload(format === "video" ? bg : null);
-  const uploadFailed = bgState?.status === "error" ? "The video didn't upload. Tap Retry on it." : "";
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const subs = extras.map((x) => x.up.subscribe(() => bump((n) => n + 1)));
+    return () => subs.forEach((u) => u());
+  }, [extras]);
+  const extraFailed = format === "video" && extras.some((x) => x.up.state.status === "error");
+  const uploadFailed = bgState?.status === "error" || extraFailed ? "A video didn't upload. Tap Retry on it." : "";
   const blocker = missing || laterMissing || uploadFailed;
 
   function track(file: File): Pick {
@@ -151,12 +165,20 @@ export default function PostStudio() {
     setError("");
     const files = Array.from(list);
     if (format === "video") {
-      const picked = files.find((x) => x.type.startsWith("video/"));
-      if (!picked) return setError("That isn't a video file.");
-      if (picked.size > MAX_VID_MB * 1024 * 1024) return setError(`That video is too big. Max ${MAX_VID_MB}MB.`);
+      const vids = files.filter((x) => x.type.startsWith("video/"));
+      if (!vids.length) return setError("That isn't a video file.");
+      const big = vids.find((x) => x.size > MAX_VID_MB * 1024 * 1024);
+      if (big) return setError(`${big.name} is too big. Max ${MAX_VID_MB}MB per video.`);
+      // The first fills the main slot (trim, text, cover); the rest each become their own drop.
+      const main = !video || replacing.current;
+      replacing.current = false;
+      const picked = main ? vids[0] : null;
+      const rest = main ? vids.slice(1) : vids;
+      if (rest.length) await addExtras(rest);
+      if (!picked) return;
       // Copy it now, while Android still lets the page read it (see lib/localCopy.ts).
       setBusy("Preparing video…");
-      await clearLocalCopies();
+      if (!extrasRef.current.length && !rest.length) await clearLocalCopies();
       let f: File;
       try { f = await keepReadable(picked); } catch (e) { setBusy(""); return setError((e as Error).message); }
       setBusy("Checking video…");
@@ -183,6 +205,31 @@ export default function PostStudio() {
     let kept: File[];
     try { kept = await Promise.all(imgs.slice(0, room).map(keepReadable)); } catch (e) { return setError((e as Error).message); }
     setPhotos((p) => [...p, ...kept.map(track)]);
+  }
+
+  async function addExtras(list: File[]) {
+    const room = MAX_BATCH - 1 - extrasRef.current.length;
+    if (room <= 0) return setError(`Up to ${MAX_BATCH} videos at a time.`);
+    if (list.length > room) setError(`Up to ${MAX_BATCH} videos at a time. Extras were skipped.`);
+    setBusy("Preparing videos…");
+    const out: Extra[] = [];
+    for (const raw of list.slice(0, room)) {
+      try {
+        const f = await keepReadable(raw);
+        out.push({ key: `${Date.now()}-${Math.random()}`, pick: track(f), up: new BgUpload(f), len: await videoLength(f), caption: "" });
+      } catch (e) { setError((e as Error).message); }
+    }
+    setBusy("");
+    setExtras((l) => [...l, ...out]);
+  }
+
+  function removeExtra(key: string) {
+    extrasRef.current.find((x) => x.key === key)?.up.cancel();
+    setExtras((l) => l.filter((x) => x.key !== key));
+  }
+
+  function retryExtra(key: string) {
+    setExtras((l) => l.map((x) => (x.key === key ? { ...x, up: new BgUpload(x.pick.file) } : x)));
   }
 
   function removeVideo() {
@@ -264,10 +311,10 @@ export default function PostStudio() {
         media = { poll: { question: question.trim(), options: opts.slice(0, 4) } };
       }
       setBusy(later ? "Scheduling…" : "Publishing…");
-      const body = {
+      const build = (caption: string, m: Record<string, unknown>) => ({
           kind: "confession",
           // the API needs some text on every drop; a poll's question stands in for a caption
-          confession: text.trim() || (format === "poll" ? question.trim() : undefined),
+          confession: caption || (format === "poll" ? question.trim() : undefined),
           font_style: "classic",
           ...(topicNote ? { tags: [topicNote] } : {}),
           sensitivity: mature ? "mature" : "general",
@@ -278,10 +325,43 @@ export default function PostStudio() {
           ...(place.estate.trim() ? { location_estate: place.estate.trim() } : {}),
           ...(sound && format !== "voice" ? { sound_id: sound.id, sound_mute_original: format === "video" && muteOriginal } : {}),
           ...(promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
-          ...media,
-      };
+          ...m,
+      });
+      const body = build(text.trim(), media);
+      const batch = format === "video" ? extras : [];
+      const at = later ? new Date(laterAt).toISOString() : null;
+      if (batch.length) {
+        // Several videos: each becomes its own drop. Stream ones finish in the background.
+        const all = [{ body, uid: streamUid, edit: streamEdit }];
+        for (let i = 0; i < batch.length; i++) {
+          const x = batch[i];
+          const n = `${i + 2} of ${batch.length + 1}`;
+          setBusy(`Preparing video ${n}…`);
+          const edit = x.len ? defaultEdit(x.len) : null;
+          let cover_url: string | undefined;
+          if (x.len) { try { cover_url = await uploadFile(await captureCover(x.pick.url, 0, []), "image"); } catch { /* feed falls back to the video */ } }
+          const unsub = x.up.subscribe((st) => setBusy(`Uploading video ${n}… ${st.pct}%`));
+          let up: BgResult;
+          try { up = await x.up.wait(); } finally { unsub(); }
+          const cap = x.caption.trim() || text.trim();
+          const cov = cover_url ? { cover_url } : {};
+          if ("streamUid" in up) all.push({ body: build(cap, { media_type: "video", ...cov }), uid: up.streamUid, edit });
+          else all.push({ body: build(cap, { media_type: "video", media_url: up.url, ...(isMeaningful(edit, x.len) ? { video_edit: edit } : {}), ...cov }), uid: "", edit: null });
+        }
+        let first = "";
+        let queued = false;
+        for (let i = 0; i < all.length; i++) {
+          const d = all[i];
+          setBusy(`${at ? "Scheduling" : "Publishing"} ${i + 1} of ${all.length}…`);
+          if (d.uid) { await queueStreamDrop(d.body, d.uid, d.edit, at); queued = true; }
+          else if (at) await api("/admin/scheduled", { body: { publish_at: at, drop: d.body } });
+          else { const r = await api<{ id?: string }>("/drops", { body: d.body }); first ||= r.id || ""; }
+        }
+        setSchedRefresh((k) => k + 1);
+        setPublished(at ? { scheduledFor: at, count: all.length } : { id: first || undefined, finishing: queued && !first, count: all.length });
+        return;
+      }
       if (streamUid) {
-        const at = later ? new Date(laterAt).toISOString() : null;
         const job = await queueStreamDrop(body, streamUid, streamEdit, at);
         setSchedRefresh((n) => n + 1);
         if (at) {
@@ -293,8 +373,7 @@ export default function PostStudio() {
           if (done.status === "failed") throw new Error(done.error || "Stream couldn't process this video.");
           setPublished(done.drop_id ? { id: done.drop_id } : { finishing: true });
         }
-      } else if (later) {
-        const at = new Date(laterAt).toISOString();
+      } else if (at) {
         await api("/admin/scheduled", { body: { publish_at: at, drop: body } });
         setSchedRefresh((n) => n + 1);
         setPublished({ scheduledFor: at });
@@ -311,6 +390,7 @@ export default function PostStudio() {
 
   function reset() {
     bgRef.current?.cancel(); setBg(null);
+    extrasRef.current.forEach((x) => x.up.cancel()); setExtras([]);
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
     setTopicNote(""); setMature(false); setError(""); setPublished(null);
@@ -335,16 +415,17 @@ export default function PostStudio() {
         {published.finishing ? (
           <>
             <h2>Almost there.</h2>
-            <p>Stream is still finishing the video. It posts itself as {poster} the moment it&apos;s ready, so you can leave this page. Track it under Coming up.</p>
+            <p>Stream is still finishing {published.count ? `the ${published.count} videos. Each posts as its own drop` : "the video. It posts"} itself as {poster} the moment it&apos;s ready, so you can leave this page. Track it under Coming up.</p>
           </>
         ) : published.scheduledFor ? (
           <>
-            <h2>It&apos;s queued.</h2>
-            <p>Goes live as {poster} on {new Date(published.scheduledFor).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Find it under Coming up.</p>
+            <h2>{published.count ? `${published.count} drops queued.` : <>It&apos;s queued.</>}</h2>
+            <p>{published.count ? "Each one goes" : "Goes"} live as {poster} on {new Date(published.scheduledFor).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Find it under Coming up.</p>
           </>
         ) : (
           <>
-            <h2>It&apos;s live.</h2>
+            <h2>{published.count ? `${published.count} drops posted.` : <>It&apos;s live.</>}</h2>
+            {published.count ? <p className="ps-help">Each video is its own drop. Any still processing on Stream show under Coming up until they go live.</p> : null}
             <p>Posted as {poster}{promo ? `, ${promo === "pin" ? "pinned to the top" : "boosted"} for ${PROMO_HOURS.find(([h]) => h === promoHours)?.[1]}` : ""}. Now send it somewhere it can spread.</p>
             {link ? (
               <div className="ps-share">
@@ -382,8 +463,8 @@ export default function PostStudio() {
       <span className="ps-drop-ic" aria-hidden>
         <Upload strokeWidth={2} aria-hidden />
       </span>
-      <b>{format === "video" ? "Select video to upload" : photos.length ? "Add more photos" : "Select photos to upload"}</b>
-      <span>or drag and drop {format === "video" ? "a file" : "them"} here · it starts uploading straight away</span>
+      <b>{format === "video" ? "Select videos to upload" : photos.length ? "Add more photos" : "Select photos to upload"}</b>
+      <span>or drag and drop {format === "video" ? `up to ${MAX_BATCH}` : "them"} here · {format === "video" ? "each video posts as its own drop" : "it starts uploading straight away"}</span>
       <span className="up-specs">
         {format === "video" ? (
           <><span>MP4 (H.264)</span><span>Up to 3 min</span><span>{MAX_VID_MB}MB max</span><span>Camera: Most compatible</span></>
@@ -430,7 +511,7 @@ export default function PostStudio() {
                   ref={fileRef}
                   type="file"
                   hidden
-                  multiple={format === "photo"}
+                  multiple
                   accept={format === "video" ? "video/*" : "image/*"}
                   onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
                 />
@@ -455,7 +536,7 @@ export default function PostStudio() {
                     {bg ? (
                       <UploadCard
                         up={bg}
-                        onReplace={() => fileRef.current?.click()}
+                        onReplace={() => { replacing.current = true; fileRef.current?.click(); }}
                         onCancel={removeVideo}
                         onRetry={() => setBg(new BgUpload(video.file))}
                       />
@@ -468,6 +549,24 @@ export default function PostStudio() {
                     ) : (
                       <p className="ps-note">{formatNote || "This browser can't play this video, so it can't be trimmed or captioned here. An H.264 .mp4 is the safest choice."}</p>
                     )}
+                    {extras.length ? (
+                      <div className="ps-batch">
+                        <b>{extras.length + 1} videos · each posts as its own drop</b>
+                        <small className="ps-help">These use their first 3 minutes and first frame as cover. Reach and Spotlight apply to all.</small>
+                        {extras.map((x, i) => (
+                          <div key={x.key} className="ps-batch-item">
+                            <video src={x.pick.url} muted playsInline preload="metadata" />
+                            <div>
+                              <UploadCard up={x.up} onReplace={() => removeExtra(x.key)} onCancel={() => removeExtra(x.key)} onRetry={() => retryExtra(x.key)} />
+                              <input type="text" maxLength={MAX_TEXT} value={x.caption} placeholder="Caption (blank uses the main one)" aria-label={`Caption for video ${i + 2}`}
+                                onChange={(e) => setExtras((l) => l.map((y) => (y.key === x.key ? { ...y, caption: e.target.value } : y)))} />
+                            </div>
+                            <button type="button" className="rm" aria-label="Remove video" onClick={() => removeExtra(x.key)}><X size={16} strokeWidth={2} aria-hidden /></button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {extras.length < MAX_BATCH - 1 ? <button type="button" className="ps-link" onClick={() => fileRef.current?.click()}>+ Add more videos</button> : null}
                   </div>
                 ) : drop}
               </>
