@@ -370,13 +370,17 @@ async def create_unlock_request(
             "room_user_id": owner_id, "cost": cost, "refund_after_hours": REFUND_AFTER_HOURS if cost > 0 else None}
 
 
-async def refund_silent_knocks(db, limit: int = 200) -> int:
-    """Give the coins back on paid knocks where the poster never wrote in the chat."""
+async def refund_silent_knocks(db, limit: int = 200, drop_ids: Optional[list] = None) -> int:
+    """Give the coins back on paid knocks where the poster never wrote in the chat: once the
+    24 hours are up, or straight away for `drop_ids` (hookup posts being deleted at 7 days)."""
     now = now_utc()
     done = 0
-    rows = await db["drop_unlock_requests"].find(
-        {"paid_in": True, "refunded": False, "refund_due_at": {"$ne": None, "$lte": now}},
-    ).limit(limit).to_list(None)
+    match = (
+        {"paid_in": True, "refunded": False, "target_id": {"$in": drop_ids}, "refund_due_at": {"$ne": None}}
+        if drop_ids is not None
+        else {"paid_in": True, "refunded": False, "refund_due_at": {"$ne": None, "$lte": now}}
+    )
+    rows = await db["drop_unlock_requests"].find(match).limit(limit if drop_ids is None else 5000).to_list(None)
     for r in rows:
         replied = await db["drop_messages"].count_documents(
             {"connection_id": r.get("connection_id"), "sender_id": r["owner_id"]}, limit=1,

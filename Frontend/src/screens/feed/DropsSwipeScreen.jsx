@@ -199,42 +199,18 @@ const hookupTags = (h) => {
     HOSTING_TAG[h.guided?.hosting] || null,
   ].filter(Boolean);
 };
-// Hookup posts are live for 12h; the owner can extend (up to 48h).
-const useLiveUntil = (post) => {
-  const [liveUntil, setLiveUntil] = useState(post.live_until);
-  const { showToast } = useToast();
-  useEffect(() => { setLiveUntil(post.live_until); }, [post.live_until]);
-  const extend = useCallback(async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/drops/${post.id}/extend`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not extend it right now.');
-      setLiveUntil(data.live_until);
-      showToast({ type: 'success', message: '12 more hours. Your post stays up.' });
-    } catch (e) {
-      showToast({ type: 'warning', message: e.message });
-    }
-  }, [post.id, showToast]);
-  return [liveUntil, extend];
-};
+// Hookup posts stay up 7 days, then delete themselves.
+const useLiveUntil = (post) => [post.live_until, null];
 
-const LiveChips = ({ post, isOwnPost }) => {
-  const [liveUntil, extend] = useLiveUntil(post);
+const LiveChips = ({ post }) => {
+  const [liveUntil] = useLiveUntil(post);
   if (post.kind !== 'hookup' || !liveUntil) return null;
   const left = timeLeft(liveUntil);
   return (
     <View style={sw.liveRow}>
-      <Text style={[sw.liveChip, left && sw.liveChipHot]}>{left ? `Tonight · ${left}` : 'Ended'}</Text>
+      <Text style={[sw.liveChip, left && sw.liveChipHot]}>{left || 'Ended'}</Text>
       {hookupTags(post.hookup).map((tag) => <Text key={tag} style={sw.liveChip}>{tag}</Text>)}
       {!!post.linkup_count && <Text style={sw.liveChip}>{post.linkup_count} linked up</Text>}
-      {isOwnPost && (
-        <TouchableOpacity onPress={extend} hitSlop={HIT_SLOP} style={sw.liveExtend}>
-          <Text style={sw.liveExtendText}>+12h</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 };
@@ -1003,7 +979,7 @@ const TextSlide = ({
   isOwnPost, onLinkUp, onMore, onShare, navigation, headerHeight = 0, chromeHidden = false, isActive = false,
   knockCost = UNLOCK_COST,
 }) => {
-  const [liveUntil, extendLive] = useLiveUntil(post);
+  const [liveUntil] = useLiveUntil(post);
   const cardPost = useMemo(() => ({ ...post, live_until: liveUntil }), [post, liveUntil]);
   // A sound the poster picked plays on a loop while this slide is on screen;
   // the chip under the caption mutes it.
@@ -1079,7 +1055,6 @@ const TextSlide = ({
           isOwnPost={isOwnPost}
           knockCost={knockCost}
           onKnock={onLinkUp}
-          onExtend={extendLive}
           topInset={headerHeight + rp(8)}
           bottomInset={rp(track ? 120 : 92)}
           headlineFont={fontOf(post.font_style)}

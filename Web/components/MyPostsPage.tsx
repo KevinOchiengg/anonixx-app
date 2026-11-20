@@ -4,7 +4,7 @@
  * POST /drops/{id}/boost, POST /drops/{id}/extend, DELETE /drops/{id}. */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Bookmark, Eye, Heart, MessageCircle, DoorOpen, Rocket, Pencil, Clock, Trash2 } from "lucide-react";
+import { Bookmark, Eye, Heart, MessageCircle, DoorOpen, Rocket, Pencil, Trash2 } from "lucide-react";
 import { api, compact } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { timeLeft } from "@/lib/linkup";
@@ -55,11 +55,6 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
     refresh();
     onToast(`Boosted for ${hours} hours.`);
   });
-  const extend = () => run("extend", async () => {
-    const r = await api<{ live_until: string }>(`/drops/${p.id}/extend`, { method: "POST" });
-    onChange(p.id, { live_until: r.live_until, is_live: true });
-    onToast("More time added.");
-  });
   const remove = () => run("delete", async () => {
     await api(`/drops/${p.id}`, { method: "DELETE" });
     onRemove(p.id);
@@ -88,9 +83,11 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
 
       <div className="mp-chips">
         {p.under_review ? <span className="warn">Under review</span> : null}
-        {hookup ? (left ? <span className="live">Live · {left}</span> : <span>Ended</span>) : null}
+        {hookup ? (left ? <span className="live">Deletes in {left.replace(" left", "")}</span> : <span>Ended</span>) : null}
         {boostLeft ? <span className="boost">Boosted · {boostLeft}</span> : null}
       </div>
+
+      {hookup ? <p className="mp-note">Stays up 7 days, then deletes itself. Link Ups you never answer are refunded.</p> : null}
 
       <div className="mp-stats">
         <Stat icon={<Eye aria-hidden />} n={p.views_count} label="views" />
@@ -114,7 +111,6 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
           {hookup && p.is_live && !p.under_review ? (
             <button type="button" className="hot" onClick={() => setConfirm("boost")}><Rocket aria-hidden />{boostLeft ? "Boost more" : "Boost"} · {cost}</button>
           ) : null}
-          {hookup ? <button type="button" disabled={busy === "extend"} onClick={extend}><Clock aria-hidden />Add time</button> : null}
           <button type="button" className="del" onClick={() => setConfirm("delete")} aria-label="Delete"><Trash2 aria-hidden /></button>
         </div>
       ) : null}

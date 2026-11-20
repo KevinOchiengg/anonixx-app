@@ -37,3 +37,5 @@
 @keyframes mp-pulse { to { opacity: .5; } }
 .mp-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--line); font-size: 13.5px; }
 @media (max-width: 380px) { .mp-sum { grid-template-columns: repeat(2, 1fr); } }
+
+.mp-note { margin: 0; font-size: 12px; color: var(--muted); }

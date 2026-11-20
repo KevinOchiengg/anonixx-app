@@ -363,7 +363,7 @@ export default function GuidedConfession({ navigation, onBack }) {
               </TouchableOpacity>
             </View>
             <Text style={s.footNote}>
-              {missing || `18+ only. Balance ${coinBalance ?? 0}.`}
+              {missing || `Stays up 7 days, then deletes itself. Link Ups you never answer are refunded. 18+ only. Balance ${coinBalance ?? 0}.`}
               {!missing && coinBalance < POST_COST ? <Text style={s.link} onPress={() => navigation.navigate('Coins')}>  Top up</Text> : null}
             </Text>
           </View>

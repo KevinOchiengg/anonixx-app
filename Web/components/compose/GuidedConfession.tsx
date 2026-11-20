@@ -270,7 +270,7 @@ export default function GuidedConfession({ onBack }: { onBack: () => void }) {
           <button className="btn" disabled={!!missing || posting} onClick={publish}>{posting ? "Dropping…" : `Drop it · ${COST.post} coins`}</button>
           {missing ? <p className="hk-missing">{missing}</p> : (
             <p className="muted small">
-              18+ only. Free with a subscription. You have {user?.coin_balance ?? 0} coins.
+              Stays up 7 days, then deletes itself. Link Ups you never answer are refunded. 18+ only. Free with a subscription. You have {user?.coin_balance ?? 0} coins.
               {short ? <> <Link href="/coins">Get coins</Link></> : null}
             </p>
           )}

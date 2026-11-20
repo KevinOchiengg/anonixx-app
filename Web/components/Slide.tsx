@@ -4,7 +4,7 @@ import { splitHook } from "@/lib/captionHook";
 import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { FRESH_LABEL, hookupTags, timeLeft } from "@/lib/linkup";
+import { hookupTags, timeLeft } from "@/lib/linkup";
 import { allowMature, useMatureOk } from "@/lib/matureConsent";
 import VideoPlayer, { TAP_GAP } from "./VideoPlayer";
 import FitImage from "./FitImage";
@@ -327,24 +327,13 @@ export default function Slide({
   );
   const voted = post.poll ? post.poll.voted_option !== null : false;
 
-  async function extend() {
-    try {
-      const r = await api<{ live_until: string }>(`/drops/${post.id}/extend`, { method: "POST" });
-      onPatch(post.id, { live_until: r.live_until });
-      onToast("More time added. Your post stays up.");
-    } catch (e) {
-      onToast((e as Error).message);
-    }
-  }
-
   const left = post.kind === "hookup" ? timeLeft(post.live_until) : null;
   const tags = hookupTags(post.hookup);
   const liveChips = post.kind === "hookup" && (left || post.linkup_count || post.is_own_post || tags.length) ? (
     <div className="live-chips">
-      {left ? <span className="hot">{FRESH_LABEL[post.hookup?.fresh_window || "tonight"] || "Tonight"} · {left}</span> : post.live_until ? <span>Ended</span> : null}
+      {left ? <span className="hot" title="Hookup confessions delete themselves after 7 days">{left}</span> : post.live_until ? <span>Ended</span> : null}
       {tags.map((t) => <span key={t}>{t}</span>)}
       {post.linkup_count ? <span>{post.linkup_count} linked up</span> : null}
-      {post.is_own_post && post.live_until ? <button onClick={extend}>{(post.hookup?.fresh_window || "tonight") === "tonight" ? "+12h" : "+3 days"}</button> : null}
     </div>
   ) : null;
 
@@ -472,9 +461,6 @@ export default function Slide({
             // the poster's font stays on the headline; the body is always the plain sans
             fontStyle={post.font_style ? dropFontStyle(post.font_style) : undefined}
             onKnock={knock}
-            extend={post.is_own_post && post.kind === "hookup" && post.live_until ? (
-              <button type="button" onClick={extend}>{(post.hookup?.fresh_window || "tonight") === "tonight" ? "+12h" : "+3 days"}</button>
-            ) : null}
           />
         ) : null}
         {!card && post.content ? (

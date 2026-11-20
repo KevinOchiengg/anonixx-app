@@ -258,13 +258,14 @@ FRESH_WINDOWS = {
 }
 
 
+# Every hookup confession stays up this long, then deletes itself (tasks/drop_cleanup.py),
+# refunding any Link Up the poster never answered.
+HOOKUP_LIFETIME = timedelta(days=7)
+
+
 def fresh_until(window: Optional[str], now: datetime) -> datetime:
-    """When a new hookup post in this window stops being discoverable."""
-    first = FRESH_WINDOWS.get(window or "tonight", FRESH_WINDOWS["tonight"])[0]
-    if first is None:   # weekend: through the end of the coming Sunday (UTC)
-        days = (6 - now.weekday()) % 7
-        return (now + timedelta(days=days)).replace(hour=23, minute=59, second=0, microsecond=0)
-    return now + first
+    """When a new hookup post stops being discoverable (and is deleted): 7 days, whatever the window."""
+    return now + HOOKUP_LIFETIME
 
 
 # Smart trim: the video is stored untouched; clients play the chosen window and text overlays.
@@ -2409,8 +2410,7 @@ async def extend_hookup(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    """Keeps a hookup post live another HOOKUP_LIVE_HOURS (from now if it already
-    ran out), up to HOOKUP_MAX_LIVE_HOURS after it was posted. Owner only."""
+    """Retired: hookup posts now run a fixed 7 days. Kept so older app builds get a clear answer."""
     try:
         oid = ObjectId(drop_id)
     except Exception:
@@ -2422,6 +2422,7 @@ async def extend_hookup(
         raise HTTPException(status_code=403, detail="Only the person who posted it can extend it.")
     if drop.get("kind") != "hookup":
         raise HTTPException(status_code=400, detail="Only hookup posts run on a timer.")
+    raise HTTPException(status_code=400, detail="Hookup confessions stay up 7 days, then delete themselves. Post a fresh one after.")
     now = now_utc()
     _, step, most = FRESH_WINDOWS.get((drop.get("hookup") or {}).get("fresh_window") or "tonight", FRESH_WINDOWS["tonight"])
     ceiling = _aware(drop["created_at"]) + most

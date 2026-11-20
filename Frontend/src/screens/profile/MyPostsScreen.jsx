@@ -83,11 +83,6 @@ function PostCard({ p, cost, hours, onChange, onRemove }) {
       showToast({ type: 'success', message: `Boosted for ${hours} hours.` });
     }) },
   ]);
-  const extend = () => run('extend', async () => {
-    const r = await call(`/drops/${p.id}/extend`, 'POST');
-    onChange(p.id, { live_until: r.live_until, is_live: true });
-    showToast({ type: 'success', message: 'More time added.' });
-  });
   const remove = () => Alert.alert('Delete this post?', 'This can\'t be undone.', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: () => run('delete', async () => {
@@ -120,10 +115,12 @@ function PostCard({ p, cost, hours, onChange, onRemove }) {
       {(p.under_review || hookup || boostLeft) && (
         <View style={s.row}>
           {p.under_review && <Text style={[s.chip, s.chipWarn]}>Under review</Text>}
-          {hookup && <Text style={[s.chip, left && s.chipLive]}>{left ? `Live · ${left}` : 'Ended'}</Text>}
+          {hookup && <Text style={[s.chip, left && s.chipLive]}>{left ? `Deletes in ${left.replace(' left', '')}` : 'Ended'}</Text>}
           {!!boostLeft && <Text style={[s.chip, s.chipBoost]}>Boosted · {boostLeft}</Text>}
         </View>
       )}
+
+      {hookup && <Text style={s.note}>Stays up 7 days, then deletes itself. Link Ups you never answer are refunded.</Text>}
 
       <View style={s.row}>
         <Stat Icon={Eye} n={p.views_count} label="views" />
@@ -139,7 +136,6 @@ function PostCard({ p, cost, hours, onChange, onRemove }) {
           {hookup && p.is_live && !p.under_review && (
             <Btn Icon={Rocket} label={`${boostLeft ? 'Boost more' : 'Boost'} · ${cost}`} hot onPress={boost} disabled={busy === 'boost'} />
           )}
-          {hookup && <Btn Icon={Clock} label="Add time" onPress={extend} disabled={busy === 'extend'} />}
           <View style={{ flex: 1 }} />
           <Btn Icon={Trash2} label="" onPress={remove} disabled={busy === 'delete'} />
         </View>
@@ -202,6 +198,7 @@ export default function MyPostsScreen({ navigation }) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: 'transparent' },
+  note: { color: T.textMute, fontSize: FONT.xs, lineHeight: FONT.xs * 1.45 },
   header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   title: { color: T.text, fontFamily: 'DMSans-Bold', fontSize: FONT.lg },
   list: { padding: SPACING.md, gap: SPACING.sm, paddingBottom: rp(60) },
