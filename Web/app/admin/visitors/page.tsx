@@ -9,6 +9,7 @@ import { Bars, country, dur, flag, type Row } from "@/components/admin/visitors/
 import { JourneyModal, PageDetail, type Journey } from "@/components/admin/visitors/Details";
 import { LivePanel, RecentVisitors } from "@/components/admin/visitors/Live";
 import { BestTimes, CountryTastes } from "@/components/admin/visitors/Panels";
+import { usePaged } from "@/components/admin/bits";
 
 type Period = {
   visitors: number; new_visitors: number; returning_visitors: number; sessions: number; views: number;
@@ -178,13 +179,14 @@ function Overview({ d }: { d: Data }) {
 }
 
 function Content({ d, days, pick }: { d: Data; days: number; pick: (p: string) => void }) {
+  const pg = usePaged(d.top_drops || [], { text: (x) => x.teaser });
   return (
     <>
       <div className="adm-panel w7">
         <h3>Drops that pull people in</h3>
         {d.top_drops?.length ? (
-          <ul className="adm-bars">
-            {d.top_drops.map((x) => (
+          <><ul className="adm-bars">
+            {pg.rows.map((x) => (
               <li key={x.id || x.teaser}>
                 <span>
                   {x.id ? <button type="button" className="adm-linkbtn" onClick={() => pick(`/drop/${x.id}`)}>{x.teaser}</button> : x.teaser}
@@ -194,7 +196,7 @@ function Content({ d, days, pick }: { d: Data; days: number; pick: (p: string) =
                 <b>{x.views}</b><small>{x.visitors} ppl</small>
               </li>
             ))}
-          </ul>
+          </ul>{pg.tools}</>
         ) : <p className="adm-empty">No drop pages opened yet.</p>}
       </div>
       <div className="adm-panel w5">
@@ -254,7 +256,7 @@ function Sources({ d }: { d: Data }) {
       </div>
       <div className="adm-panel w4">
         <h3>Countries</h3>
-        <Bars rows={d.countries || []} color="#3B82F6" label={(k) => `${flag(k)} ${country(k)}`} empty="No visits yet." />
+        <Bars rows={d.countries || []} color="#3B82F6" label={(k) => `${flag(k)} ${country(k)}`} find={country} empty="No visits yet." />
       </div>
       <div className="adm-panel w4">
         <h3>Devices</h3>

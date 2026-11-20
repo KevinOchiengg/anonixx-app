@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { LineChart } from "@/components/admin/charts";
+import { usePaged } from "@/components/admin/bits";
 
 type Money = {
   days: number;
@@ -25,6 +26,7 @@ type PaidDrops = {
 // Paid drops (super admin videos with a clear preview): which teasers sell. All time.
 function PaidDropsPanel() {
   const [p, setP] = useState<PaidDrops | null>(null);
+  const pg = usePaged(p?.drops || [], { text: (d) => d.caption || "" });
   const [err, setErr] = useState("");
   useEffect(() => { api<PaidDrops>("/admin/insights/paid-drops").then(setP).catch((e) => setErr((e as Error).message)); }, []);
   return (
@@ -41,7 +43,7 @@ function PaidDropsPanel() {
           <table className="adm-table">
             <thead><tr><th>Caption</th><th>Price</th><th>Views</th><th>Unlocks</th><th>Conversion</th><th>Coins</th></tr></thead>
             <tbody>
-              {p.drops.map((d) => (
+              {pg.rows.map((d) => (
                 <tr key={d.id}>
                   <td>{d.caption || <span className="muted">(no caption)</span>}</td>
                   <td>{d.price}</td>
@@ -53,6 +55,7 @@ function PaidDropsPanel() {
               ))}
             </tbody>
           </table>
+          {pg.tools}
         </>
       )}
     </div>

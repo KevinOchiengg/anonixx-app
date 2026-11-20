@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { fmtDate } from "@/components/admin/bits";
 import { LineChart } from "@/components/admin/charts";
 import { Bars, PageLink, ago, country, dur, flag, type Row } from "./shared";
+import { usePaged } from "@/components/admin/bits";
 
 type PageStats = {
   path: string; days: number;
@@ -95,6 +96,7 @@ export function PageDetail({ path, days, onClose, onPick }: { path: string; days
 
 /** One visitor's path through the site, step by step. */
 export function JourneyModal({ open, onClose, pick }: { open: Journey; onClose: () => void; pick: (p: string) => void }) {
+  const pg = usePaged(open.events, { size: 30, text: (e) => e.type });
   return (
     <div className="adm-modal" onClick={() => onClose()}>
       <div onClick={(e) => e.stopPropagation()}>
@@ -106,8 +108,8 @@ export function JourneyModal({ open, onClose, pick }: { open: Journey; onClose: 
           {flag(open.visitor.country)} {country(open.visitor.country)} · {open.visitor.device} · first seen {fmtDate(open.visitor.first_seen)} · came from {open.visitor.first_ref || "direct"}
           {open.visitor.first_utm?.campaign ? ` (campaign: ${open.visitor.first_utm.campaign})` : ""}
         </p>
-        <ul className="adm-journey">
-          {open.events.map((e, i) => (
+        <><ul className="adm-journey">
+          {pg.rows.map((e, i) => (
             <li key={i}>
               <small>{ago(e.created_at)}</small>
               <b>{e.type}</b>
@@ -120,7 +122,7 @@ export function JourneyModal({ open, onClose, pick }: { open: Journey; onClose: 
               </span>
             </li>
           ))}
-        </ul>
+        </ul>{pg.tools}</>
       </div>
         </div>
   );

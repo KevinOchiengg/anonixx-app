@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/admin/bits";
+import { usePaged } from "@/components/admin/bits";
 
 type Sound = { id: string; title: string; mood: string; url: string; active: boolean };
 type Draft = { file: File; title: string; mood: string; state: "ready" | "sending" | "done" | "error"; error?: string };
@@ -19,6 +20,7 @@ const titleOf = (name: string) => name.replace(/\.[^.]+$/, "").replace(/[_-]+/g,
 
 export default function AdminSounds() {
   const [sounds, setSounds] = useState<Sound[] | null>(null);
+  const pg = usePaged(sounds || [], { size: 12, text: (s) => s.title });
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -136,8 +138,8 @@ export default function AdminSounds() {
 
       <h3 style={{ marginTop: 22 }}>Library</h3>
       {!sounds ? <p className="muted">Loading…</p> : sounds.length === 0 ? <p className="muted">No sounds yet. Confessions stay silent until you add some.</p> : (
-        <div className="adm-list">
-          {sounds.map((s) => (
+        <><div className="adm-list">
+          {pg.rows.map((s) => (
             <div key={s.id} className="adm-card" style={s.active ? undefined : { opacity: 0.6 }}>
               {editing === s.id ? (
                 <div className="adm-search" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -166,7 +168,7 @@ export default function AdminSounds() {
               </div>
             </div>
           ))}
-        </div>
+        </div>{pg.tools}</>
       )}
     </>
   );

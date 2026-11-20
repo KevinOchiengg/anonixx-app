@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { flag, type Row } from "./shared";
+import { usePaged } from "@/components/admin/bits";
 
 type Best = { grid: number[][]; suggestions: { weekday: number; hour: number; visitors: number }[]; enough_data: boolean };
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -45,6 +46,7 @@ type CountryTaste = {
 export function CountryTastes({ days, onPick }: { days: number; onPick: (p: string) => void }) {
   const span = Math.max(days, 7);
   const [d, setD] = useState<CountryTaste[] | null>(null);
+  const pg = usePaged(d || [], { text: (c) => c.country });
   useEffect(() => {
     api<{ countries: CountryTaste[] }>(`/admin/insights/country-tastes?days=${span}`).then((r) => setD(r.countries)).catch(() => {});
   }, [span]);
@@ -61,7 +63,7 @@ export function CountryTastes({ days, onPick }: { days: number; onPick: (p: stri
         <div className="adm-scroll">
           <table className="adm-table">
             <thead><tr><th>Country</th><th>Opens</th><th>Moods</th><th>Kinds</th><th>Most opened drop</th></tr></thead>
-            <tbody>{d.map((c) => (
+            <tbody>{pg.rows.map((c) => (
               <tr key={c.country}>
                 <td>{flag(c.cc)} {c.country}</td>
                 <td>{c.opens}<br /><small className="muted">{c.web} web · {c.app} app</small></td>
@@ -74,6 +76,7 @@ export function CountryTastes({ days, onPick }: { days: number; onPick: (p: stri
               </tr>
             ))}</tbody>
           </table>
+          {pg.tools}
         </div>
       ) : <p className="adm-empty">No drop opens with a known country yet.</p>}
     </div>

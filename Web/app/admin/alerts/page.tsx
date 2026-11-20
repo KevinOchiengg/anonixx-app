@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Tabs, fmtDate, useTab } from "@/components/admin/bits";
 import HealthView from "@/components/admin/HealthView";
 import { useAdminRole } from "@/components/admin/AdminShell";
+import { usePaged } from "@/components/admin/bits";
 
 type Alert = { id: string; type: string; level: "good" | "warn" | "bad"; title: string; body: string; link: string | null; created_at: string | null; dismissed: boolean };
 
@@ -15,6 +16,7 @@ export default function SystemPage() {
   const [view, setView] = useTab(VIEWS);
   const [all, setAll] = useState(false);
   const [list, setList] = useState<Alert[] | null>(null);
+  const pg = usePaged(list || [], { size: 12, text: (a) => a.title });
   const [err, setErr] = useState("");
   const load = useCallback(() => {
     api<{ alerts: Alert[] }>(`/admin/alerts${all ? "?include_dismissed=true" : ""}`).then((r) => setList(r.alerts)).catch((e) => setErr((e as Error).message));
@@ -35,8 +37,8 @@ export default function SystemPage() {
       <p className="muted small">Checked every 15 minutes: signups stopping, payments failing, auto-posting breaking, reports or traffic spiking. Super admins also get each by push and email.</p>
       {err ? <p className="err">{err}</p> : null}
       {!list ? <p className="muted small">Loading…</p> : list.length === 0 ? <p className="adm-empty">All quiet. Nothing needs you right now.</p> : (
-        <div className="adm-list">
-          {list.map((a) => (
+        <><div className="adm-list">
+          {pg.rows.map((a) => (
             <div key={a.id} className="adm-alert" style={a.dismissed ? { opacity: 0.55 } : undefined}>
               <span className={`lv ${a.level}`} aria-hidden />
               <div>
@@ -50,7 +52,7 @@ export default function SystemPage() {
               </div>
             </div>
           ))}
-        </div>
+        </div>{pg.tools}</>
       )}
       </>}
     </>

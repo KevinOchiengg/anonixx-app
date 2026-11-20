@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Badge, fmtDate, theirTime } from "@/components/admin/bits";
 import { PageLink, ago, country, flag } from "./shared";
 import type { Visitor } from "./Details";
+import { usePaged } from "@/components/admin/bits";
 
 type LiveWeb = {
   vid: string; path: string; country: string | null; device: string | null; browser: string | null;
@@ -26,6 +27,8 @@ const onFor = (iso?: string | null) => {
 /** Everyone here right now: app users (signed in, so with their account) and site visitors (anonymous). */
 export function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => void; onPick: (p: string) => void }) {
   const [d, setD] = useState<Live | null>(null);
+  const pApp = usePaged(d?.app || [], { text: (a) => `${a.name || ""} ${a.user_id}` });
+  const pWeb = usePaged(d?.web || [], { text: (w) => w.vid });
   useEffect(() => {
     let live = true;
     const load = () => api<Live>("/admin/live").then((r) => { if (live) setD(r); }).catch(() => {});
@@ -45,7 +48,7 @@ export function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => v
         <div className="adm-scroll">
           <table className="adm-table">
             <thead><tr><th>Person</th><th>Where</th><th>On for</th><th>Drops seen</th><th>Joined</th><th>Money</th></tr></thead>
-            <tbody>{d.app.map((a) => (
+            <tbody>{pApp.rows.map((a) => (
               <tr key={a.user_id}>
                 <td>
                   <Link href={`/admin/users/${a.user_id}`}>{a.name || a.user_id.slice(-6)}</Link>
@@ -64,6 +67,7 @@ export function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => v
               </tr>
             ))}</tbody>
           </table>
+          {pApp.tools}
         </div>
       ) : <p className="adm-empty">Nobody in the app right now.</p>}
 
@@ -73,7 +77,7 @@ export function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => v
         <div className="adm-scroll">
           <table className="adm-table">
             <thead><tr><th>Visitor</th><th>Where</th><th>On for</th><th>This visit</th><th>Opened</th><th>Now on</th></tr></thead>
-            <tbody>{d.web.map((w) => (
+            <tbody>{pWeb.rows.map((w) => (
               <tr key={w.vid}>
                 <td>
                   <button type="button" className="adm-linkbtn" onClick={() => onJourney(w.vid)}>#{w.vid.slice(0, 6)}</button>
@@ -98,6 +102,7 @@ export function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => v
               </tr>
             ))}</tbody>
           </table>
+          {pWeb.tools}
         </div>
       ) : <p className="adm-empty">Nobody on the website right now.</p>}
     </div>
@@ -108,6 +113,7 @@ export function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => v
 /** The latest visitors in the range; click one to see their path through the site. */
 export function RecentVisitors({ days, onJourney, onPick }: { days: number; onJourney: (vid: string) => void; onPick: (p: string) => void }) {
   const [rows, setRows] = useState<Visitor[] | null>(null);
+  const pg = usePaged(rows || [], { text: (v) => v.vid });
   useEffect(() => {
     let live = true;
     const load = () => api<{ recent: Visitor[] }>(`/admin/visitors?days=${days}&tab=recent`).then((r) => { if (live) setRows(r.recent); }).catch(() => {});
@@ -123,7 +129,7 @@ export function RecentVisitors({ days, onJourney, onPick }: { days: number; onJo
           <table className="adm-table">
             <thead><tr><th>Visitor</th><th>Where</th><th>Device</th><th>Came from</th><th>Pages</th><th>Visits</th><th>Last seen</th><th>Last page</th></tr></thead>
             <tbody>
-              {rows.map((v) => (
+              {pg.rows.map((v) => (
                 <tr key={v.vid}>
                   <td>
                     <button type="button" className="adm-linkbtn" onClick={() => onJourney(v.vid)}>#{v.vid.slice(0, 6)}</button>
@@ -140,6 +146,7 @@ export function RecentVisitors({ days, onJourney, onPick }: { days: number; onJo
               ))}
             </tbody>
           </table>
+          {pg.tools}
         </div>
       ) : <p className="adm-empty">No visitors yet. They appear here as soon as someone opens the site.</p>}
     </div>

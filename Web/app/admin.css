@@ -286,3 +286,7 @@
 .lu-tag.declined, .lu-ban { background: rgba(255,59,48,.14); color: #ff6b61; }
 .lu-post { max-width: 260px; }
 .lu-post q { display: block; margin-top: 4px; opacity: .75; font-style: italic; }
+
+/* Long lists: top rows, then search + pages */
+.adm-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.adm-more .adm-input { flex: 1 1 180px; min-width: 0; }

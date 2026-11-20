@@ -1,4 +1,5 @@
 "use client";
+import { usePaged } from "@/components/admin/bits";
 
 export type Row = { key: string; count: number; visitors?: number };
 
@@ -15,14 +16,16 @@ export const ago = (iso?: string | null) => {
   return m < 1 ? "now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
 };
 
-export function Bars({ rows, color, label, empty, onPick }: {
+export function Bars({ rows, color, label, empty, onPick, find }: {
   rows: Row[]; color?: string; label?: (k: string) => React.ReactNode; empty: string; onPick?: (k: string) => void;
+  find?: (k: string) => string;   // extra words to search by, e.g. the country name for "KE"
 }) {
+  const pg = usePaged(rows, { text: (r) => `${r.key} ${find ? find(r.key) : ""}` });
   if (!rows.length) return <p className="adm-empty">{empty}</p>;
   const max = Math.max(...rows.map((r) => r.count), 1);
   return (
-    <ul className="adm-bars" style={color ? ({ "--bar": color } as React.CSSProperties) : undefined}>
-      {rows.map((r) => (
+    <><ul className="adm-bars" style={color ? ({ "--bar": color } as React.CSSProperties) : undefined}>
+      {pg.rows.map((r) => (
         <li key={r.key}>
           <i style={{ width: `${(100 * r.count) / max}%` }} />
           <span title={r.key}>
@@ -34,7 +37,7 @@ export function Bars({ rows, color, label, empty, onPick }: {
           {r.visitors !== undefined ? <small>{r.visitors} ppl</small> : null}
         </li>
       ))}
-    </ul>
+    </ul>{pg.tools}</>
   );
 }
 

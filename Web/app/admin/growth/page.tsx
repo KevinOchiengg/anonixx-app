@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
-import { Badge } from "@/components/admin/bits";
+import { Badge, usePaged } from "@/components/admin/bits";
 
 type Channel = {
   channel: string; signups: number; posted: number; active_7d: number; payers: number; usd: number; kes: number;
@@ -26,6 +26,7 @@ const money = (usd: number, kes: number) => [usd ? `$${usd.toFixed(2)}` : "", ke
 function Channels() {
   const [days, setDays] = useState(90);
   const [d, setD] = useState<{ total_signups: number; channels: Channel[] } | null>(null);
+  const pg = usePaged(d?.channels || [], { text: (c) => c.channel });
   const [err, setErr] = useState("");
   useEffect(() => {
     setD(null);
@@ -42,7 +43,7 @@ function Channels() {
           <table className="adm-table">
             <thead><tr><th>Channel</th><th>Signups</th><th>Posted</th><th>Active 7d</th><th>Paid</th><th>Revenue</th></tr></thead>
             <tbody>
-              {d.channels.map((c) => (
+              {pg.rows.map((c) => (
                 <tr key={c.channel}>
                   <td><b>{c.channel}</b></td>
                   <td>{c.signups}</td>
@@ -54,6 +55,7 @@ function Channels() {
               ))}
             </tbody>
           </table>
+          {pg.tools}
         </div>
       )}
       <p className="muted small">Tip: share links with <code>?utm_source=tiktok&amp;utm_campaign=…</code> (or a referral code) so each channel gets its own row.</p>
@@ -63,6 +65,7 @@ function Channels() {
 
 function Retention() {
   const [d, setD] = useState<{ cohorts: Cohort[] } | null>(null);
+  const pg = usePaged(d ? [...d.cohorts].reverse() : [], { text: (c) => c.week });
   const [err, setErr] = useState("");
   useEffect(() => { api<{ cohorts: Cohort[] }>("/admin/insights/retention?weeks=10").then(setD).catch((e) => setErr((e as Error).message)); }, []);
   return (
@@ -74,7 +77,7 @@ function Retention() {
           <table className="adm-table">
             <thead><tr><th>Joined week of</th><th>People</th><th>Next day</th><th>Week 2</th><th>Month 2</th></tr></thead>
             <tbody>
-              {[...d.cohorts].reverse().map((c) => (
+              {pg.rows.map((c) => (
                 <tr key={c.week}>
                   <td>{new Date(c.week).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</td>
                   <td>{c.users}</td>
@@ -85,6 +88,7 @@ function Retention() {
               ))}
             </tbody>
           </table>
+          {pg.tools}
         </div>
       )}
       <p className="muted small">Activity is counted from signed-in visits since 27 Oct 2026, plus the days people posted, so older weeks may read low.</p>
@@ -95,6 +99,7 @@ function Retention() {
 function Drops() {
   const { isSuper } = useAdminRole();
   const [d, setD] = useState<{ signups_total: number; signups_after_a_drop: number; drops: DropRow[] } | null>(null);
+  const pg = usePaged(d?.drops || [], { text: (r) => r.teaser });
   const [err, setErr] = useState("");
   useEffect(() => {
     if (isSuper) api<{ signups_total: number; signups_after_a_drop: number; drops: DropRow[] }>("/admin/insights/drop-conversions?days=30").then(setD).catch((e) => setErr((e as Error).message));
@@ -112,7 +117,7 @@ function Drops() {
               <table className="adm-table">
                 <thead><tr><th>Drop</th><th>Read by</th><th>Signups</th><th>Helped</th><th>Rate</th></tr></thead>
                 <tbody>
-                  {d.drops.map((r) => (
+                  {pg.rows.map((r) => (
                     <tr key={r.path}>
                       <td>{r.id ? <Link href={`/drop/${r.id}`}>{r.teaser}</Link> : r.teaser} <span className="muted small">· {r.kind}{r.media ? ` · ${r.media}` : ""}</span></td>
                       <td>{r.viewers}</td><td><b>{r.signups}</b></td><td>{r.assisted}</td><td>{r.rate}%</td>
@@ -120,6 +125,7 @@ function Drops() {
                   ))}
                 </tbody>
               </table>
+              {pg.tools}
             </div>
           )}
         </>
@@ -212,6 +218,7 @@ const pc = (n: number | null | undefined) => (n == null ? "—" : `${Math.round(
 function Discover() {
   const [days, setDays] = useState(7);
   const [d, setD] = useState<DiscoverStats | null>(null);
+  const pg = usePaged(d ? [...d.daily].reverse() : [], { text: (r) => `${r.day} ${r.surface}` });
   const [err, setErr] = useState("");
   useEffect(() => {
     setD(null);
@@ -236,13 +243,14 @@ function Discover() {
             <table className="adm-table">
               <thead><tr><th>Day</th><th>Where</th><th>Searches</th><th>Empty</th><th>Any-word fallback</th><th>Avg ms</th><th>Slowest</th></tr></thead>
               <tbody>
-                {d.daily.length ? [...d.daily].reverse().map((r) => (
+                {pg.rows.length ? pg.rows.map((r) => (
                   <tr key={r.day + r.surface}>
                     <td>{r.day}</td><td>{r.surface}</td><td>{r.requests}</td><td>{pc(r.zero_rate)}</td><td>{pc(r.loose_rate)}</td><td>{r.avg_ms}</td><td>{r.max_ms}</td>
                   </tr>
                 )) : <tr><td colSpan={7} className="muted">Nothing yet. It fills in as people use Discover.</td></tr>}
               </tbody>
             </table>
+            {pg.tools}
           </div>
         </>
       )}

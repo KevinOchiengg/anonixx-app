@@ -2,12 +2,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge, fmtDate } from "@/components/admin/bits";
+import { usePaged } from "@/components/admin/bits";
 
 type Conv = { user_id: string; name: string; last_text: string; last_sender: string; last_at: string | null; unread: number };
 type Msg = { id: string; sender: string; text: string; created_at: string | null };
 
 export default function AdminSupport() {
   const [convs, setConvs] = useState<Conv[] | null>(null);
+  const pg = usePaged(convs || [], { size: 12, text: (c) => c.name });
   const [open, setOpen] = useState<Conv | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
@@ -95,8 +97,8 @@ export default function AdminSupport() {
       <h2>Customer support</h2>
       {error ? <p className="err">{error}</p> : null}
       {!convs ? <p className="muted">Loading…</p> : convs.length === 0 ? <p className="muted">No one has written in yet.</p> : (
-        <div className="adm-list">
-          {convs.map((c) => (
+        <><div className="adm-list">
+          {pg.rows.map((c) => (
             <button key={c.user_id} className="adm-card adm-link" onClick={() => setOpen(c)}>
               <div className="adm-foot">
                 <b>{c.name}</b>
@@ -106,7 +108,7 @@ export default function AdminSupport() {
               <span className="muted small">{fmtDate(c.last_at)}</span>
             </button>
           ))}
-        </div>
+        </div>{pg.tools}</>
       )}
     </>
   );

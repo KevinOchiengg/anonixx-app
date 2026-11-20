@@ -86,8 +86,12 @@ export default function AdminPostsScreen({ navigation, route }) {
   const [saving, setSaving]   = useState(false);
   const timer = useRef(null);
 
+  // Pages of 50; more load as you scroll to the bottom.
+  const [moreBusy, setMoreBusy] = useState(false);
+  const lastSearch = useRef('');
   const load = useCallback(async (search = '') => {
     setLoading(true);
+    lastSearch.current = search;
     try {
       const params = new URLSearchParams({ limit: '50', sort });
       if (search.trim()) params.set('search', search.trim());
@@ -104,6 +108,17 @@ export default function AdminPostsScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [showToast, sort, only]);
+
+  const loadMore = useCallback(async () => {
+    if (only || moreBusy || loading || posts.length >= total) return;
+    setMoreBusy(true);
+    try {
+      const params = new URLSearchParams({ limit: '50', sort, skip: String(posts.length) });
+      if (lastSearch.current.trim()) params.set('search', lastSearch.current.trim());
+      const { ok, data } = await apiFetch(`/admin/drops?${params}`);
+      if (ok) setPosts((p) => [...p, ...(data.drops || []).filter((x) => !p.some((y) => y.id === x.id))]);
+    } catch {} finally { setMoreBusy(false); }
+  }, [only, moreBusy, loading, posts.length, total, sort]);
 
   useEffect(() => { load(query); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -183,6 +198,9 @@ export default function AdminPostsScreen({ navigation, route }) {
       ) : (
         <FlatList
           data={posts}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={moreBusy ? <ActivityIndicator color={T.primary} style={{ marginVertical: 16 }} /> : null}
           keyExtractor={(p) => p.id}
           renderItem={({ item }) => (
             <PostRow

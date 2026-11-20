@@ -85,20 +85,42 @@ export default function AdminUsersScreen({ navigation, route }) {
     return { Authorization: `Bearer ${token}` };
   }, []);
 
+  // Pages of 50; more load as you scroll to the bottom.
+  const [hasMore, setHasMore] = useState(false);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const lastSearch = useRef('');
   const loadUsers = useCallback(async (search = '') => {
     setLoading(true);
+    lastSearch.current = search;
     try {
       const headers = await authHeaders();
       const params = new URLSearchParams({ limit: '50' });
       if (search.trim()) params.set('search', search.trim());
       const res = await fetch(`${API_BASE_URL}/api/v1/admin/users?${params}`, { headers });
-      if (res.ok) setUsers((await res.json()).users || []);
+      if (res.ok) { const d = await res.json(); setUsers(d.users || []); setHasMore((d.users || []).length < (d.total || 0)); }
     } catch {
       showToast({ type: 'error', message: 'Could not load users.' });
     } finally {
       setLoading(false);
     }
   }, [authHeaders, showToast]);
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || moreBusy || loading) return;
+    setMoreBusy(true);
+    try {
+      const headers = await authHeaders();
+      const params = new URLSearchParams({ limit: '50', skip: String(users.length) });
+      if (lastSearch.current.trim()) params.set('search', lastSearch.current.trim());
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users?${params}`, { headers });
+      if (res.ok) {
+        const d = await res.json();
+        const next = d.users || [];
+        setUsers((u) => [...u, ...next.filter((x) => !u.some((y) => y.id === x.id))]);
+        setHasMore(next.length > 0 && users.length + next.length < (d.total || 0));
+      }
+    } catch {} finally { setMoreBusy(false); }
+  }, [hasMore, moreBusy, loading, users.length, authHeaders]);
 
   useEffect(() => { loadUsers(''); }, [loadUsers]);
 
@@ -213,6 +235,9 @@ export default function AdminUsersScreen({ navigation, route }) {
       ) : (
         <FlatList
           data={users}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={moreBusy ? <ActivityIndicator color={T.primary} style={{ marginVertical: 16 }} /> : null}
           keyExtractor={(u) => u.id}
           extraData={openId}
           renderItem={({ item }) => (
