@@ -764,9 +764,6 @@ export default function DropsComposeScreen({ navigation, route }) {
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
         ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
-        ...(locationCounty.trim() ? { location_county: locationCounty.trim() } : {}),
-        ...(locationSubCounty.trim() ? { location_sub_county: locationSubCounty.trim() } : {}),
-        ...(locationEstate.trim() ? { location_estate: locationEstate.trim() } : {}),
         font_style: fontStyle,
         ...(isSuperAdmin && paidPrice && isVideo ? { paywall_price: paidPrice, preview_seconds: PAID_PREVIEW_SECONDS } : {}),
       };
@@ -902,8 +899,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   const previewCategory = autoCategory(category, storyTopics, fullText);
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
-  const locationSummary = [locationEstate, locationSubCounty, locationCounty, locationCountry]
-    .map((v) => v.trim()).find(Boolean) || null;
+  const locationSummary = locationCountry.trim() || null;
   const intentPrompts = INTENT_PROMPTS[cardIntent] || null;
   const placeholder = intentPrompts ? intentPrompts[promptIndex % intentPrompts.length] : FALLBACK_PLACEHOLDER;
 
@@ -1420,6 +1416,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             onChangeCounty={setLocationCounty}
             onChangeSubCounty={setLocationSubCounty}
             onChangeEstate={setLocationEstate}
+            countryOnly
           />
         </OptionSheet>
 

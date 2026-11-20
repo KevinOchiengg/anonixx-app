@@ -14,9 +14,9 @@ import { rf, rp, rs, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { splitHook } from '../../utils/captionHook';
 import { timeLeft } from '../../config/linkup';
 
-// Tints are existing tokens only: coral for Link Up, violet for Confession, soft white for Vulnerable.
+// Tints are existing tokens only: coral for Link Up and Confession, soft white for Vulnerable.
 export const CATEGORIES = {
-  curiosity: { label: 'Confession', tint: T.violet, Icon: Sparkles },
+  curiosity: { label: 'Confession', tint: T.primary, Icon: Sparkles },
   linkup: { label: 'Link Up', tint: T.primary, Icon: Flame },
   vulnerable: { label: 'Vulnerable', tint: T.text, Icon: Feather },
 };

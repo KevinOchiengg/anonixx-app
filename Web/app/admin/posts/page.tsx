@@ -4,9 +4,10 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
+import CountryField from "@/components/compose/LocationFields";
 
 type D = DropMedia & {
-  id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string; confession_full: string | null;
+  id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string; confession_full: string | null; country?: string | null;
   promo_kind: "pin" | "boost" | null; promo_until: string | null;
   media_type: string | null; report_count: number; moderation_status: string | null; created_at: string | null;
   kind: string | null;
@@ -34,7 +35,7 @@ export default function AdminPosts() {
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string; country: string } | null>(null);
   const [promoting, setPromoting] = useState<{ id: string; kind: "pin" | "boost"; hours: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -46,7 +47,7 @@ export default function AdminPosts() {
       const page = await api<Page>(`/admin/drops?${p}`);
       setData(page);
       const hit = only ? page.drops.find((x) => x.id === only) : null;
-      if (hit?.is_admin_drop) setEditing((e) => e ?? { id: hit.id, text: hit.confession_full ?? hit.confession });
+      if (hit?.is_admin_drop) setEditing((e) => e ?? { id: hit.id, text: hit.confession_full ?? hit.confession, country: hit.country || "" });
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -74,7 +75,7 @@ export default function AdminPosts() {
     if (!editing || !editing.text.trim()) return;
     setBusy(editing.id);
     try {
-      await api(`/admin/drops/${editing.id}`, { method: "PATCH", body: { confession: editing.text.trim() } });
+      await api(`/admin/drops/${editing.id}`, { method: "PATCH", body: { confession: editing.text.trim(), location_country: editing.country } });
       setEditing(null);
       // From the feed's pencil: back to the drop once it's saved.
       if (only && window.history.length > 1) { window.history.back(); return; }
@@ -118,8 +119,11 @@ export default function AdminPosts() {
               {editing?.id === d.id ? (
                 <textarea
                   className="adm-edit" rows={4} maxLength={900} autoFocus value={editing.text}
-                  onChange={(e) => setEditing({ id: d.id, text: e.target.value })} aria-label="Post text"
+                  onChange={(e) => setEditing({ ...editing, text: e.target.value })} aria-label="Post text"
                 />
+              ) : null}
+              {editing?.id === d.id ? (
+                <div className="adm-country"><CountryField value={editing.country} onChange={(country) => setEditing({ ...editing, country })} /></div>
               ) : <p className="adm-text">{d.confession || "[no text]"}</p>}
               <div className="adm-stats">
                 <span><b>{d.stats.views}</b> views</span>
@@ -158,7 +162,7 @@ export default function AdminPosts() {
                     </>
                   ) : (
                     <>
-                      {d.is_admin_drop ? <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing({ id: d.id, text: d.confession_full ?? d.confession })}>Edit</button> : null}
+                      {d.is_admin_drop ? <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing({ id: d.id, text: d.confession_full ?? d.confession, country: d.country || "" })}>Edit</button> : null}
                       {d.is_admin_drop ? (
                         d.promo_kind
                           ? <button className="adm-btn" disabled={busy === d.id} onClick={() => promote(d.id, null)}>Stop {d.promo_kind === "pin" ? "pin" : "boost"}</button>

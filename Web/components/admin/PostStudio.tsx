@@ -12,7 +12,7 @@ import { uploadFile } from "@/lib/upload";
 import { keepReadable, clearLocalCopies } from "@/lib/localCopy";
 import { sniffVideo, formatProblem } from "@/lib/videoFormat";
 import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
-import LocationFields, { type LocationDraft } from "../compose/LocationFields";
+import CountryField from "../compose/LocationFields";
 import { videoLength } from "../compose/MediaPicker";
 import VideoEditor from "../compose/VideoEditor";
 import VideoPlayer from "../VideoPlayer";
@@ -37,7 +37,6 @@ const MAX_IMG_MB = 5;
 // The original goes up untouched (trim is applied at playback), so this has to leave
 // room for a long phone video that gets cut down to three minutes.
 const MAX_VID_MB = 500;
-const EMPTY_PLACE: LocationDraft = { country: "", county: "", subCounty: "", estate: "" };
 
 type Pick = { file: File; url: string };
 type Done = { id?: string; scheduledFor?: string; finishing?: boolean; count?: number };
@@ -59,7 +58,7 @@ export default function PostStudio() {
   const [options, setOptions] = useState(["", ""]);
   const [mature, setMature] = useState(false);
   const [share, setShare] = useState(true);
-  const [place, setPlace] = useState<LocationDraft>(EMPTY_PLACE);
+  const [place, setPlace] = useState("");
   const [busy, setBusy] = useState("");
   const [noPreview, setNoPreview] = useState(false);
   const [formatNote, setFormatNote] = useState("");
@@ -128,7 +127,7 @@ export default function PostStudio() {
 
   const theme = THEME;
   const opts = options.map((o) => o.trim()).filter(Boolean);
-  const placed = Object.values(place).some((v) => v.trim());
+  const placed = !!place.trim();
 
   const missing =
     format === "text" ? (text.trim() ? "" : "Write something to post.")
@@ -319,10 +318,7 @@ export default function PostStudio() {
           ...(topicNote ? { tags: [topicNote] } : {}),
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: share,
-          ...(place.country.trim() ? { location_country: place.country.trim() } : {}),
-          ...(place.county.trim() ? { location_county: place.county.trim() } : {}),
-          ...(place.subCounty.trim() ? { location_sub_county: place.subCounty.trim() } : {}),
-          ...(place.estate.trim() ? { location_estate: place.estate.trim() } : {}),
+          ...(place.trim() ? { location_country: place.trim() } : {}),
           ...(sound && format !== "voice" ? { sound_id: sound.id, sound_mute_original: format === "video" && muteOriginal } : {}),
           ...(promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
           ...m,
@@ -392,7 +388,7 @@ export default function PostStudio() {
     bgRef.current?.cancel(); setBg(null);
     extrasRef.current.forEach((x) => x.up.cancel()); setExtras([]);
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
-    setQuestion(""); setOptions(["", ""]); setPlace(EMPTY_PLACE);
+    setQuestion(""); setOptions(["", ""]); setPlace("");
     setTopicNote(""); setMature(false); setError(""); setPublished(null);
     setCoverAt(null); setSoundId(""); setMuteOriginal(false); setPromo(""); setLater(false); setLaterAt(""); setCopied(false);
   }
@@ -616,7 +612,7 @@ export default function PostStudio() {
             </label>
             <details className="ps-place" open={placed}>
               <summary>Target a location {placed ? <em>set</em> : <small>optional</small>}</summary>
-              <LocationFields value={place} onChange={setPlace} />
+              <div className="cx-card"><CountryField value={place} onChange={setPlace} /></div>
             </details>
           </section>
 

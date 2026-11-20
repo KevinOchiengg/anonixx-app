@@ -2342,6 +2342,7 @@ async def get_my_drops(
             "edited_at":    drop["edited_at"].isoformat() if drop.get("edited_at") else None,
             "kind":         drop.get("kind"),
             "topics":       drop.get("topics") or [],
+            "country":      drop_country(drop),
             "time_ago":     get_time_ago(created_at) if created_at else "",
             "comments_count": comment_counts.get(did, 0),
             "knocks_count":   knock_counts.get(did, 0),
@@ -2438,6 +2439,29 @@ async def extend_hookup(
 class EditDropRequest(BaseModel):
     content: Optional[str] = None
     topics: Optional[List[str]] = None   # replaces the author's moods/topics; [] clears
+    location_country: Optional[str] = None   # "" clears; country only
+
+
+def drop_country(drop: dict) -> Optional[str]:
+    return (drop.get("location_detail") or {}).get("country") or None
+
+
+async def country_changes(db, drop: dict, country: str) -> dict:
+    """$set for a new target country on a drop (country only; finer parts are dropped).
+    Empty clears it: official drops go global, users' fall back to their own country."""
+    raw = (country or "").strip()
+    c = known_country(raw) or raw[:60] or None
+    if c == drop_country(drop):
+        return {}
+    detail, display = build_location(c, None, None, None)
+    feed = known_country(c)
+    if not feed and not drop.get("is_admin_drop"):
+        try:
+            u = await db["users"].find_one({"_id": ObjectId(drop["sender_id"])}, {"location_country": 1, "detected_country": 1}) or {}
+        except Exception:
+            u = {}
+        feed = known_country(u.get("location_country")) or known_country(u.get("detected_country"))
+    return {"location": display, "location_detail": detail, "feed_country": feed}
 
 
 @router.patch("/{drop_id}")
@@ -2447,7 +2471,7 @@ async def edit_drop(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    if data.content is None and data.topics is None:
+    if data.content is None and data.topics is None and data.location_country is None:
         raise HTTPException(status_code=400, detail="Nothing to change.")
     if data.content is not None and not data.content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty.")
@@ -2480,6 +2504,10 @@ async def edit_drop(
         if drop.get("kind") == "hookup":
             raise HTTPException(status_code=400, detail="Moods and topics are for confessions.")
         update["topics"] = clean_topics(data.topics) or None
+    if data.location_country is not None:
+        if drop.get("kind") == "hookup":
+            raise HTTPException(status_code=400, detail="A hookup's place comes from its area.")
+        update.update(await country_changes(db, drop, data.location_country))
     await db["drops"].update_one({"_id": oid}, {"$set": update})
     return {"message": "Drop updated.", "topics": update.get("topics", drop.get("topics")) or []}
 

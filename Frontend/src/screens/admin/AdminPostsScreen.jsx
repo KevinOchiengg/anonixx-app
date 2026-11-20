@@ -7,6 +7,7 @@ import { rs, rf, rp, RADIUS } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
 import { apiFetch, AdminHeader, a } from './adminShared';
+import LocationField from '../../components/drops/LocationField';
 
 // Must match DROP_SORTS in Backend/app/api/v1/admin.py.
 const SORTS = [['recent', 'Newest'], ['views', 'Most viewed'], ['likes', 'Most liked'], ['comments', 'Most discussed'], ['engagement', 'Best engagement']];
@@ -19,7 +20,7 @@ function Stat({ n, label, hot }) {
   );
 }
 
-const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onSave, onCancel, saving }) => (
+const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving }) => (
   <View style={a.card}>
     <Text style={a.cardMeta}>
       {item.is_admin_drop ? 'Anonixx' : (item.author || 'Anonymous')}
@@ -32,6 +33,9 @@ const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onS
         style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={900} autoFocus
         placeholder="Post text" placeholderTextColor={T.textMuted}
       />
+    ) : null}
+    {editing != null ? (
+      <LocationField countryOnly country={country} onChangeCountry={onCountry} />
     ) : (
       <Text style={a.cardBody} numberOfLines={4}>{item.confession || '(no text)'}</Text>
     )}
@@ -54,7 +58,7 @@ const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onS
             <Text style={a.btnText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity style={a.btn} onPress={onSave} disabled={saving || !editing.trim()} activeOpacity={0.85}>
-            <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/500`}</Text>
+            <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/900`}</Text>
           </TouchableOpacity>
         </>
       ) : (
@@ -100,7 +104,7 @@ export default function AdminPostsScreen({ navigation, route }) {
       if (ok) {
         setPosts(data.drops || []); setTotal(data.total || 0);
         const hit = only ? (data.drops || []).find((p) => p.id === only) : null;
-        if (hit?.is_admin_drop) setEditing((e) => e || { id: hit.id, text: hit.confession_full ?? hit.confession ?? '' });
+        if (hit?.is_admin_drop) setEditing((e) => e || { id: hit.id, text: hit.confession_full ?? hit.confession ?? '', country: hit.country || '' });
       }
     } catch {
       showToast({ type: 'error', message: 'Could not load posts.' });
@@ -138,16 +142,17 @@ export default function AdminPostsScreen({ navigation, route }) {
     }
   }, [showToast]);
 
-  const startEdit = useCallback((post) => setEditing({ id: post.id, text: post.confession_full ?? post.confession ?? '' }), []);
+  const startEdit = useCallback((post) => setEditing({ id: post.id, text: post.confession_full ?? post.confession ?? '', country: post.country || '' }), []);
+  const changeCountry = useCallback((country) => setEditing((e) => (e ? { ...e, country } : e)), []);
   const changeEdit = useCallback((text) => setEditing((e) => (e ? { ...e, text } : e)), []);
   const cancelEdit = useCallback(() => setEditing(null), []);
   const saveEdit = useCallback(async () => {
     if (!editing?.text.trim()) return;
     setSaving(true);
-    const { ok, data } = await apiFetch(`/admin/drops/${editing.id}`, { method: 'PATCH', body: { confession: editing.text.trim() } });
+    const { ok, data } = await apiFetch(`/admin/drops/${editing.id}`, { method: 'PATCH', body: { confession: editing.text.trim(), location_country: editing.country || '' } });
     setSaving(false);
     if (ok) {
-      setPosts((prev) => prev.map((p) => (p.id === editing.id ? { ...p, confession: data.confession, confession_full: data.confession } : p)));
+      setPosts((prev) => prev.map((p) => (p.id === editing.id ? { ...p, confession: data.confession, confession_full: data.confession, country: data.country } : p)));
       setEditing(null);
       showToast({ type: 'success', message: 'Drop updated.' });
       // From the feed's pencil: straight back to the drop.
@@ -206,6 +211,7 @@ export default function AdminPostsScreen({ navigation, route }) {
             <PostRow
               item={item} onDelete={confirmDelete} onEdit={startEdit}
               editing={editing?.id === item.id ? editing.text : null}
+              country={editing?.id === item.id ? editing.country : ''} onCountry={changeCountry}
               onChangeText={changeEdit} onSave={saveEdit} onCancel={cancelEdit} saving={saving}
             />
           )}

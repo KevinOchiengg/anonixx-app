@@ -16,6 +16,7 @@ import { timeLeft } from '../../config/linkup';
 import { fetchBalance } from '../../store/slices/coinsSlice';
 import { useToast } from '../../components/ui/Toast';
 import { alpha } from '../../components/feed/ConfessionCard';
+import LocationField from '../../components/drops/LocationField';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
 
@@ -58,6 +59,7 @@ function PostCard({ p, cost, hours, onChange, onRemove }) {
   const dispatch = useDispatch();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(p.content);
+  const [country, setCountry] = useState(p.country || '');
   const [busy, setBusy] = useState('');
   const hookup = p.kind === 'hookup';
   const left = hookup && p.is_live ? timeLeft(p.live_until) : null;
@@ -69,8 +71,8 @@ function PostCard({ p, cost, hours, onChange, onRemove }) {
   };
   const save = () => run('save', async () => {
     const text = draft.trim();
-    await call(`/drops/${p.id}`, 'PATCH', { content: text });
-    onChange(p.id, { content: text, edited_at: new Date().toISOString() });
+    await call(`/drops/${p.id}`, 'PATCH', { content: text, ...(hookup ? {} : { location_country: country }) });
+    onChange(p.id, { content: text, country: country || null, edited_at: new Date().toISOString() });
     setEditing(false);
     showToast({ type: 'success', message: 'Saved.' });
   });
@@ -94,18 +96,19 @@ function PostCard({ p, cost, hours, onChange, onRemove }) {
   return (
     <View style={[s.card, hookup && s.cardHk]}>
       <View style={s.top}>
-        <Text style={[s.kind, { color: hookup ? T.primary : T.violet }]}>{hookup ? 'HOOKUP CONFESSION' : 'CONFESSION'}</Text>
+        <Text style={[s.kind, { color: T.primary }]}>{hookup ? 'HOOKUP CONFESSION' : 'CONFESSION'}</Text>
         <Text style={s.when}>{p.time_ago}{p.edited_at ? ' · edited' : ''}</Text>
       </View>
 
       {editing ? (
         <View style={{ gap: rp(8) }}>
           <TextInput style={s.input} value={draft} onChangeText={(v) => setDraft(v.slice(0, MAX))} multiline autoFocus textAlignVertical="top" />
+          {!hookup && <LocationField countryOnly country={country} onChangeCountry={setCountry} />}
           <View style={s.row}>
             <Text style={s.when}>{MAX - draft.length}</Text>
             <View style={{ flex: 1 }} />
-            <Btn Icon={ArrowLeft} label="Cancel" onPress={() => { setEditing(false); setDraft(p.content); }} />
-            <Btn Icon={Pencil} label={busy === 'save' ? 'Saving…' : 'Save'} hot onPress={save} disabled={busy === 'save' || !draft.trim() || draft.trim() === p.content} />
+            <Btn Icon={ArrowLeft} label="Cancel" onPress={() => { setEditing(false); setDraft(p.content); setCountry(p.country || ''); }} />
+            <Btn Icon={Pencil} label={busy === 'save' ? 'Saving…' : 'Save'} hot onPress={save} disabled={busy === 'save' || !draft.trim() || (draft.trim() === p.content && country === (p.country || ''))} />
           </View>
         </View>
       ) : (

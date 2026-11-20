@@ -7,7 +7,7 @@
 .mp-card { display: grid; gap: 10px; padding: 14px; border-radius: 18px; background: var(--bg-edge); border: 1px solid var(--line); }
 .mp-card.hk { border-color: color-mix(in srgb, var(--rose) 28%, transparent); background: radial-gradient(90% 70% at 0% 0%, color-mix(in srgb, var(--rose) 10%, transparent), transparent 70%), var(--bg-edge); }
 .mp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-.mp-kind { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--violet); }
+.mp-kind { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--rose); }
 .mp-card.hk .mp-kind { color: var(--rose); }
 .mp-when { color: var(--muted); }
 .mp-text { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font: italic 16px/1.5 Georgia, "Times New Roman", serif; color: var(--fg); white-space: pre-wrap; }

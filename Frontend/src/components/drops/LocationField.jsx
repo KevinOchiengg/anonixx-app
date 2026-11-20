@@ -66,6 +66,7 @@ export function PickerModal({ visible, title, options, onSelect, onClose }) {
 export default function LocationField({
   country, county, subCounty, estate,
   onChangeCountry, onChangeCounty, onChangeSubCounty, onChangeEstate,
+  countryOnly = false,   // drop targeting: just the country
 }) {
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countyPickerOpen, setCountyPickerOpen] = useState(false);
@@ -77,7 +78,7 @@ export default function LocationField({
     onChangeCountry(name);
     // Switching away from Kenya invalidates a picked county — it was drawn
     // from KENYA_COUNTIES and won't mean anything as freeform state/region text.
-    if (!isKenya_ByName(name) && county) onChangeCounty('');
+    if (!countryOnly && !isKenya_ByName(name) && county) onChangeCounty('');
   };
 
   return (
@@ -86,11 +87,12 @@ export default function LocationField({
       <Text style={s.label}>Country</Text>
       <TouchableOpacity style={s.field} onPress={() => setCountryPickerOpen(true)} activeOpacity={0.8}>
         <Text style={[s.fieldText, !country && s.fieldPlaceholder]}>
-          {country || 'Select a country'}
+          {country || (countryOnly ? 'Everywhere' : 'Select a country')}
         </Text>
         <ChevronDown size={rs(15)} color={T.textMute} />
       </TouchableOpacity>
 
+      {!countryOnly && <>
       {/* County (Kenya, picker) or State/Region (everywhere else, freeform) */}
       <Text style={s.label}>Region</Text>
       {kenya ? (
@@ -132,6 +134,7 @@ export default function LocationField({
         style={s.textField}
         maxLength={60}
       />
+      </>}
 
       <PickerModal
         visible={countryPickerOpen}

@@ -7,7 +7,7 @@ from bson import ObjectId
 from app.database import get_database
 from app.dependencies import require_admin, require_super_admin, is_super_admin_user
 from app.utils.coin_service import credit_coins
-from app.api.v1.drops import PROMO_KINDS, PROMO_HOURS
+from app.api.v1.drops import PROMO_KINDS, PROMO_HOURS, country_changes, drop_country
 from app.utils import stream
 
 from app.dependencies import require_scope
@@ -446,6 +446,7 @@ async def list_drops(
             "confession":        (d.get("confession") or "")[:200],
             # full text only where the dashboard can edit it, so an edit never starts from the cut-off preview
             "confession_full":   (d.get("confession") or "") if d.get("is_admin_drop") else None,
+            "country":           drop_country(d),
             "promo_kind":        d.get("promo_kind") if d.get("promo_until") and _aware(d["promo_until"]) > _now() else None,
             "promo_until":       _aware(d["promo_until"]).isoformat() if d.get("promo_until") else None,
             "media_type":        d.get("media_type"),
@@ -491,6 +492,7 @@ def _drop_oid(raw: str) -> ObjectId:
 
 class AdminEditDropRequest(BaseModel):
     confession: str
+    location_country: Optional[str] = None   # "" clears; country only
 
 
 @router.patch("/drops/{drop_id}", summary="Edit the text of a post made by an admin (users' posts stay untouchable)")
@@ -511,7 +513,7 @@ async def edit_admin_drop(
     except Exception:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
 
-    drop = await db["drops"].find_one({"_id": oid}, {"is_admin_drop": 1})
+    drop = await db["drops"].find_one({"_id": oid}, {"is_admin_drop": 1, "sender_id": 1, "location_detail": 1})
     if not drop:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
     if not drop.get("is_admin_drop"):
@@ -519,10 +521,12 @@ async def edit_admin_drop(
 
     await db["drops"].update_one(
         {"_id": oid},
-        {"$set": {"confession": text, "edited_at": _now(), "edited_by": admin_id}},
+        {"$set": {"confession": text, "edited_at": _now(), "edited_by": admin_id,
+                  **(await country_changes(db, drop, data.location_country) if data.location_country is not None else {})}},
     )
     await audit(db, admin_id, "drop.edit", "drop", drop_id)
-    return {"drop_id": drop_id, "confession": text}
+    country = data.location_country.strip() or None if data.location_country is not None else drop_country(drop)
+    return {"drop_id": drop_id, "confession": text, "country": country}
 
 
 class PromoteRequest(BaseModel):

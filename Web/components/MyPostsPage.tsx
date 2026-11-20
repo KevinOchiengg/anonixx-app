@@ -9,10 +9,11 @@ import { api, compact } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { timeLeft } from "@/lib/linkup";
 import AppShell from "./AppShell";
+import CountryField from "./compose/LocationFields";
 import "@/app/myposts.css";
 
 type Mine = {
-  id: string; content: string; kind?: string | null; time_ago: string;
+  id: string; content: string; kind?: string | null; country?: string | null; time_ago: string;
   views_count: number; likes_count: number; saves_count: number; comments_count: number; knocks_count: number;
   live_until: string | null; is_live: boolean; boosted_until: string | null; under_review: boolean; edited_at: string | null;
 };
@@ -31,6 +32,7 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
   const { refresh } = useAuth();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(p.content);
+  const [country, setCountry] = useState(p.country || "");
   const [busy, setBusy] = useState("");
   const [confirm, setConfirm] = useState<"" | "boost" | "delete">("");
   const hookup = p.kind === "hookup";
@@ -44,8 +46,8 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
   const save = () => run("save", async () => {
     const text = draft.trim();
     if (!text) throw new Error("It can't be empty.");
-    await api(`/drops/${p.id}`, { method: "PATCH", body: { content: text } });
-    onChange(p.id, { content: text, edited_at: new Date().toISOString() });
+    await api(`/drops/${p.id}`, { method: "PATCH", body: { content: text, ...(hookup ? {} : { location_country: country }) } });
+    onChange(p.id, { content: text, country: country || null, edited_at: new Date().toISOString() });
     setEditing(false);
     onToast("Saved.");
   });
@@ -71,10 +73,11 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
       {editing ? (
         <div className="mp-edit">
           <textarea rows={5} maxLength={MAX} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="Edit your post" autoFocus />
+          {hookup ? null : <CountryField value={country} onChange={setCountry} />}
           <div className="mp-row">
             <small>{MAX - draft.length}</small>
-            <button type="button" className="pill ghost" onClick={() => { setEditing(false); setDraft(p.content); }}>Cancel</button>
-            <button type="button" className="pill" disabled={busy === "save" || !draft.trim() || draft.trim() === p.content} onClick={save}>{busy === "save" ? "Saving…" : "Save"}</button>
+            <button type="button" className="pill ghost" onClick={() => { setEditing(false); setDraft(p.content); setCountry(p.country || ""); }}>Cancel</button>
+            <button type="button" className="pill" disabled={busy === "save" || !draft.trim() || (draft.trim() === p.content && country === (p.country || ""))} onClick={save}>{busy === "save" ? "Saving…" : "Save"}</button>
           </div>
         </div>
       ) : (
