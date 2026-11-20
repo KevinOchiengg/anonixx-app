@@ -303,7 +303,7 @@ export default function InboxPage() {
     : view === "calls" ? { label: "New call", icon: Icon.phone(22), on: () => setPicker("call") } : null;
 
   return (
-    <AppShell title="Rooms" right={right}>
+    <AppShell title="" right={right}>
       <div className="mx-page">
         {searching ? (
           <div className="mx-searchbar">

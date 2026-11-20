@@ -234,7 +234,7 @@ export default function MessagesScreen({ navigation, route }) {
     </View>
   ) : (
     <View style={s.header}>
-      <Text style={s.title}>Rooms</Text>
+      <View style={{ flex: 1 }} />
       <View style={s.headerIcons}>
         <TouchableOpacity onPress={() => { setSearching(true); goTab('chats'); }} hitSlop={HIT_SLOP} accessibilityLabel="Search chats">
           <Search size={rs(21)} color={T.text} />
