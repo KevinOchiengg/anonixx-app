@@ -637,8 +637,8 @@ export default function PostStudio() {
                 {sounds.length ? (
                   <div className="ps-spot-ctl">
                     <select value={soundId} onChange={(e) => { audio.current?.pause(); setHearing(false); setSoundId(e.target.value); }} aria-label="Sound">
-                      <option value="">{format === "text" ? "Auto (by mood)" : "No sound"}</option>
-                      {sounds.map((s) => <option key={s.id} value={s.id}>{s.title}{s.mood !== "any" ? ` · ${s.mood}` : ""}</option>)}
+                      <option value="">{format === "text" ? "Auto (random)" : "No sound"}</option>
+                      {sounds.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                     </select>
                     {sound ? <button type="button" className="ps-btn" onClick={hear}>{hearing ? "Stop" : "Listen"}</button> : null}
                     {sound && format === "video" ? (

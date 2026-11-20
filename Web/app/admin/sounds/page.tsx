@@ -5,16 +5,8 @@ import { Badge } from "@/components/admin/bits";
 import { usePaged } from "@/components/admin/bits";
 
 type Sound = { id: string; title: string; mood: string; url: string; active: boolean };
-type Draft = { file: File; title: string; mood: string; state: "ready" | "sending" | "done" | "error"; error?: string };
+type Draft = { file: File; title: string; state: "ready" | "sending" | "done" | "error"; error?: string };
 
-// Stored mood -> the card style it plays behind. A confession's mood comes from its card.
-const MOODS: [string, string][] = [
-  ["any", "Any card"],
-  ["longing", "Meet Me"],
-  ["untold", "Skeleton In The Closet"],
-  ["horny", "Just Tonight"],
-];
-const moodLabel = (m: string) => MOODS.find(([k]) => k === m)?.[1] ?? m;
 const MAX_MB = 5;
 const titleOf = (name: string) => name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
 
@@ -25,7 +17,7 @@ export default function AdminSounds() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ title: "", mood: "any" });
+  const [edit, setEdit] = useState({ title: "" });
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const playing = useRef<HTMLAudioElement | null>(null);
@@ -48,7 +40,7 @@ export default function AdminSounds() {
       const ok = /\.(mp3|m4a)$/i.test(f.name) || /^audio\/(mpeg|mp3|mp4|m4a|x-m4a)$/.test(f.type);
       if (!ok) { setError(`${f.name}: only mp3 or m4a.`); continue; }
       if (f.size > MAX_MB * 1024 * 1024) { setError(`${f.name} is over ${MAX_MB}MB.`); continue; }
-      next.push({ file: f, title: titleOf(f.name), mood: "any", state: "ready" });
+      next.push({ file: f, title: titleOf(f.name), state: "ready" });
     }
     setDrafts((d) => [...d, ...next]);
   }
@@ -63,7 +55,6 @@ export default function AdminSounds() {
       const form = new FormData();
       form.append("file", d.file, d.file.name);
       form.append("title", d.title.trim());
-      form.append("mood", d.mood);
       try {
         await api("/sounds/admin", { method: "POST", body: form });
         patch(i, { state: "done" });
@@ -94,8 +85,7 @@ export default function AdminSounds() {
     <>
       <h2>Ambient sounds</h2>
       <p className="muted small">
-        Quiet background tracks for text confessions. Each confession plays a sound picked for its card style; &quot;Any card&quot; fits all.
-        mp3 or m4a, up to {MAX_MB}MB each. Only upload tracks you have the rights to use.
+        Played at random behind text posts. mp3 or m4a, up to {MAX_MB}MB, only tracks you own.
       </p>
       {error ? <p className="err">{error}</p> : null}
 
@@ -118,9 +108,6 @@ export default function AdminSounds() {
             <div key={i} className="adm-card">
               <div className="adm-search" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input value={d.title} maxLength={80} onChange={(e) => patch(i, { title: e.target.value })} placeholder="Title" disabled={d.state === "sending"} />
-                <select value={d.mood} onChange={(e) => patch(i, { mood: e.target.value })} disabled={d.state === "sending"} className="adm-btn">
-                  {MOODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-                </select>
               </div>
               <div className="adm-foot">
                 <span className="muted small">{d.file.name} · {(d.file.size / 1048576).toFixed(1)}MB{d.state === "sending" ? " · uploading…" : ""}{d.state === "error" ? ` · ${d.error}` : ""}</span>
@@ -144,12 +131,9 @@ export default function AdminSounds() {
               {editing === s.id ? (
                 <div className="adm-search" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <input value={edit.title} maxLength={80} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
-                  <select value={edit.mood} onChange={(e) => setEdit({ ...edit, mood: e.target.value })} className="adm-btn">
-                    {MOODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-                  </select>
                 </div>
               ) : (
-                <div className="adm-chips"><b>{s.title}</b><Badge>{moodLabel(s.mood)}</Badge>{s.active ? null : <Badge tone="warn">off</Badge>}</div>
+                <div className="adm-chips"><b>{s.title}</b>{s.active ? null : <Badge tone="warn">off</Badge>}</div>
               )}
               <div className="adm-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button className="adm-btn" onClick={() => preview(s.url)}>▶ Play</button>
@@ -160,7 +144,7 @@ export default function AdminSounds() {
                   </>
                 ) : (
                   <>
-                    <button className="adm-btn" onClick={() => { setEditing(s.id); setEdit({ title: s.title, mood: s.mood }); }}>Edit</button>
+                    <button className="adm-btn" onClick={() => { setEditing(s.id); setEdit({ title: s.title }); }}>Edit</button>
                     <button className="adm-btn" disabled={busy === s.id} onClick={() => act(s.id, () => api(`/sounds/admin/${s.id}`, { method: "PATCH", body: { active: !s.active } }))}>{s.active ? "Turn off" : "Turn on"}</button>
                     <button className="adm-btn danger" disabled={busy === s.id} onClick={() => { if (window.confirm(`Delete "${s.title}"? This removes the file.`)) act(s.id, () => api(`/sounds/admin/${s.id}`, { method: "DELETE" })); }}>Delete</button>
                   </>

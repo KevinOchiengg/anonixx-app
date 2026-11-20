@@ -1,4 +1,5 @@
-"""Ambient sounds for text confessions. Admins upload them (R2) with a mood; clients pick one by mood."""
+"""Ambient sounds for text confessions and hookups. Admins upload them (R2); each post gets one at random.
+Sounds no longer carry a card style: `mood` is always "any" (kept in the payload for older apps)."""
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -15,15 +16,13 @@ router = APIRouter(prefix="/sounds", tags=["sounds"])
 
 MAX_BYTES = 5 * 1024 * 1024
 ALLOWED_TYPES = {"audio/mpeg", "audio/mp3", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac"}
-MOODS = {"any", "longing", "untold", "horny"}
-RETIRED_MOODS = {"discreet"}   # no card style posts with it any more; such sounds count as "any"
 
 
 def _out(doc: dict) -> dict:
     return {
         "id": str(doc["_id"]),
         "title": doc.get("title", ""),
-        "mood": "any" if doc.get("mood") in RETIRED_MOODS else doc.get("mood", "any"),
+        "mood": "any",
         "url": doc.get("url", ""),
         "active": bool(doc.get("active", True)),
         "created_at": doc["created_at"].isoformat() if doc.get("created_at") else None,
@@ -53,16 +52,13 @@ async def list_all_sounds(_: str = Depends(require_scope("content")), db=Depends
 async def add_sound(
     file: UploadFile = File(...),
     title: str = Form(...),
-    mood: str = Form("any"),
+    mood: str = Form("any"),   # ignored; older dashboards still send it
     admin_id: str = Depends(require_scope("content")),
     db=Depends(get_database),
 ):
     title = title.strip()[:80]
-    mood = mood.strip().lower()
     if not title:
         raise HTTPException(status_code=400, detail="Give the sound a title.")
-    if mood not in MOODS:
-        raise HTTPException(status_code=400, detail="Unknown mood.")
     ctype = (file.content_type or "").lower()
     if ctype not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail="Only mp3 or m4a files.")
@@ -77,7 +73,7 @@ async def add_sound(
 
     doc = {
         "title": title,
-        "mood": mood,
+        "mood": "any",
         "url": url,
         "active": True,
         "created_by": admin_id,
@@ -91,7 +87,7 @@ async def add_sound(
 
 class SoundPatch(BaseModel):
     title: Optional[str] = None
-    mood: Optional[str] = None
+    mood: Optional[str] = None     # ignored; sounds no longer have a card style
     active: Optional[bool] = None
 
 
@@ -108,11 +104,6 @@ async def edit_sound(
         if not t:
             raise HTTPException(status_code=400, detail="Give the sound a title.")
         changes["title"] = t
-    if data.mood is not None:
-        m = data.mood.strip().lower()
-        if m not in MOODS:
-            raise HTTPException(status_code=400, detail="Unknown mood.")
-        changes["mood"] = m
     if data.active is not None:
         changes["active"] = data.active
     if not changes:

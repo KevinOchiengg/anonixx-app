@@ -64,9 +64,7 @@ function hash(id: string) {
 
 function pickSound(sounds: Sound[] | undefined, post: Post): Sound | null {
   if (!sounds?.length) return null;
-  const exact = sounds.filter((s) => s.mood === post.mood_tag);
-  const pool = exact.length ? exact : sounds.filter((s) => s.mood === "any");
-  return pool.length ? pool[hash(post.id) % pool.length] : null;
+  return sounds[hash(post.id) % sounds.length];
 }
 
 
@@ -155,7 +153,7 @@ export default function Slide({
   // Text-only confessions (not polls) get the confession card: category, headline, facts, one action.
   const card = textSlide && !post.poll;
   const category = categoryOf(post);
-  // A track picked in the Post Studio wins; text slides otherwise get one by mood.
+  // A track picked in the Post Studio wins; text slides otherwise get one from the library.
   const chosen = post.sound && !audioSrc && !mature ? post.sound : null;
   const ambient = chosen || (textSlide && !mature ? pickSound(sounds, post) : null);
   const muteClip = Boolean(chosen?.mute_original);
