@@ -50,6 +50,8 @@ import AuthorAvatar from '../../components/common/AuthorAvatar';
 import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 import * as Clipboard from 'expo-clipboard';
+import { fetchBalance } from '../../store/slices/coinsSlice';
+import { SHARE_TEXT } from '../../utils/share';
 
 // Public web link for a drop; the app opens it too (AppNavigator linking).
 const dropLink = (p) => `https://anonixx.com/drop/${p.id}`;
@@ -91,14 +93,11 @@ function BufferLine({ style }) {
 }
 
 const sharePost = async (p) => {
-  const text = (p.content || '').trim();
-  const quote = text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"\n` : '';
   try {
-    const r = await Share.share({ message: `${quote}${dropLink(p)}` });
+    const r = await Share.share({ message: `${SHARE_TEXT}\n${dropLink(p)}` });
     if (r?.action !== Share.dismissedAction) signal(p.id, 'share');
   } catch {}
 };
-import { fetchBalance } from '../../store/slices/coinsSlice';
 
 // Every 7th drop gets a market slide, every 8th an ad (they can coincide).
 const MARKET_FREQUENCY = 7;

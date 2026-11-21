@@ -19,9 +19,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
   const { post } = drop;
   const description = teaser(post.content) || "An anonymous confession on Anonixx.";
-  const image = post.card_image_url || post.cover_url || post.image_url || post.images?.[0] || `${SITE_URL}/og/drop/${id}`;
   const quote = teaser(post.content, 60);
   const title = quote ? `“${quote}”` : "An anonymous confession";
+  // Link previews stay content-free: a generic title and a blurred card.
+  const share = {
+    title: "Someone confessed something on Anonixx",
+    description: "Tap to see it. No names, no trace.",
+    image: `${SITE_URL}/og/drop/${id}`,
+  };
 
   return {
     title,
@@ -31,13 +36,13 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     ...(isThinDrop(post) ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       type: "article",
-      title: "Someone confessed something on Anonixx",
-      description,
+      title: share.title,
+      description: share.description,
       url: `${SITE_URL}/drop/${id}`,
       publishedTime: post.created_at,
-      images: [{ url: image }],
+      images: [{ url: share.image, width: 1200, height: 630 }],
     },
-    twitter: { card: "summary_large_image", title, description, images: [image] },
+    twitter: { card: "summary_large_image", title: share.title, description: share.description, images: [share.image] },
   };
 }
 

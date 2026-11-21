@@ -23,6 +23,7 @@ import VideoOverlays from '../common/VideoOverlays';
 import { CommentBottomSheet } from './CommentBottomSheet';
 import ReportSheet from './ReportSheet';
 import AuthorAvatar from '../../components/common/AuthorAvatar';
+import { SHARE_TEXT } from '../../utils/share';
 
 // Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
 // tapping Link up is never a price surprise.
@@ -500,12 +501,9 @@ function DropCard({
       return;
     }
     try {
-      // Same as the feed's share: the quote, then the drop's link.
-      const text = (post.content || '').trim();
-      const quote = text ? `"${text.length > 100 ? `${text.slice(0, 100)}…` : text}"\n` : '';
-      await Share.share({ message: `${quote}https://anonixx.com/drop/${post.id}` });
+      await Share.share({ message: `${SHARE_TEXT}\nhttps://anonixx.com/drop/${post.id}` });
     } catch {}
-  }, [post.content, post.id, isAuthenticated, showToast, navigation]);
+  }, [post.id, isAuthenticated, showToast, navigation]);
 
   const handleReport    = useCallback(() => { setMenuVisible(false); setReportVisible(true); }, []);
 

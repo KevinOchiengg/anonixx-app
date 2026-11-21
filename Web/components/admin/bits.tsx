@@ -80,3 +80,5 @@ export function usePaged<T>(items: T[], { size = 8, page = 20, text }: { size?: 
   );
   return { rows, tools };
 }
+
+export const kindLabel = (kind?: string | null) => (kind === "hookup" ? "Hookup" : "Confession");

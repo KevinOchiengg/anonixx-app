@@ -290,3 +290,5 @@
 /* Long lists: top rows, then search + pages */
 .adm-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 .adm-more .adm-input { flex: 1 1 180px; min-width: 0; }
+.adm-open { display: inline-flex; vertical-align: middle; margin-left: 6px; color: var(--muted); }
+.adm-open:hover { color: var(--rose); }

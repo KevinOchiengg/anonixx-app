@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
-import { Badge, fmtDate, theirTime } from "@/components/admin/bits";
+import { Badge, fmtDate, kindLabel, theirTime } from "@/components/admin/bits";
 
 type Full = {
   user: {
@@ -28,8 +28,8 @@ type Row = { key: string; count: number };
 type Taste = {
   days: number;
   totals: { view: number; vote: number; react: number; save: number; like: number };
-  kinds: Row[]; moods: Row[]; media: Row[]; reactions: Row[]; all_time_moods: Row[];
-  top_drops: { id: string; score: number; kind: string; mood: string | null; teaser: string; did: string[] }[];
+  kinds: Row[]; media: Row[]; reactions: Row[];
+  top_drops: { id: string; score: number; kind: string; teaser: string; did: string[] }[];
 };
 
 const DID: Record<string, string> = { like: "liked", save: "saved", react: "reacted", vote: "voted", view: "opened" };
@@ -76,18 +76,16 @@ function TastePanel({ id }: { id: string }) {
               <dt>Voted</dt><dd>{n.vote}</dd>
             </dl>
           </div>
-          <div className="w3"><h3>Moods</h3><Mix rows={t.moods} /></div>
           <div className="w3"><h3>Kinds</h3><Mix rows={t.kinds} /><h3>Format</h3><Mix rows={t.media} /></div>
           <div className="w3">
             {t.reactions.length ? <><h3>Reactions they give</h3><Mix rows={t.reactions} /></> : null}
-            {t.all_time_moods.length ? <><h3>All-time mood pull</h3><Mix rows={t.all_time_moods} /></> : null}
           </div>
           <div className="adm-panel">
             <h3>Drops they loved most</h3>
             <ul className="adm-bars">
               {t.top_drops.map((p) => (
                 <li key={p.id}>
-                  <span><Link href={`/drop/${p.id}`}>{p.teaser}</Link><small className="muted"> · {p.kind}{p.mood ? ` · ${p.mood}` : ""}</small></span>
+                  <span><Link href={`/drop/${p.id}`}>{p.teaser}</Link><small className="muted"> · {kindLabel(p.kind)}</small></span>
                   <small>{p.did.map((k) => DID[k]).join(", ")}</small>
                 </li>
               ))}

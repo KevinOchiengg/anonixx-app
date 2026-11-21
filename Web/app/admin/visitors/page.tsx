@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
-import { Tabs, useTab } from "@/components/admin/bits";
+import { Tabs, kindLabel, useTab } from "@/components/admin/bits";
+import { ExternalLink } from "lucide-react";
 import { LineChart } from "@/components/admin/charts";
 import { Bars, country, dur, flag, type Row } from "@/components/admin/visitors/shared";
 import { JourneyModal, PageDetail, type Journey } from "@/components/admin/visitors/Details";
@@ -21,8 +22,8 @@ type Data = Partial<{
   series: { labels: string[]; visitors: number[]; views: number[] };
   funnel: { visitors: number; searched: number; saw_signup: number; signed_up: number };
   pages: Row[]; landing: Row[]; clicks: Row[]; dwell: { key: string; seconds: number; count: number }[];
-  top_drops: { id: string | null; views: number; visitors: number; kind: string; mood: string | null; teaser: string }[];
-  interest_kinds: Row[]; interest_moods: Row[];
+  top_drops: { id: string | null; views: number; visitors: number; kind: string; teaser: string }[];
+  interest_kinds: Row[];
   searches: Row[]; search_themes: Row[]; search_places: Row[]; zero_result_searches: Row[];
   referrers: Row[]; campaigns: Row[]; sources: Row[]; countries: Row[]; devices: Row[]; browsers: Row[];
 }>;
@@ -190,8 +191,12 @@ function Content({ d, days, pick }: { d: Data; days: number; pick: (p: string) =
               <li key={x.id || x.teaser}>
                 <span>
                   {x.id ? <button type="button" className="adm-linkbtn" onClick={() => pick(`/drop/${x.id}`)}>{x.teaser}</button> : x.teaser}
-                  {x.id ? <Link href={`/drop/${x.id}`} className="muted small" aria-label="Open drop"> open</Link> : null}
-                  <small className="muted"> · {x.kind}{x.mood ? ` · ${x.mood}` : ""}</small>
+                  <small className="muted"> · {kindLabel(x.kind)}</small>
+                  {x.id ? (
+                    <Link href={`/drop/${x.id}`} className="adm-open" aria-label="Open drop" title="Open drop">
+                      <ExternalLink size={13} strokeWidth={2} aria-hidden />
+                    </Link>
+                  ) : null}
                 </span>
                 <b>{x.views}</b><small>{x.visitors} ppl</small>
               </li>
@@ -201,8 +206,7 @@ function Content({ d, days, pick }: { d: Data; days: number; pick: (p: string) =
       </div>
       <div className="adm-panel w5">
         <h3>What interests them</h3>
-        <Bars rows={d.interest_kinds || []} color="#FF634A" empty="No drop views yet." />
-        {d.interest_moods?.length ? <><h3>Moods</h3><Bars rows={d.interest_moods} color="#F59E0B" empty="" /></> : null}
+        <Bars rows={d.interest_kinds || []} color="#FF634A" label={kindLabel} empty="No drop views yet." />
       </div>
 
       <CountryTastes days={days} onPick={pick} />

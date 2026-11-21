@@ -4,17 +4,17 @@ import type { Post } from "@/lib/api";
 import { splitHook } from "@/lib/captionHook";
 import { timeLeft } from "@/lib/linkup";
 
-export type Category = "curiosity" | "linkup" | "vulnerable";
+export type Category = "curiosity" | "linkup";
 
-// Tints are existing theme variables only (globals.css): violet, rose, fg.
 export const CATEGORIES: Record<Category, { label: string; tint: string }> = {
   curiosity: { label: "Confession", tint: "var(--rose)" },
   linkup: { label: "Link Up", tint: "var(--rose)" },
-  vulnerable: { label: "Vulnerable", tint: "var(--fg)" },
 };
 
-export const categoryOf = (post: Pick<Post, "category" | "kind">): Category =>
-  post.category && post.category in CATEGORIES ? post.category : post.kind === "hookup" ? "linkup" : "curiosity";
+export const categoryOf = (post: Pick<Post, "category" | "kind">): Category => {
+  const category = post.category ?? (post.kind === "hookup" ? "linkup" : "curiosity");
+  return category === "linkup" ? "linkup" : "curiosity";
+};
 
 /** Headline + body. A real first sentence or line is the headline; a short confession is all
  * headline; a long run-on with no sentence break is all body. */

@@ -28,7 +28,7 @@ import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
 import TopicPicker from '../../components/drops/TopicPicker';
 import GuidedConfession, { GUIDED_SAVE_KEY } from '../../components/drops/GuidedConfession';
-import { CATEGORIES, ConfessionPreview, alpha } from '../../components/feed/ConfessionCard';
+import { ConfessionPreview, alpha } from '../../components/feed/ConfessionCard';
 
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -88,12 +88,6 @@ const POST_COST = 3;
 
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
 const HOOK_MAX = 100;
-// Mirrors drop_category() in drops.py, so the preview label matches the feed.
-const VULNERABLE_TOPICS = ['heartbreak', 'regret', 'betrayal', 'anger', 'relief', 'confusion', 'growth', 'family'];
-const VULNERABLE_WORDS = /\b(cry|cried|crying|tears|hurt|hurts|hurting|alone|lonely|loneliness|scared|afraid|depress\w*|anxious|anxiety|heartbr\w*|broke my heart|ashamed|shame|guilt\w*|grief|griev\w*|numb|empty inside|miss (?:him|her|them|you)|lost my|healing|forgive)\b/i;
-const autoCategory = (picked, topics, text) => (
-  picked || (topics.some((t) => VULNERABLE_TOPICS.includes(t)) || VULNERABLE_WORDS.test(text) ? 'vulnerable' : 'curiosity')
-);
 const topicLabel = (t) => (t === 'growth' ? 'Personal growth' : t.charAt(0).toUpperCase() + t.slice(1));
 const HINT_MAX = 16;
 
@@ -352,9 +346,8 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [locationSubCounty, setLocationSubCounty] = useState('');
   const [locationEstate, setLocationEstate] = useState('');
   const [storyTopics, setStoryTopics] = useState([]);   // author's moods/topics (confessions only)
-  // General Confession extras, all optional: an opening line (the feed headline) and a category.
+  // Optional opening line, shown as the feed headline.
   const [hook, setHook] = useState('');
-  const [category, setCategory] = useState(null);      // null = worked out from the words | 'curiosity' | 'vulnerable'
   const [fontStyle, setFontStyle] = useState(DEFAULT_CARD_FONT); // an id from CARD_FONT_LIST
   const fontIdx = Math.max(0, CARD_FONT_LIST.findIndex((f) => f.id === fontStyle));
   const nextFont = useCallback(() => {
@@ -418,7 +411,6 @@ export default function DropsComposeScreen({ navigation, route }) {
                 (typeof d.text === 'string' && d.text.trim().length > 0);
               if (typeof d.text     === 'string') setText(d.text);
               if (typeof d.hook     === 'string') setHook(d.hook.slice(0, HOOK_MAX));
-              if (d.category === 'curiosity' || d.category === 'vulnerable') setCategory(d.category);
               if (typeof d.format   === 'string') setFormat(d.format);
               if (typeof d.cardIntent === 'string' && d.cardIntent !== 'the-exchange' && CARD_INTENT_LIST.some(c => c.id === d.cardIntent)) setCardIntent(d.cardIntent);
               if (typeof d.intensity=== 'string') setIntensity(d.intensity);
@@ -453,12 +445,12 @@ export default function DropsComposeScreen({ navigation, route }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
-        text, hook, category, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
+        text, hook, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
         location: { country: locationCountry, county: locationCounty, subCounty: locationSubCounty, estate: locationEstate },
       })).catch(() => {});
     }, 400);
     return () => clearTimeout(saveTimer.current);
-  }, [text, hook, category, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
+  }, [text, hook, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
       locationCountry, locationCounty, locationSubCounty, locationEstate]);
 
   const fullText = useMemo(() => [hook.trim(), text.trim()].filter(Boolean).join('\n'), [hook, text]);
@@ -682,7 +674,6 @@ export default function DropsComposeScreen({ navigation, route }) {
         mood_tag:   moodTag,
         intensity,
         ...(kind !== 'hookup' && storyTopics.length ? { topics: storyTopics } : {}),
-        ...(kind !== 'hookup' && category ? { category } : {}),
         // Hint only makes sense when a specific user is tagged.
         ...(taggedUser && hintClean ? { recognition_hint: hintClean } : {}),
         // Tag a specific user AND still hit marketplace.
@@ -804,7 +795,7 @@ export default function DropsComposeScreen({ navigation, route }) {
 
       // Clear draft
       await AsyncStorage.removeItem(DRAFT_KEY);
-      setText(''); setHook(''); setCategory(null);
+      setText(''); setHook('');
 
       Keyboard.dismiss();
       showToast({
@@ -825,7 +816,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       setLoading(false);
     }
   }, [
-    format, text, fullText, category, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
+    format, text, fullText, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, intensity, hint, taggedUser, publisherOptIn,
     locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, storyTopics, paidPrice, isSuperAdmin,
     isAdmin, videoEdit, videoMeta, coverAt, soundId, extraVideos, muteOriginal, promo, promoHours, publishAt,
@@ -837,7 +828,6 @@ export default function DropsComposeScreen({ navigation, route }) {
   const layoutMode    = 'split';
   const bodyMax       = MAX_CHARS - (hook.trim() ? hook.trim().length + 1 : 0);
   const remaining     = bodyMax - text.length;
-  const previewCategory = autoCategory(category, storyTopics, fullText);
   const remColor      = remaining <= 20
     ? (remaining <= 0 ? T.danger : T.warn) : T.textMute;
   const locationSummary = locationCountry.trim() || null;
@@ -1186,31 +1176,14 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* General Confession extras (admins): category and how it lands in the feed. */}
+          {/* Admins: preview of how the confession lands in the feed. */}
           {isAdmin && format === 'text' && (
             <View style={s.qc}>
-              <Text style={s.qcLabel}>Category <Text style={s.qcOptional}>optional</Text></Text>
-              <View style={s.qcChips}>
-                {[[null, 'Let Anonixx pick'], ['curiosity', CATEGORIES.curiosity.label], ['vulnerable', CATEGORIES.vulnerable.label]].map(([id, label]) => {
-                  const on = category === id;
-                  const tint = id ? CATEGORIES[id].tint : T.text;
-                  return (
-                    <TouchableOpacity
-                      key={label} onPress={() => setCategory(id)} activeOpacity={0.8}
-                      style={[s.qcChip, on && { borderColor: tint, backgroundColor: T.surfaceAlt }]}
-                      accessibilityState={{ selected: on }}
-                    >
-                      <Text style={[s.qcChipText, on && { color: tint }]}>{label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
               {!mediaUri && (
                 <>
                   <Text style={s.qcLabel}>How it shows in the feed</Text>
                   <ConfessionPreview
-                    category={previewCategory}
+                    category="curiosity"
                     text={fullText}
                     name={user?.anonymous_name}
                     facts={storyTopics.slice(0, 3).map((t) => ({ text: topicLabel(t) }))}
@@ -1661,16 +1634,6 @@ const s = StyleSheet.create({
   hookCount: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: rf(12) },
   qc: { gap: SPACING.sm, marginBottom: SPACING.md },
   qcLabel: { color: T.text, fontFamily: 'DMSans-SemiBold', fontSize: FONT.sm, marginTop: SPACING.xs },
-  qcOptional: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs },
-  qcChips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  qcChip: {
-    minHeight: rs(38), justifyContent: 'center', paddingHorizontal: rp(14), borderRadius: RADIUS.full,
-    borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surface,
-  },
-  qcChipOn: { borderColor: T.primary, backgroundColor: T.primaryDim },
-  qcChipText: { color: T.textSecondary, fontFamily: 'DMSans-SemiBold', fontSize: FONT.sm },
-  qcHint: { color: T.textMute, fontFamily: 'DMSans-Regular', fontSize: FONT.xs, lineHeight: rf(17) },
-  qcLink: { color: T.primary, fontFamily: 'DMSans-Bold' },
 
   // Edge warning
   edgeWarn: {

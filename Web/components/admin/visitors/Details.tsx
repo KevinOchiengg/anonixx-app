@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { fmtDate } from "@/components/admin/bits";
+import { fmtDate, kindLabel } from "@/components/admin/bits";
 import { LineChart } from "@/components/admin/charts";
 import { Bars, PageLink, ago, country, dur, flag, type Row } from "./shared";
 import { usePaged } from "@/components/admin/bits";
@@ -13,7 +13,7 @@ type PageStats = {
   series: { labels: string[]; visitors: number[]; views: number[] };
   referrers: Row[]; countries: Row[]; devices: Row[]; clicks: Row[]; searches: Row[];
   came_from: Row[]; went_to: Row[];
-  drop: { teaser: string; kind: string; mood: string | null; created_at: string | null } | null;
+  drop: { teaser: string; kind: string; created_at: string | null } | null;
 };
 
 export type Visitor = {
@@ -55,7 +55,7 @@ export function PageDetail({ path, days, onClose, onPick }: { path: string; days
         {error ? <p className="err">{error}</p> : !d ? <p className="muted small">Loading…</p> : (
           <>
             {d.drop ? (
-              <p className="adm-note">“{d.drop.teaser}”<br /><small className="muted">{d.drop.kind}{d.drop.mood ? ` · ${d.drop.mood}` : ""}</small></p>
+              <p className="adm-note">“{d.drop.teaser}”<br /><small className="muted">{kindLabel(d.drop.kind)}</small></p>
             ) : null}
             <div className="adm-kpis">
               {([

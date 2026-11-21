@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { flag, type Row } from "./shared";
-import { usePaged } from "@/components/admin/bits";
+import { kindLabel, usePaged } from "@/components/admin/bits";
 
 type Best = { grid: number[][]; suggestions: { weekday: number; hour: number; visitors: number }[]; enough_data: boolean };
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -39,7 +39,7 @@ export function BestTimes() {
 
 type CountryTaste = {
   country: string; cc: string | null; opens: number; web: number; app: number;
-  kinds: Row[]; moods: Row[]; top_drop: { id: string; opens: number; teaser: string };
+  kinds: Row[]; top_drop: { id: string; opens: number; teaser: string };
 };
 
 /** What each country opens, from website visitors (IP country) and app users (profile country). */
@@ -53,7 +53,7 @@ export function CountryTastes({ days, onPick }: { days: number; onPick: (p: stri
   if (!d) return null;
   const mix = (rows: Row[]) => {
     const total = rows.reduce((n, r) => n + r.count, 0) || 1;
-    return rows.map((r) => `${r.key} ${Math.round((100 * r.count) / total)}%`).join(" · ");
+    return rows.map((r) => `${kindLabel(r.key)} ${Math.round((100 * r.count) / total)}%`).join(" · ");
   };
   return (
     <div className="adm-panel">
@@ -62,12 +62,11 @@ export function CountryTastes({ days, onPick }: { days: number; onPick: (p: stri
       {d.length ? (
         <div className="adm-scroll">
           <table className="adm-table">
-            <thead><tr><th>Country</th><th>Opens</th><th>Moods</th><th>Kinds</th><th>Most opened drop</th></tr></thead>
+            <thead><tr><th>Country</th><th>Opens</th><th>Kinds</th><th>Most opened drop</th></tr></thead>
             <tbody>{pg.rows.map((c) => (
               <tr key={c.country}>
                 <td>{flag(c.cc)} {c.country}</td>
                 <td>{c.opens}<br /><small className="muted">{c.web} web · {c.app} app</small></td>
-                <td>{mix(c.moods) || "—"}</td>
                 <td>{mix(c.kinds)}</td>
                 <td>
                   <button type="button" className="adm-linkbtn" onClick={() => onPick(`/drop/${c.top_drop.id}`)}>{c.top_drop.teaser}</button>

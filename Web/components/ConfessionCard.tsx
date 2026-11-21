@@ -7,12 +7,11 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Post } from "@/lib/api";
 import { CATEGORIES, categoryOf, linkUpFacts, splitConfession, topicLabel, type Category, type Fact } from "@/lib/confession";
-import { Feather, Flame, Sparkles } from "lucide-react";
+import { Flame, Sparkles } from "lucide-react";
 
 function CategoryIcon({ c }: { c: Category }) {
   const p = { strokeWidth: 2, "aria-hidden": true } as const;
   if (c === "linkup") return <Flame {...p} />;
-  if (c === "vulnerable") return <Feather {...p} />;
   return <Sparkles {...p} />;
 }
 

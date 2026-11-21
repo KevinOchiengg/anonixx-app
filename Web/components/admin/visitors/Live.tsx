@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Badge, fmtDate, theirTime } from "@/components/admin/bits";
+import { Badge, fmtDate, kindLabel, theirTime } from "@/components/admin/bits";
 import { PageLink, ago, country, flag } from "./shared";
 import type { Visitor } from "./Details";
 import { usePaged } from "@/components/admin/bits";
@@ -10,7 +10,7 @@ import { usePaged } from "@/components/admin/bits";
 type LiveWeb = {
   vid: string; path: string; country: string | null; device: string | null; browser: string | null;
   signed_in: boolean; signed_up: boolean; returning: boolean; came_from: string | null; tz: string | null; since: string | null; pages: number;
-  drops: { id: string; teaser: string; kind: string | null; mood: string | null }[]; searches: string[];
+  drops: { id: string; teaser: string; kind: string | null }[]; searches: string[];
 };
 type LiveApp = {
   user_id: string; name: string | null; country: string | null; cc: string | null; gender: string | null; tz: string | null; joined: string | null;
@@ -95,7 +95,7 @@ export function LivePanel({ onJourney, onPick }: { onJourney: (vid: string) => v
                 <td>{w.drops.length ? w.drops.map((x) => (
                   <div key={x.id}>
                     <button type="button" className="adm-linkbtn" onClick={() => onPick(`/drop/${x.id}`)}>{x.teaser}</button>
-                    {x.mood ? <small className="muted"> · {x.mood}</small> : null}
+                    <small className="muted"> · {kindLabel(x.kind)}</small>
                   </div>
                 )) : <span className="muted small">no drops yet</span>}</td>
                 <td><PageLink path={w.path} onPick={onPick} /></td>
