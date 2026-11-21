@@ -24,6 +24,7 @@ from app.api.v1 import support
 from app.api.v1 import whatsapp
 from app.api.v1 import public
 from app.api.v1 import notifications
+from app.api.v1 import lives
 from app.api.v1 import visits
 from app.api.v1 import admin_insights, agent_hub, discover
 from app.tasks import admin_monitor
@@ -55,6 +56,18 @@ async def _ensure_indexes():
             [("user_id", 1), ("drop_id", 1)], unique=True, background=True
         )
         await db["drop_threads"].create_index([("drop_id", 1)],    background=True)
+        await db["lives"].create_index([("status", 1), ("starts_at", 1)], background=True)
+        await db["lives"].create_index([("host_id", 1), ("created_at", -1)], background=True)
+        await db["live_members"].create_index([("live_id", 1), ("user_id", 1)], unique=True, background=True)
+        await db["live_previews"].create_index([("live_id", 1), ("user_id", 1)], unique=True, background=True)
+        await db["live_presence"].create_index([("live_id", 1), ("user_id", 1)], unique=True, background=True)
+        await db["live_presence"].create_index("seen_at", expireAfterSeconds=3600, background=True)
+        await db["live_messages"].create_index([("live_id", 1), ("_id", 1)], background=True)
+        await db["live_earnings"].create_index([("host_id", 1), ("week", 1), ("paid_out", 1)], background=True)
+        await db["live_earnings"].create_index([("live_id", 1), ("kind", 1)], background=True)
+        await db["live_follows"].create_index([("host_id", 1), ("user_id", 1)], unique=True, background=True)
+        await db["live_reminders"].create_index([("live_id", 1), ("user_id", 1)], unique=True, background=True)
+        await db["live_payout_profiles"].create_index("user_id", unique=True, background=True)
         await db["drop_views"].create_index(
             [("drop_id", 1), ("user_id", 1)], unique=True, background=True
         )
@@ -304,6 +317,8 @@ app.include_router(visits.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_insights.router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_hub.router, prefix=settings.API_V1_PREFIX)
 app.include_router(discover.router, prefix=settings.API_V1_PREFIX)
+app.include_router(lives.router, prefix=settings.API_V1_PREFIX)
+app.include_router(lives.admin_router, prefix=settings.API_V1_PREFIX)
 
 # Wrap FastAPI with Socket.IO ASGI app.
 # Run with: uvicorn app.main:socket_app --reload

@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     AGORA_APP_ID: str = ""
     AGORA_APP_CERTIFICATE: str = ""
 
+    # LIVES (app/api/v1/lives.py)
+    ADULT_LIVES_ENABLED: bool = False        # keep off until legal sign-off and an adult-friendly processor
+    LIVE_PAYOUT_KES_PER_COIN: float = 15.0   # what one earned coin pays the host
+
     # WEB PUSH (VAPID) — browser notifications for the Anonixx website
     VAPID_PUBLIC_KEY: str = ""
     VAPID_PRIVATE_KEY: str = ""

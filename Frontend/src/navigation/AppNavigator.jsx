@@ -36,6 +36,9 @@ import PostUnlockScreen from '../screens/drops/PostUnlockScreen';
 import UnlockWaitingScreen from '../screens/drops/UnlockWaitingScreen';
 import UnlockRequestsScreen from '../screens/drops/UnlockRequestsScreen';
 import RoomScreen from '../screens/drops/RoomScreen';
+import LiveRoomScreen from '../screens/lives/LiveRoomScreen';
+import GoLiveScreen from '../screens/lives/GoLiveScreen';
+import LiveEarningsScreen from '../screens/lives/LiveEarningsScreen';
 import DropCallScreen from '../screens/drops/DropCallScreen';
 import IncomingCallOverlay from '../components/calls/IncomingCallOverlay';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
@@ -74,6 +77,8 @@ const linking = {
       DropChat:              'drop-chat/:connectionId',
       UnlockRequestsScreen:  'unlock-requests',
       Room:                  'room/:userId',
+      LiveEarnings:          'lives/earnings',
+      LiveRoom:              'lives/:liveId',
       VibeScore:             'vibe',
       Market:                'market',
       MarketItem:            'market/:itemId',
@@ -115,6 +120,8 @@ async function handleNotificationResponse(response) {
   const room = typeof data.url === 'string' && data.url.match(/^\/room\/([^/?#]+)/);
   if (room) return go('Room', { userId: room[1] });
   if (data.type === 'linkup_request') return go('UnlockRequestsScreen');
+  if (data.type === 'live' && data.live_id) return go('LiveRoom', { liveId: data.live_id });
+  if (data.type === 'live_payout') return go('LiveEarnings');
   return undefined;
 }
 
@@ -160,6 +167,9 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="UnlockWaitingScreen" component={withBackdrop(UnlockWaitingScreen)} />
         <Stack.Screen name="UnlockRequestsScreen" component={withBackdrop(UnlockRequestsScreen)} />
         <Stack.Screen name="Room" component={withBackdrop(RoomScreen, { brand: false })} />
+        <Stack.Screen name="LiveRoom" component={LiveRoomScreen} options={{ gestureEnabled: false }} />
+        <Stack.Screen name="GoLive" component={withBackdrop(GoLiveScreen)} />
+        <Stack.Screen name="LiveEarnings" component={withBackdrop(LiveEarningsScreen)} />
         {/* Calls open from anywhere (the incoming call screen, the Live tab). */}
         <Stack.Screen name="DropCall" component={withBackdrop(DropCallScreen, { brand: false })} options={{ gestureEnabled: false }} />
         <Stack.Screen name="AdminDashboard"  component={withBackdrop(AdminDashboardScreen)} />

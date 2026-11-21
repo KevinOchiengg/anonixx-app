@@ -52,6 +52,8 @@ import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSli
 import * as Clipboard from 'expo-clipboard';
 import { fetchBalance } from '../../store/slices/coinsSlice';
 import { SHARE_TEXT } from '../../utils/share';
+import LivePromoCard from '../../components/lives/LivePromoCard';
+import { livesApi } from '../../utils/lives';
 import KnockLabel from '../../components/feed/KnockLabel';
 
 // Public web link for a drop; the app opens it too (AppNavigator linking).
@@ -103,6 +105,7 @@ const sharePost = async (p) => {
 // Every 7th drop gets a market slide, every 8th an ad (they can coincide).
 const MARKET_FREQUENCY = 7;
 const FEED_AD_FREQUENCY = 8;
+const LIVE_FREQUENCY = 5;
 
 const { width, height } = Dimensions.get('window');
 
@@ -1195,6 +1198,15 @@ const AdSlide = ({ ad, onPress }) => (
   </View>
 );
 
+// ─── Promoted live slide
+const LiveSlide = ({ live, onPress }) => (
+  <View style={[ss.slide, sw.promoSlide]}>
+    <View style={sw.promoCenter}>
+      <LivePromoCard live={live} onPress={onPress} />
+    </View>
+  </View>
+);
+
 // ─── MAIN SCREEN ──────────────────────────────────────────────────
 export default function DropsSwipeScreen({ navigation, route }) {
   const { isAuthenticated, user } = useAuth();
@@ -1225,6 +1237,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const [posts, setPosts] = useState([]);
   const [linkedPost, setLinkedPost] = useState(null);
   const [feedAds, setFeedAds] = useState([]);
+  const [promotedLives, setPromotedLives] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
@@ -1264,6 +1277,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((d) => { if (d) setFeedAds(d.ads || []); })
       .catch(() => { /* offline — feed just skips ad injection this session */ });
+    livesApi.promoted().then((r) => setPromotedLives(r.lives || [])).catch(() => {});
   }, [dispatch]);
 
   const loadFeed = useCallback(async (reset = false) => {
@@ -1374,7 +1388,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       setActiveIndex(item.index);
       const it = item.item;
       // Only real drops are view-tracked.
-      const postId = it && !it.__market && !it.__ad ? it.id : null;
+      const postId = it && !it.__market && !it.__ad && !it.__live ? it.id : null;
       flushDwell(postId);
       if (postId && !viewedRef.current.has(postId)) {
         viewedRef.current.add(postId);
@@ -1593,13 +1607,19 @@ export default function DropsSwipeScreen({ navigation, route }) {
   const data = useMemo(() => {
     const base = linkedPost ? [linkedPost, ...posts.filter((p) => p.id !== linkedPost.id)] : posts;
     let out = base;
-    if (marketFeed.length > 0 || feedAds.length > 0) {
+    if (marketFeed.length > 0 || feedAds.length > 0 || promotedLives.length > 0) {
       out = [];
       let mIdx = 0;
       let aIdx = 0;
+      let lIdx = 0;
       base.forEach((p, i) => {
         out.push(p);
         const n = i + 1;
+        if (n % LIVE_FREQUENCY === 0 && promotedLives.length > 0 && lIdx < promotedLives.length * 3) {
+          const l = promotedLives[lIdx % promotedLives.length];
+          lIdx++;
+          out.push({ id: `live-${l.id}-${n}`, __live: l });
+        }
         if (n % MARKET_FREQUENCY === 0 && mIdx < marketFeed.length) {
           const m = marketFeed[mIdx++];
           out.push({ id: `market-${m.id}`, __market: m });
@@ -1612,7 +1632,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       });
     }
     return replay.length ? [...out, ...replay] : out;
-  }, [posts, linkedPost, marketFeed, feedAds, replay]);
+  }, [posts, linkedPost, marketFeed, feedAds, promotedLives, replay]);
 
   // ── Our own pan drives slide changes so a swipe snaps instantly (native paging always glides).
   // A flick or a drag past SNAP_DRAG moves one slide.
@@ -1681,7 +1701,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     if (data.length > 0 && activeIndex >= data.length - PREFETCH_AHEAD) handleEndReached();
     for (let i = activeIndex + 1; i <= activeIndex + 3 && i < data.length; i++) {
       const it = data[i];
-      if (!it || it.__market || it.__ad) continue;
+      if (!it || it.__market || it.__ad || it.__live) continue;
       [it.image_url, it.card_image_url, ...(it.images || []).map((im) => (typeof im === 'string' ? im : im?.url))]
         .filter(Boolean)
         .forEach((u) => Image.prefetch(u).catch(() => {}));
@@ -1700,6 +1720,13 @@ export default function DropsSwipeScreen({ navigation, route }) {
       return (
         <View style={{ height: listHeight, width }}>
           <AdSlide ad={item.__ad} onPress={handleAdPress} />
+        </View>
+      );
+    }
+    if (item.__live) {
+      return (
+        <View style={{ height: listHeight, width }}>
+          <LiveSlide live={item.__live} onPress={(l) => navigation.navigate('LiveRoom', { liveId: l.id })} />
         </View>
       );
     }

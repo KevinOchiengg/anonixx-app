@@ -5,7 +5,8 @@ import { api, API_URL, SHARE_TEXT, getDeviceId, getToken, loadMoreClient, type F
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
-import { AdSlide, MarketSlide } from "./FeedPromo";
+import { AdSlide, LiveSlide, MarketSlide } from "./FeedPromo";
+import { livesApi, type LiveCard } from "@/lib/lives";
 import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
@@ -20,6 +21,7 @@ type Item =
   | { kind: "ad"; key: string }
   | { kind: "promo"; key: string; ad: FeedAd }
   | { kind: "market"; key: string; item: MarketTease }
+  | { kind: "live"; key: string; live: LiveCard }
   | { kind: "status" };
 
 type AuthedFeed = {
@@ -33,6 +35,7 @@ type AuthedFeed = {
 const AD_EVERY = 6;
 const MARKET_EVERY = 7;
 const FEED_AD_EVERY = 8;
+const LIVE_EVERY = 5;
 const ADSENSE_ON = Boolean(process.env.NEXT_PUBLIC_ADSENSE_CLIENT && process.env.NEXT_PUBLIC_ADSENSE_SLOT);
 const LOCATION_LABELS: Record<string, string> = { country: "Country", county: "Region", sub_county: "Area", estate: "Nearby" };
 const LOAD_AHEAD = 4;
@@ -86,6 +89,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
   const [reportFor, setReportFor] = useState<Post | null>(null);
   const [ads, setAds] = useState<FeedAd[]>([]);
   const [market, setMarket] = useState<MarketTease[]>([]);
+  const [lives, setLives] = useState<LiveCard[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
   const [coach, setCoach] = useState(false);
   const loading = useRef(false);
@@ -101,6 +105,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
     api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => {});
     api<{ ads?: FeedAd[] }>("/ads/active?limit=10").then((r) => setAds(r.ads || [])).catch(() => {});
     api<{ items?: MarketTease[] }>("/market/items?limit=20&offset=0").then((r) => setMarket(r.items || [])).catch(() => {});
+    livesApi.promoted().then((r) => setLives(r.lives)).catch(() => {});
   }, [ready, user]);
 
   // The server couldn't hand us any posts (backend slow or down at build time): fetch them here,
@@ -207,12 +212,18 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
     const out: Item[] = [];
     let mIdx = 0;
     let aIdx = 0;
+    let lIdx = 0;
     posts.forEach((post, i) => {
       out.push({ kind: "post", post, first: i === 0 });
       const n = i + 1;
       const next = posts[i + 1];
       const calm = post.sensitivity !== "mature" && next?.sensitivity !== "mature";
       if (!calm) return;
+      if (n % LIVE_EVERY === 0 && lives.length > 0 && lIdx < lives.length * 3) {
+        const l = lives[lIdx % lives.length];
+        lIdx++;
+        out.push({ kind: "live", key: `live-${l.id}-${n}`, live: l });
+      }
       if (n % MARKET_EVERY === 0 && mIdx < market.length) {
         const m = market[mIdx++];
         out.push({ kind: "market", key: `market-${m.id}`, item: m });
@@ -234,7 +245,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
       });
     }
     return out;
-  }, [posts, replay, ads, market, loadingMore, loadFailed, first]);
+  }, [posts, replay, ads, market, lives, loadingMore, loadFailed, first]);
 
   // Out of new posts (no next page, or the server's session cap): add another replay round
   // as the viewer nears the end, so the scroll never hits a wall.
@@ -530,6 +541,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
             if (it.kind === "ad") return <AdSlot key={it.key} index={i} />;
             if (it.kind === "promo") return <AdSlide key={it.key} ad={it.ad} index={i} />;
             if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;
+            if (it.kind === "live") return <LiveSlide key={it.key} live={it.live} index={i} />;
             if (it.kind === "status") {
               const bad = first === "failed" || loadFailed;
               return (

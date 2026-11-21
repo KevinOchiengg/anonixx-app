@@ -4,7 +4,7 @@ import {
   DoorOpen,
   Home,
   Plus,
-  UserCheck,
+  Radio,
   User,
 } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -23,7 +23,7 @@ import DropChatScreen from '../screens/drops/DropChatScreen';
 import DropCallScreen from '../screens/drops/DropCallScreen';
 import DemoChatScreen from '../screens/drops/DemoChatScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
-import UnlockRequestsScreen from '../screens/drops/UnlockRequestsScreen';
+import LivesScreen from '../screens/lives/LivesScreen';
 import ChatProfileSetupScreen from '../screens/drops/ChatProfileSetupScreen';
 
 // Messages
@@ -55,7 +55,7 @@ const TabBarIcon = ({ route, focused, badgeCount, user }) => {
 
   const icons = {
     Feed:     Home,
-    Requests: UserCheck,
+    Lives:    Radio,
     Messages: DoorOpen,
     Profile:  User,
   };
@@ -200,19 +200,9 @@ export default function TabNavigator() {
         })}
       />
       <Tab.Screen
-        name="Requests"
-        component={withBackdrop(UnlockRequestsScreen)}
-        initialParams={{ inTab: true }}
-        options={{ tabBarLabel: 'Requests' }}
-        listeners={({ navigation }) => ({
-          // Guests go straight to Login.
-          tabPress: (e) => {
-            if (!isAuthenticated) {
-              e.preventDefault();
-              navigation.navigate('AuthNav', { screen: 'Login' });
-            }
-          },
-        })}
+        name="Lives"
+        component={withBackdrop(LivesScreen)}
+        options={{ tabBarLabel: 'Lives' }}
       />
       <Tab.Screen
         name="Profile"

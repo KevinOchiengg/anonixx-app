@@ -4,22 +4,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Door, Flame, Person, Plus, Requests } from "./icons";
+import { Door, Flame, Lives, Person, Plus } from "./icons";
 import AuthorAvatar from "@/components/AuthorAvatar";
 
 type Tab = { href: string; label: string; Icon: (p: { filled?: boolean }) => React.ReactElement; match: (p: string, q: string) => boolean };
 
 const TABS: (Tab | "create")[] = [
   { href: "/", label: "Desires", Icon: Flame, match: (p: string) => p === "/" || p.startsWith("/drop/") },
-  { href: "/inbox", label: "Rooms", Icon: Door, match: (p: string, q: string) => (p.startsWith("/inbox") && !q.includes("tab=requests")) || p.startsWith("/chat") },
+  { href: "/inbox", label: "Rooms", Icon: Door, match: (p: string) => p.startsWith("/inbox") || p.startsWith("/chat") },
   "create",
-  { href: "/inbox?tab=requests", label: "Requests", Icon: Requests, match: (p: string, q: string) => p.startsWith("/inbox") && q.includes("tab=requests") },
+  { href: "/lives", label: "Lives", Icon: Lives, match: (p: string) => p.startsWith("/lives") },
   { href: "/profile", label: "You", Icon: Person, match: (p: string) => p.startsWith("/settings") || p.startsWith("/profile") },
 ];
 
 type Counts = { rooms?: number; messages?: number; unlock_requests?: number };
 
-/** Badge counts for the nav: Rooms = unread messages + knocks + missed calls; Requests = knocks.
+/** Badge counts for the nav: Rooms = unread messages + knocks + missed calls.
  * Checked on every page change, every 20s while the tab is visible, and when it comes back. */
 function useBadges(signedIn: boolean, path: string) {
   const [c, setC] = useState<Counts>({});
@@ -38,7 +38,7 @@ function useBadges(signedIn: boolean, path: string) {
     document.addEventListener("visibilitychange", load);
     return () => { alive = false; window.clearInterval(t); document.removeEventListener("visibilitychange", load); };
   }, [signedIn, path]);
-  return { "/inbox": c.rooms ?? c.messages ?? 0, "/inbox?tab=requests": c.unlock_requests ?? 0 } as Record<string, number>;
+  return { "/inbox": c.rooms ?? c.messages ?? 0 } as Record<string, number>;
 }
 
 export default function BottomNav() {
