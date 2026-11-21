@@ -1,6 +1,6 @@
 /** One tap Knock (web twin: Web/components/KnockPay.tsx). Pays the Link Up fee and opens the
  * chat; short on coins it sends them to Coins, which walks them in once the top-up lands.
- * Backend: POST /unlock-requests (refunds itself if the poster never replies in 24 hours). */
+ * Backend: POST /unlock-requests (refunds itself if the poster never replies in 7 days). */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import store from '../store';
@@ -35,7 +35,7 @@ function confirmKnock(post) {
   return confirm({
     title: `Link up with ${name}?`,
     message: cost
-      ? "You go straight into the chat. If they don't reply within 24 hours, your coins come back."
+      ? "You go straight into the chat. If they don't reply within 7 days, your coins come back."
       : 'Free for you. You go straight into the chat.',
     rows: cost
       ? [

@@ -47,7 +47,7 @@ export function useKnock(onToast?: (m: string) => void) {
     const ok = await confirm({
       title: `Link up with ${name}?`,
       message: cost
-        ? "You go straight into the chat. If they don't reply within 24 hours, your coins come back."
+        ? "You go straight into the chat. If they don't reply within 7 days, your coins come back."
         : "Free for you. You go straight into the chat.",
       detail: cost ? (
         <>
@@ -125,7 +125,7 @@ function PaySheet({ need, name, onClose, onPaid }: { need: number; name: string 
     <Sheet onClose={onClose}>
       <form className="kp" onSubmit={go}>
         <h3>Link up with {name || "them"}</h3>
-        <p className="muted small">Link Up is {COST.linkUp} coins. You go straight into their Room. No reply in 24 hours and your coins come back.</p>
+        <p className="muted small">Link Up is {COST.linkUp} coins. You go straight into their Room. No reply in 7 days and your coins come back.</p>
         {mpesa === null ? <p className="muted small">Loading…</p> : mpesa && pack ? (
           <>
             <input className="hk-field" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="M-Pesa number, 07…" aria-label="M-Pesa number" required disabled={state === "waiting"} />

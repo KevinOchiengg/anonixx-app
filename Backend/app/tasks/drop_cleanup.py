@@ -72,6 +72,13 @@ class DropCleanupWorker:
             [{"$set": {"live_until": {"$add": ["$created_at", HOOKUP_LIFETIME_MS]}, "lifetime_7d": True}}],
         )
 
+        # Paid knocks made under the old 24-hour rule wait the full 7 days too.
+        from app.api.v1.unlock_requests import REFUND_AFTER
+        await db["drop_unlock_requests"].update_many(
+            {"paid_in": True, "refunded": False, "refund_due_at": {"$ne": None}, "refund_7d": {"$ne": True}},
+            [{"$set": {"refund_due_at": {"$add": ["$created_at", int(REFUND_AFTER.total_seconds() * 1000)]}, "refund_7d": True}}],
+        )
+
         # Only unlocked drops with a past expires_at (null means the clock never started),
         # plus every hookup confession older than 7 days.
         expired = await db["drops"].find(

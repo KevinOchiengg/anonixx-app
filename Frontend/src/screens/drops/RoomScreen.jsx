@@ -318,7 +318,7 @@ export default function RoomScreen({ route, navigation }) {
           </LinearGradient>
         </TouchableOpacity>
         <Text style={[s.fine, { color: th.muted }]}>
-          {cost ? `You go straight in. No reply in 24 hours and your ${cost} coins come back.` : 'Free for you. You go straight in.'}
+          {cost ? `You go straight in. No reply in 7 days and your ${cost} coins come back.` : 'Free for you. You go straight in.'}
         </Text>
       </View>
     );

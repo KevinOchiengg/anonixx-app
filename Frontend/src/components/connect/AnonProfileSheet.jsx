@@ -326,7 +326,7 @@ export default function AnonProfileSheet({
 
               {/* Sub-copy */}
               {!profile.is_self && (
-                <Text style={styles.connectSub}>You go straight in. No reply in 24 hours and your coins come back.</Text>
+                <Text style={styles.connectSub}>You go straight in. No reply in 7 days and your coins come back.</Text>
               )}
 
             </ScrollView>

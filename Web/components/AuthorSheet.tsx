@@ -92,7 +92,7 @@ export default function AuthorSheet({
                   <button className="u-cta" onClick={() => { onClose(); onLinkUp(post); }}>
                     <Link2 />Link Up
                   </button>
-                  <p className="u-hint">You go straight in. No reply in 24 hours and your coins come back.</p>
+                  <p className="u-hint">You go straight in. No reply in 7 days and your coins come back.</p>
                 </>
               ) : null}
             </>

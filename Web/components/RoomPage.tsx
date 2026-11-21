@@ -251,7 +251,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
         <button className="rm-knock" onClick={() => knockIn({ id: post.id, anonymous_name: name })}>
           <KnockLabel name={name} />
         </button>
-        <small>{cost ? `You go straight in. No reply in 24 hours and your ${cost} coins come back.` : "Free for you. You go straight in."}</small>
+        <small>{cost ? `You go straight in. No reply in 7 days and your ${cost} coins come back.` : "Free for you. You go straight in."}</small>
       </div>
     );
   } else {

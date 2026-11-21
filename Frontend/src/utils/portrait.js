@@ -68,8 +68,6 @@ function portraitFor(seed, gender) {
   shapes.push({ t: "ellipse", cx: 50, cy: 44, rx: 15, ry: 17, fill: skin });
   if (art.front) shapes.push({ t: "path", d: art.front, fill: hairFill });
   return {
-    bg: "#15101B",
-    glow: shade(shirt, 0.42),
     shapes,
     label: gender && LABELS[gender] || "Anonymous"
   };

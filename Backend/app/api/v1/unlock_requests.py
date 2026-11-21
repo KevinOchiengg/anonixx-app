@@ -1,6 +1,7 @@
 """Knocks: one tap pays the Link Up fee and opens the poster's Room chat straight away.
-If the poster never replies within REFUND_AFTER_HOURS the coins go back on their own
-(refund_silent_knocks, run by the hourly cleanup worker). Mutual knocks connect free."""
+If the poster never replies within REFUND_AFTER (7 days, the same as a hookup's lifetime) the coins
+go back on their own (refund_silent_knocks, run by the hourly cleanup worker), or as soon as the
+hookup is deleted. Mutual knocks connect free."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -20,7 +21,8 @@ from app.api.v1.chat_profile import door_rule_of, gallery_for, is_blocked_betwee
 # Unanswered knocks expire on their own after this many days.
 REQUEST_EXPIRY_DAYS = 7
 # A paid knock is refunded if the poster hasn't written in the chat by then.
-REFUND_AFTER_HOURS = 24
+REFUND_AFTER = timedelta(days=7)
+REFUND_AFTER_LABEL = "7 days"
 from app.websockets.unlock_requests import (
     emit_unlock_request_received,
     emit_unlock_request_accepted,
@@ -350,7 +352,7 @@ async def create_unlock_request(
     now = now_utc()
     req_doc.update({
         "status": "accepted", "paid_in": True, "cost": cost, "connection_id": connection_id, "responded_at": now,
-        "refund_due_at": now + timedelta(hours=REFUND_AFTER_HOURS) if cost > 0 else None, "refunded": False,
+        "refund_due_at": now + REFUND_AFTER if cost > 0 else None, "refunded": False,
     })
     await db["drop_unlock_requests"].insert_one(req_doc)
     request_id = str(req_doc["_id"])
@@ -367,12 +369,12 @@ async def create_unlock_request(
         kind="knock",
     )
     return {"status": "accepted", "request_id": request_id, "connection_id": connection_id,
-            "room_user_id": owner_id, "cost": cost, "refund_after_hours": REFUND_AFTER_HOURS if cost > 0 else None}
+            "room_user_id": owner_id, "cost": cost, "refund_after_hours": int(REFUND_AFTER.total_seconds() // 3600) if cost > 0 else None}
 
 
 async def refund_silent_knocks(db, limit: int = 200, drop_ids: Optional[list] = None) -> int:
     """Give the coins back on paid knocks where the poster never wrote in the chat: once the
-    24 hours are up, or straight away for `drop_ids` (hookup posts being deleted at 7 days)."""
+    REFUND_AFTER has passed, or straight away for `drop_ids` (hookup posts being deleted at 7 days)."""
     now = now_utc()
     done = 0
     match = (
@@ -395,11 +397,11 @@ async def refund_silent_knocks(db, limit: int = 200, drop_ids: Optional[list] = 
             continue
         await credit_coins(
             db=db, user_id=r["requester_id"], amount=r["cost"], reason="linkup_refund",
-            description="Link Up refunded: no reply in 24 hours", meta={"request_id": str(r["_id"])},
+            description=f"Link Up refunded: no reply in {REFUND_AFTER_LABEL}", meta={"request_id": str(r["_id"])},
         )
         await send_push_notification(
             r["requester_id"], "Your coins are back",
-            f"They didn't reply in {REFUND_AFTER_HOURS} hours, so your {r['cost']} coins were returned.", db,
+            f"They didn't reply in {REFUND_AFTER_LABEL}, so your {r['cost']} coins were returned.", db,
             data={"type": "linkup_refund", "url": "/coins"},
         )
         done += 1

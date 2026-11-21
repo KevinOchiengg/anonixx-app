@@ -3,7 +3,8 @@ export type Shape =
   | { t: "ellipse"; cx: number; cy: number; rx: number; ry: number; fill: string }
   | { t: "circle"; cx: number; cy: number; r: number; fill: string };
 
-export type Portrait = { bg: string; glow: string; shapes: Shape[]; label: string };
+/** Transparent: the avatar's own circle is the background. */
+export type Portrait = { shapes: Shape[]; label: string };
 
 export const PORTRAIT_VIEWBOX = "9 11 82 82";
 
@@ -87,8 +88,6 @@ export function portraitFor(seed: string, gender?: string | null): Portrait {
   if (art.front) shapes.push({ t: "path", d: art.front, fill: hairFill });
 
   return {
-    bg: "#15101B",
-    glow: shade(shirt, 0.42),
     shapes,
     label: (gender && LABELS[gender]) || "Anonymous",
   };
