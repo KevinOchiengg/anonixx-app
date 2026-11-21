@@ -5,9 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { callsApi, callInfo } from "@/lib/calls";
-import { chatsApi, chatTime, callTime, duration, avatarColor, MUTE_OPTIONS, type Chat, type CallLog } from "@/lib/chats";
+import { chatsApi, chatTime, callTime, duration, MUTE_OPTIONS, type Chat, type CallLog } from "@/lib/chats";
 import CallRoom, { type CallInfo } from "../CallRoom";
 import Sheet from "../Sheet";
+import AuthorAvatar from "../AuthorAvatar";
 import {
   Archive, ArrowLeft, BellOff, ChevronDown, Compass, DoorOpen, EllipsisVertical, MessageSquarePlus, Phone, Pin,
   Search, Send, Video, X, Users, PhoneMissed, ArrowUpRight, ArrowDownLeft, type LucideIcon,
@@ -24,8 +25,8 @@ export const Icon = {
 export function Ava({ name, url, seed, size = 50, online }: { name?: string; url?: string | null; seed?: string; size?: number; online?: boolean }) {
   return (
     <span className="mx-ava" style={{ width: size, height: size }}>
-      <span style={url ? undefined : { background: avatarColor(seed || name), fontSize: size * 0.4 }}>
-        {url ? <Image src={url} alt="" width={size} height={size} /> : (name || "A")[0].toUpperCase()}
+      <span>
+        {url ? <Image src={url} alt="" width={size} height={size} /> : <AuthorAvatar seed={seed} name={name} size={size} />}
       </span>
       {online ? <em /> : null}
     </span>

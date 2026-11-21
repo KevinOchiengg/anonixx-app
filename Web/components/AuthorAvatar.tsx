@@ -1,40 +1,34 @@
+import { useId } from "react";
 import Image from "next/image";
-import { Mars, NonBinary, Venus, type LucideIcon } from "lucide-react";
-
-export type Gender = "male" | "female" | "nonbinary";
-
-const GENDER_ICON: Record<Gender, { Icon: LucideIcon; color: string; label: string }> = {
-  male: { Icon: Mars, color: "#6FB1FF", label: "Male" },
-  female: { Icon: Venus, color: "#FF7AB8", label: "Female" },
-  nonbinary: { Icon: NonBinary, color: "#B89CFF", label: "Non-binary" },
-};
-
-export function genderOf(value: string | null | undefined): Gender | null {
-  return value && value in GENDER_ICON ? (value as Gender) : null;
-}
+import { PORTRAIT_VIEWBOX, portraitFor } from "@/lib/portrait";
 
 type Props = {
   src?: string | null;
+  seed?: string | null;
   name?: string | null;
   gender?: string | null;
   size: number;
 };
 
-export default function AuthorAvatar({ src, name, gender, size }: Props) {
+export default function AuthorAvatar({ src, seed, name, gender, size }: Props) {
+  const id = useId();
   if (src) return <Image src={src} alt="" width={size} height={size} />;
 
-  const g = genderOf(gender);
-  if (!g) return <>{(name || "A").charAt(0).toUpperCase()}</>;
-
-  const { Icon, color, label } = GENDER_ICON[g];
+  const p = portraitFor(seed || name || "", gender);
   return (
-    <span
-      className="gender-ava"
-      style={{ "--g": color } as React.CSSProperties}
-      role="img"
-      aria-label={label}
-    >
-      <Icon size={Math.round(size * 0.5)} strokeWidth={2.25} aria-hidden />
-    </span>
+    <svg className="portrait" viewBox={PORTRAIT_VIEWBOX} width={size} height={size} role="img" aria-label={p.label}>
+      <defs>
+        <radialGradient id={id} cx="50%" cy="30%" r="75%">
+          <stop offset="0" stopColor={p.glow} />
+          <stop offset="1" stopColor={p.bg} />
+        </radialGradient>
+      </defs>
+      <rect width="100" height="100" fill={`url(#${id})`} />
+      {p.shapes.map((s, i) =>
+        s.t === "path" ? <path key={i} d={s.d} fill={s.fill} />
+          : s.t === "circle" ? <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={s.fill} />
+            : <ellipse key={i} cx={s.cx} cy={s.cy} rx={s.rx} ry={s.ry} fill={s.fill} />,
+      )}
+    </svg>
   );
 }

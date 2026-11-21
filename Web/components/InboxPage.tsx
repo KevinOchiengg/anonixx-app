@@ -17,6 +17,7 @@ import KnockClues, { type KnockClue } from "./KnockClues";
 import CallRoom, { type CallInfo } from "./CallRoom";
 import RoomSettingsMenu from "./rooms/RoomSettingsMenu";
 import { CallsPanel, ChatRow, Icon, PickChats } from "./rooms/Messenger";
+import AuthorAvatar from "@/components/AuthorAvatar";
 
 type Req = KnockClue & {
   id: string;
@@ -101,7 +102,7 @@ function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"
               return (
                 <div className="lr-row" key={r.id} role="button" tabIndex={0} onClick={open} onKeyDown={(e) => e.key === "Enter" && open()}>
                   <span className="lr-ava">
-                    <span>{r.requester_avatar_url ? <Image src={r.requester_avatar_url} alt="" width={48} height={48} /> : r.requester_anonymous_name?.[0]?.toUpperCase() || "A"}</span>
+                    <span>{r.requester_avatar_url ? <Image src={r.requester_avatar_url} alt="" width={48} height={48} /> : <AuthorAvatar seed={r.requester_id} name={r.requester_anonymous_name} size={48} />}</span>
                   </span>
                   <span className="lr-main">
                     <span className="lr-top"><b>{r.requester_anonymous_name || "Anonymous"}</b><time>{chatTime(r.created_at || null)}</time></span>

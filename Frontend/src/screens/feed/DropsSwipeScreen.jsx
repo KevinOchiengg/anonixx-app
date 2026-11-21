@@ -416,13 +416,7 @@ const RailAvatar = ({ post, navigation }) => {
   return (
   <AuthorProfileTrigger post={post} navigation={navigation}>
     <View style={[sw.railAvatarRing, { width: chip, height: chip, borderRadius: chip / 2 }]}>
-      <AuthorAvatar
-        uri={post.avatar_url}
-        name={post.anonymous_name}
-        gender={post.author_gender}
-        size={chip}
-        initialStyle={[sw.railAvatarInitial, { fontSize: Math.round(chip * 0.42) }]}
-      />
+      <AuthorAvatar uri={post.avatar_url} seed={post.user_id} name={post.anonymous_name} gender={post.author_gender} />
     </View>
   </AuthorProfileTrigger>
   );
@@ -2048,7 +2042,6 @@ const sw = StyleSheet.create({
     borderWidth: 1.5, borderColor: RAIL_TINTS.avatar.line, overflow: 'hidden',
     backgroundColor: 'rgba(10,12,18,0.5)', marginBottom: rp(2),
   },
-  railAvatarInitial: { fontSize: rf(17), fontWeight: '800', color: RAIL_TINTS.avatar.c },
 
 
 

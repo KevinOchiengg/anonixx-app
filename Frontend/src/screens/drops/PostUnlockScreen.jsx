@@ -25,6 +25,7 @@ const VOICE_MAX = 15;
 import { INTENTS, MAX_INTENTS, MAX_PITCH } from '../../config/linkup';
 import AgeGate from '../../components/drops/AgeGate';
 import useDraft from '../../hooks/useDraft';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 
 // Must match COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
 const UNLOCK_COST = 6;
@@ -224,13 +225,7 @@ export default function PostUnlockScreen({ route, navigation }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={s.iconWrap}>
-          {post?.avatar_url ? (
-            <Image source={{ uri: post.avatar_url }} style={s.avatarImage} />
-          ) : (
-            <Text style={s.avatarInitial}>
-              {displayName?.[0]?.toUpperCase() || 'A'}
-            </Text>
-          )}
+          <AuthorAvatar uri={post?.avatar_url} seed={post?.user_id} name={displayName} gender={post?.author_gender} />
         </View>
 
         <Text style={s.authorName}>{displayName || 'Anonymous'}</Text>
@@ -394,8 +389,6 @@ const s = StyleSheet.create({
     marginBottom: SPACING.lg, borderWidth: 1, borderColor: 'rgba(255,99,74,0.25)',
     overflow: 'hidden',
   },
-  avatarImage: { width: '100%', height: '100%' },
-  avatarInitial: { fontSize: FONT.lg, fontWeight: '700', color: T.primary },
   authorName: { fontSize: FONT.lg, fontWeight: '700', color: T.text, fontFamily: 'PlayfairDisplay-Bold', marginBottom: SPACING.sm },
   confession: {
     fontSize: FONT.md, color: T.textSecondary, textAlign: 'center',

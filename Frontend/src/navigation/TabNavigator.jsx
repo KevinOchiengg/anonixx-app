@@ -46,7 +46,7 @@ const Stack = createStackNavigator();
 // The You tab shows your own photo (or initial) once you're signed in, ringed in coral when open.
 const MeIcon = ({ user, focused }) => (
   <View style={[styles.meRing, focused && styles.meRingOn]}>
-    <Avatar uri={user.avatar_url} size={24} name={user.anonymous_name || user.username} />
+    <Avatar uri={user.avatar_url} size={24} name={user.anonymous_name || user.username} seed={user.id} gender={user.gender} />
   </View>
 );
 

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Door, Flame, Person, Plus, Requests } from "./icons";
+import AuthorAvatar from "@/components/AuthorAvatar";
 
 type Tab = { href: string; label: string; Icon: (p: { filled?: boolean }) => React.ReactElement; match: (p: string, q: string) => boolean };
 
@@ -63,12 +64,12 @@ export default function BottomNav() {
           <Link key={t.href} href={t.href} className={on ? "on" : ""} aria-label={n ? `${t.label}, ${n} new` : t.label}>
             <span className="bn-ic">
               {t.href === "/profile" && user ? (
-                // Your own photo (or initial) on the You tab, ringed in coral when open.
+                // Your own photo (or portrait) on the You tab, ringed in coral when open.
                 <span className="me-ava">
                   {user.avatar_url
                     // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={user.avatar_url} alt="" />
-                    : (user.anonymous_name || user.username || "Y").slice(0, 1).toUpperCase()}
+                    : <AuthorAvatar seed={user.id} name={user.anonymous_name} gender={user.gender} size={28} />}
                 </span>
               ) : <t.Icon filled={on} />}
               {n ? <b className="bn-badge">{n > 99 ? "99+" : n}</b> : null}

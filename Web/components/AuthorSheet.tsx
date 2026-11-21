@@ -51,7 +51,7 @@ export default function AuthorSheet({
       <Sheet onClose={onClose} tall>
         <div className="ap">
           <div className="ap-avatar">
-            <AuthorAvatar src={avatar} name={name} gender={p?.gender ?? post.author_gender} size={84} />
+            <AuthorAvatar src={avatar} seed={post.user_id} name={name} gender={p?.gender ?? post.author_gender} size={84} />
           </div>
           <h3 className="ap-name">{name}</h3>
 

@@ -224,12 +224,9 @@ export default function AnonProfileSheet({
                 {profile.avatar_url ? (
                   <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
                 ) : (
-                  <AuthorAvatar
-                    name={profile.anonymous_name}
-                    gender={profile.gender}
-                    size={rs(90)}
-                    initialStyle={styles.avatarInitial}
-                  />
+                  <View style={styles.portrait}>
+                    <AuthorAvatar seed={profile.user_id || userId} name={profile.anonymous_name} gender={profile.gender} />
+                  </View>
                 )}
                 {/* Pulse ring */}
                 <View style={[
@@ -450,7 +447,7 @@ const styles = StyleSheet.create({
     marginBottom:   SPACING.xs,
   },
   avatarImage: { width: '100%', height: '100%', borderRadius: rs(45) },
-  avatarInitial: { fontSize: rf(36), fontWeight: '700', color: T.primary },
+  portrait: { width: '100%', height: '100%', borderRadius: rs(45), overflow: 'hidden' },
   avatarGlow: {
     position:     'absolute',
     width:        rs(110),

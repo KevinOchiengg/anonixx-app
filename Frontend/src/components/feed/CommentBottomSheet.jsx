@@ -24,6 +24,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import AnonProfileSheet from '../connect/AnonProfileSheet';
 import useDraft from '../../hooks/useDraft';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 
 // @mentions, same pattern as the backend (MENTION_RE).
 const MENTION_RE = /@([A-Za-z0-9_.]{2,30})/g;
@@ -131,13 +132,7 @@ const CommentItem = React.memo(({
   return (
     <View style={[st.commentItem, depth > 0 && st.commentItemReply]}>
       <View style={st.commentAvatar}>
-        {item.avatar_url ? (
-          <Image source={{ uri: item.avatar_url }} style={st.commentAvatarImg} />
-        ) : (
-          <Text style={st.commentAvatarText}>
-            {item.anonymous_name?.[0]?.toUpperCase() || 'A'}
-          </Text>
-        )}
+        <AuthorAvatar uri={item.avatar_url} seed={item.user_id} name={item.anonymous_name} />
       </View>
 
       <View style={st.commentBody}>
@@ -938,8 +933,6 @@ const st = StyleSheet.create({
     flexShrink: 0,
     overflow: 'hidden',
   },
-  commentAvatarImg:  { width: 34, height: 34, borderRadius: 17 },
-  commentAvatarText: { fontSize: 13, fontWeight: '700', color: T.primary, fontFamily: 'DMSans-Bold' },
   commentBody:       { flex: 1 },
   commentMetaRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

@@ -27,6 +27,7 @@ import {
 } from '../../config/roomThemes';
 import RoomThemePicker, { RoomMini } from '../../components/rooms/RoomThemePicker';
 import KnockClues from '../../components/rooms/KnockClues';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 
 // What a Knock on this Room must carry (Backend chat_profile.py DOOR_RULES).
 const DOOR_RULES = [
@@ -421,7 +422,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
               {knocks.map((k) => (
                 <View key={k.id} style={styles.person}>
                   <View style={styles.personAva}>
-                    {k.requester_avatar_url ? <Image source={{ uri: k.requester_avatar_url }} style={styles.personImg} /> : <Text style={styles.personInitial}>{(k.requester_anonymous_name || 'A')[0].toUpperCase()}</Text>}
+                    <AuthorAvatar uri={k.requester_avatar_url} seed={k.requester_id} name={k.requester_anonymous_name} />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.personName} numberOfLines={1}>{k.requester_anonymous_name || 'Anonymous'}</Text>
@@ -452,7 +453,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
               {inside.map((c) => (
                 <View key={c.id} style={styles.person}>
                   <View style={styles.personAva}>
-                    {c.other_avatar_url ? <Image source={{ uri: c.other_avatar_url }} style={styles.personImg} /> : <Text style={styles.personInitial}>{(c.other_anonymous_name || 'A')[0].toUpperCase()}</Text>}
+                    <AuthorAvatar uri={c.other_avatar_url} seed={c.other_user_id} name={c.other_anonymous_name} />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.personName} numberOfLines={1}>{c.other_anonymous_name || 'Anonymous'}</Text>
@@ -474,7 +475,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
               {history.map((h) => (
                 <View key={h.user_id} style={[styles.person, { opacity: 0.85 }]}>
                   <View style={styles.personAva}>
-                    {h.avatar_url ? <Image source={{ uri: h.avatar_url }} style={styles.personImg} /> : <Text style={styles.personInitial}>{(h.anonymous_name || 'A')[0].toUpperCase()}</Text>}
+                    <AuthorAvatar uri={h.avatar_url} seed={h.user_id} name={h.anonymous_name} />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.personName} numberOfLines={1}>{h.anonymous_name}</Text>
@@ -675,8 +676,6 @@ const styles = StyleSheet.create({
   empty: { fontSize: FONT.sm, color: T.textSec, textAlign: 'center', marginTop: rp(24) },
   person: { flexDirection: 'row', gap: rp(12), paddingVertical: rp(12), borderBottomWidth: 1, borderBottomColor: T.border },
   personAva: { width: rs(46), height: rs(46), borderRadius: rs(23), overflow: 'hidden', backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: T.goldBorder },
-  personImg: { width: '100%', height: '100%' },
-  personInitial: { color: T.text, fontWeight: '800', fontSize: FONT.md },
   personName: { color: T.text, fontWeight: '700', fontSize: FONT.md },
   personSub: { color: T.textSec, fontSize: rf(12), marginTop: rp(2) },
   personActs: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(6), marginTop: rp(8) },

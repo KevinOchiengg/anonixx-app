@@ -84,12 +84,20 @@ class UserResponse(BaseModel):
     avatar_url:     Optional[str] = None
     is_admin:       bool = False
     is_super_admin: bool = False
+    gender:         Optional[str] = None
     is_premium:     bool = False
     premium_until:  Optional[str] = None
     has_password:   bool = True
 
 
 # ─── Helpers ──────────────────────────────────────────────────
+
+
+PUBLIC_GENDERS = {"male", "female", "nonbinary"}
+
+
+def _public_gender(user: dict) -> Optional[str]:
+    return user.get("gender") if user.get("gender") in PUBLIC_GENDERS else None
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
@@ -282,6 +290,7 @@ async def register(data: RegisterRequest, request: Request, db=Depends(get_datab
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
             "is_super_admin": is_super_admin_user(user),
+            "gender":         _public_gender(user),
             "coin_balance":   WELCOME_BONUS,
             "age_verified":            user.get("age_verified", False),
         },
@@ -306,6 +315,7 @@ async def login(data: LoginRequest, db=Depends(get_database)):
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
             "is_super_admin": is_super_admin_user(user),
+            "gender":         _public_gender(user),
             "coin_balance":   user.get("coin_balance", 0),
             "age_verified":            user.get("age_verified", False),
         },
@@ -358,6 +368,7 @@ def _session(user: dict, **extra) -> dict:
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
             "is_super_admin": is_super_admin_user(user),
+            "gender":         _public_gender(user),
             "coin_balance":   user.get("coin_balance", 0),
             "age_verified":   user.get("age_verified", False),
         },
@@ -459,6 +470,7 @@ async def login_for_access_token(
             "avatar_url":     user.get("avatar_url"),
             "is_admin":       user.get("is_admin", False),
             "is_super_admin": is_super_admin_user(user),
+            "gender":         _public_gender(user),
             "coin_balance":   user.get("coin_balance", 0),
             "age_verified":            user.get("age_verified", False),
         },
@@ -487,6 +499,7 @@ async def get_current_user(
         "age_verified":            user.get("age_verified", False),
         "is_admin":       bool(user.get("is_admin", False)),
         "is_super_admin": is_super_admin_user(user),
+        "gender":         _public_gender(user),
         "is_premium":     _premium_running(user),
         "premium_until":  user["premium_until"].isoformat() if user.get("premium_until") else None,
         "has_password":   user.get("has_password", True),

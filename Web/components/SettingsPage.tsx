@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@/lib/push";
 import { Ban, Bell, Bookmark, ChevronRight, Coins, Crown, FileText, Flag, Gift, Headphones, Lock, MapPin, Megaphone, MessageCircle, Search, ShieldCheck, ShieldEllipsis, ShoppingBag, Sparkles, Trash2, Wallet } from "lucide-react";
+import AuthorAvatar from "@/components/AuthorAvatar";
 
 
 function Inner() {
@@ -74,7 +75,7 @@ function Inner() {
           {user.avatar_url
             // eslint-disable-next-line @next/next/no-img-element
             ? <img src={user.avatar_url} alt="" />
-            : (user.anonymous_name || user.username || "A")[0].toUpperCase()}
+            : <AuthorAvatar seed={user.id} name={user.anonymous_name} gender={user.gender} size={52} />}
         </span>
         <span className="grow">
           <strong>{user.anonymous_name || user.username || "You"}</strong>

@@ -164,7 +164,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           {isAuthenticated && user ? (
             <TouchableOpacity style={styles.me} onPress={() => go('EditProfile')} activeOpacity={0.8}>
               <View style={styles.meRing}>
-                <Avatar uri={user.avatar_url} size={rs(48)} name={user.anonymous_name || user.username} />
+                <Avatar uri={user.avatar_url} size={rs(48)} name={user.anonymous_name || user.username} seed={user.id} gender={user.gender} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.meName} numberOfLines={1}>{user.anonymous_name || user.username || 'You'}</Text>

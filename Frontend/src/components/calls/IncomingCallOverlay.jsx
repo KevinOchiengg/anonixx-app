@@ -4,7 +4,7 @@
  * Mounted once, inside the NavigationContainer (AppNavigator). */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated, AppState, Image, Modal, StyleSheet, Text, TouchableOpacity, Vibration, View,
+  Animated, AppState, Modal, StyleSheet, Text, TouchableOpacity, Vibration, View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +14,7 @@ import T from '../../utils/theme';
 import { useSocket } from '../../context/SocketContext';
 import { useToast } from '../ui/Toast';
 import { callsApi, callParams } from '../../services/calls';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 
 const RING_PATTERN = [0, 700, 900];
 
@@ -126,8 +127,7 @@ export default function IncomingCallOverlay({ navigate }) {
               }]}
             />
             <View style={s.ava}>
-              {call.caller_avatar ? <Image source={{ uri: call.caller_avatar }} style={StyleSheet.absoluteFill} />
-                : <Text style={s.initial}>{name[0].toUpperCase()}</Text>}
+              <AuthorAvatar uri={call.caller_avatar} name={name} />
             </View>
           </View>
           <Text style={s.name} numberOfLines={1}>{name}</Text>
@@ -159,7 +159,6 @@ const s = StyleSheet.create({
   avaWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: rp(10) },
   ring: { position: 'absolute', width: rs(132), height: rs(132), borderRadius: rs(66), borderWidth: 2, borderColor: T.primary },
   ava: { width: rs(132), height: rs(132), borderRadius: rs(66), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 3, borderColor: T.primaryBorder },
-  initial: { fontFamily: 'DMSans-Bold', fontSize: rf(48), color: T.primary },
   name: { fontFamily: 'DMSans-Bold', fontSize: rf(28), color: T.text },
   sub: { fontFamily: 'DMSans-Regular', fontSize: rf(15), color: T.textSecondary },
   actions: { flexDirection: 'row', justifyContent: 'space-evenly' },

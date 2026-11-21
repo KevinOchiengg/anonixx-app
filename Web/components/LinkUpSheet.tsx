@@ -12,6 +12,7 @@ import AgeGate from "./AgeGate";
 import Sheet from "./Sheet";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import { Camera, Flame, X } from "lucide-react";
+import AuthorAvatar from "@/components/AuthorAvatar";
 
 const MAX_CLUE_VIDEO_SECONDS = 30;
 
@@ -33,7 +34,7 @@ function videoSeconds(url: string): Promise<number> {
 export default function LinkUpSheet({
   post, onClose, onDone, viaProfile,
 }: {
-  post: Pick<Post, "id" | "anonymous_name" | "avatar_url" | "content">;
+  post: Pick<Post, "id" | "anonymous_name" | "avatar_url" | "content" | "user_id" | "author_gender">;
   onClose: () => void;
   /** When set (the Room), a sent link up closes the sheet and hands back instead of showing the sent screen. */
   onDone?: () => void;
@@ -169,7 +170,7 @@ export default function LinkUpSheet({
     <Sheet onClose={onClose}>
       <div className="u-link">
         <div className="u-avatar">
-          {post.avatar_url ? <Image src={post.avatar_url} alt="" width={56} height={56} /> : name[0]?.toUpperCase() || "A"}
+          {post.avatar_url ? <Image src={post.avatar_url} alt="" width={56} height={56} /> : <AuthorAvatar seed={post.user_id} name={name} gender={post.author_gender} size={56} />}
         </div>
         <h3 className="u-name">Knock on {name}&apos;s door</h3>
         {post.content ? (

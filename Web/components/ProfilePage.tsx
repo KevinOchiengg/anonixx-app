@@ -6,6 +6,7 @@ import { api, compact } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AppShell from "./AppShell";
 import { Bookmark, ChevronRight, Coins, Crown, Headphones, LayoutList, Lock, Settings, ShieldCheck, Wallet } from "lucide-react";
+import AuthorAvatar from "@/components/AuthorAvatar";
 
 function Inner() {
   const { user } = useAuth();
@@ -27,7 +28,7 @@ function Inner() {
     <div className="pad prof">
       <div className="prof-top">
         <div className="prof-avatar">
-          {user.avatar_url ? <Image src={user.avatar_url} alt="" width={84} height={84} /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
+          {user.avatar_url ? <Image src={user.avatar_url} alt="" width={84} height={84} /> : <AuthorAvatar seed={user.id} name={name} gender={user.gender} size={84} />}
         </div>
         <strong>{name}</strong>
         <small>{user.email}</small>

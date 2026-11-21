@@ -1,42 +1,36 @@
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
-import { Mars, NonBinary, Venus } from 'lucide-react-native';
+import React, { useId, useMemo } from 'react';
+import { Image, StyleSheet } from 'react-native';
+import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { PORTRAIT_VIEWBOX, portraitFor } from '../../utils/portrait';
 
-const GENDER_ICON = {
-  male: { Icon: Mars, color: '#6FB1FF', label: 'Male' },
-  female: { Icon: Venus, color: '#FF7AB8', label: 'Female' },
-  nonbinary: { Icon: NonBinary, color: '#B89CFF', label: 'Non-binary' },
-};
+/** Fills its (round, overflow-hidden) container: the photo if set, otherwise a portrait. */
+export default function AuthorAvatar({ uri, seed, name, gender }) {
+  const id = useId().replace(/:/g, '');
+  const p = useMemo(() => portraitFor(seed || name || '', gender), [seed, name, gender]);
 
-const withAlpha = (hex, a) => {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-};
-
-export default function AuthorAvatar({ uri, name, gender, size, initialStyle }) {
   if (uri) return <Image source={{ uri }} style={StyleSheet.absoluteFill} />;
 
-  const g = GENDER_ICON[gender];
-  if (!g) {
-    return (
-      <View style={styles.center}>
-        <Text style={initialStyle}>{name?.[0]?.toUpperCase() || 'A'}</Text>
-      </View>
-    );
-  }
-
-  const { Icon, color, label } = g;
   return (
-    <View
-      style={[styles.center, { borderRadius: size / 2, backgroundColor: withAlpha(color, 0.16) }]}
+    <Svg
+      style={StyleSheet.absoluteFill}
+      width="100%"
+      height="100%"
+      viewBox={PORTRAIT_VIEWBOX}
       accessibilityRole="image"
-      accessibilityLabel={label}
+      accessibilityLabel={p.label}
     >
-      <Icon size={Math.round(size * 0.5)} color={color} strokeWidth={2.25} />
-    </View>
+      <Defs>
+        <RadialGradient id={id} cx="50%" cy="30%" r="75%">
+          <Stop offset="0" stopColor={p.glow} />
+          <Stop offset="1" stopColor={p.bg} />
+        </RadialGradient>
+      </Defs>
+      <Rect width="100" height="100" fill={`url(#${id})`} />
+      {p.shapes.map((s, i) => {
+        if (s.t === 'path') return <Path key={i} d={s.d} fill={s.fill} />;
+        if (s.t === 'circle') return <Circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={s.fill} />;
+        return <Ellipse key={i} cx={s.cx} cy={s.cy} rx={s.rx} ry={s.ry} fill={s.fill} />;
+      })}
+    </Svg>
   );
 }
-
-const styles = StyleSheet.create({
-  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-});

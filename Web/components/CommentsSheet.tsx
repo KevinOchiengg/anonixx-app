@@ -9,6 +9,7 @@ import AudioWave from "./AudioWave";
 import { ChevronDown, Reply, Smile, Close, Pin, ImageIcon, Mic, Gif, Send } from "./feedicons";
 import { Heart } from "./icons";
 import { MessageSquareMore } from "lucide-react";
+import AuthorAvatar from "@/components/AuthorAvatar";
 
 type Comment = {
   id: string;
@@ -38,19 +39,15 @@ type GifItem = { id: string; tiny: string; full: string };
 const mmss = (s: number) => `0:${String(Math.floor(s)).padStart(2, "0")}`;
 const MENTION = /@([A-Za-z0-9_.]{2,30})/g;
 
-const HUES = [8, 352, 338, 358, 14, 328];
 function Av({ name, src, small }: { name: string; src?: string | null; small?: boolean }) {
   const n = name || "A";
   if (src) {
     const s = small ? 24 : 36;
     return <Image className={`cmt-av img${small ? " sm" : ""}`} src={src} alt="" width={s} height={s} aria-hidden />;
   }
-  let h = 0;
-  for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const hue = HUES[h % HUES.length];
   return (
-    <span className={`cmt-av${small ? " sm" : ""}`} style={{ background: `linear-gradient(135deg, hsl(${hue} 90% 62%), hsl(${(hue + 22) % 360} 80% 42%))` }} aria-hidden>
-      {n.trim().charAt(0).toUpperCase() || "A"}
+    <span className={`cmt-av${small ? " sm" : ""}`} aria-hidden>
+      <AuthorAvatar name={n} size={small ? 24 : 36} />
     </span>
   );
 }

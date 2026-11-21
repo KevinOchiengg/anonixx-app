@@ -10,6 +10,7 @@ import Image from "next/image";
 import { connectSocket } from "@/lib/socket";
 import { callsApi, type Participant, type Person } from "@/lib/calls";
 import { Mic, MicOff, PhoneOff, ScreenShare, ScreenShareOff, SwitchCamera, Users, Video, VideoOff } from "lucide-react";
+import AuthorAvatar from "@/components/AuthorAvatar";
 
 export type CallInfo = {
   callId: string;
@@ -47,7 +48,7 @@ function Ava({ p, size }: { p?: Person | null; size: number }) {
   const name = p?.name || "A";
   return (
     <span className="cr-bigava" style={{ width: size, height: size }}>
-      {p?.avatar_url ? <Image src={p.avatar_url} alt="" width={size} height={size} /> : name[0].toUpperCase()}
+      {p?.avatar_url ? <Image src={p.avatar_url} alt="" width={size} height={size} /> : <AuthorAvatar name={name} size={size} />}
     </span>
   );
 }
@@ -63,7 +64,7 @@ function Tile({ label, track, muted, mirror, person }: { label: string; track?: 
   return (
     <div className={`cr-tile${mirror ? " mirror" : ""}`}>
       <div className="cr-video" ref={box} />
-      {!track ? (person?.avatar_url ? <span className="cr-av img"><Image src={person.avatar_url} alt="" width={72} height={72} /></span> : <span className="cr-av">{label[0]?.toUpperCase() || "A"}</span>) : null}
+      {!track ? (person?.avatar_url ? <span className="cr-av img"><Image src={person.avatar_url} alt="" width={72} height={72} /></span> : <span className="cr-av"><AuthorAvatar name={label} size={64} /></span>) : null}
       <span className="cr-label">{label}{muted ? " · muted" : ""}</span>
     </div>
   );

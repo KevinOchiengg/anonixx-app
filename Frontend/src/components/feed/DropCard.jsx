@@ -22,6 +22,7 @@ import VoiceWaveform from '../common/VoiceWaveform';
 import VideoOverlays from '../common/VideoOverlays';
 import { CommentBottomSheet } from './CommentBottomSheet';
 import ReportSheet from './ReportSheet';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 
 // Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
 // tapping Link up is never a price surprise.
@@ -544,13 +545,9 @@ function DropCard({
       <View style={styles.card}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerLeft} onPress={handleProfilePress} activeOpacity={0.7} hitSlop={HIT_SLOP}>
-            {post.avatar_url ? (
-              <Image source={{ uri: post.avatar_url }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
-              </View>
-            )}
+            <View style={styles.avatar}>
+              <AuthorAvatar uri={post.avatar_url} seed={post.user_id} name={post.anonymous_name} gender={post.author_gender} />
+            </View>
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
               <Text style={styles.timestamp}>{post.time_ago}</Text>
@@ -695,8 +692,7 @@ const styles = StyleSheet.create({
   heartAnim:        { position: 'absolute', top: '40%', left: '50%', marginLeft: -rs(40), marginTop: -rs(40), zIndex: 1000 },
   header:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: rp(12) },
   headerLeft:       { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  avatar:           { width: rs(38), height: rs(38), borderRadius: rs(19), backgroundColor: T.avatarBg, alignItems: 'center', justifyContent: 'center', marginRight: rp(10), borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)' },
-  avatarText:       { fontSize: FONT.md, fontWeight: '700', color: T.primary },
+  avatar:           { width: rs(38), height: rs(38), borderRadius: rs(19), backgroundColor: T.avatarBg, overflow: 'hidden', marginRight: rp(10), borderWidth: 1, borderColor: 'rgba(255,99,74,0.2)' },
   authorInfo:       { flex: 1 },
   authorName:       { fontSize: FONT.sm, fontWeight: '600', color: T.text },
   timestamp:        { fontSize: FONT.xs, color: T.textSecondary, marginTop: rp(1) },

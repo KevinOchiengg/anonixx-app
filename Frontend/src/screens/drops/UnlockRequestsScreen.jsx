@@ -21,6 +21,7 @@ import { useUnread } from '../../context/UnreadContext';
 import { API_BASE_URL } from '../../config/api';
 import { intentLabel } from '../../config/linkup';
 import KnockClues from '../../components/rooms/KnockClues';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 
 // Full-size clue viewer, mounted only while open so its video player is freed on close.
 function MediaPreviewModal({ media, onClose }) {
@@ -243,13 +244,9 @@ export default function UnlockRequestsScreen({ route, navigation, embedded = fal
           accessibilityRole="button"
           accessibilityLabel={`Peek into ${name}'s Room`}
         >
-          {item.requester_avatar_url ? (
-            <Image source={{ uri: item.requester_avatar_url }} style={s.cardAva} />
-          ) : (
-            <View style={[s.cardAva, s.cardAvaEmpty]}>
-              <Text style={s.cardAvaText}>{name[0].toUpperCase()}</Text>
-            </View>
-          )}
+          <View style={s.cardAva}>
+            <AuthorAvatar uri={item.requester_avatar_url} seed={item.requester_id} name={name} />
+          </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.cardName} numberOfLines={1}>{name}</Text>
             <Text style={s.cardMeta} numberOfLines={1}>Knocked {ago(item.created_at)} · tap to peek</Text>
@@ -422,9 +419,7 @@ const s = StyleSheet.create({
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: rp(12) },
-  cardAva: { width: rs(46), height: rs(46), borderRadius: rs(23), backgroundColor: T.surfaceAlt, borderWidth: 1.5, borderColor: T.primaryBorder },
-  cardAvaEmpty: { alignItems: 'center', justifyContent: 'center' },
-  cardAvaText: { fontFamily: 'DMSans-Bold', fontSize: rf(18), color: T.primary },
+  cardAva: { width: rs(46), height: rs(46), borderRadius: rs(23), overflow: 'hidden', backgroundColor: T.surfaceAlt, borderWidth: 1.5, borderColor: T.primaryBorder },
   cardName: { fontFamily: 'DMSans-Bold', fontSize: rf(16), color: T.text },
   cardMeta: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textSecondary, marginTop: rp(2) },
   cardQuote: { borderLeftWidth: 2, borderLeftColor: T.primaryBorder, paddingLeft: rp(12) },

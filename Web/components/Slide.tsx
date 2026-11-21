@@ -519,7 +519,7 @@ export default function Slide({
             aria-label={`Open ${post.anonymous_name || "their"} profile`}
             className="r-ava"
           >
-            <AuthorAvatar src={post.avatar_url} name={post.anonymous_name} gender={post.author_gender} size={44} />
+            <AuthorAvatar src={post.avatar_url} seed={post.user_id} name={post.anonymous_name} gender={post.author_gender} size={44} />
           </button>
         ) : null}
         <button onClick={like} aria-label="Like" className={`r-act r-like${post.is_liked ? " liked on" : ""}`}>

@@ -67,6 +67,8 @@ export default function ProfileScreen({ navigation }) {
               uri={user?.avatar_url}
               size={100}
               name={user?.username || user?.anonymous_name}
+              seed={user?.id}
+              gender={user?.gender}
             />
             <Text style={styles.username}>
               {user?.username || user?.anonymous_name}
