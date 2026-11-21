@@ -15,6 +15,7 @@ import {
 const UNLOCK_COST = 6;
 import { API_BASE_URL } from '../../config/api';
 import { knockIn } from '../../utils/knock';
+import AuthorAvatar from '../common/AuthorAvatar';
 import { useToast } from '../ui/Toast';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
@@ -223,9 +224,12 @@ export default function AnonProfileSheet({
                 {profile.avatar_url ? (
                   <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
                 ) : (
-                  <Text style={styles.avatarInitial}>
-                    {profile.anonymous_name?.[0]?.toUpperCase() || 'A'}
-                  </Text>
+                  <AuthorAvatar
+                    name={profile.anonymous_name}
+                    gender={profile.gender}
+                    size={rs(90)}
+                    initialStyle={styles.avatarInitial}
+                  />
                 )}
                 {/* Pulse ring */}
                 <View style={[

@@ -1918,6 +1918,9 @@ def _weighted_shuffle_drops(drops: list, user_affinities: dict, viewer_taste: Op
     return high + medium + low
 
 
+AUTHOR_GENDERS = {"male", "female", "nonbinary"}
+
+
 async def batch_format_drops(drops: list, current_user_id: Optional[str], db) -> list:
     drop_ids     = [str(d["_id"]) for d in drops]
     drop_ids_obj = [d["_id"] for d in drops]
@@ -1950,12 +1953,15 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             {"$match": {"target_id": {"$in": hookup_ids}, "status": {"$in": ["pending", "accepting", "accepted"]}}},
             {"$group": {"_id": "$target_id", "count": {"$sum": 1}}},
         ]) if hookup_ids else asyncio.sleep(0, result={}),
-        db["users"].find({"_id": {"$in": sender_oids}}, {"avatar_url": 1}).to_list(None) if sender_oids else none(),
+        db["users"].find({"_id": {"$in": sender_oids}}, {"avatar_url": 1, "gender": 1}).to_list(None) if sender_oids else none(),
         db["saved_drops"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}, {"drop_id": 1}).to_list(None) if current_user_id else none(),
         db["drops"].find({"_id": {"$in": drop_ids_obj}, "liked_by": current_user_id}, {"_id": 1}).to_list(None) if current_user_id else none(),
         db["drop_poll_votes"].find({"drop_id": {"$in": drop_ids}, "user_id": current_user_id}, {"drop_id": 1, "option_index": 1}).to_list(None) if current_user_id else none(),
     )
     sender_avatars: dict[str, Optional[str]] = {str(u["_id"]): u.get("avatar_url") for u in avatar_rows}
+    sender_genders: dict[str, Optional[str]] = {
+        str(u["_id"]): u.get("gender") if u.get("gender") in AUTHOR_GENDERS else None for u in avatar_rows
+    }
     paid_ids = [str(d["_id"]) for d in drops if d.get("paywall")]
     unlocked_set = {
         r["drop_id"] async for r in db["drop_purchases"].find(
@@ -2002,6 +2008,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "content":          confession,
             "anonymous_name":   drop.get("sender_anonymous_name"),
             "avatar_url":       sender_avatars.get(drop.get("sender_id")),
+            "author_gender":    sender_genders.get(drop.get("sender_id")),
             "is_admin_drop":    drop.get("is_admin_drop", False),
             "mood_tag":         drop.get("mood_tag"),
             "font_style":       drop.get("font_style") if drop.get("created_at") and _aware(drop["created_at"]) >= FONT_PICKER_SINCE else None,

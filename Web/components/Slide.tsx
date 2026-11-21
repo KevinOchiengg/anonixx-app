@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { splitHook } from "@/lib/captionHook";
-import Image from "next/image";
 import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import AuthorAvatar from "./AuthorAvatar";
 import { hookupTags, timeLeft } from "@/lib/linkup";
 import { allowMature, useMatureOk } from "@/lib/matureConsent";
 import VideoPlayer, { TAP_GAP } from "./VideoPlayer";
@@ -519,7 +519,7 @@ export default function Slide({
             aria-label={`Open ${post.anonymous_name || "their"} profile`}
             className="r-ava"
           >
-            {post.avatar_url ? <Image src={post.avatar_url} alt="" width={44} height={44} /> : (post.anonymous_name || "A")[0].toUpperCase()}
+            <AuthorAvatar src={post.avatar_url} name={post.anonymous_name} gender={post.author_gender} size={44} />
           </button>
         ) : null}
         <button onClick={like} aria-label="Like" className={`r-act r-like${post.is_liked ? " liked on" : ""}`}>

@@ -23,6 +23,7 @@ export type Post = {
   content: string;
   anonymous_name: string | null;
   avatar_url: string | null;
+  author_gender?: string | null;
   is_admin_drop: boolean;
   mood_tag: string | null;
   font_style?: string | null;

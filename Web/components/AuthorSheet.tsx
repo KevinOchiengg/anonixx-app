@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import AuthorAvatar from "./AuthorAvatar";
 import { api, COST, type Post } from "@/lib/api";
 import Sheet from "./Sheet";
 import { Link2 } from "./feedicons";
@@ -51,7 +51,7 @@ export default function AuthorSheet({
       <Sheet onClose={onClose} tall>
         <div className="ap">
           <div className="ap-avatar">
-            {avatar ? <Image src={avatar} alt="" width={84} height={84} /> : name.charAt(0).toUpperCase()}
+            <AuthorAvatar src={avatar} name={name} gender={p?.gender ?? post.author_gender} size={84} />
           </div>
           <h3 className="ap-name">{name}</h3>
 

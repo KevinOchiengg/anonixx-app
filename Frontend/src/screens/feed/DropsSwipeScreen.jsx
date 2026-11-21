@@ -46,6 +46,7 @@ import InlineMoreText from '../../components/common/InlineMoreText';
 import { countryHeader } from '../../utils/country';
 import { timeLeft } from '../../config/linkup';
 import FitImage, { FitBackdrop } from '../../components/feed/FitImage';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 import * as Clipboard from 'expo-clipboard';
@@ -415,13 +416,13 @@ const RailAvatar = ({ post, navigation }) => {
   return (
   <AuthorProfileTrigger post={post} navigation={navigation}>
     <View style={[sw.railAvatarRing, { width: chip, height: chip, borderRadius: chip / 2 }]}>
-      {post.avatar_url ? (
-        <Image source={{ uri: post.avatar_url }} style={sw.railAvatarImg} />
-      ) : (
-        <View style={sw.railAvatarFallback}>
-          <Text style={[sw.railAvatarInitial, { fontSize: Math.round(chip * 0.42) }]}>{post.anonymous_name?.[0]?.toUpperCase() || 'A'}</Text>
-        </View>
-      )}
+      <AuthorAvatar
+        uri={post.avatar_url}
+        name={post.anonymous_name}
+        gender={post.author_gender}
+        size={chip}
+        initialStyle={[sw.railAvatarInitial, { fontSize: Math.round(chip * 0.42) }]}
+      />
     </View>
   </AuthorProfileTrigger>
   );
@@ -2047,8 +2048,6 @@ const sw = StyleSheet.create({
     borderWidth: 1.5, borderColor: RAIL_TINTS.avatar.line, overflow: 'hidden',
     backgroundColor: 'rgba(10,12,18,0.5)', marginBottom: rp(2),
   },
-  railAvatarImg: { width: '100%', height: '100%' },
-  railAvatarFallback: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   railAvatarInitial: { fontSize: rf(17), fontWeight: '800', color: RAIL_TINTS.avatar.c },
 
 
