@@ -515,8 +515,8 @@ export default function Slide({
       <div className="rail">
         {!post.is_admin_drop && post.user_id ? (
           <button
-            onClick={() => (user ? onProfile(post) : onGate("Sign in to step into their Room."))}
-            aria-label={`Open ${post.anonymous_name || "their"} Room`}
+            onClick={() => (user ? onProfile(post) : onGate("Sign in to see who they are."))}
+            aria-label={`Open ${post.anonymous_name || "their"} profile`}
             className="r-ava"
           >
             {post.avatar_url ? <Image src={post.avatar_url} alt="" width={44} height={44} /> : (post.anonymous_name || "A")[0].toUpperCase()}

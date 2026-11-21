@@ -20,7 +20,7 @@ import LocationField from '../../components/drops/LocationField';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
 
-const MAX = 900;
+const MAX = 1800;
 const compact = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n || 0));
 
 async function call(path, method = 'GET', body) {

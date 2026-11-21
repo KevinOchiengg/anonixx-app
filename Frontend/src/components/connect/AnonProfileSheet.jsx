@@ -14,6 +14,8 @@ import {
 // Same Link Up cost as DropCard / PostUnlockScreen.
 const UNLOCK_COST = 6;
 import { API_BASE_URL } from '../../config/api';
+import { knockIn } from '../../utils/knock';
+import { useToast } from '../ui/Toast';
 import {
   rs, rf, rp, SPACING, FONT, RADIUS, BUTTON_HEIGHT, HIT_SLOP,
 } from '../../utils/responsive';
@@ -40,6 +42,7 @@ const StatItem = React.memo(({ value, label }) => (
 export default function AnonProfileSheet({
   visible, anonymousName, userId, post, linkupTarget, onClose, navigation,
 }) {
+  const { showToast } = useToast();
   const [profile,      setProfile]      = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
@@ -135,9 +138,10 @@ export default function AnonProfileSheet({
     if (!post && !linkupTarget) return;
     closeSheet();
     setTimeout(() => {
-      navigation?.navigate('PostUnlock', post ? { post, viaProfile: true } : { linkupTarget, viaProfile: true });
+      if (post && navigation) knockIn(navigation, post, showToast);
+      else navigation?.navigate('PostUnlock', { linkupTarget, viaProfile: true });
     }, 300);
-  }, [post, linkupTarget, closeSheet, navigation]);
+  }, [post, linkupTarget, closeSheet, navigation, showToast]);
 
   const accentColor = T.primary;
 
@@ -316,7 +320,7 @@ export default function AnonProfileSheet({
               >
                 <View style={styles.connectBtnInner}>
                   <Link2 size={rs(16)} color="#fff" />
-                  <Text style={styles.connectBtnText}>Link up</Text>
+                  <Text style={styles.connectBtnText}>Link Up</Text>
                   <View style={styles.linkUpCostPill}>
                     <Coins size={rs(11)} color="#fff" />
                     <Text style={styles.linkUpCostText}>{UNLOCK_COST}</Text>
@@ -327,7 +331,7 @@ export default function AnonProfileSheet({
 
               {/* Sub-copy */}
               {!profile.is_self && (
-                <Text style={styles.connectSub}>They won't know it's you until they link up too.</Text>
+                <Text style={styles.connectSub}>You go straight in. No reply in 24 hours and your coins come back.</Text>
               )}
 
             </ScrollView>

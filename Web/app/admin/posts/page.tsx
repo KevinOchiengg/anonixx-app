@@ -59,7 +59,13 @@ export default function AdminPosts() {
   async function remove(d: D) {
     if (!window.confirm("Delete this post for everyone? This cannot be undone.")) return;
     setBusy(d.id);
-    try { await api(`/admin/drops/${d.id}`, { method: "DELETE" }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
+    try {
+      await api(`/admin/drops/${d.id}`, { method: "DELETE" });
+      setEditing(null);
+      // From the feed's pencil: the drop is gone, so back to the feed.
+      if (only) { window.location.href = "/"; return; }
+      await load();
+    } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }
 
   async function promote(id: string, body: { kind: string; hours: number } | null) {
@@ -118,7 +124,7 @@ export default function AdminPosts() {
               <AdminMedia media={d} open={editing?.id === d.id} />
               {editing?.id === d.id ? (
                 <textarea
-                  className="adm-edit" rows={4} maxLength={900} autoFocus value={editing.text}
+                  className="adm-edit" rows={4} maxLength={1800} autoFocus value={editing.text}
                   onChange={(e) => setEditing({ ...editing, text: e.target.value })} aria-label="Post text"
                 />
               ) : null}
@@ -153,10 +159,11 @@ export default function AdminPosts() {
                 </div>
               ) : null}
               <div className="adm-foot">
-                <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/900` : fmtDate(d.created_at)}</span>
+                <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/1800` : fmtDate(d.created_at)}</span>
                 <div className="adm-actions">
                   {editing?.id === d.id ? (
                     <>
+                      <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>
                       <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing(null)}>Cancel</button>
                       <button className="adm-btn primary" disabled={busy === d.id || !editing.text.trim()} onClick={save}>Save</button>
                     </>

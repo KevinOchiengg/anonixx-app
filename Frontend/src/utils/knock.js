@@ -7,13 +7,13 @@ import { API_BASE_URL } from '../config/api';
 export const LINKUP_COST = 6;
 
 /** Returns { connectionId } | { short: true } | { ageGate: true } | { error } */
-export async function payIn(postId) {
+export async function payIn(postId, viaProfile = false) {
   try {
     const token = await AsyncStorage.getItem('token');
     const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ target_type: 'drop', target_id: postId, payment_method: 'coins' }),
+      body: JSON.stringify({ target_type: 'drop', target_id: postId, payment_method: 'coins', ...(viaProfile ? { via_profile: true } : {}) }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.connection_id) return { connectionId: data.connection_id };
@@ -28,7 +28,7 @@ export async function payIn(postId) {
 
 /** Tap Knock: straight into the chat, or to Coins / the age check first. */
 export async function knockIn(navigation, post, showToast) {
-  const r = await payIn(post.id);
+  const r = await payIn(post.id, !!post.kind && post.kind !== 'hookup');
   if (r.connectionId) navigation.navigate('DropChat', { connectionId: r.connectionId });
   else if (r.short) navigation.navigate('Coins', { knockFor: { id: post.id, name: post.anonymous_name || null, cost: r.cost || LINKUP_COST } });
   else if (r.ageGate) navigation.navigate('PostUnlock', { post });

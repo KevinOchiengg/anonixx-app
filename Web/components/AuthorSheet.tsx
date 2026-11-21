@@ -44,7 +44,6 @@ export default function AuthorSheet({
 
   const name = p?.anonymous_name || post.anonymous_name || "Anonymous";
   const avatar = p?.avatar_url || post.avatar_url;
-  // Confessions have no Link up on the card; the profile is where you link up off one.
   const canLinkUp = p ? !p.is_self : false;
 
   return (
@@ -91,9 +90,9 @@ export default function AuthorSheet({
               ) : canLinkUp ? (
                 <>
                   <button className="u-cta" onClick={() => { onClose(); onLinkUp(post); }}>
-                    <Link2 />Knock<span className="coin-cost">{COST.linkUp}</span>
+                    <Link2 />Link Up<span className="coin-cost">{COST.linkUp}</span>
                   </button>
-                  <p className="u-hint">Free to knock. Coins only if they let you in.</p>
+                  <p className="u-hint">You go straight in. No reply in 24 hours and your coins come back.</p>
                 </>
               ) : null}
             </>

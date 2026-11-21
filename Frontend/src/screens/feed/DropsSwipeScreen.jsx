@@ -333,20 +333,29 @@ const AnimatedActionBtn = ({ icon, count, onPress, active, scaleRef, tint }) => 
 );
 
 // Super admin only: a pencil on Anonixx drops that opens it for editing.
-// Asked once per signed-in admin (the sign-in user doesn't carry the flag).
+// Uses the flag on the signed-in user when it's there; otherwise asks /admin/me once per admin.
+// A failed ask (slow network, server waking up) isn't remembered, so the next slide asks again.
 let superCheck = { id: null, p: null };
 const useIsSuperAdmin = () => {
   const user = useSelector((st) => st.auth.user);
-  const [ok, setOk] = useState(false);
+  const [ok, setOk] = useState(user?.is_super_admin === true);
   useEffect(() => {
     if (!user?.is_admin) { setOk(false); return undefined; }
+    if (typeof user.is_super_admin === 'boolean') { setOk(user.is_super_admin); return undefined; }
     if (superCheck.id !== user.id) {
-      superCheck = { id: user.id, p: apiFetch('/admin/me').then((r) => Boolean(r.ok && r.data?.is_super_admin)).catch(() => false) };
+      const id = user.id;
+      superCheck = {
+        id,
+        p: apiFetch('/admin/me').then((r) => {
+          if (!r.ok && superCheck.id === id) superCheck = { id: null, p: null };
+          return Boolean(r.ok && r.data?.is_super_admin);
+        }).catch(() => { if (superCheck.id === id) superCheck = { id: null, p: null }; return false; }),
+      };
     }
     let live = true;
     superCheck.p.then((v) => { if (live) setOk(v); });
     return () => { live = false; };
-  }, [user?.id, user?.is_admin]);
+  }, [user?.id, user?.is_admin, user?.is_super_admin]);
   return ok;
 };
 
@@ -373,17 +382,12 @@ const ViewsStat = React.memo(({ count }) => {
 const AuthorProfileTrigger = ({ post, navigation, children }) => {
   const [visible, setVisible] = useState(false);
   const isAdminViewer = useSelector((state) => !!state.auth.user?.is_admin);
-  const signedIn = useSelector((state) => !!state.auth.user);
   const opensDashboard = post.is_admin_drop && isAdminViewer;
-  // Signed-in taps on a real poster step into their Room; guests still get the sheet.
-  const opensRoom = signedIn && !post.is_admin_drop && !!post.user_id;
   return (
     <>
       <TouchableOpacity
         onPress={() => (
-          opensDashboard ? navigation.navigate('AdminDashboard')
-            : opensRoom ? navigation.navigate('Room', { userId: post.user_id, postId: post.id })
-              : setVisible(true)
+          opensDashboard ? navigation.navigate('AdminDashboard') : setVisible(true)
         )}
         activeOpacity={post.is_admin_drop && !opensDashboard ? 1 : 0.75}
         disabled={post.is_admin_drop && !opensDashboard}

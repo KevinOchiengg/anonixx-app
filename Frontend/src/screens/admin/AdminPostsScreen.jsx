@@ -30,7 +30,7 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
     </Text>
     {editing != null ? (
       <TextInput
-        style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={900} autoFocus
+        style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={1800} autoFocus
         placeholder="Post text" placeholderTextColor={T.textMuted}
       />
     ) : null}
@@ -54,11 +54,14 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
     <View style={a.actionRow}>
       {editing != null ? (
         <>
+          <TouchableOpacity style={[a.btn, a.btnDanger]} onPress={() => onDelete(item)} disabled={saving} activeOpacity={0.85}>
+            <Text style={[a.btnText, { color: '#EF4444' }]}>Delete</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={a.btn} onPress={onCancel} activeOpacity={0.85}>
             <Text style={a.btnText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity style={a.btn} onPress={onSave} disabled={saving || !editing.trim()} activeOpacity={0.85}>
-            <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/900`}</Text>
+            <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/1800`}</Text>
           </TouchableOpacity>
         </>
       ) : (
@@ -137,10 +140,14 @@ export default function AdminPostsScreen({ navigation, route }) {
     if (ok) {
       setPosts((prev) => prev.filter((p) => p.id !== post.id));
       setTotal((t) => Math.max(0, t - 1));
+      setEditing((e) => (e?.id === post.id ? null : e));
+      showToast({ type: 'success', message: 'Post deleted.' });
+      // From the feed's pencil: the drop is gone, so back to the feed.
+      if (only) navigation.goBack();
     } else {
       showToast({ type: 'error', message: data?.detail || 'Could not delete.' });
     }
-  }, [showToast]);
+  }, [showToast, only, navigation]);
 
   const startEdit = useCallback((post) => setEditing({ id: post.id, text: post.confession_full ?? post.confession ?? '', country: post.country || '' }), []);
   const changeCountry = useCallback((country) => setEditing((e) => (e ? { ...e, country } : e)), []);

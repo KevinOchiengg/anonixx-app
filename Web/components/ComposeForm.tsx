@@ -7,7 +7,7 @@ import AppShell from "./AppShell";
 import GuidedConfession, { GUIDED_SAVE_KEY } from "./compose/GuidedConfession";
 import { Flame, MessageSquareLock } from "lucide-react";
 
-const MAX = 900;
+const MAX = 1800;
 const DRAFT_KEY = "anonixx.drops.draft.v1";
 
 function Inner() {

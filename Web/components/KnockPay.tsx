@@ -10,7 +10,7 @@ import Sheet from "./Sheet";
 import AgeGate from "./AgeGate";
 
 type Pack = { id: string; coins: number; display_price: string };
-type Target = { id: string; anonymous_name?: string | null };
+type Target = { id: string; anonymous_name?: string | null; kind?: string | null };
 const PHONE_KEY = "anonixx.mpesa.phone";
 
 export function useKnock(onToast?: (m: string) => void) {
@@ -24,7 +24,8 @@ export function useKnock(onToast?: (m: string) => void) {
     if (busy) return;
     setBusy(post.id);
     try {
-      const r = await api<{ connection_id?: string }>("/unlock-requests", { body: { target_type: "drop", target_id: post.id, payment_method: "coins" } });
+      const viaProfile = !!post.kind && post.kind !== "hookup";
+      const r = await api<{ connection_id?: string }>("/unlock-requests", { body: { target_type: "drop", target_id: post.id, payment_method: "coins", ...(viaProfile ? { via_profile: true } : {}) } });
       refresh();
       if (r.connection_id) router.push(`/chat/${r.connection_id}`);
     } catch (e) {

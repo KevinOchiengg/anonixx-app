@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { api, API_URL, getDeviceId, getToken, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
@@ -68,9 +67,7 @@ function replayRound(posts: Post[], lastId: string | undefined): string[] {
 
 export default function Feed({ initialPosts, initialCursor, startId, fillAfterStart = false }: Props) {
   const { user, ready } = useAuth();
-  const router = useRouter();
-  // Avatars open the person's Room; Knock on a hookup pays and goes straight into the chat.
-  const openRoom = (p: Post) => (p.user_id && !p.is_admin_drop ? router.push(`/room/${p.user_id}?post=${p.id}`) : setProfileFor(p));
+  const openProfile = (p: Post) => setProfileFor(p);
   const linkUp = (p: Post) => (p.kind === "hookup" ? knockIn(p) : setLinkFor(p));
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
@@ -567,7 +564,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
                 onPatch={patch}
                 onComments={setCommentsFor}
                 onLinkUp={linkUp}
-                onProfile={openRoom}
+                onProfile={openProfile}
                 onReport={setReportFor}
                 onToast={flash}
                 speed={speed}
@@ -608,7 +605,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
             onNeedAuth={() => { setCommentsFor(null); setGate("Sign in to join the thread. Your name stays hidden."); }}
           />
         ) : null}
-        {profileFor ? <AuthorSheet post={profileFor} onClose={() => setProfileFor(null)} onLinkUp={setLinkFor} /> : null}
+        {profileFor ? <AuthorSheet post={profileFor} onClose={() => setProfileFor(null)} onLinkUp={knockIn} /> : null}
         {/* a confession has no card Link up, so one landing here came through AuthorSheet */}
         {knockUi}
         {linkFor ? <LinkUpSheet post={linkFor} onClose={() => setLinkFor(null)} viaProfile={linkFor.kind === "confession"} /> : null}

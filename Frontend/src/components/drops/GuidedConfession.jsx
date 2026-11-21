@@ -28,7 +28,7 @@ export const GUIDED_SAVE_KEY = 'anonixx.drops.guided.v1';
 const SAVE_KEY = GUIDED_SAVE_KEY;
 // The poster's own age, remembered after their first hookup post so it's filled in next time.
 const MY_AGE_KEY = 'anonixx.hookup.age';
-const MAX_CHARS = 900;
+const MAX_CHARS = 1800;
 
 // Ids must match HOOKUP_* in Backend/app/api/v1/drops.py.
 const GENDERS = [['woman', 'woman'], ['man', 'man'], ['other', 'person']];

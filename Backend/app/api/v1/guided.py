@@ -1,208 +1,25 @@
-"""AI writer for guided hookup posts: answers + tone -> an editable draft. Posting still goes
-through POST /drops and all its checks."""
+"""The AI writer and reword tools are retired: posts are written by people, in their own words.
+These routes stay so older app builds get a clear answer instead of a 404."""
 
-from datetime import timedelta
-from typing import List, Optional
-
-from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 
-from app.api.v1.drops import (
-    HOOKUP_CRAVINGS, HOOKUP_HOSTING, HOOKUP_MEET_WHEN, HOOKUP_TONES, HOOKUP_TRAITS, HOOKUP_VIBES, now_utc,
-)
-from app.database import get_database
 from app.dependencies import get_current_user_id
-from app.services import confession_writer as writer
-from app.utils.contact_filter import CONTACT_INFO_ERROR, contains_contact_info
-from app.utils.moderation import MODERATION_ERROR, violates_policy
 
 router = APIRouter(prefix="/guided", tags=["guided"])
 
-DAILY_DRAFTS = 20          # AI drafts per person per rolling 24h
-DRAFT_MEMORY = 4           # earlier drafts sent back so a regenerate reads differently
-RECENT_OPENINGS = 12       # platform-wide openings to steer away from
-
-_LOOKING_WORDS = {"woman": "a woman", "man": "a man", "anyone": "anyone, whoever feels right"}
-_HOSTING_WORDS = {
-    "can_host": "they can host",
-    "can_travel": "they can come to the other person",
-    "either": "either hosting or travelling works for them",
-    "decide": "they would rather decide together",
-}
-_WHEN_WORDS = {
-    "asap": "as soon as possible",
-    "today": "today",
-    "tonight": "tonight",
-    "week": "sometime this week",
-    "flexible": "no rush, whenever it feels right",
-}
-
-
-class GenerateRequest(BaseModel):
-    craving: Optional[str] = None
-    craving_custom: Optional[str] = Field(None, max_length=40)
-    age: int
-    gender: Optional[str] = None
-    area: str = Field(..., max_length=60)
-    looking_for: Optional[str] = None
-    age_min: Optional[int] = None
-    age_max: Optional[int] = None
-    connection: Optional[List[str]] = None
-    traits: Optional[List[str]] = None
-    secret: Optional[str] = Field(None, max_length=200)
-    hosting: Optional[str] = None
-    public_first: bool = False
-    want: Optional[str] = Field(None, max_length=120)       # "Expectations" in the form
-    dont_want: Optional[str] = Field(None, max_length=80)
-    appearance: Optional[str] = Field(None, max_length=60)
-    meet_when: Optional[str] = None
-    tone: str = "vulnerable"
-    previous: Optional[List[str]] = None   # this session's earlier drafts
-
-
-def _opening(text: str) -> str:
-    return " ".join(text.split()[:6])
-
-
-async def _used_today(db, user_id: str) -> int:
-    return await db["guided_generations"].count_documents(
-        {"user_id": user_id, "created_at": {"$gte": now_utc() - timedelta(hours=24)}}
-    )
+RETIRED = "Write it in your own words."
 
 
 @router.get("/status")
-async def status(current_user_id: str = Depends(get_current_user_id), db=Depends(get_database)):
-    used = await _used_today(db, current_user_id)
-    return {"enabled": writer.is_configured(), "remaining": max(0, DAILY_DRAFTS - used), "daily": DAILY_DRAFTS}
+async def status(current_user_id: str = Depends(get_current_user_id)):
+    return {"enabled": False, "remaining": 0, "daily": 0}
 
 
 @router.post("/generate")
-async def generate(
-    data: GenerateRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db=Depends(get_database),
-):
-    if not writer.is_configured():
-        raise HTTPException(status_code=503, detail="The writer is resting right now. Write it in your own words instead.")
-
-    user = await db["users"].find_one({"_id": ObjectId(current_user_id)}, {"age_verified": 1, "is_admin": 1})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if data.age < 18 or data.age > 99:
-        raise HTTPException(status_code=400, detail="You must be 18 or older to post a hookup confession.")
-    if not user.get("age_verified") and not user.get("is_admin"):
-        # Same as POST /drops: the age typed in the guided form confirms an older account.
-        await db["users"].update_one(
-            {"_id": user["_id"]},
-            {"$set": {"age_verified": True, "age_attested": "hookup_age"}},
-        )
-    area = " ".join(data.area.split())
-    if not area:
-        raise HTTPException(status_code=400, detail="Add where you are.")
-    lo = data.age_min if data.age_min and 18 <= data.age_min <= 99 else None
-    hi = data.age_max if data.age_max and 18 <= data.age_max <= 99 else None
-    if lo and hi and lo > hi:
-        lo, hi = hi, lo
-
-    custom = " ".join((data.craving_custom or "").split())
-    secret = " ".join((data.secret or "").split())
-    want = " ".join((data.want or "").split())
-    dont_want = " ".join((data.dont_want or "").split())
-    appearance = " ".join((data.appearance or "").split())
-    for t in (area, custom, secret, want, dont_want, appearance):
-        if contains_contact_info(t):
-            raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
-        if violates_policy(t):
-            raise HTTPException(status_code=400, detail=MODERATION_ERROR)
-    if writer.MONEY.search(f"{custom} {secret} {want} {dont_want} {appearance}"):
-        raise HTTPException(status_code=400, detail="Leave money and gifts out of it. On Anonixx nobody pays for company.")
-
-    used = await _used_today(db, current_user_id)
-    if used >= DAILY_DRAFTS:
-        raise HTTPException(status_code=429, detail="That's all the drafts for today. Edit the last one, or write it yourself.")
-
-    craving = custom if (custom and data.craving not in HOOKUP_CRAVINGS) else data.craving
-    meeting = "somewhere public first" if data.public_first else None
-    answers = {
-        "craving": craving,
-        "age": data.age,
-        "gender": data.gender if data.gender in ("woman", "man") else None,
-        "area": area,
-        "looking_for": _LOOKING_WORDS.get(data.looking_for or "anyone"),
-        "age_range": f"{lo or 18} to {hi}" if hi else (f"{lo}+" if lo else None),
-        "connection": [v for v in (data.connection or []) if v in HOOKUP_VIBES][:4],
-        "traits": [t for t in (data.traits or []) if t in HOOKUP_TRAITS][:3],
-        "secret": secret or None,
-        "hosting": _HOSTING_WORDS.get(data.hosting) if data.hosting in HOOKUP_HOSTING else None,
-        "meeting": meeting,
-        "appearance": appearance or None,
-        "when": _WHEN_WORDS.get(data.meet_when) if data.meet_when in HOOKUP_MEET_WHEN else None,
-        "want": want or None,
-        "dont_want": dont_want or None,
-    }
-
-    recent = await db["drops"].find(
-        {"kind": "hookup", "hookup.guided.ai_generated": True, "confession": {"$ne": None}},
-        {"confession": 1},
-    ).sort("created_at", -1).limit(RECENT_OPENINGS).to_list(RECENT_OPENINGS)
-    previous = [" ".join(p.split())[:900] for p in (data.previous or []) if p and p.strip()][-DRAFT_MEMORY:]
-
-    tone = data.tone if data.tone in HOOKUP_TONES else "vulnerable"
-    try:
-        text = await writer.write_confession(
-            answers, tone,
-            avoid_openings=[_opening(d["confession"]) for d in recent],
-            previous_drafts=previous,
-        )
-    except writer.WriterUnavailable:
-        raise HTTPException(status_code=503, detail="The writer is resting right now. Write it in your own words instead.")
-    except writer.WriterFailed:
-        raise HTTPException(status_code=502, detail="Couldn't find the words this time. Try again, or try another tone.")
-
-    await db["guided_generations"].insert_one({"user_id": current_user_id, "created_at": now_utc(), "tone": tone})
-    return {"confession": text, "tone": tone, "remaining": max(0, DAILY_DRAFTS - used - 1)}
-
-
-class RewordRequest(BaseModel):
-    text: str = Field(..., max_length=900)
-    style: str = "direct"   # one of HOOKUP_TONES: direct | mysterious | playful | vulnerable
-
-
-REWORD_MIN_WORDS = 4
+async def generate(current_user_id: str = Depends(get_current_user_id)):
+    raise HTTPException(status_code=410, detail=RETIRED)
 
 
 @router.post("/reword")
-async def reword(
-    data: RewordRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db=Depends(get_database),
-):
-    """Quick confessions: rewords what the person typed in a style, keeping its meaning.
-    Shares the daily draft allowance with /generate. Posting still goes through POST /drops."""
-    if not writer.is_configured():
-        raise HTTPException(status_code=503, detail="The writer is resting right now. Your own words work too.")
-    text = "\n".join(" ".join(line.split()) for line in data.text.strip().splitlines()).strip()
-    if len(text.split()) < REWORD_MIN_WORDS:
-        raise HTTPException(status_code=400, detail="Write a little more first. It rewords what you said, it doesn't invent it.")
-    if contains_contact_info(text):
-        raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
-    if violates_policy(text):
-        raise HTTPException(status_code=400, detail=MODERATION_ERROR)
-
-    used = await _used_today(db, current_user_id)
-    if used >= DAILY_DRAFTS:
-        raise HTTPException(status_code=429, detail="That's all the rewordings for today. Your own words work too.")
-
-    style = data.style if data.style in HOOKUP_TONES else "direct"
-    try:
-        out = await writer.reword_confession(text, style)
-    except writer.WriterUnavailable:
-        raise HTTPException(status_code=503, detail="The writer is resting right now. Your own words work too.")
-    except writer.WriterFailed:
-        raise HTTPException(status_code=502, detail="Couldn't reword it this time. Try again, or try another style.")
-
-    await db["guided_generations"].insert_one(
-        {"user_id": current_user_id, "created_at": now_utc(), "tone": style, "mode": "reword"}
-    )
-    return {"confession": out, "style": style, "remaining": max(0, DAILY_DRAFTS - used - 1)}
+async def reword(current_user_id: str = Depends(get_current_user_id)):
+    raise HTTPException(status_code=410, detail=RETIRED)

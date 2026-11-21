@@ -49,7 +49,7 @@ const SCREEN_W = Dimensions.get('window').width;
 // The toolbar uses the card theme's dark gradient stop, so it reads as the card's footer.
 const TOOLBAR_BG = DROP_THEMES['desire'].bgTo;
 const CARD_W   = SCREEN_W - SPACING.md * 2;
-const MAX_CHARS = 900;
+const MAX_CHARS = 1800;
 
 // Any video length can be picked; over 3 minutes the editor starts cut to 3:00.
 
@@ -88,9 +88,6 @@ const POST_COST = 3;
 
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
 const HOOK_MAX = 100;
-// AI reword styles, same ids as HOOKUP_TONES in Backend/app/api/v1/drops.py.
-const REWORD_STYLES = [['direct', 'Direct'], ['mysterious', 'Mysterious'], ['playful', 'Playful'], ['vulnerable', 'Vulnerable']];
-const REWORD_MIN_WORDS = 4;
 // Mirrors drop_category() in drops.py, so the preview label matches the feed.
 const VULNERABLE_TOPICS = ['heartbreak', 'regret', 'betrayal', 'anger', 'relief', 'confusion', 'growth', 'family'];
 const VULNERABLE_WORDS = /\b(cry|cried|crying|tears|hurt|hurts|hurting|alone|lonely|loneliness|scared|afraid|depress\w*|anxious|anxiety|heartbr\w*|broke my heart|ashamed|shame|guilt\w*|grief|griev\w*|numb|empty inside|miss (?:him|her|them|you)|lost my|healing|forgive)\b/i;
@@ -355,15 +352,9 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [locationSubCounty, setLocationSubCounty] = useState('');
   const [locationEstate, setLocationEstate] = useState('');
   const [storyTopics, setStoryTopics] = useState([]);   // author's moods/topics (confessions only)
-  // General Confession extras, all optional: an opening line (the feed headline), a category,
-  // and the AI reword (keeps their meaning; /guided/reword).
+  // General Confession extras, all optional: an opening line (the feed headline) and a category.
   const [hook, setHook] = useState('');
   const [category, setCategory] = useState(null);      // null = worked out from the words | 'curiosity' | 'vulnerable'
-  const [writer, setWriter] = useState({ enabled: false, remaining: null });
-  const [rewording, setRewording] = useState('');      // the style being written, '' when idle
-  const [rewordStyle, setRewordStyle] = useState('');
-  const [rewordError, setRewordError] = useState('');
-  const [beforeReword, setBeforeReword] = useState(null);
   const [fontStyle, setFontStyle] = useState(DEFAULT_CARD_FONT); // an id from CARD_FONT_LIST
   const fontIdx = Math.max(0, CARD_FONT_LIST.findIndex((f) => f.id === fontStyle));
   const nextFont = useCallback(() => {
@@ -470,57 +461,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   }, [text, hook, category, format, cardIntent, intensity, hint, fontStyle, publisherOptIn, taggedUser,
       locationCountry, locationCounty, locationSubCounty, locationEstate]);
 
-  // ── AI reword (optional) ──────────────────────────────────────
-  useEffect(() => {
-    if (!isAuthenticated) return undefined;
-    let gone = false;
-    AsyncStorage.getItem('token').then((token) => fetch(`${API_BASE_URL}/api/v1/guided/status`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })).then((r) => (r.ok ? r.json() : null)).then((d) => {
-      if (!gone && d) setWriter({ enabled: !!d.enabled, remaining: d.remaining });
-    }).catch(() => {});
-    return () => { gone = true; };
-  }, [isAuthenticated]);
-
   const fullText = useMemo(() => [hook.trim(), text.trim()].filter(Boolean).join('\n'), [hook, text]);
-  const wordCount = fullText ? fullText.split(/\s+/).length : 0;
-
-  const handleReword = useCallback(async (style) => {
-    if (rewording || wordCount < REWORD_MIN_WORDS) return;
-    setRewording(style);
-    setRewordError('');
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/v1/guided/reword`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ text: fullText, style }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 503) setWriter((w) => ({ ...w, enabled: false }));
-      if (!res.ok) { setRewordError(typeof data.detail === 'string' ? data.detail : "Couldn't reword it this time."); return; }
-      setBeforeReword((b) => b || { hook, text });
-      const out = String(data.confession || '').trim();
-      const nl = out.indexOf('\n');
-      // Keep the opening line separate when the reword kept one.
-      if (hook.trim() && nl > 0) { setHook(out.slice(0, nl).trim().slice(0, HOOK_MAX)); setText(out.slice(nl + 1).trim()); }
-      else { setHook(''); setText(out); }
-      setRewordStyle(data.style || style);
-      setWriter((w) => ({ ...w, remaining: data.remaining }));
-    } catch {
-      setRewordError("Couldn't reach the writer. Check your connection.");
-    } finally {
-      setRewording('');
-    }
-  }, [rewording, wordCount, fullText, hook, text]);
-
-  const undoReword = useCallback(() => {
-    if (!beforeReword) return;
-    setHook(beforeReword.hook);
-    setText(beforeReword.text);
-    setBeforeReword(null);
-    setRewordStyle('');
-  }, [beforeReword]);
 
   // ── Edge detection ────────────────────────────────────────────
   const edge = useMemo(() => detectEdge(text), [text]);
@@ -863,7 +804,7 @@ export default function DropsComposeScreen({ navigation, route }) {
 
       // Clear draft
       await AsyncStorage.removeItem(DRAFT_KEY);
-      setText(''); setHook(''); setCategory(null); setBeforeReword(null);
+      setText(''); setHook(''); setCategory(null);
 
       Keyboard.dismiss();
       showToast({
@@ -1245,7 +1186,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          {/* General Confession extras (admins): category, reword, and how it lands in the feed. */}
+          {/* General Confession extras (admins): category and how it lands in the feed. */}
           {isAdmin && format === 'text' && (
             <View style={s.qc}>
               <Text style={s.qcLabel}>Category <Text style={s.qcOptional}>optional</Text></Text>
@@ -1264,34 +1205,6 @@ export default function DropsComposeScreen({ navigation, route }) {
                   );
                 })}
               </View>
-
-              {writer.enabled && wordCount >= REWORD_MIN_WORDS && (
-                <>
-                  <Text style={s.qcLabel}>Reword it for me <Text style={s.qcOptional}>optional</Text></Text>
-                  <View style={s.qcChips}>
-                    {REWORD_STYLES.map(([id, label]) => {
-                      const on = rewordStyle === id;
-                      return (
-                        <TouchableOpacity
-                          key={id} onPress={() => handleReword(id)} disabled={!!rewording} activeOpacity={0.8}
-                          style={[s.qcChip, on && s.qcChipOn, !!rewording && rewording !== id && { opacity: 0.45 }]}
-                          accessibilityLabel={`Reword it, ${label}`}
-                        >
-                          {rewording === id
-                            ? <ActivityIndicator size="small" color={T.primary} />
-                            : <Text style={[s.qcChipText, on && { color: T.text }]}>{label}</Text>}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  <Text style={s.qcHint}>
-                    Same story, same details, new voice. Nothing gets added.
-                    {writer.remaining != null ? ` ${writer.remaining} left today.` : ''}
-                    {beforeReword ? <Text style={s.qcLink} onPress={undoReword}>  Undo</Text> : null}
-                  </Text>
-                  {!!rewordError && <Text style={[s.qcHint, { color: T.warn }]}>{rewordError}</Text>}
-                </>
-              )}
 
               {!mediaUri && (
                 <>
