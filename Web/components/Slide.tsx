@@ -17,6 +17,7 @@ import { DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 import ConfessionCard from "./ConfessionCard";
 import { CATEGORIES, categoryOf } from "@/lib/confession";
 import { Bookmark as LBookmark, EyeOff, Flag as LFlag, Gauge, Heart as HeartFill, Link2 as LLink2, Lock, Maximize, Pencil, Share2 } from "lucide-react";
+import KnockLabel from "./KnockLabel";
 
 type Props = {
   post: Post;
@@ -310,7 +311,7 @@ export default function Slide({
   const linkBtn = (
     <button className="linkup" onClick={knock} aria-label={`Knock on ${post.anonymous_name || "their"} door`}>
       {post.kind === "hookup" ? <HeartFill className="lu-heart" fill="currentColor" strokeWidth={2} aria-hidden /> : <Link2 />}
-      <span className="lu-label">Knock</span>
+      <KnockLabel name={post.anonymous_name} />
     </button>
   );
   const voted = post.poll ? post.poll.voted_option !== null : false;

@@ -121,8 +121,6 @@
   background: linear-gradient(120deg, var(--rt-accent), color-mix(in srgb, var(--rt-accent) 70%, var(--rt-accent2)));
   box-shadow: 0 14px 36px -14px var(--rt-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25); transition: transform 0.15s ease; }
 .rm-knock:active { transform: scale(0.98); }
-.rm-knock-t { flex: 1; text-align: left; font-weight: 800; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rm-knock em { font-style: normal; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px; background: color-mix(in srgb, var(--rt-bg) 80%, transparent); color: var(--rt-text); }
 
 /* The entrance after a Let In: a door of light opens, then the welcome. */
 .rm-enter { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 24px 18px; background: color-mix(in srgb, var(--rt-bg) 94%, transparent); animation: rmFade 0.35s ease both; overflow-y: auto; }

@@ -52,6 +52,7 @@ import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSli
 import * as Clipboard from 'expo-clipboard';
 import { fetchBalance } from '../../store/slices/coinsSlice';
 import { SHARE_TEXT } from '../../utils/share';
+import KnockLabel from '../../components/feed/KnockLabel';
 
 // Public web link for a drop; the app opens it too (AppNavigator linking).
 const dropLink = (p) => `https://anonixx.com/drop/${p.id}`;
@@ -171,7 +172,7 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
           style={[sw.linkUpBtn, wide && { justifyContent: 'center' }]}
         >
           {heart ? <Heart size={rs(16)} color="#fff" fill="#fff" strokeWidth={2} /> : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
-          <Text style={sw.linkUpBtnText} numberOfLines={1}>Knock</Text>
+          <KnockLabel name={name} style={sw.linkUpBtnText} />
         </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
@@ -2045,11 +2046,11 @@ const sw = StyleSheet.create({
   adCtaBtnText: { fontSize: FONT.sm, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
 
   linkUpWrap: {
-    marginTop: rp(6), alignSelf: 'flex-start', maxWidth: '100%', borderRadius: RADIUS.full,
+    marginTop: rp(6), alignSelf: 'flex-start', width: rs(280), maxWidth: '100%', borderRadius: RADIUS.full,
     shadowColor: THEME.primary, shadowOffset: { width: 0, height: rs(5) }, shadowOpacity: 0.55, shadowRadius: rs(12), elevation: 6,
   },
   linkUpBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(8),
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(8),
     paddingVertical: rp(12), paddingHorizontal: rp(18), borderRadius: RADIUS.full,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
   },

@@ -28,6 +28,7 @@ import { roomThemeById } from '../../config/roomThemes';
 import ChatBackground from '../../components/chat/ChatBackground';
 import KnockClues from '../../components/rooms/KnockClues';
 import { knockIn } from '../../utils/knock';
+import KnockLabel from '../../components/feed/KnockLabel';
 
 const REPORT_REASONS = [
   ['abuse', 'Harassment or abuse'],
@@ -313,7 +314,7 @@ export default function RoomScreen({ route, navigation }) {
           onPress={() => knockIn(navigation, { id: post.id, anonymous_name: name, avatar_url: pic, content: post.content }, showToast)}
         >
           <LinearGradient colors={[th.accent, th.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1.6, y: 1 }} style={s.knock}>
-            <Text style={[s.knockText, { color: th.bg }]} numberOfLines={1}>Knock</Text>
+            <KnockLabel name={name} style={[s.knockText, { color: th.bg }]} />
           </LinearGradient>
         </TouchableOpacity>
         <Text style={[s.fine, { color: th.muted }]}>
@@ -464,8 +465,8 @@ const s = StyleSheet.create({
   inText: { fontWeight: '700', fontSize: FONT.sm },
   dot: { width: rs(9), height: rs(9), borderRadius: rs(5) },
   dotSm: { width: rs(7), height: rs(7) },
-  knock: { height: rs(54), borderRadius: rs(16), flexDirection: 'row', alignItems: 'center', gap: rp(10), paddingLeft: rp(18), paddingRight: rp(8) },
-  knockText: { flex: 1, fontSize: FONT.md, fontWeight: '800' },
+  knock: { height: rs(54), borderRadius: rs(16), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(18) },
+  knockText: { fontSize: FONT.md, fontWeight: '800' },
   fine: { fontSize: rf(12), lineHeight: rf(17), textAlign: 'center' },
 
   fullBack: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },

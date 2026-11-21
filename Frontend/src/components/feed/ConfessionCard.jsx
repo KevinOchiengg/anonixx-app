@@ -13,6 +13,7 @@ import { T } from '../../utils/theme';
 import { rf, rp, rs, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { splitHook } from '../../utils/captionHook';
 import { timeLeft } from '../../config/linkup';
+import KnockLabel from './KnockLabel';
 
 export const CATEGORIES = {
   curiosity: { label: 'Confession', tint: T.primary, Icon: Sparkles },
@@ -82,9 +83,7 @@ export const KnockButton = React.memo(({ name, onPress, compact }) => (
       colors={[T.primary, alpha(T.primary, 0.82)]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       style={[k.btn, compact && k.btnCompact]}
     >
-      <View style={k.labelCol}>
-        <Text style={k.label} numberOfLines={1}>Knock</Text>
-      </View>
+      <KnockLabel name={name} style={k.label} />
     </LinearGradient>
   </TouchableOpacity>
 ));
@@ -290,11 +289,10 @@ const k = StyleSheet.create({
   },
   wrapCompact: { alignSelf: 'flex-start', borderRadius: RADIUS.full },
   btn: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(12),
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(12),
     paddingVertical: rp(12), paddingHorizontal: rp(16), borderRadius: RADIUS.lg,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
   },
   btnCompact: { paddingVertical: rp(10), borderRadius: RADIUS.full },
-  labelCol: { flex: 1, minWidth: 0 },
   label: { fontFamily: 'DMSans-Bold', fontSize: rf(16), color: '#fff' },
 });

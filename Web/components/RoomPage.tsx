@@ -18,6 +18,7 @@ import { useKnock } from "./KnockPay";
 import Sheet from "./Sheet";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import { Ellipsis, Lock as LockIcon } from "lucide-react";
+import KnockLabel from "./KnockLabel";
 
 type Hookup = { age: number; gender: string | null; area: string; looking_for: string | null; vibes: string[] } | null;
 type Preview = {
@@ -248,7 +249,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
     bar = (
       <div className="rm-bar knock">
         <button className="rm-knock" onClick={() => knockIn({ id: post.id, anonymous_name: name })}>
-          <span className="rm-knock-t">Knock</span>
+          <KnockLabel name={name} />
         </button>
         <small>{cost ? `You go straight in. No reply in 24 hours and your ${cost} coins come back.` : "Free for you. You go straight in."}</small>
       </div>

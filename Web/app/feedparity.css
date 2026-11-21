@@ -514,7 +514,6 @@
   transition: transform 0.12s ease-out;
 }
 .linkup:active { transform: scale(0.96); }
-.linkup .lu-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .linkup svg { margin-right: 0; }
 .linkup .coin-cost {
   display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: 0; padding: 2px 8px 2px 5px;
@@ -645,3 +644,16 @@
 
 /* feed loading: just the loading line along the bottom, like a buffering video */
 .net-slide { position: relative; }
+
+/* Knock label: "Knock at Name’s door", centered; only the name truncates */
+.knock-label { flex: 1; min-width: 0; display: flex; justify-content: center; white-space: nowrap; }
+.knock-fixed { flex: none; }
+.knock-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.slide .linkup, .hasnav .slide .linkup, .slide.has-media .linkup, .hasnav .slide.has-media .linkup {
+  width: min(280px, calc(100% - var(--rail-w) - 30px)); justify-content: center;
+}
+.cc-knock { justify-content: center; }
+.rm-knock { padding: 0 18px; }
+.rm-knock .knock-label { font-weight: 800; font-size: 15px; }
+.cc-knock .knock-label { font-size: 16px; font-weight: 700; line-height: 1.3; }

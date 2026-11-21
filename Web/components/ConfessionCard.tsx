@@ -8,6 +8,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import type { Post } from "@/lib/api";
 import { CATEGORIES, categoryOf, linkUpFacts, splitConfession, topicLabel, type Category, type Fact } from "@/lib/confession";
 import { Flame, Sparkles } from "lucide-react";
+import KnockLabel from "./KnockLabel";
 
 function CategoryIcon({ c }: { c: Category }) {
   const p = { strokeWidth: 2, "aria-hidden": true } as const;
@@ -23,7 +24,7 @@ export function CategoryLabel({ c }: { c: Category }) {
 export function KnockCta({ name, onClick }: { name: string | null; onClick: () => void }) {
   return (
     <button type="button" className="cc-knock" onClick={onClick} aria-label={`Knock on ${name || "their"} door`}>
-      <span className="cc-knock-text"><b>Knock</b></span>
+      <KnockLabel name={name} />
     </button>
   );
 }
