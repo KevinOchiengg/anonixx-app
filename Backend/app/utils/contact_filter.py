@@ -4,13 +4,18 @@ import re
 
 _CONTACT_INFO_PATTERNS = [
     re.compile(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", re.IGNORECASE),           # email
-    # Word-obfuscated email — "name at gmail dot com" / "name[at]gmail(dot)com"
+    # Spaced or bracketed @: "name @ gmail . com", "name[@]gmail(dot)com"
     re.compile(
-        r"[a-z0-9._%+\-]+"                            # local part
-        r"\s*[\(\[]?\s*(?:@|\bat\b)\s*[\)\]]?\s*"      # @ or "at"
-        r"[a-z0-9.\-]+"                                # domain
-        r"\s*[\(\[]?\s*(?:\.|\bdot\b)\s*[\)\]]?\s*"    # . or "dot"
-        r"[a-z]{2,}",                                   # tld
+        r"[a-z0-9._%+\-]+\s*[\(\[]?\s*@\s*[\)\]]?\s*[a-z0-9\-]+"
+        r"\s*[\(\[]?\s*(?:\.|\bdot\b)\s*[\)\]]?\s*[a-z]{2,}\b",
+        re.IGNORECASE,
+    ),
+    # Spelled-out "at": "name at gmail dot com", "name (at) gmail.com". Requires "dot" or an
+    # unspaced "." plus a real TLD, so prose like "good at first. He" isn't read as an address.
+    re.compile(
+        r"[a-z0-9._%+\-]+\s*[\(\[]?\s*\bat\b\s*[\)\]]?\s*[a-z0-9\-]+"
+        r"(?:\s*[\(\[]?\s*\bdot\b\s*[\)\]]?\s*|\.)"
+        r"(?:com|net|org|co|io|me|info|biz|app|xyz|us|uk|ke|ng|za)\b",
         re.IGNORECASE,
     ),
     re.compile(r"(\+?\d[\d\-\s()]{7,}\d)"),                              # phone number
