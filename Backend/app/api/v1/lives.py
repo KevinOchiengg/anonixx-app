@@ -6,7 +6,7 @@ member until the live ends. Members chat with the host and send gifts.
 
 Money: entry fees are split HOST_ENTRY_SHARE to the host, the rest to Anonixx; gifts go wholly to
 the host. Host earnings accrue in `live_earnings` and are paid out weekly by an admin to the host's
-verified M-Pesa number (`live_payout_profiles`). Hosts can promote a live in the main feed with coins.
+verified payout method (`live_payout_profiles`): M-Pesa in Kenya, PayPal or bank transfer anywhere. Hosts can promote a live in the main feed with coins.
 
 Adult lives exist only when ADULT_LIVES_ENABLED is set, and only on the website for age-verified
 viewers; the app never lists them.
@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -26,6 +26,7 @@ from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id, require_admin, require_super_admin
 from app.utils.audit import audit
 from app.utils.coin_service import debit_coins
+from app.utils.geoip import request_country
 from app.utils.contact_filter import CONTACT_INFO_ERROR, contains_contact_info
 from app.utils.moderation import MODERATION_ERROR, violates_policy
 
@@ -200,46 +201,145 @@ def _card(live: dict, host: dict, viewers: int = 0) -> dict:
 
 # ─── payout profile (hosts) ─────────────────────────────────────
 
+# M-Pesa only where it works (Kenya); PayPal and bank transfer everywhere.
+PAYOUT_CURRENCY = {"mpesa": "KES", "paypal": "USD", "bank": "USD"}
+PAYOUT_LABEL = {"mpesa": "M-Pesa", "paypal": "PayPal", "bank": "bank account"}
+MPESA_COUNTRIES = {"KE"}
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)
+ACCOUNT_RE = re.compile(r"^[A-Z0-9]{4,34}$")
+SWIFT_RE = re.compile(r"^[A-Z0-9]{8}(?:[A-Z0-9]{3})?$")
+
+
 class PayoutProfileBody(BaseModel):
     legal_name: str = Field(..., min_length=3, max_length=80)
     id_number: str = Field(..., min_length=5, max_length=20)
-    mpesa_phone: str = Field(..., min_length=9, max_length=15)
+    method: Literal["mpesa", "paypal", "bank"] = "mpesa"
+    mpesa_phone: Optional[str] = Field(None, max_length=15)
+    paypal_email: Optional[str] = Field(None, max_length=120)
+    bank_name: Optional[str] = Field(None, max_length=80)
+    account_number: Optional[str] = Field(None, max_length=40)
+    swift_code: Optional[str] = Field(None, max_length=11)
 
 
 def _normalize_mpesa(raw: str) -> str:
-    m = MPESA_RE.match(re.sub(r"[\s\-]", "", raw))
+    m = MPESA_RE.match(re.sub(r"[\s\-]", "", raw or ""))
     if not m:
         raise HTTPException(status_code=400, detail="Enter a valid Safaricom number, e.g. 0712 345 678.")
     return f"254{m.group(1)}"
 
 
-def _profile_out(p: Optional[dict]) -> Optional[dict]:
+def _method_of(p: dict) -> str:
+    return p.get("method") or "mpesa"   # profiles saved before PayPal/bank existed are M-Pesa
+
+
+def _currency_of(p: Optional[dict], country: Optional[str]) -> str:
+    if p:
+        return PAYOUT_CURRENCY[_method_of(p)]
+    return "KES" if country in MPESA_COUNTRIES else "USD"
+
+
+def _rate(currency: str) -> float:
+    return settings.LIVE_PAYOUT_KES_PER_COIN if currency == "KES" else settings.LIVE_PAYOUT_USD_PER_COIN
+
+
+def _amount(coins: float, currency: str) -> float:
+    value = coins * _rate(currency)
+    return round(value) if currency == "KES" else round(value, 2)
+
+
+def _details(p: dict) -> dict:
+    if _method_of(p) == "mpesa" and "details" not in p:
+        return {"phone": p.get("mpesa_phone")}
+    return p.get("details") or {}
+
+
+def _destination(p: dict, full: bool = False) -> str:
+    method, d = _method_of(p), _details(p)
+    if method == "mpesa":
+        local = f"0{d['phone'][3:]}"
+        return f"M-Pesa {local}" if full else f"M-Pesa {local[:4]} ••• {local[-3:]}"
+    if method == "paypal":
+        email = d["email"]
+        if full:
+            return f"PayPal {email}"
+        name, _, domain = email.partition("@")
+        return f"PayPal {name[:1]}•••@{domain}"
+    acct = d["account_number"]
+    if full:
+        swift = f" · SWIFT {d['swift_code']}" if d.get("swift_code") else ""
+        return f"{d['bank_name']} · {acct}{swift}"
+    return f"{d['bank_name']} ••{acct[-4:]}"
+
+
+def _profile_out(p: Optional[dict], full: bool = False) -> Optional[dict]:
     if not p:
         return None
-    return {
+    out = {
         "legal_name": p["legal_name"],
         "id_number_last4": p["id_number"][-4:],
-        "mpesa_phone": p["mpesa_phone"],
+        "method": _method_of(p),
+        "currency": PAYOUT_CURRENCY[_method_of(p)],
+        "destination": _destination(p, full=full),
         "verified": bool(p.get("verified_at")),
         "submitted_at": _iso(p.get("submitted_at")),
     }
+    if full:
+        out["id_number"] = p["id_number"]
+    return out
+
+
+def _methods_for(country: Optional[str]) -> list[str]:
+    return (["mpesa"] if country in MPESA_COUNTRIES else []) + ["paypal", "bank"]
 
 
 @router.get("/payout-profile")
-async def get_payout_profile(user_id: str = Depends(get_current_user_id), db=Depends(get_database)):
-    return {"profile": _profile_out(await db["live_payout_profiles"].find_one({"user_id": user_id}))}
+async def get_payout_profile(request: Request, user_id: str = Depends(get_current_user_id), db=Depends(get_database)):
+    country = await request_country(request)
+    return {
+        "profile": _profile_out(await db["live_payout_profiles"].find_one({"user_id": user_id})),
+        "methods": _methods_for(country),
+        "country": country,
+    }
 
 
 @router.put("/payout-profile")
-async def save_payout_profile(body: PayoutProfileBody, user_id: str = Depends(get_current_user_id), db=Depends(get_database)):
+async def save_payout_profile(
+    body: PayoutProfileBody, request: Request, user_id: str = Depends(get_current_user_id), db=Depends(get_database),
+):
+    country = await request_country(request)
+    if body.method == "mpesa":
+        if country not in MPESA_COUNTRIES:
+            raise HTTPException(status_code=400, detail="M-Pesa payouts are only available in Kenya. Choose PayPal or bank transfer.")
+        details = {"phone": _normalize_mpesa(body.mpesa_phone)}
+    elif body.method == "paypal":
+        email = (body.paypal_email or "").strip().lower()
+        if not EMAIL_RE.match(email):
+            raise HTTPException(status_code=400, detail="Enter the email address of your PayPal account.")
+        details = {"email": email}
+    else:
+        bank = " ".join((body.bank_name or "").split())
+        account = re.sub(r"[\s\-]", "", body.account_number or "").upper()
+        swift = re.sub(r"\s", "", body.swift_code or "").upper()
+        if len(bank) < 2:
+            raise HTTPException(status_code=400, detail="Enter your bank's name.")
+        if not ACCOUNT_RE.match(account):
+            raise HTTPException(status_code=400, detail="Enter a valid account number or IBAN.")
+        if swift and not SWIFT_RE.match(swift):
+            raise HTTPException(status_code=400, detail="A SWIFT/BIC code has 8 or 11 letters and numbers.")
+        details = {"bank_name": bank, "account_number": account, "swift_code": swift or None}
+
     doc = {
         "legal_name": " ".join(body.legal_name.split()),
         "id_number": re.sub(r"\s", "", body.id_number),
-        "mpesa_phone": _normalize_mpesa(body.mpesa_phone),
+        "method": body.method,
+        "details": details,
+        "country": country,
         "submitted_at": _now(),
         "verified_at": None,
     }
-    await db["live_payout_profiles"].update_one({"user_id": user_id}, {"$set": doc, "$setOnInsert": {"user_id": user_id}}, upsert=True)
+    await db["live_payout_profiles"].update_one(
+        {"user_id": user_id}, {"$set": doc, "$unset": {"mpesa_phone": ""}, "$setOnInsert": {"user_id": user_id}}, upsert=True,
+    )
     return {"profile": _profile_out({**doc, "user_id": user_id})}
 
 
@@ -286,7 +386,7 @@ async def promoted(db=Depends(get_database)):
 # ─── host earnings ──────────────────────────────────────────────
 
 @router.get("/earnings")
-async def my_earnings(user_id: str = Depends(get_current_user_id), db=Depends(get_database)):
+async def my_earnings(request: Request, user_id: str = Depends(get_current_user_id), db=Depends(get_database)):
     rows = db["live_earnings"].aggregate([
         {"$match": {"host_id": user_id}},
         {"$group": {"_id": {"week": "$week", "paid": "$paid_out"}, "coins": {"$sum": "$coins"}}},
@@ -298,19 +398,22 @@ async def my_earnings(user_id: str = Depends(get_current_user_id), db=Depends(ge
         w["coins"] += r["coins"]
         if r["_id"]["paid"]:
             w["paid_coins"] += r["coins"]
+    profile = await db["live_payout_profiles"].find_one({"user_id": user_id})
+    currency = _currency_of(profile, None if profile else await request_country(request))
     current = week_start(_now()).isoformat()
     out = sorted(weeks.values(), key=lambda w: w["week"], reverse=True)
     for w in out:
-        w["kes"] = round(w["coins"] * settings.LIVE_PAYOUT_KES_PER_COIN)
+        w["amount"] = _amount(w["coins"], currency)
         w["status"] = "in_progress" if w["week"] == current else "paid" if w["paid_coins"] >= w["coins"] else "due"
     owed = sum(w["coins"] - w["paid_coins"] for w in out if w["status"] == "due")
     return {
         "weeks": out[:26],
         "owed_coins": owed,
-        "owed_kes": round(owed * settings.LIVE_PAYOUT_KES_PER_COIN),
-        "kes_per_coin": settings.LIVE_PAYOUT_KES_PER_COIN,
+        "owed_amount": _amount(owed, currency),
+        "currency": currency,
+        "rate": _rate(currency),
         "host_share": HOST_ENTRY_SHARE,
-        "profile": _profile_out(await db["live_payout_profiles"].find_one({"user_id": user_id})),
+        "profile": _profile_out(profile),
     }
 
 
@@ -726,18 +829,25 @@ async def admin_payouts(admin_id: str = Depends(require_super_admin), db=Depends
     profiles = {p["user_id"]: p async for p in db["live_payout_profiles"].find({"user_id": {"$in": [h["_id"] for h in hosts]}})}
     recent = await db["live_payouts"].find().sort("created_at", -1).to_list(30)
     recent_people = await _people(db, [p["host_id"] for p in recent])
-    return {
-        "kes_per_coin": settings.LIVE_PAYOUT_KES_PER_COIN,
-        "due": [{
+    def due_row(h: dict) -> dict:
+        profile = profiles.get(h["_id"])
+        currency = _currency_of(profile, None)
+        return {
             "host_id": h["_id"],
             "host": people.get(h["_id"], {}),
             "coins": round(h["coins"], 2),
-            "kes": round(h["coins"] * settings.LIVE_PAYOUT_KES_PER_COIN),
+            "amount": _amount(h["coins"], currency),
+            "currency": currency,
             "weeks": sorted(w.date().isoformat() for w in h["weeks"]),
-            "profile": {**_profile_out(profiles[h["_id"]]), "id_number": profiles[h["_id"]]["id_number"]} if h["_id"] in profiles else None,
-        } for h in hosts],
+            "profile": _profile_out(profile, full=True),
+        }
+
+    return {
+        "rates": {"KES": settings.LIVE_PAYOUT_KES_PER_COIN, "USD": settings.LIVE_PAYOUT_USD_PER_COIN},
+        "due": [due_row(h) for h in hosts],
         "recent": [{
-            "id": str(p["_id"]), "host": recent_people.get(p["host_id"], {}), "coins": p["coins"], "kes": p["kes"],
+            "id": str(p["_id"]), "host": recent_people.get(p["host_id"], {}), "coins": p["coins"],
+            "amount": p.get("amount", p.get("kes")), "currency": p.get("currency", "KES"),
             "reference": p.get("reference"), "created_at": _iso(p["created_at"]),
         } for p in recent],
     }
@@ -758,15 +868,19 @@ async def admin_mark_paid(host_id: str, body: MarkPaidBody, admin_id: str = Depe
     coins = round(total[0]["coins"], 2) if total else 0
     if not coins:
         raise HTTPException(status_code=400, detail="Nothing is owed to this host.")
+    currency = _currency_of(profile, None)
     payout = {
-        "host_id": host_id, "coins": coins, "kes": round(coins * settings.LIVE_PAYOUT_KES_PER_COIN),
-        "mpesa_phone": profile["mpesa_phone"], "reference": body.reference.strip(), "admin_id": admin_id, "created_at": _now(),
+        "host_id": host_id, "coins": coins, "amount": _amount(coins, currency), "currency": currency,
+        "method": _method_of(profile), "destination": _destination(profile, full=True),
+        "reference": body.reference.strip(), "admin_id": admin_id, "created_at": _now(),
     }
     res = await db["live_payouts"].insert_one(payout)
     await db["live_earnings"].update_many(match, {"$set": {"paid_out": True, "payout_id": str(res.inserted_id)}})
     await audit(db, admin_id, "live.payout", "user", host_id)
-    _push(db, [host_id], "You've been paid", f"KES {payout['kes']} from your lives was sent to your M-Pesa.", {"type": "live_payout", "url": "/lives/earnings"})
-    return {"paid": True, "kes": payout["kes"]}
+    sent = f"{currency} {payout['amount']:,}"
+    _push(db, [host_id], "You've been paid", f"{sent} from your lives was sent to your {PAYOUT_LABEL[payout['method']]}.",
+          {"type": "live_payout", "url": "/lives/earnings"})
+    return {"paid": True, "amount": payout["amount"], "currency": currency}
 
 
 @admin_router.get("/hosts")
@@ -774,8 +888,7 @@ async def admin_hosts(admin_id: str = Depends(require_super_admin), db=Depends(g
     rows = await db["live_payout_profiles"].find().sort("submitted_at", -1).to_list(200)
     people = await _people(db, [r["user_id"] for r in rows])
     return {"hosts": [{
-        "user_id": r["user_id"], "host": people.get(r["user_id"], {}),
-        **_profile_out(r), "id_number": r["id_number"],
+        "user_id": r["user_id"], "host": people.get(r["user_id"], {}), **_profile_out(r, full=True),
     } for r in rows]}
 
 

@@ -20,6 +20,9 @@ const nextConfig = {
     ];
   },
   images: {
+    // Serve media straight from R2/Stream. Uploads are already compressed, and Vercel's image
+    // optimizer has a monthly quota; once it runs out every <Image> returns 402 and shows blank.
+    unoptimized: true,
     remotePatterns: [
       ...(MEDIA_HOST ? [{ protocol: "https", hostname: MEDIA_HOST }] : []),
       { protocol: "https", hostname: "**.r2.dev" },

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
+import { money } from "@/lib/lives";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { Badge, Tabs, fmtDate, usePaged, useTab } from "@/components/admin/bits";
 
@@ -12,14 +13,21 @@ type LiveRow = {
   members: number; viewers: number; starts_at: string | null; started_at: string | null; ended_at: string | null;
   host: Host & { id: string }; entry_coins: number; gift_coins: number; reports: number;
 };
-type Profile = { legal_name: string; id_number: string; id_number_last4: string; mpesa_phone: string; verified: boolean; submitted_at: string | null };
-type Due = { host_id: string; host: Host; coins: number; kes: number; weeks: string[]; profile: Profile | null };
-type Payouts = { kes_per_coin: number; due: Due[]; recent: { id: string; host: Host; coins: number; kes: number; reference: string | null; created_at: string | null }[] };
+type Profile = {
+  legal_name: string; id_number: string; id_number_last4: string; method: "mpesa" | "paypal" | "bank"; currency: string;
+  destination: string; verified: boolean; submitted_at: string | null;
+};
+type Due = { host_id: string; host: Host; coins: number; amount: number; currency: string; weeks: string[]; profile: Profile | null };
+type Payouts = {
+  rates: Record<string, number>;
+  due: Due[];
+  recent: { id: string; host: Host; coins: number; amount: number; currency: string; reference: string | null; created_at: string | null }[];
+};
 type HostRow = Profile & { user_id: string; host: Host };
 
 const TABS = ["Lives", "Payouts", "Hosts"] as const;
 const STATUS_FILTERS: [string, string][] = [["", "All"], ["live", "Live"], ["scheduled", "Scheduled"], ["ended", "Ended"]];
-const phone = (p: string) => `0${p.slice(3)}`;
+const REF_HINT: Record<Profile["method"], string> = { mpesa: "M-Pesa code, e.g. SKL2X9P0QR", paypal: "PayPal transaction ID", bank: "Bank transfer reference" };
 
 function LivesTab() {
   const confirm = useConfirm();
@@ -91,9 +99,9 @@ function PayoutsTab() {
   async function markPaid(d: Due) {
     const reference = (refs[d.host_id] || "").trim();
     const ok = await confirm({
-      title: `Mark KES ${d.kes.toLocaleString()} as paid?`,
-      message: `Only do this after sending the money to ${d.profile?.legal_name} on M-Pesa ${d.profile ? phone(d.profile.mpesa_phone) : ""}.`,
-      detail: <div className="cf-row"><span>M-Pesa code</span><b>{reference}</b></div>,
+      title: `Mark ${money(d.amount, d.currency)} as paid?`,
+      message: `Only do this after sending the money to ${d.profile?.legal_name} (${d.profile?.destination}).`,
+      detail: <div className="cf-row"><span>Reference</span><b>{reference}</b></div>,
       confirmLabel: "Mark as paid",
     });
     if (!ok) return;
@@ -106,24 +114,27 @@ function PayoutsTab() {
 
   return (
     <>
-      <p className="muted small">Earnings from finished weeks (Monday to Sunday). One coin pays KES {data.kes_per_coin}. Send the money on M-Pesa, then enter the M-Pesa code and mark it paid.</p>
+      <p className="muted small">
+        Earnings from finished weeks (Monday to Sunday). One coin pays KES {data.rates.KES} on M-Pesa or USD {data.rates.USD} on PayPal and bank.
+        Send the money, then enter the transaction reference and mark it paid.
+      </p>
       {!data.due.length ? <p className="muted">Nothing is owed right now.</p> : (
         <div className="adm-list">
           {data.due.map((d) => (
             <div key={d.host_id} className="adm-card">
               <div className="adm-chips">
                 <b>{d.host.name || "Anonymous"}</b>
-                <Badge tone="warn">KES {d.kes.toLocaleString()}</Badge>
+                <Badge tone="warn">{money(d.amount, d.currency)}</Badge>
                 <span className="muted small">{d.coins} coins · weeks of {d.weeks.join(", ")}</span>
               </div>
               {d.profile ? (
                 <p className="small">
-                  {d.profile.legal_name} · ID {d.profile.id_number} · M-Pesa <b>{phone(d.profile.mpesa_phone)}</b>{" "}
+                  {d.profile.legal_name} · ID {d.profile.id_number} · <b>{d.profile.destination}</b>{" "}
                   {d.profile.verified ? <Badge tone="ok">verified</Badge> : <Badge tone="bad">not verified</Badge>}
                 </p>
               ) : <p className="err small">No payout details.</p>}
               <div className="adm-actions">
-                <input className="adm-input" placeholder="M-Pesa code, e.g. SKL2X9P0QR" value={refs[d.host_id] || ""} maxLength={40}
+                <input className="adm-input" placeholder={d.profile ? REF_HINT[d.profile.method] : "Reference"} value={refs[d.host_id] || ""} maxLength={40}
                   onChange={(e) => setRefs({ ...refs, [d.host_id]: e.target.value })} />
                 <button className="adm-btn primary" disabled={busy === d.host_id || !d.profile?.verified || (refs[d.host_id] || "").trim().length < 4} onClick={() => markPaid(d)}>
                   Mark paid
@@ -137,7 +148,7 @@ function PayoutsTab() {
         <>
           <h3 style={{ marginTop: 22 }}>Recent payouts</h3>
           <ul className="adm-bars">
-            {data.recent.map((p) => <li key={p.id}><span>{p.host.name || "Anonymous"} · {p.reference}</span><b>KES {p.kes.toLocaleString()}</b><small>{fmtDate(p.created_at)}</small></li>)}
+            {data.recent.map((p) => <li key={p.id}><span>{p.host.name || "Anonymous"} · {p.reference}</span><b>{money(p.amount, p.currency)}</b><small>{fmtDate(p.created_at)}</small></li>)}
           </ul>
         </>
       ) : null}
@@ -157,7 +168,7 @@ function HostsTab() {
   async function verify(h: HostRow) {
     const ok = await confirm({
       title: `Verify ${h.legal_name}?`,
-      message: "Confirm their ID matches this name and the M-Pesa number is registered to them. Payouts go only to verified hosts.",
+      message: "Confirm their ID matches this name and the payout account belongs to them. Payouts go only to verified hosts.",
       confirmLabel: "Verify host",
     });
     if (!ok) return;
@@ -170,13 +181,13 @@ function HostsTab() {
   return (
     <div className="adm-scroll">
       <table className="adm-table">
-        <thead><tr><th>Host</th><th>Legal name</th><th>ID</th><th>M-Pesa</th><th>Submitted</th><th /></tr></thead>
+        <thead><tr><th>Host</th><th>Legal name</th><th>ID</th><th>Paid to</th><th>Submitted</th><th /></tr></thead>
         <tbody>{rows.map((h) => (
           <tr key={h.user_id}>
             <td><Link href={`/admin/users/${h.user_id}`}>{h.host.name || "Anonymous"}</Link></td>
             <td>{h.legal_name}</td>
             <td>{h.id_number}</td>
-            <td>{phone(h.mpesa_phone)}</td>
+            <td>{h.destination}</td>
             <td>{fmtDate(h.submitted_at)}</td>
             <td>{h.verified ? <Badge tone="ok">verified</Badge> : <button className="adm-btn primary" onClick={() => verify(h)}>Verify</button>}</td>
           </tr>
@@ -193,7 +204,7 @@ export default function AdminLives() {
   return (
     <>
       <h2>Lives</h2>
-      <p className="muted small">Paid lives: hosts keep 80% of entry fees and all gifts, paid weekly to M-Pesa.</p>
+      <p className="muted small">Paid lives: hosts keep 80% of entry fees and all gifts, paid weekly by M-Pesa, PayPal or bank transfer.</p>
       {superAdmin ? <Tabs value={tab} options={TABS} onChange={setTab} /> : null}
       {tab === "Payouts" && superAdmin ? <PayoutsTab /> : tab === "Hosts" && superAdmin ? <HostsTab /> : <LivesTab />}
     </>

@@ -45,16 +45,30 @@ export type LiveMessage = {
 
 export type Gift = { id: string; label: string; coins: number };
 
-export type PayoutProfile = { legal_name: string; id_number_last4: string; mpesa_phone: string; verified: boolean; submitted_at: string | null };
+export type PayoutMethod = "mpesa" | "paypal" | "bank";
+
+export type PayoutProfile = {
+  legal_name: string; id_number_last4: string; method: PayoutMethod; currency: string; destination: string;
+  verified: boolean; submitted_at: string | null;
+};
+
+export type PayoutInput = {
+  legal_name: string; id_number: string; method: PayoutMethod;
+  mpesa_phone?: string; paypal_email?: string; bank_name?: string; account_number?: string; swift_code?: string;
+};
 
 export type Earnings = {
-  weeks: { week: string; coins: number; paid_coins: number; kes: number; status: "in_progress" | "due" | "paid" }[];
+  weeks: { week: string; coins: number; paid_coins: number; amount: number; status: "in_progress" | "due" | "paid" }[];
   owed_coins: number;
-  owed_kes: number;
-  kes_per_coin: number;
+  owed_amount: number;
+  currency: string;
+  rate: number;
   host_share: number;
   profile: PayoutProfile | null;
 };
+
+export const money = (amount: number, currency: string) =>
+  `${currency} ${amount.toLocaleString(undefined, { maximumFractionDigits: currency === "KES" ? 0 : 2, minimumFractionDigits: currency === "KES" ? 0 : 2 })}`;
 
 export const PROMO_OPTIONS: { hours: number; coins: number; label: string }[] = [
   { hours: 1, coins: 3, label: "1 hour" },
@@ -86,9 +100,8 @@ export const livesApi = {
   follow: (hostId: string) => api<{ following: boolean; followers: number }>(`/lives/hosts/${hostId}/follow`, { method: "POST" }),
   report: (id: string, reason: string) => api(`/lives/${id}/report`, { body: { reason } }),
   earnings: () => api<Earnings>("/lives/earnings"),
-  payoutProfile: () => api<{ profile: PayoutProfile | null }>("/lives/payout-profile"),
-  savePayoutProfile: (body: { legal_name: string; id_number: string; mpesa_phone: string }) =>
-    api<{ profile: PayoutProfile }>("/lives/payout-profile", { method: "PUT", body }),
+  payoutProfile: () => api<{ profile: PayoutProfile | null; methods: PayoutMethod[]; country: string | null }>("/lives/payout-profile"),
+  savePayoutProfile: (body: PayoutInput) => api<{ profile: PayoutProfile }>("/lives/payout-profile", { method: "PUT", body }),
 };
 
 export function startsLabel(iso: string | null): string {

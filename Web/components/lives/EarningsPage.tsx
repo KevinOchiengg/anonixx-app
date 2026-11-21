@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { BadgeCheck, Clock } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useAuth } from "@/lib/auth";
-import { livesApi, type Earnings } from "@/lib/lives";
+import { livesApi, money, type Earnings } from "@/lib/lives";
 import PayoutForm from "./PayoutForm";
 import "@/app/lives.css";
 
@@ -38,9 +38,9 @@ export default function EarningsPage() {
           <>
             <section className="lv-owed">
               <small>Waiting to be paid</small>
-              <b>KES {data.owed_kes.toLocaleString()}</b>
+              <b>{money(data.owed_amount, data.currency)}</b>
               <span className="muted small">
-                {data.owed_coins} coins · paid every week to your M-Pesa. You keep {Math.round(data.host_share * 100)}% of entry fees and all gifts.
+                {data.owed_coins} coins · paid every week. You keep {Math.round(data.host_share * 100)}% of entry fees and all gifts.
               </span>
             </section>
 
@@ -50,7 +50,7 @@ export default function EarningsPage() {
                 <div className="lv-profile">
                   <div>
                     <b>{data.profile.legal_name}</b>
-                    <small className="muted">M-Pesa 0{data.profile.mpesa_phone.slice(3)} · ID ending {data.profile.id_number_last4}</small>
+                    <small className="muted">{data.profile.destination} · ID ending {data.profile.id_number_last4}</small>
                   </div>
                   <span className={`lv-verify${data.profile.verified ? " ok" : ""}`}>
                     {data.profile.verified ? <><BadgeCheck aria-hidden />Verified</> : <><Clock aria-hidden />Checking</>}
@@ -58,7 +58,7 @@ export default function EarningsPage() {
                   <button className="pill ghost" onClick={() => setEditing(true)}>Edit</button>
                 </div>
               ) : (
-                <PayoutForm initial={data.profile} onSaved={(profile) => { setData({ ...data, profile }); setEditing(false); }} />
+                <PayoutForm initial={data.profile} onSaved={() => { setEditing(false); livesApi.earnings().then(setData).catch(() => {}); }} />
               )}
             </section>
 
@@ -69,7 +69,7 @@ export default function EarningsPage() {
                   {data.weeks.map((w) => (
                     <li key={w.week}>
                       <span>{weekLabel(w.week)}</span>
-                      <b>KES {w.kes.toLocaleString()}</b>
+                      <b>{money(w.amount, data.currency)}</b>
                       <em className={w.status}>{STATUS[w.status]}</em>
                     </li>
                   ))}

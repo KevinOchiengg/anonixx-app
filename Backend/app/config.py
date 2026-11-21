@@ -81,7 +81,8 @@ class Settings(BaseSettings):
 
     # LIVES (app/api/v1/lives.py)
     ADULT_LIVES_ENABLED: bool = False        # keep off until legal sign-off and an adult-friendly processor
-    LIVE_PAYOUT_KES_PER_COIN: float = 15.0   # what one earned coin pays the host
+    LIVE_PAYOUT_KES_PER_COIN: float = 15.0   # what one earned coin pays a host paid in KES (M-Pesa)
+    LIVE_PAYOUT_USD_PER_COIN: float = 0.10   # what one earned coin pays a host paid in USD (PayPal, bank)
 
     # WEB PUSH (VAPID) — browser notifications for the Anonixx website
     VAPID_PUBLIC_KEY: str = ""

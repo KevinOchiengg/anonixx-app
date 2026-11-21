@@ -7,6 +7,11 @@ export const PROMO_OPTIONS = [
   { hours: 24, coins: 25, label: '24 hours' },
 ];
 
+export function money(amount, currency) {
+  const digits = currency === 'KES' ? 0 : 2;
+  return `${currency} ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+}
+
 export const GIFT_EMOJI = { rose: '🌹', heart: '💖', fire: '🔥', diamond: '💎', crown: '👑' };
 
 export class LiveApiError extends Error {

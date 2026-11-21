@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, BadgeCheck, Clock } from 'lucide-react-native';
 import PayoutForm from '../../components/lives/PayoutForm';
-import { livesApi } from '../../utils/lives';
+import { livesApi, money } from '../../utils/lives';
 import { HIT_SLOP, RADIUS, rf, rp, rs } from '../../utils/responsive';
 import T from '../../utils/theme';
 
@@ -45,9 +45,9 @@ export default function LiveEarningsScreen({ navigation }) {
             <>
               <View style={s.owed}>
                 <Text style={s.owedLabel}>Waiting to be paid</Text>
-                <Text style={s.owedValue}>KES {data.owed_kes.toLocaleString()}</Text>
+                <Text style={s.owedValue}>{money(data.owed_amount, data.currency)}</Text>
                 <Text style={s.owedNote}>
-                  {data.owed_coins} coins · paid every week to your M-Pesa. You keep {Math.round(data.host_share * 100)}% of entry fees and all gifts.
+                  {data.owed_coins} coins · paid every week. You keep {Math.round(data.host_share * 100)}% of entry fees and all gifts.
                 </Text>
               </View>
 
@@ -56,7 +56,7 @@ export default function LiveEarningsScreen({ navigation }) {
                 <View style={s.profile}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.profileName}>{data.profile.legal_name}</Text>
-                    <Text style={s.profileSub}>M-Pesa 0{data.profile.mpesa_phone.slice(3)} · ID ending {data.profile.id_number_last4}</Text>
+                    <Text style={s.profileSub}>{data.profile.destination} · ID ending {data.profile.id_number_last4}</Text>
                   </View>
                   <View style={s.verify}>
                     {data.profile.verified ? <BadgeCheck size={rs(14)} color="#34D399" /> : <Clock size={rs(14)} color={T.gold} />}
@@ -65,14 +65,14 @@ export default function LiveEarningsScreen({ navigation }) {
                   <TouchableOpacity onPress={() => setEditing(true)} hitSlop={HIT_SLOP}><Text style={s.edit}>Edit</Text></TouchableOpacity>
                 </View>
               ) : (
-                <PayoutForm initial={data.profile} onSaved={(profile) => { setData({ ...data, profile }); setEditing(false); }} />
+                <PayoutForm initial={data.profile} onSaved={() => { setEditing(false); load(); }} />
               )}
 
               <Text style={s.section}>By week</Text>
               {data.weeks.length ? data.weeks.map((w) => (
                 <View key={w.week} style={s.week}>
                   <Text style={s.weekLabel}>{weekLabel(w.week)}</Text>
-                  <Text style={s.weekValue}>KES {w.kes.toLocaleString()}</Text>
+                  <Text style={s.weekValue}>{money(w.amount, data.currency)}</Text>
                   <Text style={[s.weekStatus, { color: STATUS_COLOR[w.status] }]}>{STATUS[w.status]}</Text>
                 </View>
               )) : <Text style={s.muted}>No earnings yet. Go live to start earning.</Text>}
