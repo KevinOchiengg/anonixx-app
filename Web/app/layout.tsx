@@ -16,6 +16,7 @@ import "./rooms.css";
 import "./messenger.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";
+import { ConfirmProvider } from "@/lib/confirm";
 import OfflineBar from "@/components/OfflineBar";
 import VisitTracker from "@/components/VisitTracker";
 import IncomingCall from "@/components/IncomingCall";
@@ -62,8 +63,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={serif.variable}>
       <body>
         <AuthProvider>
-          {children}
-          <IncomingCall />
+          <ConfirmProvider>
+            {children}
+            <IncomingCall />
+          </ConfirmProvider>
         </AuthProvider>
         <OfflineBar />
         <VisitTracker />

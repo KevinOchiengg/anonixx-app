@@ -20,18 +20,11 @@ export function CategoryLabel({ c }: { c: Category }) {
   return <span className="cc-label"><CategoryIcon c={c} />{CATEGORIES[c].label}</span>;
 }
 
-function Coin() {
-  return <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" fill="currentColor" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" fill="none" stroke="#7a4a00" strokeWidth="1.6" strokeLinecap="round" /></svg>;
-}
-
-/** Knock CTA: "Knock" and the price; the rest is in the tooltip. cost 0 = free (Premium). */
-export function KnockCta({ name, cost, onClick }: { name: string | null; cost: number; onClick: () => void }) {
+/** Knock CTA. Cost and refund terms are shown in the confirmation step. */
+export function KnockCta({ name, onClick }: { name: string | null; onClick: () => void }) {
   return (
-    <button type="button" className="cc-knock" onClick={onClick}
-      aria-label={`Knock on ${name || "their"} door`}
-      title={cost ? `Free to knock. ${cost} coins only if they let you in.` : "Free for you."}>
+    <button type="button" className="cc-knock" onClick={onClick} aria-label={`Knock on ${name || "their"} door`}>
       <span className="cc-knock-text"><b>Knock</b></span>
-      <span className="cc-knock-cost" aria-label={cost ? `${cost} coins if they let you in` : "Free"}><Coin />{cost || "Free"}</span>
     </button>
   );
 }
@@ -48,14 +41,13 @@ function Chips({ facts, extra }: { facts: Fact[]; extra?: React.ReactNode }) {
 
 type Props = {
   post: Post;
-  knockCost: number;
   headline?: boolean;          // the drop page's main post: headline is the page's h1
   fontStyle?: React.CSSProperties;
   onKnock: () => void;
   extend?: React.ReactNode;    // the owner's "+12h" button
 };
 
-function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, extend }: Props) {
+function ConfessionCard({ post, headline, fontStyle, onKnock, extend }: Props) {
   const cat = categoryOf(post);
   const meta = CATEGORIES[cat];
   const { head, body } = useMemo(() => splitConfession(post.content), [post.content]);
@@ -100,7 +92,7 @@ function ConfessionCard({ post, knockCost, headline, fontStyle, onKnock, extend 
         facts={facts}
         extra={<>{extend}{cat === "linkup" && post.linkup_count ? <span>{post.linkup_count} linked up</span> : null}</>}
       />
-      {canKnock ? <KnockCta name={post.anonymous_name} cost={knockCost} onClick={onKnock} /> : null}
+      {canKnock ? <KnockCta name={post.anonymous_name} onClick={onKnock} /> : null}
     </div>
   );
 }

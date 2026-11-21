@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { splitHook } from "@/lib/captionHook";
-import { api, API_URL, COST, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
+import { api, API_URL, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import AuthorAvatar from "./AuthorAvatar";
 import { hookupTags, timeLeft } from "@/lib/linkup";
@@ -306,21 +306,11 @@ export default function Slide({
   }
 
   const canLinkUp = !post.is_admin_drop && !post.is_own_post && post.kind !== "confession";
-  // What Let In costs this viewer; knocking itself is free. Premium lets in free.
-  const knockCost = user?.is_premium ? 0 : COST.linkUp;
   const knock = () => (user ? onLinkUp(post) : onGate("Sign in to knock. Your name stays hidden until they let you in."));
   const linkBtn = (
-    <button
-      className="linkup"
-      onClick={knock}
-      title={knockCost ? `${knockCost} coins. You go straight in; no reply in 24 hours and they come back.` : "Free for you."}
-    >
+    <button className="linkup" onClick={knock} aria-label={`Knock on ${post.anonymous_name || "their"} door`}>
       {post.kind === "hookup" ? <HeartFill className="lu-heart" fill="currentColor" strokeWidth={2} aria-hidden /> : <Link2 />}
       <span className="lu-label">Knock</span>
-      <span className="coin-cost">
-        <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" fill="currentColor" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" fill="none" stroke="#7a4a00" strokeWidth="1.6" strokeLinecap="round" /></svg>
-        {knockCost || "Free"}
-      </span>
     </button>
   );
   const voted = post.poll ? post.poll.voted_option !== null : false;
@@ -454,7 +444,6 @@ export default function Slide({
         {card ? (
           <ConfessionCard
             post={post}
-            knockCost={knockCost}
             headline={headline}
             // the poster's font stays on the headline; the body is always the plain sans
             fontStyle={post.font_style ? dropFontStyle(post.font_style) : undefined}

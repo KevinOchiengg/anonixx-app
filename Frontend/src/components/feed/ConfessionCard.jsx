@@ -7,7 +7,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Coins, Feather, Flame, Sparkles } from 'lucide-react-native';
+import { Feather, Flame, Sparkles } from 'lucide-react-native';
 
 import { T } from '../../utils/theme';
 import { rf, rp, rs, RADIUS, HIT_SLOP } from '../../utils/responsive';
@@ -71,12 +71,11 @@ export function linkUpFacts(h, liveUntil) {
 
 // Knock CTA. Says what a knock is and what it costs before anyone taps.
 // cost 0 = free for this viewer (premium).
-export const KnockButton = React.memo(({ name, cost, onPress, compact }) => (
+export const KnockButton = React.memo(({ name, onPress, compact }) => (
   <TouchableOpacity
     onPress={onPress} activeOpacity={0.88} hitSlop={HIT_SLOP}
     accessibilityRole="button"
     accessibilityLabel={`Knock on ${name || 'their'} door`}
-    accessibilityHint={cost ? `Free to knock. ${cost} coins only if they let you in.` : 'Free for you.'}
     style={[k.wrap, compact && k.wrapCompact]}
   >
     <LinearGradient
@@ -85,10 +84,6 @@ export const KnockButton = React.memo(({ name, cost, onPress, compact }) => (
     >
       <View style={k.labelCol}>
         <Text style={k.label} numberOfLines={1}>Knock</Text>
-      </View>
-      <View style={k.cost}>
-        <Coins size={rs(13)} color={T.gold} />
-        <Text style={k.costText}>{cost ? cost : 'Free'}</Text>
       </View>
     </LinearGradient>
   </TouchableOpacity>
@@ -101,7 +96,7 @@ const Chip = ({ text, hot, tint }) => (
 );
 
 function ConfessionCard({
-  post, isOwnPost, knockCost, onKnock, onExtend,
+  post, isOwnPost, onKnock, onExtend,
   topInset = 0, bottomInset = 0, headlineFont,
 }) {
   const { height: winH } = useWindowDimensions();
@@ -201,7 +196,7 @@ function ConfessionCard({
 
         {canKnock && (
           <View style={c.actions} pointerEvents="box-none">
-            <KnockButton name={post.anonymous_name} cost={knockCost} onPress={onKnock} />
+            <KnockButton name={post.anonymous_name} onPress={onKnock} />
           </View>
         )}
       </View>
@@ -302,9 +297,4 @@ const k = StyleSheet.create({
   btnCompact: { paddingVertical: rp(10), borderRadius: RADIUS.full },
   labelCol: { flex: 1, minWidth: 0 },
   label: { fontFamily: 'DMSans-Bold', fontSize: rf(16), color: '#fff' },
-  cost: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(4),
-    backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: RADIUS.full, paddingHorizontal: rp(9), paddingVertical: rp(5),
-  },
-  costText: { fontFamily: 'DMSans-Bold', fontSize: rf(13), color: T.gold },
 });

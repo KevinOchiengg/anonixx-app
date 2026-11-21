@@ -14,6 +14,7 @@ import { SocketProvider } from './src/context/SocketContext';
 import { ThemeProvider as CustomThemeProvider } from './src/context/ThemeContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/components/ui/Toast';
+import ConfirmHost from './src/components/ui/ConfirmHost';
 import { UnreadProvider } from './src/context/UnreadContext';
 import { STRIPE_PUBLISHABLE_KEY } from './src/config/api';
 import { FONT_MAP } from './src/config/fonts';
@@ -71,6 +72,7 @@ export default function App() {
                       <UnreadProvider>
                         <StatusBar style="light" />
                         <AppNavigator fontsReady={fontsReady} />
+                        <ConfirmHost />
                       </UnreadProvider>
                     </ToastProvider>
                   </SocketProvider>

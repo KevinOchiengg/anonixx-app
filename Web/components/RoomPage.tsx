@@ -249,7 +249,6 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
       <div className="rm-bar knock">
         <button className="rm-knock" onClick={() => knockIn({ id: post.id, anonymous_name: name })}>
           <span className="rm-knock-t">Knock</span>
-          <em>{cost ? `${cost} coins` : "Free"}</em>
         </button>
         <small>{cost ? `You go straight in. No reply in 24 hours and your ${cost} coins come back.` : "Free for you. You go straight in."}</small>
       </div>

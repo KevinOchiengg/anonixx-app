@@ -8,11 +8,9 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  X, UserCheck, Crown, MapPin, Link2, Coins, CircleAlert,
+  X, UserCheck, Crown, MapPin, Link2, CircleAlert,
 } from 'lucide-react-native';
 
-// Same Link Up cost as DropCard / PostUnlockScreen.
-const UNLOCK_COST = 6;
 import { API_BASE_URL } from '../../config/api';
 import { knockIn } from '../../utils/knock';
 import AuthorAvatar from '../common/AuthorAvatar';
@@ -322,10 +320,6 @@ export default function AnonProfileSheet({
                 <View style={styles.connectBtnInner}>
                   <Link2 size={rs(16)} color="#fff" />
                   <Text style={styles.connectBtnText}>Link Up</Text>
-                  <View style={styles.linkUpCostPill}>
-                    <Coins size={rs(11)} color="#fff" />
-                    <Text style={styles.linkUpCostText}>{UNLOCK_COST}</Text>
-                  </View>
                 </View>
               </TouchableOpacity>
               )}
@@ -596,20 +590,6 @@ const styles = StyleSheet.create({
     fontSize:      FONT.md,
     fontWeight:    '700',
     letterSpacing: 0.3,
-  },
-  linkUpCostPill: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               rp(3),
-    paddingHorizontal: rp(8),
-    paddingVertical:   rp(3),
-    borderRadius:      RADIUS.full,
-    backgroundColor:   'rgba(255,255,255,0.18)',
-  },
-  linkUpCostText: {
-    color:      '#fff',
-    fontSize:   FONT.xs,
-    fontWeight: '700',
   },
 
   // Sub-copy

@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  Bookmark, Coins, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Pencil, Play, Search, Share2, ShieldCheck, VolumeX, Music,
+  Bookmark, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Pencil, Play, Search, Share2, ShieldCheck, VolumeX, Music,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -106,8 +106,6 @@ const FEED_AD_FREQUENCY = 8;
 
 const { width, height } = Dimensions.get('window');
 
-// Matches COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
-const UNLOCK_COST = 6;
 
 // Mirrors LOCATION_SCOPE_LABELS in DropsFeedScreen.jsx
 const LOCATION_SCOPE_LABELS = {
@@ -153,7 +151,7 @@ const fmtClock = (s) => {
 // ─── Shared: Link Up button, pinned near the bottom of the slide.
 // heart: hookup posts get the 🖤 version.
 // cost: what Let In costs this viewer (0 with Premium). Knocking itself is free.
-const LinkUpButton = React.memo(({ onPress, name, wide, heart, cost = UNLOCK_COST }) => {
+const LinkUpButton = React.memo(({ onPress, name, wide, heart }) => {
   const glow = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -168,7 +166,6 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart, cost = UNLOCK_COS
       <TouchableOpacity
         onPress={onPress} activeOpacity={0.85} hitSlop={HIT_SLOP} accessibilityRole="button"
         accessibilityLabel={`Knock on ${name || 'their'} door`}
-        accessibilityHint={cost ? `Free to knock. ${cost} coins only if they let you in.` : 'Free for you.'}
       >
         <LinearGradient
           colors={['#ff8a73', '#ff634a', '#ff4f7b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -176,10 +173,6 @@ const LinkUpButton = React.memo(({ onPress, name, wide, heart, cost = UNLOCK_COS
         >
           {heart ? <Heart size={rs(16)} color="#fff" fill="#fff" strokeWidth={2} /> : <Link2 size={rs(16)} color="#fff" strokeWidth={2} />}
           <Text style={sw.linkUpBtnText} numberOfLines={1}>Knock</Text>
-          <View style={sw.linkUpCostPill}>
-            <Coins size={rs(12)} color="#ffc93c" />
-            <Text style={sw.linkUpCostText}>{cost || 'Free'}</Text>
-          </View>
         </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
@@ -427,7 +420,7 @@ const RailAvatar = ({ post, navigation }) => {
 const posterCache = new Map();
 const VideoSlide = ({
   post, isActive, isNear = false, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, onMore, onShare, navigation, chromeHidden = false, onUnlock, headerHeight = 0, knockCost = UNLOCK_COST,
+  commentCount, isOwnPost, onLinkUp, onMore, onShare, navigation, chromeHidden = false, onUnlock, headerHeight = 0,
   speed = 1, onSpeed, onDuration,
 }) => {
   const likedRef = useRef(liked);
@@ -766,7 +759,7 @@ const VideoSlide = ({
             ) : null}
 
             <LiveChips post={post} isOwnPost={isOwnPost} />
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
 
         </>
@@ -778,7 +771,7 @@ const VideoSlide = ({
 // ─── AUDIO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
 const AudioSlide = ({
   post, isActive, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
-  commentCount, isOwnPost, onLinkUp, onMore, onShare, navigation, chromeHidden = false, knockCost = UNLOCK_COST,
+  commentCount, isOwnPost, onLinkUp, onMore, onShare, navigation, chromeHidden = false,
 }) => {
   const audioPlayer = useAudioPlayer(null);
   const audioStatus = useAudioPlayerStatus(audioPlayer);
@@ -926,7 +919,7 @@ const AudioSlide = ({
         </TouchableOpacity>
 
         <LiveChips post={post} isOwnPost={isOwnPost} />
-        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} />}
+        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
       </View>
 
       <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
@@ -976,7 +969,6 @@ const fontOf = (id) => {
 const TextSlide = ({
   post, onLike, liked, likesCount, savesCount, onSave, saved, onComment, commentCount,
   isOwnPost, onLinkUp, onMore, onShare, navigation, headerHeight = 0, chromeHidden = false, isActive = false,
-  knockCost = UNLOCK_COST,
 }) => {
   const [liveUntil] = useLiveUntil(post);
   const cardPost = useMemo(() => ({ ...post, live_until: liveUntil }), [post, liveUntil]);
@@ -1052,7 +1044,6 @@ const TextSlide = ({
         <ConfessionCard
           post={cardPost}
           isOwnPost={isOwnPost}
-          knockCost={knockCost}
           onKnock={onLinkUp}
           topInset={headerHeight + rp(8)}
           bottomInset={rp(track ? 120 : 92)}
@@ -1108,7 +1099,7 @@ const TextSlide = ({
                 <View style={[sw.liveChip, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>{trackMuted ? <VolumeX size={rs(12)} color="#fff" strokeWidth={2} /> : <Music size={rs(12)} color="#fff" strokeWidth={2} />}<Text style={{ color: '#fff', fontSize: rf(11), fontWeight: '700' }} numberOfLines={1}>{track.title}</Text></View>
               </TouchableOpacity>
             )}
-            {hasImage && !isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} wide />}
+            {hasImage && !isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} wide />}
           </View>
         </>
       )}
@@ -1120,7 +1111,7 @@ const TextSlide = ({
 // ─── POLL SLIDE (new) ─────────────────────────────────────────────
 const PollSlide = ({
   post, isAuthenticated, onVote, onLike, liked, likesCount, savesCount, onSave, saved,
-  onComment, commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false, knockCost = UNLOCK_COST,
+  onComment, commentCount, isOwnPost, onLinkUp, onMore, navigation, chromeHidden = false,
 }) => {
   const t = CARD_INTENTS[post.intent] || DROP_THEMES[post.theme] || DROP_THEMES['desire'];
   // Double tap on any empty part of the slide likes it; hold for the menu.
@@ -1173,7 +1164,7 @@ const PollSlide = ({
               </AuthorProfileTrigger>
             </View>
             <LiveChips post={post} isOwnPost={isOwnPost} />
-            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} cost={knockCost} />}
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
           </View>
         </>
       )}
@@ -1734,7 +1725,6 @@ export default function DropsSwipeScreen({ navigation, route }) {
       navigation,
       headerHeight,
       chromeHidden: chromeHidden || clearMode,
-      knockCost: user?.is_premium ? 0 : UNLOCK_COST,
     };
 
     let slide;
@@ -2066,8 +2056,6 @@ const sw = StyleSheet.create({
   },
   linkUpBtnText: { flexShrink: 1, fontSize: FONT.sm, fontWeight: '800', color: '#fff', letterSpacing: 0.1 },
   linkUpHeart: { fontSize: rf(15) },
-  linkUpCostPill: { flexDirection: 'row', alignItems: 'center', gap: rp(4), backgroundColor: 'rgba(60,20,10,0.32)', borderRadius: RADIUS.full, paddingHorizontal: rp(8), paddingVertical: rp(3) },
-  linkUpCostText: { fontSize: rf(12), fontWeight: '800', color: '#ffe7a3' },
 
 
   pollSlideCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rp(20) },

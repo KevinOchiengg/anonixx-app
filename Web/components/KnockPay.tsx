@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, COST } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useConfirm } from "@/lib/confirm";
 import Sheet from "./Sheet";
 import AgeGate from "./AgeGate";
 
@@ -19,8 +20,9 @@ export function useKnock(onToast?: (m: string) => void) {
   const [busy, setBusy] = useState("");
   const [pay, setPay] = useState<Target | null>(null);
   const [age, setAge] = useState<Target | null>(null);
+  const confirm = useConfirm();
 
-  const knock = useCallback(async (post: Target) => {
+  const payIn = useCallback(async (post: Target) => {
     if (busy) return;
     setBusy(post.id);
     try {
@@ -37,12 +39,33 @@ export function useKnock(onToast?: (m: string) => void) {
     }
   }, [busy, refresh, router, onToast]);
 
+  const knock = useCallback(async (post: Target) => {
+    if (busy) return;
+    const cost = user?.is_premium ? 0 : COST.linkUp;
+    const balance = user?.coin_balance ?? 0;
+    const name = post.anonymous_name || "them";
+    const ok = await confirm({
+      title: `Link up with ${name}?`,
+      message: cost
+        ? "You go straight into the chat. If they don't reply within 24 hours, your coins come back."
+        : "Free for you. You go straight into the chat.",
+      detail: cost ? (
+        <>
+          <div className="cf-row"><span>Link Up</span><b className="cf-cost">{cost} coins</b></div>
+          <div className="cf-row"><span>Your balance</span><b>{balance} coins</b></div>
+        </>
+      ) : undefined,
+      confirmLabel: cost ? `Pay ${cost} coins` : "Link Up",
+    });
+    if (ok) await payIn(post);
+  }, [busy, user?.is_premium, user?.coin_balance, confirm, payIn]);
+
   const ui = (
     <>
-      {pay ? <PaySheet need={Math.max(1, COST.linkUp - (user?.coin_balance ?? 0))} name={pay.anonymous_name ?? null} onClose={() => setPay(null)} onPaid={() => { const p = pay; setPay(null); knock(p); }} /> : null}
+      {pay ? <PaySheet need={Math.max(1, COST.linkUp - (user?.coin_balance ?? 0))} name={pay.anonymous_name ?? null} onClose={() => setPay(null)} onPaid={() => { const p = pay; setPay(null); payIn(p); }} /> : null}
       {age ? (
         <Sheet onClose={() => setAge(null)}>
-          <AgeGate onDone={() => { const p = age; setAge(null); knock(p); }} />
+          <AgeGate onDone={() => { const p = age; setAge(null); payIn(p); }} />
         </Sheet>
       ) : null}
     </>

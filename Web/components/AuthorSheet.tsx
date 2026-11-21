@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AuthorAvatar from "./AuthorAvatar";
-import { api, COST, type Post } from "@/lib/api";
+import { api, type Post } from "@/lib/api";
 import Sheet from "./Sheet";
 import { Link2 } from "./feedicons";
 import { MapPin } from "lucide-react";
@@ -90,7 +90,7 @@ export default function AuthorSheet({
               ) : canLinkUp ? (
                 <>
                   <button className="u-cta" onClick={() => { onClose(); onLinkUp(post); }}>
-                    <Link2 />Link Up<span className="coin-cost">{COST.linkUp}</span>
+                    <Link2 />Link Up
                   </button>
                   <p className="u-hint">You go straight in. No reply in 24 hours and your coins come back.</p>
                 </>

@@ -314,7 +314,6 @@ export default function RoomScreen({ route, navigation }) {
         >
           <LinearGradient colors={[th.accent, th.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1.6, y: 1 }} style={s.knock}>
             <Text style={[s.knockText, { color: th.bg }]} numberOfLines={1}>Knock</Text>
-            <View style={[s.freePill, { backgroundColor: th.bg }]}><Text style={[s.freeText, { color: th.text }]}>{cost ? `${cost} coins` : 'Free'}</Text></View>
           </LinearGradient>
         </TouchableOpacity>
         <Text style={[s.fine, { color: th.muted }]}>
@@ -467,8 +466,6 @@ const s = StyleSheet.create({
   dotSm: { width: rs(7), height: rs(7) },
   knock: { height: rs(54), borderRadius: rs(16), flexDirection: 'row', alignItems: 'center', gap: rp(10), paddingLeft: rp(18), paddingRight: rp(8) },
   knockText: { flex: 1, fontSize: FONT.md, fontWeight: '800' },
-  freePill: { borderRadius: 999, paddingHorizontal: rp(10), paddingVertical: rp(6), opacity: 0.85 },
-  freeText: { fontSize: rf(11), fontWeight: '700' },
   fine: { fontSize: rf(12), lineHeight: rf(17), textAlign: 'center' },
 
   fullBack: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
