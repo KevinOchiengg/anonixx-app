@@ -3,6 +3,23 @@ import { usePaged } from "@/components/admin/bits";
 
 export type Row = { key: string; count: number; visitors?: number };
 
+// ISO 3166-2:KE county codes. Other countries show their subdivision code.
+const KE_COUNTIES = [
+  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa", "Homa Bay", "Isiolo", "Kajiado",
+  "Kakamega", "Kericho", "Kiambu", "Kilifi", "Kirinyaga", "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia",
+  "Lamu", "Machakos", "Makueni", "Mandera", "Marsabit", "Meru", "Migori", "Mombasa", "Murang'a", "Nairobi",
+  "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua", "Nyeri", "Samburu", "Siaya", "Taita-Taveta", "Tana River",
+  "Tharaka-Nithi", "Trans Nzoia", "Turkana", "Uasin Gishu", "Vihiga", "Wajir", "West Pokot",
+];
+
+/** "KE-30" -> "Nairobi, Kenya"; unknown codes -> "Region 12, Ghana". */
+export function regionName(key: string): string {
+  const [cc, code] = key.split("-");
+  const n = Number(code);
+  const name = cc === "KE" && Number.isInteger(n) && KE_COUNTIES[n - 1] ? KE_COUNTIES[n - 1] : `Region ${code}`;
+  return `${name}, ${country(cc)}`;
+}
+
 export const flag = (cc?: string | null) =>
   cc && /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0))) : "🌐";
 export const country = (cc?: string | null) => {

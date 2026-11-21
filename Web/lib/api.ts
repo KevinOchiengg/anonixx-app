@@ -97,6 +97,17 @@ export function viewerCountry(): string | null {
   const m = document.cookie.match(/(?:^|;\s*)anx_cc=([A-Z]{2})/);
   return m ? m[1] : null;
 }
+/** The visitor's region code and city, as set by middleware.ts. Analytics only. */
+export function viewerPlace(): { region: string | null; city: string | null } {
+  if (typeof document === "undefined") return { region: null, city: null };
+  const m = document.cookie.match(/(?:^|;\s*)anx_geo=([^;]*)/);
+  if (!m) return { region: null, city: null };
+  let raw = "";
+  try { raw = decodeURIComponent(m[1]); } catch { return { region: null, city: null }; }
+  const [region, city] = raw.split("|");
+  return { region: region || null, city: city || null };
+}
+
 const countryHeader = (): Record<string, string> => {
   const c = viewerCountry();
   return c ? { "X-Country": c } : {};

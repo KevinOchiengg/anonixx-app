@@ -6,7 +6,7 @@ import { useAdminRole } from "@/components/admin/AdminShell";
 import { Tabs, kindLabel, useTab } from "@/components/admin/bits";
 import { ExternalLink } from "lucide-react";
 import { LineChart } from "@/components/admin/charts";
-import { Bars, country, dur, flag, type Row } from "@/components/admin/visitors/shared";
+import { Bars, country, dur, flag, regionName, type Row } from "@/components/admin/visitors/shared";
 import { JourneyModal, PageDetail, type Journey } from "@/components/admin/visitors/Details";
 import { LivePanel, RecentVisitors } from "@/components/admin/visitors/Live";
 import { BestTimes, CountryTastes } from "@/components/admin/visitors/Panels";
@@ -25,7 +25,7 @@ type Data = Partial<{
   top_drops: { id: string | null; views: number; visitors: number; kind: string; teaser: string }[];
   interest_kinds: Row[];
   searches: Row[]; search_themes: Row[]; search_places: Row[]; zero_result_searches: Row[];
-  referrers: Row[]; campaigns: Row[]; sources: Row[]; countries: Row[]; devices: Row[]; browsers: Row[];
+  referrers: Row[]; campaigns: Row[]; sources: Row[]; countries: Row[]; regions?: Row[]; cities?: Row[]; devices: Row[]; browsers: Row[];
 }>;
 
 const RANGES = [1, 7, 30, 90] as const;
@@ -261,6 +261,12 @@ function Sources({ d }: { d: Data }) {
       <div className="adm-panel w4">
         <h3>Countries</h3>
         <Bars rows={d.countries || []} color="#3B82F6" label={(k) => `${flag(k)} ${country(k)}`} find={country} empty="No visits yet." />
+      </div>
+      <div className="adm-panel w4">
+        <h3>Regions</h3>
+        <Bars rows={d.regions || []} color="#3B82F6" label={(k) => `${flag(k.split("-")[0])} ${regionName(k)}`} find={regionName} empty="Collecting from today." />
+        <h3>Cities</h3>
+        <Bars rows={d.cities || []} color="#3B82F6" empty="Collecting from today." />
       </div>
       <div className="adm-panel w4">
         <h3>Devices</h3>

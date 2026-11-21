@@ -33,6 +33,7 @@ MAX_EVENTS_PER_BATCH = 25
 MAX_BODY_BYTES = 16_000
 ID_RE = re.compile(r"^[a-z0-9]{8,40}$")
 CC_RE = re.compile(r"^[A-Z]{2}$")
+REGION_RE = re.compile(r"^[A-Z0-9]{1,3}$")
 DROP_PATH = re.compile(r"^/drop/([0-9a-f]{24})")
 BOT_RE = re.compile(
     r"bot|crawl|spider|slurp|preview|headless|lighthouse|pagespeed|facebookexternalhit|"
@@ -95,6 +96,16 @@ def _device(ua: str) -> tuple[str, str]:
     return device, browser
 
 
+def _place(cc: Optional[str], region, city) -> tuple[Optional[str], Optional[str]]:
+    """("KE-30", "Nairobi") from the client's geolocation hints; either may be None."""
+    code = region.strip().upper() if isinstance(region, str) else ""
+    region_key = f"{cc}-{code}" if cc and REGION_RE.match(code) else None
+    name = _clip(city, 60)
+    if name and not re.fullmatch(r"[^\W\d_][\w .'\-()]*", name):
+        name = None
+    return region_key, name
+
+
 def _clip(v, n: int) -> Optional[str]:
     if not isinstance(v, str):
         return None
@@ -150,6 +161,7 @@ async def track(request: Request, db=Depends(get_database)):
     cc = body.get("cc") if isinstance(body.get("cc"), str) and CC_RE.match(body["cc"]) else None
     if not cc:
         cc = await geoip.country_of(ip)
+    region, city = _place(cc, body.get("rg"), body.get("ct"))
     device, browser = _device(ua)
     signed_in = bool(body.get("in"))
     tz = valid_tz(body.get("tz"))
@@ -164,7 +176,7 @@ async def track(request: Request, db=Depends(get_database)):
             continue
         doc = {
             "vid": vid, "sid": sid, "type": e["t"], "path": path,
-            "country": cc, "device": device, "browser": browser,
+            "country": cc, "region": region, "city": city, "device": device, "browser": browser,
             "signed_in": signed_in, "created_at": now,
         }
         if e["t"] == "view":
@@ -233,7 +245,7 @@ async def track(request: Request, db=Depends(get_database)):
     update = {
         "$setOnInsert": on_insert,
         "$set": {"last_seen": now, "last_sid": sid, "last_path": docs[-1]["path"],
-                 "country": cc, "device": device, "browser": browser},
+                 "country": cc, "region": region, "city": city, "device": device, "browser": browser},
         "$inc": inc,
     }
     if signed_in:
@@ -432,6 +444,8 @@ async def visitors_overview(
             "campaigns": _group(db, views_m, "utm.campaign", 10),
             "sources": _group(db, views_m, "utm.source", 10),
             "countries": _group(db, views_m, "country", 15),
+            "regions": _group(db, views_m, "region", 50),
+            "cities": _group(db, views_m, "city", 50),
             "devices": _group(db, views_m, "device", 5),
             "browsers": _group(db, views_m, "browser", 6),
         }
