@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import Link from "next/link";
 import { api } from "@/lib/api";
 import { BgUpload, fmtMB, type BgResult } from "@/lib/bgUpload";
 import { captureCover } from "@/lib/coverFrame";
@@ -82,7 +81,7 @@ function shuffle<T>(list: T[]) {
   return a;
 }
 
-export default function BulkVideos() {
+export default function BulkVideos({ initial, onClose }: { initial: File[]; onClose: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [perDay, setPerDay] = useState(10);
@@ -105,8 +104,12 @@ export default function BulkVideos() {
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const anyRef = useRef<HTMLInputElement>(null);
+  const seeded = useRef(false);
 
-  useEffect(() => { setStart(nextDay(readStore<string | null>(LAST_KEY, null))); }, []);
+  useEffect(() => {
+    setStart(nextDay(readStore<string | null>(LAST_KEY, null)));
+    if (!seeded.current) { seeded.current = true; addFiles(initial); }
+  }, []);
 
   useEffect(() => {
     if (!running) return;
@@ -118,7 +121,7 @@ export default function BulkVideos() {
     return () => { window.removeEventListener("beforeunload", warn); lock?.release().catch(() => {}); };
   }, [running]);
 
-  function addFiles(list: FileList | null) {
+  function addFiles(list: FileList | File[] | null) {
     if (!list?.length || runningRef.current) return;
     const done = readStore<Record<string, string>>(DONE_KEY, {});
     const known = new Set(items.map((i) => i.key));
@@ -295,6 +298,15 @@ export default function BulkVideos() {
     go();
   }
 
+  async function back() {
+    const left = items.filter((i) => i.status === "waiting" || i.status === "failed").length;
+    if (left) {
+      const ok = await askConfirm({ title: "Leave bulk posting?", message: `${left} videos aren't scheduled yet. Scheduled ones stay scheduled.`, confirmLabel: "Leave", icon: "leave" });
+      if (!ok) return;
+    }
+    onClose();
+  }
+
   async function clearList() {
     const ok = await askConfirm({ title: "Clear the list?", message: "Scheduled videos stay scheduled.", confirmLabel: "Clear", icon: "delete" });
     if (!ok) return;
@@ -316,11 +328,12 @@ export default function BulkVideos() {
 
   return (
     <div className="ps bk">
-      <div className="ps-head">
+      <div className="ps-head bk-head">
         <div>
-          <h2>Bulk videos</h2>
-          <p>Pick hundreds at once. Each one posts as its own drop, spread over the days you choose.</p>
+          <h2>Post a drop</h2>
+          <p>{total} videos. Each one posts as its own drop, spread over the days you choose.</p>
         </div>
+        {!running ? <button type="button" className="ps-btn" onClick={back}>Back</button> : null}
       </div>
 
       <div className="bk-grid">
@@ -423,7 +436,7 @@ export default function BulkVideos() {
               </ul>
             </details>
           ) : null}
-          <p className="bk-note">Scheduled videos show under <Link href="/admin/post">Post a drop</Link>. If this tab closes, pick the same videos again and the finished ones are skipped.</p>
+          <p className="bk-note">Scheduled videos show in the scheduled list on Post a drop. If this tab closes, pick the same videos again and the finished ones are skipped.</p>
         </section>
       ) : null}
 

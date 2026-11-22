@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import BulkVideos from "./BulkVideos";
 import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
 import { queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
@@ -47,6 +48,7 @@ const MAX_BATCH = 10;
 const PROMO_HOURS: [number, string][] = [[6, "6 hours"], [24, "1 day"], [72, "3 days"], [168, "7 days"]];
 
 export default function PostStudio() {
+  const [bulk, setBulk] = useState<File[] | null>(null);
   const [format, setFormat] = useState<Format>("text");
   const [text, setText] = useState("");
   const [photos, setPhotos] = useState<Pick[]>([]);
@@ -166,6 +168,15 @@ export default function PostStudio() {
     if (format === "video") {
       const vids = files.filter((x) => x.type.startsWith("video/"));
       if (!vids.length) return setError("That isn't a video file.");
+      if (vids.length > MAX_BATCH - extrasRef.current.length - (video && !replacing.current ? 1 : 0)) {
+        const kept = [...(video && !replacing.current ? [video.file] : []), ...extrasRef.current.map((x) => x.pick.file)];
+        bgRef.current?.cancel();
+        extrasRef.current.forEach((x) => x.up.cancel());
+        setBg(null); setVideo(null); setExtras([]);
+        replacing.current = false;
+        setBulk([...kept, ...vids]);
+        return;
+      }
       const big = vids.find((x) => x.size > MAX_VID_MB * 1024 * 1024);
       if (big) return setError(`${big.name} is too big. Max ${MAX_VID_MB}MB per video.`);
       // The first fills the main slot (trim, text, cover); the rest each become their own drop.
@@ -404,6 +415,8 @@ export default function PostStudio() {
   const bars = useMemo(() => Array.from({ length: 36 }, (_, i) => 18 + Math.round(Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.4)) * 70)), []);
   const voiceBars = voice?.waveform?.length ? voice.waveform.map((v) => 12 + Math.round(v * 88)) : bars;
 
+  if (bulk) return <BulkVideos initial={bulk} onClose={() => setBulk(null)} />;
+
   if (published) {
     return (
       <div className="ps-done">
@@ -460,7 +473,7 @@ export default function PostStudio() {
         <Upload strokeWidth={2} aria-hidden />
       </span>
       <b>{format === "video" ? "Select videos to upload" : photos.length ? "Add more photos" : "Select photos to upload"}</b>
-      <span>or drag and drop {format === "video" ? `up to ${MAX_BATCH}` : "them"} here · {format === "video" ? "each video posts as its own drop" : "it starts uploading straight away"}</span>
+      <span>or drag and drop {format === "video" ? "as many as you like" : "them"} here · {format === "video" ? "each video posts as its own drop" : "it starts uploading straight away"}</span>
       <span className="up-specs">
         {format === "video" ? (
           <><span>MP4 (H.264)</span><span>Up to 3 min</span><span>{MAX_VID_MB}MB max</span><span>Camera: Most compatible</span></>
@@ -476,7 +489,7 @@ export default function PostStudio() {
       <div className="ps-head">
         <div>
           <h2>Post a drop</h2>
-          <p>Free, no coins. Shows in the feed as Anonixx. Lots of videos? <Link href="/admin/bulk">Schedule them in bulk</Link>.</p>
+          <p>Free, no coins. Shows in the feed as Anonixx.</p>
         </div>
       </div>
 
@@ -562,7 +575,7 @@ export default function PostStudio() {
                         ))}
                       </div>
                     ) : null}
-                    {extras.length < MAX_BATCH - 1 ? <button type="button" className="ps-link" onClick={() => fileRef.current?.click()}>+ Add more videos</button> : null}
+                    <button type="button" className="ps-link" onClick={() => fileRef.current?.click()}>+ Add more videos</button>
                   </div>
                 ) : drop}
               </>

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
-  IcDash, IcPost, IcBulk, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic,
+  IcDash, IcPost, IcUsers, IcPosts, IcShield, IcRefund, IcChat, IcMegaphone, IcMusic,
   IcMenu, IcBell, IcClose, IcEye, IcTrendUp, IcCoin, IcPulse, IcBot, IcList, IcKnock, IcLive,
 } from "./adminicons";
 import { useKeepPlace } from "./keepPlace";
@@ -29,7 +29,6 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Create",
     items: [
       { href: "/admin/post", label: "Post a drop", icon: <IcPost />, scope: "content" },
-      { href: "/admin/bulk", label: "Bulk videos", icon: <IcBulk />, scope: "content" },
       { href: "/admin/agents", label: "Agent hub", icon: <IcBot />, scope: "content" },
       { href: "/admin/sounds", label: "Sounds", icon: <IcMusic />, scope: "content" },
     ],
