@@ -12,7 +12,7 @@ from bson import ObjectId
 from app.database import get_database
 from app.dependencies import get_current_user_id
 from app.utils.coin_service import debit_coins, credit_coins
-from app.utils import taste
+from app.utils import activity, taste
 from app.api.v1.drops import _ensure_aware, send_push_notification, AGE_GATE_DETAIL
 from app.utils.contact_filter import contains_contact_info, CONTACT_INFO_ERROR
 from app.utils.moderation import violates_policy, MODERATION_ERROR
@@ -180,6 +180,7 @@ async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
                 {"$set": {"payment_nudged_at": now_utc()}},
             )
             if nudged:
+                await activity.record(db, claimed["requester_id"], "linkup_short", actor_id=owner_id, url="/coins")
                 await send_push_notification(
                     claimed["requester_id"], "They want to let you in 🔥",
                     "Your wallet is short, so nothing was charged. Top up and they can let you in.", db,
@@ -201,6 +202,8 @@ async def _accept_one(request_oid: ObjectId, owner_id: str, db) -> dict:
     await emit_unlock_request_accepted(claimed["requester_id"], {
         "request_id": str(request_oid), "connection_id": connection_id,
     })
+    await activity.record(db, claimed["requester_id"], "linkup_accepted", actor_id=owner_id,
+                          url=f"/room/{owner_id}")
     await send_push_notification(
         claimed["requester_id"], "You're inside 🔥", "They let you in. The Room is open, go say something.", db,
         # Lands on the owner's Room so the visitor gets the "You're inside" moment first.
@@ -359,6 +362,8 @@ async def create_unlock_request(
     await taste.record_id(db, current_user_id, data.target_id, "knock")   # a knock is the strongest "more like this"
 
     await emit_unlock_request_accepted(owner_id, {"request_id": request_id, "connection_id": connection_id})
+    await activity.record(db, owner_id, "linkup_in", actor_id=current_user_id, text=pitch,
+                          url=f"/chat/{connection_id}")
     await send_push_notification(
         owner_id,
         f"{requester_name} is in your Room \U0001F525",
@@ -439,6 +444,8 @@ async def _try_mutual(data, doc, owner_id, requester_id, requester_name, pitch, 
     await db["drop_unlock_requests"].insert_one(mine)
     for uid, rid in ((requester_id, mine["_id"]), (owner_id, reverse["_id"])):
         await emit_unlock_request_accepted(uid, {"request_id": str(rid), "connection_id": connection_id, "mutual": True})
+        await activity.record(db, uid, "linkup_mutual", actor_id=owner_id if uid == requester_id else requester_id,
+                              url=f"/chat/{connection_id}")
         await send_push_notification(
             uid, "It's mutual 🔥", "You both knocked. You're inside each other's Room, say something.", db,
             data={"type": "linkup_mutual", "connection_id": connection_id, "url": f"/chat/{connection_id}"},
@@ -726,6 +733,8 @@ async def decline_unlock_request(
         raise HTTPException(status_code=404, detail="Request not found or already handled.")
 
     await emit_unlock_request_declined(req["requester_id"], {"request_id": request_id})
+    await activity.record(db, req["requester_id"], "linkup_declined", title="Not this time",
+                          text="No coins were charged. You can knock again later.")
     await send_push_notification(
         req["requester_id"], "Not this time",
         "No coins were charged. You can knock again later.", db,

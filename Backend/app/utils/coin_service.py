@@ -46,6 +46,9 @@ async def credit_coins(
         "created_at":       _now(),
     })
 
+    from app.utils import activity
+    await activity.record(db, user_id, "coins", title=f"+{amount} coins", text=description, coins=amount,
+                          url="/coins")
     return new_balance
 
 

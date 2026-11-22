@@ -120,6 +120,8 @@ async def _ensure_indexes():
             [("created_at", 1)], expireAfterSeconds=90 * 24 * 3600, background=True
         )
         await visits.ensure_indexes(db)
+        from app.utils import activity
+        await activity.ensure_indexes(db)
         await db["user_activity_days"].create_index([("user_id", 1), ("day", 1)], background=True)
         await db["user_activity_days"].create_index([("day", 1)], background=True)
         await db["admin_audit"].create_index([("created_at", -1)], background=True)

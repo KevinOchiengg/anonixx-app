@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { useSocket } from './SocketContext';
 
-const EMPTY_COUNTS = { Messages: 0, Requests: 0 };
+const EMPTY_COUNTS = { Messages: 0, Requests: 0, Activity: 0 };
 
 const UnreadContext = createContext({ badgeCounts: EMPTY_COUNTS, refreshUnread: () => {} });
 
@@ -33,6 +33,7 @@ export function UnreadProvider({ children }) {
       setBadgeCounts({
         Messages: data.rooms ?? data.messages ?? 0,
         Requests: data.unlock_requests ?? 0,
+        Activity: data.activity ?? 0,
       });
     } catch {
       // silent — badges just stay at their last known value
@@ -64,7 +65,7 @@ export function UnreadProvider({ children }) {
   useEffect(() => {
     let t = null;
     const handleChange = () => { clearTimeout(t); t = setTimeout(fetchUnread, 500); };
-    const more = ['new_message', 'messages_seen', 'call_missed', 'call_cancelled'];
+    const more = ['new_message', 'messages_seen', 'call_missed', 'call_cancelled', 'activity_new'];
     more.forEach((e) => socketService.on?.(e, handleChange));
 
     socketService.on?.('unlock_request_received',  handleChange);

@@ -14,6 +14,7 @@ import "./room.css";
 import "./confession.css";
 import "./rooms.css";
 import "./messenger.css";
+import "./activity.css";
 import { SITE_URL } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth";
 import { ConfirmProvider } from "@/lib/confirm";

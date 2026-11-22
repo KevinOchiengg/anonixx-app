@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.database import get_database
 from app.dependencies import get_current_user_id, get_optional_user_id, require_admin, require_super_admin
+from app.utils import activity
 from app.utils.audit import audit
 from app.utils.coin_service import debit_coins
 from app.utils.geoip import request_country
@@ -498,6 +499,8 @@ async def _announce_start(db, live: dict) -> None:
     reminded = await db["live_reminders"].distinct("user_id", {"live_id": str(live["_id"])})
     audience = [u for u in {*followers, *reminded} if u != live["host_id"]]
     if audience:
+        await activity.record_many(db, audience, "live_started", actor_id=live["host_id"], text=live["title"],
+                                   live_id=str(live["_id"]))
         _push(db, audience, f"{host.get('name', 'Someone')} is live", live["title"],
               {"type": "live", "live_id": str(live["_id"]), "url": f"/lives/{live['_id']}"})
 
@@ -652,6 +655,8 @@ async def join(live_id: str, user_id: str = Depends(get_current_user_id), db=Dep
         "week": week_start(now), "paid_out": False, "created_at": now,
     })
     await db["lives"].update_one({"_id": live["_id"]}, {"$inc": {"members": 1, "entry_coins": price}})
+    await activity.record(db, live["host_id"], "live_join", actor_id=user_id, text=live["title"], live_id=live_id,
+                          coins=price)
     who = (await _people(db, [user_id])).get(user_id, {})
     await _post_message(db, live, user_id, "join", f"{who.get('name', 'Someone')} joined")
     return {"stream": _stream(live, uid, ROLE_SUBSCRIBER, expires), "member": True}
@@ -746,6 +751,8 @@ async def send_gift(live_id: str, body: GiftBody, user_id: str = Depends(get_cur
         "gross": gift["coins"], "coins": gift["coins"], "week": week_start(now), "paid_out": False, "created_at": now,
     })
     await db["lives"].update_one({"_id": live["_id"]}, {"$inc": {"gift_coins": gift["coins"]}})
+    await activity.record(db, live["host_id"], "gift", actor_id=user_id, text=live["title"], live_id=live_id,
+                          coins=gift["coins"])
     return {"message": await _post_message(db, live, user_id, "gift", gift=body.gift, coins=gift["coins"])}
 
 
@@ -878,6 +885,8 @@ async def admin_mark_paid(host_id: str, body: MarkPaidBody, admin_id: str = Depe
     await db["live_earnings"].update_many(match, {"$set": {"paid_out": True, "payout_id": str(res.inserted_id)}})
     await audit(db, admin_id, "live.payout", "user", host_id)
     sent = f"{currency} {payout['amount']:,}"
+    await activity.record(db, host_id, "live_payout", title="You've been paid",
+                          text=f"{sent} sent to your {PAYOUT_LABEL[payout['method']]}.", url="/lives/earnings")
     _push(db, [host_id], "You've been paid", f"{sent} from your lives was sent to your {PAYOUT_LABEL[payout['method']]}.",
           {"type": "live_payout", "url": "/lives/earnings"})
     return {"paid": True, "amount": payout["amount"], "currency": currency}

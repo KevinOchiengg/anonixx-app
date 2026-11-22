@@ -8,6 +8,7 @@ import AdSlot from "./AdSlot";
 import { AdSlide, LiveSlide, MarketSlide } from "./FeedPromo";
 import { livesApi, type LiveCard } from "@/lib/lives";
 import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
+import NotificationBell from "./NotificationBell";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
@@ -532,6 +533,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
             ) : null}
             {user?.is_admin ? <Link href="/admin" className="hbtn admin" aria-label="Admin dashboard" title="Admin dashboard"><ShieldIcon /></Link> : null}
             <Link href="/search" className="hbtn" aria-label="Search"><SearchIcon /></Link>
+            {user ? <NotificationBell /> : null}
             {user ? <Link href="/settings" className="hbtn" aria-label="Menu"><MenuIcon /></Link> : null}
           </span>
         </header>

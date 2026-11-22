@@ -39,6 +39,7 @@ import RoomScreen from '../screens/drops/RoomScreen';
 import LiveRoomScreen from '../screens/lives/LiveRoomScreen';
 import GoLiveScreen from '../screens/lives/GoLiveScreen';
 import LiveEarningsScreen from '../screens/lives/LiveEarningsScreen';
+import ActivityScreen from '../screens/activity/ActivityScreen';
 import DropCallScreen from '../screens/drops/DropCallScreen';
 import IncomingCallOverlay from '../components/calls/IncomingCallOverlay';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
@@ -78,6 +79,7 @@ const linking = {
       UnlockRequestsScreen:  'unlock-requests',
       Room:                  'room/:userId',
       LiveEarnings:          'lives/earnings',
+      Activity:              'activity',
       LiveRoom:              'lives/:liveId',
       VibeScore:             'vibe',
       Market:                'market',
@@ -170,6 +172,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="LiveRoom" component={LiveRoomScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="GoLive" component={withBackdrop(GoLiveScreen)} />
         <Stack.Screen name="LiveEarnings" component={withBackdrop(LiveEarningsScreen)} />
+        <Stack.Screen name="Activity" component={withBackdrop(ActivityScreen)} />
         {/* Calls open from anywhere (the incoming call screen, the Live tab). */}
         <Stack.Screen name="DropCall" component={withBackdrop(DropCallScreen, { brand: false })} options={{ gestureEnabled: false }} />
         <Stack.Screen name="AdminDashboard"  component={withBackdrop(AdminDashboardScreen)} />

@@ -26,6 +26,7 @@ import AnonProfileSheet from '../../components/connect/AnonProfileSheet';
 import { PollCard } from '../../components/feed/DropCard';
 import ConfessionCard from '../../components/feed/ConfessionCard';
 import MarketCard from '../../components/feed/MarketCard';
+import NotificationBell from '../../components/feed/NotificationBell';
 import FeedAdCard from '../../components/feed/FeedAdCard';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
@@ -1859,6 +1860,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={sw.headerBtn} hitSlop={HIT_SLOP}>
             <Search size={rs(18)} color="#fff" />
           </TouchableOpacity>
+          {isAuthenticated && (
+            <NotificationBell onPress={() => navigation.navigate('Activity')} style={sw.headerBtn} />
+          )}
           <TouchableOpacity onPress={() => setMenuVisible(true)} style={sw.headerBtn} hitSlop={HIT_SLOP}>
             <Menu size={rs(18)} color="#fff" />
           </TouchableOpacity>

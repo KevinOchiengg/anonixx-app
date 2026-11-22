@@ -32,6 +32,7 @@ from app.utils import stream
 from app.utils.countries import country_from_header, known_country
 from app.utils.discovery import VISIBLE as DISCOVERY_VISIBLE, fresh as discovery_fresh
 from app.utils.search_lexicon import clean_topics, place_from_area
+from app.utils import activity
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
 )
@@ -947,6 +948,8 @@ async def create_drop(
 
     # Notify target user privately — they see no sender identity
     if data.target_user_id:
+        await activity.record(db, data.target_user_id, "confession_for_you",
+                              title="Someone has a confession for you", drop_id=drop_id_str)
         await send_push_notification(
             data.target_user_id,
             "Someone has a confession for you 👀",
@@ -1114,6 +1117,7 @@ async def like_drop(
     await update_drop_affinity(current_user_id, drop.get("mood_tag"), "like", db)
     await taste.record(db, current_user_id, drop, "like")
 
+    await activity.record(db, drop["sender_id"], "like", actor_id=current_user_id, drop_id=drop_id)
     if drop["sender_id"] != current_user_id:
         await send_push_notification(
             drop["sender_id"],
@@ -1414,6 +1418,16 @@ async def add_to_drop_thread(
     await update_drop_affinity(current_user_id, drop.get("mood_tag"), "comment", db)
     await taste.record(db, current_user_id, drop, "comment")
 
+    comment_id = str(result.inserted_id)
+    parent_author = None
+    if parent_id:
+        parent = await db["drop_threads"].find_one({"_id": activity.oid(parent_id)}, {"user_id": 1})
+        parent_author = parent.get("user_id") if parent else None
+        await activity.record(db, parent_author, "reply", actor_id=current_user_id, text=content,
+                              drop_id=drop_id, comment_id=comment_id)
+    if drop["sender_id"] != parent_author:
+        await activity.record(db, drop["sender_id"], "comment", actor_id=current_user_id, text=content,
+                              drop_id=drop_id, comment_id=comment_id)
     if drop["sender_id"] != current_user_id:
         await send_push_notification(
             drop["sender_id"],
@@ -1433,6 +1447,8 @@ async def add_to_drop_thread(
             mentioned_id = str(mentioned["_id"])
             if mentioned_id == current_user_id:
                 continue
+            await activity.record(db, mentioned_id, "mention", actor_id=current_user_id, text=content,
+                                  drop_id=drop_id, comment_id=comment_id)
             await send_push_notification(
                 mentioned_id,
                 "Someone mentioned you 💬",
@@ -1565,6 +1581,8 @@ async def like_drop_comment(
     )
     likes_count = updated.get("likes_count", 0)
     await emit_comment_liked(drop_id, comment_id, likes_count)
+    await activity.record(db, comment.get("user_id"), "comment_like", actor_id=current_user_id,
+                          text=comment.get("content"), drop_id=drop_id, comment_id=comment_id)
     return {"liked": True, "likes_count": likes_count}
 
 
