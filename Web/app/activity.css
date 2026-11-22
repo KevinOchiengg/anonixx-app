@@ -1,5 +1,3 @@
-.hbtn.me { overflow: hidden; border: 1.5px solid rgba(255, 99, 74, 0.7); background: var(--surface-alt); }
-.hbtn.me img, .hbtn.me svg { width: 100%; height: 100%; object-fit: cover; }
 
 .act { display: flex; flex-direction: column; padding-bottom: 24px; }
 
