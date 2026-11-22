@@ -104,6 +104,7 @@ export default function BulkVideos() {
   const settings = useRef({ captions: [] as string[], share, mature });
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
+  const anyRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setStart(nextDay(readStore<string | null>(LAST_KEY, null))); }, []);
 
@@ -335,14 +336,16 @@ export default function BulkVideos() {
             onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer.files); }}
           >
-            <b>Select videos</b>
-            <span>or drop them here · up to {MAX_VID_MB}MB each</span>
+            <b>{total ? "Add more videos" : "Select videos"}</b>
+            <span>or drop them here · up to {MAX_VID_MB}MB each · every pick adds to the list</span>
           </div>
           <div className="bk-row">
+            <button type="button" className="ps-btn" disabled={running} onClick={() => anyRef.current?.click()}>Browse files</button>
             <button type="button" className="ps-btn" disabled={running} onClick={() => folderRef.current?.click()}>Pick a folder</button>
             {total && !running ? <button type="button" className="ps-btn danger" onClick={clearList}>Clear list</button> : null}
           </div>
           <input ref={filesRef} type="file" accept="video/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+          <input ref={anyRef} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
           <input ref={folderRef} type="file" multiple hidden {...{ webkitdirectory: "" }} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
           {total ? (
             <p className="bk-count"><b>{total}</b> videos · <b>{waiting.length}</b> waiting{waiting.length ? ` (${fmtMB(sizeLeft)})` : ""}</p>
