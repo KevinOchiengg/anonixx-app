@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,
-  ActivityIndicator, Modal, Alert,
+  ActivityIndicator, Modal,
 } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {

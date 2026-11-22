@@ -18,6 +18,7 @@ import CallRoom, { type CallInfo } from "./CallRoom";
 import RoomSettingsMenu from "./rooms/RoomSettingsMenu";
 import { CallsPanel, ChatRow, Icon, PickChats } from "./rooms/Messenger";
 import AuthorAvatar from "@/components/AuthorAvatar";
+import { askConfirm } from "@/lib/confirm";
 
 type Req = KnockClue & {
   id: string;
@@ -247,7 +248,7 @@ export default function InboxPage() {
           <>
             <div className="mx-scrim" onClick={() => setMenu(false)} />
             <div className="mx-menu right" role="menu" onClick={() => setMenu(false)}>
-              {view === "calls" ? <button role="menuitem" onClick={async () => { if (window.confirm("Clear your call log? It's only cleared for you.")) { await chatsApi.clearCalls().catch(() => {}); setCallsKey((k) => k + 1); } }}>Clear call log</button> : null}
+              {view === "calls" ? <button role="menuitem" onClick={async () => { if (await askConfirm({ title: "Clear your call log?", message: "It's only cleared for you.", confirmLabel: "Clear", tone: "danger", icon: "delete" })) { await chatsApi.clearCalls().catch(() => {}); setCallsKey((k) => k + 1); } }}>Clear call log</button> : null}
               <button role="menuitem" onClick={() => setView("archived")}>Archived{archived.length ? ` (${archived.length})` : ""}</button>
               <button role="menuitem" onClick={() => setSettings(true)}>Room settings</button>
             </div>

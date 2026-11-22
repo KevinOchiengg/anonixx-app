@@ -3,8 +3,9 @@
  * Backend: GET /drops/mine, PATCH /drops/{id}, POST /drops/{id}/boost|extend, DELETE /drops/{id}. */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Alert, RefreshControl,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';

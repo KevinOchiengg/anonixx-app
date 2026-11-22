@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { fmtDate } from "@/components/admin/bits";
+import { askConfirm } from "@/lib/confirm";
 
 type R = {
   id: string; user_name: string | null; user_email: string | null; user_balance: number;
@@ -41,7 +42,7 @@ export default function RefundBoard() {
     const msg = action === "accept"
       ? `Removes up to ${r.coins} coins from the user and tells them the money is coming back. You still send the money yourself (M-Pesa / Stripe). Continue?`
       : "Reject this refund request?";
-    if (!window.confirm(msg)) return;
+    if (!(await askConfirm({ title: action === "accept" ? "Accept this refund?" : "Reject this refund?", message: action === "accept" ? msg : undefined, confirmLabel: action === "accept" ? "Accept" : "Reject", tone: action === "accept" ? "default" : "danger", icon: "coins" }))) return;
     setBusy(r.id);
     try { await api(`/admin/refunds/${r.id}/${action}`, { body: {} }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }

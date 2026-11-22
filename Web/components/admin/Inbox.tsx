@@ -4,6 +4,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAdminRole } from "./AdminShell";
 import { fmtDate } from "./bits";
+import { askConfirm } from "@/lib/confirm";
 
 // Everything waiting on an admin, in one list, with the common decision right on the row.
 type Act = { label: string; tone?: "primary" | "danger"; confirm?: string; run: () => Promise<unknown> };
@@ -66,7 +67,7 @@ export default function Inbox() {
   }, [load]);
 
   async function run(it: Item, a: Act) {
-    if (a.confirm && !window.confirm(a.confirm)) return;
+    if (a.confirm && !(await askConfirm({ title: a.confirm, confirmLabel: a.label, tone: a.tone === "danger" ? "danger" : "default", icon: a.tone === "danger" ? "delete" : "info" }))) return;
     setBusy(it.key);
     try { await a.run(); setError(""); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(""); }
   }

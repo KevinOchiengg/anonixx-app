@@ -4,6 +4,7 @@ import Image from "next/image";
 import { api } from "@/lib/api";
 import { Badge, fmtDate } from "@/components/admin/bits";
 import AdminMedia from "@/components/admin/AdminMedia";
+import { askConfirm } from "@/lib/confirm";
 
 type Ad = {
   id: string; title: string; media_url: string | null; media_type: string; link_url: string;
@@ -27,7 +28,7 @@ export default function AdminAds() {
   useEffect(() => { load(); }, [load]);
 
   async function decide(ad: Ad, action: "approve" | "reject") {
-    if (action === "reject" && !window.confirm("Reject this ad? The advertiser's coins are refunded.")) return;
+    if (action === "reject" && !(await askConfirm({ title: "Reject this ad?", message: "The advertiser's coins are refunded.", confirmLabel: "Reject", tone: "danger", icon: "warning" }))) return;
     setBusy(ad.id);
     try { await api(`/ads/admin/${ad.id}/${action}`, { method: "PATCH" }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }

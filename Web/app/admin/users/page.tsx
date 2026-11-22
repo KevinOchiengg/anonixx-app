@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { X } from "lucide-react";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
+import { askConfirm } from "@/lib/confirm";
 
 type U = {
   id: string; email: string | null; username: string | null; anonymous_name: string | null;
@@ -67,8 +68,8 @@ export default function AdminUsers() {
 
   const toggle = (u: U, path: "ban" | "verify" | "admin") => run(u.id, () => api(`/admin/users/${u.id}/${path}`, { method: "PATCH" }));
 
-  const remove = (u: U) => {
-    if (!window.confirm(`Permanently delete ${u.anonymous_name || u.email}? This removes their posts and cannot be undone.`)) return;
+  const remove = async (u: U) => {
+    if (!(await askConfirm({ title: `Delete ${u.anonymous_name || u.email}?`, message: "Their account and posts are removed. This can't be undone.", confirmLabel: "Delete", tone: "danger", icon: "delete" }))) return;
     run(u.id, () => api(`/admin/users/${u.id}`, { method: "DELETE" }));
   };
 

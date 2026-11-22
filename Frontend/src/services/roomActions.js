@@ -1,6 +1,6 @@
 /** Confirm-then-act helpers shared by the chat and its contact info: block, report, remove,
  * clear chat, mute. Each shows the native confirm and calls onDone(message) when it worked. */
-import { Alert } from 'react-native';
+import { Alert } from '../utils/confirm';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { chatsApi, MUTE_OPTIONS } from './chats';

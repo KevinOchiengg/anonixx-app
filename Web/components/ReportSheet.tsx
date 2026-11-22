@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api, type Post } from "@/lib/api";
 import Sheet from "./Sheet";
 import { Flag, UserX } from "./feedicons";
+import { askConfirm } from "@/lib/confirm";
 
 const REASONS: [string, string][] = [
   ["abuse", "Harassment or abuse"],
@@ -42,7 +43,7 @@ export default function ReportSheet({
 
   async function block() {
     if (busy || !post.user_id) return;
-    if (!window.confirm("Block this person?\n\nYou won't see each other's posts or messages.")) return;
+    if (!(await askConfirm({ title: "Block this person?", message: "You won't see each other's posts or messages.", confirmLabel: "Block", tone: "danger", icon: "block" }))) return;
     setBusy(true);
     setError("");
     try {

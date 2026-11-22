@@ -42,7 +42,7 @@ function LivesTab() {
   useEffect(() => { load(); }, [load]);
 
   async function end(r: LiveRow) {
-    if (!(await confirm({ title: `End "${r.title}"?`, message: "Everyone watching is sent out. The host can't restart it.", confirmLabel: "End live", tone: "danger" }))) return;
+    if (!(await confirm({ title: `End "${r.title}"?`, message: "Everyone watching is sent out. The host can't restart it.", confirmLabel: "End live", tone: "danger", icon: "live" }))) return;
     try { await api(`/admin/lives/${r.id}/end`, { method: "POST" }); load(); } catch (e) { setError((e as Error).message); }
   }
 
@@ -100,6 +100,7 @@ function PayoutsTab() {
     const reference = (refs[d.host_id] || "").trim();
     const ok = await confirm({
       title: `Mark ${money(d.amount, d.currency)} as paid?`,
+      icon: "coins",
       message: `Only do this after sending the money to ${d.profile?.legal_name} (${d.profile?.destination}).`,
       detail: <div className="cf-row"><span>Reference</span><b>{reference}</b></div>,
       confirmLabel: "Mark as paid",

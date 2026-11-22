@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { Badge, Pager, Tabs, fmtDate, useTab } from "@/components/admin/bits";
 import DeceptionReports from "@/components/admin/DeceptionReports";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
+import { askConfirm } from "@/lib/confirm";
 
 type D = DropMedia & {
   id: string; sender_id: string | null; confession: string; media_type: string | null;
@@ -35,7 +36,7 @@ export default function AdminModeration() {
   useEffect(() => { load(); }, [load]);
 
   async function act(d: D, kind: "dismiss" | "delete") {
-    if (kind === "delete" && !window.confirm("Delete this post for everyone? This cannot be undone.")) return;
+    if (kind === "delete" && !(await askConfirm({ title: "Delete this post?", message: "It's removed for everyone. This can't be undone.", confirmLabel: "Delete", tone: "danger", icon: "delete" }))) return;
     setBusy(d.id);
     try {
       if (kind === "dismiss") await api(`/admin/drops/${d.id}/dismiss`, { method: "PATCH" });

@@ -20,6 +20,7 @@ import {
 import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
+import { askConfirm } from "@/lib/confirm";
 
 type Profile = {
   font_style?: string;
@@ -247,7 +248,7 @@ function Inner() {
       setError(`You can remove ${c.other_anonymous_name} from ${new Date(c.removable_at).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Something wrong? Block them now.`);
       return;
     }
-    if (!window.confirm(`Remove ${c.other_anonymous_name} from your Room?\n\nThe chat closes. They're outside again.`)) return;
+    if (!(await askConfirm({ title: `Remove ${c.other_anonymous_name} from your Room?`, message: "The chat closes. They're outside again.", confirmLabel: "Remove", tone: "danger", icon: "leave" }))) return;
     setBusy(c.id);
     try {
       await api(`/drops/connections/${c.id}/remove`, { method: "POST" });
@@ -261,7 +262,7 @@ function Inner() {
   }
 
   async function block(c: Conn) {
-    if (!window.confirm(`Block ${c.other_anonymous_name}?\n\nThey're removed from your Room and can't knock again.`)) return;
+    if (!(await askConfirm({ title: `Block ${c.other_anonymous_name}?`, message: "They're removed from your Room and can't knock again.", confirmLabel: "Block", tone: "danger", icon: "block" }))) return;
     setBusy(c.id);
     try {
       // Blocking closes the conversation and any call straight away, server side.

@@ -6,8 +6,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView,
-  ActivityIndicator, Animated, Image, Pressable, Alert, Platform,
+  ActivityIndicator, Animated, Image, Pressable, Platform,
 } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';

@@ -1,10 +1,24 @@
 "use client";
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import ConfirmDialog, { type ConfirmOptions } from "@/components/ConfirmDialog";
+
+export type { ConfirmOptions, AlertIcon } from "@/components/ConfirmDialog";
 
 type Confirm = (options: ConfirmOptions) => Promise<boolean>;
 
 const ConfirmContext = createContext<Confirm | null>(null);
+
+let host: Confirm | null = null;
+
+/** Shows the Anonixx alert from anywhere; resolves true when the main action is chosen. */
+export function askConfirm(options: ConfirmOptions): Promise<boolean> {
+  return host ? host(options) : Promise.resolve(false);
+}
+
+/** A notice with a single button. */
+export function showAlert(options: Omit<ConfirmOptions, "cancelLabel">): Promise<boolean> {
+  return askConfirm({ confirmLabel: "Got it", ...options, cancelLabel: null });
+}
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [options, setOptions] = useState<ConfirmOptions | null>(null);
@@ -15,6 +29,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     setOptions(next);
     return new Promise<boolean>((resolve) => { resolver.current = resolve; });
   }, []);
+
+  useEffect(() => {
+    host = confirm;
+    return () => { if (host === confirm) host = null; };
+  }, [confirm]);
 
   const settle = useCallback((ok: boolean) => {
     resolver.current?.(ok);

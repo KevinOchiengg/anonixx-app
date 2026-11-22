@@ -7,8 +7,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView,
-  Animated, Modal, Pressable, Alert,
+  Animated, Modal, Pressable,
 } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';

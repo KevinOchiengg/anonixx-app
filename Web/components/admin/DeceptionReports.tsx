@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
+import { askConfirm } from "@/lib/confirm";
 
 type R = {
   id: string; confession: string; note: string | null; sender_name: string; sender_strikes: number;
@@ -28,7 +29,7 @@ export default function AdminDeception() {
   useEffect(() => { load(); }, [load]);
 
   async function decide(r: R, action: "confirm" | "dismiss") {
-    if (action === "confirm" && !window.confirm(`Confirm as deceptive? The reporter is refunded and ${r.sender_name} gets a strike.`)) return;
+    if (action === "confirm" && !(await askConfirm({ title: "Confirm as deceptive?", message: `The reporter is refunded and ${r.sender_name} gets a strike.`, confirmLabel: "Confirm", tone: "danger", icon: "report" }))) return;
     setBusy(r.id);
     try { await api(`/deception-reports/${r.id}/${action}`, { method: "POST" }); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }

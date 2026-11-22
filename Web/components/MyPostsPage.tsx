@@ -11,6 +11,7 @@ import { timeLeft } from "@/lib/linkup";
 import AppShell from "./AppShell";
 import CountryField from "./compose/LocationFields";
 import "@/app/myposts.css";
+import { askConfirm } from "@/lib/confirm";
 
 type Mine = {
   id: string; content: string; kind?: string | null; country?: string | null; time_ago: string;
@@ -34,14 +35,13 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
   const [draft, setDraft] = useState(p.content);
   const [country, setCountry] = useState(p.country || "");
   const [busy, setBusy] = useState("");
-  const [confirm, setConfirm] = useState<"" | "boost" | "delete">("");
   const hookup = p.kind === "hookup";
   const left = hookup && p.is_live ? timeLeft(p.live_until) : null;
   const boostLeft = p.boosted_until ? timeLeft(p.boosted_until) : null;
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
-    try { await fn(); } catch (e) { onToast((e as Error).message); } finally { setBusy(""); setConfirm(""); }
+    try { await fn(); } catch (e) { onToast((e as Error).message); } finally { setBusy(""); }
   }
   const save = () => run("save", async () => {
     const text = draft.trim();
@@ -51,6 +51,26 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
     setEditing(false);
     onToast("Saved.");
   });
+  const askBoost = async () => {
+    const ok = await askConfirm({
+      title: "Boost this post?",
+      message: `It shows higher in the feed for ${hours} hours.`,
+      detail: <div className="cf-row"><span>Cost</span><b className="cf-cost">{cost} coins</b></div>,
+      confirmLabel: `Boost · ${cost} coins`,
+      icon: "boost",
+    });
+    if (ok) boost();
+  };
+  const askDelete = async () => {
+    const ok = await askConfirm({
+      title: "Delete this post?",
+      message: "It's gone for good, with its likes and comments. This can't be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (ok) remove();
+  };
   const boost = () => run("boost", async () => {
     const r = await api<{ boosted_until: string }>(`/drops/${p.id}/boost`, { method: "POST" });
     onChange(p.id, { boosted_until: r.boosted_until });
@@ -100,21 +120,13 @@ function Card({ p, cost, hours, onChange, onRemove, onToast }: {
         {hookup ? <Stat icon={<DoorOpen aria-hidden />} n={p.knocks_count} label="knocks" /> : null}
       </div>
 
-      {confirm ? (
-        <div className="mp-confirm">
-          <span>{confirm === "boost" ? `Boost for ${hours} hours for ${cost} coins?` : "Delete this post for good?"}</span>
-          <button type="button" className="pill ghost" onClick={() => setConfirm("")}>No</button>
-          <button type="button" className={`pill${confirm === "delete" ? " danger" : ""}`} disabled={!!busy} onClick={confirm === "boost" ? boost : remove}>
-            {busy ? "…" : confirm === "boost" ? `Boost · ${cost} coins` : "Delete"}
-          </button>
-        </div>
-      ) : !editing ? (
+      {!editing ? (
         <div className="mp-actions">
           <button type="button" onClick={() => setEditing(true)}><Pencil aria-hidden />Edit</button>
           {hookup && p.is_live && !p.under_review ? (
-            <button type="button" className="hot" onClick={() => setConfirm("boost")}><Rocket aria-hidden />{boostLeft ? "Boost more" : "Boost"} · {cost}</button>
+            <button type="button" className="hot" disabled={!!busy} onClick={askBoost}><Rocket aria-hidden />{boostLeft ? "Boost more" : "Boost"} · {cost}</button>
           ) : null}
-          <button type="button" className="del" onClick={() => setConfirm("delete")} aria-label="Delete"><Trash2 aria-hidden /></button>
+          <button type="button" className="del" disabled={!!busy} onClick={askDelete} aria-label="Delete"><Trash2 aria-hidden /></button>
         </div>
       ) : null}
     </article>

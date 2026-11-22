@@ -226,6 +226,7 @@ export default function LiveRoomScreen({ navigation, route }) {
     const { price, host } = detail.live;
     const ok = await confirm({
       title: `Join ${host.name || 'this'}'s live?`,
+      icon: 'coins',
       message: 'You stay a member until the live ends. Chat with the host and send gifts.',
       rows: [
         { label: 'Entry', value: `${price} coins`, highlight: true },
@@ -259,6 +260,7 @@ export default function LiveRoomScreen({ navigation, route }) {
   const sendGift = async (g) => {
     const ok = await confirm({
       title: `Send a ${g.label}?`,
+      icon: 'coins',
       message: `${GIFT_EMOJI[g.id] || ''} It goes straight to ${detail?.live.host.name || 'the host'}.`,
       rows: [{ label: 'Cost', value: `${g.coins} coin${g.coins === 1 ? '' : 's'}`, highlight: true }],
       confirmLabel: `Send ${g.label}`,

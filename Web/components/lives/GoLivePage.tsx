@@ -47,6 +47,7 @@ export default function GoLivePage() {
     const later = when === "later" && startsAt ? new Date(startsAt) : null;
     const ok = await confirm({
       title: later ? "Schedule this live?" : "Go live now?",
+      icon: "live",
       message: later
         ? `Starts ${startsLabel(later.toISOString())}. Followers and anyone who taps Remind me get notified when you start.`
         : "Your camera and mic turn on. Viewers get a 30-second preview, then pay to stay.",

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { askConfirm } from "@/lib/confirm";
 
 type Item = {
   id: string; status: string; publish_at: string | null; display_name: string | null; confession: string;
@@ -66,7 +67,7 @@ export default function ScheduledDrops({ refresh }: { refresh: number }) {
                 </>
               ) : null}
               <button type="button" className="ps-btn danger" disabled={busy === s.id || s.status === "publishing"}
-                onClick={() => window.confirm("Cancel this scheduled drop?") && act(s.id, () => api(`/admin/scheduled/${s.id}`, { method: "DELETE" }))}>
+                onClick={async () => (await askConfirm({ title: "Cancel this scheduled drop?", message: "It won't be posted.", confirmLabel: "Cancel drop", tone: "danger", icon: "delete" })) && act(s.id, () => api(`/admin/scheduled/${s.id}`, { method: "DELETE" }))}>
                 {s.status === "failed" ? "Dismiss" : "Cancel"}
               </button>
             </div>

@@ -4,9 +4,10 @@
  * old live|myroom|updates links open Chats). */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Animated, BackHandler, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text,
+  ActivityIndicator, Animated, BackHandler, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, TouchableWithoutFeedback, View, useWindowDimensions,
 } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';

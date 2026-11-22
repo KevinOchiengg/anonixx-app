@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useDispatch } from 'react-redux'
-import { Alert, Platform } from 'react-native'
+import { Platform } from 'react-native'
+import { Alert } from '../utils/confirm';
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuth } from '../context/AuthContext'
 import { logout as logoutAction } from '../store/slices/authSlice'

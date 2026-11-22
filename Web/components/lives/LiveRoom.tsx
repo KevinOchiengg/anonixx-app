@@ -201,6 +201,7 @@ export default function LiveRoom({ id, autoStart = false }: { id: string; autoSt
     const { price, host } = detail.live;
     const ok = await confirm({
       title: `Join ${host.name || "this"}'s live?`,
+      icon: "coins",
       message: "You stay a member until the live ends. Chat with the host and send gifts.",
       detail: (
         <>
@@ -222,7 +223,7 @@ export default function LiveRoom({ id, autoStart = false }: { id: string; autoSt
   }
 
   async function goLiveNow() {
-    const ok = await confirm({ title: "Go live now?", message: "Your camera and mic turn on, and your followers get notified.", confirmLabel: "Go live" });
+    const ok = await confirm({ title: "Go live now?", message: "Your camera and mic turn on, and your followers get notified.", confirmLabel: "Go live", icon: "live" });
     if (!ok) return;
     try {
       setPhase("connecting");
@@ -237,7 +238,7 @@ export default function LiveRoom({ id, autoStart = false }: { id: string; autoSt
   }
 
   async function endLive() {
-    const ok = await confirm({ title: "End this live?", message: "Everyone is sent out and the live can't be restarted.", confirmLabel: "End live", tone: "danger" });
+    const ok = await confirm({ title: "End this live?", message: "Everyone is sent out and the live can't be restarted.", confirmLabel: "End live", tone: "danger", icon: "live" });
     if (!ok) return;
     try { await livesApi.end(id); await leave(); setPhase("ended"); } catch (e) { flash((e as Error).message); }
   }
@@ -245,6 +246,7 @@ export default function LiveRoom({ id, autoStart = false }: { id: string; autoSt
   async function sendGift(g: Gift) {
     const ok = await confirm({
       title: `Send a ${g.label}?`,
+      icon: "coins",
       message: `${GIFT_EMOJI[g.id] || ""} It goes straight to ${detail?.live.host.name || "the host"}.`,
       detail: <div className="cf-row"><span>Cost</span><b className="cf-cost">{g.coins} coin{g.coins === 1 ? "" : "s"}</b></div>,
       confirmLabel: `Send ${g.label}`,
@@ -264,6 +266,7 @@ export default function LiveRoom({ id, autoStart = false }: { id: string; autoSt
   async function promote(hours: number, coins: number) {
     const ok = await confirm({
       title: `Promote for ${hours === 1 ? "1 hour" : `${hours} hours`}?`,
+      icon: "boost",
       message: "Your live shows up in the main feed for everyone.",
       detail: <div className="cf-row"><span>Cost</span><b className="cf-cost">{coins} coins</b></div>,
       confirmLabel: `Pay ${coins} coins`,
@@ -307,7 +310,7 @@ export default function LiveRoom({ id, autoStart = false }: { id: string; autoSt
   }
 
   async function report() {
-    const ok = await confirm({ title: "Report this live?", message: "Our team will review it. The host won't know who reported.", confirmLabel: "Report", tone: "danger" });
+    const ok = await confirm({ title: "Report this live?", message: "Our team will review it. The host won't know who reported.", confirmLabel: "Report", tone: "danger", icon: "report" });
     if (!ok) return;
     try { await livesApi.report(id, "Reported from the live room"); flash("Thanks. We'll take a look."); } catch (e) { flash((e as Error).message); }
   }

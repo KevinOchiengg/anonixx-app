@@ -46,6 +46,7 @@ export function useKnock(onToast?: (m: string) => void) {
     const name = post.anonymous_name || "them";
     const ok = await confirm({
       title: `Link up with ${name}?`,
+      icon: "coins",
       message: cost
         ? "You go straight into the chat. If they don't reply within 7 days, your coins come back."
         : "Free for you. You go straight into the chat.",

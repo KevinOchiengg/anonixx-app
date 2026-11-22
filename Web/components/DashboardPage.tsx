@@ -8,6 +8,7 @@ import AppShell from "./AppShell";
 import Sheet from "./Sheet";
 import "@/app/money.css";
 import TopicPicker, { topicLabel } from "./compose/TopicPicker";
+import { askConfirm } from "@/lib/confirm";
 
 type Balance = { balance: number; estimated_kes: number; payout_rate_kes_per_coin: number; cash_out_available?: boolean };
 type Mine = { id: string; content: string; views_count: number; likes_count: number; time_ago: string; kind?: string | null; topics?: string[] };
@@ -59,7 +60,7 @@ function Inner() {
   }
 
   async function del(id: string) {
-    if (!window.confirm("Delete this post?")) return;
+    if (!(await askConfirm({ title: "Delete this post?", message: "It's gone for good. This can't be undone.", confirmLabel: "Delete", tone: "danger", icon: "delete" }))) return;
     try { await api(`/drops/${id}`, { method: "DELETE" }); load(); } catch (e) { setErr((e as Error).message); }
   }
   const [tagging, setTagging] = useState<{ id: string; topics: string[] } | null>(null);

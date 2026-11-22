@@ -31,8 +31,6 @@
 .mp-actions button.hot { border-color: transparent; background: var(--rose); color: #fff; }
 .mp-actions button.del { margin-left: auto; color: var(--muted); }
 .mp-actions button:disabled { opacity: .5; cursor: default; }
-.mp-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 13.5px; }
-.mp-confirm span { margin-right: auto; }
 .mp-skel { height: 150px; border-radius: 18px; background: var(--surface); animation: mp-pulse 1.2s ease-in-out infinite alternate; }
 @keyframes mp-pulse { to { opacity: .5; } }
 .mp-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--line); font-size: 13.5px; }

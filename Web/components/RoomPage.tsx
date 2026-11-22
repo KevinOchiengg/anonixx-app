@@ -19,6 +19,7 @@ import Sheet from "./Sheet";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import { Ellipsis, Lock as LockIcon } from "lucide-react";
 import KnockLabel from "./KnockLabel";
+import { askConfirm } from "@/lib/confirm";
 
 type Hookup = { age: number; gender: string | null; area: string; looking_for: string | null; vibes: string[] } | null;
 type Preview = {
@@ -158,7 +159,7 @@ function Inner({ userId, postId }: { userId: string; postId: string | null }) {
   }
 
   async function block() {
-    if (!window.confirm("Block this person?\n\nTheir Room closes for you and they can't knock on yours.")) return;
+    if (!(await askConfirm({ title: "Block this person?", message: "Their Room closes for you and they can't knock on yours.", confirmLabel: "Block", tone: "danger", icon: "block" }))) return;
     setBusy(true);
     try {
       await api(`/users/${userId}/block`, { method: "POST" });

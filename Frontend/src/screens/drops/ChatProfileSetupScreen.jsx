@@ -4,8 +4,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Image, ActivityIndicator, TextInput, Switch, Alert, KeyboardAvoidingView,
+  Image, ActivityIndicator, TextInput, Switch, KeyboardAvoidingView,
 } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { useSelector } from 'react-redux';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';

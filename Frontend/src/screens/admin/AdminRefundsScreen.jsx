@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useToast } from '../../components/ui/Toast';

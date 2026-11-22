@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 import CountryField from "@/components/compose/LocationFields";
+import { askConfirm } from "@/lib/confirm";
 
 type D = DropMedia & {
   id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string; confession_full: string | null; country?: string | null;
@@ -57,7 +58,7 @@ export default function AdminPosts() {
   useEffect(() => { if (ready) load(); }, [load, ready]);
 
   async function remove(d: D) {
-    if (!window.confirm("Delete this post for everyone? This cannot be undone.")) return;
+    if (!(await askConfirm({ title: "Delete this post?", message: "It's removed for everyone. This can't be undone.", confirmLabel: "Delete", tone: "danger", icon: "delete" }))) return;
     setBusy(d.id);
     try {
       await api(`/admin/drops/${d.id}`, { method: "DELETE" });

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/admin/bits";
 import { usePaged } from "@/components/admin/bits";
+import { askConfirm } from "@/lib/confirm";
 
 type Sound = { id: string; title: string; mood: string; url: string; active: boolean };
 type Draft = { file: File; title: string; state: "ready" | "sending" | "done" | "error"; error?: string };
@@ -146,7 +147,7 @@ export default function AdminSounds() {
                   <>
                     <button className="adm-btn" onClick={() => { setEditing(s.id); setEdit({ title: s.title }); }}>Edit</button>
                     <button className="adm-btn" disabled={busy === s.id} onClick={() => act(s.id, () => api(`/sounds/admin/${s.id}`, { method: "PATCH", body: { active: !s.active } }))}>{s.active ? "Turn off" : "Turn on"}</button>
-                    <button className="adm-btn danger" disabled={busy === s.id} onClick={() => { if (window.confirm(`Delete "${s.title}"? This removes the file.`)) act(s.id, () => api(`/sounds/admin/${s.id}`, { method: "DELETE" })); }}>Delete</button>
+                    <button className="adm-btn danger" disabled={busy === s.id} onClick={async () => { if (await askConfirm({ title: `Delete "${s.title}"?`, message: "This removes the file.", confirmLabel: "Delete", tone: "danger", icon: "delete" })) act(s.id, () => api(`/sounds/admin/${s.id}`, { method: "DELETE" })); }}>Delete</button>
                   </>
                 )}
               </div>

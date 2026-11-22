@@ -18,6 +18,7 @@ import ConfessionCard from "./ConfessionCard";
 import { CATEGORIES, categoryOf } from "@/lib/confession";
 import { Bookmark as LBookmark, EyeOff, Flag as LFlag, Gauge, Heart as HeartFill, Link2 as LLink2, Lock, Maximize, Pencil, Share2 } from "lucide-react";
 import KnockLabel from "./KnockLabel";
+import { askConfirm } from "@/lib/confirm";
 
 type Props = {
   post: Post;
@@ -128,7 +129,7 @@ export default function Slide({
   async function unlock() {
     if (!pw || unlocking) return;
     if (!user) return onGate("Sign up to unlock it. Nobody sees what you watch.");
-    if (!window.confirm(`Unlock for ${pw.price} coins? Yours to rewatch any time.`)) return;
+    if (!(await askConfirm({ title: `Unlock for ${pw.price} coins?`, message: "Yours to rewatch any time.", confirmLabel: "Unlock", icon: "coins" }))) return;
     setUnlocking(true);
     try {
       const r = await api<{ video_url: string }>(`/drops/${post.id}/unlock`, { method: "POST" });
@@ -137,7 +138,7 @@ export default function Slide({
       onPatch(post.id, { paywall: { ...pw, unlocked: true } });
     } catch (e) {
       if ((e as { status?: number }).status === 402) {
-        if (window.confirm(`You need ${pw.price} coins. Top up?`)) window.location.href = "/coins";
+        if (await askConfirm({ title: "Not enough coins", message: `You need ${pw.price} coins to unlock this.`, confirmLabel: "Top up", icon: "coins" })) window.location.href = "/coins";
       } else {
         onToast((e as Error).message);
       }

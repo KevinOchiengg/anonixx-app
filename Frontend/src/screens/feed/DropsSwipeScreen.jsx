@@ -2,10 +2,11 @@
  * market items and ads mixed in. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Linking,
+  ActivityIndicator, Animated, Dimensions, FlatList, Image, Linking,
   ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
   View, useWindowDimensions,
 } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Gesture, GestureDetector, Pressable as GHPressable } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';

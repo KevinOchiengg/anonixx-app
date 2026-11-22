@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Flag, UserX, X } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../../utils/confirm';
 import { API_BASE_URL } from '../../config/api';
 import { FONT, HIT_SLOP, RADIUS, rp, rs } from '../../utils/responsive';
 import T from '../../utils/theme';

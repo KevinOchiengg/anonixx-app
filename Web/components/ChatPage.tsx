@@ -22,6 +22,7 @@ import CameraSheet from "./chat/CameraSheet";
 import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
 import { ArrowLeft, BellOff, Camera, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, Video, X } from "lucide-react";
+import { askConfirm } from "@/lib/confirm";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
@@ -242,7 +243,7 @@ function Inner({ id }: { id: string }) {
   }
   async function clearChat() {
     setMenu(null);
-    if (!window.confirm("Clear this chat?\n\nOnly for you. They keep their copy.")) return;
+    if (!(await askConfirm({ title: "Clear this chat?", message: "Only for you. They keep their copy.", confirmLabel: "Clear chat", tone: "danger", icon: "delete" }))) return;
     try { await chatsApi.clear(id); setInfo(false); await load(); setToast("Chat cleared."); } catch (err) { setError((err as Error).message); }
   }
   async function report(reason: string) {
@@ -253,14 +254,14 @@ function Inner({ id }: { id: string }) {
   }
   async function reportFake() {
     setMenu(null);
-    if (!window.confirm("Their confession was fake?\n\nWe'll review it. If it was, you get your coins back.")) return;
+    if (!(await askConfirm({ title: "Their confession was fake?", message: "We'll review it. If it was, you get your coins back.", confirmLabel: "Report", tone: "danger", icon: "report" }))) return;
     try { await api("/deception-reports", { body: { connection_id: id } }); setToast("Report sent for review."); }
     catch (e) { setError((e as Error).message); }
   }
   async function block() {
     setMenu(null);
     if (!conn?.other_user_id) return;
-    if (!window.confirm("Block this person?\n\nThe chat closes and they can't knock again.")) return;
+    if (!(await askConfirm({ title: "Block this person?", message: "The chat closes and they can't knock again.", confirmLabel: "Block", tone: "danger", icon: "block" }))) return;
     try { await api(`/users/${conn.other_user_id}/block`, { method: "POST" }); router.push("/inbox"); }
     catch (e) { setError((e as Error).message); }
   }
@@ -270,7 +271,7 @@ function Inner({ id }: { id: string }) {
       setError(`You can end this chat from ${unlocks.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. Something wrong? Block them now.`);
       return;
     }
-    if (!window.confirm(`End this chat?\n\nIt closes for you and ${conn?.other_anonymous_name || "them"}. They'd have to knock again.`)) return;
+    if (!(await askConfirm({ title: "End this chat?", message: `It closes for you and ${conn?.other_anonymous_name || "them"}. They'd have to knock again.`, confirmLabel: "End chat", tone: "danger", icon: "leave" }))) return;
     try { await api(`/drops/connections/${id}/remove`, { method: "POST" }); router.push("/inbox"); }
     catch (e) { setError((e as Error).message); }
   }
