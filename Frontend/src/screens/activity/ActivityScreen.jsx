@@ -4,12 +4,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft, AtSign, Bell, Coins, DoorOpen, Gift, Heart, MessageCircle, Radio, Sparkles,
+  AtSign, Bell, Coins, DoorOpen, Gift, Heart, MessageCircle, Radio, Sparkles,
 } from 'lucide-react-native';
 import Avatar from '../../components/common/Avatar';
 import { useUnread } from '../../context/UnreadContext';
 import { ACTIVITY_FILTERS, activityApi, openActivity, sectionOf, timeAgo } from '../../utils/activity';
-import { rs, rf, rp, HIT_SLOP } from '../../utils/responsive';
+import { rs, rf, rp } from '../../utils/responsive';
 import T from '../../utils/theme';
 
 const BLUE = '#3b82f6';
@@ -177,11 +177,7 @@ export default function ActivityScreen({ navigation }) {
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} accessibilityLabel="Back">
-          <ArrowLeft size={rs(22)} color={T.text} />
-        </TouchableOpacity>
-        <Text style={s.title}>Notifications</Text>
-        <View style={{ width: rs(22) }} />
+        <Text style={s.title}>Activity</Text>
       </View>
 
       <View>
@@ -234,11 +230,8 @@ export default function ActivityScreen({ navigation }) {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: rp(16), paddingVertical: rp(12),
-  },
-  title: { color: T.text, fontSize: rf(17), fontWeight: '700' },
+  header: { paddingHorizontal: rp(16), paddingVertical: rp(12) },
+  title: { color: T.text, fontSize: rf(22), fontWeight: '800' },
   chips: { paddingHorizontal: rp(16), paddingBottom: rp(10), gap: rp(8) },
   chip: {
     height: rs(32), paddingHorizontal: rp(14), borderRadius: rs(16), justifyContent: 'center',

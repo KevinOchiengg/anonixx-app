@@ -8,7 +8,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
-  Settings, Edit, Lock, Palette, ChevronRight, LayoutDashboard, LayoutList, Crown,
+  ArrowLeft, Settings, Edit, Lock, Palette, ChevronRight, LayoutDashboard, LayoutList, Crown,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient'
 import { useDispatch, useSelector } from 'react-redux'
@@ -49,7 +49,14 @@ export default function ProfileScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <View style={styles.headerLeft}>
+          {navigation.canGoBack() && (
+            <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12} accessibilityLabel="Back">
+              <ArrowLeft size={24} color={THEME.text} />
+            </TouchableOpacity>
+          )}
+          <Text style={styles.headerTitle}>Profile</Text>
+        </View>
         <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
           <Settings size={24} color='#ffffff' />
         </TouchableOpacity>
@@ -209,6 +216,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: THEME.border,
   },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: THEME.text },
   scrollView: { flex: 1 },
   profileHeader: { alignItems: 'center', paddingVertical: 32 },

@@ -162,13 +162,13 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
         >
           {/* ── You: photo and hidden name; tap to edit them ── */}
           {isAuthenticated && user ? (
-            <TouchableOpacity style={styles.me} onPress={() => go('EditProfile')} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.me} onPress={() => go('Profile')} activeOpacity={0.8}>
               <View style={styles.meRing}>
                 <Avatar uri={user.avatar_url} size={rs(48)} name={user.anonymous_name || user.username} seed={user.id} gender={user.gender} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.meName} numberOfLines={1}>{user.anonymous_name || user.username || 'You'}</Text>
-                <Text style={styles.meHint}>Edit profile</Text>
+                <Text style={styles.meHint}>View profile</Text>
               </View>
               <ChevronRight size={rs(15)} color={T.textMuted} />
             </TouchableOpacity>

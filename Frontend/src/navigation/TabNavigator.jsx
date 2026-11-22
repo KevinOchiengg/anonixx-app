@@ -1,11 +1,11 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import {
+  Bell,
   DoorOpen,
   Home,
   Plus,
   Radio,
-  User,
 } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,32 +32,21 @@ import ChatInfoScreen from '../screens/rooms/ChatInfoScreen';
 import ArchivedChatsScreen from '../screens/rooms/ArchivedChatsScreen';
 import ChatMediaScreen from '../screens/rooms/ChatMediaScreen';
 
-// Profile
-import ProfileScreen from '../screens/profile/ProfileScreen';
+import ActivityScreen from '../screens/activity/ActivityScreen';
 
 import { THEME } from '../utils/theme';
-import Avatar from '../components/common/Avatar';
 import { withBackdrop } from '../components/common/CoralBackdrop';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 // ─── TAB BAR ICON ─────────────────────────────────────────────
-// The You tab shows your own photo (or initial) once you're signed in, ringed in coral when open.
-const MeIcon = ({ user, focused }) => (
-  <View style={[styles.meRing, focused && styles.meRingOn]}>
-    <Avatar uri={user.avatar_url} size={24} name={user.anonymous_name || user.username} seed={user.id} gender={user.gender} />
-  </View>
-);
-
-const TabBarIcon = ({ route, focused, badgeCount, user }) => {
-  if (route.name === 'Profile' && user) return <View style={styles.iconContainer}><MeIcon user={user} focused={focused} /></View>;
-
+const TabBarIcon = ({ route, focused, badgeCount }) => {
   const icons = {
     Feed:     Home,
     Lives:    Radio,
     Messages: DoorOpen,
-    Profile:  User,
+    Activity: Bell,
   };
   const IconComponent = icons[route.name];
   if (!IconComponent) return null;
@@ -129,20 +118,11 @@ function MessagesStack() {
   );
 }
 
-// ─── PROFILE STACK ────────────────────────────────────────────
-function ProfileStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="ProfileMain" component={withBackdrop(ProfileScreen)} />
-    </Stack.Navigator>
-  );
-}
-
 // ─── TAB NAVIGATOR ────────────────────────────────────────────
 export default function TabNavigator() {
   const insets      = useSafeAreaInsets();
   const { badgeCounts } = useUnread();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return (
     <Tab.Navigator
@@ -166,7 +146,6 @@ export default function TabNavigator() {
               route={route}
               focused={focused}
               badgeCount={badgeCounts[route.name]}
-              user={isAuthenticated ? user : null}
             />
           );
         },
@@ -205,9 +184,17 @@ export default function TabNavigator() {
         options={{ tabBarLabel: 'Lives' }}
       />
       <Tab.Screen
-        name="Profile"
-        component={ProfileStack}
-        options={{ tabBarLabel: 'You' }}
+        name="Activity"
+        component={withBackdrop(ActivityScreen)}
+        options={{ tabBarLabel: 'Activity' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            if (!isAuthenticated) {
+              e.preventDefault();
+              navigation.navigate('AuthNav', { screen: 'Login' });
+            }
+          },
+        })}
       />
     </Tab.Navigator>
   );
@@ -233,9 +220,6 @@ const styles = StyleSheet.create({
   tabBarItem: {
     paddingVertical: 2,
   },
-
-  meRing: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-  meRingOn: { borderColor: THEME.primary },
 
   // Icon + pill
   iconContainer: {

@@ -27,7 +27,7 @@ import AnonProfileSheet from '../../components/connect/AnonProfileSheet';
 import { PollCard } from '../../components/feed/DropCard';
 import ConfessionCard from '../../components/feed/ConfessionCard';
 import MarketCard from '../../components/feed/MarketCard';
-import NotificationBell from '../../components/feed/NotificationBell';
+import Avatar from '../../components/common/Avatar';
 import FeedAdCard from '../../components/feed/FeedAdCard';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
@@ -1861,11 +1861,17 @@ export default function DropsSwipeScreen({ navigation, route }) {
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={sw.headerBtn} hitSlop={HIT_SLOP}>
             <Search size={rs(18)} color="#fff" />
           </TouchableOpacity>
-          {isAuthenticated && (
-            <NotificationBell onPress={() => navigation.navigate('Activity')} style={sw.headerBtn} />
-          )}
-          <TouchableOpacity onPress={() => setMenuVisible(true)} style={sw.headerBtn} hitSlop={HIT_SLOP}>
-            <Menu size={rs(18)} color="#fff" />
+          <TouchableOpacity
+            onPress={() => setMenuVisible(true)}
+            style={[sw.headerBtn, isAuthenticated && user && sw.headerAvatar]}
+            hitSlop={HIT_SLOP}
+            accessibilityLabel="Menu"
+          >
+            {isAuthenticated && user ? (
+              <Avatar uri={user.avatar_url} size={rs(30)} name={user.anonymous_name} seed={user.id} gender={user.gender} />
+            ) : (
+              <Menu size={rs(18)} color="#fff" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -2129,6 +2135,7 @@ const sw = StyleSheet.create({
     width: rs(34), height: rs(34), borderRadius: rs(17), backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
+  headerAvatar: { borderColor: 'rgba(255,99,74,0.7)', borderWidth: 1.5, overflow: 'hidden' },
   headerBtnAdmin: { backgroundColor: 'rgba(255,99,74,0.14)', borderColor: 'rgba(255,99,74,0.45)' },
   clearExit: {
     position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: rp(6),

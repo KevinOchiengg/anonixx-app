@@ -191,7 +191,7 @@ function Inner() {
 
 export default function ActivityPage() {
   return (
-    <AppShell title="Notifications" back="/">
+    <AppShell title="Activity">
       <Inner />
     </AppShell>
   );

@@ -7,8 +7,8 @@ import Slide from "./Slide";
 import AdSlot from "./AdSlot";
 import { AdSlide, LiveSlide, MarketSlide } from "./FeedPromo";
 import { livesApi, type LiveCard } from "@/lib/lives";
-import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
-import NotificationBell from "./NotificationBell";
+import { MapPin, SearchIcon, ShieldIcon } from "./feedicons";
+import AuthorAvatar from "./AuthorAvatar";
 import BottomNav from "./BottomNav";
 import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
@@ -533,8 +533,14 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
             ) : null}
             {user?.is_admin ? <Link href="/admin" className="hbtn admin" aria-label="Admin dashboard" title="Admin dashboard"><ShieldIcon /></Link> : null}
             <Link href="/search" className="hbtn" aria-label="Search"><SearchIcon /></Link>
-            {user ? <NotificationBell /> : null}
-            {user ? <Link href="/settings" className="hbtn" aria-label="Menu"><MenuIcon /></Link> : null}
+            {user ? (
+              <Link href="/settings" className="hbtn me" aria-label="Menu">
+                {user.avatar_url
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={user.avatar_url} alt="" />
+                  : <AuthorAvatar seed={user.id} name={user.anonymous_name} gender={user.gender} size={36} />}
+              </Link>
+            ) : null}
           </span>
         </header>
 

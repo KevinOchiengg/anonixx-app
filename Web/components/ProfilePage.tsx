@@ -79,5 +79,5 @@ function Inner() {
 }
 
 export default function ProfilePage() {
-  return <AppShell title="You" right={<Link href="/settings" aria-label="Settings" className="u-icon"><Settings size={19} strokeWidth={2} aria-hidden /></Link>}><Inner /></AppShell>;
+  return <AppShell title="You" back="/settings" right={<Link href="/settings" aria-label="Settings" className="u-icon"><Settings size={19} strokeWidth={2} aria-hidden /></Link>}><Inner /></AppShell>;
 }

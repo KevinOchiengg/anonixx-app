@@ -70,7 +70,7 @@ function Inner() {
 
   return (
     <div className="pad settings">
-      <Link href="/profile/edit" className="who me-card">
+      <Link href="/profile" className="who me-card">
         <span className="me-photo">
           {user.avatar_url
             // eslint-disable-next-line @next/next/no-img-element
@@ -79,7 +79,7 @@ function Inner() {
         </span>
         <span className="grow">
           <strong>{user.anonymous_name || user.username || "You"}</strong>
-          <small>Edit profile</small>
+          <small>View profile</small>
         </span>
         <ChevronRight className="row-chev" size={18} strokeWidth={2} aria-hidden />
       </Link>

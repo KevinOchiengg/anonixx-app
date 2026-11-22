@@ -22,5 +22,6 @@ export const User = () => <LUser strokeWidth={S} />;
 export const Flame = ({ filled = false }: { filled?: boolean }) => <LFlame strokeWidth={S} {...softFill(filled)} />;
 export const Door = ({ filled = false }: { filled?: boolean }) => <DoorOpen strokeWidth={S} {...softFill(filled)} />;
 export const Requests = ({ filled = false }: { filled?: boolean }) => <Bell strokeWidth={S} {...softFill(filled)} />;
+export const Activity = ({ filled = false }: { filled?: boolean }) => <Bell strokeWidth={S} {...softFill(filled)} />;
 export const Lives = ({ filled = false }: { filled?: boolean }) => <Radio strokeWidth={S} {...softFill(filled)} />;
 export const Person = ({ filled = false }: { filled?: boolean }) => <LUser strokeWidth={S} {...softFill(filled)} />;
