@@ -28,7 +28,7 @@ async def advance_video_jobs(db) -> None:
     now = datetime.now(timezone.utc)
     jobs = await db["scheduled_drops"].find(
         {"status": "processing", "$or": [{"lock_until": None}, {"lock_until": {"$lt": now}}]},
-    ).sort("created_at", 1).limit(10).to_list(None)
+    ).sort("created_at", 1).limit(30).to_list(None)
     for job in jobs:
         # claim it so overlapping runs never cut the same video twice
         claimed = await db["scheduled_drops"].find_one_and_update(

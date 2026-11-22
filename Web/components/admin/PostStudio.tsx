@@ -476,7 +476,7 @@ export default function PostStudio() {
       <div className="ps-head">
         <div>
           <h2>Post a drop</h2>
-          <p>Free, no coins. Shows in the feed as Anonixx.</p>
+          <p>Free, no coins. Shows in the feed as Anonixx. Lots of videos? <Link href="/admin/bulk">Schedule them in bulk</Link>.</p>
         </div>
       </div>
 

@@ -577,7 +577,7 @@ async def unpromote_drop(
 # Stored here and published on time by tasks/scheduled_publisher.py. Stream videos wait
 # in "processing" while Cloudflare encodes them, then publish.
 
-MAX_SCHEDULE_DAYS = 60
+MAX_SCHEDULE_DAYS = 365
 MIN_STREAM_CLIP = 1
 
 
