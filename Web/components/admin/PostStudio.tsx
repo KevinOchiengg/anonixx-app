@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import BulkVideos from "./BulkVideos";
+import BulkVideos, { isVideoFile } from "./BulkVideos";
 import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
 import { queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
@@ -91,6 +91,7 @@ export default function PostStudio() {
   const [copied, setCopied] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const urls = useRef<string[]>([]);
 
   useEffect(() => {
@@ -168,15 +169,6 @@ export default function PostStudio() {
     if (format === "video") {
       const vids = files.filter((x) => x.type.startsWith("video/"));
       if (!vids.length) return setError("That isn't a video file.");
-      if (vids.length > MAX_BATCH - extrasRef.current.length - (video && !replacing.current ? 1 : 0)) {
-        const kept = [...(video && !replacing.current ? [video.file] : []), ...extrasRef.current.map((x) => x.pick.file)];
-        bgRef.current?.cancel();
-        extrasRef.current.forEach((x) => x.up.cancel());
-        setBg(null); setVideo(null); setExtras([]);
-        replacing.current = false;
-        setBulk([...kept, ...vids]);
-        return;
-      }
       const big = vids.find((x) => x.size > MAX_VID_MB * 1024 * 1024);
       if (big) return setError(`${big.name} is too big. Max ${MAX_VID_MB}MB per video.`);
       // The first fills the main slot (trim, text, cover); the rest each become their own drop.
@@ -219,8 +211,8 @@ export default function PostStudio() {
 
   async function addExtras(list: File[]) {
     const room = MAX_BATCH - 1 - extrasRef.current.length;
-    if (room <= 0) return setError(`Up to ${MAX_BATCH} videos at a time.`);
-    if (list.length > room) setError(`Up to ${MAX_BATCH} videos at a time. Extras were skipped.`);
+    if (room <= 0) return setError(`Up to ${MAX_BATCH} videos at a time. Choose a folder to post more.`);
+    if (list.length > room) setError(`Up to ${MAX_BATCH} videos at a time, so extras were skipped. Choose a folder to post more.`);
     setBusy("Preparing videos…");
     const out: Extra[] = [];
     for (const raw of list.slice(0, room)) {
@@ -473,7 +465,7 @@ export default function PostStudio() {
         <Upload strokeWidth={2} aria-hidden />
       </span>
       <b>{format === "video" ? "Select videos to upload" : photos.length ? "Add more photos" : "Select photos to upload"}</b>
-      <span>or drag and drop {format === "video" ? "as many as you like" : "them"} here · {format === "video" ? "each video posts as its own drop" : "it starts uploading straight away"}</span>
+      <span>or drag and drop {format === "video" ? `up to ${MAX_BATCH}` : "them"} here · {format === "video" ? "each video posts as its own drop" : "it starts uploading straight away"}</span>
       <span className="up-specs">
         {format === "video" ? (
           <><span>MP4 (H.264)</span><span>Up to 3 min</span><span>{MAX_VID_MB}MB max</span><span>Camera: Most compatible</span></>
@@ -483,6 +475,24 @@ export default function PostStudio() {
       </span>
     </div>
   );
+  const folder = format === "video" ? (
+    <>
+      <button type="button" className="ps-link ps-folder" onClick={() => folderRef.current?.click()}>Or choose a folder to post every video in it</button>
+      <input
+        ref={folderRef}
+        type="file"
+        hidden
+        multiple
+        {...{ webkitdirectory: "" }}
+        onChange={(e) => {
+          const vids = Array.from(e.target.files || []).filter(isVideoFile);
+          e.target.value = "";
+          if (vids.length) setBulk(vids);
+          else setError("No videos in that folder.");
+        }}
+      />
+    </>
+  ) : null;
 
   return (
     <div className="ps">
@@ -575,9 +585,9 @@ export default function PostStudio() {
                         ))}
                       </div>
                     ) : null}
-                    <button type="button" className="ps-link" onClick={() => fileRef.current?.click()}>+ Add more videos</button>
+                    {extras.length < MAX_BATCH - 1 ? <button type="button" className="ps-link" onClick={() => fileRef.current?.click()}>+ Add more videos</button> : null}
                   </div>
-                ) : drop}
+                ) : <>{drop}{folder}</>}
               </>
             ) : null}
 
