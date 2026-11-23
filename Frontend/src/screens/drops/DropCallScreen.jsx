@@ -16,7 +16,7 @@ import {
   ActivityIndicator, Animated, AppState, Image, Modal, Platform, PermissionsAndroid, Pressable, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, BackHandler,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bluetooth, EllipsisVertical, Headphones, Mic, MicOff, Minimize2, Phone, PhoneOff, PictureInPicture2, RefreshCw, Smartphone, Smile, Sparkles,
@@ -64,7 +64,23 @@ function Avatar({ name, url, size }) {
   );
 }
 
-const VideoTile = React.memo(({ uid, person, isLocal, muted, camOff, RtcView, size, style, overlay, small }) => (
+// Full-screen video: the header and controls float over it on a soft fade.
+function Scrim({ on, edge, onHeight, children }) {
+  if (!on) return children;
+  const top = edge === 'top';
+  return (
+    <LinearGradient
+      pointerEvents="box-none"
+      colors={top ? ['rgba(0,0,0,0.62)', 'rgba(0,0,0,0)'] : ['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']}
+      style={[styles.scrim, top ? styles.scrimTop : styles.scrimBottom]}
+      onLayout={(e) => onHeight(e.nativeEvent.layout.height)}
+    >
+      {children}
+    </LinearGradient>
+  );
+}
+
+const VideoTile = React.memo(({ uid, person, isLocal, muted, camOff, RtcView, size, style, overlay, small, bare }) => (
   <View style={[styles.tile, size ? { width: size, height: size } : null, style]}>
     {RtcView && !camOff ? (
       <RtcView
@@ -78,7 +94,7 @@ const VideoTile = React.memo(({ uid, person, isLocal, muted, camOff, RtcView, si
         {!small && !isLocal ? <Text style={styles.camOffText}>Camera off</Text> : null}
       </View>
     )}
-    {small ? null : (
+    {small || bare ? null : (
       <View style={styles.tileLabelWrap}>
         <Text style={styles.tileLabel} numberOfLines={1}>{isLocal ? 'You' : person?.name || 'Guest'}</Text>
         {muted && <MicOff size={rs(11)} color="#fff" />}
@@ -117,6 +133,9 @@ export default function DropCallScreen({ route, navigation }) {
   const [inPip, setInPip]           = useState(false);
   const [blur, setBlur]             = useState(false);
   const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
+  const [topH, setTopH]             = useState(0);
+  const [bottomH, setBottomH]       = useState(0);
   const liveSince = useRef(null);
   const [joined, setJoined]         = useState(false);
   const [micMuted, setMicMuted]     = useState(false);
@@ -560,6 +579,16 @@ export default function DropCallScreen({ route, navigation }) {
   const mainTile = mainKey ? tiles.find((t) => t.key === mainKey) : null;
   const sideTiles = mainTile ? tiles.filter((t) => t.key !== mainKey) : [];
   const showChrome = chrome || !mainTile || showStage;
+  const immersive = direct && !!mainTile && !showStage;
+
+  // Like WhatsApp: the controls fade away after a few seconds of video; a tap brings them back.
+  const menuOpen = reactOpen || moreOpen || routeOpen || !!videoAsk;
+  useEffect(() => {
+    if (!immersive || !chrome || phase !== 'live' || menuOpen) return undefined;
+    const t = setTimeout(() => setChrome(false), 5000);
+    return () => clearTimeout(t);
+  }, [immersive, chrome, phase, menuOpen]);
+  useEffect(() => { if (!immersive) setChrome(true); }, [immersive]);
   const tileProps = (t) => ({
     uid: t.uid,
     person: t.isLocal ? null : personForUid(t.uid),
@@ -626,17 +655,20 @@ export default function DropCallScreen({ route, navigation }) {
     : '';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-      <LinearGradient colors={[T.primaryGlow, 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} pointerEvents="none" />
+    <SafeAreaView style={[styles.safe, immersive && styles.full]} edges={immersive ? [] : ['top', 'left', 'right', 'bottom']}>
+      {immersive ? null : (
+        <LinearGradient colors={[T.primaryGlow, 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} pointerEvents="none" />
+      )}
       {netNote || weakNote ? (
-        <View style={styles.netBanner} pointerEvents="none">
+        <View style={[styles.netBanner, immersive && { top: (showChrome ? topH : insets.top) + rp(8) }]} pointerEvents="none">
           {netNote ? <WifiOff size={rs(14)} color="#fff" /> : <Wifi size={rs(14)} color="#fff" />}
           <Text style={styles.netBannerText}>{netNote || weakNote}</Text>
         </View>
       ) : null}
 
       {showChrome ? (
-      <View style={styles.header}>
+      <Scrim on={immersive} edge="top" onHeight={setTopH}>
+      <View style={[styles.header, immersive && { paddingTop: insets.top + rp(10), paddingLeft: insets.left + SPACING.md, paddingRight: insets.right + SPACING.md, paddingBottom: rp(28) }]}>
         {direct && p.connectionId && phase !== 'ringing' ? (
           <TouchableOpacity style={styles.minBtn} onPress={minimise} hitSlop={HIT_SLOP} accessibilityLabel="Minimise call and open the chat">
             <Minimize2 size={rs(18)} color={T.text} />
@@ -667,6 +699,7 @@ export default function DropCallScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
       </View>
+      </Scrim>
       ) : null}
 
       {showStage ? (
@@ -695,13 +728,17 @@ export default function DropCallScreen({ route, navigation }) {
           ) : null}
         </View>
       ) : mainTile ? (
-        <View style={styles.focusWrap} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+        <View style={[styles.focusWrap, immersive && StyleSheet.absoluteFill]} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onMainPress} accessibilityLabel={direct ? 'Show or hide controls' : 'Back to everyone'}>
-            <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} />
+            <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} bare={immersive} />
           </Pressable>
           {direct ? (
             sideTiles[0] ? (
-              <DraggablePip area={area} width={rs(104)} height={rs(148)} onTap={() => setFocusKey(sideTiles[0].key)} style={styles.pip}>
+              <DraggablePip
+                area={area} width={rs(104)} height={rs(148)} onTap={() => setFocusKey(sideTiles[0].key)} style={styles.pip}
+                top={immersive ? (showChrome ? topH : insets.top) : 0}
+                bottom={immersive ? (showChrome ? bottomH : insets.bottom) : 0}
+              >
                 <VideoTile key={`pip-${sideTiles[0].key}`} {...tileProps(sideTiles[0])} style={styles.pipTile} overlay small />
               </DraggablePip>
             ) : null
@@ -728,14 +765,14 @@ export default function DropCallScreen({ route, navigation }) {
       <ReactionLayer items={floaters} onDone={dropFloater} />
 
       {asking ? (
-        <View style={styles.askPill} pointerEvents="none">
+        <View style={[styles.askPill, immersive && { top: (showChrome ? topH : insets.top) + rp(44) }]} pointerEvents="none">
           <Video size={rs(14)} color="#fff" />
           <Text style={styles.askPillText}>Asking {other?.name || 'them'} to switch to video…</Text>
         </View>
       ) : null}
 
       {videoAsk ? (
-        <View style={styles.askCard}>
+        <View style={[styles.askCard, immersive && { bottom: (showChrome ? bottomH : insets.bottom) + rp(12) }]}>
           <Text style={styles.askTitle}>{videoAsk.name || other?.name || 'They'} wants to switch to video</Text>
           <View style={styles.askActs}>
             <TouchableOpacity style={styles.askNo} onPress={() => answerVideo(false)} accessibilityRole="button">
@@ -755,9 +792,11 @@ export default function DropCallScreen({ route, navigation }) {
         </View>
       )}
 
-      {showChrome && reactOpen ? <ReactionPicker onPick={sendReaction} /> : null}
+      {showChrome ? (
+      <Scrim on={immersive} edge="bottom" onHeight={setBottomH}>
+      {reactOpen ? <ReactionPicker onPick={sendReaction} /> : null}
 
-      {showChrome && moreOpen ? (
+      {moreOpen ? (
         <View style={styles.menu}>
           {canPip ? (
             <TouchableOpacity style={styles.menuRow} onPress={() => { setMoreOpen(false); nativeCalls.enterPip(); }} accessibilityRole="button">
@@ -774,7 +813,7 @@ export default function DropCallScreen({ route, navigation }) {
         </View>
       ) : null}
 
-      {showChrome && routeOpen ? (
+      {routeOpen ? (
         <View style={styles.menu}>
           {[
             !devices.wired && { key: 'earpiece', label: 'Phone', Icon: Smartphone },
@@ -790,8 +829,7 @@ export default function DropCallScreen({ route, navigation }) {
         </View>
       ) : null}
 
-      {showChrome ? (
-      <View style={styles.controls}>
+      <View style={[styles.controls, immersive && { paddingTop: rp(28) }]}>
         <CtrlBtn on={micMuted} onPress={toggleMic} label={micMuted ? 'Unmute' : 'Mute'}
           icon={micMuted ? <MicOff size={rs(20)} color="#fff" /> : <Mic size={rs(20)} color={T.text} strokeWidth={2} />} />
         <CtrlBtn on={camOff} onPress={toggleCam} label={camOff ? 'Camera on' : 'Camera off'}
@@ -809,14 +847,12 @@ export default function DropCallScreen({ route, navigation }) {
           icon={<RefreshCw size={rs(20)} color={camOff ? T.textMute : T.text} strokeWidth={2} />} />
       </View>
 
-      ) : null}
-
-      {showChrome ? (
-      <Text style={styles.hostNote}>
+      <Text style={[styles.hostNote, immersive && { color: 'rgba(255,255,255,0.75)', paddingBottom: insets.bottom + rp(10) }]}>
         {direct ? 'Ends the call. The chat stays open.'
           : isHost ? 'Ends it for everyone. Nobody leaves your Room.'
             : 'Leaving the session keeps you in the Room.'}
       </Text>
+      </Scrim>
       ) : null}
 
       <Modal visible={peopleOpen} transparent animationType="slide" onRequestClose={() => setPeopleOpen(false)}>
@@ -870,6 +906,10 @@ function CtrlBtn({ on, onPress, icon, label, disabled }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: 'transparent' },
+  full: { backgroundColor: '#000' },
+  scrim: { position: 'absolute', left: 0, right: 0, zIndex: 4 },
+  scrimTop: { top: 0 },
+  scrimBottom: { bottom: 0 },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: rp(10), paddingHorizontal: SPACING.md, paddingVertical: rp(10) },
   headerTitle: { fontFamily: 'DMSans-Bold', fontSize: rf(17), color: T.text },
