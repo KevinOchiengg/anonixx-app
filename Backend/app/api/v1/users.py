@@ -48,6 +48,7 @@ class ReportUserRequest(BaseModel):
 
 class PushTokenRequest(BaseModel):
     token: str
+    call_ui: bool = False   # the app can ring full screen from a silent call push
 
 
 @router.get("/me")
@@ -138,7 +139,7 @@ async def register_push_token(
     """A user's Expo push token, for every push sender."""
     await db["push_tokens"].update_one(
         {"user_id": current_user_id},
-        {"$set": {"token": data.token, "updated_at": _now()}},
+        {"$set": {"token": data.token, "call_ui": data.call_ui, "updated_at": _now()}},
         upsert=True,
     )
     return {"message": "Push token registered"}

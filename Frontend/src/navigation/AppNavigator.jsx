@@ -42,6 +42,7 @@ import LiveEarningsScreen from '../screens/lives/LiveEarningsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import DropCallScreen from '../screens/drops/DropCallScreen';
 import IncomingCallOverlay from '../components/calls/IncomingCallOverlay';
+import CallReturnBar from '../components/calls/CallReturnBar';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminModerationScreen from '../screens/admin/AdminModerationScreen';
@@ -98,7 +99,11 @@ let Notifications = null;
 try { Notifications = require('expo-notifications'); } catch { /* not available */ }
 
 const navigationRef = createNavigationContainerRef();
-const navigateRoot = (name, params) => { if (navigationRef.isReady()) navigationRef.navigate(name, params); };
+let pendingNav = null;   // a call answered from the lock screen can arrive before navigation is ready
+const navigateRoot = (name, params) => {
+  if (navigationRef.isReady()) navigationRef.navigate(name, params);
+  else pendingNav = [name, params];
+};
 
 // Push taps: Accept on a link up accepts and opens the chat; a Knock opens requests; a Let In
 // opens their Room; mutual opens the chat.
@@ -139,6 +144,11 @@ export default function AppNavigator({ fontsReady }) {
 
   // Cold start from a notification: handle it once the stack is mounted.
   const onReady = () => {
+    if (pendingNav) {
+      const [name, params] = pendingNav;
+      pendingNav = null;
+      navigationRef.navigate(name, params);
+    }
     Notifications?.getLastNotificationResponseAsync?.()
       .then((r) => { if (r) handleNotificationResponse(r); })
       .catch(() => {});
@@ -202,6 +212,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="Market"         component={withBackdrop(MarketScreen)} />
         <Stack.Screen name="MarketItem"     component={withBackdrop(MarketItemScreen)} />
       </Stack.Navigator>
+      {!loading && <CallReturnBar navigationRef={navigationRef} />}
       {!loading && <IncomingCallOverlay navigate={navigateRoot} />}
     </NavigationContainer>
   );

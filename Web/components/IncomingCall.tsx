@@ -5,18 +5,21 @@
  * Mounted once in the root layout. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { connectSocket } from "@/lib/socket";
-import { callsApi, callInfo } from "@/lib/calls";
+import { callsApi, callInfo, QUICK_REPLIES, sendQuickReply } from "@/lib/calls";
 import CallRoom, { type CallInfo } from "./CallRoom";
 import { startCallSound, stopCallSound } from "@/lib/callSounds";
 
-type Ring = { call_id: string; caller_name?: string; caller_avatar?: string | null; video?: boolean; ring_seconds?: number };
+type Ring = { call_id: string; connection_id?: string; caller_name?: string; caller_avatar?: string | null; video?: boolean; ring_seconds?: number };
 
 export default function IncomingCall() {
   const { user } = useAuth();
   const [ring, setRing] = useState<Ring | null>(null);
   const [busy, setBusy] = useState(false);
+  const [replying, setReplying] = useState(false);
+  const router = useRouter();
   const [call, setCall] = useState<CallInfo | null>(null);
   const [note, setNote] = useState("");
   const timer = useRef<number | null>(null);
@@ -28,6 +31,7 @@ export default function IncomingCall() {
     if (prevTitle.current) { document.title = prevTitle.current; prevTitle.current = ""; }
     setRing(null);
     setBusy(false);
+    setReplying(false);
   }, []);
 
   const show = useCallback((r: Ring) => {
@@ -36,6 +40,7 @@ export default function IncomingCall() {
     document.title = `📞 ${r.caller_name || "Someone"} is calling`;
     try { navigator.vibrate?.([400, 300, 400]); } catch { /* not supported */ }
     startCallSound("ringtone");
+    callsApi.ringing(r.call_id).catch(() => {});
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(clear, ((r.ring_seconds || 45) + 2) * 1000);
   }, [clear]);
@@ -63,7 +68,7 @@ export default function IncomingCall() {
       try {
         const live = await callsApi.live();
         const r = live.direct.find((d) => d.incoming && d.status === "ringing");
-        if (r) show({ call_id: r.id, caller_name: r.other?.name, caller_avatar: r.other?.avatar_url, video: r.video });
+        if (r) show({ call_id: r.id, connection_id: r.connection_id, caller_name: r.other?.name, caller_avatar: r.other?.avatar_url, video: r.video });
       } catch { /* offline */ }
     };
     void check();
@@ -98,6 +103,21 @@ export default function IncomingCall() {
     try { await callsApi.decline(id); } catch { /* it ends by itself */ }
   }
 
+  async function replyWith(content: string) {
+    if (!ring) return;
+    const { call_id: id, connection_id: cid } = ring;
+    clear();
+    callsApi.decline(id).catch(() => {});
+    if (!cid) return;
+    if (!content) { router.push(`/chat/${cid}`); return; }
+    try {
+      await sendQuickReply(cid, content);
+      setNote("Message sent.");
+    } catch {
+      setNote("Couldn’t send it. Try again.");
+    }
+  }
+
   if (call) return <CallRoom info={call} onClose={() => setCall(null)} />;
   if (note) return <div className="ic-note" role="status">{note}</div>;
   if (!ring) return null;
@@ -111,8 +131,17 @@ export default function IncomingCall() {
         </span>
         <b>{name}</b>
         <span className="ic-sub">is calling you</span>
+        {replying ? (
+          <div className="ic-replies">
+            {QUICK_REPLIES.map((r) => <button key={r} type="button" onClick={() => void replyWith(r)}>{r}</button>)}
+            <button type="button" className="own" onClick={() => void replyWith("")}>Write your own…</button>
+          </div>
+        ) : null}
         <div className="ic-acts">
           <button className="ic-no" onClick={decline}>Decline</button>
+          {ring.connection_id ? (
+            <button type="button" className="ic-msg" onClick={() => setReplying((v) => !v)} aria-expanded={replying}>Message</button>
+          ) : null}
           <button className="ic-yes" onClick={accept} disabled={busy} autoFocus>{busy ? "Connecting…" : "Accept"}</button>
         </div>
       </div>

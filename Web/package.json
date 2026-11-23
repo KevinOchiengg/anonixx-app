@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "agora-extension-virtual-background": "2.1.0",
     "agora-rtc-sdk-ng": "^4.24.8",
     "hls.js": "^1.7.3",
     "lucide-react": "0.544.0",

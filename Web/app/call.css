@@ -26,6 +26,55 @@
   .cr-mini .cr-tile { aspect-ratio: 16 / 10; }
   .cr-strip .cr-mini { width: 160px; }
 }
+.cr-net { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); z-index: 5; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(245, 158, 11, 0.92); color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.cr-net svg { width: 14px; height: 14px; }
+.cr-hint { color: var(--faint) !important; font-size: 12px !important; text-align: center; }
+.cr-out-t { color: var(--rose); font-size: 18px; margin-top: 4px; }
+.cr-out { display: flex; justify-content: space-evenly; padding: 16px 12px calc(40px + env(safe-area-inset-bottom)); }
+.cr-out > span { display: grid; justify-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+.cr-out button { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; border: 1px solid var(--line); }
+.cr-out button svg { width: 24px; height: 24px; }
+.cr-out-close { background: rgba(255, 255, 255, 0.08); color: var(--fg); }
+.cr-out-call { background: #22c55e; border-color: #22c55e !important; color: #fff; box-shadow: 0 6px 18px rgba(34, 197, 94, 0.4); }
+.cr-out-call:disabled { opacity: 0.6; cursor: default; }
+.cr-drag { right: auto !important; bottom: auto !important; touch-action: none; cursor: grab; transition: left 0.25s ease, top 0.25s ease; }
+.cr-drag.dragging { transition: none; cursor: grabbing; }
+.cr-drag .cr-tile, .cr-drag video { pointer-events: none; }
+.cr-camoff { position: absolute; left: 0; right: 0; bottom: 34%; text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cr-mini .cr-camoff { display: none; }
+.cr-head { position: relative; }
+.cr-hbtn { position: absolute; top: 12px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: var(--fg); cursor: pointer; }
+.cr-hbtn svg { width: 18px; height: 18px; }
+.cr-hbtn.left { left: 14px; }
+.cr-hbtn.right { right: 14px; }
+.cr-hbtn.on { background: var(--rose); border-color: var(--rose); color: #fff; }
+.cr-muted { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); font-size: 12px; font-weight: 600; }
+.cr-muted svg { width: 13px; height: 13px; }
+.cr-floaters { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 6; }
+.cr-floaters span { position: absolute; bottom: 150px; font-size: 38px; animation: crFloat 2.4s ease-out forwards; }
+@keyframes crFloat { 0% { transform: translateY(0) scale(0.5); opacity: 1; } 15% { transform: translateY(-30px) scale(1.2); } 70% { opacity: 1; } 100% { transform: translateY(-300px) scale(1); opacity: 0; } }
+.cr-react { align-self: center; display: flex; gap: 4px; padding: 6px 10px; border-radius: 999px; background: rgba(17, 19, 24, 0.92); border: 1px solid var(--line); margin-bottom: 4px; }
+.cr-react button { width: 42px; height: 42px; border: 0; background: none; font-size: 26px; cursor: pointer; border-radius: 50%; }
+.cr-react button:hover { background: rgba(255, 255, 255, 0.08); }
+.cr-asking { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); z-index: 5; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; background: rgba(17, 19, 24, 0.9); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.cr-asking svg { width: 14px; height: 14px; }
+.cr-ask { position: absolute; left: 16px; right: 16px; bottom: 150px; z-index: 7; max-width: 420px; margin: 0 auto; display: grid; gap: 14px; padding: 16px; border-radius: 18px; background: rgba(17, 19, 24, 0.96); border: 1px solid var(--line); text-align: center; }
+.cr-ask > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cr-ask button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 11px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.08); color: var(--fg); font-weight: 600; cursor: pointer; }
+.cr-ask button.yes { background: #22c55e; color: #fff; }
+.cr-ask button svg { width: 16px; height: 16px; }
+.cr-float { position: fixed; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 200; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 18px; background: #111318; border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); color: var(--fg); max-width: calc(100vw - 32px); }
+.cr-float-t { display: grid; min-width: 0; }
+.cr-float-t b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-float-t small { font-size: 12px; color: #22c55e; font-variant-numeric: tabular-nums; }
+.cr-float button { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: var(--fg); cursor: pointer; flex: none; }
+.cr-float button svg { width: 18px; height: 18px; }
+.cr-float button.end { background: #ef4444; border-color: #ef4444; color: #fff; }
+.cr-settings { align-self: center; width: min(340px, calc(100% - 32px)); display: grid; gap: 10px; padding: 14px; margin-bottom: 4px; border-radius: 16px; background: rgba(17, 19, 24, 0.96); border: 1px solid var(--line); }
+.cr-settings label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.cr-settings select { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--fg); }
+.cr-settings button { padding: 10px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: var(--fg); font-weight: 600; cursor: pointer; }
+.cr-settings button.on { background: var(--rose); border-color: var(--rose); color: #fff; }
 .cr-ctrls { display: flex; justify-content: center; align-items: center; gap: 14px; padding: 16px 12px calc(16px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
 .cr-ctrls button { width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line); color: var(--fg); display: grid; place-items: center; cursor: pointer; }
 .cr-ctrls button svg { width: 20px; height: 20px; }

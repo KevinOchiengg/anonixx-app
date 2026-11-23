@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '../config/api';
+import { registerCallPushTask } from '../services/callPush';
 
 let Notifications = null;
 try { Notifications = require('expo-notifications'); } catch { /* not available */ }
@@ -48,7 +49,7 @@ async function registerPushToken(token) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ token: pushToken }),
+      body: JSON.stringify({ token: pushToken, call_ui: await registerCallPushTask() }),
     });
 
     console.log('✅ Push token registered with backend');

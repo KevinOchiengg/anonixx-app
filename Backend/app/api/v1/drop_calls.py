@@ -65,9 +65,15 @@ async def _emit(event: str, payload: dict, user_ids) -> None:
         pass
 
 
-def _push(user_id: str, title: str, body: str, db, data: dict, kind: str) -> None:
+def _push(user_id: str, title: str, body: str, db, data: dict, kind: str, call_signal: Optional[str] = None) -> None:
     from app.api.v1.drops import send_push_notification
-    asyncio.create_task(send_push_notification(user_id, title, body, db, data, kind=kind))
+    asyncio.create_task(send_push_notification(user_id, title, body, db, data, kind=kind, call_signal=call_signal))
+
+
+def _stop_ringing(call: dict, db) -> None:
+    from app.api.v1.drops import send_call_signal
+    if call.get("kind") == "direct" and call.get("callee_id"):
+        asyncio.create_task(send_call_signal(call["callee_id"], str(call["_id"]), db))
 
 
 async def _people(db, ids) -> dict:
@@ -138,6 +144,7 @@ async def _expire_rings(db) -> None:
             {"_id": call["_id"], "status": "ringing"}, {"$set": {"status": "missed", "ended_at": _now()}},
         )
         if res.modified_count:
+            _stop_ringing(call, db)
             await _emit("call_missed", {"call_id": str(call["_id"])}, [call["host_user_id"], call["callee_id"]])
             names = await _people(db, [call["host_user_id"]])
             _push(call["callee_id"], "Missed call",
@@ -408,12 +415,34 @@ async def start_direct_call(
     _push(callee_id, f"{me.get('name', 'Someone')} is calling 📞",
           f"Incoming {'video' if body.video else 'voice'} call. Open Anonixx to answer.", db,
           {"type": "call_incoming", "call_id": str(call["_id"]), "connection_id": body.connection_id,
-           "url": f"/chat/{body.connection_id}?call={call['_id']}"}, "call")
+           "caller_name": me.get("name") or "Someone", "video": body.video, "ring_seconds": RING_SECONDS,
+           "url": f"/chat/{body.connection_id}?call={call['_id']}"}, "call", call_signal="incoming")
 
+    from app.websockets.events import online_users
     return {
         **_token_reply(call, uid), "kind": "direct", "video": body.video, "status": "ringing",
         "ring_seconds": RING_SECONDS, "other": {"user_id": callee_id, **names.get(callee_id, {})},
+        "connection_id": body.connection_id, "reachable": callee_id in online_users(),
     }
+
+
+@router.post("/{call_id}/ringing")
+async def direct_call_ringing(
+    call_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """The callee's device got the call and is ringing, so the caller can show "Ringing"."""
+    call = await _load(call_id, db)
+    if call.get("kind") != "direct" or call.get("callee_id") != current_user_id:
+        raise HTTPException(status_code=403, detail="This call isn't for you.")
+    res = await db["drop_calls"].update_one(
+        {"_id": call["_id"], "status": "ringing", "delivered_at": None},
+        {"$set": {"delivered_at": _now()}},
+    )
+    if res.modified_count:
+        await _emit("call_ringing", {"call_id": call_id}, [call["host_user_id"]])
+    return {"ringing": True}
 
 
 @router.post("/{call_id}/accept")
@@ -439,11 +468,13 @@ async def accept_direct_call(
     if not conn or conn.get("removed_at") or await is_blocked_between(db, call["host_user_id"], current_user_id):
         await db["drop_calls"].update_one({"_id": call["_id"]}, {"$set": {"status": "ended", "ended_at": _now()}})
         raise HTTPException(status_code=410, detail="This call has ended.")
+    _stop_ringing(call, db)
     await _emit("call_accepted", {"call_id": call_id}, [call["host_user_id"]])
     names = await _people(db, [call["host_user_id"]])
     return {
         **_token_reply(call, uid), "kind": "direct", "video": call.get("video", False), "status": "active",
         "other": {"user_id": call["host_user_id"], **names.get(call["host_user_id"], {})},
+        "connection_id": call.get("connection_id"),
     }
 
 
@@ -460,6 +491,7 @@ async def decline_direct_call(
         {"_id": call["_id"], "status": "ringing"}, {"$set": {"status": "declined", "ended_at": _now()}},
     )
     if res.modified_count:
+        _stop_ringing(call, db)
         await _emit("call_declined", {"call_id": call_id}, [call["host_user_id"]])
     return {"declined": True}
 
@@ -519,6 +551,7 @@ async def _end_call(call: dict, db, by: Optional[str] = None) -> dict:
     cid = str(call["_id"])
     others = [u for u in _participant_ids(call) if u != by]
     if call.get("kind") == "direct" and was_ringing:
+        _stop_ringing(call, db)
         await _emit("call_cancelled", {"call_id": cid}, others)
         names = await _people(db, [call["host_user_id"]])
         _push(call["callee_id"], "Missed call",
@@ -527,6 +560,71 @@ async def _end_call(call: dict, db, by: Optional[str] = None) -> dict:
     else:
         await _emit("drop_call_ended", {"call_id": cid}, others)
     return {"message": "Call ended."}
+
+
+CALL_REACTIONS = {"❤️", "😂", "😮", "😢", "🔥", "👏"}
+
+
+class VideoReplyBody(BaseModel):
+    accept: bool
+
+
+class ReactionBody(BaseModel):
+    emoji: str
+
+
+async def _live_participant(call_id: str, user_id: str, db) -> dict:
+    call = await _load(call_id, db)
+    if call["status"] != "active" or user_id not in _participant_ids(call):
+        raise HTTPException(status_code=410, detail="This call has ended.")
+    return call
+
+
+@router.post("/{call_id}/video-request")
+async def request_video(
+    call_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """In a 1-to-1 voice call: ask the other person to switch to video."""
+    call = await _live_participant(call_id, current_user_id, db)
+    if call.get("kind") != "direct":
+        raise HTTPException(status_code=400, detail="Only 1-to-1 calls switch to video.")
+    names = await _people(db, [current_user_id])
+    others = [u for u in _participant_ids(call) if u != current_user_id]
+    await _emit("call_video_request", {"call_id": call_id, "from_name": names.get(current_user_id, {}).get("name")}, others)
+    return {"asked": True}
+
+
+@router.post("/{call_id}/video-reply")
+async def reply_video(
+    call_id: str,
+    body: VideoReplyBody,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    call = await _live_participant(call_id, current_user_id, db)
+    if body.accept:
+        await db["drop_calls"].update_one({"_id": call["_id"]}, {"$set": {"video": True}})
+    others = [u for u in _participant_ids(call) if u != current_user_id]
+    await _emit("call_video_reply", {"call_id": call_id, "accept": body.accept}, others)
+    return {"ok": True}
+
+
+@router.post("/{call_id}/react")
+async def react_in_call(
+    call_id: str,
+    body: ReactionBody,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """A quick reaction that floats up on everyone else's screen."""
+    if body.emoji not in CALL_REACTIONS:
+        raise HTTPException(status_code=400, detail="Pick one of the reactions.")
+    call = await _live_participant(call_id, current_user_id, db)
+    others = [u for u in _participant_ids(call) if u != current_user_id]
+    await _emit("call_reaction", {"call_id": call_id, "emoji": body.emoji, "from_user_id": current_user_id}, others)
+    return {"ok": True}
 
 
 @router.post("/{call_id}/renew")

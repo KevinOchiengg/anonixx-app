@@ -1,4 +1,5 @@
 import './global.css';
+import './src/services/callPush';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Provider } from 'react-redux';

@@ -5,12 +5,12 @@
  * kind "group": a session in the owner's Room. The host sees who's in and can mute or remove
  *   someone, and ends it for all; guests leave.
  * Leaving a call never touches the Room conversation. */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { connectSocket } from "@/lib/socket";
 import { playEndTone, startCallSound, stopCallSound } from "@/lib/callSounds";
-import { callsApi, type Participant, type Person } from "@/lib/calls";
-import { Mic, MicOff, PhoneOff, ScreenShare, ScreenShareOff, SwitchCamera, Users, Video, VideoOff } from "lucide-react";
+import { callInfo, callsApi, type Participant, type Person } from "@/lib/calls";
+import { Maximize2, Mic, MicOff, Minimize2, Phone, PhoneOff, PictureInPicture2, ScreenShare, ScreenShareOff, Settings2, Smile, SwitchCamera, Users, Video, VideoOff, Wifi, WifiOff, X } from "lucide-react";
 import AuthorAvatar from "@/components/AuthorAvatar";
 
 export type CallInfo = {
@@ -26,6 +26,8 @@ export type CallInfo = {
   status?: "ringing" | "active";
   ringSeconds?: number;
   other?: Person;
+  reachable?: boolean;
+  connectionId?: string;
 };
 
 type AnyTrack = {
@@ -63,15 +65,98 @@ function Tile({ label, track, muted, mirror, person }: { label: string; track?: 
     return () => { try { track.stop(); } catch { /* already closed */ } };
   }, [track]);
   return (
-    <div className={`cr-tile${mirror ? " mirror" : ""}`}>
+    <div className={`cr-tile${mirror ? " mirror" : ""}`} data-remote={label.startsWith("You") ? undefined : "1"}>
       <div className="cr-video" ref={box} />
       {!track ? (person?.avatar_url ? <span className="cr-av img"><Image src={person.avatar_url} alt="" width={72} height={72} /></span> : <span className="cr-av"><AuthorAvatar name={label} size={64} /></span>) : null}
+      {!track && !label.startsWith("You") ? <span className="cr-camoff">Camera off</span> : null}
       <span className="cr-label">{label}{muted ? " · muted" : ""}</span>
     </div>
   );
 }
 
+const REACTIONS = ["❤️", "😂", "😮", "😢", "🔥", "👏"];
+const PIP_MARGIN = 12;
+
+/** The small video: drag it anywhere over the call and it settles in the nearest corner. A tap swaps. */
+function DragPip({ onTap, label, children }: { onTap: () => void; label: string; children: ReactNode }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const corner = useRef(3);
+  const start = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const place = useCallback((i: number) => {
+    const el = ref.current;
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    corner.current = i;
+    setPos({
+      x: i % 2 ? box.clientWidth - el.offsetWidth - PIP_MARGIN : PIP_MARGIN,
+      y: i > 1 ? box.clientHeight - el.offsetHeight - PIP_MARGIN : PIP_MARGIN,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    place(corner.current);
+    const box = ref.current?.parentElement;
+    if (!box || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => place(corner.current));
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [place]);
+
+  function down(e: React.PointerEvent<HTMLButtonElement>) {
+    if (!pos) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    start.current = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y, moved: false };
+  }
+  function move(e: React.PointerEvent<HTMLButtonElement>) {
+    const s = start.current;
+    if (!s) return;
+    const dx = e.clientX - s.px;
+    const dy = e.clientY - s.py;
+    if (!s.moved && Math.hypot(dx, dy) < 6) return;
+    s.moved = true;
+    setDragging(true);
+    setPos({ x: s.x + dx, y: s.y + dy });
+  }
+  function up() {
+    const s = start.current;
+    start.current = null;
+    setDragging(false);
+    if (!s) return;
+    if (!s.moved) { onTap(); return; }
+    const el = ref.current;
+    const box = el?.parentElement;
+    if (!el || !box || !pos) return;
+    const cx = pos.x + el.offsetWidth / 2;
+    const cy = pos.y + el.offsetHeight / 2;
+    place((cx > box.clientWidth / 2 ? 1 : 0) + (cy > box.clientHeight / 2 ? 2 : 0));
+  }
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`cr-mini cr-drag${dragging ? " dragging" : ""}`}
+      style={pos ? { left: pos.x, top: pos.y } : { visibility: "hidden" }}
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      onPointerCancel={up}
+      aria-label={label}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: () => void }) {
+  const [current, setCurrent] = useState(info);
+  return <CallRoomInner key={current.callId} info={current} onClose={onClose} onRedial={setCurrent} />;
+}
+
+function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: () => void; onRedial: (next: CallInfo) => void }) {
   const direct = info.kind === "direct";
   const other = info.other || (info.hostName ? { name: info.hostName } : null);
   const [phase, setPhase] = useState<"ringing" | "connecting" | "live">(info.status === "ringing" ? "ringing" : "connecting");
@@ -89,6 +174,21 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   const [people, setPeople] = useState<Participant[]>([]);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [delivered, setDelivered] = useState(info.reachable !== false);
+  const [outcome, setOutcome] = useState<{ title: string; sub?: string } | null>(null);
+  const [redialing, setRedialing] = useState(false);
+  const [weak, setWeak] = useState({ me: false, them: false });
+  const [mini, setMini] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [videoAsk, setVideoAsk] = useState<string | null>(null);
+  const [reactOpen, setReactOpen] = useState(false);
+  const [floaters, setFloaters] = useState<{ id: number; emoji: string; left: number }[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [devices, setDevices] = useState<{ mics: MediaDeviceInfo[]; outs: MediaDeviceInfo[] }>({ mics: [], outs: [] });
+  const [blur, setBlur] = useState(false);
+  const [blurBusy, setBlurBusy] = useState(false);
+  const outputId = useRef("");
+  const vb = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [chrome, setChrome] = useState(true);
 
@@ -99,6 +199,8 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   const screen = useRef<AnyTrack | null>(null);
   const camIdx = useRef(0);
   const ended = useRef(false);
+  const reconnectTimer = useRef<number | null>(null);
+  const dropTimer = useRef<number | null>(null);
 
   // Live = the other side is actually here (1-to-1), or we're in the session (group).
   const live = joined && (direct ? remotes.length > 0 : true);
@@ -120,6 +222,9 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   }, []);
 
   const teardown = useCallback(async () => {
+    try { await vb.current?.release?.(); } catch { /* not started */ }
+    vb.current = null;
+    if (typeof document !== "undefined" && document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
     for (const t of [mic.current, cam.current, screen.current]) {
       try { t?.stop(); t?.close(); } catch { /* already closed */ }
     }
@@ -129,13 +234,17 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   }, []);
 
   // notify: tell the server (end for host / direct, leave for guests). message: shown after.
-  const finish = useCallback(async ({ notify = true, message = "" }: { notify?: boolean; message?: string } = {}) => {
+  // outcome: an unanswered call stays on screen with "Call again", like a phone.
+  const finish = useCallback(async ({ notify = true, message = "", outcome: result }: { notify?: boolean; message?: string; outcome?: { title: string; sub?: string } } = {}) => {
     if (ended.current) return;
     ended.current = true;
+    if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
+    if (dropTimer.current) window.clearTimeout(dropTimer.current);
     stopCallSound();
     playEndTone();
     void teardown();
     if (notify) (direct || info.isHost ? callsApi.end(info.callId) : callsApi.leave(info.callId)).catch(() => {});
+    if (result) { setOutcome(result); return; }
     if (message) setNotice(message);
     window.setTimeout(onClose, message ? 1600 : 0);
   }, [direct, info.callId, info.isHost, onClose, teardown]);
@@ -148,14 +257,32 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   }, [info.callId]);
   useEffect(() => { void loadPeople(); }, [loadPeople]);
 
+  const addFloater = useCallback((emoji: string) => {
+    const id = Date.now() + Math.random();
+    setFloaters((list) => [...list.slice(-12), { id, emoji, left: 10 + Math.random() * 70 }]);
+    window.setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 2500);
+  }, []);
+
   // Server events for this call.
   useEffect(() => {
     const so = connectSocket();
     if (!so) return;
     const mine = (fn: () => void) => (e: { call_id?: string }) => { if (e?.call_id === info.callId) fn(); };
+    so.on("call_ringing", mine(() => setDelivered(true)));
+    const mineE = <T extends { call_id?: string }>(fn: (e: T) => void) => (e: T) => { if (e?.call_id === info.callId) fn(e); };
+    so.on("call_video_request", mineE((e: { call_id?: string; from_name?: string }) => setVideoAsk(e.from_name || other?.name || "They")));
+    so.on("call_video_reply", mineE((e: { call_id?: string; accept?: boolean }) => {
+      setAsking(false);
+      if (!e.accept) {
+        void cam.current?.setEnabled(false);
+        setCamOff(true);
+        setError(`${other?.name || "They"} would rather stay on voice.`);
+      }
+    }));
+    so.on("call_reaction", mineE((e: { call_id?: string; emoji?: string }) => { if (e.emoji) addFloater(e.emoji); }));
     so.on("call_accepted", mine(() => setPhase("connecting")));
-    so.on("call_declined", mine(() => void finish({ notify: false, message: `${other?.name || "They"} can't talk right now.` })));
-    so.on("call_missed", mine(() => void finish({ notify: false, message: `${other?.name || "They"} didn't answer.` })));
+    so.on("call_declined", mine(() => void finish({ notify: false, outcome: { title: "Can’t talk right now", sub: "They declined. Try again later or send a message." } })));
+    so.on("call_missed", mine(() => void finish({ notify: false, outcome: { title: "No answer", sub: "They didn’t pick up." } })));
     so.on("call_cancelled", mine(() => void finish({ notify: false })));
     so.on("drop_call_ended", mine(() => void finish({ notify: false, message: "The call ended." })));
     so.on("drop_call_removed", mine(() => void finish({ notify: false, message: "The host took you out of the session." })));
@@ -172,10 +299,23 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   // Ringing: give up after the ring window (the server marks it missed too).
   useEffect(() => {
     if (phase !== "ringing") return;
-    if (direct) startCallSound("ringback");
-    const t = window.setTimeout(() => void finish({ message: `${other?.name || "They"} didn't answer.` }), ((info.ringSeconds || 45) + 3) * 1000);
+    if (direct && delivered) startCallSound("ringback");
+    const sub = delivered ? "They didn’t pick up." : "They’re offline. They’ll see you called.";
+    const t = window.setTimeout(() => void finish({ outcome: { title: "No answer", sub } }), ((info.ringSeconds || 45) + 3) * 1000);
     return () => { window.clearTimeout(t); stopCallSound(); };
-  }, [phase, direct, finish, info.ringSeconds, other?.name]);
+  }, [phase, direct, delivered, finish, info.ringSeconds]);
+
+  async function redial() {
+    if (!info.connectionId || redialing) return;
+    setRedialing(true);
+    try {
+      const d = await callsApi.direct(info.connectionId, !info.audioOnly);
+      onRedial(callInfo(d, { other: { ...(other || {}), ...(d.other || {}) }, connectionId: info.connectionId }));
+    } catch (e) {
+      setRedialing(false);
+      setOutcome((o) => (o ? { ...o, sub: (e as Error).message || "Could not call. Try again." } : o));
+    }
+  }
 
   useEffect(() => {
     let dead = false;
@@ -195,21 +335,53 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
         c.on("user-published", async (user: any, type: "audio" | "video") => { // eslint-disable-line @typescript-eslint/no-explicit-any
           try {
             await c.subscribe(user, type);
-            if (type === "audio") user.audioTrack?.play();
+            if (type === "audio") {
+              user.audioTrack?.play();
+              if (outputId.current) user.audioTrack?.setPlaybackDevice?.(outputId.current).catch(() => {});
+            }
           } catch { /* user left mid-subscribe */ }
           syncRemotes();
         });
         c.on("user-unpublished", syncRemotes);
-        c.on("user-joined", () => { syncRemotes(); void loadPeople(); });
-        c.on("user-left", () => {
+        c.on("user-joined", () => {
+          if (dropTimer.current) window.clearTimeout(dropTimer.current);
+          setNetNote("");
           syncRemotes();
-          // A 1-to-1 call is over when the other person drops out.
-          if (direct && c.remoteUsers.length === 0) void finish({ message: "The call ended." });
+          void loadPeople();
+        });
+        // "ServerTimeOut" = their connection dropped: wait for them to come back before ending.
+        c.on("user-left", (_u: unknown, reason?: string) => {
+          syncRemotes();
+          if (!direct || c.remoteUsers.length > 0) return;
+          if (reason === "ServerTimeOut") {
+            setNetNote("Their connection dropped. Reconnecting…");
+            if (dropTimer.current) window.clearTimeout(dropTimer.current);
+            dropTimer.current = window.setTimeout(() => void finish({ message: "Lost them. The call ended." }), 25000);
+          } else {
+            void finish({ message: "The call ended." });
+          }
         });
         c.on("connection-state-change", (cur: string, _prev: string, reason?: string) => {
-          if (cur === "RECONNECTING") setNetNote("Reconnecting…");
-          else if (cur === "CONNECTED") setNetNote("");
-          else if (cur === "DISCONNECTED" && reason && reason !== "LEAVE") void finish({ notify: false, message: "Lost the connection. The call ended." });
+          if (cur === "RECONNECTING") {
+            setNetNote("Reconnecting…");
+            if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
+            reconnectTimer.current = window.setTimeout(() => void finish({ message: "Couldn’t reconnect. The call ended." }), 30000);
+          } else if (cur === "CONNECTED") {
+            if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
+            setNetNote("");
+          } else if (cur === "DISCONNECTED" && reason && reason !== "LEAVE") {
+            void finish({ notify: false, message: "Lost the connection. The call ended." });
+          }
+        });
+        // Quality 4+ is poor (Agora); checks mine and theirs every couple of seconds.
+        c.on("network-quality", (q: { uplinkNetworkQuality: number; downlinkNetworkQuality: number }) => {
+          const me = Math.max(q.uplinkNetworkQuality, q.downlinkNetworkQuality) >= 4;
+          let them = false;
+          try {
+            const r = c.getRemoteNetworkQuality() as Record<string, { uplinkNetworkQuality: number; downlinkNetworkQuality: number }>;
+            them = Object.values(r).some((x) => Math.max(x.uplinkNetworkQuality, x.downlinkNetworkQuality) >= 4);
+          } catch { /* no one else yet */ }
+          setWeak((prev) => (prev.me === me && prev.them === them ? prev : { me, them }));
         });
         c.on("token-privilege-will-expire", async () => {
           try { await c.renewToken((await callsApi.renew(info.callId)).token); } catch { /* ends when the old token runs out */ }
@@ -253,10 +425,15 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
     if (!next) setError("");
   }
 
-  async function toggleCam() {
+  async function toggleCam(ask = true) {
     const c = client.current;
     if (!c || sharing) return;
     if (camOff) {
+      // A voice call: turning the camera on asks them to switch to video, like WhatsApp.
+      if (ask && direct && phase === "live" && !remotes.some((r) => r.video)) {
+        setAsking(true);
+        callsApi.askVideo(info.callId).catch(() => setAsking(false));
+      }
       try {
         if (!cam.current) {
           cam.current = await sdk.current.createCameraVideoTrack();
@@ -273,6 +450,93 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
     } else {
       await cam.current?.setEnabled(false);
       setCamOff(true);
+      setAsking(false);
+    }
+  }
+
+  async function answerVideo(accept: boolean) {
+    setVideoAsk(null);
+    callsApi.replyVideo(info.callId, accept).catch(() => {});
+    if (accept && camOff) await toggleCam(false);
+  }
+
+  function sendReaction(emoji: string) {
+    setReactOpen(false);
+    addFloater(emoji);
+    callsApi.react(info.callId, emoji).catch(() => {});
+  }
+
+  // Picture in picture: their video floats over other tabs and apps.
+  const canPip = typeof document !== "undefined" && !!document.pictureInPictureEnabled && remotes.some((r) => r.video);
+  const togglePip = useCallback(async () => {
+    try {
+      if (document.pictureInPictureElement) { await document.exitPictureInPicture(); return; }
+      const v = document.querySelector<HTMLVideoElement>(".cr [data-remote] video");
+      if (v) await v.requestPictureInPicture();
+    } catch { /* blocked by the browser */ }
+  }, []);
+  useEffect(() => {
+    if (!canPip || !("mediaSession" in navigator)) return;
+    try { navigator.mediaSession.setActionHandler("enterpictureinpicture" as unknown as MediaSessionAction, () => void togglePip()); } catch { /* not supported */ }
+    return () => { try { navigator.mediaSession.setActionHandler("enterpictureinpicture" as unknown as MediaSessionAction, null); } catch { /* not supported */ } };
+  }, [canPip, togglePip]);
+
+  async function openSettings() {
+    const next = !settingsOpen;
+    setSettingsOpen(next);
+    if (!next || !sdk.current) return;
+    try {
+      const [mics, outs] = await Promise.all([
+        sdk.current.getMicrophones().catch(() => []),
+        sdk.current.getPlaybackDevices ? sdk.current.getPlaybackDevices().catch(() => []) : [],
+      ]);
+      setDevices({ mics, outs });
+      setCams(await sdk.current.getCameras().catch(() => cams));
+    } catch { /* no permission */ }
+  }
+
+  async function pickMic(id: string) {
+    try { await mic.current?.setDevice?.(id); } catch { setError("Couldn’t switch the microphone."); }
+  }
+
+  async function pickOutput(id: string) {
+    outputId.current = id;
+    for (const u of client.current?.remoteUsers || []) {
+      try { await u.audioTrack?.setPlaybackDevice?.(id); } catch { setError("This browser can’t switch speakers."); }
+    }
+  }
+
+  async function pickCam(id: string) {
+    try { await cam.current?.setDevice?.(id); } catch { setError("Couldn’t switch the camera."); }
+  }
+
+  async function toggleBlur() {
+    const track = cam.current as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (!track || blurBusy) return;
+    setBlurBusy(true);
+    try {
+      if (!vb.current) {
+        const { default: Extension } = await import("agora-extension-virtual-background");
+        const ext = new Extension();
+        if (!ext.checkCompatibility()) { setError("This browser can’t blur the background."); return; }
+        sdk.current.registerExtensions([ext]);
+        const processor = ext.createProcessor();
+        await processor.init();
+        track.pipe(processor).pipe(track.processorDestination);
+        vb.current = processor;
+      }
+      if (blur) {
+        await vb.current.disable();
+        setBlur(false);
+      } else {
+        vb.current.setOptions({ type: "blur", blurDegree: 2 });
+        await vb.current.enable();
+        setBlur(true);
+      }
+    } catch {
+      setError("Couldn’t blur the background.");
+    } finally {
+      setBlurBusy(false);
     }
   }
 
@@ -349,11 +613,65 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   const chromeOn = chrome || !main;
   const tp = (t: (typeof tiles)[number]) => ({ label: t.label, track: t.track, muted: t.muted, mirror: t.mirror, person: t.person });
   const onMain = () => (direct ? setChrome((v) => !v) : setFocusKey(null));
-  const status = notice || (phase === "ringing" ? "Ringing…" : !live ? (direct ? "Connecting…" : "Opening the session…") : netNote || clock);
+  const ringLabel = delivered ? "Ringing…" : "Calling…";
+  const status = notice || (phase === "ringing" ? ringLabel : !live ? (direct ? "Connecting…" : "Opening the session…") : netNote || clock);
+  const weakNote = phase === "live" && !netNote
+    ? weak.me ? "Your connection is weak" : weak.them ? `${other?.name ? `${other.name}’s` : "Their"} connection is weak` : ""
+    : "";
+
+  if (mini && !outcome) {
+    return (
+      <div className="cr-float" role="dialog" aria-label={`Call with ${other?.name || "Anonymous"}`}>
+        <Ava p={other} size={40} />
+        <span className="cr-float-t">
+          <b>{other?.name || "Anonymous"}</b>
+          <small>{status}</small>
+        </span>
+        <button type="button" onClick={() => setMini(false)} aria-label="Back to the call"><Maximize2 {...ico} /></button>
+        <button type="button" className="end" onClick={() => void finish()} aria-label="End call"><EndI /></button>
+      </div>
+    );
+  }
+
+  if (outcome) {
+    return (
+      <div className="cr" role="dialog" aria-modal aria-label={`Call with ${other?.name || "Anonymous"}`}>
+        <div className="cr-stage">
+          <Ava p={other} size={124} />
+          <b>{other?.name || "Anonymous"}</b>
+          <strong className="cr-out-t">{outcome.title}</strong>
+          {outcome.sub ? <small>{outcome.sub}</small> : null}
+        </div>
+        <div className="cr-out">
+          <span>
+            <button type="button" className="cr-out-close" onClick={onClose} aria-label="Close"><X {...ico} /></button>
+            Close
+          </span>
+          {info.connectionId ? (
+            <span>
+              <button type="button" className="cr-out-call" onClick={() => void redial()} disabled={redialing} aria-label="Call again">
+                {info.audioOnly ? <Phone {...ico} /> : <Video {...ico} />}
+              </button>
+              {redialing ? "Calling…" : "Call again"}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="cr" role="dialog" aria-modal aria-label={direct ? `Call with ${other?.name || "Anonymous"}` : "Session"}>
+      {netNote || weakNote ? (
+        <div className="cr-net" role="status">{netNote ? <WifiOff {...ico} /> : <Wifi {...ico} />}{netNote || weakNote}</div>
+      ) : null}
       {chromeOn ? <div className="cr-head">
+        {direct && phase !== "ringing" ? (
+          <button type="button" className="cr-hbtn left" onClick={() => setMini(true)} aria-label="Minimise call"><Minimize2 {...ico} /></button>
+        ) : null}
+        {direct && phase === "live" ? (
+          <button type="button" className={`cr-hbtn right${reactOpen ? " on" : ""}`} onClick={() => setReactOpen((v) => !v)} aria-label="Send a reaction"><Smile {...ico} /></button>
+        ) : null}
         <span className="cr-head-t">
           <b>{direct ? other?.name || "Anonymous" : info.isHost ? "Your session" : `${other?.name || "Room"} session`}</b>
           <small className={netNote ? "warn" : ""}>{direct ? `${info.audioOnly ? "Voice" : "Video"} call · ${status}` : `${tiles.length} here · ${status}`}</small>
@@ -369,7 +687,9 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
         <div className="cr-stage">
           <span className={`cr-ring${phase === "ringing" ? " on" : ""}`}><Ava p={other} size={124} /></span>
           <b>{other?.name || "Anonymous"}</b>
-          <small>{phase === "ringing" ? "Calling… they'll see it's you" : status}</small>
+          <small>{phase === "ringing" ? ringLabel : status}</small>
+          {phase === "ringing" && !delivered ? <small className="cr-hint">They’re offline. They’ll get a notification.</small> : null}
+          {phase === "live" && remotes.some((r) => r.muted) ? <span className="cr-muted"><MicOff {...ico} />{other?.name || "They"} muted</span> : null}
           {localCam && !camOff ? <div className="cr-pip"><Tile label="You" track={localScreen || localCam} mirror={!localScreen} /></div> : null}
         </div>
       ) : main ? (
@@ -379,9 +699,9 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
           </button>
           {direct ? (
             side[0] ? (
-              <button type="button" className="cr-mini" onClick={() => setFocusKey(side[0].key)} aria-label="Swap videos">
+              <DragPip onTap={() => setFocusKey(side[0].key)} label="Drag to move, tap to swap videos">
                 <Tile key={`pip-${side[0].key}`} {...tp(side[0])} />
-              </button>
+              </DragPip>
             ) : null
           ) : (
             <div className="cr-strip">
@@ -420,14 +740,67 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
         </div>
       ) : null}
 
+      <div className="cr-floaters" aria-hidden>
+        {floaters.map((f) => <span key={f.id} style={{ left: `${f.left}%` }}>{f.emoji}</span>)}
+      </div>
+      {asking ? <div className="cr-asking" role="status"><Video {...ico} />Asking {other?.name || "them"} to switch to video…</div> : null}
+      {videoAsk ? (
+        <div className="cr-ask" role="alertdialog" aria-label="Switch to video?">
+          <b>{videoAsk} wants to switch to video</b>
+          <div>
+            <button type="button" onClick={() => void answerVideo(false)}>Not now</button>
+            <button type="button" className="yes" onClick={() => void answerVideo(true)}><Video {...ico} />Switch</button>
+          </div>
+        </div>
+      ) : null}
       {error ? <p className="cr-err">{error}</p> : null}
+      {chromeOn && settingsOpen ? (
+        <div className="cr-settings" role="region" aria-label="Call settings">
+          {devices.mics.length ? (
+            <label>Microphone
+              <select onChange={(e) => void pickMic(e.target.value)} defaultValue="">
+                <option value="" disabled>Choose…</option>
+                {devices.mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}
+              </select>
+            </label>
+          ) : null}
+          {devices.outs.length ? (
+            <label>Speaker
+              <select onChange={(e) => void pickOutput(e.target.value)} defaultValue="">
+                <option value="" disabled>Choose…</option>
+                {devices.outs.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Speaker"}</option>)}
+              </select>
+            </label>
+          ) : null}
+          {cams.length > 1 ? (
+            <label>Camera
+              <select onChange={(e) => void pickCam(e.target.value)} defaultValue="">
+                <option value="" disabled>Choose…</option>
+                {cams.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{(d as { label?: string }).label || `Camera ${i + 1}`}</option>)}
+              </select>
+            </label>
+          ) : null}
+          {localCam && !camOff ? (
+            <button type="button" className={blur ? "on" : ""} onClick={() => void toggleBlur()} disabled={blurBusy}>
+              {blurBusy ? "Working…" : blur ? "Stop blurring background" : "Blur background"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {chromeOn && reactOpen ? (
+        <div className="cr-react">
+          {REACTIONS.map((e) => <button key={e} type="button" onClick={() => sendReaction(e)} aria-label={`React ${e}`}>{e}</button>)}
+        </div>
+      ) : null}
       {chromeOn ? <>
       <div className="cr-ctrls">
         <button className={micOff ? "on" : ""} onClick={toggleMic} aria-label={micOff ? "Unmute" : "Mute"}><MicI off={micOff} /></button>
-        <button className={camOff ? "on" : ""} onClick={toggleCam} disabled={sharing} aria-label={camOff ? "Turn camera on" : "Turn camera off"}><CamI off={camOff} /></button>
+        <button className={camOff ? "on" : ""} onClick={() => void toggleCam()} disabled={sharing} aria-label={camOff ? "Turn camera on" : "Turn camera off"}><CamI off={camOff} /></button>
         <button className="end" onClick={() => void finish()} aria-label={direct ? "End call" : info.isHost ? "End session for everyone" : "Leave session"}><EndI /></button>
         {canShare && phase !== "ringing" ? <button className={sharing ? "on" : ""} onClick={toggleShare} aria-label={sharing ? "Stop sharing" : "Share screen"}><ScreenI off={sharing} /></button> : null}
         {cams.length > 1 ? <button onClick={flip} aria-label="Switch camera"><FlipI /></button> : null}
+        {canPip ? <button onClick={() => void togglePip()} aria-label="Picture in picture"><PictureInPicture2 {...ico} /></button> : null}
+        <button className={settingsOpen ? "on" : ""} onClick={() => void openSettings()} aria-label="Call settings" aria-expanded={settingsOpen}><Settings2 {...ico} /></button>
       </div>
       <p className="cr-note">
         {direct ? "Ends the call. The chat stays open."

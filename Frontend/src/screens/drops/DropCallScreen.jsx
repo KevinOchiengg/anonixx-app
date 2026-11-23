@@ -13,18 +13,24 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  ActivityIndicator, Animated, Image, Modal, Platform, PermissionsAndroid, Pressable, ScrollView,
+  ActivityIndicator, Animated, AppState, Image, Modal, Platform, PermissionsAndroid, Pressable, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Mic, MicOff, PhoneOff, RefreshCw, Users, Video, VideoOff, Volume2, VolumeX, X, UserMinus,
+  Bluetooth, EllipsisVertical, Headphones, Mic, MicOff, Minimize2, Phone, PhoneOff, PictureInPicture2, RefreshCw, Smartphone, Smile, Sparkles,
+  Users, Video, VideoOff, Volume2, VolumeX, Wifi, WifiOff, X, UserMinus,
 } from 'lucide-react-native';
+import { useIsFocused } from '@react-navigation/native';
+import DraggablePip from '../../components/calls/DraggablePip';
+import { ReactionLayer, ReactionPicker } from '../../components/calls/CallReactions';
+import { activeCall } from '../../utils/activeCall';
+import { nativeCalls } from '../../native/calls';
 import { rs, rf, rp, SPACING, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
-import { callsApi } from '../../services/calls';
+import { callsApi, callParams } from '../../services/calls';
 import { playEndTone, startCallSound, stopCallSound } from '../../utils/callSounds';
 import T from '../../utils/theme';
 
@@ -69,6 +75,7 @@ const VideoTile = React.memo(({ uid, person, isLocal, muted, camOff, RtcView, si
     ) : (
       <View style={[StyleSheet.absoluteFill, styles.tileFallback]}>
         <Avatar name={person?.name} url={person?.avatar_url} size={small ? rs(36) : rs(64)} />
+        {!small && !isLocal ? <Text style={styles.camOffText}>Camera off</Text> : null}
       </View>
     )}
     {small ? null : (
@@ -94,6 +101,23 @@ export default function DropCallScreen({ route, navigation }) {
   const { socketService } = useSocket();
 
   const [phase, setPhase]           = useState(p.status === 'ringing' ? 'ringing' : 'connecting');
+  const [delivered, setDelivered]   = useState(p.reachable !== false);
+  const [outcome, setOutcome]       = useState(null);   // { title, sub } once an unanswered call ends
+  const [redialing, setRedialing]   = useState(false);
+  const [weak, setWeak]             = useState({ me: false, them: false });
+  const [area, setArea]             = useState(null);
+  const [asking, setAsking]         = useState(false);   // I asked to switch to video
+  const [videoAsk, setVideoAsk]     = useState(null);    // they asked: { name }
+  const [reactOpen, setReactOpen]   = useState(false);
+  const [floaters, setFloaters]     = useState([]);
+  const [audioRoute, setAudioRoute] = useState(wantVideo ? 'speaker' : 'earpiece');
+  const [devices, setDevices]       = useState({ bluetooth: false, wired: false });
+  const [routeOpen, setRouteOpen]   = useState(false);
+  const [moreOpen, setMoreOpen]     = useState(false);
+  const [inPip, setInPip]           = useState(false);
+  const [blur, setBlur]             = useState(false);
+  const isFocused = useIsFocused();
+  const liveSince = useRef(null);
   const [joined, setJoined]         = useState(false);
   const [micMuted, setMicMuted]     = useState(false);
   const [camOff, setCamOff]         = useState(!wantVideo);
@@ -108,6 +132,8 @@ export default function DropCallScreen({ route, navigation }) {
   const [chrome, setChrome]         = useState(true);
 
   const engineRef  = useRef(null);
+  const reconnectTimer = useRef(null);
+  const dropTimer      = useRef(null);
   const RtcViewRef = useRef(null);
   const endedRef   = useRef(false);
   const pulse      = useRef(new Animated.Value(0)).current;
@@ -117,6 +143,20 @@ export default function DropCallScreen({ route, navigation }) {
   const elapsed = useCallTimer(live);
   useEffect(() => { if (live) setPhase('live'); }, [live]);
 
+  // Lets the "Tap to return to call" bar show while you're elsewhere in the app.
+  useEffect(() => {
+    if (outcome) { activeCall.clear(callId); return; }
+    if (phase === 'live' && !liveSince.current) liveSince.current = Date.now();
+    activeCall.set({ callId, name: other?.name, video: !camOff, startedAt: liveSince.current });
+  }, [phase, outcome, camOff, callId, other?.name]);
+  useEffect(() => () => activeCall.clear(callId), [callId]);
+
+  const addFloater = useCallback((emoji) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setFloaters((list) => [...list.slice(-12), { id, emoji, left: rs(40) + Math.random() * rs(240) }]);
+  }, []);
+  const dropFloater = useCallback((id) => setFloaters((list) => list.filter((f) => f.id !== id)), []);
+
   const cleanupEngine = useCallback(() => {
     try {
       engineRef.current?.leaveChannel();
@@ -125,26 +165,58 @@ export default function DropCallScreen({ route, navigation }) {
     engineRef.current = null;
   }, []);
 
+  const leaveScreen = useCallback(() => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('Main');
+  }, [navigation]);
+
   // notify: tell the server (end for host/direct, leave for guests). message: toast to show.
-  const finish = useCallback(async ({ notify = true, message } = {}) => {
+  // outcome: an unanswered call stays on screen with "Call again", like a phone.
+  const finish = useCallback(async ({ notify = true, message, outcome: result } = {}) => {
     if (endedRef.current) return;
     endedRef.current = true;
+    activeCall.clear(callId);
+    nativeCalls.setProximity(false);
+    nativeCalls.setAutoPip(false);
+    nativeCalls.releaseLockScreen();
+    clearTimeout(reconnectTimer.current);
+    clearTimeout(dropTimer.current);
     stopCallSound();
     playEndTone();
     cleanupEngine();
     if (notify && callId) {
       (direct || isHost ? callsApi.end(callId) : callsApi.leave(callId)).catch(() => {});
     }
+    if (result) {
+      setOutcome(result);
+      return;
+    }
     if (message) showToast({ type: 'info', message });
-    if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate('Main');
-  }, [callId, direct, isHost, cleanupEngine, navigation, showToast]);
+    leaveScreen();
+  }, [callId, direct, isHost, cleanupEngine, leaveScreen, showToast]);
+
+  const redial = useCallback(async () => {
+    if (!p.connectionId || redialing) return;
+    setRedialing(true);
+    try {
+      const d = await callsApi.direct(p.connectionId, wantVideo);
+      navigation.replace('DropCall', callParams(d, { other: { ...(other || {}), ...(d.other || {}) } }));
+    } catch (e) {
+      setRedialing(false);
+      showToast({ type: 'info', message: e.message || 'Could not call. Try again.' });
+    }
+  }, [p.connectionId, redialing, wantVideo, navigation, other, showToast]);
 
   // Hardware back = hang up, so nobody stays connected by accident.
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { finish(); return true; });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!navigation.isFocused()) return false;
+      if (outcome) leaveScreen();
+      else finish();
+      return true;
+    });
     return () => sub.remove();
-  }, [finish]);
+  }, [finish, outcome, leaveScreen, navigation]);
 
   // Ringing: a soft pulse, and give up after the ring window (the server marks it missed too).
   useEffect(() => {
@@ -154,18 +226,29 @@ export default function DropCallScreen({ route, navigation }) {
       Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
     ]));
     loop.start();
-    if (direct) startCallSound('ringback');
-    const t = setTimeout(() => finish({ message: `${other?.name || 'They'} didn't answer.` }), ((p.ringSeconds || 45) + 3) * 1000);
+    if (direct && delivered) startCallSound('ringback');
+    const t = setTimeout(() => finish({ outcome: { title: 'No answer', sub: delivered ? 'They didn’t pick up.' : 'They’re offline. They’ll see you called.' } }), ((p.ringSeconds || 45) + 3) * 1000);
     return () => { loop.stop(); clearTimeout(t); stopCallSound(); };
-  }, [phase, pulse, finish, other?.name, p.ringSeconds]);
+  }, [phase, pulse, finish, p.ringSeconds, direct, delivered]);
 
   // Server events for this call.
   useEffect(() => {
     const mine = (fn) => (e) => { if (e?.call_id === callId) fn(e); };
     const handlers = {
+      call_ringing: mine(() => setDelivered(true)),
+      call_video_request: mine((e) => setVideoAsk({ name: e.from_name })),
+      call_video_reply: mine((e) => {
+        setAsking(false);
+        if (!e.accept) {
+          engineRef.current?.muteLocalVideoStream(true);
+          setCamOff(true);
+          showToast({ type: 'info', message: `${other?.name || 'They'} would rather stay on voice.` });
+        }
+      }),
+      call_reaction: mine((e) => addFloater(e.emoji)),
       call_accepted: mine(() => setPhase('connecting')),
-      call_declined: mine(() => finish({ notify: false, message: `${other?.name || 'They'} can't talk right now.` })),
-      call_missed: mine(() => finish({ notify: false, message: `${other?.name || 'They'} didn't answer.` })),
+      call_declined: mine(() => finish({ notify: false, outcome: { title: 'Can’t talk right now', sub: 'They declined. Try again later or send a message.' } })),
+      call_missed: mine(() => finish({ notify: false, outcome: { title: 'No answer', sub: 'They didn’t pick up.' } })),
       call_cancelled: mine(() => finish({ notify: false })),
       drop_call_ended: mine(() => finish({ notify: false, message: 'The call ended.' })),
       drop_call_removed: mine(() => finish({ notify: false, message: 'The host took you out of the session.' })),
@@ -235,28 +318,64 @@ export default function DropCallScreen({ route, navigation }) {
         engine.enableAudio();
         engine.enableVideo();
         engine.setDefaultAudioRouteToSpeakerphone(wantVideo);
+        // Weak network: drop their video and keep the voice going, like a phone call.
+        try { engine.setRemoteSubscribeFallbackOption(2); } catch { /* older SDK */ }
         if (camAllowed) engine.startPreview();
         engine.muteLocalVideoStream(!camAllowed);
 
         engine.addListener('onUserJoined', (_c, u) => {
+          clearTimeout(dropTimer.current);
+          setNetNote('');
           setRemoteUids((prev) => (prev.includes(u) ? prev : [...prev, u]));
           loadPeople();
         });
-        engine.addListener('onUserOffline', (_c, u) => {
+        // reason 1 = their connection dropped: wait for them to come back before ending.
+        engine.addListener('onUserOffline', (_c, u, reason) => {
           setRemoteUids((prev) => {
             const next = prev.filter((x) => x !== u);
-            // A 1-to-1 call is over when the other person drops out.
-            if (direct && next.length === 0) setTimeout(() => finish({ message: 'The call ended.' }), 0);
+            if (direct && next.length === 0) {
+              if (reason === 1) {
+                setNetNote('Their connection dropped. Reconnecting…');
+                clearTimeout(dropTimer.current);
+                dropTimer.current = setTimeout(() => finish({ message: 'Lost them. The call ended.' }), 25000);
+              } else {
+                setTimeout(() => finish({ message: 'The call ended.' }), 0);
+              }
+            }
             return next;
           });
         });
+        // Quality 4+ is poor (Agora QualityType); uid 0 is me.
+        engine.addListener('onNetworkQuality', (_c, u, tx, rx) => {
+          const bad = Math.max(tx || 0, rx || 0) >= 4;
+          setWeak((prev) => {
+            const key = u === 0 ? 'me' : 'them';
+            return prev[key] === bad ? prev : { ...prev, [key]: bad };
+          });
+        });
         engine.addListener('onUserMuteVideo', (_c, u, m) => setRemoteCamOff((prev) => ({ ...prev, [u]: m })));
+        // Agora AudioRoute: 1 earpiece, 3/4 speaker, 5/10 Bluetooth, 0/2/6 wired or USB.
+        engine.addListener('onAudioRoutingChanged', (routing) => {
+          const r = [3, 4].includes(routing) ? 'speaker'
+            : [5, 10].includes(routing) ? 'bluetooth'
+              : [0, 2, 6].includes(routing) ? 'wired' : 'earpiece';
+          setAudioRoute(r);
+          setSpeaker(r === 'speaker');
+          setDevices(nativeCalls.audioDevices());
+        });
         engine.addListener('onUserMuteAudio', (_c, u, m) => setRemoteMuted((prev) => ({ ...prev, [u]: m })));
         // 4 reconnecting, 5 failed (Agora ConnectionStateType).
         engine.addListener('onConnectionStateChanged', (_c, state) => {
-          if (state === 4) setNetNote('Reconnecting…');
-          else if (state === 5) finish({ notify: false, message: 'Lost the connection. The call ended.' });
-          else setNetNote('');
+          if (state === 4) {
+            setNetNote('Reconnecting…');
+            clearTimeout(reconnectTimer.current);
+            reconnectTimer.current = setTimeout(() => finish({ message: 'Couldn’t reconnect. The call ended.' }), 30000);
+          } else if (state === 5) {
+            finish({ notify: false, message: 'Lost the connection. The call ended.' });
+          } else if (state === 3) {
+            clearTimeout(reconnectTimer.current);
+            setNetNote('');
+          }
         });
         engine.addListener('onTokenPrivilegeWillExpire', async () => {
           try {
@@ -289,7 +408,7 @@ export default function DropCallScreen({ route, navigation }) {
     setMicMuted(next);
   }, [micMuted]);
 
-  const toggleCam = useCallback(async () => {
+  const toggleCam = useCallback(async ({ ask = true } = {}) => {
     const next = !camOff;
     if (!next && Platform.OS === 'android') {
       const r = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
@@ -301,13 +420,98 @@ export default function DropCallScreen({ route, navigation }) {
     if (!next) engineRef.current?.startPreview();
     engineRef.current?.muteLocalVideoStream(next);
     setCamOff(next);
-  }, [camOff, showToast]);
+    // A voice call: turning the camera on asks them to switch to video, like WhatsApp.
+    const theyHaveVideo = remoteUids.some((u) => !remoteCamOff[u]);
+    if (!next && ask && direct && phase === 'live' && !theyHaveVideo) {
+      setAsking(true);
+      engineRef.current?.setEnableSpeakerphone(true);
+      setSpeaker(true);
+      callsApi.askVideo(callId).catch(() => setAsking(false));
+    }
+    if (next) setAsking(false);
+  }, [camOff, showToast, remoteUids, remoteCamOff, direct, phase, callId]);
 
+  const answerVideo = useCallback(async (accept) => {
+    setVideoAsk(null);
+    callsApi.replyVideo(callId, accept).catch(() => {});
+    if (!accept) return;
+    engineRef.current?.setEnableSpeakerphone(true);
+    setSpeaker(true);
+    if (camOff) await toggleCam({ ask: false });
+  }, [callId, camOff, toggleCam]);
+
+  const sendReaction = useCallback((emoji) => {
+    setReactOpen(false);
+    addFloater(emoji);
+    callsApi.react(callId, emoji).catch(() => {});
+  }, [callId, addFloater]);
+
+  const minimise = useCallback(() => {
+    if (p.connectionId) navigation.push('DropChat', { connectionId: p.connectionId });
+  }, [navigation, p.connectionId]);
+
+  const chooseRoute = useCallback((r) => {
+    const engine = engineRef.current;
+    setRouteOpen(false);
+    if (!engine) return;
+    engine.setEnableSpeakerphone(r === 'speaker');
+    if (Platform.OS === 'android' && r !== 'speaker') {
+      try { engine.setRouteInCommunicationMode(r === 'bluetooth' ? 5 : r === 'wired' ? 0 : 1); } catch { /* older SDK */ }
+    }
+    setAudioRoute(r);
+    setSpeaker(r === 'speaker');
+  }, []);
+
+  // With a headset or Bluetooth connected, the speaker button picks where the sound goes.
   const toggleSpeaker = useCallback(() => {
-    const next = !speaker;
-    engineRef.current?.setEnableSpeakerphone(next);
-    setSpeaker(next);
-  }, [speaker]);
+    const d = nativeCalls.audioDevices();
+    setDevices(d);
+    if (d.bluetooth || d.wired) { setRouteOpen((v) => !v); return; }
+    chooseRoute(speaker ? 'earpiece' : 'speaker');
+  }, [speaker, chooseRoute]);
+
+  useEffect(() => {
+    setDevices(nativeCalls.audioDevices());
+    const t = setInterval(() => setDevices(nativeCalls.audioDevices()), 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Voice on the earpiece: the screen goes dark at your ear so your cheek can't tap anything.
+  const atEar = direct && camOff && audioRoute === 'earpiece' && !outcome && phase !== 'ended';
+  useEffect(() => {
+    nativeCalls.setProximity(atEar);
+    return () => nativeCalls.setProximity(false);
+  }, [atEar]);
+
+  // A live video call goes picture-in-picture when you leave the app, like WhatsApp.
+  const hasVideo = !camOff || remoteUids.some((u) => !remoteCamOff[u]);
+  const canPip = nativeCalls.available && Platform.OS === 'android' && phase === 'live' && hasVideo && !outcome;
+  useEffect(() => {
+    nativeCalls.setAutoPip(canPip);
+    return () => nativeCalls.setAutoPip(false);
+  }, [canPip]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', () => setInPip(nativeCalls.isInPip()));
+    return () => sub.remove();
+  }, []);
+
+  const toggleBlur = useCallback(() => {
+    const engine = engineRef.current;
+    setMoreOpen(false);
+    if (!engine) return;
+    const next = !blur;
+    try {
+      if (next && !engine.isFeatureAvailableOnDevice(1)) {
+        showToast({ type: 'info', message: 'This phone can’t blur the background.' });
+        return;
+      }
+      const res = engine.enableVirtualBackground(next, { background_source_type: 3, blur_degree: 3 }, { modelType: 1, greenCapacity: 0.5 });
+      if (res < 0) throw new Error('blur');
+      setBlur(next);
+    } catch {
+      showToast({ type: 'info', message: 'Couldn’t blur the background on this phone.' });
+    }
+  }, [blur, showToast]);
 
   const switchCamera = useCallback(() => engineRef.current?.switchCamera(), []);
 
@@ -336,7 +540,8 @@ export default function DropCallScreen({ route, navigation }) {
     ...remoteUids.map((u) => ({ key: String(u), uid: u, isLocal: false })),
   ], [remoteUids]);
 
-  const RtcView = RtcViewRef.current;
+  // Off screen (minimised), video views are dropped so they can't draw over other screens.
+  const RtcView = isFocused ? RtcViewRef.current : null;
   const anyVideo = !camOff || remoteUids.some((u) => !remoteCamOff[u]);
   const showStage = direct && (phase === 'ringing' || !anyVideo || remoteUids.length === 0);
   const cols = columnsFor(tiles.length);
@@ -362,16 +567,75 @@ export default function DropCallScreen({ route, navigation }) {
     else setFocusKey(null);
   };
 
-  const status = phase === 'ringing' ? 'Ringing…'
+  const ringLabel = delivered ? 'Ringing…' : 'Calling…';
+  const status = phase === 'ringing' ? ringLabel
     : !live ? (direct ? 'Connecting…' : 'Opening the session…')
       : netNote || elapsed;
+
+  // Picture-in-picture: just the video, no buttons.
+  if (inPip) {
+    return (
+      <View style={styles.pipOnly}>
+        {mainTile ? (
+          <VideoTile {...tileProps(mainTile)} style={styles.mainTile} small />
+        ) : (
+          <View style={styles.pipAva}><Avatar name={other?.name} url={other?.avatar_url} size={rs(64)} /></View>
+        )}
+      </View>
+    );
+  }
+
+  if (outcome) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+        <LinearGradient colors={[T.primaryGlow, 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} pointerEvents="none" />
+        <View style={styles.stage}>
+          <Avatar name={other?.name} url={other?.avatar_url} size={rs(124)} />
+          <Text style={styles.stageName} numberOfLines={1}>{other?.name || 'Anonymous'}</Text>
+          <Text style={styles.outcomeTitle}>{outcome.title}</Text>
+          {outcome.sub ? <Text style={styles.stageStatus}>{outcome.sub}</Text> : null}
+        </View>
+        <View style={styles.outcomeActs}>
+          <View style={styles.outcomeAct}>
+            <TouchableOpacity style={styles.outcomeClose} onPress={leaveScreen} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Close">
+              <X size={rs(24)} color={T.text} />
+            </TouchableOpacity>
+            <Text style={styles.outcomeLabel}>Close</Text>
+          </View>
+          {p.connectionId ? (
+            <View style={styles.outcomeAct}>
+              <TouchableOpacity style={styles.outcomeCall} onPress={redial} disabled={redialing} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Call again">
+                {redialing ? <ActivityIndicator color="#fff" /> : wantVideo ? <Video size={rs(24)} color="#fff" /> : <Phone size={rs(24)} color="#fff" />}
+              </TouchableOpacity>
+              <Text style={styles.outcomeLabel}>Call again</Text>
+            </View>
+          ) : null}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const weakNote = phase === 'live' && !netNote
+    ? weak.me ? 'Your connection is weak' : weak.them ? `${other?.name || 'Their'}${other?.name ? '’s' : ''} connection is weak` : ''
+    : '';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <LinearGradient colors={[T.primaryGlow, 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} pointerEvents="none" />
+      {netNote || weakNote ? (
+        <View style={styles.netBanner} pointerEvents="none">
+          {netNote ? <WifiOff size={rs(14)} color="#fff" /> : <Wifi size={rs(14)} color="#fff" />}
+          <Text style={styles.netBannerText}>{netNote || weakNote}</Text>
+        </View>
+      ) : null}
 
       {showChrome ? (
       <View style={styles.header}>
+        {direct && p.connectionId && phase !== 'ringing' ? (
+          <TouchableOpacity style={styles.minBtn} onPress={minimise} hitSlop={HIT_SLOP} accessibilityLabel="Minimise call and open the chat">
+            <Minimize2 size={rs(18)} color={T.text} />
+          </TouchableOpacity>
+        ) : null}
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {direct ? other?.name || 'Anonymous' : isHost ? 'Your session' : `${other?.name || 'Room'} session`}
@@ -380,6 +644,16 @@ export default function DropCallScreen({ route, navigation }) {
             {direct ? `${wantVideo ? 'Video' : 'Voice'} call · ${status}` : `${tiles.length} here · ${status}`}
           </Text>
         </View>
+        {direct && phase === 'live' ? (
+          <TouchableOpacity style={[styles.minBtn, styles.reactBtn, reactOpen && styles.reactBtnOn]} onPress={() => setReactOpen((v) => !v)} hitSlop={HIT_SLOP} accessibilityLabel="Send a reaction">
+            <Smile size={rs(18)} color={reactOpen ? '#fff' : T.text} />
+          </TouchableOpacity>
+        ) : null}
+        {phase !== 'ringing' && (canPip || !camOff) ? (
+          <TouchableOpacity style={[styles.minBtn, styles.reactBtn, moreOpen && styles.reactBtnOn]} onPress={() => setMoreOpen((v) => !v)} hitSlop={HIT_SLOP} accessibilityLabel="More call options">
+            <EllipsisVertical size={rs(18)} color={moreOpen ? '#fff' : T.text} />
+          </TouchableOpacity>
+        ) : null}
         {!direct && (
           <TouchableOpacity style={styles.peopleBtn} onPress={() => setPeopleOpen(true)} hitSlop={HIT_SLOP} accessibilityLabel="People in this session">
             <Users size={rs(16)} color={T.text} />
@@ -404,26 +678,26 @@ export default function DropCallScreen({ route, navigation }) {
             <Avatar name={other?.name} url={other?.avatar_url} size={rs(124)} />
           </View>
           <Text style={styles.stageName} numberOfLines={1}>{other?.name || 'Anonymous'}</Text>
-          <Text style={styles.stageStatus}>{phase === 'ringing' ? `Calling… they'll see it's you` : status}</Text>
+          <Text style={styles.stageStatus}>{phase === 'ringing' ? ringLabel : status}</Text>
+          {phase === 'ringing' && !delivered ? <Text style={styles.stageHint}>They’re offline. They’ll get a notification.</Text> : null}
+          {phase === 'live' && remoteUids.some((u) => remoteMuted[u]) ? (
+            <View style={styles.mutedPill}><MicOff size={rs(13)} color="#fff" /><Text style={styles.mutedPillText}>{other?.name || 'They'} muted</Text></View>
+          ) : null}
           {/* My own camera, small, while waiting or when only I have video on. */}
           {!camOff && RtcView ? (
             <View style={styles.selfPip}><RtcView style={StyleSheet.absoluteFill} canvas={{ uid: 0, renderMode: 1 }} /></View>
           ) : null}
         </View>
       ) : mainTile ? (
-        <View style={styles.focusWrap}>
+        <View style={styles.focusWrap} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onMainPress} accessibilityLabel={direct ? 'Show or hide controls' : 'Back to everyone'}>
             <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} />
           </Pressable>
           {direct ? (
             sideTiles[0] ? (
-              <Pressable
-                style={[styles.pip, !showChrome && styles.pipLow]}
-                onPress={() => setFocusKey(sideTiles[0].key)}
-                accessibilityLabel="Swap videos"
-              >
+              <DraggablePip area={area} width={rs(104)} height={rs(148)} onTap={() => setFocusKey(sideTiles[0].key)} style={styles.pip}>
                 <VideoTile key={`pip-${sideTiles[0].key}`} {...tileProps(sideTiles[0])} style={styles.pipTile} overlay small />
-              </Pressable>
+              </DraggablePip>
             ) : null
           ) : (
             <ScrollView horizontal style={styles.strip} contentContainerStyle={styles.stripIn} showsHorizontalScrollIndicator={false}>
@@ -445,11 +719,70 @@ export default function DropCallScreen({ route, navigation }) {
         </View>
       )}
 
+      <ReactionLayer items={floaters} onDone={dropFloater} />
+
+      {asking ? (
+        <View style={styles.askPill} pointerEvents="none">
+          <Video size={rs(14)} color="#fff" />
+          <Text style={styles.askPillText}>Asking {other?.name || 'them'} to switch to video…</Text>
+        </View>
+      ) : null}
+
+      {videoAsk ? (
+        <View style={styles.askCard}>
+          <Text style={styles.askTitle}>{videoAsk.name || other?.name || 'They'} wants to switch to video</Text>
+          <View style={styles.askActs}>
+            <TouchableOpacity style={styles.askNo} onPress={() => answerVideo(false)} accessibilityRole="button">
+              <Text style={styles.askNoText}>Not now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.askYes} onPress={() => answerVideo(true)} accessibilityRole="button">
+              <Video size={rs(16)} color="#fff" />
+              <Text style={styles.askYesText}>Switch</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
       {!joined && phase !== 'ringing' && (
         <View style={styles.connectingOverlay} pointerEvents="none">
           <ActivityIndicator color={T.primary} size="large" />
         </View>
       )}
+
+      {showChrome && reactOpen ? <ReactionPicker onPick={sendReaction} /> : null}
+
+      {showChrome && moreOpen ? (
+        <View style={styles.menu}>
+          {canPip ? (
+            <TouchableOpacity style={styles.menuRow} onPress={() => { setMoreOpen(false); nativeCalls.enterPip(); }} accessibilityRole="button">
+              <PictureInPicture2 size={rs(18)} color={T.text} />
+              <Text style={styles.menuText}>Picture in picture</Text>
+            </TouchableOpacity>
+          ) : null}
+          {!camOff ? (
+            <TouchableOpacity style={styles.menuRow} onPress={toggleBlur} accessibilityRole="button">
+              <Sparkles size={rs(18)} color={blur ? T.primary : T.text} />
+              <Text style={styles.menuText}>{blur ? 'Stop blurring background' : 'Blur background'}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      {showChrome && routeOpen ? (
+        <View style={styles.menu}>
+          {[
+            !devices.wired && { key: 'earpiece', label: 'Phone', Icon: Smartphone },
+            { key: 'speaker', label: 'Speaker', Icon: Volume2 },
+            devices.bluetooth && { key: 'bluetooth', label: 'Bluetooth', Icon: Bluetooth },
+            devices.wired && { key: 'wired', label: 'Headphones', Icon: Headphones },
+          ].filter(Boolean).map(({ key, label, Icon }) => (
+            <TouchableOpacity key={key} style={styles.menuRow} onPress={() => chooseRoute(key)} accessibilityRole="button" accessibilityState={{ selected: audioRoute === key }}>
+              <Icon size={rs(18)} color={audioRoute === key ? T.primary : T.text} />
+              <Text style={[styles.menuText, audioRoute === key && { color: T.primary }]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
 
       {showChrome ? (
       <View style={styles.controls}>
@@ -461,8 +794,11 @@ export default function DropCallScreen({ route, navigation }) {
           accessibilityRole="button" accessibilityLabel={!direct && isHost ? 'End session for everyone' : 'End call'}>
           <PhoneOff size={rs(24)} color="#fff" strokeWidth={2} />
         </TouchableOpacity>
-        <CtrlBtn on={!speaker} onPress={toggleSpeaker} label={speaker ? 'Speaker on' : 'Speaker off'}
-          icon={speaker ? <Volume2 size={rs(20)} color={T.text} strokeWidth={2} /> : <VolumeX size={rs(20)} color="#fff" />} />
+        <CtrlBtn on={audioRoute === 'earpiece'} onPress={toggleSpeaker}
+          label={audioRoute === 'bluetooth' ? 'Bluetooth' : audioRoute === 'wired' ? 'Headphones' : speaker ? 'Speaker on' : 'Speaker off'}
+          icon={audioRoute === 'bluetooth' ? <Bluetooth size={rs(20)} color={T.text} strokeWidth={2} />
+            : audioRoute === 'wired' ? <Headphones size={rs(20)} color={T.text} strokeWidth={2} />
+              : speaker ? <Volume2 size={rs(20)} color={T.text} strokeWidth={2} /> : <VolumeX size={rs(20)} color="#fff" />} />
         <CtrlBtn disabled={camOff} onPress={switchCamera} label="Flip camera"
           icon={<RefreshCw size={rs(20)} color={camOff ? T.textMute : T.text} strokeWidth={2} />} />
       </View>
@@ -539,6 +875,18 @@ const styles = StyleSheet.create({
   stageAvaWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: rp(8) },
   ring: { position: 'absolute', width: rs(124), height: rs(124), borderRadius: rs(62), borderWidth: 2, borderColor: T.primary },
   stageName: { fontFamily: 'DMSans-Bold', fontSize: rf(24), color: T.text },
+  stageHint: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute, textAlign: 'center' },
+  outcomeTitle: { fontFamily: 'DMSans-Bold', fontSize: rf(18), color: T.primary, marginTop: rp(6) },
+  outcomeActs: { flexDirection: 'row', justifyContent: 'space-evenly', paddingBottom: rp(40) },
+  outcomeAct: { alignItems: 'center', gap: rp(10) },
+  outcomeClose: { width: rs(66), height: rs(66), borderRadius: rs(33), alignItems: 'center', justifyContent: 'center', backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border },
+  outcomeCall: { width: rs(66), height: rs(66), borderRadius: rs(33), alignItems: 'center', justifyContent: 'center', backgroundColor: T.success, elevation: 6 },
+  outcomeLabel: { fontFamily: 'DMSans-SemiBold', fontSize: rf(13), color: T.text },
+  netBanner: {
+    position: 'absolute', top: rp(64), alignSelf: 'center', zIndex: 5, flexDirection: 'row', alignItems: 'center', gap: rp(6),
+    backgroundColor: 'rgba(245,158,11,0.92)', borderRadius: 999, paddingHorizontal: rp(12), paddingVertical: rp(6),
+  },
+  netBannerText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(12), color: '#fff' },
   stageStatus: { fontFamily: 'DMSans-Regular', fontSize: rf(14), color: T.textSecondary },
   selfPip: { position: 'absolute', right: SPACING.md, top: rp(8), width: rs(96), height: rs(132), borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surface },
 
@@ -551,11 +899,44 @@ const styles = StyleSheet.create({
   focusWrap: { flex: 1, position: 'relative', backgroundColor: '#000' },
   mainTile: { width: '100%', height: '100%', aspectRatio: undefined, borderWidth: 0 },
   pip: {
-    position: 'absolute', right: SPACING.md, bottom: rp(12), width: rs(104), height: rs(148),
     borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)',
     backgroundColor: T.surface, elevation: 8,
   },
-  pipLow: { bottom: rp(36) },
+  minBtn: {
+    width: rs(36), height: rs(36), borderRadius: rs(18), alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)', marginRight: rp(10),
+  },
+  reactBtn: { marginRight: 0, marginLeft: rp(10) },
+  reactBtnOn: { backgroundColor: T.primary },
+  pipOnly: { flex: 1, backgroundColor: '#000' },
+  pipAva: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  menu: {
+    alignSelf: 'center', minWidth: rs(220), marginBottom: rp(6), paddingVertical: rp(6),
+    borderRadius: RADIUS.lg, backgroundColor: 'rgba(17,19,24,0.96)', borderWidth: 1, borderColor: T.border,
+  },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: rp(12), paddingHorizontal: rp(16), paddingVertical: rp(12) },
+  menuText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(14), color: T.text },
+  camOffText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(12), color: T.textSecondary, marginTop: rp(8) },
+  mutedPill: {
+    flexDirection: 'row', alignItems: 'center', gap: rp(6), marginTop: rp(6),
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 999, paddingHorizontal: rp(10), paddingVertical: rp(4),
+  },
+  mutedPillText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(12), color: '#fff' },
+  askPill: {
+    position: 'absolute', top: rp(100), alignSelf: 'center', zIndex: 5, flexDirection: 'row', alignItems: 'center', gap: rp(6),
+    backgroundColor: 'rgba(17,19,24,0.9)', borderRadius: 999, paddingHorizontal: rp(12), paddingVertical: rp(7),
+  },
+  askPillText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(12), color: '#fff' },
+  askCard: {
+    position: 'absolute', left: SPACING.lg, right: SPACING.lg, bottom: rp(150), zIndex: 6, gap: rp(14),
+    backgroundColor: 'rgba(17,19,24,0.96)', borderRadius: RADIUS.lg, borderWidth: 1, borderColor: T.border, padding: rp(16),
+  },
+  askTitle: { fontFamily: 'DMSans-Bold', fontSize: rf(15), color: T.text, textAlign: 'center' },
+  askActs: { flexDirection: 'row', gap: rp(10) },
+  askNo: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: rp(11), borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
+  askNoText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(14), color: T.text },
+  askYes: { flex: 1, flexDirection: 'row', gap: rp(6), alignItems: 'center', justifyContent: 'center', paddingVertical: rp(11), borderRadius: 999, backgroundColor: T.success },
+  askYesText: { fontFamily: 'DMSans-Bold', fontSize: rf(14), color: '#fff' },
   pipTile: { width: '100%', height: '100%', aspectRatio: undefined, borderWidth: 0 },
   strip: { position: 'absolute', left: 0, right: 0, bottom: rp(10), flexGrow: 0 },
   stripIn: { paddingHorizontal: SPACING.md, gap: rp(8) },

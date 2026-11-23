@@ -544,7 +544,8 @@ def _in_quiet_hours(prefs: dict, now: Optional[datetime] = None) -> bool:
 
 
 async def send_push_notification(user_id: str, title: str, body: str, db, data: Optional[dict] = None,
-                                 category: Optional[str] = None, kind: Optional[str] = None):
+                                 category: Optional[str] = None, kind: Optional[str] = None,
+                                 call_signal: Optional[str] = None):
     """`category` names a set of action buttons — the app registers them by id
     (e.g. "linkup_request" -> Accept), the website's sw.js reads data.actions.
     `kind` (knock | message | call | session) applies the person's Room notification
@@ -575,16 +576,41 @@ async def send_push_notification(user_id: str, title: str, body: str, db, data: 
         token = doc.get("token")
         if not token or not token.startswith("ExponentPushToken"):
             return
+        if call_signal and doc.get("call_ui"):
+            # Silent and high priority: the app rings full screen itself, even when closed.
+            payload = {"to": token, "priority": "high", "_contentAvailable": True,
+                       "data": {**(data or {}), "anx_call": call_signal}}
+        else:
+            payload = {"to": token, "title": title, "body": body, "sound": "default",
+                       **({"data": data} if data else {}), **({"categoryId": category} if category else {})}
         async with httpx.AsyncClient() as client:
             await client.post(
                 "https://exp.host/--/api/v2/push/send",
-                json={"to": token, "title": title, "body": body, "sound": "default",
-                      **({"data": data} if data else {}), **({"categoryId": category} if category else {})},
+                json=payload,
                 headers={"Content-Type": "application/json"},
                 timeout=5.0
             )
     except Exception as e:
         print(f"⚠️ Push notification failed: {e}")
+
+
+async def send_call_signal(user_id: str, call_id: str, db) -> None:
+    """Stops a full-screen ring on the callee's phone (answered, declined, cancelled or missed)."""
+    try:
+        doc = await db["push_tokens"].find_one({"user_id": user_id})
+        token = (doc or {}).get("token")
+        if not doc or not doc.get("call_ui") or not token or not token.startswith("ExponentPushToken"):
+            return
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                "https://exp.host/--/api/v2/push/send",
+                json={"to": token, "priority": "high", "_contentAvailable": True,
+                      "data": {"anx_call": "ended", "call_id": call_id}},
+                headers={"Content-Type": "application/json"},
+                timeout=5.0,
+            )
+    except Exception as e:
+        print(f"⚠️ Call signal failed: {e}")
 
 
 # ==================== HELPERS ============================

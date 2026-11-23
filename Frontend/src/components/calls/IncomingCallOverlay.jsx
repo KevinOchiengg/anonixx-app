@@ -4,18 +4,19 @@
  * Mounted once, inside the NavigationContainer (AppNavigator). */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated, AppState, Modal, StyleSheet, Text, TouchableOpacity, Vibration, View,
+  Animated, AppState, Linking, Modal, StyleSheet, Text, TouchableOpacity, Vibration, View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Phone, PhoneOff, Video } from 'lucide-react-native';
+import { MessageCircle, Phone, PhoneOff, Video } from 'lucide-react-native';
 import { rs, rf, rp, SPACING, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
 import { useSocket } from '../../context/SocketContext';
 import { useToast } from '../ui/Toast';
-import { callsApi, callParams } from '../../services/calls';
+import { callsApi, callParams, QUICK_REPLIES, sendQuickReply } from '../../services/calls';
 import AuthorAvatar from '../../components/common/AuthorAvatar';
 import { startCallSound, stopCallSound } from '../../utils/callSounds';
+import { nativeCalls } from '../../native/calls';
 
 const RING_PATTERN = [0, 700, 900];
 
@@ -24,6 +25,7 @@ export default function IncomingCallOverlay({ navigate }) {
   const { showToast } = useToast();
   const [call, setCall] = useState(null);   // { call_id, caller_name, caller_avatar, video, connection_id }
   const [busy, setBusy] = useState(false);
+  const [replying, setReplying] = useState(false);
   const pulse = useRef(new Animated.Value(0)).current;
   const timer = useRef(null);
 
@@ -33,12 +35,15 @@ export default function IncomingCallOverlay({ navigate }) {
     clearTimeout(timer.current);
     setCall(null);
     setBusy(false);
+    setReplying(false);
   }, []);
 
   const ring = useCallback((c) => {
     setCall((cur) => (cur && cur.call_id !== c.call_id ? cur : c));   // one at a time
+    nativeCalls.cancelIncomingCall(c.call_id);
     Vibration.vibrate(RING_PATTERN, true);
     startCallSound('ringtone');
+    callsApi.ringing(c.call_id).catch(() => {});
     clearTimeout(timer.current);
     timer.current = setTimeout(close, ((c.ring_seconds || 45) + 2) * 1000);
   }, [close]);
@@ -78,6 +83,27 @@ export default function IncomingCallOverlay({ navigate }) {
     return () => sub.remove();
   }, [check]);
 
+  // Opened from the full-screen ringing notification: Answer goes straight into the call.
+  useEffect(() => {
+    const handle = async (url) => {
+      const m = url && url.match(/^anonixx:\/\/call\/([^?/]+)\?action=(\w+)/);
+      if (!m) return;
+      const [, id, action] = m;
+      nativeCalls.cancelIncomingCall(id);
+      if (action !== 'accept') { check(); return; }
+      try {
+        const data = await callsApi.accept(id);
+        close();
+        navigate('DropCall', callParams(data, { other: data.other || null }));
+      } catch (e) {
+        showToast({ type: 'info', message: e.message || 'This call has ended.' });
+      }
+    };
+    Linking.getInitialURL().then(handle).catch(() => {});
+    const sub = Linking.addEventListener('url', ({ url }) => handle(url));
+    return () => sub.remove();
+  }, [check, close, navigate, showToast]);
+
   useEffect(() => {
     if (!call) return undefined;
     const loop = Animated.loop(Animated.sequence([
@@ -111,6 +137,24 @@ export default function IncomingCallOverlay({ navigate }) {
     try { await callsApi.decline(id); } catch { /* it ends by itself */ }
   }, [call, close]);
 
+  const replyWith = useCallback(async (content) => {
+    if (!call) return;
+    const { call_id: id, connection_id: cid } = call;
+    close();
+    callsApi.decline(id).catch(() => {});
+    if (!cid) return;
+    if (!content) {
+      navigate('DropChat', { connectionId: cid });
+      return;
+    }
+    try {
+      await sendQuickReply(cid, content);
+      showToast({ type: 'info', message: 'Message sent.' });
+    } catch (e) {
+      showToast({ type: 'error', message: e.message });
+    }
+  }, [call, close, navigate, showToast]);
+
   if (!call) return null;
   const name = call.caller_name || 'Someone';
 
@@ -135,6 +179,21 @@ export default function IncomingCallOverlay({ navigate }) {
           <Text style={s.name} numberOfLines={1}>{name}</Text>
           <Text style={s.sub}>is calling you</Text>
         </View>
+        {replying ? (
+          <View style={s.replies}>
+            {QUICK_REPLIES.map((r) => (
+              <TouchableOpacity key={r} style={s.reply} onPress={() => replyWith(r)} accessibilityRole="button">
+                <Text style={s.replyText}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={s.reply} onPress={() => replyWith('')} accessibilityRole="button">
+              <Text style={[s.replyText, s.replyOwn]}>Write your own…</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setReplying(false)} hitSlop={HIT_SLOP} accessibilityRole="button">
+              <Text style={s.replyBack}>Back</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         <View style={s.actions}>
           <View style={s.act}>
             <TouchableOpacity style={[s.btn, s.decline]} onPress={decline} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Decline call">
@@ -142,6 +201,14 @@ export default function IncomingCallOverlay({ navigate }) {
             </TouchableOpacity>
             <Text style={s.actText}>Decline</Text>
           </View>
+          {call.connection_id ? (
+            <View style={s.act}>
+              <TouchableOpacity style={[s.btn, s.message]} onPress={() => setReplying((v) => !v)} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Decline with a message">
+                <MessageCircle size={rs(24)} color={T.text} />
+              </TouchableOpacity>
+              <Text style={s.actText}>Message</Text>
+            </View>
+          ) : null}
           <View style={s.act}>
             <TouchableOpacity style={[s.btn, s.accept]} onPress={accept} disabled={busy} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Accept call">
               {call.video ? <Video size={rs(26)} color="#fff" /> : <Phone size={rs(26)} color="#fff" />}
@@ -168,5 +235,11 @@ const s = StyleSheet.create({
   btn: { width: rs(72), height: rs(72), borderRadius: rs(36), alignItems: 'center', justifyContent: 'center', elevation: 8 },
   decline: { backgroundColor: T.danger },
   accept: { backgroundColor: T.success },
+  message: { backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border, width: rs(60), height: rs(60), borderRadius: rs(30), marginTop: rs(6) },
+  replies: { position: 'absolute', left: SPACING.lg, right: SPACING.lg, bottom: rp(190), gap: rp(8), alignItems: 'stretch' },
+  reply: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: 999, paddingVertical: rp(12), paddingHorizontal: rp(16) },
+  replyText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(14), color: T.text, textAlign: 'center' },
+  replyOwn: { color: T.primary },
+  replyBack: { fontFamily: 'DMSans-SemiBold', fontSize: rf(13), color: T.textSecondary, textAlign: 'center', paddingTop: rp(4) },
   actText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(14), color: T.text },
 });
