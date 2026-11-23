@@ -228,8 +228,8 @@ const s = StyleSheet.create({
   avaWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: rp(10) },
   ring: { position: 'absolute', width: rs(132), height: rs(132), borderRadius: rs(66), borderWidth: 2, borderColor: T.primary },
   ava: { width: rs(132), height: rs(132), borderRadius: rs(66), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 3, borderColor: T.primaryBorder },
-  name: { fontFamily: 'DMSans-Bold', fontSize: rf(30), color: '#fff', marginTop: rp(10) },
-  sub: { fontFamily: 'DMSans-Regular', fontSize: rf(15), color: T.textSecondary },
+  name: { fontFamily: 'DMSans-SemiBold', fontSize: rf(26), color: '#fff', marginTop: rp(10) },
+  sub: { fontFamily: 'DMSans-Regular', fontSize: rf(15), color: 'rgba(255,255,255,0.75)' },
   bottom: { alignItems: 'center', gap: rp(36) },
   actions: { flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'stretch', paddingHorizontal: rs(56) },
   btn: {

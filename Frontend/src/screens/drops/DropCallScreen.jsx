@@ -938,7 +938,7 @@ const styles = StyleSheet.create({
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: rp(12), paddingHorizontal: SPACING.lg },
   stageAvaWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: rp(8) },
   ring: { position: 'absolute', width: rs(124), height: rs(124), borderRadius: rs(62), borderWidth: 2, borderColor: T.primary },
-  stageName: { fontFamily: 'DMSans-Bold', fontSize: rf(24), color: T.text },
+  stageName: { fontFamily: 'DMSans-SemiBold', fontSize: rf(26), color: '#fff' },
   stageHint: { fontFamily: 'DMSans-Regular', fontSize: rf(12), color: T.textMute, textAlign: 'center' },
   outcomeTitle: { fontFamily: 'DMSans-Bold', fontSize: rf(18), color: T.primary, marginTop: rp(6) },
   outcomeActs: { flexDirection: 'row', justifyContent: 'space-evenly', paddingBottom: rp(40) },
@@ -951,7 +951,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245,158,11,0.92)', borderRadius: 999, paddingHorizontal: rp(12), paddingVertical: rp(6),
   },
   netBannerText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(12), color: '#fff' },
-  stageStatus: { fontFamily: 'DMSans-Regular', fontSize: rf(14), color: T.textSecondary },
+  stageStatus: { fontFamily: 'DMSans-Regular', fontSize: rf(15), color: 'rgba(255,255,255,0.75)' },
   selfPip: { position: 'absolute', right: SPACING.md, top: rp(8), width: rs(96), height: rs(132), borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surface },
 
   ava: { backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: T.primaryBorder },

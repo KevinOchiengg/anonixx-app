@@ -5,6 +5,9 @@
  * Mounted once in the root layout. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { createPortal } from "react-dom";
+import { MessageCircle, Phone, PhoneOff, Video } from "lucide-react";
+import { enterCallFullscreen } from "@/lib/fullscreen";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { connectSocket } from "@/lib/socket";
@@ -85,6 +88,7 @@ export default function IncomingCall() {
   async function accept() {
     if (!ring || busy) return;
     setBusy(true);
+    enterCallFullscreen();
     const r = ring;
     try {
       const d = await callsApi.accept(r.call_id);
@@ -122,29 +126,42 @@ export default function IncomingCall() {
   if (note) return <div className="ic-note" role="status">{note}</div>;
   if (!ring) return null;
   const name = ring.caller_name || "Someone";
-  return (
+  const ico = { strokeWidth: 2, "aria-hidden": true } as const;
+  return createPortal(
     <div className="ic-call" role="alertdialog" aria-modal aria-label={`${name} is calling`}>
-      <div className="ic-in">
-        <small>{ring.video ? "Video call" : "Voice call"} · from your Room</small>
-        <span className="ic-ava">
-          {ring.caller_avatar ? <Image src={ring.caller_avatar} alt="" width={120} height={120} /> : name[0].toUpperCase()}
+      <div className="ic-bg" aria-hidden>
+        {ring.caller_avatar ? <span style={{ backgroundImage: `url("${encodeURI(ring.caller_avatar)}")` }} /> : null}
+      </div>
+      <div className="ic-top">
+        <small>{ring.video ? <Video {...ico} /> : <Phone {...ico} />}{ring.video ? "Anonixx video call" : "Anonixx voice call"}</small>
+        <span className="ic-ring">
+          <span className="ic-ava">
+            {ring.caller_avatar ? <Image src={ring.caller_avatar} alt="" fill sizes="112px" /> : name[0].toUpperCase()}
+          </span>
         </span>
         <b>{name}</b>
-        <span className="ic-sub">is calling you</span>
-        {replying ? (
-          <div className="ic-replies">
-            {QUICK_REPLIES.map((r) => <button key={r} type="button" onClick={() => void replyWith(r)}>{r}</button>)}
-            <button type="button" className="own" onClick={() => void replyWith("")}>Write your own…</button>
-          </div>
+        <span className="ic-sub">{busy ? "Connecting…" : "Incoming call"}</span>
+      </div>
+      {replying ? (
+        <div className="ic-replies">
+          {QUICK_REPLIES.map((r) => <button key={r} type="button" onClick={() => void replyWith(r)}>{r}</button>)}
+          <button type="button" className="own" onClick={() => void replyWith("")}>Write your own…</button>
+        </div>
+      ) : null}
+      <div className="ic-bottom">
+        {ring.connection_id ? (
+          <button type="button" className={`ic-msg${replying ? " on" : ""}`} onClick={() => setReplying((v) => !v)} aria-expanded={replying} aria-label="Reply with a message">
+            <MessageCircle {...ico} />
+          </button>
         ) : null}
         <div className="ic-acts">
-          <button className="ic-no" onClick={decline}>Decline</button>
-          {ring.connection_id ? (
-            <button type="button" className="ic-msg" onClick={() => setReplying((v) => !v)} aria-expanded={replying}>Message</button>
-          ) : null}
-          <button className="ic-yes" onClick={accept} disabled={busy} autoFocus>{busy ? "Connecting…" : "Accept"}</button>
+          <button type="button" className="ic-no" onClick={decline} aria-label="Decline"><PhoneOff {...ico} /></button>
+          <button type="button" className="ic-yes" onClick={accept} disabled={busy} autoFocus aria-label="Answer">
+            {ring.video ? <Video {...ico} /> : <Phone {...ico} />}
+          </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

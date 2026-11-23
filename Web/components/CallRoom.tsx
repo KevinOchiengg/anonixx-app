@@ -6,6 +6,8 @@
  *   someone, and ends it for all; guests leave.
  * Leaving a call never touches the Room conversation. */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { enterCallFullscreen, exitCallFullscreen } from "@/lib/fullscreen";
 import Image from "next/image";
 import { connectSocket } from "@/lib/socket";
 import { playEndTone, startCallSound, stopCallSound } from "@/lib/callSounds";
@@ -47,11 +49,20 @@ const FlipI = () => <SwitchCamera {...ico} />;
 const EndI = () => <PhoneOff {...ico} />;
 const PeopleI = () => <Users {...ico} />;
 
+/** Their photo, blurred and dark, behind a ringing or voice call. */
+function Backdrop({ p }: { p?: Person | null }) {
+  return (
+    <div className="cr-backdrop" aria-hidden>
+      {p?.avatar_url ? <span style={{ backgroundImage: `url("${encodeURI(p.avatar_url)}")` }} /> : null}
+    </div>
+  );
+}
+
 function Ava({ p, size }: { p?: Person | null; size: number }) {
   const name = p?.name || "A";
   return (
     <span className="cr-bigava" style={{ width: size, height: size }}>
-      {p?.avatar_url ? <Image src={p.avatar_url} alt="" width={size} height={size} /> : <AuthorAvatar name={name} size={size} />}
+      {p?.avatar_url ? <Image src={p.avatar_url} alt="" fill sizes={`${size}px`} /> : <AuthorAvatar name={name} size={size} />}
     </span>
   );
 }
@@ -78,12 +89,14 @@ const REACTIONS = ["❤️", "😂", "😮", "😢", "🔥", "👏"];
 const PIP_MARGIN = 12;
 
 /** The small video: drag it anywhere over the call and it settles in the nearest corner. A tap swaps. */
-function DragPip({ onTap, label, children }: { onTap: () => void; label: string; children: ReactNode }) {
+function DragPip({ onTap, label, children, top = 0, bottom = 0 }: { onTap: () => void; label: string; children: ReactNode; top?: number; bottom?: number }) {
   const ref = useRef<HTMLButtonElement>(null);
   const corner = useRef(3);
   const start = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const inset = useRef({ top, bottom });
+  inset.current = { top, bottom };
 
   const place = useCallback((i: number) => {
     const el = ref.current;
@@ -92,9 +105,10 @@ function DragPip({ onTap, label, children }: { onTap: () => void; label: string;
     corner.current = i;
     setPos({
       x: i % 2 ? box.clientWidth - el.offsetWidth - PIP_MARGIN : PIP_MARGIN,
-      y: i > 1 ? box.clientHeight - el.offsetHeight - PIP_MARGIN : PIP_MARGIN,
+      y: i > 1 ? box.clientHeight - el.offsetHeight - PIP_MARGIN - inset.current.bottom : PIP_MARGIN + inset.current.top,
     });
   }, []);
+  useEffect(() => { place(corner.current); }, [top, bottom, place]);
 
   useLayoutEffect(() => {
     place(corner.current);
@@ -153,7 +167,9 @@ function DragPip({ onTap, label, children }: { onTap: () => void; label: string;
 
 export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: () => void }) {
   const [current, setCurrent] = useState(info);
-  return <CallRoomInner key={current.callId} info={current} onClose={onClose} onRedial={setCurrent} />;
+  // A layer of its own over the whole page, so no page layout can squeeze it.
+  if (typeof document === "undefined") return null;
+  return createPortal(<CallRoomInner key={current.callId} info={current} onClose={onClose} onRedial={setCurrent} />, document.body);
 }
 
 function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: () => void; onRedial: (next: CallInfo) => void }) {
@@ -610,9 +626,22 @@ function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: (
   const mainKey = tiles.some((t) => t.key === focusKey) ? focusKey : direct ? tiles.find((t) => t.key !== "me")?.key ?? null : null;
   const main = !stage && mainKey ? tiles.find((t) => t.key === mainKey) : undefined;
   const side = main ? tiles.filter((t) => t.key !== mainKey) : [];
-  const chromeOn = chrome || !main;
   const tp = (t: (typeof tiles)[number]) => ({ label: t.label, track: t.track, muted: t.muted, mirror: t.mirror, person: t.person });
   const onMain = () => (direct ? setChrome((v) => !v) : setFocusKey(null));
+  // Video fills the screen; the controls fade out after a few seconds and a tap brings them back.
+  const videoMode = direct && !!main;
+  const hidden = videoMode && !chrome;
+  const menuOpen = reactOpen || settingsOpen || !!videoAsk;
+  useEffect(() => {
+    if (!videoMode || !chrome || phase !== "live" || menuOpen) return;
+    const t = window.setTimeout(() => setChrome(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [videoMode, chrome, phase, menuOpen]);
+  useEffect(() => { if (!videoMode) setChrome(true); }, [videoMode]);
+  useEffect(() => {
+    if (mini) exitCallFullscreen(); else enterCallFullscreen();
+  }, [mini]);
+  useEffect(() => () => exitCallFullscreen(), []);
   const ringLabel = delivered ? "Ringing…" : "Calling…";
   const status = notice || (phase === "ringing" ? ringLabel : !live ? (direct ? "Connecting…" : "Opening the session…") : netNote || clock);
   const weakNote = phase === "live" && !netNote
@@ -635,9 +664,10 @@ function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: (
 
   if (outcome) {
     return (
-      <div className="cr" role="dialog" aria-modal aria-label={`Call with ${other?.name || "Anonymous"}`}>
+      <div className="cr full" role="dialog" aria-modal aria-label={`Call with ${other?.name || "Anonymous"}`}>
+        <Backdrop p={other} />
         <div className="cr-stage">
-          <Ava p={other} size={124} />
+          <Ava p={other} size={112} />
           <b>{other?.name || "Anonymous"}</b>
           <strong className="cr-out-t">{outcome.title}</strong>
           {outcome.sub ? <small>{outcome.sub}</small> : null}
@@ -660,46 +690,35 @@ function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: (
     );
   }
 
+  const centerName = (
+    <div className="cr-center">
+      <span className={`cr-ring${phase === "ringing" ? " on" : ""}`}><Ava p={other} size={112} /></span>
+      <b>{other?.name || "Anonymous"}</b>
+      <small>{phase === "ringing" ? ringLabel : status}</small>
+      {phase === "ringing" && !delivered ? <small className="cr-hint">They’re offline. They’ll get a notification.</small> : null}
+      {phase === "live" && remotes.some((r) => r.muted) ? <span className="cr-muted"><MicOff {...ico} />{other?.name || "They"} muted</span> : null}
+    </div>
+  );
+
   return (
-    <div className="cr" role="dialog" aria-modal aria-label={direct ? `Call with ${other?.name || "Anonymous"}` : "Session"}>
+    <div className={`cr${direct ? " full" : ""}${hidden ? " hide" : ""}`} role="dialog" aria-modal aria-label={direct ? `Call with ${other?.name || "Anonymous"}` : "Session"}>
       {netNote || weakNote ? (
         <div className="cr-net" role="status">{netNote ? <WifiOff {...ico} /> : <Wifi {...ico} />}{netNote || weakNote}</div>
       ) : null}
-      {chromeOn ? <div className="cr-head">
-        {direct && phase !== "ringing" ? (
-          <button type="button" className="cr-hbtn left" onClick={() => setMini(true)} aria-label="Minimise call"><Minimize2 {...ico} /></button>
-        ) : null}
-        {direct && phase === "live" ? (
-          <button type="button" className={`cr-hbtn right${reactOpen ? " on" : ""}`} onClick={() => setReactOpen((v) => !v)} aria-label="Send a reaction"><Smile {...ico} /></button>
-        ) : null}
-        <span className="cr-head-t">
-          <b>{direct ? other?.name || "Anonymous" : info.isHost ? "Your session" : `${other?.name || "Room"} session`}</b>
-          <small className={netNote ? "warn" : ""}>{direct ? `${info.audioOnly ? "Voice" : "Video"} call · ${status}` : `${tiles.length} here · ${status}`}</small>
-        </span>
-        {!direct ? (
-          <button className="cr-people" onClick={() => setPeopleOpen((v) => !v)} aria-expanded={peopleOpen} aria-label="People in this session">
-            <PeopleI /> {Math.max(people.length, tiles.length)}
-          </button>
-        ) : null}
-      </div> : null}
 
       {stage ? (
-        <div className="cr-stage">
-          <span className={`cr-ring${phase === "ringing" ? " on" : ""}`}><Ava p={other} size={124} /></span>
-          <b>{other?.name || "Anonymous"}</b>
-          <small>{phase === "ringing" ? ringLabel : status}</small>
-          {phase === "ringing" && !delivered ? <small className="cr-hint">They’re offline. They’ll get a notification.</small> : null}
-          {phase === "live" && remotes.some((r) => r.muted) ? <span className="cr-muted"><MicOff {...ico} />{other?.name || "They"} muted</span> : null}
-          {localCam && !camOff ? <div className="cr-pip"><Tile label="You" track={localScreen || localCam} mirror={!localScreen} /></div> : null}
+        <div className="cr-bg">
+          {localCam && !camOff ? <Tile label="You" track={localScreen || localCam} mirror={!localScreen} /> : <Backdrop p={other} />}
+          {centerName}
         </div>
       ) : main ? (
-        <div className={`cr-focus${chromeOn ? "" : " bare"}`}>
+        <div className="cr-focus">
           <button type="button" className="cr-main" onClick={onMain} aria-label={direct ? "Show or hide controls" : "Back to everyone"}>
             <Tile key={`main-${main.key}`} {...tp(main)} />
           </button>
           {direct ? (
             side[0] ? (
-              <DragPip onTap={() => setFocusKey(side[0].key)} label="Drag to move, tap to swap videos">
+              <DragPip onTap={() => setFocusKey(side[0].key)} label="Drag to move, tap to swap videos" top={hidden ? 16 : 76} bottom={hidden ? 16 : 132}>
                 <Tile key={`pip-${side[0].key}`} {...tp(side[0])} />
               </DragPip>
             ) : null
@@ -722,6 +741,26 @@ function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: (
           ))}
         </div>
       )}
+
+      <div className="cr-head cr-top">
+        {direct && phase !== "ringing" ? (
+          <button type="button" className="cr-hbtn left" onClick={() => setMini(true)} aria-label="Minimise call"><Minimize2 {...ico} /></button>
+        ) : null}
+        {direct && phase === "live" ? (
+          <button type="button" className={`cr-hbtn right${reactOpen ? " on" : ""}`} onClick={() => setReactOpen((v) => !v)} aria-label="Send a reaction"><Smile {...ico} /></button>
+        ) : null}
+        {stage ? <span className="cr-head-t" /> : (
+          <span className="cr-head-t">
+            <b>{direct ? other?.name || "Anonymous" : info.isHost ? "Your session" : `${other?.name || "Room"} session`}</b>
+            <small className={netNote ? "warn" : ""}>{direct ? status : `${tiles.length} here · ${status}`}</small>
+          </span>
+        )}
+        {!direct ? (
+          <button className="cr-people" onClick={() => setPeopleOpen((v) => !v)} aria-expanded={peopleOpen} aria-label="People in this session">
+            <PeopleI /> {Math.max(people.length, tiles.length)}
+          </button>
+        ) : null}
+      </div>
 
       {peopleOpen && !direct ? (
         <div className="cr-panel" role="region" aria-label="In this session">
@@ -753,61 +792,60 @@ function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: (
           </div>
         </div>
       ) : null}
-      {error ? <p className="cr-err">{error}</p> : null}
-      {chromeOn && settingsOpen ? (
-        <div className="cr-settings" role="region" aria-label="Call settings">
-          {devices.mics.length ? (
-            <label>Microphone
-              <select onChange={(e) => void pickMic(e.target.value)} defaultValue="">
-                <option value="" disabled>Choose…</option>
-                {devices.mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}
-              </select>
-            </label>
-          ) : null}
-          {devices.outs.length ? (
-            <label>Speaker
-              <select onChange={(e) => void pickOutput(e.target.value)} defaultValue="">
-                <option value="" disabled>Choose…</option>
-                {devices.outs.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Speaker"}</option>)}
-              </select>
-            </label>
-          ) : null}
-          {cams.length > 1 ? (
-            <label>Camera
-              <select onChange={(e) => void pickCam(e.target.value)} defaultValue="">
-                <option value="" disabled>Choose…</option>
-                {cams.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{(d as { label?: string }).label || `Camera ${i + 1}`}</option>)}
-              </select>
-            </label>
-          ) : null}
-          {localCam && !camOff ? (
-            <button type="button" className={blur ? "on" : ""} onClick={() => void toggleBlur()} disabled={blurBusy}>
-              {blurBusy ? "Working…" : blur ? "Stop blurring background" : "Blur background"}
-            </button>
-          ) : null}
+
+      <div className="cr-bottom">
+        {error ? <p className="cr-err">{error}</p> : null}
+        {settingsOpen ? (
+          <div className="cr-settings" role="region" aria-label="Call settings">
+            {devices.mics.length ? (
+              <label>Microphone
+                <select onChange={(e) => void pickMic(e.target.value)} defaultValue="">
+                  <option value="" disabled>Choose…</option>
+                  {devices.mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {devices.outs.length ? (
+              <label>Speaker
+                <select onChange={(e) => void pickOutput(e.target.value)} defaultValue="">
+                  <option value="" disabled>Choose…</option>
+                  {devices.outs.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Speaker"}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {cams.length > 1 ? (
+              <label>Camera
+                <select onChange={(e) => void pickCam(e.target.value)} defaultValue="">
+                  <option value="" disabled>Choose…</option>
+                  {cams.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{(d as { label?: string }).label || `Camera ${i + 1}`}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {localCam && !camOff ? (
+              <button type="button" className={blur ? "on" : ""} onClick={() => void toggleBlur()} disabled={blurBusy}>
+                {blurBusy ? "Working…" : blur ? "Stop blurring background" : "Blur background"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {reactOpen ? (
+          <div className="cr-react">
+            {REACTIONS.map((e) => <button key={e} type="button" onClick={() => sendReaction(e)} aria-label={`React ${e}`}>{e}</button>)}
+          </div>
+        ) : null}
+        <div className="cr-ctrls">
+          {cams.length > 1 ? <button onClick={flip} aria-label="Switch camera"><FlipI /></button> : null}
+          <button className={camOff ? "on" : ""} onClick={() => void toggleCam()} disabled={sharing} aria-label={camOff ? "Turn camera on" : "Turn camera off"}><CamI off={camOff} /></button>
+          <button className={micOff ? "on" : ""} onClick={toggleMic} aria-label={micOff ? "Unmute" : "Mute"}><MicI off={micOff} /></button>
+          {canShare && phase !== "ringing" ? <button className={sharing ? "on" : ""} onClick={toggleShare} aria-label={sharing ? "Stop sharing" : "Share screen"}><ScreenI off={sharing} /></button> : null}
+          {canPip ? <button onClick={() => void togglePip()} aria-label="Picture in picture"><PictureInPicture2 {...ico} /></button> : null}
+          <button className={settingsOpen ? "set on" : "set"} onClick={() => void openSettings()} aria-label="Call settings" aria-expanded={settingsOpen}><Settings2 {...ico} /></button>
+          <button className="end" onClick={() => void finish()} aria-label={direct ? "End call" : info.isHost ? "End session for everyone" : "Leave session"}><EndI /></button>
         </div>
-      ) : null}
-      {chromeOn && reactOpen ? (
-        <div className="cr-react">
-          {REACTIONS.map((e) => <button key={e} type="button" onClick={() => sendReaction(e)} aria-label={`React ${e}`}>{e}</button>)}
-        </div>
-      ) : null}
-      {chromeOn ? <>
-      <div className="cr-ctrls">
-        <button className={micOff ? "on" : ""} onClick={toggleMic} aria-label={micOff ? "Unmute" : "Mute"}><MicI off={micOff} /></button>
-        <button className={camOff ? "on" : ""} onClick={() => void toggleCam()} disabled={sharing} aria-label={camOff ? "Turn camera on" : "Turn camera off"}><CamI off={camOff} /></button>
-        <button className="end" onClick={() => void finish()} aria-label={direct ? "End call" : info.isHost ? "End session for everyone" : "Leave session"}><EndI /></button>
-        {canShare && phase !== "ringing" ? <button className={sharing ? "on" : ""} onClick={toggleShare} aria-label={sharing ? "Stop sharing" : "Share screen"}><ScreenI off={sharing} /></button> : null}
-        {cams.length > 1 ? <button onClick={flip} aria-label="Switch camera"><FlipI /></button> : null}
-        {canPip ? <button onClick={() => void togglePip()} aria-label="Picture in picture"><PictureInPicture2 {...ico} /></button> : null}
-        <button className={settingsOpen ? "on" : ""} onClick={() => void openSettings()} aria-label="Call settings" aria-expanded={settingsOpen}><Settings2 {...ico} /></button>
+        {direct ? null : (
+          <p className="cr-note">{info.isHost ? "Ends it for everyone. Nobody leaves your Room." : "Leaving the session keeps you in the Room."}</p>
+        )}
       </div>
-      <p className="cr-note">
-        {direct ? "Ends the call. The chat stays open."
-          : info.isHost ? "Ends it for everyone. Nobody leaves your Room."
-            : "Leaving the session keeps you in the Room."}
-      </p>
-      </> : null}
     </div>
   );
 }
