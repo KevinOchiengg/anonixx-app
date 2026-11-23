@@ -64,6 +64,16 @@ function Avatar({ name, url, size }) {
   );
 }
 
+// Behind a voice call or a ringing call: their photo, blurred and darkened, edge to edge.
+function Backdrop({ url }) {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} blurRadius={40} /> : null}
+      <LinearGradient colors={['rgba(11,15,24,0.55)', 'rgba(11,15,24,0.82)', 'rgba(11,15,24,0.96)']} style={StyleSheet.absoluteFill} />
+    </View>
+  );
+}
+
 // Full-screen video: the header and controls float over it on a soft fade.
 function Scrim({ on, edge, onHeight, children }) {
   if (!on) return children;
@@ -579,16 +589,17 @@ export default function DropCallScreen({ route, navigation }) {
   const mainTile = mainKey ? tiles.find((t) => t.key === mainKey) : null;
   const sideTiles = mainTile ? tiles.filter((t) => t.key !== mainKey) : [];
   const showChrome = chrome || !mainTile || showStage;
-  const immersive = direct && !!mainTile && !showStage;
+  const immersive = direct;
+  const fullVideo = direct && !!mainTile && !showStage;
 
   // Like WhatsApp: the controls fade away after a few seconds of video; a tap brings them back.
   const menuOpen = reactOpen || moreOpen || routeOpen || !!videoAsk;
   useEffect(() => {
-    if (!immersive || !chrome || phase !== 'live' || menuOpen) return undefined;
-    const t = setTimeout(() => setChrome(false), 5000);
+    if (!fullVideo || !chrome || phase !== 'live' || menuOpen) return undefined;
+    const t = setTimeout(() => setChrome(false), 4000);
     return () => clearTimeout(t);
-  }, [immersive, chrome, phase, menuOpen]);
-  useEffect(() => { if (!immersive) setChrome(true); }, [immersive]);
+  }, [fullVideo, chrome, phase, menuOpen]);
+  useEffect(() => { if (!fullVideo) setChrome(true); }, [fullVideo]);
   const tileProps = (t) => ({
     uid: t.uid,
     person: t.isLocal ? null : personForUid(t.uid),
@@ -675,12 +686,14 @@ export default function DropCallScreen({ route, navigation }) {
           </TouchableOpacity>
         ) : null}
         <View style={{ flex: 1 }}>
+          {immersive && showStage ? null : (<>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {direct ? other?.name || 'Anonymous' : isHost ? 'Your session' : `${other?.name || 'Room'} session`}
           </Text>
           <Text style={[styles.headerSub, netNote && { color: T.warn }]}>
             {direct ? `${wantVideo ? 'Video' : 'Voice'} call · ${status}` : `${tiles.length} here · ${status}`}
           </Text>
+          </>)}
         </View>
         {direct && phase === 'live' ? (
           <TouchableOpacity style={[styles.minBtn, styles.reactBtn, reactOpen && styles.reactBtnOn]} onPress={() => setReactOpen((v) => !v)} hitSlop={HIT_SLOP} accessibilityLabel="Send a reaction">
@@ -703,7 +716,12 @@ export default function DropCallScreen({ route, navigation }) {
       ) : null}
 
       {showStage ? (
-        <View style={styles.stage}>
+        <View style={[styles.stage, immersive && [StyleSheet.absoluteFill, { paddingTop: insets.top + rs(96), justifyContent: 'flex-start' }]]}>
+          {immersive ? (
+            !camOff && RtcView
+              ? <View style={StyleSheet.absoluteFill} pointerEvents="none"><RtcView style={StyleSheet.absoluteFill} canvas={{ uid: 0, renderMode: 1 }} /><LinearGradient colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.35)']} style={StyleSheet.absoluteFill} /></View>
+              : <Backdrop url={other?.avatar_url} />
+          ) : null}
           <View style={styles.stageAvaWrap}>
             {phase === 'ringing' && (
               <Animated.View
@@ -723,14 +741,14 @@ export default function DropCallScreen({ route, navigation }) {
             <View style={styles.mutedPill}><MicOff size={rs(13)} color="#fff" /><Text style={styles.mutedPillText}>{other?.name || 'They'} muted</Text></View>
           ) : null}
           {/* My own camera, small, while waiting or when only I have video on. */}
-          {!camOff && RtcView ? (
+          {!immersive && !camOff && RtcView ? (
             <View style={styles.selfPip}><RtcView style={StyleSheet.absoluteFill} canvas={{ uid: 0, renderMode: 1 }} /></View>
           ) : null}
         </View>
       ) : mainTile ? (
         <View style={[styles.focusWrap, immersive && StyleSheet.absoluteFill]} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onMainPress} accessibilityLabel={direct ? 'Show or hide controls' : 'Back to everyone'}>
-            <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} bare={immersive} />
+            <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} bare={fullVideo} />
           </Pressable>
           {direct ? (
             sideTiles[0] ? (
@@ -829,7 +847,7 @@ export default function DropCallScreen({ route, navigation }) {
         </View>
       ) : null}
 
-      <View style={[styles.controls, immersive && { paddingTop: rp(28) }]}>
+      <View style={[styles.controls, immersive && styles.controlsFull]}>
         <CtrlBtn on={micMuted} onPress={toggleMic} label={micMuted ? 'Unmute' : 'Mute'}
           icon={micMuted ? <MicOff size={rs(20)} color="#fff" /> : <Mic size={rs(20)} color={T.text} strokeWidth={2} />} />
         <CtrlBtn on={camOff} onPress={toggleCam} label={camOff ? 'Camera on' : 'Camera off'}
@@ -847,11 +865,11 @@ export default function DropCallScreen({ route, navigation }) {
           icon={<RefreshCw size={rs(20)} color={camOff ? T.textMute : T.text} strokeWidth={2} />} />
       </View>
 
-      <Text style={[styles.hostNote, immersive && { color: 'rgba(255,255,255,0.75)', paddingBottom: insets.bottom + rp(10) }]}>
-        {direct ? 'Ends the call. The chat stays open.'
-          : isHost ? 'Ends it for everyone. Nobody leaves your Room.'
-            : 'Leaving the session keeps you in the Room.'}
-      </Text>
+      {immersive ? <View style={{ height: insets.bottom + rp(24) }} /> : (
+        <Text style={styles.hostNote}>
+          {isHost ? 'Ends it for everyone. Nobody leaves your Room.' : 'Leaving the session keeps you in the Room.'}
+        </Text>
+      )}
       </Scrim>
       ) : null}
 
@@ -996,6 +1014,7 @@ const styles = StyleSheet.create({
 
   connectingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(11,15,24,0.5)' },
 
+  controlsFull: { paddingTop: rp(36), gap: rp(18) },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(14), paddingTop: rp(16), paddingBottom: rp(8) },
   ctrlBtn: { width: rs(50), height: rs(50), borderRadius: rs(25), backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.border },
   ctrlBtnActive: { backgroundColor: 'rgba(255,99,74,0.3)', borderColor: T.primary },

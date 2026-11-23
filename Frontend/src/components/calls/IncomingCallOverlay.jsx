@@ -4,11 +4,12 @@
  * Mounted once, inside the NavigationContainer (AppNavigator). */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated, AppState, Linking, Modal, StyleSheet, Text, TouchableOpacity, Vibration, View,
+  Animated, AppState, Image, Linking, Modal, StyleSheet, Text, TouchableOpacity, Vibration, View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MessageCircle, Phone, PhoneOff, Video } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { rs, rf, rp, SPACING, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
 import { useSocket } from '../../context/SocketContext';
@@ -26,6 +27,7 @@ export default function IncomingCallOverlay({ navigate }) {
   const [call, setCall] = useState(null);   // { call_id, caller_name, caller_avatar, video, connection_id }
   const [busy, setBusy] = useState(false);
   const [replying, setReplying] = useState(false);
+  const insets = useSafeAreaInsets();
   const pulse = useRef(new Animated.Value(0)).current;
   const timer = useRef(null);
 
@@ -159,11 +161,15 @@ export default function IncomingCallOverlay({ navigate }) {
   const name = call.caller_name || 'Someone';
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={decline} statusBarTranslucent>
-      <View style={s.back}>
-        <LinearGradient colors={[T.primaryGlow, T.background]} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.7 }} />
+    <Modal visible transparent animationType="fade" onRequestClose={decline} statusBarTranslucent navigationBarTranslucent>
+      <View style={[s.back, { paddingTop: insets.top + rs(72), paddingBottom: insets.bottom + rs(56) }]}>
+        {call.caller_avatar ? <Image source={{ uri: call.caller_avatar }} style={StyleSheet.absoluteFill} blurRadius={40} /> : null}
+        <LinearGradient colors={['rgba(11,15,24,0.55)', 'rgba(11,15,24,0.82)', 'rgba(11,15,24,0.97)']} style={StyleSheet.absoluteFill} />
         <View style={s.center}>
-          <Text style={s.kicker}>{call.video ? 'VIDEO CALL' : 'VOICE CALL'} · FROM YOUR ROOM</Text>
+          <View style={s.kickerRow}>
+            {call.video ? <Video size={rs(14)} color={T.textSecondary} /> : <Phone size={rs(14)} color={T.textSecondary} />}
+            <Text style={s.kicker}>{call.video ? 'Anonixx video call' : 'Anonixx voice call'}</Text>
+          </View>
           <View style={s.avaWrap}>
             <Animated.View
               pointerEvents="none"
@@ -177,7 +183,7 @@ export default function IncomingCallOverlay({ navigate }) {
             </View>
           </View>
           <Text style={s.name} numberOfLines={1}>{name}</Text>
-          <Text style={s.sub}>is calling you</Text>
+          <Text style={s.sub}>{busy ? 'Connecting…' : 'Incoming call'}</Text>
         </View>
         {replying ? (
           <View style={s.replies}>
@@ -194,26 +200,19 @@ export default function IncomingCallOverlay({ navigate }) {
             </TouchableOpacity>
           </View>
         ) : null}
-        <View style={s.actions}>
-          <View style={s.act}>
-            <TouchableOpacity style={[s.btn, s.decline]} onPress={decline} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Decline call">
-              <PhoneOff size={rs(26)} color="#fff" />
-            </TouchableOpacity>
-            <Text style={s.actText}>Decline</Text>
-          </View>
+        <View style={s.bottom}>
           {call.connection_id ? (
-            <View style={s.act}>
-              <TouchableOpacity style={[s.btn, s.message]} onPress={() => setReplying((v) => !v)} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Decline with a message">
-                <MessageCircle size={rs(24)} color={T.text} />
-              </TouchableOpacity>
-              <Text style={s.actText}>Message</Text>
-            </View>
-          ) : null}
-          <View style={s.act}>
-            <TouchableOpacity style={[s.btn, s.accept]} onPress={accept} disabled={busy} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Accept call">
-              {call.video ? <Video size={rs(26)} color="#fff" /> : <Phone size={rs(26)} color="#fff" />}
+            <TouchableOpacity style={[s.message, replying && s.messageOn]} onPress={() => setReplying((v) => !v)} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Decline with a message">
+              <MessageCircle size={rs(20)} color="#fff" />
             </TouchableOpacity>
-            <Text style={s.actText}>{busy ? 'Connecting…' : 'Accept'}</Text>
+          ) : null}
+          <View style={s.actions}>
+            <TouchableOpacity style={[s.btn, s.decline]} onPress={decline} hitSlop={HIT_SLOP} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Decline call">
+              <PhoneOff size={rs(30)} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.btn, s.accept, busy && { opacity: 0.6 }]} onPress={accept} disabled={busy} hitSlop={HIT_SLOP} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Accept call">
+              {call.video ? <Video size={rs(30)} color="#fff" /> : <Phone size={rs(30)} color="#fff" />}
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -222,24 +221,31 @@ export default function IncomingCallOverlay({ navigate }) {
 }
 
 const s = StyleSheet.create({
-  back: { flex: 1, backgroundColor: T.background, justifyContent: 'space-between', paddingVertical: rp(70) },
+  back: { flex: 1, backgroundColor: T.background, justifyContent: 'space-between' },
   center: { alignItems: 'center', gap: rp(10), paddingHorizontal: SPACING.lg },
-  kicker: { fontFamily: 'DMSans-Bold', fontSize: rf(11), letterSpacing: 2, color: T.primary, marginBottom: rp(24) },
+  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: rp(6), marginBottom: rp(28) },
+  kicker: { fontFamily: 'DMSans-SemiBold', fontSize: rf(13), color: T.textSecondary },
   avaWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: rp(10) },
   ring: { position: 'absolute', width: rs(132), height: rs(132), borderRadius: rs(66), borderWidth: 2, borderColor: T.primary },
   ava: { width: rs(132), height: rs(132), borderRadius: rs(66), backgroundColor: T.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 3, borderColor: T.primaryBorder },
-  name: { fontFamily: 'DMSans-Bold', fontSize: rf(28), color: T.text },
+  name: { fontFamily: 'DMSans-Bold', fontSize: rf(30), color: '#fff', marginTop: rp(10) },
   sub: { fontFamily: 'DMSans-Regular', fontSize: rf(15), color: T.textSecondary },
-  actions: { flexDirection: 'row', justifyContent: 'space-evenly' },
-  act: { alignItems: 'center', gap: rp(10) },
-  btn: { width: rs(72), height: rs(72), borderRadius: rs(36), alignItems: 'center', justifyContent: 'center', elevation: 8 },
-  decline: { backgroundColor: T.danger },
-  accept: { backgroundColor: T.success },
-  message: { backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border, width: rs(60), height: rs(60), borderRadius: rs(30), marginTop: rs(6) },
-  replies: { position: 'absolute', left: SPACING.lg, right: SPACING.lg, bottom: rp(190), gap: rp(8), alignItems: 'stretch' },
+  bottom: { alignItems: 'center', gap: rp(36) },
+  actions: { flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'stretch', paddingHorizontal: rs(56) },
+  btn: {
+    width: rs(74), height: rs(74), borderRadius: rs(37), alignItems: 'center', justifyContent: 'center',
+    elevation: 10, shadowOffset: { width: 0, height: rs(6) }, shadowOpacity: 0.45, shadowRadius: rs(14),
+  },
+  decline: { backgroundColor: T.danger, shadowColor: T.danger },
+  accept: { backgroundColor: T.success, shadowColor: T.success },
+  message: {
+    width: rs(48), height: rs(48), borderRadius: rs(24), alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  messageOn: { backgroundColor: 'rgba(255,255,255,0.24)' },
+  replies: { position: 'absolute', left: SPACING.lg, right: SPACING.lg, bottom: rs(230), gap: rp(8), alignItems: 'stretch' },
   reply: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: 999, paddingVertical: rp(12), paddingHorizontal: rp(16) },
   replyText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(14), color: T.text, textAlign: 'center' },
   replyOwn: { color: T.primary },
   replyBack: { fontFamily: 'DMSans-SemiBold', fontSize: rf(13), color: T.textSecondary, textAlign: 'center', paddingTop: rp(4) },
-  actText: { fontFamily: 'DMSans-SemiBold', fontSize: rf(14), color: T.text },
 });
