@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { connectSocket } from "@/lib/socket";
+import { playEndTone, startCallSound, stopCallSound } from "@/lib/callSounds";
 import { callsApi, type Participant, type Person } from "@/lib/calls";
 import { Mic, MicOff, PhoneOff, ScreenShare, ScreenShareOff, SwitchCamera, Users, Video, VideoOff } from "lucide-react";
 import AuthorAvatar from "@/components/AuthorAvatar";
@@ -129,10 +130,10 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   const finish = useCallback(async ({ notify = true, message = "" }: { notify?: boolean; message?: string } = {}) => {
     if (ended.current) return;
     ended.current = true;
-    await teardown();
-    if (notify) {
-      try { await (direct || info.isHost ? callsApi.end(info.callId) : callsApi.leave(info.callId)); } catch { /* already closed */ }
-    }
+    stopCallSound();
+    playEndTone();
+    void teardown();
+    if (notify) (direct || info.isHost ? callsApi.end(info.callId) : callsApi.leave(info.callId)).catch(() => {});
     if (message) setNotice(message);
     window.setTimeout(onClose, message ? 1600 : 0);
   }, [direct, info.callId, info.isHost, onClose, teardown]);
@@ -169,9 +170,10 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   // Ringing: give up after the ring window (the server marks it missed too).
   useEffect(() => {
     if (phase !== "ringing") return;
+    if (direct) startCallSound("ringback");
     const t = window.setTimeout(() => void finish({ message: `${other?.name || "They"} didn't answer.` }), ((info.ringSeconds || 45) + 3) * 1000);
-    return () => window.clearTimeout(t);
-  }, [phase, finish, info.ringSeconds, other?.name]);
+    return () => { window.clearTimeout(t); stopCallSound(); };
+  }, [phase, direct, finish, info.ringSeconds, other?.name]);
 
   useEffect(() => {
     let dead = false;

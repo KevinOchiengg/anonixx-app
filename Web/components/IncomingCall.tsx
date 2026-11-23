@@ -2,13 +2,14 @@
 /** Incoming 1-to-1 Room call, over any page. Rings from the socket (`call_incoming`); when the
  * tab becomes visible again it also asks GET /drop-calls/live, so a call that rang while the
  * socket was down still shows. Accept opens the call right here; decline tells the caller.
- * Mounted once in the root layout. No ringtone: browsers block sound until you interact. */
+ * Mounted once in the root layout. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth";
 import { connectSocket } from "@/lib/socket";
 import { callsApi, callInfo } from "@/lib/calls";
 import CallRoom, { type CallInfo } from "./CallRoom";
+import { startCallSound, stopCallSound } from "@/lib/callSounds";
 
 type Ring = { call_id: string; caller_name?: string; caller_avatar?: string | null; video?: boolean; ring_seconds?: number };
 
@@ -23,6 +24,7 @@ export default function IncomingCall() {
 
   const clear = useCallback(() => {
     if (timer.current) window.clearTimeout(timer.current);
+    stopCallSound();
     if (prevTitle.current) { document.title = prevTitle.current; prevTitle.current = ""; }
     setRing(null);
     setBusy(false);
@@ -33,6 +35,7 @@ export default function IncomingCall() {
     if (!prevTitle.current) prevTitle.current = document.title;
     document.title = `📞 ${r.caller_name || "Someone"} is calling`;
     try { navigator.vibrate?.([400, 300, 400]); } catch { /* not supported */ }
+    startCallSound("ringtone");
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(clear, ((r.ring_seconds || 45) + 2) * 1000);
   }, [clear]);

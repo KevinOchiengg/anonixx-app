@@ -25,6 +25,7 @@ import { rs, rf, rp, SPACING, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { callsApi } from '../../services/calls';
+import { playEndTone, startCallSound, stopCallSound } from '../../utils/callSounds';
 import T from '../../utils/theme';
 
 function useCallTimer(running) {
@@ -120,14 +121,15 @@ export default function DropCallScreen({ route, navigation }) {
   const finish = useCallback(async ({ notify = true, message } = {}) => {
     if (endedRef.current) return;
     endedRef.current = true;
+    stopCallSound();
+    playEndTone();
     cleanupEngine();
     if (notify && callId) {
-      try {
-        await (direct || isHost ? callsApi.end(callId) : callsApi.leave(callId));
-      } catch { /* the server ends stale calls by itself */ }
+      (direct || isHost ? callsApi.end(callId) : callsApi.leave(callId)).catch(() => {});
     }
     if (message) showToast({ type: 'info', message });
     if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('Main');
   }, [callId, direct, isHost, cleanupEngine, navigation, showToast]);
 
   // Hardware back = hang up, so nobody stays connected by accident.
@@ -144,8 +146,9 @@ export default function DropCallScreen({ route, navigation }) {
       Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
     ]));
     loop.start();
+    if (direct) startCallSound('ringback');
     const t = setTimeout(() => finish({ message: `${other?.name || 'They'} didn't answer.` }), ((p.ringSeconds || 45) + 3) * 1000);
-    return () => { loop.stop(); clearTimeout(t); };
+    return () => { loop.stop(); clearTimeout(t); stopCallSound(); };
   }, [phase, pulse, finish, other?.name, p.ringSeconds]);
 
   // Server events for this call.

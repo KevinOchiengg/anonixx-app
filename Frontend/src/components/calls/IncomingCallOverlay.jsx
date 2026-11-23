@@ -15,6 +15,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useToast } from '../ui/Toast';
 import { callsApi, callParams } from '../../services/calls';
 import AuthorAvatar from '../../components/common/AuthorAvatar';
+import { startCallSound, stopCallSound } from '../../utils/callSounds';
 
 const RING_PATTERN = [0, 700, 900];
 
@@ -28,6 +29,7 @@ export default function IncomingCallOverlay({ navigate }) {
 
   const close = useCallback(() => {
     Vibration.cancel();
+    stopCallSound();
     clearTimeout(timer.current);
     setCall(null);
     setBusy(false);
@@ -35,8 +37,8 @@ export default function IncomingCallOverlay({ navigate }) {
 
   const ring = useCallback((c) => {
     setCall((cur) => (cur && cur.call_id !== c.call_id ? cur : c));   // one at a time
-    // Vibration only: the device's own mute and do-not-disturb settings decide the rest.
     Vibration.vibrate(RING_PATTERN, true);
+    startCallSound('ringtone');
     clearTimeout(timer.current);
     timer.current = setTimeout(close, ((c.ring_seconds || 45) + 2) * 1000);
   }, [close]);
@@ -45,7 +47,7 @@ export default function IncomingCallOverlay({ navigate }) {
     if (!connected) return undefined;
     const onIncoming = (c) => ring(c);
     const onGone = (e) => setCall((cur) => {
-      if (cur && cur.call_id === e?.call_id) { Vibration.cancel(); clearTimeout(timer.current); return null; }
+      if (cur && cur.call_id === e?.call_id) { Vibration.cancel(); stopCallSound(); clearTimeout(timer.current); return null; }
       return cur;
     });
     socketService.on('call_incoming', onIncoming);

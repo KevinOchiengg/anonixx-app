@@ -322,6 +322,7 @@ app.include_router(discover.router, prefix=settings.API_V1_PREFIX)
 app.include_router(lives.router, prefix=settings.API_V1_PREFIX)
 app.include_router(lives.admin_router, prefix=settings.API_V1_PREFIX)
 
-# Wrap FastAPI with Socket.IO ASGI app.
-# Run with: uvicorn app.main:socket_app --reload
-socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+# Socket.IO wraps the API, so `uvicorn app.main:app` serves both.
+api = app
+app = socketio.ASGIApp(sio, other_asgi_app=api)
+socket_app = app

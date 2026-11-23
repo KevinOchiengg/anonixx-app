@@ -22,7 +22,7 @@ class SocketService {
       transports:          ['websocket'],
       reconnection:        true,
       reconnectionDelay:   1500,
-      reconnectionAttempts: 8,
+      reconnectionAttempts: Infinity,
     });
 
     return this.socket;
