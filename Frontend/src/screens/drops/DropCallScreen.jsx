@@ -13,7 +13,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  ActivityIndicator, Animated, Image, Modal, Platform, PermissionsAndroid, ScrollView,
+  ActivityIndicator, Animated, Image, Modal, Platform, PermissionsAndroid, Pressable, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -58,19 +58,25 @@ function Avatar({ name, url, size }) {
   );
 }
 
-const VideoTile = React.memo(({ uid, person, isLocal, muted, camOff, RtcView, size }) => (
-  <View style={[styles.tile, { width: size, height: size }]}>
+const VideoTile = React.memo(({ uid, person, isLocal, muted, camOff, RtcView, size, style, overlay, small }) => (
+  <View style={[styles.tile, size ? { width: size, height: size } : null, style]}>
     {RtcView && !camOff ? (
-      <RtcView style={StyleSheet.absoluteFill} canvas={{ uid: isLocal ? 0 : uid, renderMode: 1 }} />
+      <RtcView
+        style={StyleSheet.absoluteFill}
+        canvas={{ uid: isLocal ? 0 : uid, renderMode: 1 }}
+        zOrderMediaOverlay={!!overlay}
+      />
     ) : (
       <View style={[StyleSheet.absoluteFill, styles.tileFallback]}>
-        <Avatar name={person?.name} url={person?.avatar_url} size={rs(64)} />
+        <Avatar name={person?.name} url={person?.avatar_url} size={small ? rs(36) : rs(64)} />
       </View>
     )}
-    <View style={styles.tileLabelWrap}>
-      <Text style={styles.tileLabel} numberOfLines={1}>{isLocal ? 'You' : person?.name || 'Guest'}</Text>
-      {muted && <MicOff size={rs(11)} color="#fff" />}
-    </View>
+    {small ? null : (
+      <View style={styles.tileLabelWrap}>
+        <Text style={styles.tileLabel} numberOfLines={1}>{isLocal ? 'You' : person?.name || 'Guest'}</Text>
+        {muted && <MicOff size={rs(11)} color="#fff" />}
+      </View>
+    )}
   </View>
 ));
 
@@ -98,6 +104,8 @@ export default function DropCallScreen({ route, navigation }) {
   const [netNote, setNetNote]       = useState('');
   const [people, setPeople]         = useState([]);       // from GET /drop-calls/{id}
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [focusKey, setFocusKey]     = useState(null);
+  const [chrome, setChrome]         = useState(true);
 
   const engineRef  = useRef(null);
   const RtcViewRef = useRef(null);
@@ -334,6 +342,26 @@ export default function DropCallScreen({ route, navigation }) {
   const cols = columnsFor(tiles.length);
   const tileSize = `${100 / cols}%`;
 
+  // 1-to-1: the other person fills the screen and you sit in the corner; tap the corner to swap.
+  // Group: tap anyone to make them full screen, tap again to go back to the grid.
+  const firstRemote = remoteUids.length ? String(remoteUids[0]) : null;
+  const mainKey = tiles.some((t) => t.key === focusKey) ? focusKey : direct ? firstRemote : null;
+  const mainTile = mainKey ? tiles.find((t) => t.key === mainKey) : null;
+  const sideTiles = mainTile ? tiles.filter((t) => t.key !== mainKey) : [];
+  const showChrome = chrome || !mainTile || showStage;
+  const tileProps = (t) => ({
+    uid: t.uid,
+    person: t.isLocal ? null : personForUid(t.uid),
+    isLocal: t.isLocal,
+    muted: t.isLocal ? micMuted : !!remoteMuted[t.uid],
+    camOff: t.isLocal ? camOff : !!remoteCamOff[t.uid],
+    RtcView,
+  });
+  const onMainPress = () => {
+    if (direct) setChrome((v) => !v);
+    else setFocusKey(null);
+  };
+
   const status = phase === 'ringing' ? 'Ringing…'
     : !live ? (direct ? 'Connecting…' : 'Opening the session…')
       : netNote || elapsed;
@@ -342,6 +370,7 @@ export default function DropCallScreen({ route, navigation }) {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <LinearGradient colors={[T.primaryGlow, 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} pointerEvents="none" />
 
+      {showChrome ? (
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -358,6 +387,7 @@ export default function DropCallScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
       </View>
+      ) : null}
 
       {showStage ? (
         <View style={styles.stage}>
@@ -380,19 +410,37 @@ export default function DropCallScreen({ route, navigation }) {
             <View style={styles.selfPip}><RtcView style={StyleSheet.absoluteFill} canvas={{ uid: 0, renderMode: 1 }} /></View>
           ) : null}
         </View>
+      ) : mainTile ? (
+        <View style={styles.focusWrap}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onMainPress} accessibilityLabel={direct ? 'Show or hide controls' : 'Back to everyone'}>
+            <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} />
+          </Pressable>
+          {direct ? (
+            sideTiles[0] ? (
+              <Pressable
+                style={[styles.pip, !showChrome && styles.pipLow]}
+                onPress={() => setFocusKey(sideTiles[0].key)}
+                accessibilityLabel="Swap videos"
+              >
+                <VideoTile key={`pip-${sideTiles[0].key}`} {...tileProps(sideTiles[0])} style={styles.pipTile} overlay small />
+              </Pressable>
+            ) : null
+          ) : (
+            <ScrollView horizontal style={styles.strip} contentContainerStyle={styles.stripIn} showsHorizontalScrollIndicator={false}>
+              {sideTiles.map((t) => (
+                <Pressable key={t.key} onPress={() => setFocusKey(t.key)} accessibilityLabel="Show full screen">
+                  <VideoTile key={`strip-${t.key}`} {...tileProps(t)} style={styles.stripTile} overlay small />
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
       ) : (
         <View style={styles.grid}>
           {tiles.map((t) => (
-            <VideoTile
-              key={t.key}
-              uid={t.uid}
-              person={t.isLocal ? null : personForUid(t.uid)}
-              isLocal={t.isLocal}
-              muted={t.isLocal ? micMuted : !!remoteMuted[t.uid]}
-              camOff={t.isLocal ? camOff : !!remoteCamOff[t.uid]}
-              RtcView={RtcView}
-              size={tileSize}
-            />
+            <Pressable key={t.key} style={{ width: tileSize }} onPress={() => setFocusKey(t.key)} accessibilityLabel="Show full screen">
+              <VideoTile {...tileProps(t)} style={styles.gridTile} />
+            </Pressable>
           ))}
         </View>
       )}
@@ -403,6 +451,7 @@ export default function DropCallScreen({ route, navigation }) {
         </View>
       )}
 
+      {showChrome ? (
       <View style={styles.controls}>
         <CtrlBtn on={micMuted} onPress={toggleMic} label={micMuted ? 'Unmute' : 'Mute'}
           icon={micMuted ? <MicOff size={rs(20)} color="#fff" /> : <Mic size={rs(20)} color={T.text} strokeWidth={2} />} />
@@ -418,11 +467,15 @@ export default function DropCallScreen({ route, navigation }) {
           icon={<RefreshCw size={rs(20)} color={camOff ? T.textMute : T.text} strokeWidth={2} />} />
       </View>
 
+      ) : null}
+
+      {showChrome ? (
       <Text style={styles.hostNote}>
         {direct ? 'Ends the call. The chat stays open.'
           : isHost ? 'Ends it for everyone. Nobody leaves your Room.'
             : 'Leaving the session keeps you in the Room.'}
       </Text>
+      ) : null}
 
       <Modal visible={peopleOpen} transparent animationType="slide" onRequestClose={() => setPeopleOpen(false)}>
         <View style={styles.sheetBack}>
@@ -494,6 +547,19 @@ const styles = StyleSheet.create({
 
   grid: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignContent: 'flex-start', alignItems: 'flex-start' },
   tile: { aspectRatio: 3 / 4, borderWidth: 1, borderColor: T.border, overflow: 'hidden', position: 'relative' },
+  gridTile: { width: '100%' },
+  focusWrap: { flex: 1, position: 'relative', backgroundColor: '#000' },
+  mainTile: { width: '100%', height: '100%', aspectRatio: undefined, borderWidth: 0 },
+  pip: {
+    position: 'absolute', right: SPACING.md, bottom: rp(12), width: rs(104), height: rs(148),
+    borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: T.surface, elevation: 8,
+  },
+  pipLow: { bottom: rp(36) },
+  pipTile: { width: '100%', height: '100%', aspectRatio: undefined, borderWidth: 0 },
+  strip: { position: 'absolute', left: 0, right: 0, bottom: rp(10), flexGrow: 0 },
+  stripIn: { paddingHorizontal: SPACING.md, gap: rp(8) },
+  stripTile: { width: rs(84), height: rs(112), aspectRatio: undefined, borderRadius: RADIUS.md, borderColor: 'rgba(255,255,255,0.35)' },
   tileFallback: { backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center' },
   tileLabelWrap: {
     position: 'absolute', bottom: rp(6), left: rp(8), flexDirection: 'row', alignItems: 'center', gap: rp(5),

@@ -89,6 +89,8 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   const [people, setPeople] = useState<Participant[]>([]);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [chrome, setChrome] = useState(true);
 
   const sdk = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const client = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -339,11 +341,19 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
   const anyVideo = !!(localScreen || (!camOff && localCam)) || remotes.some((r) => r.video);
   const stage = direct && (phase === "ringing" || !anyVideo || remotes.length === 0);
   const cols = tiles.length <= 1 ? 1 : tiles.length <= 4 ? 2 : tiles.length <= 9 ? 3 : 4;
+  // 1-to-1: the other person fills the screen and you sit in the corner; tap the corner to swap.
+  // Group: tap anyone to make them full screen, tap again to go back to the grid.
+  const mainKey = tiles.some((t) => t.key === focusKey) ? focusKey : direct ? tiles.find((t) => t.key !== "me")?.key ?? null : null;
+  const main = !stage && mainKey ? tiles.find((t) => t.key === mainKey) : undefined;
+  const side = main ? tiles.filter((t) => t.key !== mainKey) : [];
+  const chromeOn = chrome || !main;
+  const tp = (t: (typeof tiles)[number]) => ({ label: t.label, track: t.track, muted: t.muted, mirror: t.mirror, person: t.person });
+  const onMain = () => (direct ? setChrome((v) => !v) : setFocusKey(null));
   const status = notice || (phase === "ringing" ? "Ringing…" : !live ? (direct ? "Connecting…" : "Opening the session…") : netNote || clock);
 
   return (
     <div className="cr" role="dialog" aria-modal aria-label={direct ? `Call with ${other?.name || "Anonymous"}` : "Session"}>
-      <div className="cr-head">
+      {chromeOn ? <div className="cr-head">
         <span className="cr-head-t">
           <b>{direct ? other?.name || "Anonymous" : info.isHost ? "Your session" : `${other?.name || "Room"} session`}</b>
           <small className={netNote ? "warn" : ""}>{direct ? `${info.audioOnly ? "Voice" : "Video"} call · ${status}` : `${tiles.length} here · ${status}`}</small>
@@ -353,7 +363,7 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
             <PeopleI /> {Math.max(people.length, tiles.length)}
           </button>
         ) : null}
-      </div>
+      </div> : null}
 
       {stage ? (
         <div className="cr-stage">
@@ -362,9 +372,34 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
           <small>{phase === "ringing" ? "Calling… they'll see it's you" : status}</small>
           {localCam && !camOff ? <div className="cr-pip"><Tile label="You" track={localScreen || localCam} mirror={!localScreen} /></div> : null}
         </div>
+      ) : main ? (
+        <div className={`cr-focus${chromeOn ? "" : " bare"}`}>
+          <button type="button" className="cr-main" onClick={onMain} aria-label={direct ? "Show or hide controls" : "Back to everyone"}>
+            <Tile key={`main-${main.key}`} {...tp(main)} />
+          </button>
+          {direct ? (
+            side[0] ? (
+              <button type="button" className="cr-mini" onClick={() => setFocusKey(side[0].key)} aria-label="Swap videos">
+                <Tile key={`pip-${side[0].key}`} {...tp(side[0])} />
+              </button>
+            ) : null
+          ) : (
+            <div className="cr-strip">
+              {side.map((t) => (
+                <button key={t.key} type="button" className="cr-mini" onClick={() => setFocusKey(t.key)} aria-label={`Show ${t.label} full screen`}>
+                  <Tile {...tp(t)} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="cr-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-          {tiles.map((t) => <Tile key={t.key} label={t.label} track={t.track} muted={t.muted} mirror={t.mirror} person={t.person} />)}
+          {tiles.map((t) => (
+            <button key={t.key} type="button" className="cr-cell" onClick={() => setFocusKey(t.key)} aria-label={`Show ${t.label} full screen`}>
+              <Tile {...tp(t)} />
+            </button>
+          ))}
         </div>
       )}
 
@@ -386,6 +421,7 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
       ) : null}
 
       {error ? <p className="cr-err">{error}</p> : null}
+      {chromeOn ? <>
       <div className="cr-ctrls">
         <button className={micOff ? "on" : ""} onClick={toggleMic} aria-label={micOff ? "Unmute" : "Mute"}><MicI off={micOff} /></button>
         <button className={camOff ? "on" : ""} onClick={toggleCam} disabled={sharing} aria-label={camOff ? "Turn camera on" : "Turn camera off"}><CamI off={camOff} /></button>
@@ -398,6 +434,7 @@ export default function CallRoom({ info, onClose }: { info: CallInfo; onClose: (
           : info.isHost ? "Ends it for everyone. Nobody leaves your Room."
             : "Leaving the session keeps you in the Room."}
       </p>
+      </> : null}
     </div>
   );
 }
