@@ -70,7 +70,7 @@ const VideoTile = React.memo(({ uid, person, isLocal, muted, camOff, RtcView, si
       <RtcView
         style={StyleSheet.absoluteFill}
         canvas={{ uid: isLocal ? 0 : uid, renderMode: 1 }}
-        zOrderMediaOverlay={!!overlay}
+        {...(Platform.OS === 'ios' && overlay ? { zOrderMediaOverlay: true } : null)}
       />
     ) : (
       <View style={[StyleSheet.absoluteFill, styles.tileFallback]}>
@@ -288,9 +288,10 @@ export default function DropCallScreen({ route, navigation }) {
         return;
       }
       const {
-        createAgoraRtcEngine, ChannelProfileType, ClientRoleType, RtcSurfaceView,
+        createAgoraRtcEngine, ChannelProfileType, ClientRoleType, RtcSurfaceView, RtcTextureView,
       } = agoraModule;
-      RtcViewRef.current = RtcSurfaceView;
+      // Android TextureView draws in the normal view tree, so the movable mini video stays where it is placed.
+      RtcViewRef.current = Platform.OS === 'android' && RtcTextureView ? RtcTextureView : RtcSurfaceView;
 
       // Mic is required; the camera only for video, and a refused camera just means voice.
       let camAllowed = wantVideo;
@@ -354,6 +355,11 @@ export default function DropCallScreen({ route, navigation }) {
           });
         });
         engine.addListener('onUserMuteVideo', (_c, u, m) => setRemoteCamOff((prev) => ({ ...prev, [u]: m })));
+        // RemoteVideoState: 2 decoding = their video is arriving; 0 with reason 5 = they turned it off.
+        engine.addListener('onRemoteVideoStateChanged', (_c, u, state, reason) => {
+          if (state === 2) setRemoteCamOff((prev) => (prev[u] ? { ...prev, [u]: false } : prev));
+          else if (state === 0 && reason === 5) setRemoteCamOff((prev) => ({ ...prev, [u]: true }));
+        });
         // Agora AudioRoute: 1 earpiece, 3/4 speaker, 5/10 Bluetooth, 0/2/6 wired or USB.
         engine.addListener('onAudioRoutingChanged', (routing) => {
           const r = [3, 4].includes(routing) ? 'speaker'
