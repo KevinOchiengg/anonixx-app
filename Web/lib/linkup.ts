@@ -30,7 +30,8 @@ export function hookupTags(h: Post["hookup"]): string[] {
   const range = wanted ? ` ${wanted}` : "";
   return [
     h.area ? `Location: ${h.area}` : null,
-    h.age ? `Age: ${h.age}${h.gender && h.gender !== "other" ? ` · ${h.gender}` : ""}` : null,
+    h.age ? `Age: ${h.age}` : null,
+    h.gender && h.gender !== "other" ? `Gender: ${h.gender}` : null,
     who ? who + range : null,
     (h.guided?.hosting && HOSTING_TAG[h.guided.hosting]) || null,
   ].filter((x): x is string => Boolean(x));

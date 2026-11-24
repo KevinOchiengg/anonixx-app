@@ -59,7 +59,8 @@ function hookupTags(h) {
   const who = h.looking_for === 'woman' ? 'into women' : h.looking_for === 'man' ? 'into men' : wanted ? 'looking for' : null;
   return [
     h.area ? `Location: ${h.area}` : null,
-    h.age ? `Age: ${h.age}${h.gender && h.gender !== 'other' ? ` · ${h.gender}` : ''}` : null,
+    h.age ? `Age: ${h.age}` : null,
+    h.gender && h.gender !== 'other' ? `Gender: ${h.gender}` : null,
     who ? `${who}${wanted ? ` ${wanted}` : ''}` : null,
     (h.guided?.hosting && HOSTING_TAG[h.guided.hosting]) || null,
   ].filter(Boolean);

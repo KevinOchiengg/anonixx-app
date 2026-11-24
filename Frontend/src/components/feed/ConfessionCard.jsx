@@ -63,7 +63,8 @@ export function linkUpFacts(h, liveUntil) {
     // live posts count down; a draft (no liveUntil yet) just shows when
     left ? { text: `${when || 'Live'} · ${left}`, hot: true } : liveUntil ? { text: 'Ended' } : when ? { text: when, hot: true } : null,
     h.area ? { text: `Location: ${h.area}` } : null,
-    h.age ? { text: `Age: ${h.age}${h.gender && h.gender !== 'other' ? ` · ${h.gender}` : ''}` } : null,
+    h.age ? { text: `Age: ${h.age}` } : null,
+    h.gender && h.gender !== 'other' ? { text: `Gender: ${h.gender}` } : null,
     who ? { text: `${who}${range ? ` ${range}` : ''}` } : null,
     ...(h.vibes || []).slice(0, 2).map((v) => ({ text: v })),
     HOSTING[h.guided?.hosting] ? { text: HOSTING[h.guided.hosting] } : null,
