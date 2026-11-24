@@ -24,7 +24,7 @@ FIELD_RE = re.compile(r"^([a-z_]+):\s?(.*)$")
 FOLDERS = {
     "weekly": "Chief of staff", "growth": "Growth hacker", "research": "Researcher", "content": "Content scout",
     "seo": "SEO manager", "revenue": "Revenue manager", "tiktok": "TikTok manager", "marketing": "Marketing manager",
-    "product": "Product manager",
+    "product": "Product manager", "affiliate": "Affiliate manager",
 }
 
 
@@ -38,6 +38,7 @@ TEAM = [
     {"key": "seo-manager", "name": "SEO manager", "folder": "seo", "days": [3], "hour": 5, "minute": 0},
     {"key": "revenue-manager", "name": "Revenue manager", "folder": "revenue", "days": [5], "hour": 5, "minute": 0},
     {"key": "tiktok-manager", "name": "TikTok manager", "folder": "tiktok", "days": [5], "hour": 5, "minute": 0},
+    {"key": "affiliate-manager", "name": "Affiliate manager", "folder": "affiliate", "days": [], "hour": 0, "minute": 0},
     {"key": "chief-of-staff", "name": "Chief of staff", "folder": "weekly", "days": [0], "hour": 5, "minute": 0},
     {"key": "marketing-manager", "name": "Marketing manager", "folder": "marketing", "days": [], "hour": 0, "minute": 0},
     {"key": "product-manager", "name": "Product manager", "folder": "product", "days": [], "hour": 0, "minute": 0},

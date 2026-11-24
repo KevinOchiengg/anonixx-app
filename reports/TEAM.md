@@ -37,5 +37,6 @@ reports/
   marketing/YYYY-MM-DD.md marketing manager
   growth/YYYY-MM-DD.md    growth hacker (acquisition strategy, ads, viral loops)
   seo/YYYY-MM-DD.md       seo manager
+  affiliate/YYYY-MM-DD.md affiliate manager (partner program, networks, partner offers)
   weekly/YYYY-MM-DD.md    chief of staff summary
 ```

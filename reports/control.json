@@ -29,6 +29,9 @@
     },
     "posting-manager": {
       "paused": false
+    },
+    "affiliate-manager": {
+      "paused": false
     }
   }
 }
