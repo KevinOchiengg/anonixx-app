@@ -38,7 +38,7 @@ TEAM = [
     {"key": "seo-manager", "name": "SEO manager", "folder": "seo", "days": [3], "hour": 5, "minute": 0},
     {"key": "revenue-manager", "name": "Revenue manager", "folder": "revenue", "days": [5], "hour": 5, "minute": 0},
     {"key": "tiktok-manager", "name": "TikTok manager", "folder": "tiktok", "days": [5], "hour": 5, "minute": 0},
-    {"key": "affiliate-manager", "name": "Affiliate manager", "folder": "affiliate", "days": [], "hour": 0, "minute": 0},
+    {"key": "affiliate-manager", "name": "Affiliate manager", "folder": "affiliate", "days": [0, 1, 2, 3, 4, 5, 6], "hour": 5, "minute": 0, "on_demand": True},
     {"key": "chief-of-staff", "name": "Chief of staff", "folder": "weekly", "days": [0], "hour": 5, "minute": 0},
     {"key": "marketing-manager", "name": "Marketing manager", "folder": "marketing", "days": [], "hour": 0, "minute": 0},
     {"key": "product-manager", "name": "Product manager", "folder": "product", "days": [], "hour": 0, "minute": 0},
@@ -94,7 +94,7 @@ def _team(files: list[str], control: dict) -> list[dict]:
     for a in TEAM:
         mine = [f for f in files if f.startswith(f"reports/{a['folder']}")]
         state = control["agents"].get(a["key"]) or {}
-        out.append({**a, "scheduled": bool(a["days"]), "paused": bool(state.get("paused")),
+        out.append({"on_demand": False, **a, "scheduled": bool(a["days"]), "paused": bool(state.get("paused")),
                     "paused_at": state.get("at"), "latest": mine[0] if mine else None, "reports": len(mine)})
     return out
 

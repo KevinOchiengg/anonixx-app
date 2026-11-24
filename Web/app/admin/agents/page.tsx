@@ -11,7 +11,7 @@ type Draft = {
 type Agent = { folder: string; agent: string; latest: string; count: number; recent: string[] };
 type Member = {
   key: string; name: string; days: number[]; hour: number; minute: number;
-  scheduled: boolean; paused: boolean; latest: string | null; reports: number;
+  scheduled: boolean; paused: boolean; on_demand: boolean; latest: string | null; reports: number;
 };
 type Hub = { configured: boolean; repo: string; agents: Agent[]; drafts: Draft[]; decided?: Draft[]; team?: Member[] };
 
@@ -30,6 +30,7 @@ function nextRun(m: Member): Date | null {
 
 function scheduleText(m: Member) {
   if (!m.scheduled) return "Runs only when you ask";
+  if (m.on_demand && m.paused) return "Off. Start it and it works every day until you stop it";
   const t = new Date(Date.UTC(2000, 0, 2, m.hour, m.minute)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return m.days.length === 7 ? `Every day, ${t}` : `Every ${m.days.map((d) => DAYS[d]).join(", ")}, ${t}`;
 }
@@ -64,7 +65,9 @@ export default function AgentsPage() {
     setBusy(m.key); setErr(""); setNote("");
     try {
       await api(`/admin/agents/${m.key}/pause`, { method: "PUT", body: { paused: !m.paused } });
-      setNote(m.paused ? `${m.name} is back on. It runs on its next turn.` : `${m.name} is paused. It skips its runs until you resume it.`);
+      const next = nextRun(m);
+      const when = next ? next.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "its next turn";
+      setNote(m.paused ? `${m.name} is on. It starts ${when}.` : `${m.name} is ${m.on_demand ? "off" : "paused"}. It does nothing until you ${m.on_demand ? "start" : "resume"} it.`);
       await load();
     } catch (e) { setErr((e as Error).message); } finally { setBusy(""); }
   }
@@ -103,7 +106,7 @@ export default function AgentsPage() {
                     <span className="dot" style={{ background: !m.scheduled ? "var(--muted, #888)" : m.paused ? "#e5a03a" : "#3ecf8e" }} />
                     <span style={{ flex: 1 }}>
                       <b>{m.name}</b>{" "}
-                      {m.scheduled ? (m.paused ? <Badge tone="warn">paused</Badge> : <Badge tone="ok">on</Badge>) : <Badge>on request</Badge>}
+                      {m.scheduled ? (m.paused ? <Badge tone="warn">{m.on_demand ? "off" : "paused"}</Badge> : <Badge tone="ok">on</Badge>) : <Badge>on request</Badge>}
                       <br />
                       <span className="muted small">
                         {scheduleText(m)}
@@ -116,7 +119,7 @@ export default function AgentsPage() {
                     </span>
                     {isSuper && m.scheduled ? (
                       <button type="button" className={`adm-btn${m.paused ? " primary" : ""}`} disabled={busy === m.key} onClick={() => pause(m)}>
-                        {busy === m.key ? "Saving…" : m.paused ? "Resume" : "Pause"}
+                        {busy === m.key ? "Saving…" : m.on_demand ? (m.paused ? "Start" : "Stop") : m.paused ? "Resume" : "Pause"}
                       </button>
                     ) : null}
                   </div>
