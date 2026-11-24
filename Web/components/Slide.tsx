@@ -441,7 +441,7 @@ export default function Slide({
       ) : null}
 
       <div className={hasMedia ? "caption" : "text-body"} style={{ position: "relative", zIndex: 2 }}>
-        {post.promo_kind === "pin" ? <span className="pin-tag">pinned</span> : null}
+
         {textSlide && post.font_style ? <link rel="stylesheet" href={DROP_FONTS_HREF} precedence="default" /> : null}
         {card ? (
           <ConfessionCard

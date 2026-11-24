@@ -772,7 +772,6 @@ export default function PostStudio() {
               {mature ? <div className="ps-mature">Mature · blurred</div> : null}
               {promo === "pin" || sound ? (
                 <div className="ps-chips">
-                  {promo === "pin" ? <span className="pin-tag">pinned</span> : null}
                   {sound ? <span className="ps-sound">♪ {sound.title}</span> : null}
                 </div>
               ) : null}

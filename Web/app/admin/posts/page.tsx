@@ -1,22 +1,50 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 import CountryField from "@/components/compose/LocationFields";
 import { askConfirm } from "@/lib/confirm";
+import VideoEditor from "@/components/compose/VideoEditor";
+import { attachVideo } from "@/lib/attachVideo";
+import { defaultEdit, type VideoEdit } from "@/lib/videoEdit";
 
 type D = DropMedia & {
   id: string; sender_id: string | null; author: string | null; is_admin_drop: boolean; confession: string; confession_full: string | null; country?: string | null;
   promo_kind: "pin" | "boost" | null; promo_until: string | null;
   media_type: string | null; report_count: number; moderation_status: string | null; created_at: string | null;
   kind: string | null;
+  video_edit: VideoEdit | null; duration_seconds: number | null;
   stats: { views: number; likes: number; comments: number; saves: number; reactions: number; linkups: number; unlocks: number; engagement: number | null };
 };
 const SORTS: [string, string][] = [["recent", "Newest"], ["views", "Most viewed"], ["likes", "Most liked"], ["comments", "Most discussed"], ["engagement", "Best engagement"]];
 type Page = { total: number; skip: number; limit: number; drops: D[] };
 const LIMIT = 20;
+type Editing = { id: string; text: string; country: string; vedit: VideoEdit | null; touched: boolean };
+
+// Text over an existing video: finds its length, then opens the same editor as Post a drop.
+function VideoText({ src, known, value, onChange }: { src: string; known: number | null; value: VideoEdit | null; onChange: (v: VideoEdit) => void }) {
+  const probe = useRef<HTMLVideoElement>(null);
+  const [len, setLen] = useState(known || 0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => (len || !probe.current ? undefined : attachVideo(probe.current, src)), [src, len]);
+  useEffect(() => { if (len && !value) onChange(defaultEdit(len)); }, [len, value, onChange]);
+  if (failed) return <p className="muted small">This video can&apos;t be previewed here, so text can&apos;t be added to it.</p>;
+  if (!len || !value) {
+    return (
+      <>
+        <video ref={probe} hidden muted preload="metadata" onLoadedMetadata={(e) => setLen(e.currentTarget.duration || 0)} onError={() => setFailed(true)} />
+        <p className="muted small">Loading the video…</p>
+      </>
+    );
+  }
+  return <VideoEditor src={src} duration={len} value={value} onChange={onChange} onNoPreview={() => setFailed(true)} />;
+}
+
+const startEdit = (d: D): Editing => ({
+  id: d.id, text: d.confession_full ?? d.confession, country: d.country || "", vedit: d.video_edit, touched: false,
+});
 
 export default function AdminPosts() {
   const [q, setQ] = useState("");
@@ -36,7 +64,7 @@ export default function AdminPosts() {
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id: string; text: string; country: string } | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [promoting, setPromoting] = useState<{ id: string; kind: "pin" | "boost"; hours: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -48,7 +76,7 @@ export default function AdminPosts() {
       const page = await api<Page>(`/admin/drops?${p}`);
       setData(page);
       const hit = only ? page.drops.find((x) => x.id === only) : null;
-      if (hit?.is_admin_drop) setEditing((e) => e ?? { id: hit.id, text: hit.confession_full ?? hit.confession, country: hit.country || "" });
+      if (hit?.is_admin_drop) setEditing((e) => e ?? startEdit(hit));
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -79,16 +107,30 @@ export default function AdminPosts() {
   }
 
   async function save() {
-    if (!editing || !editing.text.trim()) return;
+    if (!editing || !canSave(editing)) return;
     setBusy(editing.id);
     try {
-      await api(`/admin/drops/${editing.id}`, { method: "PATCH", body: { confession: editing.text.trim(), location_country: editing.country } });
+      await api(`/admin/drops/${editing.id}`, {
+        method: "PATCH",
+        body: {
+          confession: editing.text.trim(),
+          location_country: editing.country,
+          ...(editing.vedit && editing.touched ? { video_edit: editing.vedit } : {}),
+        },
+      });
       setEditing(null);
       // From the feed's pencil: back to the drop once it's saved.
       if (only && window.history.length > 1) { window.history.back(); return; }
       await load();
     } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }
+
+  const dropOf = (id: string) => data?.drops.find((x) => x.id === id);
+  const canSave = (e: Editing) => Boolean(e.text.trim() || dropOf(e.id)?.media_url);
+  const setVedit = useCallback((v: VideoEdit) => setEditing((e) => (e ? { ...e, vedit: v, touched: e.vedit !== null } : e)), []);
+  const promoButton = (d: D) => d.promo_kind
+    ? <button className="adm-btn" disabled={busy === d.id} onClick={() => promote(d.id, null)}>Stop {d.promo_kind === "pin" ? "pin" : "boost"}</button>
+    : <button className="adm-btn" disabled={busy === d.id} onClick={() => setPromoting({ id: d.id, kind: "pin", hours: 24 })}>Pin / boost</button>;
 
   return (
     <>
@@ -129,6 +171,12 @@ export default function AdminPosts() {
                   onChange={(e) => setEditing({ ...editing, text: e.target.value })} aria-label="Post text"
                 />
               ) : null}
+              {editing?.id === d.id && d.media_type === "video" && d.media_url ? (
+                <div className="adm-vtext">
+                  <b className="small">Text over the video</b>
+                  <VideoText src={d.media_url} known={d.duration_seconds} value={editing.vedit} onChange={setVedit} />
+                </div>
+              ) : null}
               {editing?.id === d.id ? (
                 <div className="adm-country"><CountryField value={editing.country} onChange={(country) => setEditing({ ...editing, country })} /></div>
               ) : <p className="adm-text">{d.confession || "[no text]"}</p>}
@@ -165,17 +213,14 @@ export default function AdminPosts() {
                   {editing?.id === d.id ? (
                     <>
                       <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>
+                      {promoButton(d)}
                       <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing(null)}>Cancel</button>
-                      <button className="adm-btn primary" disabled={busy === d.id || !editing.text.trim()} onClick={save}>Save</button>
+                      <button className="adm-btn primary" disabled={busy === d.id || !canSave(editing)} onClick={save}>Save</button>
                     </>
                   ) : (
                     <>
-                      {d.is_admin_drop ? <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing({ id: d.id, text: d.confession_full ?? d.confession, country: d.country || "" })}>Edit</button> : null}
-                      {d.is_admin_drop ? (
-                        d.promo_kind
-                          ? <button className="adm-btn" disabled={busy === d.id} onClick={() => promote(d.id, null)}>Stop {d.promo_kind === "pin" ? "pin" : "boost"}</button>
-                          : <button className="adm-btn" disabled={busy === d.id} onClick={() => setPromoting({ id: d.id, kind: "pin", hours: 24 })}>Pin / boost</button>
-                      ) : null}
+                      {d.is_admin_drop ? <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing(startEdit(d))}>Edit</button> : null}
+                      {d.is_admin_drop ? promoButton(d) : null}
                       <Link className="adm-btn" href={`/drop/${d.id}`} title="Open the post as people see it">View post</Link>
                       <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>
                     </>

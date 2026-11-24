@@ -7,6 +7,7 @@ import {
 import "../../app/videooverlay.css";
 import "../../app/videoeditor.css";
 import { Pause, Play } from "lucide-react";
+import { attachVideo } from "@/lib/attachVideo";
 
 const SIZES: [OverlaySize, string][] = [["s", "S"], ["m", "M"], ["l", "L"]];
 const STYLES: [OverlayStyle, string][] = [["shadow", "Clean"], ["dark", "Box"], ["coral", "Coral"]];
@@ -38,6 +39,7 @@ export default function VideoEditor({ src, duration, value, onChange, onNoPrevie
   const cut = duration > MAX_CLIP_SECONDS + 0.5;
 
   useEffect(() => { if (sel !== null && sel >= overlays.length) setSel(null); }, [sel, overlays.length]);
+  useEffect(() => (vid.current ? attachVideo(vid.current, src) : undefined), [src]);
 
   function seek(t: number) {
     const v = vid.current;
@@ -110,7 +112,6 @@ export default function VideoEditor({ src, duration, value, onChange, onNoPrevie
       >
         <video
           ref={vid}
-          src={src}
           playsInline
           muted
           preload="auto"

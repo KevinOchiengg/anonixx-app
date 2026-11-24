@@ -360,6 +360,8 @@ async def get_moderation_queue(
             "confession":        (d.get("confession") or "")[:200],
             "media_type":        d.get("media_type"),
             **_media(d),
+            "video_edit":        d.get("video_edit") if d.get("is_admin_drop") else None,
+            "duration_seconds":  d.get("duration_seconds"),
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
             "flagged_at":        d["flagged_at"].isoformat() if d.get("flagged_at") else None,
@@ -493,6 +495,7 @@ def _drop_oid(raw: str) -> ObjectId:
 class AdminEditDropRequest(BaseModel):
     confession: str
     location_country: Optional[str] = None   # "" clears; country only
+    video_edit: Optional[dict] = None         # video drops: trim window + text over the video
 
 
 @router.patch("/drops/{drop_id}", summary="Edit the text of a post made by an admin (users' posts stay untouchable)")
@@ -503,8 +506,6 @@ async def edit_admin_drop(
     db=Depends(get_database),
 ):
     text = data.confession.strip()
-    if not text:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text cannot be empty")
     if len(text) > 1800:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text must be 1800 characters or fewer")
 
@@ -513,20 +514,33 @@ async def edit_admin_drop(
     except Exception:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid drop ID")
 
-    drop = await db["drops"].find_one({"_id": oid}, {"is_admin_drop": 1, "sender_id": 1, "location_detail": 1})
+    drop = await db["drops"].find_one({"_id": oid}, {"is_admin_drop": 1, "sender_id": 1, "location_detail": 1, "media_url": 1, "media_type": 1})
     if not drop:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Drop not found")
     if not drop.get("is_admin_drop"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only posts made by admins can be edited")
+    if not text and not drop.get("media_url"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text cannot be empty")
+
+    extra: dict = {}
+    if data.video_edit is not None:
+        if drop.get("media_type") != "video":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only videos take text over them")
+        from app.api.v1.drops import VideoEditInput, clean_video_edit
+        try:
+            edit = VideoEditInput(**data.video_edit)
+        except Exception:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid video edit")
+        extra["video_edit"] = clean_video_edit(edit)
 
     await db["drops"].update_one(
         {"_id": oid},
-        {"$set": {"confession": text, "edited_at": _now(), "edited_by": admin_id,
+        {"$set": {"confession": text or None, "edited_at": _now(), "edited_by": admin_id, **extra,
                   **(await country_changes(db, drop, data.location_country) if data.location_country is not None else {})}},
     )
     await audit(db, admin_id, "drop.edit", "drop", drop_id)
     country = data.location_country.strip() or None if data.location_country is not None else drop_country(drop)
-    return {"drop_id": drop_id, "confession": text, "country": country}
+    return {"drop_id": drop_id, "confession": text, "country": country, "video_edit": extra.get("video_edit")}
 
 
 class PromoteRequest(BaseModel):

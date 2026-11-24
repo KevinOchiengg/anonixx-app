@@ -9,9 +9,32 @@ import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
 import { apiFetch, AdminHeader, a } from './adminShared';
 import LocationField from '../../components/drops/LocationField';
+import VideoEditorModal from '../../components/compose/VideoEditorModal';
+import { defaultEdit } from '../../utils/videoEdit';
+import { useVideoPlayer } from 'expo-video';
 
 // Must match DROP_SORTS in Backend/app/api/v1/admin.py.
 const SORTS = [['recent', 'Newest'], ['views', 'Most viewed'], ['likes', 'Most liked'], ['comments', 'Most discussed'], ['engagement', 'Best engagement']];
+
+const PROMO_HOURS = [[6, '6h'], [24, '1 day'], [72, '3 days'], [168, '7 days']];
+
+const editFor = (post) => ({
+  id: post.id, text: post.confession_full ?? post.confession ?? '', country: post.country || '',
+  vedit: post.video_edit || null, touched: false,
+});
+
+// Length of a video the list doesn't know yet, read once it loads.
+function DurationProbe({ uri, onLength }) {
+  const player = useVideoPlayer({ uri });
+  useEffect(() => {
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'readyToPlay' && player.duration) onLength(player.duration);
+      if (status === 'error') onLength(-1);
+    });
+    return () => sub.remove();
+  }, [player, onLength]);
+  return null;
+}
 
 function Stat({ n, label, hot }) {
   return (
@@ -21,7 +44,7 @@ function Stat({ n, label, hot }) {
   );
 }
 
-const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving }) => (
+const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText }) => (
   <View style={a.card}>
     <Text style={a.cardMeta}>
       {item.is_admin_drop ? 'Anonixx' : (item.author || 'Anonymous')}
@@ -52,6 +75,47 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
       </View>
     )}
     <Text style={a.cardMeta}>{item.created_at ? new Date(item.created_at).toLocaleString() : ''}</Text>
+    {editing != null && promoting ? (
+      <View style={st.promo}>
+        <View style={st.promoRow}>
+          {[['pin', 'Pin to top'], ['boost', 'Boost']].map(([k, l]) => (
+            <TouchableOpacity key={k} onPress={() => onPromoting({ ...promoting, kind: k })} style={[st.sortChip, promoting.kind === k && st.sortChipOn]} activeOpacity={0.8}>
+              <Text style={[st.sortText, promoting.kind === k && st.sortTextOn]}>{l}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={st.promoRow}>
+          {PROMO_HOURS.map(([h, l]) => (
+            <TouchableOpacity key={h} onPress={() => onPromoting({ ...promoting, hours: h })} style={[st.sortChip, promoting.hours === h && st.sortChipOn]} activeOpacity={0.8}>
+              <Text style={[st.sortText, promoting.hours === h && st.sortTextOn]}>{l}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={st.promoRow}>
+          <TouchableOpacity style={a.btn} onPress={() => onPromoting(null)} activeOpacity={0.85}>
+            <Text style={a.btnText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={a.btn} onPress={() => onPromote(item, promoting)} disabled={saving} activeOpacity={0.85}>
+            <Text style={[a.btnText, { color: T.primary }]}>Start</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    ) : null}
+    {editing != null ? (
+      <View style={a.actionRow}>
+        {item.media_type === 'video' && item.media_url ? (
+          <TouchableOpacity style={a.btn} onPress={() => onVideoText(item)} disabled={saving} activeOpacity={0.85}>
+            <Text style={a.btnText}>Text over video</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          style={a.btn} disabled={saving} activeOpacity={0.85}
+          onPress={() => (item.promo_kind ? onPromote(item, null) : onPromoting({ kind: 'pin', hours: 24 }))}
+        >
+          <Text style={a.btnText}>{item.promo_kind ? `Stop ${item.promo_kind}` : 'Pin / boost'}</Text>
+        </TouchableOpacity>
+      </View>
+    ) : null}
     <View style={a.actionRow}>
       {editing != null ? (
         <>
@@ -61,7 +125,7 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
           <TouchableOpacity style={a.btn} onPress={onCancel} activeOpacity={0.85}>
             <Text style={a.btnText}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={a.btn} onPress={onSave} disabled={saving || !editing.trim()} activeOpacity={0.85}>
+          <TouchableOpacity style={a.btn} onPress={onSave} disabled={saving || (!editing.trim() && !item.media_url)} activeOpacity={0.85}>
             <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/1800`}</Text>
           </TouchableOpacity>
         </>
@@ -90,8 +154,10 @@ export default function AdminPostsScreen({ navigation, route }) {
   const [sort, setSort]       = useState('recent');
   // From the pencil on a drop in the feed: just that drop, open for editing.
   const [only, setOnly]       = useState(route?.params?.editId || null);
-  const [editing, setEditing] = useState(null); // { id, text }
+  const [editing, setEditing] = useState(null); // { id, text, country, vedit, touched }
   const [saving, setSaving]   = useState(false);
+  const [promoting, setPromoting] = useState(null); // { kind, hours }
+  const [videoFor, setVideoFor] = useState(null);   // { post, duration }
   const timer = useRef(null);
 
   // Pages of 50; more load as you scroll to the bottom.
@@ -108,7 +174,7 @@ export default function AdminPostsScreen({ navigation, route }) {
       if (ok) {
         setPosts(data.drops || []); setTotal(data.total || 0);
         const hit = only ? (data.drops || []).find((p) => p.id === only) : null;
-        if (hit?.is_admin_drop) setEditing((e) => e || { id: hit.id, text: hit.confession_full ?? hit.confession ?? '', country: hit.country || '' });
+        if (hit?.is_admin_drop) setEditing((e) => e || editFor(hit));
       }
     } catch {
       showToast({ type: 'error', message: 'Could not load posts.' });
@@ -150,17 +216,29 @@ export default function AdminPostsScreen({ navigation, route }) {
     }
   }, [showToast, only, navigation]);
 
-  const startEdit = useCallback((post) => setEditing({ id: post.id, text: post.confession_full ?? post.confession ?? '', country: post.country || '' }), []);
+  const startEdit = useCallback((post) => { setPromoting(null); setEditing(editFor(post)); }, []);
   const changeCountry = useCallback((country) => setEditing((e) => (e ? { ...e, country } : e)), []);
   const changeEdit = useCallback((text) => setEditing((e) => (e ? { ...e, text } : e)), []);
-  const cancelEdit = useCallback(() => setEditing(null), []);
+  const cancelEdit = useCallback(() => { setEditing(null); setPromoting(null); }, []);
   const saveEdit = useCallback(async () => {
-    if (!editing?.text.trim()) return;
+    if (!editing) return;
+    const post = posts.find((p) => p.id === editing.id);
+    if (!editing.text.trim() && !post?.media_url) return;
     setSaving(true);
-    const { ok, data } = await apiFetch(`/admin/drops/${editing.id}`, { method: 'PATCH', body: { confession: editing.text.trim(), location_country: editing.country || '' } });
+    const { ok, data } = await apiFetch(`/admin/drops/${editing.id}`, {
+      method: 'PATCH',
+      body: {
+        confession: editing.text.trim(),
+        location_country: editing.country || '',
+        ...(editing.touched && editing.vedit ? { video_edit: editing.vedit } : {}),
+      },
+    });
     setSaving(false);
     if (ok) {
-      setPosts((prev) => prev.map((p) => (p.id === editing.id ? { ...p, confession: data.confession, confession_full: data.confession, country: data.country } : p)));
+      setPosts((prev) => prev.map((p) => (p.id === editing.id ? {
+        ...p, confession: data.confession, confession_full: data.confession, country: data.country,
+        ...(editing.touched ? { video_edit: data.video_edit } : {}),
+      } : p)));
       setEditing(null);
       showToast({ type: 'success', message: 'Drop updated.' });
       // From the feed's pencil: straight back to the drop.
@@ -168,7 +246,34 @@ export default function AdminPostsScreen({ navigation, route }) {
     } else {
       showToast({ type: 'error', message: data?.detail || 'Could not save.' });
     }
-  }, [editing, showToast, only, navigation]);
+  }, [editing, posts, showToast, only, navigation]);
+
+  const promote = useCallback(async (post, choice) => {
+    setSaving(true);
+    const { ok, data } = await apiFetch(`/admin/drops/${post.id}/promote`, choice ? { method: 'PATCH', body: choice } : { method: 'DELETE' });
+    setSaving(false);
+    if (ok) {
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, promo_kind: data.promo_kind, promo_until: data.promo_until || null } : p)));
+      setPromoting(null);
+      showToast({ type: 'success', message: choice ? (choice.kind === 'pin' ? 'Pinned.' : 'Boosted.') : 'Stopped.' });
+    } else {
+      showToast({ type: 'error', message: data?.detail || 'Could not update.' });
+    }
+  }, [showToast]);
+
+  const openVideoText = useCallback((post) => setVideoFor({ post, duration: post.duration_seconds || 0 }), []);
+  const gotLength = useCallback((len) => {
+    if (len < 0) {
+      setVideoFor(null);
+      showToast({ type: 'error', message: "This video can't be previewed here." });
+      return;
+    }
+    setVideoFor((v) => (v ? { ...v, duration: len } : v));
+  }, [showToast]);
+  const videoDone = useCallback(({ edit }) => {
+    setEditing((e) => (e ? { ...e, vedit: edit, touched: true } : e));
+    setVideoFor(null);
+  }, []);
 
   const confirmDelete = useCallback((post) => {
     Alert.alert('Delete this post?', 'This removes it for everyone and can\'t be undone.', [
@@ -221,14 +326,28 @@ export default function AdminPostsScreen({ navigation, route }) {
               editing={editing?.id === item.id ? editing.text : null}
               country={editing?.id === item.id ? editing.country : ''} onCountry={changeCountry}
               onChangeText={changeEdit} onSave={saveEdit} onCancel={cancelEdit} saving={saving}
+              promoting={editing?.id === item.id ? promoting : null} onPromoting={setPromoting}
+              onPromote={promote} onVideoText={openVideoText}
             />
           )}
-          extraData={editing}
+          extraData={[editing, promoting, saving]}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={a.listContent}
           ListEmptyComponent={<Text style={a.emptyText}>No posts found.</Text>}
         />
       )}
+      {videoFor && !videoFor.duration ? <DurationProbe uri={videoFor.post.media_url} onLength={gotLength} /> : null}
+      {videoFor && videoFor.duration ? (
+        <VideoEditorModal
+          visible
+          uri={videoFor.post.media_url}
+          duration={videoFor.duration}
+          landscape={false}
+          value={(editing?.id === videoFor.post.id && editing.vedit) || defaultEdit(videoFor.duration)}
+          onClose={() => setVideoFor(null)}
+          onDone={videoDone}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -248,4 +367,6 @@ const st = StyleSheet.create({
   sortChipOn: { borderColor: T.primary, backgroundColor: T.primaryDim },
   sortText: { fontSize: rf(12), fontWeight: '700', color: T.textSecondary },
   sortTextOn: { color: T.text },
+  promo: { gap: rp(8), marginTop: rp(4) },
+  promoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
 });

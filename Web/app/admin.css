@@ -292,3 +292,4 @@
 .adm-more .adm-input { flex: 1 1 180px; min-width: 0; }
 .adm-open { display: inline-flex; vertical-align: middle; margin-left: 6px; color: var(--muted); }
 .adm-open:hover { color: var(--rose); }
+.adm-vtext { display: grid; gap: 6px; margin: 8px 0; }
