@@ -2,6 +2,7 @@
 approve or reject content drafts. Approving schedules the drop and marks the draft;
 the decision is saved first so a draft is never scheduled twice."""
 import base64
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -12,7 +13,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.database import get_database
-from app.dependencies import require_scope
+from app.dependencies import require_scope, require_super_admin
 from app.utils.audit import audit
 
 router = APIRouter(prefix="/admin/agents", tags=["Agent hub"])
@@ -25,6 +26,24 @@ FOLDERS = {
     "seo": "SEO manager", "revenue": "Revenue manager", "tiktok": "TikTok manager", "marketing": "Marketing manager",
     "product": "Product manager",
 }
+
+
+CONTROL_PATH = "reports/control.json"
+
+# Scheduled agents and when they run (UTC, 0 = Sunday). The routines read CONTROL_PATH first and stop if paused.
+TEAM = [
+    {"key": "growth-hacker", "name": "Growth hacker", "folder": "growth", "days": [0, 1, 2, 3, 4, 5, 6], "hour": 10, "minute": 40},
+    {"key": "researcher", "name": "Researcher", "folder": "research", "days": [1], "hour": 5, "minute": 0},
+    {"key": "content-scout", "name": "Content scout", "folder": "content/queue", "days": [2], "hour": 5, "minute": 0},
+    {"key": "seo-manager", "name": "SEO manager", "folder": "seo", "days": [3], "hour": 5, "minute": 0},
+    {"key": "revenue-manager", "name": "Revenue manager", "folder": "revenue", "days": [5], "hour": 5, "minute": 0},
+    {"key": "tiktok-manager", "name": "TikTok manager", "folder": "tiktok", "days": [5], "hour": 5, "minute": 0},
+    {"key": "chief-of-staff", "name": "Chief of staff", "folder": "weekly", "days": [0], "hour": 5, "minute": 0},
+    {"key": "marketing-manager", "name": "Marketing manager", "folder": "marketing", "days": [], "hour": 0, "minute": 0},
+    {"key": "product-manager", "name": "Product manager", "folder": "product", "days": [], "hour": 0, "minute": 0},
+    {"key": "posting-manager", "name": "Posting manager", "folder": "content/posted", "days": [], "hour": 0, "minute": 0},
+]
+TEAM_KEYS = {a["key"] for a in TEAM}
 
 
 def _configured() -> bool:
@@ -51,6 +70,32 @@ async def _gh(method: str, url: str, **kw) -> dict:
 async def _read(path: str) -> tuple[str, str]:
     data = await _gh("GET", f"/repos/{settings.GITHUB_REPO}/contents/{path}", params={"ref": settings.GITHUB_BRANCH})
     return base64.b64decode(data["content"]).decode("utf-8"), data["sha"]
+
+
+async def _control() -> tuple[dict, Optional[str]]:
+    try:
+        text, sha = await _read(CONTROL_PATH)
+    except HTTPException as e:
+        if e.status_code == 404:
+            return {"agents": {}}, None
+        raise
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = {}
+    if not isinstance(data.get("agents"), dict):
+        data["agents"] = {}
+    return data, sha
+
+
+def _team(files: list[str], control: dict) -> list[dict]:
+    out = []
+    for a in TEAM:
+        mine = [f for f in files if f.startswith(f"reports/{a['folder']}")]
+        state = control["agents"].get(a["key"]) or {}
+        out.append({**a, "scheduled": bool(a["days"]), "paused": bool(state.get("paused")),
+                    "paused_at": state.get("at"), "latest": mine[0] if mine else None, "reports": len(mine)})
+    return out
 
 
 def _check_path(path: str) -> str:
@@ -129,8 +174,33 @@ async def overview(admin_id: str = Depends(require_scope("content")), db=Depends
             drafts.append({**d, "path": path})
     pending = [d for d in drafts if d["status"] == "draft"]
     recent = [d for d in drafts if d["status"] != "draft"][:20]
+    control, _ = await _control()
     return {"configured": True, "repo": settings.GITHUB_REPO, "agents": agents, "drafts": pending, "decided": recent,
-            "other": [f for f in files if f.count("/") == 1][:10]}
+            "team": _team(files, control), "other": [f for f in files if f.count("/") == 1][:10]}
+
+
+class PauseRequest(BaseModel):
+    paused: bool
+
+
+@router.put("/{key}/pause", summary="Pause or resume a scheduled agent (super admin)")
+async def pause_agent(key: str, body: PauseRequest, admin_id: str = Depends(require_super_admin), db=Depends(get_database)):
+    if not _configured():
+        raise HTTPException(503, "Connect GitHub first (GITHUB_TOKEN).")
+    if key not in TEAM_KEYS:
+        raise HTTPException(404, "Unknown agent")
+    control, sha = await _control()
+    control["agents"][key] = {"paused": body.paused, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    payload = {
+        "message": f"chore(agents): {'pause' if body.paused else 'resume'} {key} from the admin dashboard",
+        "content": base64.b64encode((json.dumps(control, indent=2) + "\n").encode("utf-8")).decode(),
+        "branch": settings.GITHUB_BRANCH,
+    }
+    if sha:
+        payload["sha"] = sha
+    await _gh("PUT", f"/repos/{settings.GITHUB_REPO}/contents/{CONTROL_PATH}", json=payload)
+    await audit(db, admin_id, "agent.pause" if body.paused else "agent.resume", "agent", key)
+    return {"key": key, "paused": body.paused}
 
 
 @router.get("/file", summary="One report's text")

@@ -1,0 +1,34 @@
+{
+  "agents": {
+    "growth-hacker": {
+      "paused": false
+    },
+    "researcher": {
+      "paused": false
+    },
+    "content-scout": {
+      "paused": false
+    },
+    "seo-manager": {
+      "paused": false
+    },
+    "revenue-manager": {
+      "paused": false
+    },
+    "tiktok-manager": {
+      "paused": false
+    },
+    "chief-of-staff": {
+      "paused": false
+    },
+    "marketing-manager": {
+      "paused": false
+    },
+    "product-manager": {
+      "paused": false
+    },
+    "posting-manager": {
+      "paused": false
+    }
+  }
+}

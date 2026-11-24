@@ -27,6 +27,7 @@ North-star numbers: new signups, % posting within 24h, link up accept rate, 7-da
 ```
 reports/
   TEAM.md                 this file
+  control.json            pause switches set from the admin dashboard; scheduled agents check it first and stop if paused
   research/YYYY-MM-DD.md  researcher
   content/queue/YYYY-MM-DD.md  content scout drafts (status: draft | approved | scheduled | rejected)
   content/posted.md       posting manager's log
