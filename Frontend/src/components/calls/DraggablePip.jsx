@@ -3,24 +3,22 @@ import { Animated, PanResponder, StyleSheet, View } from 'react-native';
 
 const MARGIN = 12;
 
-/** A small video you can drag anywhere over the call. It settles in the nearest corner, and a
- * tap (no drag) calls onTap. Moves by left/top so Android video surfaces follow it. */
-export default function DraggablePip({ area, width, height, onTap, style, children, top = 0, bottom = 0 }) {
+/** One person's video in a 1-to-1 call. Full screen (mini=false) or the small video you can drag
+ * anywhere; it settles in the nearest corner. The same view is kept when you swap, so the video
+ * never reloads. A tap calls onTap (mini) or onMainTap (full screen). */
+export default function DraggablePip({
+  area, width, height, mini = true, onTap, onMainTap, style, children, top = 0, bottom = 0,
+}) {
   const pos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const at = useRef({ x: 0, y: 0 });
   const corner = useRef(3);
-  const areaRef = useRef(area);
-  const tapRef = useRef(onTap);
-  const insetRef = useRef({ top, bottom });
-  areaRef.current = area;
-  tapRef.current = onTap;
-  insetRef.current = { top, bottom };
+  const live = useRef({});
+  live.current = { area, mini, onTap, onMainTap, top, bottom };
 
   const settle = (i, animate = true) => {
-    const a = areaRef.current;
+    const { area: a, top: t, bottom: b } = live.current;
     if (!a) return;
     const x = i % 2 ? a.w - width - MARGIN : MARGIN;
-    const { top: t, bottom: b } = insetRef.current;
     const y = i > 1 ? a.h - height - MARGIN - b : MARGIN + t;
     corner.current = i;
     at.current = { x, y };
@@ -28,31 +26,42 @@ export default function DraggablePip({ area, width, height, onTap, style, childr
     else pos.setValue({ x, y });
   };
 
-  useEffect(() => { settle(corner.current, false); }, [area?.w, area?.h]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { settle(corner.current); }, [top, bottom]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (mini) settle(corner.current, false); }, [mini, area?.w, area?.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (mini) settle(corner.current); }, [top, bottom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderTerminationRequest: () => false,
-    onPanResponderMove: (_e, g) => pos.setValue({ x: at.current.x + g.dx, y: at.current.y + g.dy }),
+    onMoveShouldSetPanResponder: () => live.current.mini,
+    onPanResponderTerminationRequest: () => !live.current.mini,
+    onPanResponderMove: (_e, g) => {
+      if (live.current.mini) pos.setValue({ x: at.current.x + g.dx, y: at.current.y + g.dy });
+    },
     onPanResponderRelease: (_e, g) => {
-      if (Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6) {
-        settle(corner.current);
-        tapRef.current?.();
+      const tap = Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6;
+      if (!live.current.mini) {
+        if (tap) live.current.onMainTap?.();
         return;
       }
-      const a = areaRef.current;
+      if (tap) {
+        settle(corner.current);
+        live.current.onTap?.();
+        return;
+      }
+      const a = live.current.area;
       const cx = at.current.x + g.dx + g.vx * 160 + width / 2;
       const cy = at.current.y + g.dy + g.vy * 160 + height / 2;
       settle((cx > a.w / 2 ? 1 : 0) + (cy > a.h / 2 ? 2 : 0));
     },
-    onPanResponderTerminate: () => settle(corner.current),
+    onPanResponderTerminate: () => { if (live.current.mini) settle(corner.current); },
   })).current;
 
-  if (!area) return null;
   return (
-    <Animated.View {...pan.panHandlers} style={[styles.pip, style, { width, height, left: pos.x, top: pos.y }]}>
+    <Animated.View
+      {...pan.panHandlers}
+      style={mini
+        ? [styles.pip, style, { width, height, left: pos.x, top: pos.y }, !area && styles.hidden]
+        : [StyleSheet.absoluteFill, styles.main]}
+    >
       <View style={StyleSheet.absoluteFill} pointerEvents="none">{children}</View>
     </Animated.View>
   );
@@ -60,4 +69,6 @@ export default function DraggablePip({ area, width, height, onTap, style, childr
 
 const styles = StyleSheet.create({
   pip: { position: 'absolute', zIndex: 3 },
+  main: { zIndex: 0 },
+  hidden: { opacity: 0 },
 });

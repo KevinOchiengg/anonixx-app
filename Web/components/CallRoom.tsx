@@ -89,7 +89,7 @@ const REACTIONS = ["❤️", "😂", "😮", "😢", "🔥", "👏"];
 const PIP_MARGIN = 12;
 
 /** The small video: drag it anywhere over the call and it settles in the nearest corner. A tap swaps. */
-function DragPip({ onTap, label, children, top = 0, bottom = 0 }: { onTap: () => void; label: string; children: ReactNode; top?: number; bottom?: number }) {
+function DragPip({ onTap, onMainTap, mini = true, label, children, top = 0, bottom = 0 }: { onTap: () => void; onMainTap?: () => void; mini?: boolean; label: string; children: ReactNode; top?: number; bottom?: number }) {
   const ref = useRef<HTMLButtonElement>(null);
   const corner = useRef(3);
   const start = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null);
@@ -108,7 +108,7 @@ function DragPip({ onTap, label, children, top = 0, bottom = 0 }: { onTap: () =>
       y: i > 1 ? box.clientHeight - el.offsetHeight - PIP_MARGIN - inset.current.bottom : PIP_MARGIN + inset.current.top,
     });
   }, []);
-  useEffect(() => { place(corner.current); }, [top, bottom, place]);
+  useEffect(() => { if (mini) place(corner.current); }, [top, bottom, mini, place]);
 
   useLayoutEffect(() => {
     place(corner.current);
@@ -120,7 +120,7 @@ function DragPip({ onTap, label, children, top = 0, bottom = 0 }: { onTap: () =>
   }, [place]);
 
   function down(e: React.PointerEvent<HTMLButtonElement>) {
-    if (!pos) return;
+    if (!mini || !pos) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     start.current = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y, moved: false };
   }
@@ -148,6 +148,13 @@ function DragPip({ onTap, label, children, top = 0, bottom = 0 }: { onTap: () =>
     place((cx > box.clientWidth / 2 ? 1 : 0) + (cy > box.clientHeight / 2 ? 2 : 0));
   }
 
+  if (!mini) {
+    return (
+      <button ref={ref} type="button" className="cr-main" onClick={onMainTap} aria-label="Show or hide controls">
+        {children}
+      </button>
+    );
+  }
   return (
     <button
       ref={ref}
@@ -713,16 +720,23 @@ function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: (
         </div>
       ) : main ? (
         <div className="cr-focus">
-          <button type="button" className="cr-main" onClick={onMain} aria-label={direct ? "Show or hide controls" : "Back to everyone"}>
-            <Tile key={`main-${main.key}`} {...tp(main)} />
-          </button>
           {direct ? (
-            side[0] ? (
-              <DragPip onTap={() => setFocusKey(side[0].key)} label="Drag to move, tap to swap videos" top={hidden ? 16 : 76} bottom={hidden ? 16 : 132}>
-                <Tile key={`pip-${side[0].key}`} {...tp(side[0])} />
+            // Each person keeps one video element; swapping only moves it, so there is never a second copy.
+            tiles.map((t) => (
+              <DragPip
+                key={t.key}
+                mini={t.key !== main.key}
+                onTap={() => setFocusKey(t.key)} onMainTap={onMain}
+                label="Drag to move, tap to swap videos" top={hidden ? 16 : 76} bottom={hidden ? 16 : 132}
+              >
+                <Tile {...tp(t)} />
               </DragPip>
-            ) : null
+            ))
           ) : (
+            <>
+            <button type="button" className="cr-main" onClick={onMain} aria-label="Back to everyone">
+              <Tile key={`main-${main.key}`} {...tp(main)} />
+            </button>
             <div className="cr-strip">
               {side.map((t) => (
                 <button key={t.key} type="button" className="cr-mini" onClick={() => setFocusKey(t.key)} aria-label={`Show ${t.label} full screen`}>
@@ -730,6 +744,7 @@ function CallRoomInner({ info, onClose, onRedial }: { info: CallInfo; onClose: (
                 </button>
               ))}
             </div>
+            </>
           )}
         </div>
       ) : (

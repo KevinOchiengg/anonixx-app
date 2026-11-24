@@ -747,20 +747,28 @@ export default function DropCallScreen({ route, navigation }) {
         </View>
       ) : mainTile ? (
         <View style={[styles.focusWrap, immersive && StyleSheet.absoluteFill]} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onMainPress} accessibilityLabel={direct ? 'Show or hide controls' : 'Back to everyone'}>
-            <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} bare={fullVideo} />
-          </Pressable>
           {direct ? (
-            sideTiles[0] ? (
-              <DraggablePip
-                area={area} width={rs(104)} height={rs(148)} onTap={() => setFocusKey(sideTiles[0].key)} style={styles.pip}
-                top={immersive ? (showChrome ? topH : insets.top) : 0}
-                bottom={immersive ? (showChrome ? bottomH : insets.bottom) : 0}
-              >
-                <VideoTile key={`pip-${sideTiles[0].key}`} {...tileProps(sideTiles[0])} style={styles.pipTile} overlay small />
-              </DraggablePip>
-            ) : null
+            // Each person keeps one video view; swapping only moves it, so there is never a second copy.
+            tiles.map((t) => {
+              const isMain = t.key === mainKey;
+              return (
+                <DraggablePip
+                  key={t.key}
+                  mini={!isMain}
+                  area={area} width={rs(104)} height={rs(148)} style={styles.pip}
+                  onTap={() => setFocusKey(t.key)} onMainTap={onMainPress}
+                  top={immersive ? (showChrome ? topH : insets.top) : 0}
+                  bottom={immersive ? (showChrome ? bottomH : insets.bottom) : 0}
+                >
+                  <VideoTile {...tileProps(t)} style={isMain ? styles.mainTile : styles.pipTile} overlay={!isMain} small={!isMain} bare={isMain && fullVideo} />
+                </DraggablePip>
+              );
+            })
           ) : (
+            <>
+            <Pressable style={StyleSheet.absoluteFill} onPress={onMainPress} accessibilityLabel="Back to everyone">
+              <VideoTile key={`main-${mainTile.key}`} {...tileProps(mainTile)} style={styles.mainTile} />
+            </Pressable>
             <ScrollView horizontal style={styles.strip} contentContainerStyle={styles.stripIn} showsHorizontalScrollIndicator={false}>
               {sideTiles.map((t) => (
                 <Pressable key={t.key} onPress={() => setFocusKey(t.key)} accessibilityLabel="Show full screen">
@@ -768,6 +776,7 @@ export default function DropCallScreen({ route, navigation }) {
                 </Pressable>
               ))}
             </ScrollView>
+            </>
           )}
         </View>
       ) : (
