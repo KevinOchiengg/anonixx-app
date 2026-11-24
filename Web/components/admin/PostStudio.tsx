@@ -59,7 +59,7 @@ export default function PostStudio() {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
   const [mature, setMature] = useState(false);
-  const [share, setShare] = useState(true);
+  const [share, setShare] = useState(false);
   const [place, setPlace] = useState("");
   const [busy, setBusy] = useState("");
   const [noPreview, setNoPreview] = useState(false);

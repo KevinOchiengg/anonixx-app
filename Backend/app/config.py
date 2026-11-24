@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = "Anonixx <noreply@anonixx.com>"
 
     # ── SOCIAL PUBLISHER ──────────────────────────────────────────
+    # Minutes between social posts, so a big batch goes out spread over time.
+    SOCIAL_POST_GAP_MINUTES: int = 30
+
     # TikTok access token (scopes: video.publish, video.upload)
     TIKTOK_ACCESS_TOKEN: str = "your-tiktok-access-token-here"
 

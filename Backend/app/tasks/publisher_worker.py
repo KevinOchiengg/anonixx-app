@@ -62,10 +62,21 @@ class PublisherWorker:
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     # ── Batch (also exposed to /publisher/trigger) ────────────────
-    async def process_batch(self):
-        """Dispatch up to BATCH_SIZE queued drops, each as its own task."""
+    async def process_batch(self, force: bool = False):
+        """Dispatch queued drops. One per SOCIAL_POST_GAP_MINUTES unless forced, so a
+        batch upload doesn't flood the official accounts."""
         db  = await get_database()
         now = _now()
+        gap = max(0, settings.SOCIAL_POST_GAP_MINUTES)
+        limit = BATCH_SIZE if force or gap == 0 else 1
+
+        if limit == 1:
+            recent = await db["publisher_queue"].find_one(
+                {"processing_started_at": {"$gte": now - timedelta(minutes=gap)}},
+                {"_id": 1},
+            )
+            if recent:
+                return
 
         entries = await (
             db["publisher_queue"]
@@ -80,8 +91,8 @@ class PublisherWorker:
                 ]
             })
             .sort("submitted_at", 1)
-            .limit(BATCH_SIZE)
-            .to_list(length=BATCH_SIZE)
+            .limit(limit)
+            .to_list(length=limit)
         )
 
         if not entries:

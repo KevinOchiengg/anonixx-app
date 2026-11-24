@@ -37,6 +37,17 @@ function markDone(key: string) {
     done[key] = new Date().toISOString();
     localStorage.setItem(DONE_KEY, JSON.stringify(done));
   } catch { /* storage full or blocked */ }
+  api("/admin/bulk/mark", { body: { keys: [key] } }).catch(() => {});
+}
+
+async function postedOnServer(keys: string[]): Promise<Set<string>> {
+  if (!keys.length) return new Set();
+  try {
+    const r = await api<{ posted: string[] }>("/admin/bulk/posted", { body: { keys } });
+    return new Set(r.posted);
+  } catch {
+    return new Set();
+  }
 }
 
 function fmtDuration(sec: number) {
@@ -49,11 +60,12 @@ function fmtDuration(sec: number) {
 export default function BulkVideos({ initial, onClose }: { initial: File[]; onClose: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
-  const [share, setShare] = useState(true);
+  const [share, setShare] = useState(false);
   const [mature, setMature] = useState(false);
   const [running, setRunning] = useState(false);
   const [skipped, setSkipped] = useState("");
   const [startedAt, setStartedAt] = useState(0);
+  const [checking, setChecking] = useState(true);
   const queue = useRef<Item[]>([]);
   const runningRef = useRef(false);
   const active = useRef(0);
@@ -64,24 +76,28 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
   useEffect(() => {
     if (seeded.current) return;
     seeded.current = true;
-    const done = readDone();
-    let posted = 0;
-    let big = 0;
-    const list: Item[] = [];
-    for (const f of initial) {
-      if (!isVideoFile(f)) continue;
-      const key = fileKey(f);
-      if (done[key]) { posted++; continue; }
-      if (f.size > MAX_VID_MB * 1024 * 1024) { big++; continue; }
-      list.push({ key, file: f, status: "waiting", pct: 0, error: "", tries: 0 });
-    }
-    list.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true }));
-    const parts = [];
-    if (posted) parts.push(`${posted} already posted`);
-    if (big) parts.push(`${big} over ${MAX_VID_MB}MB`);
-    setSkipped(parts.length ? `Skipped ${parts.join(" and ")}.` : "");
-    queue.current = list;
-    setItems(list);
+    void (async () => {
+      const videos = initial.filter(isVideoFile);
+      const local = readDone();
+      const server = await postedOnServer(videos.map(fileKey));
+      let posted = 0;
+      let big = 0;
+      const list: Item[] = [];
+      for (const f of videos) {
+        const key = fileKey(f);
+        if (local[key] || server.has(key)) { posted++; continue; }
+        if (f.size > MAX_VID_MB * 1024 * 1024) { big++; continue; }
+        list.push({ key, file: f, status: "waiting", pct: 0, error: "", tries: 0 });
+      }
+      list.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true }));
+      const parts = [];
+      if (posted) parts.push(`${posted} already posted`);
+      if (big) parts.push(`${big} over ${MAX_VID_MB}MB`);
+      setSkipped(parts.length ? `Skipped ${parts.join(" and ")}.` : "");
+      queue.current = list;
+      setItems(list);
+      setChecking(false);
+    })();
   }, [initial]);
 
   useEffect(() => {
@@ -255,14 +271,14 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
             {started ? <div className="bk-bar"><i style={{ width: `${pct}%` }} /></div> : null}
           </>
         ) : (
-          <b>No new videos in that folder.</b>
+          <b>{checking ? "Checking the folder…" : "No new videos in that folder."}</b>
         )}
         {skipped ? <p className="bk-note">{skipped}</p> : null}
 
         {!started && total ? (
           <>
             <label className="ps-switch">
-              <span><b>Share to Anonixx socials</b><small>Eligible for our official accounts.</small></span>
+              <span><b>Share to Anonixx socials</b><small>Goes out to our official accounts a few at a time. Leave off for explicit videos.</small></span>
               <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} />
             </label>
             <label className="ps-switch">

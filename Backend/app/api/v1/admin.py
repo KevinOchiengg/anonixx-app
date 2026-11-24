@@ -622,6 +622,27 @@ def _scheduled_out(s: dict) -> dict:
     }
 
 
+class BulkKeys(BaseModel):
+    keys: list[str]
+
+
+@router.post("/bulk/posted", summary="Which folder files were already posted")
+async def bulk_posted(data: BulkKeys, _: str = Depends(require_scope("content")), db=Depends(get_database)):
+    keys = [k[:300] for k in data.keys[:5000]]
+    found = await db["bulk_posted"].find({"_id": {"$in": keys}}, {"_id": 1}).to_list(length=len(keys))
+    return {"posted": [d["_id"] for d in found]}
+
+
+@router.post("/bulk/mark", summary="Remember folder files as posted")
+async def bulk_mark(data: BulkKeys, admin_id: str = Depends(require_scope("content")), db=Depends(get_database)):
+    now = _now()
+    for k in data.keys[:100]:
+        await db["bulk_posted"].update_one(
+            {"_id": k[:300]}, {"$setOnInsert": {"at": now, "by": admin_id}}, upsert=True,
+        )
+    return {"ok": True}
+
+
 @router.post("/scheduled", summary="Schedule an admin drop to publish later")
 async def schedule_drop(
     data:     ScheduleRequest,
