@@ -1,6 +1,6 @@
 // Admin dashboard icons. Lucide at stroke 2, the same family as the app and the rest of the site.
 import {
-  Activity, Bell, Bot, DoorOpen, Check, Coins, Eye, FileText, LayoutDashboard, List, Megaphone, Menu,
+  Activity, Bell, Bot, Captions, DoorOpen, Check, Coins, Eye, FileText, LayoutDashboard, List, Megaphone, Menu,
   MessagesSquare, Music, Radio, RotateCcw, ShieldCheck, SquarePlus, TrendingUp, Users, X,
 } from "lucide-react";
 
@@ -15,6 +15,7 @@ export const IcRefund = () => <RotateCcw {...P} />;
 export const IcChat = () => <MessagesSquare {...P} />;
 export const IcMegaphone = () => <Megaphone {...P} />;
 export const IcMusic = () => <Music {...P} />;
+export const IcCaptions = () => <Captions {...P} />;
 export const IcMenu = () => <Menu {...P} />;
 export const IcBell = () => <Bell {...P} />;
 export const IcClose = () => <X {...P} />;

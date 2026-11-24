@@ -122,7 +122,10 @@ class PublisherWorker:
         # Never post link-up or mature drops, even ones queued before this rule.
         from bson import ObjectId
         try:
-            drop = await db["drops"].find_one({"_id": ObjectId(entry.get("drop_id"))}, {"kind": 1, "sensitivity": 1})
+            drop = await db["drops"].find_one(
+                {"_id": ObjectId(entry.get("drop_id"))},
+                {"kind": 1, "sensitivity": 1, "confession": 1, "is_admin_drop": 1},
+            )
         except Exception:
             drop = None
         if not drop or not socials_safe(drop):
@@ -130,6 +133,13 @@ class PublisherWorker:
                 {"_id": eid}, {"$set": {"status": "skipped", "error": "link up / 18+ or deleted: stays on Anonixx", "processed_at": _now()}},
             )
             return
+
+        if drop.get("is_admin_drop") and not drop.get("confession"):
+            from app.utils.auto_caption import fill, is_on
+            if await is_on(db):
+                drop["confession"] = await fill(db, drop)
+        if drop.get("confession"):
+            entry["confession"] = drop["confession"]
 
         try:
             platform_results, platform_errors = await self._dispatch_all(entry)

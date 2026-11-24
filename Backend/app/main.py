@@ -13,6 +13,7 @@ import app.websockets.events  # noqa: F401 — registers all @sio.event handlers
 from app.api.v1 import geo_pricing, market
 from app.api.v1 import drops, rewards, referrals, guided
 from app.api.v1 import admin
+from app.api.v1 import captions
 from app.api.v1 import publisher
 from app.api.v1 import chat_profile
 from app.api.v1 import ads
@@ -40,6 +41,7 @@ from app.api.v1 import (
 from app.tasks.publisher_worker import publisher_worker
 from app.tasks.drop_cleanup import drop_cleanup_worker
 from app.tasks import scheduled_publisher
+from app.tasks import auto_captioner
 from app.utils import geoip
 
 
@@ -160,9 +162,11 @@ async def lifespan(app: FastAPI):
     await drop_cleanup_worker.start()       # delete drops past their post-unlock grace
     await scheduled_publisher.start()       # publish admin drops scheduled for later
     await admin_monitor.start()             # alerts, morning digest, risk scores for flagged posts
+    await auto_captioner.start()            # caption official media drops from the caption bank
     geoip.start_loading()                   # local IP->country database for payment pricing (background)
     yield
     await scheduled_publisher.stop()
+    await auto_captioner.stop()
     await admin_monitor.stop()
     await drop_cleanup_worker.stop()        # clean shutdown
     await publisher_worker.stop()
@@ -321,6 +325,7 @@ app.include_router(agent_hub.router, prefix=settings.API_V1_PREFIX)
 app.include_router(discover.router, prefix=settings.API_V1_PREFIX)
 app.include_router(lives.router, prefix=settings.API_V1_PREFIX)
 app.include_router(lives.admin_router, prefix=settings.API_V1_PREFIX)
+app.include_router(captions.router, prefix=settings.API_V1_PREFIX)
 
 # Socket.IO wraps the API, so `uvicorn app.main:app` serves both.
 api = app
