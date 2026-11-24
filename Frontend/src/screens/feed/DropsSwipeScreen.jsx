@@ -191,8 +191,8 @@ const hookupTags = (h) => {
   const who = h.looking_for === 'woman' ? 'into women' : h.looking_for === 'man' ? 'into men' : wanted ? 'looking for' : null;
   const range = wanted ? ` ${wanted}` : '';
   return [
-    h.age ? `${h.age}${h.gender && h.gender !== 'other' ? ` · ${h.gender}` : ''}` : null,
-    h.area || null,
+    h.area ? `Location: ${h.area}` : null,
+    h.age ? `Age: ${h.age}${h.gender && h.gender !== 'other' ? ` · ${h.gender}` : ''}` : null,
     who ? who + range : null,
     HOSTING_TAG[h.guided?.hosting] || null,
   ].filter(Boolean);

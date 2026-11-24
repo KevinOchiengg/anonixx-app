@@ -58,8 +58,8 @@ function hookupTags(h) {
   const wanted = !h.age_min && !h.age_max ? '' : h.age_min && h.age_min === h.age_max ? `${h.age_min}` : `${h.age_min || 18}–${h.age_max || 99}`;
   const who = h.looking_for === 'woman' ? 'into women' : h.looking_for === 'man' ? 'into men' : wanted ? 'looking for' : null;
   return [
-    h.age ? `${h.age}${h.gender && h.gender !== 'other' ? ` · ${h.gender}` : ''}` : null,
-    h.area || null,
+    h.area ? `Location: ${h.area}` : null,
+    h.age ? `Age: ${h.age}${h.gender && h.gender !== 'other' ? ` · ${h.gender}` : ''}` : null,
     who ? `${who}${wanted ? ` ${wanted}` : ''}` : null,
     (h.guided?.hosting && HOSTING_TAG[h.guided.hosting]) || null,
   ].filter(Boolean);
