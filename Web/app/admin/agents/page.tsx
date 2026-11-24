@@ -82,7 +82,7 @@ export default function AgentsPage() {
           <ol className="small">
             <li>On GitHub: Settings → Developer settings → Fine-grained tokens → Generate new token.</li>
             <li>Repository access: only <b>{hub.repo}</b>. Permissions: <b>Contents: Read and write</b>.</li>
-            <li>On Render: the anonixx-api service → Environment → add <code>GITHUB_TOKEN</code> with that token, then save (it redeploys).</li>
+            <li>On Render: the <b>anonixx-app</b> web service (the backend at anonixx-app.onrender.com) → Environment → add <code>GITHUB_TOKEN</code> with that token → <b>Save, rebuild, and deploy</b>.</li>
           </ol>
         </div>
       </>
