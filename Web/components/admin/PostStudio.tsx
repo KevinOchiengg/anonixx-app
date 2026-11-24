@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import BulkVideos, { isVideoFile } from "./BulkVideos";
+import { useAdminRole } from "./AdminShell";
 import { allowRead, canWatchFolder, loadFolder, pickFolder, saveFolder, type DirHandle } from "@/lib/folderWatch";
 import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
@@ -49,6 +50,7 @@ const MAX_BATCH = 10;
 const PROMO_HOURS: [number, string][] = [[6, "6 hours"], [24, "1 day"], [72, "3 days"], [168, "7 days"]];
 
 export default function PostStudio() {
+  const { isSuper } = useAdminRole();
   const [bulk, setBulk] = useState<File[] | null>(null);
   const [watchDir, setWatchDir] = useState<DirHandle | null>(null);
   const [savedDir, setSavedDir] = useState<DirHandle | null>(null);
@@ -343,7 +345,7 @@ export default function PostStudio() {
           publisher_opt_in: share,
           ...(place.trim() ? { location_country: place.trim() } : {}),
           ...(sound && format !== "voice" ? { sound_id: sound.id, sound_mute_original: format === "video" && muteOriginal } : {}),
-          ...(promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
+          ...(isSuper && promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
           ...m,
       });
       const body = build(text.trim(), media);
@@ -699,7 +701,7 @@ export default function PostStudio() {
               </div>
             ) : null}
 
-            <div className="ps-spot-row">
+            {isSuper ? <div className="ps-spot-row">
               <b>Pin or boost</b>
               <div className="ps-spot-ctl">
                 <div className="ps-seg" role="group" aria-label="Promote">
@@ -714,7 +716,7 @@ export default function PostStudio() {
                 ) : null}
               </div>
               <span>{promo === "pin" ? "First thing everyone sees when they open the feed." : promo === "boost" ? "Shown near the top of everyone's feed." : "Shows in the feed like any new drop."}</span>
-            </div>
+            </div> : null}
 
             <div className="ps-spot-row">
               <b>When</b>

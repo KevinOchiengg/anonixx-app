@@ -6,6 +6,7 @@ import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 import CountryField from "@/components/compose/LocationFields";
 import { askConfirm } from "@/lib/confirm";
+import { useAdminRole } from "@/components/admin/AdminShell";
 import VideoEditor from "@/components/compose/VideoEditor";
 import { attachVideo } from "@/lib/attachVideo";
 import { defaultEdit, type VideoEdit } from "@/lib/videoEdit";
@@ -57,6 +58,7 @@ export default function AdminPosts() {
     setReady(true);
   }, []);
   // ?edit=<id> (the pencil on a drop in the feed): that one drop, open in the editor.
+  const { isSuper } = useAdminRole();
   const [only, setOnly] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [sort, setSort] = useState("recent");
@@ -128,7 +130,7 @@ export default function AdminPosts() {
   const dropOf = (id: string) => data?.drops.find((x) => x.id === id);
   const canSave = (e: Editing) => Boolean(e.text.trim() || dropOf(e.id)?.media_url);
   const setVedit = useCallback((v: VideoEdit) => setEditing((e) => (e ? { ...e, vedit: v, touched: e.vedit !== null } : e)), []);
-  const promoButton = (d: D) => d.promo_kind
+  const promoButton = (d: D) => !isSuper ? null : d.promo_kind
     ? <button className="adm-btn" disabled={busy === d.id} onClick={() => promote(d.id, null)}>Stop {d.promo_kind === "pin" ? "pin" : "boost"}</button>
     : <button className="adm-btn" disabled={busy === d.id} onClick={() => setPromoting({ id: d.id, kind: "pin", hours: 24 })}>Pin / boost</button>;
 

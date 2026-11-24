@@ -816,6 +816,8 @@ async def create_drop(
     promo_until = None
     if is_admin_drop:
         if data.promo_kind:
+            if not is_super_admin_user(user):
+                raise HTTPException(status_code=403, detail="Only the super admin can pin or boost.")
             if data.promo_kind not in PROMO_KINDS or data.promo_hours not in PROMO_HOURS:
                 raise HTTPException(status_code=400, detail="Pick pin or boost, for 6 hours, 1, 3 or 7 days.")
             promo_until = now_utc() + timedelta(hours=data.promo_hours)

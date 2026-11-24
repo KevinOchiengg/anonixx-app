@@ -552,7 +552,7 @@ class PromoteRequest(BaseModel):
 async def promote_drop(
     drop_id:  str,
     data:     PromoteRequest,
-    admin_id: str = Depends(require_scope("content")),
+    admin_id: str = Depends(require_super_admin),
     db=Depends(get_database),
 ):
     if data.kind not in PROMO_KINDS or data.hours not in PROMO_HOURS:
@@ -575,7 +575,7 @@ async def promote_drop(
 @router.delete("/drops/{drop_id}/promote", summary="Stop pinning/boosting a post")
 async def unpromote_drop(
     drop_id:  str,
-    admin_id: str = Depends(require_scope("content")),
+    admin_id: str = Depends(require_super_admin),
     db=Depends(get_database),
 ):
     result = await db["drops"].update_one(
@@ -675,8 +675,10 @@ async def schedule_drop(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Add something to post")
     req.paywall = None   # only the video pipeline fills this in
     paid = check_paywall_request(req.paywall_price, req.preview_seconds)
+    actor = await db["users"].find_one({"_id": ObjectId(admin_id)}, {"is_admin": 1, "email": 1})
+    if req.promo_kind and not is_super_admin_user(actor or {}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the super admin can pin or boost")
     if paid:
-        actor = await db["users"].find_one({"_id": ObjectId(admin_id)}, {"is_admin": 1, "email": 1})
         if not is_super_admin_user(actor or {}):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the super admin can post paid drops")
         if not data.stream:

@@ -44,7 +44,7 @@ function Stat({ n, label, hot }) {
   );
 }
 
-const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText }) => (
+const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText, canPin }) => (
   <View style={a.card}>
     <Text style={a.cardMeta}>
       {item.is_admin_drop ? 'Anonixx' : (item.author || 'Anonymous')}
@@ -75,7 +75,7 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
       </View>
     )}
     <Text style={a.cardMeta}>{item.created_at ? new Date(item.created_at).toLocaleString() : ''}</Text>
-    {editing != null && promoting ? (
+    {editing != null && canPin && promoting ? (
       <View style={st.promo}>
         <View style={st.promoRow}>
           {[['pin', 'Pin to top'], ['boost', 'Boost']].map(([k, l]) => (
@@ -108,12 +108,14 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
             <Text style={a.btnText}>Text over video</Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity
-          style={a.btn} disabled={saving} activeOpacity={0.85}
-          onPress={() => (item.promo_kind ? onPromote(item, null) : onPromoting({ kind: 'pin', hours: 24 }))}
-        >
-          <Text style={a.btnText}>{item.promo_kind ? `Stop ${item.promo_kind}` : 'Pin / boost'}</Text>
-        </TouchableOpacity>
+        {canPin ? (
+          <TouchableOpacity
+            style={a.btn} disabled={saving} activeOpacity={0.85}
+            onPress={() => (item.promo_kind ? onPromote(item, null) : onPromoting({ kind: 'pin', hours: 24 }))}
+          >
+            <Text style={a.btnText}>{item.promo_kind ? `Stop ${item.promo_kind}` : 'Pin / boost'}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     ) : null}
     <View style={a.actionRow}>
@@ -158,6 +160,10 @@ export default function AdminPostsScreen({ navigation, route }) {
   const [saving, setSaving]   = useState(false);
   const [promoting, setPromoting] = useState(null); // { kind, hours }
   const [videoFor, setVideoFor] = useState(null);   // { post, duration }
+  const [isSuper, setIsSuper] = useState(false);
+  useEffect(() => {
+    apiFetch('/admin/me').then(({ ok, data }) => { if (ok) setIsSuper(!!data?.is_super_admin); }).catch(() => {});
+  }, []);
   const timer = useRef(null);
 
   // Pages of 50; more load as you scroll to the bottom.
@@ -327,10 +333,10 @@ export default function AdminPostsScreen({ navigation, route }) {
               country={editing?.id === item.id ? editing.country : ''} onCountry={changeCountry}
               onChangeText={changeEdit} onSave={saveEdit} onCancel={cancelEdit} saving={saving}
               promoting={editing?.id === item.id ? promoting : null} onPromoting={setPromoting}
-              onPromote={promote} onVideoText={openVideoText}
+              onPromote={promote} onVideoText={openVideoText} canPin={isSuper}
             />
           )}
-          extraData={[editing, promoting, saving]}
+          extraData={[editing, promoting, saving, isSuper]}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={a.listContent}
           ListEmptyComponent={<Text style={a.emptyText}>No posts found.</Text>}

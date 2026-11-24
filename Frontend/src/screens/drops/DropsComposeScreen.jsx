@@ -692,7 +692,7 @@ export default function DropsComposeScreen({ navigation, route }) {
         ...(coverUrl ? { cover_url: coverUrl } : {}),
         // Spotlight (admin only; the server ignores these from anyone else)
         ...(soundId && format !== 'voice' ? { sound_id: soundId, ...(isAdmin ? { sound_mute_original: isVideo && muteOriginal } : {}) } : {}),
-        ...(isAdmin && promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
+        ...(isSuperAdmin && promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
         // Link back to the feed post that inspired this drop, if any.
         ...(inspiredByPostId ? { inspired_by_post_id: inspiredByPostId } : {}),
         ...(locationCountry.trim() ? { location_country: locationCountry.trim() } : {}),
@@ -1382,22 +1382,22 @@ export default function DropsComposeScreen({ navigation, route }) {
             </View>
           )}
 
-          <Text style={s.spotLabel}>Pin or boost</Text>
-          <View style={s.spotChips}>
+          {isSuperAdmin && <Text style={s.spotLabel}>Pin or boost</Text>}
+          {isSuperAdmin && <View style={s.spotChips}>
             <SpotChip label="Off" on={!promo} onPress={() => setPromo('')} />
             <SpotChip label="Pin to top" on={promo === 'pin'} onPress={() => setPromo('pin')} />
             <SpotChip label="Boost" on={promo === 'boost'} onPress={() => setPromo('boost')} />
-          </View>
-          {!!promo && (
+          </View>}
+          {isSuperAdmin && !!promo && (
             <View style={s.spotChips}>
               {PROMO_HOURS.map(([h, l]) => <SpotChip key={h} label={`for ${l}`} on={promoHours === h} onPress={() => setPromoHours(h)} />)}
             </View>
           )}
-          <Text style={s.spotHint}>
+          {isSuperAdmin && <Text style={s.spotHint}>
             {promo === 'pin' ? 'First thing everyone sees when they open the feed.'
               : promo === 'boost' ? "Shown near the top of everyone's feed."
               : 'Shows in the feed like any new drop.'}
-          </Text>
+          </Text>}
 
           {isSuperAdmin && mediaKind === 'video' && !!mediaUri && (
             <>
