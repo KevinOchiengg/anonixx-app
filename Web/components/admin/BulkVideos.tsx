@@ -8,6 +8,7 @@ import { uploadFile } from "@/lib/upload";
 import { defaultEdit, isMeaningful } from "@/lib/videoEdit";
 import { askConfirm } from "@/lib/confirm";
 import { videoLength } from "../compose/MediaPicker";
+import { listFiles, type DirHandle } from "@/lib/folderWatch";
 import "../../app/poststudio.css";
 import "../../app/bulk.css";
 
@@ -15,6 +16,7 @@ const PARALLEL = 3;
 const MAX_VID_MB = 500;
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv|avi|3gp)$/i;
 const DONE_KEY = "anx:bulk:done";
+const WATCH_EVERY_MS = 3 * 60 * 1000;
 
 type Status = "waiting" | "uploading" | "posting" | "done" | "failed";
 type Item = { key: string; file: File; status: Status; pct: number; error: string; tries: number; up?: BgUpload };
@@ -57,7 +59,7 @@ function fmtDuration(sec: number) {
   return h ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
 }
 
-export default function BulkVideos({ initial, onClose }: { initial: File[]; onClose: () => void }) {
+export default function BulkVideos({ initial, dir, onClose }: { initial: File[]; dir?: DirHandle; onClose: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [share, setShare] = useState(false);
@@ -66,6 +68,9 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
   const [skipped, setSkipped] = useState("");
   const [startedAt, setStartedAt] = useState(0);
   const [checking, setChecking] = useState(true);
+  const [watching, setWatching] = useState(false);
+  const watchingRef = useRef(false);
+  const skippedKeys = useRef(new Set<string>());
   const queue = useRef<Item[]>([]);
   const runningRef = useRef(false);
   const active = useRef(0);
@@ -73,42 +78,64 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
   const settings = useRef({ share, mature });
   const seeded = useRef(false);
 
+  async function addFiles(files: File[]) {
+    const known = new Set(queue.current.map((i) => i.key));
+    const fresh = files.filter((f) => !known.has(fileKey(f)) && !skippedKeys.current.has(fileKey(f)));
+    const local = readDone();
+    const server = await postedOnServer(fresh.map(fileKey));
+    let posted = 0;
+    let big = 0;
+    const list: Item[] = [];
+    for (const f of fresh) {
+      const key = fileKey(f);
+      if (local[key] || server.has(key)) { posted++; skippedKeys.current.add(key); continue; }
+      if (f.size > MAX_VID_MB * 1024 * 1024) { big++; skippedKeys.current.add(key); continue; }
+      list.push({ key, file: f, status: "waiting", pct: 0, error: "", tries: 0 });
+    }
+    list.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true }));
+    queue.current = [...queue.current, ...list];
+    setItems(queue.current);
+    return { added: list.length, posted, big };
+  }
+
   useEffect(() => {
     if (seeded.current) return;
     seeded.current = true;
     void (async () => {
-      const videos = initial.filter(isVideoFile);
-      const local = readDone();
-      const server = await postedOnServer(videos.map(fileKey));
-      let posted = 0;
-      let big = 0;
-      const list: Item[] = [];
-      for (const f of videos) {
-        const key = fileKey(f);
-        if (local[key] || server.has(key)) { posted++; continue; }
-        if (f.size > MAX_VID_MB * 1024 * 1024) { big++; continue; }
-        list.push({ key, file: f, status: "waiting", pct: 0, error: "", tries: 0 });
+      let files = initial.filter(isVideoFile);
+      if (dir) {
+        try { files = await listFiles(dir, isVideoFile); } catch { files = []; }
       }
-      list.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true }));
+      const { posted, big } = await addFiles(files);
       const parts = [];
       if (posted) parts.push(`${posted} already posted`);
       if (big) parts.push(`${big} over ${MAX_VID_MB}MB`);
       setSkipped(parts.length ? `Skipped ${parts.join(" and ")}.` : "");
-      queue.current = list;
-      setItems(list);
       setChecking(false);
     })();
-  }, [initial]);
+  }, [initial, dir]);
 
   useEffect(() => {
-    if (!running) return;
+    if (!watching || !dir) return;
+    const t = setInterval(async () => {
+      try {
+        const { added } = await addFiles(await listFiles(dir, isVideoFile));
+        if (added && watchingRef.current && !runningRef.current) resume();
+      } catch { /* folder moved or access lost; try again next round */ }
+    }, WATCH_EVERY_MS);
+    return () => clearInterval(t);
+  }, [watching, dir]);
+
+  const live = running || watching;
+  useEffect(() => {
+    if (!live) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     let lock: { release(): Promise<void> } | null = null;
     const nav = navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<{ release(): Promise<void> }> } };
     nav.wakeLock?.request("screen").then((l) => { lock = l; }).catch(() => {});
     return () => { window.removeEventListener("beforeunload", warn); lock?.release().catch(() => {}); };
-  }, [running]);
+  }, [live]);
 
   function pump() {
     while (runningRef.current && active.current < PARALLEL) {
@@ -184,20 +211,36 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
     }
   }
 
-  function go() {
-    settings.current = { share, mature };
-    setStartedAt(Date.now());
-    doneSince.current = 0;
+  function resume() {
     runningRef.current = true;
     setRunning(true);
     pump();
   }
 
+  function go() {
+    settings.current = { share, mature };
+    setStartedAt(Date.now());
+    doneSince.current = 0;
+    if (dir) {
+      queue.current.forEach((x) => { if (x.status === "failed") { x.status = "waiting"; x.tries = 0; } });
+      watchingRef.current = true;
+      setWatching(true);
+    }
+    resume();
+  }
+
+  function stopWatching() {
+    watchingRef.current = false;
+    setWatching(false);
+  }
+
   async function start() {
     const n = queue.current.filter((x) => x.status === "waiting").length;
     const ok = await askConfirm({
-      title: `Post ${n} videos?`,
-      message: "Each one goes live as soon as it uploads. Keep this tab open until they finish.",
+      title: dir ? `Watch ${dir.name}?` : `Post ${n} videos?`,
+      message: dir
+        ? "Videos in it go live as they upload, and new ones post on their own. Keep this tab open."
+        : "Each one goes live as soon as it uploads. Keep this tab open until they finish.",
       confirmLabel: "Post them",
       icon: "info",
     });
@@ -212,6 +255,7 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
       icon: "warning",
     });
     if (!ok) return;
+    stopWatching();
     runningRef.current = false;
     setRunning(false);
     queue.current.forEach((x) => x.up?.cancel());
@@ -228,7 +272,7 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
   async function back() {
     const left = queue.current.filter((i) => i.status === "waiting" || i.status === "failed").length;
     const posted = queue.current.some((i) => i.status === "done");
-    if (left && posted) {
+    if (watching || (left && posted)) {
       const ok = await askConfirm({ title: "Leave folder posting?", message: `${left} videos aren't posted yet. Posted ones stay up.`, confirmLabel: "Leave", icon: "leave" });
       if (!ok) return;
     }
@@ -251,9 +295,9 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
       <div className="ps-head bk-head">
         <div>
           <h2>Post a drop</h2>
-          <p>Every video in the folder posts as its own drop, one after another.</p>
+          <p>{dir ? `New videos added to ${dir.name} post on their own while this tab is open.` : "Every video in the folder posts as its own drop, one after another."}</p>
         </div>
-        {!running ? <button type="button" className="ps-btn" onClick={back}>Back</button> : null}
+        {!live ? <button type="button" className="ps-btn" onClick={back}>Back</button> : null}
       </div>
 
       <section className="ps-sec bk-card">
@@ -263,6 +307,7 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
               <b>{started ? `${doneCount} of ${total} posted` : `${total} videos ready`}</b>
               <span>
                 {running ? (eta ? `about ${fmtDuration(eta)} left` : "working…")
+                  : watching ? "Watching"
                   : failed.length && !waiting.length ? `${failed.length} failed`
                   : doneCount === total ? "All posted"
                   : started ? "Paused" : fmtMB(size)}
@@ -271,11 +316,11 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
             {started ? <div className="bk-bar"><i style={{ width: `${pct}%` }} /></div> : null}
           </>
         ) : (
-          <b>{checking ? "Checking the folder…" : "No new videos in that folder."}</b>
+          <b>{checking ? "Checking the folder…" : watching ? "Watching for new videos." : "No new videos in that folder."}</b>
         )}
         {skipped ? <p className="bk-note">{skipped}</p> : null}
 
-        {!started && total ? (
+        {!started && !watching && (total || dir) ? (
           <>
             <label className="ps-switch">
               <span><b>Share to Anonixx socials</b><small>Goes out to our official accounts a few at a time. Leave off for explicit videos.</small></span>
@@ -313,19 +358,25 @@ export default function BulkVideos({ initial, onClose }: { initial: File[]; onCl
           </details>
         ) : null}
 
-        {started ? <p className="bk-note">If this tab closes, choose the same folder again and it carries on where it stopped.</p> : null}
+        {started && !dir ? <p className="bk-note">If this tab closes, choose the same folder again and it carries on where it stopped.</p> : null}
       </section>
 
       <div className="ps-bar">
         <div className="ps-bar-msg">
-          {running ? <span>Posting {busy.length} at a time. Keep this tab open.</span> : <span className="mute">{waiting.length ? "Ready when you are." : ""}</span>}
+          {running ? <span>Posting {busy.length} at a time. Keep this tab open.</span>
+            : watching ? <span>Checks for new videos every 3 minutes. Keep this tab open.</span>
+            : <span className="mute">{waiting.length || dir ? "Ready when you are." : ""}</span>}
         </div>
         {running ? (
           <button type="button" className="ps-btn big" onClick={pause}>Pause</button>
-        ) : failed.length && !waiting.length ? (
+        ) : watching ? (
+          <button type="button" className="ps-btn big" onClick={stopWatching}>Stop watching</button>
+        ) : checking ? null : failed.length && !waiting.length && !dir ? (
           <button type="button" className="ps-btn primary big" onClick={retryFailed}>Retry {failed.length} failed</button>
         ) : waiting.length ? (
-          <button type="button" className="ps-btn primary big" onClick={start}>{started ? "Resume" : `Post ${waiting.length} videos`}</button>
+          <button type="button" className="ps-btn primary big" onClick={start}>{started ? "Resume" : dir ? "Start watching" : `Post ${waiting.length} videos`}</button>
+        ) : dir ? (
+          <button type="button" className="ps-btn primary big" onClick={start}>Start watching</button>
         ) : (
           <button type="button" className="ps-btn primary big" onClick={onClose}>Done</button>
         )}

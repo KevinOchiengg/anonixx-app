@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import BulkVideos, { isVideoFile } from "./BulkVideos";
+import { allowRead, canWatchFolder, loadFolder, pickFolder, saveFolder, type DirHandle } from "@/lib/folderWatch";
 import { api, type Sound } from "@/lib/api";
 import { captureCover } from "@/lib/coverFrame";
 import { queueStreamDrop, waitForStreamDrop } from "@/lib/streamVideo";
@@ -49,6 +50,25 @@ const PROMO_HOURS: [number, string][] = [[6, "6 hours"], [24, "1 day"], [72, "3 
 
 export default function PostStudio() {
   const [bulk, setBulk] = useState<File[] | null>(null);
+  const [watchDir, setWatchDir] = useState<DirHandle | null>(null);
+  const [savedDir, setSavedDir] = useState<DirHandle | null>(null);
+  const [canWatch, setCanWatch] = useState(false);
+  useEffect(() => {
+    if (!canWatchFolder()) return;
+    setCanWatch(true);
+    loadFolder().then((d) => { if (d) setSavedDir(d); });
+  }, []);
+  async function watchNew() {
+    const d = await pickFolder();
+    if (!d) return;
+    await saveFolder(d);
+    setSavedDir(d);
+    setWatchDir(d);
+  }
+  async function watchSaved() {
+    if (savedDir && (await allowRead(savedDir))) setWatchDir(savedDir);
+    else setError("Couldn't open that folder. Choose it again.");
+  }
   const [format, setFormat] = useState<Format>("text");
   const [text, setText] = useState("");
   const [photos, setPhotos] = useState<Pick[]>([]);
@@ -408,6 +428,7 @@ export default function PostStudio() {
   const voiceBars = voice?.waveform?.length ? voice.waveform.map((v) => 12 + Math.round(v * 88)) : bars;
 
   if (bulk) return <BulkVideos initial={bulk} onClose={() => setBulk(null)} />;
+  if (watchDir) return <BulkVideos initial={[]} dir={watchDir} onClose={() => setWatchDir(null)} />;
 
   if (published) {
     return (
@@ -478,6 +499,16 @@ export default function PostStudio() {
   const folder = format === "video" ? (
     <>
       <button type="button" className="ps-link ps-folder" onClick={() => folderRef.current?.click()}>Or choose a folder to post every video in it</button>
+      {canWatch ? (
+        savedDir ? (
+          <>
+            <button type="button" className="ps-link ps-folder" onClick={watchSaved}>Keep watching {savedDir.name}</button>
+            <button type="button" className="ps-link ps-folder" onClick={watchNew}>Watch a different folder</button>
+          </>
+        ) : (
+          <button type="button" className="ps-link ps-folder" onClick={watchNew}>Or watch a folder and post new videos on their own</button>
+        )
+      ) : null}
       <input
         ref={folderRef}
         type="file"
