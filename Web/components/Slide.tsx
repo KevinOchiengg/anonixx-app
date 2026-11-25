@@ -480,7 +480,7 @@ export default function Slide({
 
         {post.poll ? (
           <div className="poll">
-            {post.poll.question ? <div className="poll-q">{post.poll.question}</div> : null}
+            {post.poll.question && post.poll.question.trim() !== (post.content || "").trim() ? <div className="poll-q">{post.poll.question}</div> : null}
             {post.poll.options.map((o, i) => (
               <button
                 key={i}

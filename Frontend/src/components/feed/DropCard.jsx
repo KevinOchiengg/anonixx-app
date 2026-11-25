@@ -316,7 +316,7 @@ const VideoPlayer = React.memo(({ videoUrl, postId, viewCount, onMediaPress, edi
 });
 
 // ─── Poll Card (also used by DropsSwipeScreen) ────────────────
-export const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) => {
+export const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote, hideQuestion }) => {
   const barAnims = useRef(poll.options.map(() => new Animated.Value(0))).current;
   const hasVoted  = poll.voted_option !== null && poll.voted_option !== undefined;
   const isExpired = poll.expired;
@@ -335,7 +335,7 @@ export const PollCard = React.memo(({ poll, postId, isAuthenticated, onVote }) =
         <Text style={styles.pollLabel}>{isExpired ? 'poll ended' : 'poll · 24h'}</Text>
         {hasVoted && <Text style={styles.pollVoteCount}>{poll.total_votes} vote{poll.total_votes !== 1 ? 's' : ''}</Text>}
       </View>
-      <Text style={styles.pollQuestion}>{poll.question}</Text>
+      {!hideQuestion && <Text style={styles.pollQuestion}>{poll.question}</Text>}
       <View style={styles.pollOptions}>
         {poll.options.map((opt, i) => {
           const isChosen = poll.voted_option === i;
@@ -599,7 +599,8 @@ function DropCard({
             {post.audio_url && <AudioPlayer audioUrl={post.audio_url} />}
 
             {poll && (
-              <PollCard poll={poll} postId={post.id} isAuthenticated={isAuthenticated} onVote={handleVote} />
+              <PollCard poll={poll} postId={post.id} isAuthenticated={isAuthenticated} onVote={handleVote}
+                hideQuestion={(poll.question || '').trim() === (post.content || '').trim()} />
             )}
 
             <View style={styles.divider} />
