@@ -22,7 +22,7 @@ const PROMO_HOURS = [[6, '6h'], [24, '1 day'], [72, '3 days'], [168, '7 days']];
 const editFor = (post) => ({
   id: post.id, text: post.confession_full ?? post.confession ?? '', country: post.country || '',
   vedit: post.video_edit || null, touched: false,
-  sound: post.sound?.id || '', mute: !!post.sound?.mute_original, soundTouched: false,
+  sound: post.sound?.id || '', mute: !!post.sound?.mute_original, soundTouched: false, mature: !!post.mature,
 });
 
 // Length of a video the list doesn't know yet, read once it loads.
@@ -106,7 +106,7 @@ function ExtractAudio({ item, caption }) {
   );
 }
 
-const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText, canPin, soundPick, sounds, hearing, onSound, onHear }) => (
+const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText, canPin, soundPick, sounds, hearing, onSound, onHear, mature, onMature }) => (
   <View style={a.card}>
     <Text style={a.cardMeta}>
       {item.is_admin_drop ? 'Anonixx' : (item.author || 'Anonymous')}
@@ -128,6 +128,11 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
     ) : null}
     {editing != null && canPin && item.is_admin_drop && item.media_type === 'video' && item.media_url ? (
       <ExtractAudio item={item} caption={editing} />
+    ) : null}
+    {editing != null ? (
+      <TouchableOpacity onPress={onMature} style={[st.sortChip, mature && st.sortChipOn, { alignSelf: 'flex-start', marginTop: 8 }]} activeOpacity={0.8}>
+        <Text style={[st.sortText, mature && st.sortTextOn]}>Mature: blurred until tapped</Text>
+      </TouchableOpacity>
     ) : null}
     {editing != null ? (
       <LocationField countryOnly country={country} onChangeCountry={onCountry} />
@@ -295,6 +300,7 @@ export default function AdminPostsScreen({ navigation, route }) {
 
   const startEdit = useCallback((post) => { setPromoting(null); setEditing(editFor(post)); }, []);
   const changeCountry = useCallback((country) => setEditing((e) => (e ? { ...e, country } : e)), []);
+  const toggleMature = useCallback(() => setEditing((e) => (e ? { ...e, mature: !e.mature } : e)), []);
   const changeEdit = useCallback((text) => setEditing((e) => (e ? { ...e, text } : e)), []);
   const cancelEdit = useCallback(() => { setEditing(null); setPromoting(null); }, []);
   const saveEdit = useCallback(async () => {
@@ -309,6 +315,7 @@ export default function AdminPostsScreen({ navigation, route }) {
         location_country: editing.country || '',
         ...(editing.touched && editing.vedit ? { video_edit: editing.vedit } : {}),
         ...(isSuper && editing.soundTouched ? { sound_id: editing.sound, sound_mute_original: editing.mute } : {}),
+        ...(editing.mature !== !!post?.mature ? { mature: editing.mature } : {}),
       },
     });
     setSaving(false);
@@ -317,6 +324,7 @@ export default function AdminPostsScreen({ navigation, route }) {
         ...p, confession: data.confession, confession_full: data.confession, country: data.country,
         ...(editing.touched ? { video_edit: data.video_edit } : {}),
         ...('sound' in data ? { sound: data.sound } : {}),
+        ...('mature' in data ? { mature: data.mature } : {}),
       } : p)));
       setEditing(null);
       showToast({ type: 'success', message: 'Drop updated.' });
@@ -425,6 +433,7 @@ export default function AdminPostsScreen({ navigation, route }) {
               onPromote={promote} onVideoText={openVideoText} canPin={isSuper}
               soundPick={editing?.id === item.id ? editing : null} sounds={sounds} hearing={hearing}
               onSound={changeSound} onHear={hearSound}
+              mature={editing?.id === item.id && editing.mature} onMature={toggleMature}
             />
           )}
           extraData={[editing, promoting, saving, isSuper, sounds, hearing]}

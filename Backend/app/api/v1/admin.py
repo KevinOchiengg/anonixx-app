@@ -456,6 +456,7 @@ async def list_drops(
             "video_edit":        d.get("video_edit") if d.get("is_admin_drop") else None,
             "duration_seconds":  d.get("duration_seconds"),
             "sound":             d.get("sound"),
+            "mature":            bool(d.get("blur")),
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
             "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
@@ -501,6 +502,7 @@ class AdminEditDropRequest(BaseModel):
     video_edit: Optional[dict] = None         # video drops: trim window + text over the video
     sound_id: Optional[str] = None            # super admin: a Sounds library track; "" removes it
     sound_mute_original: Optional[bool] = None
+    mature: Optional[bool] = None             # blurred for every viewer until tapped
 
 
 @router.patch("/drops/{drop_id}", summary="Edit the text of a post made by an admin (users' posts stay untouchable)")
@@ -538,6 +540,11 @@ async def edit_admin_drop(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid video edit")
         extra["video_edit"] = clean_video_edit(edit)
 
+    if data.mature is not None:
+        from app.utils.content_mode import classify_sensitivity
+        extra["blur"] = data.mature
+        extra["sensitivity"] = classify_sensitivity(text, marked_mature=data.mature)
+
     unset: dict = {}
     if data.sound_id is not None:
         actor = await db["users"].find_one({"_id": ObjectId(admin_id)}, {"is_admin": 1, "email": 1})
@@ -570,6 +577,8 @@ async def edit_admin_drop(
     out = {"drop_id": drop_id, "confession": text, "country": country, "video_edit": extra.get("video_edit")}
     if data.sound_id is not None:
         out["sound"] = extra.get("sound")
+    if data.mature is not None:
+        out["mature"] = data.mature
     return out
 
 
