@@ -60,7 +60,7 @@ export default function BottomNav() {
       {TABS.map((t) => {
         if (t === "create") {
           return (
-            <Link key="create" href="/compose" className="create" aria-label="Drop a confession">
+            <Link key="create" href={user?.is_admin ? "/admin/post" : "/compose"} className="create" aria-label="Drop a confession">
               <span><Plus /></span>
             </Link>
           );

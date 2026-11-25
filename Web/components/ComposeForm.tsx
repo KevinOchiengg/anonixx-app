@@ -11,7 +11,7 @@ const MAX = 1800;
 const DRAFT_KEY = "anonixx.drops.draft.v1";
 
 function Inner() {
-  const { user, refresh } = useAuth();
+  const { user, ready, refresh } = useAuth();
   const router = useRouter();
   const [kind, setKind] = useState<"hookup" | "confession" | null>(null);
   const [text, setText] = useState("");
@@ -112,6 +112,8 @@ function Inner() {
     );
   }
 
+  // Admins post from the studio: show nothing while we know who it is or send them on.
+  if (!ready || user?.is_admin) return null;
   if (kind === "hookup") return <GuidedConfession onBack={() => setKind(null)} />;
 
   return (
