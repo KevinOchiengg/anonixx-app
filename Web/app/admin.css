@@ -301,3 +301,6 @@
 .adm-panes button.on { color: var(--fg); border-color: #ff634a; background: rgba(255, 99, 74, 0.14); }
 .adm-card .vx { grid-template-columns: minmax(0, 160px) minmax(0, 1fr); }
 .adm-foot.sticky { position: sticky; bottom: 0; z-index: 5; padding: 10px 0; background: var(--card); border-top: 1px solid var(--line); }
+
+/* Ticks in the dashboard use the brand coral. */
+.adm input[type="checkbox"], .adm-card input[type="checkbox"], .adm-extract input[type="checkbox"] { accent-color: #ff634a; }
