@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Play } from "lucide-react";
 import { TAP_GAP } from "./VideoPlayer";
 
 // Same colours as the app's voice waves: pink → coral → amber → gold → coral → pink.
@@ -35,6 +36,7 @@ export default function AudioStage({ src, seed, active, near, muted }: { src: st
   const ref = useRef<HTMLAudioElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [t, setT] = useState(0);
   const [dur, setDur] = useState(0);
   const [buffering, setBuffering] = useState(false);
@@ -52,6 +54,7 @@ export default function AudioStage({ src, seed, active, near, muted }: { src: st
   useEffect(() => {
     const a = ref.current;
     if (!a) return;
+    setPaused(false);
     if (active) a.play().catch(() => setPlaying(false));
     else a.pause();
   }, [active, near]);
@@ -71,8 +74,8 @@ export default function AudioStage({ src, seed, active, near, muted }: { src: st
   function toggle() {
     const a = ref.current;
     if (!a) return;
-    if (a.paused) a.play().catch(() => {});
-    else a.pause();
+    if (a.paused) { setPaused(false); a.play().catch(() => {}); }
+    else { setPaused(true); a.pause(); }
   }
 
   function seek(clientX: number) {
@@ -114,6 +117,7 @@ export default function AudioStage({ src, seed, active, near, muted }: { src: st
           />
         ))}
       </div>
+      {active && paused ? <span className="play-badge" aria-hidden><Play fill="currentColor" strokeWidth={0} /></span> : null}
       {active ? (
         <div
           ref={track}
