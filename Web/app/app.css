@@ -265,7 +265,7 @@
 
 .toast { background: var(--surface-alt); color: var(--fg); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
 .empty h2 { font-size: 18px; }
-.slide .mature-veil { background: rgba(11, 15, 24, 0.92); }
+.slide .mature-veil { background: rgba(11, 15, 24, 0.45); backdrop-filter: blur(36px) saturate(1.2); -webkit-backdrop-filter: blur(36px) saturate(1.2); }
 .nav-arrows button { background: var(--surface-alt); border: 1px solid rgba(255, 255, 255, 0.08); }
 .join h3 { font-size: 16px; margin: 18px 0 4px; color: var(--fg); }
 .join section b { color: var(--fg); }

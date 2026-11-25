@@ -94,7 +94,9 @@ export default function Slide({
   const press = useRef<{ timer: number; x: number; y: number } | null>(null);
   const pressed = useRef(false);
 
-  const mature = post.sensitivity === "mature" && !matureOk && !user?.age_verified;
+  // Ticked "Mature" by the poster: veiled for everyone until tapped, post by post.
+  const [revealed, setRevealed] = useState(false);
+  const mature = post.blur ? !revealed : post.sensitivity === "mature" && !matureOk && !user?.age_verified;
 
   useEffect(() => {
     if (!active || viewed.current || mature) return;
@@ -588,9 +590,9 @@ export default function Slide({
       ) : null}
 
       {mature ? (
-        <button className="mature-veil" onClick={allowMature}>
+        <button className="mature-veil" onClick={post.blur ? () => setRevealed(true) : allowMature}>
           <strong>Mature content</strong>
-          <span>Adults only. Tap once and you won't be asked again.</span>
+          <span>{post.blur ? "Tap to see it." : "Adults only. Tap once and you won't be asked again."}</span>
         </button>
       ) : null}
     </article>

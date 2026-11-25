@@ -39,6 +39,7 @@ export type Post = {
     guided?: { craving: string | null; traits: string[]; hosting: string | null; public_first?: boolean; tone: string | null; ai_generated: boolean; meet_when?: string | null } | null;
   } | null;
   sensitivity: "general" | "mature";
+  blur?: boolean;
   media_url: string | null;
   media_type: "image" | "video" | "voice" | null;
   video_url: string | null;

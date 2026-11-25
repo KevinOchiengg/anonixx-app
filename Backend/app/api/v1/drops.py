@@ -887,6 +887,7 @@ async def create_drop(
             data.confession, data.poll.question if data.poll else None,
             marked_mature=data.sensitivity == "mature" or kind == "hookup",
         ),
+        "blur": data.sensitivity == "mature",  # the poster ticked it: veiled for every viewer
         # All drops are always public in the marketplace.
         # target_user_id means "also deliver to this inbox" — not "private only".
         "is_marketplace": True,
@@ -2066,6 +2067,7 @@ async def batch_format_drops(drops: list, current_user_id: Optional[str], db) ->
             "live_until":       _aware(drop["live_until"]).isoformat() if drop.get("live_until") else None,
             "linkup_count":     linkup_counts.get(did, 0) if drop.get("kind") == "hookup" else None,
             "sensitivity":      drop.get("sensitivity", "general"),
+            "blur":             bool(drop.get("blur")),
             "intensity":        drop.get("intensity"),
             "media_url":        drop.get("media_url"),
             "media_type":       drop.get("media_type"),
