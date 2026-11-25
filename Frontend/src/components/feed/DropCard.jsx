@@ -105,7 +105,8 @@ const ImageCarousel = React.memo(({ images }) => {
   return (
     <View style={styles.carouselWrap} onLayout={handleLayout}>
       {containerWidth > 0 && (
-        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+        <ScrollView horizontal snapToInterval={containerWidth} snapToAlignment="start" disableIntervalMomentum
+          showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={handleScrollEnd} scrollEventThrottle={16} decelerationRate="fast">
           {images.map((url, i) => (
             <Image

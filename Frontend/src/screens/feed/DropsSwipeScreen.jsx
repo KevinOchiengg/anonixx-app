@@ -942,11 +942,13 @@ const ImageSlideCarousel = React.memo(({ images }) => {
     <View style={StyleSheet.absoluteFill}>
       <ScrollView
         horizontal
-        pagingEnabled
+        snapToInterval={width}
+        snapToAlignment="start"
+        disableIntervalMomentum
+        decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
         scrollEventThrottle={16}
-        decelerationRate="fast"
       >
         {images.map((url, i) => (
           <FitImage key={i} uri={url} style={{ width, height: '100%' }} />

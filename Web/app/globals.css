@@ -107,7 +107,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   scrollbar-width: none;
 }
 .carousel::-webkit-scrollbar { display: none; }
-.carousel > div { flex: 0 0 100%; scroll-snap-align: start; height: 100%; }
+.carousel > div { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; height: 100%; }
 .dots { position: absolute; z-index: 3; top: 66px; left: 0; right: 0; display: flex; gap: 5px; justify-content: center; }
 .dots i { width: 22px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.35); }
 .dots i.on { background: #fff; }
