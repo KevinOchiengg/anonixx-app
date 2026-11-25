@@ -881,8 +881,7 @@ const AudioSlide = ({
   });
 
   return (
-    <View style={ss.slide}>
-      <LinearGradient colors={['#1a0a12', '#0b0609', '#000']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+    <View style={[ss.slide, { backgroundColor: THEME.background }]}>
 
       <GestureDetector gesture={tapGesture}>
         <View style={StyleSheet.absoluteFill} collapsable={false} />

@@ -217,7 +217,8 @@
 
 .slide .dots { top: 12px; }
 /* Audio drops: a coloured wave moving in the middle, laid out like a video. */
-.astage { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(120% 80% at 50% 45%, #2a0f1c 0%, #0b0609 60%, #000 100%); cursor: pointer; }
+.slide.audio-slide, .slide.audio-slide .media { background: var(--bg); }
+.astage { position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer; }
 .astage-wave { display: flex; align-items: center; gap: 4px; height: 150px; margin-bottom: 60px; }
 .astage-wave i { width: 5px; border-radius: 3px; opacity: 0.55; transform-origin: center; animation: astage-bar 1.2s ease-in-out infinite alternate; animation-play-state: paused; }
 .astage-wave i.played { opacity: 1; box-shadow: 0 0 8px currentColor; }
