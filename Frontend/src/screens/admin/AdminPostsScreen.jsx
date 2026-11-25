@@ -127,7 +127,7 @@ function ExtractAudio({ item, caption }) {
         {chip(post, 'Post as an audio drop', () => setPost((v) => !v))}
         {chip(library, 'Add to Sounds', () => setLibrary((v) => !v))}
       </View>
-      {post ? <Text style={a.cardMeta}>It posts now with the caption above. To schedule it, use the website.</Text> : null}
+      {post ? <Text style={a.cardMeta}>It posts now, with the caption above.</Text> : null}
       <View style={st.promoRow}>
         <TouchableOpacity style={a.btn} onPress={() => setOpen(false)} disabled={busy} activeOpacity={0.85}>
           <Text style={a.btnText}>Cancel</Text>

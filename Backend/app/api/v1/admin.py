@@ -1005,7 +1005,6 @@ class ExtractAudioRequest(BaseModel):
     library:    bool = False                 # add it to the Sounds library
     caption:    Optional[str] = None
     title:      Optional[str] = None         # Sounds library title
-    publish_at: Optional[datetime] = None    # None = post now
 
 
 @router.post("/drops/{drop_id}/extract-audio", summary="Pull the sound out of an official video drop (super admin)")
@@ -1028,7 +1027,6 @@ async def extract_drop_audio(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only video drops have audio to extract")
     if drop.get("paywall"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Paid videos can't be extracted")
-    when = _check_publish_at(data.publish_at) if data.post and data.publish_at else None
     if data.end is not None and data.end <= data.start:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "The end has to come after the start")
 
@@ -1060,15 +1058,8 @@ async def extract_drop_audio(
             "location_country": drop_country(drop),
         }
         payload = {k: v for k, v in payload.items() if v is not None}
-        if when:
-            res = await db["scheduled_drops"].insert_one({
-                "admin_id": admin_id, "drop": payload, "publish_at": when, "status": "pending", "created_at": _now(),
-            })
-            out["scheduled_id"] = str(res.inserted_id)
-            out["publish_at"] = when.isoformat()
-        else:
-            created = await create_drop(CreateDropRequest(**payload), admin_id, db)
-            out["drop_id"] = created.get("id")
+        created = await create_drop(CreateDropRequest(**payload), admin_id, db)
+        out["drop_id"] = created.get("id")
 
     await audit(db, admin_id, "drop.extract_audio", "drop", drop_id)
     return out

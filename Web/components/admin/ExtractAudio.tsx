@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { attachVideo } from "@/lib/attachVideo";
 
-type Result = { audio_url: string; drop_id?: string; scheduled_id?: string; publish_at?: string; sound?: { title: string } };
+type Result = { audio_url: string; drop_id?: string; sound?: { title: string } };
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -20,8 +20,6 @@ export default function ExtractAudio({ dropId, src, known, trim, caption }: {
   const [library, setLibrary] = useState(false);
   const [text, setText] = useState(caption);
   const [title, setTitle] = useState("");
-  const [later, setLater] = useState(false);
-  const [at, setAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState<Result | null>(null);
@@ -40,7 +38,6 @@ export default function ExtractAudio({ dropId, src, known, trim, caption }: {
           post, library,
           caption: text.trim(),
           ...(library && title.trim() ? { title: title.trim() } : {}),
-          ...(post && later && at ? { publish_at: new Date(at).toISOString() } : {}),
         },
       });
       setDone(r);
@@ -51,7 +48,7 @@ export default function ExtractAudio({ dropId, src, known, trim, caption }: {
     }
   }
 
-  const ready = (post || library) && (!later || !post || at) && (!len || end - start >= 1);
+  const ready = (post || library) && (!len || end - start >= 1);
 
   return (
     <div className="adm-extract">
@@ -71,16 +68,7 @@ export default function ExtractAudio({ dropId, src, known, trim, caption }: {
       ) : <p className="muted small">Reading the video's length…</p>}
 
       <label className="small"><input type="checkbox" checked={post} onChange={(e) => setPost(e.target.checked)} /> Post it as an audio drop</label>
-      {post ? (
-        <>
-          <textarea className="adm-edit" rows={2} maxLength={1800} value={text} onChange={(e) => setText(e.target.value)} placeholder="Caption" aria-label="Audio drop caption" />
-          <div className="adm-actions" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-            <label className="small"><input type="radio" checked={!later} onChange={() => setLater(false)} /> Post now</label>
-            <label className="small"><input type="radio" checked={later} onChange={() => setLater(true)} /> Schedule</label>
-            {later ? <input type="datetime-local" className="adm-select" value={at} onChange={(e) => setAt(e.target.value)} aria-label="Publish at" /> : null}
-          </div>
-        </>
-      ) : null}
+      {post ? <textarea className="adm-edit" rows={2} maxLength={1800} value={text} onChange={(e) => setText(e.target.value)} placeholder="Caption" aria-label="Audio drop caption" /> : null}
 
       <label className="small"><input type="checkbox" checked={library} onChange={(e) => setLibrary(e.target.checked)} /> Add it to the Sounds library</label>
       {library ? (
@@ -89,13 +77,13 @@ export default function ExtractAudio({ dropId, src, known, trim, caption }: {
 
       <div className="adm-actions" style={{ justifyContent: "flex-start" }}>
         <button type="button" className="adm-btn primary" disabled={!ready || busy} onClick={run}>
-          {busy ? "Extracting…" : "Extract audio"}
+          {busy ? "Extracting…" : post ? "Extract and post" : "Extract"}
         </button>
       </div>
       {err ? <p className="err small">{err}</p> : null}
       {done ? (
         <div className="ok small">
-          {done.drop_id ? "Posted as an audio drop. " : done.scheduled_id ? `Scheduled for ${new Date(done.publish_at!).toLocaleString()}. ` : ""}
+          {done.drop_id ? "Posted as an audio drop. " : ""}
           {done.sound ? `Added "${done.sound.title}" to Sounds.` : ""}
           <audio src={done.audio_url} controls preload="none" style={{ display: "block", width: "100%", marginTop: 6 }} />
         </div>

@@ -24,6 +24,7 @@ type D = DropMedia & {
 const SORTS: [string, string][] = [["recent", "Newest"], ["views", "Most viewed"], ["likes", "Most liked"], ["comments", "Most discussed"], ["engagement", "Best engagement"]];
 type Page = { total: number; skip: number; limit: number; drops: D[] };
 const LIMIT = 20;
+type Pane = "text" | "video" | "sound" | "audio";
 type Editing = {
   id: string; text: string; country: string; vedit: VideoEdit | null; touched: boolean;
   sound: string; mute: boolean; soundTouched: boolean;
@@ -106,6 +107,7 @@ export default function AdminPosts() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [pane, setPane] = useState<Pane>("text");
   const [promoting, setPromoting] = useState<{ id: string; kind: "pin" | "boost"; hours: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -211,41 +213,65 @@ export default function AdminPosts() {
                 {d.report_count ? <Badge tone="bad">{d.report_count} report{d.report_count === 1 ? "" : "s"}</Badge> : null}
                 {d.moderation_status ? <Badge>{d.moderation_status}</Badge> : null}
               </div>
-              <AdminMedia media={d} open={editing?.id === d.id} />
-              {editing?.id === d.id ? (
-                <textarea
-                  className="adm-edit" rows={4} maxLength={1800} autoFocus value={editing.text}
-                  onChange={(e) => setEditing({ ...editing, text: e.target.value })} aria-label="Post text"
-                />
-              ) : null}
-              {editing?.id === d.id && d.media_type === "video" && d.media_url ? (
-                <div className="adm-vtext">
-                  <b className="small">Text over the video</b>
-                  <VideoText src={d.media_url} known={d.duration_seconds} value={editing.vedit} onChange={setVedit} />
-                </div>
-              ) : null}
-              {editing?.id === d.id && isSuper && d.media_type !== "voice" ? (
-                <div className="adm-vtext">
-                  <b className="small">Sound</b>
-                  <SoundPick
-                    sounds={sounds} video={d.media_type === "video"} value={editing.sound} mute={editing.mute}
-                    onChange={(sound, mute) => setEditing({ ...editing, sound, mute, soundTouched: true })}
-                  />
-                </div>
-              ) : null}
-              {editing?.id === d.id && isSuper && d.is_admin_drop && d.media_type === "video" && d.media_url ? (
-                <div className="adm-vtext">
-                  <b className="small">Extract audio</b>
-                  <ExtractAudio
-                    dropId={d.id} src={d.media_url} known={d.duration_seconds}
-                    trim={d.video_edit ? { start: d.video_edit.start, end: d.video_edit.end } : null}
-                    caption={editing.text}
-                  />
-                </div>
-              ) : null}
-              {editing?.id === d.id ? (
-                <div className="adm-country"><CountryField value={editing.country} onChange={(country) => setEditing({ ...editing, country })} /></div>
-              ) : <p className="adm-text">{d.confession || "[no text]"}</p>}
+              {editing?.id === d.id ? (() => {
+                const video = d.media_type === "video" && !!d.media_url;
+                const panes: [Pane, string][] = [
+                  ["text", "Text"],
+                  ...(video ? [["video", "Text over video"] as [Pane, string]] : []),
+                  ...(isSuper && d.media_type !== "voice" ? [["sound", "Sound"] as [Pane, string]] : []),
+                  ...(isSuper && video ? [["audio", "Extract audio"] as [Pane, string]] : []),
+                ];
+                const on = panes.some(([k]) => k === pane) ? pane : "text";
+                return (
+                  <>
+                    {panes.length > 1 ? (
+                      <div className="adm-panes" role="tablist">
+                        {panes.map(([k, l]) => (
+                          <button key={k} type="button" role="tab" aria-selected={on === k} className={on === k ? "on" : ""} onClick={() => setPane(k)}>{l}</button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {on === "text" ? (
+                      <>
+                        {!video ? <AdminMedia media={d} open /> : null}
+                        <textarea
+                          className="adm-edit" rows={4} maxLength={1800} autoFocus value={editing.text}
+                          onChange={(e) => setEditing({ ...editing, text: e.target.value })} aria-label="Post text"
+                        />
+                        <div className="adm-country"><CountryField value={editing.country} onChange={(country) => setEditing({ ...editing, country })} /></div>
+                      </>
+                    ) : null}
+                    {on === "video" && d.media_url ? (
+                      <div className="adm-vtext">
+                        <VideoText src={d.media_url} known={d.duration_seconds} value={editing.vedit} onChange={setVedit} />
+                      </div>
+                    ) : null}
+                    {on === "sound" ? (
+                      <div className="adm-vtext">
+                        <SoundPick
+                          sounds={sounds} video={video} value={editing.sound} mute={editing.mute}
+                          onChange={(sound, mute) => setEditing({ ...editing, sound, mute, soundTouched: true })}
+                        />
+                      </div>
+                    ) : null}
+                    {on === "audio" && d.media_url ? (
+                      <div className="adm-vtext">
+                        <p className="muted small">Saves the video&apos;s sound as a separate drop or sound. The video stays as it is.</p>
+                        <ExtractAudio
+                          dropId={d.id} src={d.media_url} known={d.duration_seconds}
+                          trim={d.video_edit ? { start: d.video_edit.start, end: d.video_edit.end } : null}
+                          caption={editing.text}
+                        />
+                      </div>
+                    ) : null}
+                  </>
+                );
+              })() : (
+                <>
+                  <AdminMedia media={d} />
+                  <p className="adm-text">{d.confession || "[no text]"}</p>
+                </>
+              )}
               <div className="adm-stats">
                 <span><b>{d.stats.views}</b> views</span>
                 <span><b>{d.stats.likes}</b> likes</span>
@@ -273,7 +299,7 @@ export default function AdminPosts() {
                   <button className="adm-btn primary" disabled={busy === d.id} onClick={() => promote(d.id, { kind: promoting.kind, hours: promoting.hours })}>Start</button>
                 </div>
               ) : null}
-              <div className="adm-foot">
+              <div className={`adm-foot${editing?.id === d.id ? " sticky" : ""}`}>
                 <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/1800` : fmtDate(d.created_at)}</span>
                 <div className="adm-actions">
                   {editing?.id === d.id ? (
@@ -285,7 +311,7 @@ export default function AdminPosts() {
                     </>
                   ) : (
                     <>
-                      {d.is_admin_drop ? <button className="adm-btn" disabled={busy === d.id} onClick={() => setEditing(startEdit(d))}>Edit</button> : null}
+                      {d.is_admin_drop ? <button className="adm-btn" disabled={busy === d.id} onClick={() => { setPane("text"); setEditing(startEdit(d)); }}>Edit</button> : null}
                       {d.is_admin_drop ? promoButton(d) : null}
                       <Link className="adm-btn" href={`/drop/${d.id}`} title="Open the post as people see it">View post</Link>
                       <button className="adm-btn danger" disabled={busy === d.id} onClick={() => remove(d)}>Delete</button>

@@ -236,7 +236,7 @@
 .adm-media-peek { display: flex; align-items: center; gap: 10px; width: fit-content; max-width: 100%; padding: 6px 12px 6px 6px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
 .adm-media-peek img, .adm-media-peek .ph { width: 44px; height: 56px; border-radius: 8px; object-fit: cover; display: grid; place-items: center; background: rgba(0, 0, 0, 0.3); }
 .adm-media { display: grid; gap: 8px; justify-items: start; }
-.adm-media-el { width: 100%; max-width: 320px; max-height: 480px; border-radius: 12px; background: #000; }
+.adm-media-el { width: 100%; max-width: 220px; max-height: 300px; border-radius: 12px; background: #000; }
 .adm-media-audio { width: 100%; max-width: 360px; }
 .adm-media-photos { display: flex; gap: 8px; overflow-x: auto; max-width: 100%; }
 .adm-media-photos img { height: 160px; border-radius: 10px; object-fit: cover; display: block; }
@@ -297,3 +297,10 @@
 .adm-extract-range { display: grid; gap: 4px; }
 .adm-extract-range label { display: grid; gap: 2px; }
 .adm-extract-range input[type="range"] { width: 100%; accent-color: var(--accent, #ff634a); }
+
+/* Edit drop: one section at a time, a small video, Save always in reach. */
+.adm-panes { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; }
+.adm-panes button { font: inherit; font-size: 13px; font-weight: 700; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.adm-panes button.on { color: var(--fg); border-color: #ff634a; background: rgba(255, 99, 74, 0.14); }
+.adm-card .vx { grid-template-columns: minmax(0, 160px) minmax(0, 1fr); }
+.adm-foot.sticky { position: sticky; bottom: 0; z-index: 5; padding: 10px 0; background: var(--card); border-top: 1px solid var(--line); }
