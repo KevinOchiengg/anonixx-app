@@ -453,6 +453,9 @@ async def list_drops(
             "promo_until":       _aware(d["promo_until"]).isoformat() if d.get("promo_until") else None,
             "media_type":        d.get("media_type"),
             **_media(d),
+            "video_edit":        d.get("video_edit") if d.get("is_admin_drop") else None,
+            "duration_seconds":  d.get("duration_seconds"),
+            "sound":             d.get("sound"),
             "report_count":      d.get("report_count", 0),
             "moderation_status": d.get("moderation_status"),
             "created_at":        d["created_at"].isoformat() if d.get("created_at") else None,
@@ -496,6 +499,8 @@ class AdminEditDropRequest(BaseModel):
     confession: str
     location_country: Optional[str] = None   # "" clears; country only
     video_edit: Optional[dict] = None         # video drops: trim window + text over the video
+    sound_id: Optional[str] = None            # super admin: a Sounds library track; "" removes it
+    sound_mute_original: Optional[bool] = None
 
 
 @router.patch("/drops/{drop_id}", summary="Edit the text of a post made by an admin (users' posts stay untouchable)")
@@ -533,14 +538,39 @@ async def edit_admin_drop(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid video edit")
         extra["video_edit"] = clean_video_edit(edit)
 
+    unset: dict = {}
+    if data.sound_id is not None:
+        actor = await db["users"].find_one({"_id": ObjectId(admin_id)}, {"is_admin": 1, "email": 1})
+        if not is_super_admin_user(actor or {}):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the super admin can change a post's sound")
+        if drop.get("media_type") == "voice":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Voice posts already have their own audio")
+        if not data.sound_id:
+            unset["sound"] = ""
+        else:
+            try:
+                snd = await db["sounds"].find_one({"_id": ObjectId(data.sound_id), "active": True})
+            except Exception:
+                snd = None
+            if not snd:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "That sound isn't available any more. Pick another.")
+            extra["sound"] = {
+                "id": str(snd["_id"]), "title": snd.get("title", ""), "url": snd.get("url", ""),
+                "mute_original": bool(data.sound_mute_original) and drop.get("media_type") == "video",
+            }
+
     await db["drops"].update_one(
         {"_id": oid},
-        {"$set": {"confession": text or None, "edited_at": _now(), "edited_by": admin_id, **extra,
+        {**({"$unset": unset} if unset else {}),
+         "$set": {"confession": text or None, "edited_at": _now(), "edited_by": admin_id, **extra,
                   **(await country_changes(db, drop, data.location_country) if data.location_country is not None else {})}},
     )
     await audit(db, admin_id, "drop.edit", "drop", drop_id)
     country = data.location_country.strip() or None if data.location_country is not None else drop_country(drop)
-    return {"drop_id": drop_id, "confession": text, "country": country, "video_edit": extra.get("video_edit")}
+    out = {"drop_id": drop_id, "confession": text, "country": country, "video_edit": extra.get("video_edit")}
+    if data.sound_id is not None:
+        out["sound"] = extra.get("sound")
+    return out
 
 
 class PromoteRequest(BaseModel):

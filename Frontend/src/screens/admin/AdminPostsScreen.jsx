@@ -12,6 +12,7 @@ import LocationField from '../../components/drops/LocationField';
 import VideoEditorModal from '../../components/compose/VideoEditorModal';
 import { defaultEdit } from '../../utils/videoEdit';
 import { useVideoPlayer } from 'expo-video';
+import { useAudioPlayer } from 'expo-audio';
 
 // Must match DROP_SORTS in Backend/app/api/v1/admin.py.
 const SORTS = [['recent', 'Newest'], ['views', 'Most viewed'], ['likes', 'Most liked'], ['comments', 'Most discussed'], ['engagement', 'Best engagement']];
@@ -21,6 +22,7 @@ const PROMO_HOURS = [[6, '6h'], [24, '1 day'], [72, '3 days'], [168, '7 days']];
 const editFor = (post) => ({
   id: post.id, text: post.confession_full ?? post.confession ?? '', country: post.country || '',
   vedit: post.video_edit || null, touched: false,
+  sound: post.sound?.id || '', mute: !!post.sound?.mute_original, soundTouched: false,
 });
 
 // Length of a video the list doesn't know yet, read once it loads.
@@ -44,7 +46,37 @@ function Stat({ n, label, hot }) {
   );
 }
 
-const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText, canPin }) => (
+// Super admin: the track that plays behind the drop, from the Sounds library.
+function SoundPick({ sounds, video, value, mute, hearing, onChange, onHear }) {
+  if (!sounds.length) return <Text style={a.cardMeta}>No sounds yet. Add some on the website's admin Sounds page.</Text>;
+  return (
+    <View style={st.promo}>
+      <Text style={a.cardMeta}>Sound</Text>
+      <View style={st.promoRow}>
+        <TouchableOpacity onPress={() => onChange('', mute)} style={[st.sortChip, !value && st.sortChipOn]} activeOpacity={0.8}>
+          <Text style={[st.sortText, !value && st.sortTextOn]}>No sound</Text>
+        </TouchableOpacity>
+        {sounds.map((snd) => (
+          <TouchableOpacity
+            key={snd.id} activeOpacity={0.8}
+            onPress={() => onChange(snd.id, mute)} onLongPress={() => onHear(snd)}
+            style={[st.sortChip, value === snd.id && st.sortChipOn]}
+          >
+            <Text style={[st.sortText, value === snd.id && st.sortTextOn]}>{hearing === snd.id ? `■ ${snd.title}` : snd.title}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={a.cardMeta}>Hold a sound to listen.</Text>
+      {value && video ? (
+        <TouchableOpacity onPress={() => onChange(value, !mute)} style={[st.sortChip, mute && st.sortChipOn, { alignSelf: 'flex-start' }]} activeOpacity={0.8}>
+          <Text style={[st.sortText, mute && st.sortTextOn]}>{mute ? "Video's own sound: muted" : "Mute the video's own sound"}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText, canPin, soundPick, sounds, hearing, onSound, onHear }) => (
   <View style={a.card}>
     <Text style={a.cardMeta}>
       {item.is_admin_drop ? 'Anonixx' : (item.author || 'Anonymous')}
@@ -56,6 +88,12 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
       <TextInput
         style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={1800} autoFocus
         placeholder="Post text" placeholderTextColor={T.textMuted}
+      />
+    ) : null}
+    {editing != null && canPin && soundPick && item.media_type !== 'voice' ? (
+      <SoundPick
+        sounds={sounds} video={item.media_type === 'video'} value={soundPick.sound} mute={soundPick.mute}
+        hearing={hearing} onChange={onSound} onHear={onHear}
       />
     ) : null}
     {editing != null ? (
@@ -237,6 +275,7 @@ export default function AdminPostsScreen({ navigation, route }) {
         confession: editing.text.trim(),
         location_country: editing.country || '',
         ...(editing.touched && editing.vedit ? { video_edit: editing.vedit } : {}),
+        ...(isSuper && editing.soundTouched ? { sound_id: editing.sound, sound_mute_original: editing.mute } : {}),
       },
     });
     setSaving(false);
@@ -244,6 +283,7 @@ export default function AdminPostsScreen({ navigation, route }) {
       setPosts((prev) => prev.map((p) => (p.id === editing.id ? {
         ...p, confession: data.confession, confession_full: data.confession, country: data.country,
         ...(editing.touched ? { video_edit: data.video_edit } : {}),
+        ...('sound' in data ? { sound: data.sound } : {}),
       } : p)));
       setEditing(null);
       showToast({ type: 'success', message: 'Drop updated.' });
@@ -252,7 +292,23 @@ export default function AdminPostsScreen({ navigation, route }) {
     } else {
       showToast({ type: 'error', message: data?.detail || 'Could not save.' });
     }
-  }, [editing, posts, showToast, only, navigation]);
+  }, [editing, posts, showToast, only, navigation, isSuper]);
+
+  const [sounds, setSounds] = useState([]);
+  const [hearing, setHearing] = useState('');
+  const soundPlayer = useAudioPlayer(null);
+  useEffect(() => {
+    if (!isSuper || !editing || sounds.length) return;
+    apiFetch('/sounds').then(({ ok, data }) => { if (ok && data?.sounds) setSounds(data.sounds); }).catch(() => {});
+  }, [isSuper, editing, sounds.length]);
+  useEffect(() => { if (!editing && hearing) { soundPlayer.pause(); setHearing(''); } }, [editing, hearing, soundPlayer]);
+  const changeSound = useCallback((sound, mute) => setEditing((e) => (e ? { ...e, sound, mute, soundTouched: true } : e)), []);
+  const hearSound = useCallback((snd) => {
+    if (hearing === snd.id) { soundPlayer.pause(); setHearing(''); return; }
+    soundPlayer.replace({ uri: snd.url });
+    soundPlayer.play();
+    setHearing(snd.id);
+  }, [hearing, soundPlayer]);
 
   const promote = useCallback(async (post, choice) => {
     setSaving(true);
@@ -334,9 +390,11 @@ export default function AdminPostsScreen({ navigation, route }) {
               onChangeText={changeEdit} onSave={saveEdit} onCancel={cancelEdit} saving={saving}
               promoting={editing?.id === item.id ? promoting : null} onPromoting={setPromoting}
               onPromote={promote} onVideoText={openVideoText} canPin={isSuper}
+              soundPick={editing?.id === item.id ? editing : null} sounds={sounds} hearing={hearing}
+              onSound={changeSound} onHear={hearSound}
             />
           )}
-          extraData={[editing, promoting, saving, isSuper]}
+          extraData={[editing, promoting, saving, isSuper, sounds, hearing]}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={a.listContent}
           ListEmptyComponent={<Text style={a.emptyText}>No posts found.</Text>}

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type Sound } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
 import CountryField from "@/components/compose/LocationFields";
@@ -17,12 +17,49 @@ type D = DropMedia & {
   media_type: string | null; report_count: number; moderation_status: string | null; created_at: string | null;
   kind: string | null;
   video_edit: VideoEdit | null; duration_seconds: number | null;
+  sound: { id: string; title: string; url: string; mute_original: boolean } | null;
   stats: { views: number; likes: number; comments: number; saves: number; reactions: number; linkups: number; unlocks: number; engagement: number | null };
 };
 const SORTS: [string, string][] = [["recent", "Newest"], ["views", "Most viewed"], ["likes", "Most liked"], ["comments", "Most discussed"], ["engagement", "Best engagement"]];
 type Page = { total: number; skip: number; limit: number; drops: D[] };
 const LIMIT = 20;
-type Editing = { id: string; text: string; country: string; vedit: VideoEdit | null; touched: boolean };
+type Editing = {
+  id: string; text: string; country: string; vedit: VideoEdit | null; touched: boolean;
+  sound: string; mute: boolean; soundTouched: boolean;
+};
+
+// Super admin: the track that plays behind the drop, from the Sounds library.
+function SoundPick({ sounds, video, value, mute, onChange }: {
+  sounds: Sound[]; video: boolean; value: string; mute: boolean; onChange: (id: string, mute: boolean) => void;
+}) {
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const [hearing, setHearing] = useState(false);
+  const picked = sounds.find((x) => x.id === value);
+  useEffect(() => () => audio.current?.pause(), []);
+  function hear() {
+    if (hearing) { audio.current?.pause(); setHearing(false); return; }
+    if (!picked) return;
+    audio.current?.pause();
+    const a = new Audio(picked.url);
+    a.onended = () => setHearing(false);
+    audio.current = a;
+    a.play().then(() => setHearing(true)).catch(() => setHearing(false));
+  }
+  if (!sounds.length) return <p className="muted small">No sounds yet. Add some on the <Link href="/admin/sounds">Sounds</Link> page.</p>;
+  return (
+    <div className="adm-actions" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
+      <select className="adm-select" value={value} aria-label="Sound"
+        onChange={(e) => { audio.current?.pause(); setHearing(false); onChange(e.target.value, mute); }}>
+        <option value="">No sound</option>
+        {sounds.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+      </select>
+      {picked ? <button type="button" className="adm-btn" onClick={hear}>{hearing ? "Stop" : "Listen"}</button> : null}
+      {picked && video ? (
+        <label className="small"><input type="checkbox" checked={mute} onChange={(e) => onChange(value, e.target.checked)} /> Mute the video&apos;s own sound</label>
+      ) : null}
+    </div>
+  );
+}
 
 // Text over an existing video: finds its length, then opens the same editor as Post a drop.
 function VideoText({ src, known, value, onChange }: { src: string; known: number | null; value: VideoEdit | null; onChange: (v: VideoEdit) => void }) {
@@ -45,6 +82,7 @@ function VideoText({ src, known, value, onChange }: { src: string; known: number
 
 const startEdit = (d: D): Editing => ({
   id: d.id, text: d.confession_full ?? d.confession, country: d.country || "", vedit: d.video_edit, touched: false,
+  sound: d.sound?.id || "", mute: !!d.sound?.mute_original, soundTouched: false,
 });
 
 export default function AdminPosts() {
@@ -118,6 +156,7 @@ export default function AdminPosts() {
           confession: editing.text.trim(),
           location_country: editing.country,
           ...(editing.vedit && editing.touched ? { video_edit: editing.vedit } : {}),
+          ...(isSuper && editing.soundTouched ? { sound_id: editing.sound, sound_mute_original: editing.mute } : {}),
         },
       });
       setEditing(null);
@@ -126,6 +165,11 @@ export default function AdminPosts() {
       await load();
     } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }
+
+  const [sounds, setSounds] = useState<Sound[]>([]);
+  useEffect(() => {
+    if (isSuper && editing && !sounds.length) api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => {});
+  }, [isSuper, editing, sounds.length]);
 
   const dropOf = (id: string) => data?.drops.find((x) => x.id === id);
   const canSave = (e: Editing) => Boolean(e.text.trim() || dropOf(e.id)?.media_url);
@@ -177,6 +221,15 @@ export default function AdminPosts() {
                 <div className="adm-vtext">
                   <b className="small">Text over the video</b>
                   <VideoText src={d.media_url} known={d.duration_seconds} value={editing.vedit} onChange={setVedit} />
+                </div>
+              ) : null}
+              {editing?.id === d.id && isSuper && d.media_type !== "voice" ? (
+                <div className="adm-vtext">
+                  <b className="small">Sound</b>
+                  <SoundPick
+                    sounds={sounds} video={d.media_type === "video"} value={editing.sound} mute={editing.mute}
+                    onChange={(sound, mute) => setEditing({ ...editing, sound, mute, soundTouched: true })}
+                  />
                 </div>
               ) : null}
               {editing?.id === d.id ? (
