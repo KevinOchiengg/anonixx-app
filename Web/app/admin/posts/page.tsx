@@ -256,12 +256,8 @@ export default function AdminPosts() {
                     ) : null}
                     {on === "audio" && d.media_url ? (
                       <div className="adm-vtext">
-                        <p className="muted small">Saves the video&apos;s sound as a separate drop or sound. The video stays as it is.</p>
-                        <ExtractAudio
-                          dropId={d.id} src={d.media_url} known={d.duration_seconds}
-                          trim={d.video_edit ? { start: d.video_edit.start, end: d.video_edit.end } : null}
-                          caption={editing.text}
-                        />
+                        <p className="muted small">Posts the video&apos;s sound as a new audio drop with the same caption. The video stays as it is.</p>
+                        <ExtractAudio dropId={d.id} caption={editing.text} />
                       </div>
                     ) : null}
                   </>

@@ -76,16 +76,10 @@ function SoundPick({ sounds, video, value, mute, hearing, onChange, onHear }) {
   );
 }
 
-const clock = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
-
-// Super admin: pull the sound out of an official video into an audio drop and/or the Sounds
-// library. The video drop doesn't change.
+// Super admin: one tap pulls the whole video's sound out and posts it as an audio drop with the
+// same caption. The video drop doesn't change.
 function ExtractAudio({ item, caption }) {
   const { showToast } = useToast();
-  const trim = item.video_edit && item.video_edit.end > item.video_edit.start ? item.video_edit : null;
-  const [open, setOpen] = useState(false);
-  const [useTrim, setUseTrim] = useState(!!trim);
-  const [post, setPost] = useState(true);
   const [library, setLibrary] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -93,49 +87,21 @@ function ExtractAudio({ item, caption }) {
     setBusy(true);
     const { ok, data } = await apiFetch(`/admin/drops/${item.id}/extract-audio`, {
       method: 'POST',
-      body: { ...(useTrim && trim ? { start: trim.start, end: trim.end } : { start: 0 }), post, library, caption: (caption || '').trim() },
+      body: { post: true, library, caption: (caption || '').trim() },
     });
     setBusy(false);
     if (!ok) { showToast({ type: 'error', message: data?.detail || 'Could not extract the audio.' }); return; }
-    setOpen(false);
-    showToast({
-      type: 'success',
-      message: [data.drop_id ? 'Posted as an audio drop.' : '', data.sound ? `Added "${data.sound.title}" to Sounds.` : ''].filter(Boolean).join(' '),
-    });
+    showToast({ type: 'success', message: data.sound ? 'Posted as an audio drop and added to Sounds.' : 'Posted as an audio drop.' });
   };
 
-  if (!open) {
-    return (
-      <TouchableOpacity style={[a.btn, { alignSelf: 'flex-start' }]} onPress={() => setOpen(true)} activeOpacity={0.85}>
-        <Text style={a.btnText}>Extract audio</Text>
-      </TouchableOpacity>
-    );
-  }
-  const chip = (on, label, onPress) => (
-    <TouchableOpacity key={label} onPress={onPress} style={[st.sortChip, on && st.sortChipOn]} activeOpacity={0.8}>
-      <Text style={[st.sortText, on && st.sortTextOn]}>{label}</Text>
-    </TouchableOpacity>
-  );
   return (
-    <View style={st.promo}>
-      <Text style={a.cardMeta}>Extract audio</Text>
-      <View style={st.promoRow}>
-        {chip(!useTrim, 'Whole video', () => setUseTrim(false))}
-        {trim ? chip(useTrim, `Trimmed part ${clock(trim.start)}–${clock(trim.end)}`, () => setUseTrim(true)) : null}
-      </View>
-      <View style={st.promoRow}>
-        {chip(post, 'Post as an audio drop', () => setPost((v) => !v))}
-        {chip(library, 'Add to Sounds', () => setLibrary((v) => !v))}
-      </View>
-      {post ? <Text style={a.cardMeta}>It posts now, with the caption above.</Text> : null}
-      <View style={st.promoRow}>
-        <TouchableOpacity style={a.btn} onPress={() => setOpen(false)} disabled={busy} activeOpacity={0.85}>
-          <Text style={a.btnText}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={a.btn} onPress={run} disabled={busy || !(post || library)} activeOpacity={0.85}>
-          {busy ? <ActivityIndicator size="small" color={T.primary} /> : <Text style={[a.btnText, { color: T.primary }]}>Extract</Text>}
-        </TouchableOpacity>
-      </View>
+    <View style={st.promoRow}>
+      <TouchableOpacity style={a.btn} onPress={run} disabled={busy} activeOpacity={0.85}>
+        {busy ? <ActivityIndicator size="small" color={T.primary} /> : <Text style={[a.btnText, { color: T.primary }]}>Extract audio</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => setLibrary((v) => !v)} style={[st.sortChip, library && st.sortChipOn]} activeOpacity={0.8}>
+        <Text style={[st.sortText, library && st.sortTextOn]}>Also add to Sounds</Text>
+      </TouchableOpacity>
     </View>
   );
 }

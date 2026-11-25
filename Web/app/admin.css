@@ -294,9 +294,6 @@
 .adm-open:hover { color: var(--rose); }
 .adm-vtext { display: grid; gap: 6px; margin: 8px 0; }
 .adm-extract { display: grid; gap: 8px; }
-.adm-extract-range { display: grid; gap: 4px; }
-.adm-extract-range label { display: grid; gap: 2px; }
-.adm-extract-range input[type="range"] { width: 100%; accent-color: var(--accent, #ff634a); }
 
 /* Edit drop: one section at a time, a small video, Save always in reach. */
 .adm-panes { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; }
