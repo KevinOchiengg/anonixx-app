@@ -26,7 +26,6 @@
 .linkup svg { width: 16px; height: 16px; margin-right: 4px; vertical-align: -3px; }
 
 /* ---------- audio waveform ---------- */
-.audio-slide { justify-content: center; }
 .wave { position: relative; width: calc(100% - 96px); max-width: 420px; margin: 24px auto 0; padding: 20px 18px 16px; border-radius: 20px; background: rgba(21, 25, 36, 0.78); border: 1px solid var(--line); text-align: center; }
 .wave-bars { display: flex; align-items: center; justify-content: space-between; height: 72px; gap: 2px; }
 .wave-bars i { flex: 1; min-width: 2px; border-radius: 2px; background: rgba(255, 255, 255, 0.25); }
@@ -217,7 +216,14 @@
 .linkup svg { margin-right: 6px; vertical-align: 0; flex: none; }
 
 .slide .dots { top: 12px; }
-.audio-slide .wave { width: 100%; }
+/* Audio drops: a coloured wave moving in the middle, laid out like a video. */
+.astage { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(120% 80% at 50% 45%, #2a0f1c 0%, #0b0609 60%, #000 100%); cursor: pointer; }
+.astage-wave { display: flex; align-items: center; gap: 4px; height: 150px; margin-bottom: 60px; }
+.astage-wave i { width: 5px; border-radius: 3px; opacity: 0.55; transform-origin: center; animation: astage-bar 1.2s ease-in-out infinite alternate; animation-play-state: paused; }
+.astage-wave i.played { opacity: 1; box-shadow: 0 0 8px currentColor; }
+.astage.on .astage-wave i { animation-play-state: running; }
+@keyframes astage-bar { 0% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } 100% { transform: scaleY(0.6); } }
+@media (prefers-reduced-motion: reduce) { .astage-wave i { animation: none; } }
 .slide.text-slide .confession { font-size: clamp(20px, 5.4vw, 28px); }
 
 @media (max-height: 720px) {

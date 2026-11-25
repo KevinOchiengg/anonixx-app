@@ -10,7 +10,7 @@ import VideoPlayer, { TAP_GAP } from "./VideoPlayer";
 import FitImage from "./FitImage";
 import { Bookmark, Comment, Heart, Share } from "./icons";
 import { Link2, SoundOff } from "./feedicons";
-import AudioWave from "./AudioWave";
+import AudioStage from "./AudioStage";
 import AmbientSound from "./AmbientSound";
 import Sheet from "./Sheet";
 import { DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
@@ -148,7 +148,9 @@ export default function Slide({
   }
   const audioSrc = post.audio_url;
   const singleImage = !slides && !videoSrc && post.media_type === "image" ? post.media_url : post.image_url;
-  const hasMedia = Boolean(slides || videoSrc || singleImage);
+  // An audio drop with nothing to look at plays full screen like a video.
+  const audioOnly = Boolean(audioSrc) && !slides && !videoSrc && !singleImage;
+  const hasMedia = Boolean(slides || videoSrc || singleImage) || audioOnly;
 
   const Text = headline ? "h1" : "p";
   const textSlide = !hasMedia && !audioSrc;
@@ -365,7 +367,7 @@ export default function Slide({
       onContextMenu={(e) => { if (press.current || pressed.current) e.preventDefault(); }}
       // Text drops: double tap anywhere on the slide likes it too (taps on buttons and links don't count).
       onClick={hasMedia ? undefined : (e) => { if (!(e.target as HTMLElement).closest("button, a, input, textarea, select, [role=button]")) mediaTap(e); }}
-      className={`slide${clear ? " clear" : ""} ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${card ? " cc-slide" : textSlide ? " text-slide" : ""}${audioSrc && !hasMedia ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
+      className={`slide${clear ? " clear" : ""} ${hasMedia ? "has-media" : `g${hash(post.id) % 6}`}${card ? " cc-slide" : textSlide ? " text-slide" : ""}${audioOnly ? " audio-slide" : ""}${canLinkUp && hasMedia ? " has-linkup" : ""}`}
       style={card ? ({ "--cc-tint": CATEGORIES[category].tint } as React.CSSProperties) : undefined}
       data-idx={index}
       data-post={post.id}
@@ -422,6 +424,8 @@ export default function Slide({
             />
           ) : singleImage ? (
             <FitImage src={singleImage} alt={post.content.slice(0, 100)} priority={near} />
+          ) : audioOnly && audioSrc ? (
+            <AudioStage src={audioSrc} seed={post.audio_url || post.id} active={active && !mature} near={near && !mature} />
           ) : null}
           {videoSrc && locked && previewDone ? (
             <div className="paywall" onClick={(e) => e.stopPropagation()}>
@@ -496,9 +500,7 @@ export default function Slide({
           </div>
         ) : null}
 
-        {audioSrc && near && !mature ? (
-          hasMedia ? <audio className="voice" controls preload="none" src={audioSrc} /> : <AudioWave src={audioSrc} seed={post.id} active={active} />
-        ) : null}
+        {audioSrc && !audioOnly && near && !mature ? <audio className="voice" controls preload="none" src={audioSrc} /> : null}
       </div>
 
       {ambient && near ? <AmbientSound src={ambient.url} play={active && !muted} /> : null}

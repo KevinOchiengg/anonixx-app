@@ -18,8 +18,8 @@ let activePlayer = null;
 
 // The colour flows along the wave: pink → coral → amber → gold → coral → pink (web twin: ChatBubble.tsx).
 const STOPS = ['#e8456e', '#ff634a', '#ff9376', '#f0a868', '#ffc93c', '#ff634a', '#e8456e'];
-function barColor(i) {
-  const x = (i / (BAR_COUNT - 1)) * (STOPS.length - 1);
+export function barColor(i, count = BAR_COUNT) {
+  const x = (i / (count - 1)) * (STOPS.length - 1);
   const k = Math.min(STOPS.length - 2, Math.floor(x));
   const f = x - k;
   const mix = (o) => Math.round(parseInt(STOPS[k].slice(o, o + 2), 16) * (1 - f) + parseInt(STOPS[k + 1].slice(o, o + 2), 16) * f);

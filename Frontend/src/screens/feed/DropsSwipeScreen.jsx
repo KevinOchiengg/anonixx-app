@@ -2,7 +2,7 @@
  * market items and ads mixed in. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Dimensions, FlatList, Image, Linking,
+  ActivityIndicator, Animated, Dimensions, Easing, FlatList, Image, Linking,
   ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity,
   View, useWindowDimensions,
 } from 'react-native';
@@ -44,6 +44,7 @@ import { THEME } from '../../utils/theme';
 import { CARD_INTENTS, CARD_FONT_STYLES, DROP_THEMES } from '../../components/drops/DropCardRenderer';
 import VideoOverlays from '../../components/common/VideoOverlays';
 import InlineMoreText from '../../components/common/InlineMoreText';
+import { barColor } from '../../components/common/VoiceWaveform';
 import { countryHeader } from '../../utils/country';
 import { timeLeft } from '../../config/linkup';
 import FitImage, { FitBackdrop } from '../../components/feed/FitImage';
@@ -773,7 +774,51 @@ const VideoSlide = ({
   );
 };
 
-// ─── AUDIO SLIDE (ported from MediaFeedScreen.jsx) ───────────────
+// ─── AUDIO SLIDE: laid out like a video drop, with a coloured wave moving in the middle.
+const WAVE_BARS = 36;
+
+function waveShape(seed) {
+  let h = 0;
+  const str = seed || 'x';
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  const rnd = () => { h = (h * 1103515245 + 12345) >>> 0; return ((h >>> 8) % 1000) / 1000; };
+  return Array.from({ length: WAVE_BARS }, (_, i) => {
+    const hump = 0.45 + 0.55 * Math.sin((i / (WAVE_BARS - 1)) * Math.PI);
+    const k = [rnd(), rnd(), rnd(), rnd()].map((r) => Math.max(0.18, hump * (0.35 + r * 0.65)));
+    return { rest: k[0], steps: [k[0], k[1], k[2], k[3], k[0]], color: barColor(i, WAVE_BARS) };
+  });
+}
+
+const AudioWave = React.memo(({ seed, playing, progress }) => {
+  const phase = useRef(new Animated.Value(0)).current;
+  const bars = useMemo(() => waveShape(seed), [seed]);
+  useEffect(() => {
+    if (!playing) return undefined;
+    const loop = Animated.loop(Animated.timing(phase, { toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [playing, phase]);
+  const playedUpTo = Math.floor(progress * WAVE_BARS);
+  return (
+    <View style={as.wave} pointerEvents="none">
+      {bars.map((b, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            as.waveBar,
+            {
+              backgroundColor: b.color,
+              opacity: progress > 0 && i <= playedUpTo ? 1 : 0.55,
+              transform: [{ scaleY: phase.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: b.steps }) }],
+            },
+            progress > 0 && i === playedUpTo && { shadowColor: b.color, shadowOpacity: 0.9, shadowRadius: 8, elevation: 6 },
+          ]}
+        />
+      ))}
+    </View>
+  );
+});
+
 const AudioSlide = ({
   post, isActive, onLike, liked, likesCount, savesCount, onSave, saved, onComment,
   commentCount, isOwnPost, onLinkUp, onMore, onShare, navigation, chromeHidden = false,
@@ -781,12 +826,13 @@ const AudioSlide = ({
   const audioPlayer = useAudioPlayer(null);
   const audioStatus = useAudioPlayerStatus(audioPlayer);
   const [expanded, setExpanded] = useState(false);
-  const progressAnim = useRef(new Animated.Value(0)).current;
 
-  const position = (audioStatus.currentTime || 0) * 1000;
-  const duration = (audioStatus.duration || 0) * 1000;
-  const progress = duration > 0 ? position / duration : 0;
+  const position = audioStatus.currentTime || 0;
+  const duration = audioStatus.duration || 0;
+  const progress = duration > 0 ? Math.min(1, position / duration) : 0;
   const playing = audioStatus.playing;
+  const playingRef = useRef(false);
+  playingRef.current = playing;
 
   // Slow network: the same loading line as videos, after 0.7s of waiting for sound.
   const waiting = isActive && !!post.audio_url && (audioStatus.isBuffering || !audioStatus.isLoaded);
@@ -797,15 +843,16 @@ const AudioSlide = ({
     return () => clearTimeout(t);
   }, [waiting]);
 
+  // Loops like a video.
   useEffect(() => {
-    Animated.timing(progressAnim, { toValue: progress, duration: 100, useNativeDriver: false }).start();
-    if (audioStatus.didJustFinish) progressAnim.setValue(0);
-  }, [progress, audioStatus.didJustFinish]);
+    if (!audioStatus.didJustFinish || !isActive) return;
+    try { audioPlayer.seekTo(0); audioPlayer.play(); } catch {}
+  }, [audioStatus.didJustFinish, isActive, audioPlayer]);
 
   const audioLoaded = useRef(false);
   useEffect(() => {
     let cancelled = false;
-    if (!isActive) { audioPlayer.pause(); return; }
+    if (!isActive) { audioPlayer.pause(); return undefined; }
     (async () => {
       try {
         await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true, shouldPlayInBackground: true });
@@ -818,116 +865,86 @@ const AudioSlide = ({
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [isActive, post.audio_url]);
+  }, [isActive, post.audio_url]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const togglePlay = async () => {
-    try {
-      if (!audioLoaded.current) {
-        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true, shouldPlayInBackground: true });
-        audioPlayer.replace({ uri: post.audio_url });
-        audioLoaded.current = true;
-        audioPlayer.play();
-      } else if (playing) {
-        audioPlayer.pause();
-      } else {
-        audioPlayer.play();
-      }
-    } catch {}
-  };
+  const togglePlay = useCallback(() => {
+    try { playingRef.current ? audioPlayer.pause() : audioPlayer.play(); } catch {}
+  }, [audioPlayer]);
 
-  const formatTime = (ms) => {
-    const s = Math.floor(ms / 1000);
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-
-  // Double tap on any empty part of the slide likes it; hold for the menu.
+  // A tap pauses or plays; a double tap likes; hold for the menu.
   const likedRef = useRef(liked);
   likedRef.current = liked;
   const { gesture: tapGesture, hearts, removeHeart } = useDoubleTapLike({
-    onSingle: null,
+    onSingle: togglePlay,
     onDoubleLike: () => { if (!likedRef.current) { likedRef.current = true; onLike(); } },
     onLong: onMore,
   });
 
-  const activeBar = Math.floor(progress * 48);
-  const bars = Array.from({ length: 48 }, (_, i) => ({
-    h: Math.sin(i * 0.55) * 20 + Math.cos(i * 0.3) * 10 + 28,
-    played: progress > 0 && i / 48 <= progress,
-    current: progress > 0 && i === activeBar,
-  }));
-
-
   return (
-    <View style={[ss.slide, { backgroundColor: THEME.background }]}>
-      <View style={as.bgAccent} />
-      <View style={as.bgAccent2} />
+    <View style={ss.slide}>
+      <LinearGradient colors={['#1a0a12', '#0b0609', '#000']} style={StyleSheet.absoluteFill} pointerEvents="none" />
 
       <GestureDetector gesture={tapGesture}>
         <View style={StyleSheet.absoluteFill} collapsable={false} />
       </GestureDetector>
 
-      {!chromeHidden && (
-        <View style={ss.rail}>
-          <RailAvatar post={post} navigation={navigation} />
-          <ActionBtn
-            icon={<Heart size={26} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
-            tint="like" count={likesCount} onPress={onLike} active={liked}
-          />
-          <ActionBtn tint="comment" icon={<MessageSquareMore size={26} color="#fff" />} count={commentCount} onPress={onComment} />
-          <ActionBtn
-            icon={<Bookmark size={26} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
-            tint="save" count={savesCount} onPress={onSave} active={saved}
-          />
-          <ActionBtn
-            tint="share" icon={<Share2 size={26} color="#fff" />} count={null}
-            onPress={onShare}
-          />
-          <EditRailBtn post={post} navigation={navigation} />
-          <ViewsStat count={post.views_count} />
-        </View>
-      )}
-
-      <View style={as.center} pointerEvents="box-none">
-        <View style={as.authorRow} pointerEvents="box-none">
-          <AuthorProfileTrigger post={post} navigation={navigation}>
-            <View>
-              <Text style={as.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
-              <Text style={as.timeAgo}>{post.time_ago}</Text>
-            </View>
-          </AuthorProfileTrigger>
-        </View>
-
-        {post.content ? (
-          <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85} style={as.contentWrap}>
-            <InlineMoreText text={post.content} style={as.contentText} moreStyle={as.moreText} hookStyle={ss.captionHook} expanded={expanded} />
-          </TouchableOpacity>
-        ) : null}
-
-        <View style={as.waveformWrap} pointerEvents="none">
-          {bars.map((bar, i) => (
-            <View key={i} style={[as.bar, { height: bar.h }, bar.played ? as.barPlayed : as.barUnplayed, bar.current && as.barGlow]} />
-          ))}
-        </View>
-
-        <View style={as.progressTrack} pointerEvents="none">
-          <Animated.View style={[as.progressFill, { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
-          {slowLoad && <BufferLine style={as.bufferOnTrack} />}
-        </View>
-
-        <View style={as.timeRow} pointerEvents="none">
-          <Text style={as.timeText}>{formatTime(position)}</Text>
-          <Text style={as.timeText}>{duration > 0 ? formatTime(duration) : '--:--'}</Text>
-        </View>
-
-        <TouchableOpacity style={as.playBtn} onPress={togglePlay} activeOpacity={0.85}>
-          {playing ? <Pause size={32} color="#fff" fill="#fff" /> : <Play size={32} color="#fff" fill="#fff" />}
-        </TouchableOpacity>
-
-        <LiveChips post={post} isOwnPost={isOwnPost} />
-        {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
+      <View style={as.waveCenter} pointerEvents="none">
+        <AudioWave seed={post.audio_url || post.id} playing={playing} progress={progress} />
       </View>
 
+      {duration > 0 && !chromeHidden && (
+        <View style={ss.progressWrap} pointerEvents="none">
+          <View style={[ss.progressFill, { width: `${progress * 100}%` }]} />
+        </View>
+      )}
+      {slowLoad && <BufferLine />}
+
       <HeartBursts hearts={hearts} color={RAIL_TINTS.like.ca} onDone={removeHeart} />
+
+      {!chromeHidden && (
+        <>
+          <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
+
+          {isActive && duration > 0 && !playing && <PlayBadge />}
+
+          <View style={ss.rail}>
+            <RailAvatar post={post} navigation={navigation} />
+            <ActionBtn
+              icon={<Heart size={28} color={liked ? THEME.primary : '#fff'} fill={liked ? THEME.primary : 'none'} />}
+              tint="like" count={likesCount} onPress={onLike} active={liked}
+            />
+            <ActionBtn tint="comment" icon={<MessageSquareMore size={28} color="#fff" />} count={commentCount} onPress={onComment} />
+            <ActionBtn
+              icon={<Bookmark size={28} color={saved ? THEME.primary : '#fff'} fill={saved ? THEME.primary : 'none'} />}
+              tint="save" count={savesCount} onPress={onSave} active={saved}
+            />
+            <ActionBtn tint="share" icon={<Share2 size={28} color="#fff" />} count={null} onPress={onShare} />
+            <EditRailBtn post={post} navigation={navigation} />
+            <ViewsStat count={post.views_count} />
+          </View>
+
+          <View style={ss.bottomInfo}>
+            <View style={ss.authorRow}>
+              <AuthorProfileTrigger post={post} navigation={navigation}>
+                <View style={ss.authorMeta}>
+                  <Text style={ss.authorName}>{post.anonymous_name || 'Anonymous'}</Text>
+                  <Text style={ss.timeAgo}>{post.time_ago}{post.kind === 'hookup' ? ' · Hookup' : post.kind === 'confession' ? ' · Confession' : ''}</Text>
+                </View>
+              </AuthorProfileTrigger>
+            </View>
+
+            {post.content ? (
+              <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
+                <InlineMoreText text={post.content} style={ss.contentText} moreStyle={ss.moreText} hookStyle={ss.captionHook} expanded={expanded} />
+              </TouchableOpacity>
+            ) : null}
+
+            <LiveChips post={post} isOwnPost={isOwnPost} />
+            {!isOwnPost && !post.is_admin_drop && post.kind !== 'confession' && <LinkUpButton heart={post.kind === 'hookup'} onPress={onLinkUp} name={post.anonymous_name} />}
+          </View>
+        </>
+      )}
     </View>
   );
 };
@@ -2016,33 +2033,9 @@ const ss = StyleSheet.create({
 });
 
 const as = StyleSheet.create({
-  bgAccent: { position: 'absolute', top: -120, left: -100, width: 340, height: 340, borderRadius: 170, backgroundColor: 'rgba(255,99,74,0.09)' },
-  bgAccent2: { position: 'absolute', bottom: -100, right: -80, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,99,74,0.06)' },
-  center: { flex: 1, paddingHorizontal: 28, paddingTop: 100, paddingBottom: 120, justifyContent: 'center' },
-  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  authorName: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  timeAgo: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
-  contentWrap: { marginBottom: 28 },
-  contentText: {
-    fontSize: 15.5, lineHeight: 22, color: 'rgba(246,230,236,0.78)',
-    textShadowColor: 'rgba(0,0,0,0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
-  },
-  moreText: { color: 'rgba(255,255,255,0.72)', fontWeight: '800' },   // reads as part of the caption
-  waveformWrap: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 64, marginBottom: 12 },
-  bar: { width: 4, borderRadius: 3 },
-  barPlayed: { backgroundColor: THEME.primary },
-  barUnplayed: { backgroundColor: 'rgba(255,255,255,0.15)' },
-  barGlow: { shadowColor: THEME.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 6, elevation: 6 },
-  progressTrack: { height: 3, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 2, marginBottom: 8, overflow: 'hidden' },
-  bufferOnTrack: { bottom: 0, height: 3 },
-  progressFill: { height: '100%', backgroundColor: THEME.primary, borderRadius: 2 },
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
-  timeText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
-  playBtn: {
-    alignSelf: 'center', width: 72, height: 72, borderRadius: 36, backgroundColor: THEME.primary,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
-    shadowColor: THEME.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.6, shadowRadius: 16, elevation: 12,
-  },
+  waveCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingRight: 56, paddingBottom: 60 },
+  wave: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 150 },
+  waveBar: { width: 5, height: 150, borderRadius: 3 },
 });
 
 // ─── New-to-this-screen styles ────────────────────────────────────
