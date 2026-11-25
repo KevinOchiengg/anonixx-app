@@ -25,7 +25,7 @@ from app.utils.moderation import violates_policy, MODERATION_ERROR
 from app.services.confession_writer import MONEY as CLARITY_MONEY
 from app.utils.content_mode import classify_sensitivity, mature_allowed, apply_content_mode, socials_safe
 from app.utils.fingerprint import fingerprint_hash
-from app.utils.feed_mix import fetch_mixed, reslot, not_promoted, fetch_promoted, splice_promoted
+from app.utils.feed_mix import fetch_mixed, keep_rhythm, reslot, not_promoted, fetch_promoted, splice_promoted
 from app.utils import taste
 from app.tasks import scheduled_publisher
 from app.utils import stream
@@ -2176,7 +2176,7 @@ async def get_drops_feed(
     if loc_filter:
         pool_query = {"$and": [pool_query, loc_filter]} if pool_query else loc_filter
 
-    # Mixed feed: MEDIA_RUN media drops, then one text confession, repeating. Each kind pages
+    # Mixed feed: MEDIA_RUN media drops, then one text or poll drop, repeating. Each kind pages
     # separately (utils/feed_mix.py). Local first, using the viewer's country unless turned off.
     detected = country_from_header(x_country)
     if detected and user_doc and user_doc.get("detected_country") != detected:
@@ -2212,7 +2212,7 @@ async def get_drops_feed(
             else:
                 page, next_cursor, page_has_more = await _recycled_page(db, viewer_key, stream_query, drops_to_load, RECYCLE_PREFIX)
 
-    drops = reslot(page, _weighted_shuffle_drops(page, user_affinities, viewer_taste))
+    drops = keep_rhythm(reslot(page, _weighted_shuffle_drops(page, user_affinities, viewer_taste)), session_posts)
     if not cursor:
         drops = splice_promoted(drops, await fetch_promoted(db, pool_query, now))
     formatted_drops = await batch_format_drops(drops, current_user_id, db)

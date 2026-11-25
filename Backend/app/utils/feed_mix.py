@@ -1,4 +1,4 @@
-"""Feed mixing: MEDIA_RUN media drops, then one text confession, repeating. Each stream pages
+"""Feed mixing: MEDIA_RUN media drops, then one text or poll drop, repeating. Each stream pages
 separately in one cursor, so nothing is skipped or repeated. With a known country, text slots
 take LOCAL_RUN local confessions per global one; either side fills in when the other runs out.
 
@@ -18,7 +18,8 @@ from typing import Optional
 from bson import ObjectId
 from fastapi import HTTPException
 
-MEDIA_RUN = 3
+MEDIA_RUN = 9
+TEXT_EVERY = MEDIA_RUN + 1
 PATTERN = ["m"] * MEDIA_RUN + ["t"]
 LOCAL_RUN = 2
 TEXT_PATTERN = ["l"] * LOCAL_RUN + ["g"]
@@ -228,6 +229,25 @@ def splice_showcase(page: list, showcase: list) -> list:
     """Lead with the showcase drops, then the page without repeats of them."""
     ids = {d["_id"] for d in showcase}
     return list(showcase) + [d for d in page if d["_id"] not in ids]
+
+
+def keep_rhythm(page: list, start: int) -> list:
+    """Text and poll drops only at every TEXT_EVERY-th place in the session (counted from
+    `start`). Extra ones wait for a later load, unless media is running out."""
+    media = [d for d in page if is_media_drop(d)]
+    text = [d for d in page if not is_media_drop(d)]
+    media_scarce = len(media) <= len(page) // 2
+    out: list = []
+    n = start
+    while media or (text and media_scarce):
+        if text and (n % TEXT_EVERY == TEXT_EVERY - 1 or not media):
+            out.append(text.pop(0))
+        else:
+            out.append(media.pop(0))
+        n += 1
+    if text and (not out or n % TEXT_EVERY == TEXT_EVERY - 1):
+        out.append(text.pop(0))
+    return out
 
 
 def reslot(page: list, shuffled: list) -> list:
