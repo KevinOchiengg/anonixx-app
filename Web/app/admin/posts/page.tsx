@@ -8,6 +8,7 @@ import CountryField from "@/components/compose/LocationFields";
 import { askConfirm } from "@/lib/confirm";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import VideoEditor from "@/components/compose/VideoEditor";
+import ExtractAudio from "@/components/admin/ExtractAudio";
 import { attachVideo } from "@/lib/attachVideo";
 import { defaultEdit, type VideoEdit } from "@/lib/videoEdit";
 
@@ -229,6 +230,16 @@ export default function AdminPosts() {
                   <SoundPick
                     sounds={sounds} video={d.media_type === "video"} value={editing.sound} mute={editing.mute}
                     onChange={(sound, mute) => setEditing({ ...editing, sound, mute, soundTouched: true })}
+                  />
+                </div>
+              ) : null}
+              {editing?.id === d.id && isSuper && d.is_admin_drop && d.media_type === "video" && d.media_url ? (
+                <div className="adm-vtext">
+                  <b className="small">Extract audio</b>
+                  <ExtractAudio
+                    dropId={d.id} src={d.media_url} known={d.duration_seconds}
+                    trim={d.video_edit ? { start: d.video_edit.start, end: d.video_edit.end } : null}
+                    caption={editing.text}
                   />
                 </div>
               ) : null}

@@ -994,3 +994,81 @@ async def bootstrap_admin(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
     return {"message": "First admin created.", "user_id": user_id}
+
+
+# ─── Extract audio from a video drop ─────────────────────────
+
+class ExtractAudioRequest(BaseModel):
+    start:      float = 0.0
+    end:        Optional[float] = None
+    post:       bool = True                  # post it as an audio drop
+    library:    bool = False                 # add it to the Sounds library
+    caption:    Optional[str] = None
+    title:      Optional[str] = None         # Sounds library title
+    publish_at: Optional[datetime] = None    # None = post now
+
+
+@router.post("/drops/{drop_id}/extract-audio", summary="Pull the sound out of an official video drop (super admin)")
+async def extract_drop_audio(
+    drop_id:  str,
+    data:     ExtractAudioRequest,
+    admin_id: str = Depends(require_super_admin),
+    db=Depends(get_database),
+):
+    from app.api.v1.drops import create_drop, CreateDropRequest
+    from app.utils import r2_storage
+    from app.utils.audio_extract import ExtractError, extract_audio
+
+    if not (data.post or data.library):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose where the audio goes")
+    drop = await db["drops"].find_one({"_id": _drop_oid(drop_id)})
+    if not drop or not drop.get("is_admin_drop"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Official drop not found")
+    if drop.get("media_type") != "video" or not drop.get("media_url"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only video drops have audio to extract")
+    if drop.get("paywall"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Paid videos can't be extracted")
+    when = _check_publish_at(data.publish_at) if data.post and data.publish_at else None
+    if data.end is not None and data.end <= data.start:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The end has to come after the start")
+
+    r2_storage.require_configured()
+    try:
+        audio, seconds = await extract_audio(drop.get("media_download_url") or drop["media_url"], data.start, data.end)
+    except ExtractError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    try:
+        url = r2_storage.upload_bytes(audio, "audio", "audio/mp4")
+    except Exception:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Couldn't save the audio. Try again")
+
+    caption = (data.caption if data.caption is not None else drop.get("confession") or "").strip()
+    out: dict = {"audio_url": url, "duration_seconds": seconds}
+
+    if data.library:
+        title = (data.title or caption or "Original sound").strip()[:80]
+        doc = {"title": title, "mood": "any", "url": url, "active": True, "created_by": admin_id,
+               "created_at": _now(), "source_drop_id": drop_id}
+        res = await db["sounds"].insert_one(doc)
+        out["sound"] = {"id": str(res.inserted_id), "title": title, "url": url}
+
+    if data.post:
+        payload = {
+            "media_type": "voice", "media_url": url, "duration_seconds": seconds,
+            "confession": caption or None, "theme": drop.get("theme") or "desire",
+            "intent": drop.get("intent"), "mood_tag": drop.get("mood_tag"),
+            "location_country": drop_country(drop),
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        if when:
+            res = await db["scheduled_drops"].insert_one({
+                "admin_id": admin_id, "drop": payload, "publish_at": when, "status": "pending", "created_at": _now(),
+            })
+            out["scheduled_id"] = str(res.inserted_id)
+            out["publish_at"] = when.isoformat()
+        else:
+            created = await create_drop(CreateDropRequest(**payload), admin_id, db)
+            out["drop_id"] = created.get("id")
+
+    await audit(db, admin_id, "drop.extract_audio", "drop", drop_id)
+    return out
