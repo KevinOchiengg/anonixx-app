@@ -218,7 +218,9 @@
 .slide .dots { top: 12px; }
 /* Audio drops: a coloured wave moving in the middle, laid out like a video. */
 .slide.audio-slide, .slide.audio-slide .media { background: var(--bg); }
-.astage { position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer; }
+.astage { position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+/* Double tap to like must not flash or select anything. */
+.slide .media, .slide .rail { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
 .astage-wave { display: flex; align-items: center; gap: 4px; height: 150px; margin-bottom: 60px; }
 .astage-wave i { width: 5px; border-radius: 3px; opacity: 0.55; transform-origin: center; animation: astage-bar 1.2s ease-in-out infinite alternate; animation-play-state: paused; }
 .astage-wave i.played { opacity: 1; box-shadow: 0 0 8px currentColor; }
