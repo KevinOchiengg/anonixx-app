@@ -14,13 +14,14 @@ import ScheduledDrops, { toLocalInput } from "./ScheduledDrops";
 import { uploadFile } from "@/lib/upload";
 import { keepReadable, clearLocalCopies } from "@/lib/localCopy";
 import { sniffVideo, formatProblem } from "@/lib/videoFormat";
-import VoiceRecorder, { type VoiceDraft } from "../compose/VoiceRecorder";
+import type { VoiceDraft } from "../compose/VoiceRecorder";
+import AudioPicker from "../compose/AudioPicker";
 import CountryField from "../compose/LocationFields";
 import { videoLength } from "../compose/MediaPicker";
 import VideoEditor from "../compose/VideoEditor";
 import VideoPlayer from "../VideoPlayer";
 import { defaultEdit, isMeaningful, type VideoEdit } from "@/lib/videoEdit";
-import { IconText, IconImages, IconVideo, IconMic, IconPoll } from "../compose/toolicons";
+import { IconText, IconImages, IconVideo, IconAudio, IconPoll } from "../compose/toolicons";
 import "../../app/poststudio.css";
 import { Upload, X } from "lucide-react";
 
@@ -29,7 +30,7 @@ const FORMATS: { id: Format; label: string; hint: string; icon: React.ReactNode 
   { id: "text", label: "Text", hint: "Words on a gradient", icon: <IconText /> },
   { id: "photo", label: "Photos", hint: "1 to 9 images", icon: <IconImages /> },
   { id: "video", label: "Video", hint: "Up to 3 min, trim + text", icon: <IconVideo /> },
-  { id: "voice", label: "Voice", hint: "Record a note", icon: <IconMic /> },
+  { id: "voice", label: "Audio", hint: "Upload an audio file", icon: <IconAudio /> },
   { id: "poll", label: "Poll", hint: "2 to 4 options", icon: <IconPoll /> },
 ];
 
@@ -158,7 +159,7 @@ export default function PostStudio() {
     format === "text" ? (text.trim() ? "" : "Write something to post.")
     : format === "photo" ? (photos.length ? "" : "Add at least one photo.")
     : format === "video" ? (video ? "" : "Add a video.")
-    : format === "voice" ? (voice ? "" : "Record a voice note.")
+    : format === "voice" ? (voice ? "" : "Upload an audio file.")
     : !question.trim() ? "Ask a question."
     : opts.length < 2 ? "Add at least two options."
     : "";
@@ -324,7 +325,7 @@ export default function PostStudio() {
           };
         }
       } else if (format === "voice" && voice) {
-        setBusy("Uploading voice note…");
+        setBusy("Uploading audio…");
         media = {
           media_type: "voice",
           media_url: await uploadFile(voice.blob, "voice"),
@@ -624,7 +625,7 @@ export default function PostStudio() {
               </>
             ) : null}
 
-            {format === "voice" ? <VoiceRecorder value={voice} onChange={setVoice} onError={setError} /> : null}
+            {format === "voice" ? <AudioPicker value={voice} onChange={setVoice} onError={setError} /> : null}
 
             {format === "poll" ? (
               <div className="ps-poll">

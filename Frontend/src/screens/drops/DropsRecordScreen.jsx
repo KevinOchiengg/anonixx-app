@@ -1,25 +1,21 @@
-/** Voice drop recorder: record up to 3:00 with a live waveform (warns near the end), then
- * preview with seek and speed, and send, re-record or add text. */
+/** Audio drop: pick an audio file, preview it with seek and speed, then send, swap it or add text. */
 import React, {
   useCallback, useEffect, useRef, useState,
 } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Dimensions, Animated, Platform,
+  ActivityIndicator, Dimensions, Animated,
   KeyboardAvoidingView, ScrollView, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  useAudioRecorder, useAudioRecorderState,
-  useAudioPlayer,   useAudioPlayerStatus,
-  AudioModule, RecordingPresets,
-} from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, AudioModule } from 'expo-audio';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useDispatch } from 'react-redux';
 import {
-  Globe, Images, Lock, Mic, Pause, Play, RotateCcw, Send, Square,
+  Globe, Images, Lock, Pause, Play, RotateCcw, Send, Upload,
   Type as TypeIcon, X,
 } from 'lucide-react-native';
 
@@ -36,13 +32,24 @@ import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useAuth } from '../../context/AuthContext';
 
 const SCREEN_W      = Dimensions.get('window').width;
-const MAX_DURATION  = 180;      // seconds — spec: 3 minutes
-const BAR_COUNT     = 120;      // spec section 1: 120 amplitude bars
+const MAX_MB        = 10;
+const BAR_COUNT     = 120;
 const SPEEDS        = [0.75, 1, 1.5];
 
 const formatTime = (seconds) => {
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+// Decorative bars, steady for a given file.
+const barsFor = (seed) => {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return Array.from({ length: BAR_COUNT }, (_, i) => {
+    h = (h * 1103515245 + 12345) >>> 0;
+    const wave = 0.35 + 0.3 * Math.sin(i / 6) * Math.sin(i / 17);
+    return Math.max(0.08, Math.min(1, wave + ((h % 1000) / 1000 - 0.5) * 0.5));
+  });
 };
 
 // ─── Waveform bar ──────────────────────────────────────────────
@@ -58,22 +65,6 @@ const WaveBar = React.memo(function WaveBar({ value, accent, played }) {
         backgroundColor:  played ? accent : accent,
         opacity:          played ? 1 : 0.25,
       }}
-    />
-  );
-});
-
-// ─── Recording dot (pulses while recording) ────────────────────
-const RecordingDot = React.memo(function RecordingDot({ visible, pulse }) {
-  if (!visible) return null;
-  return (
-    <Animated.View
-      style={[
-        styles.redDot,
-        {
-          transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }) }],
-          opacity:    pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }),
-        },
-      ]}
     />
   );
 });
@@ -103,16 +94,11 @@ export default function DropsRecordScreen({ navigation, route }) {
   const themeObj  = CARD_INTENTS[cardIntent] || DROP_THEMES[theme] || DROP_THEMES['desire'];
   const accent    = themeObj.accent;
 
-  // ── Recorder ──────────────────────────────────────────────────
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recState = useAudioRecorderState(recorder, 100);
-
   // ── State ─────────────────────────────────────────────────────
   const [recordedUri, setRecordedUri]     = useState(null);
-  const [elapsed,     setElapsed]         = useState(0);
+  const [audioFile,   setAudioFile]       = useState(null);   // { name, mime }
   const [uploading,   setUploading]       = useState(false);
-  const [levels,      setLevels]          = useState(() => new Array(BAR_COUNT).fill(0));
-  const [capturedLevels, setCapturedLevels] = useState(null);  // frozen snapshot post-record
+  const [levels,      setLevels]          = useState(() => new Array(BAR_COUNT).fill(0.08));
   const [caption,     setCaption]         = useState(route?.params?.text || '');
   const [showCaption, setShowCaption]     = useState(!!route?.params?.text);
   const [speed,       setSpeed]           = useState(1);
@@ -148,23 +134,7 @@ export default function DropsRecordScreen({ navigation, route }) {
   const handleClearImage = useCallback(() => setImageUri(null), []);
 
   // ── Animations ────────────────────────────────────────────────
-  const redPulse    = useRef(new Animated.Value(0)).current;
   const heartbeat   = useRef(new Animated.Value(1)).current;
-
-  // Red dot pulses during recording
-  useEffect(() => {
-    if (recState.isRecording) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(redPulse, { toValue: 1, duration: 800, useNativeDriver: true }),
-          Animated.timing(redPulse, { toValue: 0, duration: 800, useNativeDriver: true }),
-        ]),
-      ).start();
-    } else {
-      redPulse.stopAnimation();
-      redPulse.setValue(0);
-    }
-  }, [recState.isRecording, redPulse]);
 
   // Heartbeat pulse on play button when paused (spec: "faint heartbeat pulse")
   useEffect(() => {
@@ -181,84 +151,33 @@ export default function DropsRecordScreen({ navigation, route }) {
     }
   }, [recordedUri, heartbeat]);
 
-  // ── Permissions + audio mode on mount ─────────────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const perm = await AudioModule.requestRecordingPermissionsAsync();
-        if (!perm.granted) {
-          showToast({ type: 'warning', message: 'Microphone access is needed to record.' });
-          return;
-        }
-        await AudioModule.setAudioModeAsync({
-          allowsRecording:   true,
-          playsInSilentMode: true,
-        });
-      } catch {
-        /* permission flow cancelled */
+  // ── Pick / cancel / swap ──────────────────────────────────────
+  const handlePick = useCallback(async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
+      if (res.canceled || !res.assets?.length) return;
+      const a = res.assets[0];
+      if (a.size && a.size > MAX_MB * 1024 * 1024) {
+        showToast({ type: 'warning', message: `That file is over ${MAX_MB} MB.` });
+        return;
       }
-    })();
+      const mime = a.mimeType && a.mimeType.startsWith('audio/') ? a.mimeType : 'audio/mpeg';
+      setAudioFile({ name: a.name || 'Audio', mime });
+      setLevels(barsFor(a.name || a.uri));
+      setRecordedUri(a.uri);
+      setPublisherOptIn(false);
+    } catch {
+      showToast({ type: 'error', message: 'Could not open your files.' });
+    }
   }, [showToast]);
 
-  // ── Elapsed + live waveform samples while recording ───────────
-  useEffect(() => {
-    if (!recState.isRecording) return;
-    const sec = Math.min(MAX_DURATION, (recState.durationMillis || 0) / 1000);
-    setElapsed(sec);
-
-    if (typeof recState.metering === 'number') {
-      const normalized = Math.max(0, Math.min(1, (recState.metering + 60) / 60));
-      setLevels((prev) => {
-        const next = prev.slice(1);
-        next.push(normalized);
-        return next;
-      });
-    }
-
-    // Auto-stop at MAX
-    if ((recState.durationMillis || 0) >= MAX_DURATION * 1000) {
-      handleStop();
-    }
-  }, [recState.durationMillis, recState.metering, recState.isRecording]); // eslint-disable-line
-
-  // ── Start / stop / cancel ─────────────────────────────────────
-  const handleStart = useCallback(async () => {
-    try {
-      setLevels(new Array(BAR_COUNT).fill(0));
-      setCapturedLevels(null);
-      setElapsed(0);
-      setRecordedUri(null);
-      // Re-enable recording mode before each take (preview turns it off).
-      await AudioModule.setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-    } catch {
-      showToast({ type: 'error', message: 'Could not start recording.' });
-    }
-  }, [recorder, showToast]);
-
-  const handleStop = useCallback(async () => {
-    try {
-      await recorder.stop();
-      const uri = recorder.uri;
-      setCapturedLevels(levels.slice());    // freeze for playback render
-      if (uri) setRecordedUri(uri);
-    } catch {
-      showToast({ type: 'error', message: 'Recording stopped unexpectedly.' });
-    }
-  }, [recorder, levels, showToast]);
-
-  const handleCancel = useCallback(async () => {
-    try { await recorder.stop(); } catch {}
-    navigation.goBack();
-  }, [recorder, navigation]);
+  const handleCancel = useCallback(() => navigation.goBack(), [navigation]);
 
   const handleRedo = useCallback(() => {
     setRecordedUri(null);
-    setCapturedLevels(null);
-    setLevels(new Array(BAR_COUNT).fill(0));
-    setElapsed(0);
-    setPublisherOptIn(false); // a re-record invalidates any previous consent
+    setAudioFile(null);
+    setLevels(new Array(BAR_COUNT).fill(0.08));
+    setPublisherOptIn(false);
   }, []);
 
   // Publisher opt-in — voice always goes through the double-consent screen
@@ -310,9 +229,8 @@ export default function DropsRecordScreen({ navigation, route }) {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // 1. Upload the recording to R2
-      const voiceMime = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4';
-      const voiceUrl = await uploadToR2(recordedUri, 'audio', voiceMime);
+      // 1. Upload the audio file to R2
+      const voiceUrl = await uploadToR2(recordedUri, 'audio', audioFile?.mime || 'audio/mpeg');
 
       // 2. Optional supporting photo — separate upload since media_url
       // above is already taken by the voice recording itself.
@@ -329,8 +247,7 @@ export default function DropsRecordScreen({ navigation, route }) {
         theme,
         intent:     cardIntent,   // drives the card's palette/pattern
         mood_tag:   moodTag,
-        duration_seconds: Math.round(playerStatus.duration || elapsed),
-        waveform_data:    (capturedLevels || levels).slice(),
+        duration_seconds: Math.round(playerStatus.duration || 0) || undefined,
         confession:       caption?.trim() || undefined,
         publisher_opt_in: !!publisherOptIn,
         // Tag a specific user — carried over from the compose screen when
@@ -390,8 +307,8 @@ export default function DropsRecordScreen({ navigation, route }) {
 
       showToast({
         type:    'success',
-        title:   'Your voice is on its way.',
-        message: 'They\'ll hear it — unnamed.',
+        title:   'Your audio is on its way.',
+        message: 'They\'ll hear it, unnamed.',
       });
       dispatch(awardMilestone('first_drop'));
 
@@ -401,30 +318,23 @@ export default function DropsRecordScreen({ navigation, route }) {
     } catch (err) {
       showToast({
         type:    'error',
-        message: err?.message || 'Could not send your voice drop.',
+        message: err?.message || 'Could not send your audio drop.',
       });
     } finally {
       setUploading(false);
     }
   }, [
-    recordedUri, theme, moodTag, caption, elapsed,
-    capturedLevels, levels, playerStatus.duration,
+    recordedUri, audioFile, theme, moodTag, caption, playerStatus.duration,
     publisherOptIn, imageUri,
     dispatch, navigation, showToast,
   ]);
 
   // ── Derived ───────────────────────────────────────────────────
-  const isRecording  = recState.isRecording;
   const hasRecording = !!recordedUri;
   const playing      = playerStatus.playing;
   const playheadSec  = playerStatus.currentTime || 0;
-  const playerDur    = playerStatus.duration || elapsed || MAX_DURATION;
-  const remainingSec = Math.max(0, MAX_DURATION - elapsed);
-  const isUrgent     = remainingSec <= 30 && remainingSec > 0;
-  const isCritical   = remainingSec <= 10 && remainingSec > 0;
-
-  // Display levels — live while recording, frozen snapshot during playback
-  const displayLevels = hasRecording ? (capturedLevels || levels) : levels;
+  const playerDur    = playerStatus.duration || 0;
+  const displayLevels = levels;
   const progressRatio = hasRecording ? Math.min(1, playheadSec / (playerDur || 1)) : 0;
 
   // ─────────────────────────────────────────────────────────────
@@ -436,7 +346,7 @@ export default function DropsRecordScreen({ navigation, route }) {
       >
         {/* Header */}
         <DropScreenHeader
-          title="Voice Drop"
+          title="Audio Drop"
           navigation={navigation}
           onBack={handleCancel}
         />
@@ -457,14 +367,9 @@ export default function DropsRecordScreen({ navigation, route }) {
         >
           {/* Timer row */}
           <View style={styles.timerRow}>
-            <RecordingDot visible={isRecording} pulse={redPulse} />
-            <Text style={[
-              styles.timer,
-              isUrgent && { color: accent },
-              isCritical && styles.timerCritical,
-            ]}>
-              {formatTime(hasRecording ? (playing ? playheadSec : elapsed) : elapsed)}
-              <Text style={styles.timerMax}>  /  {formatTime(MAX_DURATION)}</Text>
+            <Text style={styles.timer}>
+              {formatTime(playheadSec)}
+              <Text style={styles.timerMax}>  /  {formatTime(playerDur)}</Text>
             </Text>
           </View>
 
@@ -519,17 +424,12 @@ export default function DropsRecordScreen({ navigation, route }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[
-                    styles.recordBtn,
-                    { backgroundColor: isRecording ? T.danger : accent },
-                  ]}
-                  onPress={isRecording ? handleStop : handleStart}
+                  style={[styles.recordBtn, { backgroundColor: accent }]}
+                  onPress={handlePick}
                   activeOpacity={0.85}
+                  accessibilityLabel="Upload audio"
                 >
-                  {isRecording
-                    ? <Square size={rs(22)} color="#fff" fill="#fff" />
-                    : <Mic size={rs(28)} color="#fff" />
-                  }
+                  <Upload size={rs(26)} color="#fff" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -555,7 +455,7 @@ export default function DropsRecordScreen({ navigation, route }) {
                   hitSlop={HIT_SLOP}
                 >
                   <RotateCcw size={rs(18)} color={T.textSec} />
-                  <Text style={styles.sideBtnText}>Re-record</Text>
+                  <Text style={styles.sideBtnText}>Change</Text>
                 </TouchableOpacity>
 
                 <Animated.View style={{ transform: [{ scale: heartbeat }] }}>
@@ -614,11 +514,9 @@ export default function DropsRecordScreen({ navigation, route }) {
 
           {/* Hint copy */}
           <Text style={styles.hint}>
-            {isRecording
-              ? 'say it like nobody is listening.'
-              : hasRecording
-                ? 'Listen. If it\'s honest, send it.'
-                : 'Tap to start. Up to 3:00.'}
+            {hasRecording
+              ? audioFile?.name
+              : `Tap to upload audio. mp3, m4a or wav, up to ${MAX_MB} MB.`}
           </Text>
 
           {/* Optional photo. */}
@@ -643,7 +541,7 @@ export default function DropsRecordScreen({ navigation, route }) {
           {hasRecording && (
             <View style={styles.publisherBox}>
               <Text style={styles.publisherQ}>
-                Allow Anonixx to share this voice anonymously on our social pages?
+                Allow Anonixx to share this audio anonymously on our social pages?
               </Text>
               <View style={styles.publisherRow}>
                 <TouchableOpacity
@@ -678,7 +576,7 @@ export default function DropsRecordScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
               <Text style={styles.publisherNote}>
-                Your identity never leaves Anonixx. Your voice will.
+                Your identity never leaves Anonixx. The audio will.
               </Text>
             </View>
           )}
@@ -704,7 +602,7 @@ export default function DropsRecordScreen({ navigation, route }) {
           )}
 
           <Text style={styles.footer}>
-            Your voice, un-named. Anonixx scrubs everything but the sound.
+            Unnamed. Only the sound leaves your phone.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -747,12 +645,6 @@ const styles = StyleSheet.create({
     gap:           rp(10),
     marginBottom:  SPACING.md,
   },
-  redDot: {
-    width:           rs(10),
-    height:          rs(10),
-    borderRadius:    rs(5),
-    backgroundColor: T.danger,
-  },
   timer: {
     fontFamily:    'PlayfairDisplay-Italic',
     fontSize:      rf(42),
@@ -764,12 +656,6 @@ const styles = StyleSheet.create({
     fontSize:   rf(14),
     color:      T.textMute,
     letterSpacing: 1,
-  },
-  timerCritical: {
-    // Under 10s: brighter colour plus a soft glow.
-    textShadowColor:  'rgba(255,99,74,0.45)',
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 0 },
   },
 
   // Waveform

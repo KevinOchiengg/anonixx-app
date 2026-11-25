@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useDispatch } from 'react-redux';
 import {
-  ChevronLeft, Images, BarChart2, Mic, AlertTriangle, X,
+  ChevronLeft, Images, BarChart2, AudioLines, AlertTriangle, X,
   MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, Feather, MessageSquareLock, Music,
 } from 'lucide-react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
@@ -1088,10 +1088,10 @@ export default function DropsComposeScreen({ navigation, route }) {
             {isAdmin && (
             <ToolIcon
               onPress={() => { dismissToolbarHint(); handleFormatChange('voice'); }}
-              label="Voice"
-              a11yLabel="Record a voice drop instead"
+              label="Audio"
+              a11yLabel="Upload an audio drop instead"
             >
-              <Mic size={rs(18)} color={T.textMute} />
+              <AudioLines size={rs(18)} color={T.textMute} />
             </ToolIcon>
             )}
 

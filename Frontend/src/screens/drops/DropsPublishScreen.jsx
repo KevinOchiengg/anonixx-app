@@ -135,10 +135,10 @@ export default function DropsPublishScreen({ navigation, route }) {
                   <Volume2 size={rs(14)} color={T.warn} />
                   <View style={{ flex: 1 }}>
                     <Text style={s.voiceTitle}>
-                      People outside Anonixx will hear your voice.
+                      People outside Anonixx will hear this audio.
                     </Text>
                     <Text style={s.voiceSub}>
-                      Same tone. Same breath. Same silence between words.
+                      Exactly as you uploaded it.
                     </Text>
                   </View>
                 </View>
