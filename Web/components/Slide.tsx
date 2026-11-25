@@ -590,10 +590,18 @@ export default function Slide({
       ) : null}
 
       {mature ? (
-        <button className="mature-veil" onClick={post.blur ? () => setRevealed(true) : allowMature}>
-          <strong>Mature content</strong>
-          <span>{post.blur ? "Tap to see it." : "Adults only. Tap once and you won't be asked again."}</span>
-        </button>
+        post.blur ? (
+          <button className="mature-veil veil-soft" onClick={() => setRevealed(true)}>
+            <span className="veil-icon" aria-hidden><EyeOff /></span>
+            <strong>Disturbing content</strong>
+            <span className="veil-tap">Tap to see</span>
+          </button>
+        ) : (
+          <button className="mature-veil" onClick={allowMature}>
+            <strong>Mature content</strong>
+            <span>Adults only. Tap once and you won&apos;t be asked again.</span>
+          </button>
+        )
       ) : null}
     </article>
   );
