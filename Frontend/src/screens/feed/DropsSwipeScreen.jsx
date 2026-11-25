@@ -20,7 +20,6 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
   Bookmark, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Pencil, Play, Search, Share2, ShieldCheck, VolumeX, Music,
-  WifiOff,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -1585,6 +1584,13 @@ export default function DropsSwipeScreen({ navigation, route }) {
     Linking.openURL(ad.link_url).catch(() => {});
   }, []);
 
+  // A failed "load more" retries quietly every few seconds.
+  useEffect(() => {
+    if (!loadError || !posts.length || !screenFocused) return;
+    const t = setTimeout(() => loadFeed(false), 5000);
+    return () => clearTimeout(t);
+  }, [loadError, posts.length, screenFocused, loadFeed]);
+
   // Out of new posts: replay a shuffle of what's loaded (videos first, then any media, then all).
   const handleEndReached = useCallback(() => {
     if (loadingRef.current) return;
@@ -1809,17 +1815,6 @@ export default function DropsSwipeScreen({ navigation, route }) {
     <View style={ss.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {loadError && posts.length > 0 ? (
-        <View style={ss.netBar} accessibilityRole="alert">
-          <View style={ss.netIcon}>
-            <WifiOff size={rs(16)} color={THEME.primary} strokeWidth={2} />
-          </View>
-          <Text style={ss.netBarText} numberOfLines={1}>Lost the signal.</Text>
-          <TouchableOpacity style={ss.netRetry} onPress={() => loadFeed(false)} activeOpacity={0.85} hitSlop={HIT_SLOP}>
-            <Text style={ss.netRetryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
 
       <FlatList
         ref={flatListRef}
@@ -1941,18 +1936,6 @@ const ss = StyleSheet.create({
   netSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center', marginTop: 8 },
   netBtn: { marginTop: 20, backgroundColor: THEME.primary, borderRadius: 24, paddingHorizontal: 28, paddingVertical: 12 },
   netBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  netBar: {
-    position: 'absolute', left: rp(12), right: rp(12), bottom: rp(28), zIndex: 60,   // clears the raised + button
-    flexDirection: 'row', alignItems: 'center', gap: rp(10),
-    backgroundColor: 'rgba(18,18,22,0.96)', borderRadius: rs(16),
-    paddingVertical: rp(8), paddingLeft: rp(8), paddingRight: rp(8),
-    borderWidth: 1, borderColor: 'rgba(255,99,74,0.25)',
-    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
-  },
-  netIcon: { width: rs(32), height: rs(32), borderRadius: rs(10), backgroundColor: 'rgba(255,99,74,0.14)', alignItems: 'center', justifyContent: 'center' },
-  netBarText: { flex: 1, color: '#fff', fontSize: rs(14), fontWeight: '600' },
-  netRetry: { backgroundColor: THEME.primary, borderRadius: rs(12), paddingHorizontal: rp(16), paddingVertical: rp(8) },
-  netRetryText: { color: '#fff', fontSize: rs(13), fontWeight: '700' },
   slide: { width, height: '100%', backgroundColor: '#000' },
   gradientTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, zIndex: 1 },
   gradientBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 340, zIndex: 1 },
