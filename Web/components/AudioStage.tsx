@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Play } from "lucide-react";
 import { TAP_GAP } from "./VideoPlayer";
 
 // Same colours as the app's voice waves: pink → coral → amber → gold → coral → pink.
@@ -30,9 +29,9 @@ function shape(seed: string) {
   });
 }
 
-/** An audio drop shown like a video: a coloured wave moving in the middle, tap to pause,
- *  the progress line along the bottom. */
-export default function AudioStage({ src, seed, active, near }: { src: string; seed: string; active: boolean; near: boolean }) {
+/** An audio drop shown like a video: a coloured wave moving in the middle, the feed's mute
+ *  switch for sound, tap to pause, the progress line along the bottom. */
+export default function AudioStage({ src, seed, active, near, muted }: { src: string; seed: string; active: boolean; near: boolean; muted: boolean }) {
   const ref = useRef<HTMLAudioElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -45,6 +44,10 @@ export default function AudioStage({ src, seed, active, near }: { src: string; s
   const stalled = () => { if (bufTimer.current === null) bufTimer.current = window.setTimeout(() => setBuffering(true), 600); };
   const flowing = () => { if (bufTimer.current !== null) { window.clearTimeout(bufTimer.current); bufTimer.current = null; } setBuffering(false); };
   useEffect(() => () => { if (bufTimer.current !== null) window.clearTimeout(bufTimer.current); }, []);
+
+  useEffect(() => {
+    if (ref.current) ref.current.muted = muted;
+  }, [muted, near]);
 
   useEffect(() => {
     const a = ref.current;
@@ -90,6 +93,8 @@ export default function AudioStage({ src, seed, active, near }: { src: string; s
           src={src}
           preload="metadata"
           loop
+          muted={muted}
+          playsInline
           onPlay={() => setPlaying(true)}
           onPause={() => { setPlaying(false); flowing(); }}
           onWaiting={stalled}
@@ -109,7 +114,6 @@ export default function AudioStage({ src, seed, active, near }: { src: string; s
           />
         ))}
       </div>
-      {!playing && active ? <span className="play-badge" aria-hidden><Play fill="currentColor" strokeWidth={0} /></span> : null}
       {active ? (
         <div
           ref={track}

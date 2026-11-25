@@ -425,7 +425,7 @@ export default function Slide({
           ) : singleImage ? (
             <FitImage src={singleImage} alt={post.content.slice(0, 100)} priority={near} />
           ) : audioOnly && audioSrc ? (
-            <AudioStage src={audioSrc} seed={post.audio_url || post.id} active={active && !mature} near={near && !mature} />
+            <AudioStage src={audioSrc} seed={post.audio_url || post.id} active={active && !mature} near={near && !mature} muted={muted} />
           ) : null}
           {videoSrc && locked && previewDone ? (
             <div className="paywall" onClick={(e) => e.stopPropagation()}>
@@ -532,7 +532,7 @@ export default function Slide({
             <Pencil aria-hidden />
           </button>
         ) : null}
-        {muted && ((videoSrc && !slides && !mature) || ambient) ? (
+        {muted && ((videoSrc && !slides && !mature) || (audioOnly && !mature) || ambient) ? (
           <button onClick={onToggleMute} aria-label="Turn sound on" className="sound-rail r-act r-sound">
             <SoundOff />
           </button>

@@ -906,8 +906,6 @@ const AudioSlide = ({
           <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={ss.gradientTop} pointerEvents="none" />
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={ss.gradientBottom} pointerEvents="none" />
 
-          {isActive && duration > 0 && !playing && <PlayBadge />}
-
           <View style={ss.rail}>
             <RailAvatar post={post} navigation={navigation} />
             <ActionBtn
