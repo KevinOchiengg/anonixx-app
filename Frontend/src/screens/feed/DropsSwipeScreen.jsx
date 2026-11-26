@@ -1924,6 +1924,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
         menu={postMenu}
         saved={postMenu ? saveMap[postMenu.post.id] || false : false}
         onClose={() => setPostMenu(null)}
+        onMoreLike={(p) => navigation.navigate('Search', { like: p.id })}
         onSave={(p) => handleSave(p.id)}
         onShare={handleShare}
         onCopyLink={async (p) => {

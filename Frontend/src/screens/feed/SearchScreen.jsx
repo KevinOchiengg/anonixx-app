@@ -102,7 +102,8 @@ function usePaged(url) {
   return { items, meta, loading, failed, more };
 }
 
-export default function SearchScreen({ navigation }) {
+export default function SearchScreen({ navigation, route }) {
+  const likeId = route?.params?.like || null;
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const [tab, setTab] = useState('all');
@@ -131,7 +132,8 @@ export default function SearchScreen({ navigation }) {
     (async () => {
       try {
         const [t, w, h] = await Promise.all([AsyncStorage.getItem(TAB_KEY), AsyncStorage.getItem(WHERE_KEY), AsyncStorage.getItem(HISTORY_KEY)]);
-        if (t === 'all' || t === 'near' || t === 'stories') setTab(t);
+        if (likeId) setTab('all');
+        else if (t === 'all' || t === 'near' || t === 'stories') setTab(t);
         if (w) setWhere(JSON.parse(w));
         else if (isAuthenticated) {
           const me = await get('/users/me').catch(() => null);
@@ -475,7 +477,7 @@ export default function SearchScreen({ navigation }) {
       )}
 
       {tab === 'all' ? (
-        <AllSearch query={query} signedIn={isAuthenticated} navigation={navigation} />
+        <AllSearch query={query} signedIn={isAuthenticated} navigation={navigation} likeId={likeId} onClearLike={() => navigation.setParams({ like: undefined })} />
       ) : (
       <FlatList
         data={list.items}

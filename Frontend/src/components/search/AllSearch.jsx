@@ -31,7 +31,7 @@ async function call(path, body) {
   return data;
 }
 
-export default function AllSearch({ query, signedIn, navigation, header }) {
+export default function AllSearch({ query, signedIn, navigation, header, likeId, onClearLike }) {
   const [q, setQ] = useState(query.trim());
   const [sel, setSel] = useState({});
   const [topic, setTopic] = useState('');
@@ -59,15 +59,16 @@ export default function AllSearch({ query, signedIn, navigation, header }) {
   Object.entries(sel).forEach(([k, v]) => params.set(k, v));
   if (topic) params.set('topic', topic);
   const qs = params.toString();
-  const searching = !!qs;
+  const path = likeId ? `/search/similar/${encodeURIComponent(likeId)}` : qs ? `/search?${qs}` : null;
+  const searching = !!path;
 
   useEffect(() => {
     setSaved('');
-    if (!qs) { setItems([]); setCursor(null); setQueryId(null); return; }
+    if (!path) { setItems([]); setCursor(null); setQueryId(null); return; }
     const mine = ++seq.current;
     setLoading(true);
     setFailed(false);
-    call(`/search?${qs}`)
+    call(path)
       .then((r) => {
         if (mine !== seq.current) return;
         setItems(r.results || []);
@@ -76,10 +77,10 @@ export default function AllSearch({ query, signedIn, navigation, header }) {
       })
       .catch(() => { if (mine === seq.current) { setItems([]); setFailed(true); } })
       .finally(() => { if (mine === seq.current) setLoading(false); });
-  }, [qs]);
+  }, [path]);
 
   const more = async () => {
-    if (!cursor || loading) return;
+    if (!cursor || loading || likeId) return;
     const mine = seq.current;
     setLoading(true);
     try {
@@ -115,6 +116,12 @@ export default function AllSearch({ query, signedIn, navigation, header }) {
   const Header = (
     <View>
       {header}
+      {likeId ? (
+        <View style={s.likeRow}>
+          <Text style={s.likeTitle}>More like this</Text>
+          <TouchableOpacity onPress={onClearLike} activeOpacity={0.8}><Text style={s.likeBack}>Back to search</Text></TouchableOpacity>
+        </View>
+      ) : (<>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         {CHIPS.map(([k, v, l]) => <Chip key={k + v} label={l} on={sel[k] === v} onPress={() => toggle(k, v)} />)}
       </ScrollView>
@@ -123,7 +130,7 @@ export default function AllSearch({ query, signedIn, navigation, header }) {
           {topics.map((t) => <Chip key={t.id} label={t.label} on={topic === t.id} onPress={() => setTopic(topic === t.id ? '' : t.id)} />)}
         </ScrollView>
       )}
-      {searching && (
+      {searching && !likeId && (
         signedIn ? (
           <TouchableOpacity style={s.save} onPress={save} disabled={saved === 'busy' || saved === 'done'} activeOpacity={0.85}>
             {saved === 'done' ? <BellRing size={rs(15)} color={T.primary} /> : <Bell size={rs(15)} color={T.primary} />}
@@ -140,6 +147,7 @@ export default function AllSearch({ query, signedIn, navigation, header }) {
         </>
       )}
       {!searching && !popular.length && <Text style={s.note}>Search videos, audio, photos, confessions and hookups.</Text>}
+      </>)}
     </View>
   );
 
@@ -200,6 +208,9 @@ function Tile({ post, onPress }) {
 
 const s = StyleSheet.create({
   list: { paddingBottom: rs(40) },
+  likeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: rs(14), marginVertical: rs(8) },
+  likeTitle: { color: T.text, fontSize: rf(15), fontWeight: '800' },
+  likeBack: { color: T.primary, fontSize: rf(13), fontWeight: '700' },
   row: { gap: rs(10), paddingHorizontal: rs(14) },
   chips: { gap: rs(8), paddingHorizontal: rs(14), paddingVertical: rs(6) },
   chip: { paddingHorizontal: rs(12), paddingVertical: rs(7), borderRadius: rs(16), backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },

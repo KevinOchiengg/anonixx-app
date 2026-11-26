@@ -51,6 +51,7 @@ import AdminAdsScreen from '../screens/admin/AdminAdsScreen';
 import AdminPostsScreen from '../screens/admin/AdminPostsScreen';
 import AdminRefundsScreen from '../screens/admin/AdminRefundsScreen';
 import AdminSupportScreen from '../screens/admin/AdminSupportScreen';
+import AdminSearchScreen from '../screens/admin/AdminSearchScreen';
 import SupportChatScreen from '../screens/support/SupportChatScreen';
 import CreateAdScreen from '../screens/feed/CreateAdScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
@@ -193,6 +194,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="AdminPosts"      component={withBackdrop(AdminPostsScreen)} />
         <Stack.Screen name="AdminRefunds"    component={withBackdrop(AdminRefundsScreen)} />
         <Stack.Screen name="AdminSupport"    component={withBackdrop(AdminSupportScreen)} />
+        <Stack.Screen name="AdminSearch"     component={withBackdrop(AdminSearchScreen)} />
         <Stack.Screen name="SupportChat"     component={withBackdrop(SupportChatScreen, { brand: false })} />
         <Stack.Screen name="CreateAd"        component={withBackdrop(CreateAdScreen)} />
         {/* Accessible from HamburgerMenu across all tabs */}

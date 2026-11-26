@@ -1,9 +1,9 @@
-/** Long-press menu for a feed post: speed (videos), clear display, save, share, copy link,
- * not interested, and Report or block on other people's posts. */
+/** Long-press menu for a feed post: speed (videos), clear display, more like this, save, share,
+ * copy link, not interested, and Report or block on other people's posts. */
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bookmark, EyeOff, Flag, Gauge, Link2, Maximize, Share2 } from 'lucide-react-native';
+import { Bookmark, EyeOff, Flag, Gauge, Link2, Maximize, Share2, Sparkles } from 'lucide-react-native';
 import { THEME } from '../../utils/theme';
 
 const SPEEDS = [0.5, 1, 1.5, 2];
@@ -22,7 +22,7 @@ function Row({ icon, label, danger, onPress }) {
 }
 
 export default function PostMenuSheet({
-  menu, saved, onClose, onSave, onShare, onCopyLink, onClear, onNotInterested, onReport,
+  menu, saved, onClose, onSave, onShare, onCopyLink, onClear, onNotInterested, onReport, onMoreLike,
 }) {
   const insets = useSafeAreaInsets();
   const post = menu?.post;
@@ -66,6 +66,9 @@ export default function PostMenuSheet({
           <Row icon={<Share2 size={20} color={THEME.primary} />} label="Share" onPress={pick(() => onShare(post))} />
           <Row icon={<Link2 size={20} color={THEME.primary} />} label="Copy link" onPress={() => { onCopyLink(post); onClose(); }} />
           <Row icon={<Maximize size={20} color={THEME.primary} />} label="Clear display" onPress={() => { onClear(); onClose(); }} />
+          {onMoreLike && (
+            <Row icon={<Sparkles size={20} color={THEME.primary} />} label="More like this" onPress={pick(() => onMoreLike(post))} />
+          )}
           {others && (
             <Row icon={<EyeOff size={20} color={THEME.primary} />} label="Not interested" onPress={() => { onNotInterested(post); onClose(); }} />
           )}

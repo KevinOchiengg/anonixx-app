@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Users, Flag, TrendingUp, Megaphone, AlertTriangle, FileText, MessageCircle, RotateCcw } from 'lucide-react-native';
+import { ArrowLeft, Users, Flag, TrendingUp, Megaphone, AlertTriangle, FileText, MessageCircle, RotateCcw, Search } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
@@ -157,6 +157,14 @@ export default function AdminDashboardScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={s.navCardTitle}>Moderation queue</Text>
             <Text style={s.navCardDesc}>Flagged and hidden drops awaiting review</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={s.navCard} onPress={() => navigation.navigate('AdminSearch')} activeOpacity={0.85}>
+          <Search size={rs(20)} color={T.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.navCardTitle}>Search</Text>
+            <Text style={s.navCardDesc}>What people search, can't find, and the slang list</Text>
           </View>
         </TouchableOpacity>
 
