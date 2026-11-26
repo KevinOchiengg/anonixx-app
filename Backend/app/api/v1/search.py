@@ -63,7 +63,8 @@ async def search(
     now = _now()
     skip = int(cursor) if cursor and cursor.isdigit() else 0
 
-    ai = await se.ai_understand(db, query) if query and not skip else None
+    # Hookup details ("woman 30 Kenya") are read directly, never rewritten by the AI step.
+    ai = await se.ai_understand(db, query) if query and not skip and not se.who(query)["filters"] else None
     if ai:
         kind = kind or (ai["kind"] if ai["kind"] != "any" else None)
         media = media or (ai["media_type"] if ai["media_type"] != "any" else None)

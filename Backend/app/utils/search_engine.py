@@ -149,6 +149,41 @@ async def understand(db, q: str) -> dict:
     return out
 
 
+_WHO_LABELS = {"location", "place", "age", "aged", "gender", "from", "years", "year", "yrs", "yr", "old", "yo", "in"}
+_AGE = re.compile(r"^(\d{2})(s|yo|yrs?)?$")
+
+
+def who(q: str) -> dict:
+    """Hookup details in a search ("woman 30 Kenya", "Location: Kenya Age: 30 Gender: woman").
+    Returns {filters, rest}: Mongo filters on the poster's gender, age and place, and the words
+    left to match as text. No filters when the search names nobody."""
+    parsed = lex.parse(q)
+    words = parsed["keyword"].split()
+    gender, country, county = parsed.get("gender"), parsed.get("country"), parsed.get("county")
+    age = None
+    rest = []
+    for w in words:
+        m = _AGE.match(w)
+        if m and age is None and 18 <= int(m.group(1)) <= 99:
+            n = int(m.group(1))
+            age = (n, n + 9) if m.group(2) == "s" else (max(18, n - 2), n + 2)
+        elif w not in _WHO_LABELS:
+            rest.append(w)
+    named = bool(gender or country or county) or ("age" in words and age)
+    if not named:
+        return {"filters": [], "rest": q}
+    filters: list = [{"kind": "hookup"}]
+    if gender:
+        filters.append({"hookup.gender": gender})
+    if age:
+        filters.append({"hookup.age": {"$gte": age[0], "$lte": age[1]}})
+    if county:
+        filters.append({"location_detail.county": {"$regex": f"^{re.escape(county)}$", "$options": "i"}})
+    elif country:
+        filters.append({"location_detail.country": {"$regex": f"^{re.escape(country)}$", "$options": "i"}})
+    return {"filters": filters, "rest": " ".join(rest)}
+
+
 _AI_SCHEMA = {
     "type": "object",
     "properties": {
@@ -361,6 +396,10 @@ async def search(db, conds: list, q: str, viewer_key: Optional[str], arm: str = 
     """Ranked drops for q within conds (eligibility and filters already in conds)."""
     now = _now()
     key = norm(q)
+    person = who(q) if key else {"filters": []}
+    if person["filters"]:
+        conds = conds + person["filters"]
+        key = norm(person["rest"])
     if not key:
         docs = await db["drops"].find({"$and": conds}).sort("created_at", -1).limit(POOL).to_list(POOL)
         pool = {str(d["_id"]): (d, 0.3) for d in docs}
@@ -376,7 +415,7 @@ async def search(db, conds: list, q: str, viewer_key: Optional[str], arm: str = 
                 text[did] = (text[did][0], max(text[did][1], hit[1]) + 0.2)
             else:
                 text[did] = hit
-        aff = await _affinity(db, conds, key)
+        aff = await _affinity(db, conds, norm(q))
         mean = await _meaning(db, conds, key)
         pool = {**mean, **aff, **text}
     fused = _rrf(
