@@ -107,7 +107,7 @@ const EmojiPicker = React.memo(({ onSelect }) => {
 // ─── Comment row ──────────────────────────────────────────────
 const CommentItem = React.memo(({
   item, isFirst, isHot, onReply, replyingTo, onLike, onOpenImage, depth = 0,
-  isOwner, onPin, onMentionPress, onDelete,
+  isOwner, onPin, onMentionPress, onDelete, onAuthorPress,
 }) => {
   const isReplying = replyingTo === item.id;
   const replies    = item.replies ?? [];
@@ -131,15 +131,23 @@ const CommentItem = React.memo(({
 
   return (
     <View style={[st.commentItem, depth > 0 && st.commentItemReply]}>
-      <View style={st.commentAvatar}>
+      <TouchableOpacity
+        style={st.commentAvatar}
+        onPress={() => onAuthorPress?.(item)}
+        disabled={!item.user_id || item._optimistic}
+        activeOpacity={0.75}
+        accessibilityLabel={`See ${item.anonymous_name || 'their'} profile`}
+      >
         <AuthorAvatar uri={item.avatar_url} seed={item.user_id} name={item.anonymous_name} />
-      </View>
+      </TouchableOpacity>
 
       <View style={st.commentBody}>
         <View style={st.commentMetaRow}>
-          <Text style={st.commentAuthor} numberOfLines={1}>
-            {isOwn ? 'You' : (item.anonymous_name || 'Anonymous')}
-          </Text>
+          <TouchableOpacity onPress={() => onAuthorPress?.(item)} disabled={!item.user_id || item._optimistic} activeOpacity={0.75} style={{ flexShrink: 1 }}>
+            <Text style={st.commentAuthor} numberOfLines={1}>
+              {isOwn ? 'You' : (item.anonymous_name || 'Anonymous')}
+            </Text>
+          </TouchableOpacity>
           {item.pinned && (
             <View style={st.pinnedBadge}>
               <Pin size={9} color={T.primary} fill={T.primary} />
@@ -238,6 +246,7 @@ const CommentItem = React.memo(({
                 onOpenImage={onOpenImage}
                 onMentionPress={onMentionPress}
                 onDelete={onDelete}
+                onAuthorPress={onAuthorPress}
                 depth={1}
               />
             ))}
@@ -634,6 +643,12 @@ export const CommentBottomSheet = React.memo(({
   }, []);
 
   // Mentions are plain text, so look the user up on tap, then open their profile.
+  // A commenter's name or photo opens their profile; from there they can knock on their Room.
+  const handleAuthorPress = useCallback((c) => {
+    if (!c?.user_id) return;
+    setMentionProfile({ visible: true, userId: c.user_id, anonymousName: c.anonymous_name || 'Anonymous' });
+  }, []);
+
   const handleMentionPress = useCallback(async (username) => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -745,8 +760,9 @@ export const CommentBottomSheet = React.memo(({
       onPin={handlePin}
       onMentionPress={handleMentionPress}
       onDelete={handleDelete}
+      onAuthorPress={handleAuthorPress}
     />
-  ), [firstCommentId, hotCommentId, replyingTo, handleLike, isOwner, handlePin, handleMentionPress, handleDelete]);
+  ), [firstCommentId, hotCommentId, replyingTo, handleLike, isOwner, handlePin, handleMentionPress, handleDelete, handleAuthorPress]);
 
   const keyExtractor = useCallback((item, i) => item.id || String(i), []);
 
@@ -928,6 +944,8 @@ export const CommentBottomSheet = React.memo(({
         onClose={() => setMentionProfile(p => ({ ...p, visible: false }))}
         userId={mentionProfile.userId}
         anonymousName={mentionProfile.anonymousName}
+        roomKnock
+        navigation={{ navigate: (...args) => { onClose?.(); navigation?.navigate?.(...args); } }}
       />
     </Modal>
   );

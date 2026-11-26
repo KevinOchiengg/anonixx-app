@@ -1552,6 +1552,7 @@ async def get_drop_thread(
             "id":             str(t["_id"]),
             "content":        t.get("content", ""),
             "anonymous_name": t.get("anonymous_name", "Anonymous"),
+            "user_id":        t.get("user_id"),   # opens their profile and Room, like a post's author
             "avatar_url":     avatar_by_id.get(t.get("user_id")),
             "created_at":     t["created_at"].isoformat(),
             "time_ago":       get_time_ago(t["created_at"]),

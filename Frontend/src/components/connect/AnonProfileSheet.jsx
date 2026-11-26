@@ -39,7 +39,7 @@ const StatItem = React.memo(({ value, label }) => (
 
 // ─── Main Component ───────────────────────────────────────────
 export default function AnonProfileSheet({
-  visible, anonymousName, userId, post, linkupTarget, onClose, navigation,
+  visible, anonymousName, userId, post, linkupTarget, onClose, navigation, roomKnock,
 }) {
   const { showToast } = useToast();
   const [profile,      setProfile]      = useState(null);
@@ -133,14 +133,16 @@ export default function AnonProfileSheet({
   }, [visible, anonymousName]);
 
   // ── Link up: opens PostUnlockScreen with the post (or a linkupTarget). ──
+  // roomKnock (opened from a comment): no post to link up on, so it opens their Room to knock there.
   const handleLinkUp = useCallback(() => {
-    if (!post && !linkupTarget) return;
+    if (!post && !linkupTarget && !(roomKnock && userId)) return;
     closeSheet();
     setTimeout(() => {
-      if (post && navigation) knockIn(navigation, post, showToast);
+      if (roomKnock && userId) navigation?.navigate('Room', { userId });
+      else if (post && navigation) knockIn(navigation, post, showToast);
       else navigation?.navigate('PostUnlock', { linkupTarget, viaProfile: true });
     }, 300);
-  }, [post, linkupTarget, closeSheet, navigation, showToast]);
+  }, [post, linkupTarget, roomKnock, userId, closeSheet, navigation, showToast]);
 
   const accentColor = T.primary;
 
@@ -319,14 +321,14 @@ export default function AnonProfileSheet({
               >
                 <View style={styles.connectBtnInner}>
                   <Link2 size={rs(16)} color="#fff" />
-                  <Text style={styles.connectBtnText}>Link Up</Text>
+                  <Text style={styles.connectBtnText}>{roomKnock ? 'Knock on their door' : 'Link Up'}</Text>
                 </View>
               </TouchableOpacity>
               )}
 
               {/* Sub-copy */}
               {!profile.is_self && (
-                <Text style={styles.connectSub}>You go straight in. No reply in 7 days and your coins come back.</Text>
+                <Text style={styles.connectSub}>{roomKnock ? 'They decide whether to let you in.' : 'You go straight in. No reply in 7 days and your coins come back.'}</Text>
               )}
 
             </ScrollView>

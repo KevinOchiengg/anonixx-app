@@ -2,7 +2,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDraft from "@/lib/useDraft";
 import Image from "next/image";
-import { api } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { api, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { uploadFile } from "@/lib/upload";
 import AudioWave from "./AudioWave";
@@ -11,11 +12,13 @@ import { Heart } from "./icons";
 import { MessageSquareMore } from "lucide-react";
 import AuthorAvatar from "@/components/AuthorAvatar";
 import { askConfirm } from "@/lib/confirm";
+import AuthorSheet from "./AuthorSheet";
 
 type Comment = {
   id: string;
   content: string;
   anonymous_name: string;
+  user_id?: string | null;
   avatar_url?: string | null;
   time_ago: string;
   likes_count: number;
@@ -85,6 +88,8 @@ export default function CommentsSheet({
   const [items, setItems] = useState<Comment[] | null>(null);
   const [text, setText] = useDraft(`comment:${postId}`, ""); // unsent comment stays per post
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  const [who, setWho] = useState<Comment | null>(null);   // a commenter's profile, opened from their name
+  const router = useRouter();
   const [sort, setSort] = useState<"new" | "top">("new");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [picker, setPicker] = useState(false);
@@ -317,13 +322,17 @@ export default function CommentsSheet({
   const row = (c: Comment, depth = 0) => {
     const expanded = open[c.id];
     const name = c.anonymous_name || "Anonymous";
+    const canOpen = Boolean(c.user_id) && !c.id.startsWith("tmp-");
+    const openWho = () => { if (canOpen) setWho(c); };
     return (
       <div key={c.id} className={`cmt${depth ? " nested" : ""}`}>
         <div className="cmt-main">
-          <Av name={name} src={c.avatar_url} small={depth > 0} />
+          <button type="button" className="cmt-who" onClick={openWho} disabled={!canOpen} aria-label={`See ${name}'s profile`}>
+            <Av name={name} src={c.avatar_url} small={depth > 0} />
+          </button>
           <div className="cmt-col">
             <div className="cmt-head">
-              <b>{name}</b>
+              <button type="button" className="cmt-who" onClick={openWho} disabled={!canOpen}><b>{name}</b></button>
               {c.pinned ? <span className="cmt-badge pinned"><Pin />Pinned</span> : null}
               {depth === 0 && c.id === firstId && c.id !== hotId ? <span className="cmt-badge first">first</span> : null}
               {depth === 0 && c.id === hotId ? <span className="cmt-badge hot">hot</span> : null}
@@ -369,6 +378,7 @@ export default function CommentsSheet({
   const addEmoji = (e: string) => setText((t) => (t + e).slice(0, 500));
 
   return (
+    <>
     <div className="sheet-back" onClick={onClose}>
       <div className="sheet tall cmt-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
         <span className="sheet-handle" aria-hidden />
@@ -459,5 +469,15 @@ export default function CommentsSheet({
         </form>
       </div>
     </div>
+    {who?.user_id ? (
+      <AuthorSheet
+        post={{ id: who.id, user_id: who.user_id, anonymous_name: who.anonymous_name, avatar_url: who.avatar_url ?? null } as unknown as Post}
+        onClose={() => setWho(null)}
+        onLinkUp={() => { if (!user) { onNeedAuth(); return; } router.push(`/room/${who.user_id}`); }}
+        ctaLabel="Knock on their door"
+        ctaHint="They decide whether to let you in."
+      />
+    ) : null}
+    </>
   );
 }
