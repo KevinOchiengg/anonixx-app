@@ -42,6 +42,8 @@ from app.tasks.publisher_worker import publisher_worker
 from app.tasks.drop_cleanup import drop_cleanup_worker
 from app.tasks import scheduled_publisher
 from app.tasks import auto_captioner
+from app.tasks import search_worker
+from app.api.v1 import search as search_api
 from app.utils import geoip
 
 
@@ -154,6 +156,42 @@ async def _ensure_indexes():
         log.warning("Index creation skipped: %s", exc)
 
 
+async def _ensure_search_indexes():
+    """Search: one weighted text index over drops, plus event and cache housekeeping."""
+    from app.database import get_database
+    from app.utils.search_engine import seed_synonyms
+    import logging
+    log = logging.getLogger(__name__)
+    db = await get_database()
+    try:
+        await db["drops"].create_index(
+            [("confession", "text"), ("topics", "text"), ("mood_tag", "text"), ("theme", "text"),
+             ("intent", "text"), ("kind", "text"), ("tags", "text"), ("poll.question", "text"),
+             ("sound.title", "text"), ("transcript", "text"), ("auto_tags", "text"), ("comment_text", "text"),
+             ("video_edit.overlays.text", "text")],
+            name="drops_search", default_language="english", language_override="search_lang",
+            weights={"topics": 8, "mood_tag": 8, "theme": 8, "intent": 8, "kind": 6, "confession": 5,
+                     "tags": 5, "poll.question": 5, "video_edit.overlays.text": 4, "sound.title": 3,
+                     "transcript": 2, "auto_tags": 2, "comment_text": 1},
+            background=True,
+        )
+    except Exception as exc:
+        log.warning("Search text index skipped: %s", exc)
+    try:
+        await db["search_events"].create_index("at", expireAfterSeconds=180 * 86400, background=True)
+        await db["search_events"].create_index([("type", 1), ("q", 1), ("at", -1)], background=True)
+        await db["search_events"].create_index([("query_id", 1)], background=True)
+        await db["search_affinity"].create_index([("q", 1), ("score", -1)], background=True)
+        await db["search_parse_cache"].create_index("at", expireAfterSeconds=30 * 86400, background=True)
+        await db["search_flags"].create_index([("reviewed", 1), ("created_at", -1)], background=True)
+        await db["saved_searches"].create_index([("user_id", 1), ("created_at", -1)], background=True)
+        await db["saved_searches"].create_index([("checked_at", 1)], background=True)
+        await db["drops"].create_index([("autotag_at", 1)], sparse=True, background=True)
+        await seed_synonyms(db)
+    except Exception as exc:
+        log.warning("Search indexes skipped: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
@@ -163,6 +201,8 @@ async def lifespan(app: FastAPI):
     await scheduled_publisher.start()       # publish admin drops scheduled for later
     await admin_monitor.start()             # alerts, morning digest, risk scores for flagged posts
     await auto_captioner.start()            # caption official media drops from the caption bank
+    await _ensure_search_indexes()
+    await search_worker.start()             # search learning, auto-tags, saved-search alerts
     geoip.start_loading()                   # local IP->country database for payment pricing (background)
     yield
     await scheduled_publisher.stop()
@@ -326,6 +366,7 @@ app.include_router(discover.router, prefix=settings.API_V1_PREFIX)
 app.include_router(lives.router, prefix=settings.API_V1_PREFIX)
 app.include_router(lives.admin_router, prefix=settings.API_V1_PREFIX)
 app.include_router(captions.router, prefix=settings.API_V1_PREFIX)
+app.include_router(search_api.router, prefix=settings.API_V1_PREFIX)
 
 # Socket.IO wraps the API, so `uvicorn app.main:app` serves both.
 api = app

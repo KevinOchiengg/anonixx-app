@@ -43,6 +43,11 @@ TEMPLATES = {
     },
 
     # Drops
+    "saved_search": {
+        "title": "New on your search",
+        "body": "New drops match a search you saved.",
+        "data": {"type": "saved_search"},
+    },
     "drop_resonated": {
         "title": "Someone resonated with your confession 🔥",
         "body": "They felt your words and had to say something back. Tap to read their drop.",

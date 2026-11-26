@@ -16,7 +16,7 @@ import Sheet from "./Sheet";
 import { DROP_FONTS_HREF, dropFontStyle } from "@/lib/dropFonts";
 import ConfessionCard from "./ConfessionCard";
 import { CATEGORIES, categoryOf } from "@/lib/confession";
-import { Bookmark as LBookmark, EyeOff, Flag as LFlag, Gauge, Heart as HeartFill, Link2 as LLink2, Lock, Maximize, Pencil, Share2 } from "lucide-react";
+import { Bookmark as LBookmark, Sparkles, EyeOff, Flag as LFlag, Gauge, Heart as HeartFill, Link2 as LLink2, Lock, Maximize, Pencil, Share2 } from "lucide-react";
 import KnockLabel from "./KnockLabel";
 import { askConfirm } from "@/lib/confirm";
 
@@ -567,6 +567,9 @@ export default function Slide({
             </button>
             <button className="opt-row" onClick={() => { setMenu(false); onClear(); }}>
               <span className="pm-ic"><Maximize /></span>Clear display
+            </button>
+            <button className="opt-row" onClick={() => { setMenu(false); window.location.assign(`/search?like=${encodeURIComponent(post.id)}`); }}>
+              <span className="pm-ic"><Sparkles /></span>More like this
             </button>
             {canReport ? (
               <button className="opt-row" onClick={() => { setMenu(false); onNotInterested(post); }}>

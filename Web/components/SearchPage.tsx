@@ -16,8 +16,9 @@ import BottomNav from "./BottomNav";
 import { Clock, Close, MapPin, SearchIcon } from "./feedicons";
 import { ArrowLeft, Heart, MessageSquareMore } from "lucide-react";
 import { BrandMark } from "./AppShell";
+import AllSearch from "./search/AllSearch";
 
-type Tab = "near" | "stories";
+type Tab = "all" | "near" | "stories";
 type Scope = "close" | "area" | "country" | "anywhere";
 type Place = { scope: Scope; country: string; county: string; sub: string };
 type Room = { user_id: string; listing: string; open: boolean; room_theme: string; avatar_url: string | null; door_rule: string; anonymous_name?: string | null; place?: string | null };
@@ -60,7 +61,8 @@ function placeLabel(p: Place): string {
 export default function SearchPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("near");
+  const [tab, setTab] = useState<Tab>("all");
+  const [likeId, setLikeId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [where, setWhere] = useState<Place | null>(null);       // saved "Discover in"
@@ -76,11 +78,15 @@ export default function SearchPage() {
   const [focused, setFocused] = useState(false);
 
   const place = override || where;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   const keyword = parsed ? parsed.keyword : query.trim();
 
   // ── first load: tab, saved place (else the profile's own area), topics, history ──
   useEffect(() => {
-    setTab(store.get<Tab>(TAB_KEY, "near"));
+    const like = new URLSearchParams(window.location.search).get("like");
+    setLikeId(like);
+    setTab(like ? "all" : store.get<Tab>(TAB_KEY, "all"));
     setHistory(store.get<string[]>(HISTORY_KEY, []));
     api<typeof topics>("/discover/topics").then(setTopics).catch(() => {});
     const saved = store.get<Place | null>(WHERE_KEY, null);
@@ -111,7 +117,7 @@ export default function SearchPage() {
       api<Parsed>(`/discover/parse?q=${encodeURIComponent(q)}`)
         .then((p) => {
           setParsed(p);
-          if (p.surface) pickTab(p.surface);
+          if (p.surface && tabRef.current !== "all") pickTab(p.surface);
           if (p.county) p.chips = p.chips.map((c) => (c.kind === "place" ? { ...c, country: p.country || "" } : c));
           p.chips.forEach((c) => applyChip(c, false));   // the parsed surface already picked the tab
         })
@@ -191,7 +197,7 @@ export default function SearchPage() {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setFocused(true)}
               onBlur={() => window.setTimeout(() => setFocused(false), 150)}
-              placeholder={tab === "near" ? "try “someone nearby tonight”" : "try “heartbreak stories”"}
+              placeholder={tab === "all" ? "Search videos, audio, confessions…" : tab === "near" ? "try “someone nearby tonight”" : "try “heartbreak stories”"}
               aria-label="Search"
               aria-autocomplete="list"
               aria-expanded={focused && sugs.length > 0}
@@ -218,11 +224,12 @@ export default function SearchPage() {
         </form>
 
         <div className="dc-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "all"} className={tab === "all" ? "on" : ""} onClick={() => pickTab("all")}>All</button>
           <button role="tab" aria-selected={tab === "near"} className={tab === "near" ? "on" : ""} onClick={() => pickTab("near")}>Near</button>
           <button role="tab" aria-selected={tab === "stories"} className={tab === "stories" ? "on" : ""} onClick={() => pickTab("stories")}>Stories</button>
         </div>
 
-        {applied.length ? (
+        {applied.length && tab !== "all" ? (
           <div className="dc-read" aria-label="Filters from your search">
             <span>{parsed?.chips.length ? "Reading it as" : "Filtering by"}</span>
             {applied.map((c) => (
@@ -230,7 +237,7 @@ export default function SearchPage() {
             ))}
           </div>
         ) : null}
-        {parsed?.suggest?.filter((c) => !applied.some((a) => a.kind === c.kind && a.value === c.value)).length ? (
+        {tab !== "all" && parsed?.suggest?.filter((c) => !applied.some((a) => a.kind === c.kind && a.value === c.value)).length ? (
           <div className="dc-read maybe" aria-label="Did you mean">
             <span>Did you mean</span>
             {parsed.suggest.filter((c) => !applied.some((a) => a.kind === c.kind && a.value === c.value)).map((c) => (
@@ -240,7 +247,9 @@ export default function SearchPage() {
         ) : null}
 
         <div className="sp-body">
-          {tab === "near" ? (
+          {tab === "all" ? (
+            <AllSearch query={query} likeId={likeId} onTrack={(n) => trackSearch(query, { theme: "all", n })} />
+          ) : tab === "near" ? (
             <Near
               place={place}
               overridden={!!override}

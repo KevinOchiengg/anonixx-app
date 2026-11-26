@@ -94,6 +94,18 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-opus-5-5"
 
+    # SEARCH (app/utils/search_engine.py). Each extra is off until its key is set.
+    SEARCH_AI_PARSE: bool = True            # Haiku turns long searches into filters (needs ANTHROPIC_API_KEY)
+    SEARCH_AI_MODEL: str = "claude-haiku-5-5"
+    SEARCH_AUTOTAG_VISION: bool = False     # tag photo and video covers with Claude (needs ANTHROPIC_API_KEY)
+    SEARCH_STT_KEY: str = ""                # speech-to-text for video/audio drops (OpenAI-compatible API)
+    SEARCH_STT_URL: str = "https://api.openai.com/v1/audio/transcriptions"
+    SEARCH_STT_MODEL: str = "whisper-1"
+    SEARCH_EMBED_KEY: str = ""              # embeddings for search by meaning (Voyage AI)
+    SEARCH_EMBED_URL: str = "https://api.voyageai.com/v1/embeddings"
+    SEARCH_EMBED_MODEL: str = "voyage-3.5-lite"
+    SEARCH_AB_TEST: bool = False            # split ranking A/B by viewer
+
     # ADMIN DIGEST + ALERTS (app/tasks/admin_monitor.py). Hour in UTC for the morning
     # summary email/push to super admins; 5 = 08:00 in East Africa.
     ADMIN_DIGEST_HOUR_UTC: int = 5
