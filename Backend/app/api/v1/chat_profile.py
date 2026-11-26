@@ -531,6 +531,31 @@ async def delete_gallery_media(
     return _sanitize(updated)
 
 
+@router.get("/{user_id}/knock-target")
+async def get_knock_target(
+    user_id:         str,
+    current_user_id: str = Depends(get_current_user_id),
+    db               = Depends(get_database),
+):
+    """What a Link Up from someone's profile unlocks: their live hookup post, else their latest
+    confession. Also says if you're already linked up, so the chat opens instead."""
+    if not ObjectId.is_valid(user_id) or user_id == current_user_id:
+        raise HTTPException(status_code=404, detail="Room not found.")
+    user = await db["users"].find_one({"_id": ObjectId(user_id)}, {"anonymous_name": 1, "is_active": 1})
+    if not user or user.get("is_active") is False or await is_blocked_between(db, user_id, current_user_id):
+        raise HTTPException(status_code=404, detail="Room not found.")
+    connection = await db["drop_connections"].find_one({"$or": [
+        {"sender_id": user_id, "unlocker_id": current_user_id},
+        {"sender_id": current_user_id, "unlocker_id": user_id},
+    ], "removed_at": None}, {"_id": 1})
+    real = {"sender_id": user_id, "is_active": True, "is_admin_drop": {"$ne": True}}
+    post = await db["drops"].find_one({**real, "kind": "hookup", "live_until": {"$gt": _now()}}, {"kind": 1}, sort=[("created_at", -1)])         or await db["drops"].find_one({**real, "kind": "confession"}, {"kind": 1}, sort=[("created_at", -1)])
+    return {
+        "connection_id": str(connection["_id"]) if connection else None,
+        "post": {"id": str(post["_id"]), "kind": post.get("kind"), "anonymous_name": user.get("anonymous_name")} if post else None,
+    }
+
+
 @router.get("/{user_id}/preview")
 async def get_room_preview(
     user_id:          str,

@@ -13,6 +13,7 @@ import { MessageSquareMore } from "lucide-react";
 import AuthorAvatar from "@/components/AuthorAvatar";
 import { askConfirm } from "@/lib/confirm";
 import AuthorSheet from "./AuthorSheet";
+import { useKnock } from "./KnockPay";
 
 type Comment = {
   id: string;
@@ -90,11 +91,28 @@ export default function CommentsSheet({
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [who, setWho] = useState<Comment | null>(null);   // a commenter's profile, opened from their name
   const router = useRouter();
+  const [error, setError] = useState("");
+  const { knock, ui: knockUi } = useKnock(setError);
+
+  // Link Up from a commenter's profile: unlocks their latest post, or opens the chat if already linked.
+  async function linkUpWith(c: Comment) {
+    if (!user) { onNeedAuth(); return; }
+    const name = c.anonymous_name || "They";
+    try {
+      const t = await api<{ connection_id: string | null; post: { id: string; kind: string; anonymous_name: string } | null }>(
+        `/chat-profile/${c.user_id}/knock-target`,
+      );
+      if (t.connection_id) { router.push(`/chat/${t.connection_id}`); return; }
+      if (!t.post) { setError(`${name} hasn't posted anything to link up on yet.`); return; }
+      await knock(t.post);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   const [sort, setSort] = useState<"new" | "top">("new");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [picker, setPicker] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const [gifOpen, setGifOpen] = useState(false);
   const [gifQ, setGifQ] = useState("");
   const [gifs, setGifs] = useState<GifItem[]>([]);
@@ -473,11 +491,10 @@ export default function CommentsSheet({
       <AuthorSheet
         post={{ id: who.id, user_id: who.user_id, anonymous_name: who.anonymous_name, avatar_url: who.avatar_url ?? null } as unknown as Post}
         onClose={() => setWho(null)}
-        onLinkUp={() => { if (!user) { onNeedAuth(); return; } router.push(`/room/${who.user_id}`); }}
-        ctaLabel="Knock on their door"
-        ctaHint="They decide whether to let you in."
+        onLinkUp={() => linkUpWith(who)}
       />
     ) : null}
+    {knockUi}
     </>
   );
 }

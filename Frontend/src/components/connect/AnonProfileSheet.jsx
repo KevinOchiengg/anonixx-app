@@ -39,7 +39,7 @@ const StatItem = React.memo(({ value, label }) => (
 
 // ─── Main Component ───────────────────────────────────────────
 export default function AnonProfileSheet({
-  visible, anonymousName, userId, post, linkupTarget, onClose, navigation, roomKnock,
+  visible, anonymousName, userId, post, linkupTarget, onClose, navigation, byUser,
 }) {
   const { showToast } = useToast();
   const [profile,      setProfile]      = useState(null);
@@ -133,16 +133,29 @@ export default function AnonProfileSheet({
   }, [visible, anonymousName]);
 
   // ── Link up: opens PostUnlockScreen with the post (or a linkupTarget). ──
-  // roomKnock (opened from a comment): no post to link up on, so it opens their Room to knock there.
+  // byUser (opened from a comment): no post in hand, so it links up on their latest post,
+  // or opens the chat if you're already linked.
   const handleLinkUp = useCallback(() => {
-    if (!post && !linkupTarget && !(roomKnock && userId)) return;
+    if (!post && !linkupTarget && !(byUser && userId)) return;
     closeSheet();
-    setTimeout(() => {
-      if (roomKnock && userId) navigation?.navigate('Room', { userId });
-      else if (post && navigation) knockIn(navigation, post, showToast);
+    setTimeout(async () => {
+      if (byUser && userId) {
+        try {
+          const token = await AsyncStorage.getItem('token');
+          if (!token) { navigation?.navigate('AuthNav', { screen: 'Login' }); return; }
+          const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/${userId}/knock-target`, { headers: { Authorization: `Bearer ${token}` } });
+          const t = await res.json().catch(() => ({}));
+          if (!res.ok) { showToast({ type: 'warning', message: t?.detail || "Couldn't open their profile." }); return; }
+          if (t.connection_id) navigation?.navigate('DropChat', { connectionId: t.connection_id });
+          else if (!t.post) showToast({ type: 'info', message: `${anonymousName || 'They'} hasn't posted anything to link up on yet.` });
+          else knockIn(navigation, t.post, showToast);
+        } catch {
+          showToast({ type: 'warning', message: "Can't reach Anonixx right now." });
+        }
+      } else if (post && navigation) knockIn(navigation, post, showToast);
       else navigation?.navigate('PostUnlock', { linkupTarget, viaProfile: true });
     }, 300);
-  }, [post, linkupTarget, roomKnock, userId, closeSheet, navigation, showToast]);
+  }, [post, linkupTarget, byUser, userId, anonymousName, closeSheet, navigation, showToast]);
 
   const accentColor = T.primary;
 
@@ -321,14 +334,14 @@ export default function AnonProfileSheet({
               >
                 <View style={styles.connectBtnInner}>
                   <Link2 size={rs(16)} color="#fff" />
-                  <Text style={styles.connectBtnText}>{roomKnock ? 'Knock on their door' : 'Link Up'}</Text>
+                  <Text style={styles.connectBtnText}>Link Up</Text>
                 </View>
               </TouchableOpacity>
               )}
 
               {/* Sub-copy */}
               {!profile.is_self && (
-                <Text style={styles.connectSub}>{roomKnock ? 'They decide whether to let you in.' : 'You go straight in. No reply in 7 days and your coins come back.'}</Text>
+                <Text style={styles.connectSub}>You go straight in. No reply in 7 days and your coins come back.</Text>
               )}
 
             </ScrollView>

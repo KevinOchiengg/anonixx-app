@@ -25,13 +25,11 @@ type Profile = {
 const GENDER: Record<string, string> = { male: "Male", female: "Female", nonbinary: "Non-binary" };
 
 export default function AuthorSheet({
-  post, onClose, onLinkUp, ctaLabel = "Link Up", ctaHint = "You go straight in. No reply in 7 days and your coins come back.",
+  post, onClose, onLinkUp,
 }: {
   post: Post;
   onClose: () => void;
   onLinkUp: (post: Post) => void;
-  ctaLabel?: string;   // from a comment there's no post to link up on: the button opens their Room instead
-  ctaHint?: string;
 }) {
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState("");
@@ -92,9 +90,9 @@ export default function AuthorSheet({
               ) : canLinkUp ? (
                 <>
                   <button className="u-cta" onClick={() => { onClose(); onLinkUp(post); }}>
-                    <Link2 />{ctaLabel}
+                    <Link2 />Link Up
                   </button>
-                  <p className="u-hint">{ctaHint}</p>
+                  <p className="u-hint">You go straight in. No reply in 7 days and your coins come back.</p>
                 </>
               ) : null}
             </>

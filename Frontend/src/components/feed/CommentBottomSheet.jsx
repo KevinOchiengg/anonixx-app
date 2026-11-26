@@ -944,7 +944,7 @@ export const CommentBottomSheet = React.memo(({
         onClose={() => setMentionProfile(p => ({ ...p, visible: false }))}
         userId={mentionProfile.userId}
         anonymousName={mentionProfile.anonymousName}
-        roomKnock
+        byUser
         navigation={{ navigate: (...args) => { onClose?.(); navigation?.navigate?.(...args); } }}
       />
     </Modal>
