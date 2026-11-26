@@ -117,3 +117,35 @@ async def public_sitemap(page: int = Query(0, ge=0), db = Depends(get_database))
             for r in rows if r.get("created_at")
         ],
     }
+
+
+TOPIC_PAGE_MIN = 3
+
+
+@router.get("/topics")
+async def public_topics(db = Depends(get_database)):
+    """Moods and topics with enough safe drops to make a page (for the sitemap)."""
+    from app.utils.search_lexicon import MOODS, STORY_TOPICS, TOPIC_LABELS
+    out = []
+    for t in (*MOODS, *STORY_TOPICS):
+        n = await db["drops"].count_documents(
+            {**_LIVE, **SAFE_FILTER, "kind": {"$ne": "hookup"}, "topics": t}, limit=TOPIC_PAGE_MIN,
+        )
+        if n >= TOPIC_PAGE_MIN:
+            out.append({"id": t, "label": TOPIC_LABELS[t]})
+    return {"topics": out}
+
+
+@router.get("/topics/{topic}")
+async def public_topic(topic: str, db = Depends(get_database)):
+    """A public page of safe confessions for one mood or topic. Never mature, never hookups."""
+    from app.utils.search_lexicon import STORY_TAGS, TOPIC_LABELS
+    from app.utils.search_engine import engagement
+    if topic not in STORY_TAGS:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    docs = await db["drops"].find(
+        {**_LIVE, **SAFE_FILTER, "kind": {"$ne": "hookup"}, "topics": topic, **_NOT_THIN},
+    ).sort("created_at", -1).limit(120).to_list(120)
+    docs.sort(key=lambda d: -engagement(d))
+    posts = [_public_post(p) for p in await batch_format_drops(docs[:30], None, db)]
+    return {"topic": topic, "label": TOPIC_LABELS[topic], "posts": posts}

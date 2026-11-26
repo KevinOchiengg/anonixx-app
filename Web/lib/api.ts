@@ -90,6 +90,10 @@ export const fetchPublicDrop = (id: string) => get<PublicDrop>(`/public/drops/${
 
 export type Sitemap = { total: number; pages: number; items: { id: string; lastmod: string }[] };
 export const fetchSitemap = (page = 0) => get<Sitemap>(`/public/sitemap?page=${page}`, 3600);
+export type PublicTopic = { id: string; label: string };
+export const fetchPublicTopics = () => get<{ topics: PublicTopic[] }>("/public/topics", 3600);
+export const fetchPublicTopic = (id: string) =>
+  get<{ topic: string; label: string; posts: Post[] }>(`/public/topics/${encodeURIComponent(id)}`, 900);
 
 // The visitor's country, as set by middleware.ts from Vercel's geolocation. Sent to the
 // API as X-Country so the feed can put local confessions first.

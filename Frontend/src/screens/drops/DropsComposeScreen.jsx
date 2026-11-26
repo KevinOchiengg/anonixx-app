@@ -617,6 +617,11 @@ export default function DropsComposeScreen({ navigation, route }) {
       showToast({ type: 'warning', message: 'Write something or add a photo first.' });
       return;
     }
+    if (isAdmin && !fullText.trim() && kind !== 'hookup' && !storyTopics.length) {
+      showToast({ type: 'warning', message: 'Add a caption or pick a mood so people can find it.' });
+      setActiveSheet('feeling');
+      return;
+    }
 
     setLoading(true);
     try {

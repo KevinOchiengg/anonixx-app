@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { fetchSitemap, SITE_URL } from "@/lib/api";
+import { fetchPublicTopics, fetchSitemap, SITE_URL } from "@/lib/api";
 
 export const revalidate = 3600;
 
@@ -12,6 +12,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE_URL}/privacy`, changeFrequency: "yearly", priority: 0.2 },
   ];
+
+  const topics = await fetchPublicTopics();
+  for (const t of topics?.topics ?? []) {
+    entries.push({ url: `${SITE_URL}/topics/${t.id}`, changeFrequency: "daily", priority: 0.6 });
+  }
 
   const first = await fetchSitemap(0);
   if (!first) return entries;
