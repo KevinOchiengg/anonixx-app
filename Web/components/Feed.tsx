@@ -9,6 +9,7 @@ import { AdSlide, LiveSlide, MarketSlide } from "./FeedPromo";
 import { livesApi, type LiveCard } from "@/lib/lives";
 import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
 import BottomNav from "./BottomNav";
+import AdultWelcome from "./AdultWelcome";
 import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
 import { useKnock } from "./KnockPay";
@@ -591,6 +592,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
 
         {coach ? <div className="coach" role="status"><span>Swipe up for the next one</span><i /><span>Double-tap to like</span></div> : null}
         <BottomNav />
+        <AdultWelcome seen={active} />
 
         {gate ? (
           <div className="sheet-back" onClick={() => setGate(null)}>
