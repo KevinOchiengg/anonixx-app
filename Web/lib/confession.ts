@@ -48,8 +48,9 @@ export function linkUpFacts(h: Post["hookup"] | null | undefined, liveUntil: str
   const when = WHEN[h.guided?.meet_when || ""] || FRESH[h.fresh_window || ""] || null;
   const out: (Fact | null)[] = [
     left ? { text: `${when || "Live"} · ${left}`, hot: true } : liveUntil ? { text: "Ended" } : when ? { text: when, hot: true } : null,
-    h.age ? { text: `${h.age}${h.gender && h.gender !== "other" ? ` · ${h.gender}` : ""}` } : null,
-    h.area ? { text: h.area } : null,
+    h.area ? { text: `Location: ${h.area}` } : null,
+    h.age ? { text: `Age: ${h.age}` } : null,
+    h.gender && h.gender !== "other" ? { text: `Gender: ${h.gender}` } : null,
     who ? { text: `${who}${range ? ` ${range}` : ""}` } : null,
     ...(h.vibes || []).slice(0, 2).map((v) => ({ text: v })),
     h.guided?.hosting && HOSTING[h.guided.hosting] ? { text: HOSTING[h.guided.hosting] } : null,
