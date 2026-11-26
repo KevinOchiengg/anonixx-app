@@ -8,7 +8,6 @@ import { rs, rf, rp, RADIUS } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
 import { apiFetch, AdminHeader, a } from './adminShared';
-import LocationField from '../../components/drops/LocationField';
 import VideoEditorModal from '../../components/compose/VideoEditorModal';
 import { defaultEdit } from '../../utils/videoEdit';
 import { useVideoPlayer } from 'expo-video';
@@ -106,7 +105,7 @@ function ExtractAudio({ item, caption }) {
   );
 }
 
-const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText, canPin, soundPick, sounds, hearing, onSound, onHear, mature, onMature }) => (
+const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onSave, onCancel, saving, promoting, onPromoting, onPromote, onVideoText, canPin, soundPick, sounds, hearing, onSound, onHear, mature, onMature }) => (
   <View style={a.card}>
     <Text style={a.cardMeta}>
       {item.is_admin_drop ? 'Anonixx' : (item.author || 'Anonymous')}
@@ -134,11 +133,9 @@ const PostRow = React.memo(({ item, onDelete, editing, country, onCountry, onEdi
         <Text style={[st.sortText, mature && st.sortTextOn]}>Mature: blurred until tapped</Text>
       </TouchableOpacity>
     ) : null}
-    {editing != null ? (
-      <LocationField countryOnly country={country} onChangeCountry={onCountry} />
-    ) : (
+    {editing == null ? (
       <Text style={a.cardBody} numberOfLines={4}>{item.confession || '(no text)'}</Text>
-    )}
+    ) : null}
     {item.stats && (
       <View style={st.stats}>
         <Stat n={item.stats.views} label="views" />
@@ -299,7 +296,6 @@ export default function AdminPostsScreen({ navigation, route }) {
   }, [showToast, only, navigation]);
 
   const startEdit = useCallback((post) => { setPromoting(null); setEditing(editFor(post)); }, []);
-  const changeCountry = useCallback((country) => setEditing((e) => (e ? { ...e, country } : e)), []);
   const toggleMature = useCallback(() => setEditing((e) => (e ? { ...e, mature: !e.mature } : e)), []);
   const changeEdit = useCallback((text) => setEditing((e) => (e ? { ...e, text } : e)), []);
   const cancelEdit = useCallback(() => { setEditing(null); setPromoting(null); }, []);
@@ -312,7 +308,6 @@ export default function AdminPostsScreen({ navigation, route }) {
       method: 'PATCH',
       body: {
         confession: editing.text.trim(),
-        location_country: editing.country || '',
         ...(editing.touched && editing.vedit ? { video_edit: editing.vedit } : {}),
         ...(isSuper && editing.soundTouched ? { sound_id: editing.sound, sound_mute_original: editing.mute } : {}),
         ...(editing.mature !== !!post?.mature ? { mature: editing.mature } : {}),
@@ -427,7 +422,6 @@ export default function AdminPostsScreen({ navigation, route }) {
             <PostRow
               item={item} onDelete={confirmDelete} onEdit={startEdit}
               editing={editing?.id === item.id ? editing.text : null}
-              country={editing?.id === item.id ? editing.country : ''} onCountry={changeCountry}
               onChangeText={changeEdit} onSave={saveEdit} onCancel={cancelEdit} saving={saving}
               promoting={editing?.id === item.id ? promoting : null} onPromoting={setPromoting}
               onPromote={promote} onVideoText={openVideoText} canPin={isSuper}

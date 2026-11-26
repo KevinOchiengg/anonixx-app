@@ -16,7 +16,6 @@ import { keepReadable, clearLocalCopies } from "@/lib/localCopy";
 import { sniffVideo, formatProblem } from "@/lib/videoFormat";
 import type { VoiceDraft } from "../compose/VoiceRecorder";
 import AudioPicker from "../compose/AudioPicker";
-import CountryField from "../compose/LocationFields";
 import { videoLength } from "../compose/MediaPicker";
 import VideoEditor from "../compose/VideoEditor";
 import VideoPlayer from "../VideoPlayer";
@@ -83,7 +82,6 @@ export default function PostStudio() {
   const [options, setOptions] = useState(["", ""]);
   const [mature, setMature] = useState(false);
   const [share, setShare] = useState(false);
-  const [place, setPlace] = useState("");
   const [busy, setBusy] = useState("");
   const [noPreview, setNoPreview] = useState(false);
   const [formatNote, setFormatNote] = useState("");
@@ -153,7 +151,6 @@ export default function PostStudio() {
 
   const theme = THEME;
   const opts = options.map((o) => o.trim()).filter(Boolean);
-  const placed = !!place.trim();
 
   const missing =
     format === "text" ? (text.trim() ? "" : "Write something to post.")
@@ -344,7 +341,6 @@ export default function PostStudio() {
           ...(topicNote ? { tags: [topicNote] } : {}),
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: share,
-          ...(place.trim() ? { location_country: place.trim() } : {}),
           ...(sound && format !== "voice" ? { sound_id: sound.id, sound_mute_original: format === "video" && muteOriginal } : {}),
           ...(isSuper && promo ? { promo_kind: promo, promo_hours: promoHours } : {}),
           ...m,
@@ -414,7 +410,7 @@ export default function PostStudio() {
     bgRef.current?.cancel(); setBg(null);
     extrasRef.current.forEach((x) => x.up.cancel()); setExtras([]);
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
-    setQuestion(""); setOptions(["", ""]); setPlace("");
+    setQuestion(""); setOptions(["", ""]);
     setTopicNote(""); setMature(false); setError(""); setPublished(null);
     setCoverAt(null); setSoundId(""); setMuteOriginal(false); setPromo(""); setLater(false); setLaterAt(""); setCopied(false);
   }
@@ -667,10 +663,6 @@ export default function PostStudio() {
               <span><b>Mature content</b><small>Blurred until the viewer taps to reveal.</small></span>
               <input type="checkbox" checked={mature} onChange={(e) => setMature(e.target.checked)} />
             </label>
-            <details className="ps-place" open={placed}>
-              <summary>Target a location {placed ? <em>set</em> : <small>optional</small>}</summary>
-              <div className="cx-card"><CountryField value={place} onChange={setPlace} /></div>
-            </details>
           </section>
 
           <section className="ps-sec ps-spot">

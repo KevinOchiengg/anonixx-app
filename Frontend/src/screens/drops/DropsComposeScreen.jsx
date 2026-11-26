@@ -1076,6 +1076,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             </ToolIcon>
             )}
 
+            {!isAdmin && (
             <ToolIcon
               active={!!locationSummary}
               onPress={() => { dismissToolbarHint(); setActiveSheet('location'); }}
@@ -1084,6 +1085,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             >
               <MapPin size={rs(18)} color={locationSummary ? T.primary : T.textMute} />
             </ToolIcon>
+            )}
 
             {isAdmin && (
             <ToolIcon

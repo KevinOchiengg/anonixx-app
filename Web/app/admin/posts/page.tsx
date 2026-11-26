@@ -4,7 +4,6 @@ import Link from "next/link";
 import { api, type Sound } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
-import CountryField from "@/components/compose/LocationFields";
 import { askConfirm } from "@/lib/confirm";
 import { useAdminRole } from "@/components/admin/AdminShell";
 import VideoEditor from "@/components/compose/VideoEditor";
@@ -158,7 +157,6 @@ export default function AdminPosts() {
         method: "PATCH",
         body: {
           confession: editing.text.trim(),
-          location_country: editing.country,
           ...(editing.vedit && editing.touched ? { video_edit: editing.vedit } : {}),
           ...(isSuper && editing.soundTouched ? { sound_id: editing.sound, sound_mute_original: editing.mute } : {}),
           ...(editing.mature !== !!dropOf(editing.id)?.mature ? { mature: editing.mature } : {}),
@@ -240,7 +238,6 @@ export default function AdminPosts() {
                           className="adm-edit" rows={4} maxLength={1800} autoFocus value={editing.text}
                           onChange={(e) => setEditing({ ...editing, text: e.target.value })} aria-label="Post text"
                         />
-                        <div className="adm-country"><CountryField value={editing.country} onChange={(country) => setEditing({ ...editing, country })} /></div>
                         <label className="small"><input type="checkbox" checked={editing.mature} onChange={(e) => setEditing({ ...editing, mature: e.target.checked })} /> Mature: blurred until the viewer taps</label>
                       </>
                     ) : null}
