@@ -38,7 +38,7 @@ async function call(path, body) {
   return data;
 }
 
-export default function AllSearch({ query, signedIn, navigation, header, likeId, onClearLike }) {
+export default function AllSearch({ query, signedIn, navigation, header, likeId, onClearLike, onPick }) {
   const [q, setQ] = useState(query.trim());
   const [sel, setSel] = useState({});
   const [topic, setTopic] = useState('');
@@ -120,6 +120,8 @@ export default function AllSearch({ query, signedIn, navigation, header, likeId,
     } catch { setSaved('error'); }
   };
 
+  const moodLabel = topics.find((t) => t.id === topic)?.label;
+
   const Header = (
     <View>
       {header}
@@ -128,33 +130,39 @@ export default function AllSearch({ query, signedIn, navigation, header, likeId,
           <Text style={s.likeTitle}>More like this</Text>
           <TouchableOpacity onPress={onClearLike} activeOpacity={0.8}><Text style={s.likeBack}>Back to search</Text></TouchableOpacity>
         </View>
-      ) : (<>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-        {CHIPS.map(([k, v, l]) => <Chip key={k + v} label={l} on={sel[k] === v} onPress={() => toggle(k, v)} />)}
-      </ScrollView>
-      {topics.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-          {topics.map((t) => <Chip key={t.id} label={t.label} on={topic === t.id} onPress={() => setTopic(topic === t.id ? '' : t.id)} />)}
-        </ScrollView>
-      )}
-      {searching && !likeId && (
-        signedIn ? (
-          <TouchableOpacity style={s.save} onPress={save} disabled={saved === 'busy' || saved === 'done'} activeOpacity={0.85}>
-            {saved === 'done' ? <BellRing size={rs(15)} color={T.primary} /> : <Bell size={rs(15)} color={T.primary} />}
-            <Text style={s.saveText}>{saved === 'done' ? "Saved. We'll tell you when new ones drop." : saved === 'error' ? "Couldn't save it. Tap to retry." : 'Save this search'}</Text>
-          </TouchableOpacity>
-        ) : null
-      )}
-      {!searching && popular.length > 0 && (
+      ) : searching ? (
         <>
-          <Text style={s.section}>People are searching</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-            {popular.map((p) => <Chip key={p} label={p} onPress={() => setQ(p)} />)}
+            {!!moodLabel && <Chip label={`${moodLabel} ✕`} on onPress={() => setTopic('')} />}
+            {CHIPS.map(([k, v, l]) => <Chip key={k + v} label={l} on={sel[k] === v} onPress={() => toggle(k, v)} />)}
           </ScrollView>
+          {signedIn && (
+            <TouchableOpacity style={s.save} onPress={save} disabled={saved === 'busy' || saved === 'done'} activeOpacity={0.85}>
+              {saved === 'done' ? <BellRing size={rs(15)} color={T.primary} /> : <Bell size={rs(15)} color={T.primary} />}
+              <Text style={s.saveText}>{saved === 'done' ? "Saved. We'll tell you when new ones drop." : saved === 'error' ? "Couldn't save it. Tap to retry." : 'Save this search'}</Text>
+            </TouchableOpacity>
+          )}
+        </>
+      ) : (
+        <>
+          {topics.length > 0 && (
+            <>
+              <Text style={s.section}>Moods</Text>
+              <View style={[s.chips, s.wrap]}>
+                {topics.map((t) => <Chip key={t.id} label={t.label} onPress={() => setTopic(t.id)} />)}
+              </View>
+            </>
+          )}
+          {popular.length > 0 && (
+            <>
+              <Text style={s.section}>Trending searches</Text>
+              <View style={[s.chips, s.wrap]}>
+                {popular.map((p) => <Chip key={p} label={p} onPress={() => onPick?.(p)} />)}
+              </View>
+            </>
+          )}
         </>
       )}
-      {!searching && !popular.length && <Text style={s.note}>Search videos, audio, photos, confessions and hookups.</Text>}
-      </>)}
     </View>
   );
 
@@ -169,7 +177,7 @@ export default function AllSearch({ query, signedIn, navigation, header, likeId,
       ListEmptyComponent={!loading && searching ? (
         <View style={s.empty}>
           <Text style={s.emptyTitle}>{failed ? "Couldn't search right now." : 'Nothing matches that yet.'}</Text>
-          <Text style={s.note}>{failed ? 'Check your connection and try again.' : 'Try another word, or a mood above.'}</Text>
+          <Text style={s.note}>{failed ? 'Check your connection and try again.' : 'Try another word.'}</Text>
         </View>
       ) : null}
       ListFooterComponent={loading ? <ActivityIndicator color={T.primary} style={{ marginVertical: rs(16) }} /> : null}
@@ -220,6 +228,7 @@ function Tile({ post, onPress }) {
 
 const s = StyleSheet.create({
   list: { paddingBottom: rs(40) },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap' },
   likeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: rs(14), marginVertical: rs(8) },
   likeTitle: { color: T.text, fontSize: rf(15), fontWeight: '800' },
   likeBack: { color: T.primary, fontSize: rf(13), fontWeight: '700' },

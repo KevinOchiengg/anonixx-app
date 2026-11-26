@@ -24,7 +24,7 @@ const CHIPS: Chip[] = [
 ];
 export const SEARCH_QUEUE_KEY = "anonixx.search.queue";
 
-export default function AllSearch({ query, likeId, onTrack }: { query: string; likeId: string | null; onTrack: (n: number) => void }) {
+export default function AllSearch({ query, likeId, onPick, onTrack }: { query: string; likeId: string | null; onPick: (q: string) => void; onTrack: (n: number) => void }) {
   const { user } = useAuth();
   const router = useRouter();
   const [q, setQ] = useState(query.trim());
@@ -116,49 +116,49 @@ export default function AllSearch({ query, likeId, onTrack }: { query: string; l
 
   const searching = Boolean(q || Object.keys(sel).length || topic);
 
+  const moodLabel = topics.find((t) => t.id === topic)?.label;
+
   return (
     <>
       {likeId ? (
         <div className="sp-section"><span>More like this</span><Link href="/search">Back to search</Link></div>
-      ) : (
+      ) : searching ? (
         <>
           <div className="sp-facets dc-chips" aria-label="Filters">
+            {moodLabel ? <button type="button" className="facet on" aria-pressed onClick={() => setTopic("")}>{moodLabel} ✕</button> : null}
             {CHIPS.map((c) => (
               <button key={c.key + c.value} type="button" className={`facet${sel[c.key] === c.value ? " on" : ""}`} aria-pressed={sel[c.key] === c.value} onClick={() => toggle(c)}>{c.label}</button>
             ))}
           </div>
+          <div className="as-save">
+            {user ? (
+              <button type="button" className="pill" disabled={saved === "busy" || saved === "done"} onClick={save}>
+                {saved === "done" ? <><BellRing size={15} strokeWidth={2} aria-hidden /> Saved. We&apos;ll tell you when new ones drop.</> : <><Bell size={15} strokeWidth={2} aria-hidden /> Save this search</>}
+              </button>
+            ) : null}
+            {saved === "error" ? <small className="err">Couldn&apos;t save it. Try again.</small> : null}
+          </div>
+        </>
+      ) : (
+        <>
           {topics.length ? (
-            <div className="sp-facets dc-chips" aria-label="Moods and topics">
-              {topics.map((t) => (
-                <button key={t.id} type="button" className={`facet${topic === t.id ? " on" : ""}`} aria-pressed={topic === t.id} onClick={() => setTopic(topic === t.id ? "" : t.id)}>{t.label}</button>
-              ))}
-            </div>
+            <>
+              <div className="sp-section"><span>Moods</span></div>
+              <div className="sp-facets dc-chips as-moods" aria-label="Moods and topics">
+                {topics.map((t) => <button key={t.id} type="button" className="facet" onClick={() => setTopic(t.id)}>{t.label}</button>)}
+              </div>
+            </>
           ) : null}
-          {searching ? (
-            <div className="as-save">
-              {user ? (
-                <button type="button" className="pill" disabled={saved === "busy" || saved === "done"} onClick={save}>
-                  {saved === "done" ? <><BellRing size={15} strokeWidth={2} aria-hidden /> Saved. We&apos;ll tell you when new ones drop.</> : <><Bell size={15} strokeWidth={2} aria-hidden /> Save this search</>}
-                </button>
-              ) : (
-                <Link className="pill" href="/login?next=/search"><Bell size={15} strokeWidth={2} aria-hidden /> Sign in to save this search</Link>
-              )}
-              {saved === "error" ? <small className="err">Couldn&apos;t save it. Try again.</small> : null}
-            </div>
+          {popular.length ? (
+            <>
+              <div className="sp-section"><span>Trending searches</span></div>
+              <div className="sp-facets dc-chips as-moods">
+                {popular.map((p) => <button key={p} type="button" className="facet" onClick={() => onPick(p)}>{p}</button>)}
+              </div>
+            </>
           ) : null}
         </>
       )}
-
-      {!searching && !likeId ? (
-        popular.length ? (
-          <>
-            <div className="sp-section"><span>People are searching</span></div>
-            <div className="sp-facets dc-chips">
-              {popular.map((p) => <button key={p} type="button" className="facet" onClick={() => setQ(p)}>{p}</button>)}
-            </div>
-          </>
-        ) : <p className="dc-note">Search videos, audio, photos, confessions and hookups.</p>
-      ) : null}
 
       <div className="as-grid">
         {items.map((p, i) => <Tile key={p.id} post={p} onOpen={() => open(p, i)} />)}
@@ -171,7 +171,7 @@ export default function AllSearch({ query, likeId, onTrack }: { query: string; l
           <p>{failed ? "Check your connection and try again." : "Try another word, or one of these."}</p>
           {!failed && topics.length ? (
             <div className="sp-facets dc-chips">
-              {topics.slice(0, 6).map((t) => <button key={t.id} type="button" className="facet" onClick={() => { setSel({}); setQ(""); setTopic(t.id); }}>{t.label}</button>)}
+              {topics.slice(0, 6).map((t) => <button key={t.id} type="button" className="facet" onClick={() => { setSel({}); onPick(""); setTopic(t.id); }}>{t.label}</button>)}
             </div>
           ) : null}
         </div>
