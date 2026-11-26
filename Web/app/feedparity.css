@@ -678,3 +678,4 @@
 .lvp-title { font-size: 20px; font-weight: 800; line-height: 1.25; }
 .lvp-cta { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 46px; border-radius: 999px; background: var(--rose); color: #fff; font-weight: 800; }
 .lvp-cta svg { width: 18px; height: 18px; }
+.cmt-actions .cmt-del:hover { color: var(--rose); }

@@ -10,6 +10,7 @@ import { ChevronDown, Reply, Smile, Close, Pin, ImageIcon, Mic, Gif, Send } from
 import { Heart } from "./icons";
 import { MessageSquareMore } from "lucide-react";
 import AuthorAvatar from "@/components/AuthorAvatar";
+import { askConfirm } from "@/lib/confirm";
 
 type Comment = {
   id: string;
@@ -20,6 +21,7 @@ type Comment = {
   likes_count: number;
   liked_by_me: boolean;
   pinned: boolean;
+  is_own_reply?: boolean;
   image_url?: string;
   gif_url?: string;
   voice_url?: string;
@@ -293,6 +295,25 @@ export default function CommentsSheet({
     }
   }
 
+  async function remove(c: Comment) {
+    const replies = c.replies.length;
+    const ok = await askConfirm({
+      title: "Delete your comment?",
+      message: replies ? `The ${replies === 1 ? "reply" : `${replies} replies`} under it go too.` : "It's gone for good.",
+      confirmLabel: "Delete",
+      icon: "warning",
+    });
+    if (!ok) return;
+    try {
+      const r = await api<{ thread_count: number }>(`/drops/${postId}/thread/${c.id}`, { method: "DELETE" });
+      setItems((l) => (l || []).filter((x) => x.id !== c.id).map((x) => ({ ...x, replies: x.replies.filter((y) => y.id !== c.id) })));
+      if (replyTo?.id === c.id) setReplyTo(null);
+      onCount(r.thread_count);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   const row = (c: Comment, depth = 0) => {
     const expanded = open[c.id];
     const name = c.anonymous_name || "Anonymous";
@@ -321,6 +342,9 @@ export default function CommentsSheet({
               ) : null}
               {depth === 0 && isOwner && !c.id.startsWith("tmp-") ? (
                 <button className={c.pinned ? "on" : ""} onClick={() => pin(c)}>{c.pinned ? "Unpin" : "Pin"}</button>
+              ) : null}
+              {c.is_own_reply && !c.id.startsWith("tmp-") ? (
+                <button className="cmt-del" onClick={() => remove(c)}>Delete</button>
               ) : null}
             </div>
           </div>

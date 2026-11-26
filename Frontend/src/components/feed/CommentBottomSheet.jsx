@@ -2,7 +2,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  ActivityIndicator, Animated, Dimensions, FlatList, Image,
+  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image,
   KeyboardAvoidingView, Modal, PanResponder, Platform, StyleSheet,
   Text, TouchableOpacity, TouchableWithoutFeedback, View,
 } from 'react-native';
@@ -107,7 +107,7 @@ const EmojiPicker = React.memo(({ onSelect }) => {
 // ─── Comment row ──────────────────────────────────────────────
 const CommentItem = React.memo(({
   item, isFirst, isHot, onReply, replyingTo, onLike, onOpenImage, depth = 0,
-  isOwner, onPin, onMentionPress,
+  isOwner, onPin, onMentionPress, onDelete,
 }) => {
   const isReplying = replyingTo === item.id;
   const replies    = item.replies ?? [];
@@ -190,6 +190,15 @@ const CommentItem = React.memo(({
               </Text>
             </TouchableOpacity>
           )}
+          {isOwn && !item._optimistic && onDelete && (
+            <TouchableOpacity
+              onPress={() => onDelete(item, depth)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Delete your comment"
+            >
+              <Text style={st.commentFooterAction}>Delete</Text>
+            </TouchableOpacity>
+          )}
           {depth === 0 && isOwner && (
             <TouchableOpacity
               onPress={() => onPin(item.id, !item.pinned)}
@@ -228,6 +237,7 @@ const CommentItem = React.memo(({
                 onLike={onLike}
                 onOpenImage={onOpenImage}
                 onMentionPress={onMentionPress}
+                onDelete={onDelete}
                 depth={1}
               />
             ))}
@@ -362,11 +372,23 @@ export const CommentBottomSheet = React.memo(({
       setComments(prev => prev.map(c => c.id === commentId ? { ...c, pinned: false } : c));
     };
 
+    const handleCommentDeleted = ({ dropId, commentId }) => {
+      if (dropId !== postId) return;
+      setComments(prev => {
+        const next = prev.filter(c => c.id !== commentId)
+          .map(c => ({ ...c, replies: (c.replies ?? []).filter(r => r.id !== commentId) }));
+        onCountChange?.(next.length);
+        return next;
+      });
+    };
+
+    socketService.on('comment_deleted',  handleCommentDeleted);
     socketService.on('new_comment',      handleNewComment);
     socketService.on('comment_liked',    handleCommentLiked);
     socketService.on('comment_pinned',   handleCommentPinned);
     socketService.on('comment_unpinned', handleCommentUnpinned);
     return () => {
+      socketService.off('comment_deleted',  handleCommentDeleted);
       socketService.off('new_comment',      handleNewComment);
       socketService.off('comment_liked',    handleCommentLiked);
       socketService.off('comment_pinned',   handleCommentPinned);
@@ -467,6 +489,7 @@ export const CommentBottomSheet = React.memo(({
           voice_url:      voiceUrl      ?? undefined,
           voice_duration: voiceDuration ?? undefined,
           _optimistic: false,
+          is_own_reply: true,
         };
         if (savedReplyTo) {
           setComments(prev =>
@@ -523,6 +546,38 @@ export const CommentBottomSheet = React.memo(({
       });
     } catch {}
   }, [postId]);
+
+  // Your own comment (and the replies under it). Asks first; removes it once the server agrees.
+  const handleDelete = useCallback((comment, depth) => {
+    const n = depth === 0 ? (comment.replies ?? []).length : 0;
+    Alert.alert(
+      'Delete your comment?',
+      n ? `The ${n === 1 ? 'reply' : `${n} replies`} under it go too.` : "It's gone for good.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const res = await fetch(`${API_BASE_URL}/api/v1/drops/${postId}/thread/${comment.id}`, {
+                method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) throw new Error();
+              setComments(prev => {
+                const next = prev.filter(c => c.id !== comment.id)
+                  .map(c => ({ ...c, replies: (c.replies ?? []).filter(r => r.id !== comment.id) }));
+                onCountChange?.(next.length);
+                return next;
+              });
+              setReplyingTo(r => (r === comment.id ? null : r));
+            } catch {
+              Alert.alert("Couldn't delete it", 'Check your connection and try again.');
+            }
+          },
+        },
+      ],
+    );
+  }, [postId, onCountChange]);
 
   // One pinned comment per drop (owner only).
   const handlePin = useCallback(async (commentId, toPin) => {
@@ -689,8 +744,9 @@ export const CommentBottomSheet = React.memo(({
       isOwner={isOwner}
       onPin={handlePin}
       onMentionPress={handleMentionPress}
+      onDelete={handleDelete}
     />
-  ), [firstCommentId, hotCommentId, replyingTo, handleLike, isOwner, handlePin, handleMentionPress]);
+  ), [firstCommentId, hotCommentId, replyingTo, handleLike, isOwner, handlePin, handleMentionPress, handleDelete]);
 
   const keyExtractor = useCallback((item, i) => item.id || String(i), []);
 

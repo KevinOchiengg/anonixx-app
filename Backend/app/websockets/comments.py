@@ -26,3 +26,10 @@ async def emit_comment_unpinned(drop_id: str, comment_id: str):
     await sio.emit(
         "comment_unpinned", {"dropId": drop_id, "commentId": comment_id}, room=f"drop_{drop_id}",
     )
+
+
+async def emit_comment_deleted(drop_id: str, comment_id: str, thread_count: int):
+    await sio.emit(
+        "comment_deleted", {"dropId": drop_id, "commentId": comment_id, "threadCount": thread_count},
+        room=f"drop_{drop_id}",
+    )

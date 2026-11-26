@@ -34,7 +34,7 @@ from app.utils.discovery import VISIBLE as DISCOVERY_VISIBLE, fresh as discovery
 from app.utils.search_lexicon import clean_topics, place_from_area
 from app.utils import activity
 from app.websockets.comments import (
-    emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned,
+    emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned, emit_comment_deleted,
 )
 from app.websockets.chat import emit_new_message, emit_messages_seen, emit_message_deleted, emit_chat_event
 
@@ -1641,6 +1641,41 @@ async def unlike_drop_comment(
     likes_count = max(0, updated.get("likes_count", 0))
     await emit_comment_liked(drop_id, comment_id, likes_count)
     return {"liked": False, "likes_count": likes_count}
+
+
+@router.delete("/{drop_id}/thread/{comment_id}")
+async def delete_drop_comment(
+    drop_id: str,
+    comment_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db = Depends(get_database),
+):
+    """Delete your own comment, with the replies under it."""
+    if not ObjectId.is_valid(comment_id):
+        raise HTTPException(status_code=404, detail="Comment not found")
+    comment = await db["drop_threads"].find_one({"_id": ObjectId(comment_id), "drop_id": drop_id})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.get("user_id") != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own comments.")
+
+    ids, frontier = [comment["_id"]], [comment_id]
+    while frontier:
+        children = await db["drop_threads"].find(
+            {"drop_id": drop_id, "parent_id": {"$in": frontier}}, {"_id": 1},
+        ).to_list(None)
+        frontier = [str(c["_id"]) for c in children]
+        ids += [c["_id"] for c in children]
+    res = await db["drop_threads"].delete_many({"_id": {"$in": ids}})
+    updated = await db["drops"].find_one_and_update(
+        {"_id": ObjectId(drop_id)}, {"$inc": {"thread_count": -res.deleted_count}},
+        return_document=ReturnDocument.AFTER, projection={"thread_count": 1},
+    )
+    count = max(0, (updated or {}).get("thread_count", 0))
+    if updated and updated.get("thread_count", 0) < 0:
+        await db["drops"].update_one({"_id": ObjectId(drop_id)}, {"$set": {"thread_count": 0}})
+    await emit_comment_deleted(drop_id, comment_id, count)
+    return {"deleted": res.deleted_count, "thread_count": count}
 
 
 @router.post("/{drop_id}/thread/{comment_id}/pin")
