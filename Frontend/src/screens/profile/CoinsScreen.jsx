@@ -353,8 +353,9 @@ export default function CoinsScreen({ navigation, route }) {
   useEffect(() => {
     if (!knockFor || walking.current || (balance ?? 0) < (knockFor.cost || LINKUP_COST)) return;
     walking.current = true;
-    payIn(knockFor.id).then((r) => {
+    payIn(knockFor.id, !!knockFor.viaProfile, !!knockFor.ask).then((r) => {
       if (r.connectionId) navigation.replace('DropChat', { connectionId: r.connectionId });
+      else if (r.pending) navigation.goBack();
       else walking.current = false;
     });
   }, [knockFor, balance, navigation]);
@@ -378,7 +379,9 @@ export default function CoinsScreen({ navigation, route }) {
       {!!knockFor && (
         <View style={styles.knockBanner}>
           <Text style={styles.knockBannerText}>
-            Top up {knockFor.cost || LINKUP_COST} coins to link up{knockFor.name ? ` with ${knockFor.name}` : ''}. You go straight in once it's paid.
+            {knockFor.ask
+              ? `Top up ${knockFor.cost || LINKUP_COST} coins to send your request${knockFor.name ? ` to ${knockFor.name}` : ''}. Coins leave only if they let you in.`
+              : `Top up ${knockFor.cost || LINKUP_COST} coins to link up${knockFor.name ? ` with ${knockFor.name}` : ''}. You go straight in once it's paid.`}
           </Text>
         </View>
       )}

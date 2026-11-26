@@ -8,17 +8,19 @@ import { confirm } from './confirm';
 
 export const LINKUP_COST = 6;
 
-/** Returns { connectionId } | { short: true } | { ageGate: true } | { error } */
-export async function payIn(postId, viaProfile = false) {
+/** Returns { connectionId } | { pending, already } | { short: true } | { ageGate: true } | { error }.
+ * ask: the knock waits for their answer; coins leave only if they let you in. */
+export async function payIn(postId, viaProfile = false, ask = false) {
   try {
     const token = await AsyncStorage.getItem('token');
     const res = await fetch(`${API_BASE_URL}/api/v1/unlock-requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ target_type: 'drop', target_id: postId, payment_method: 'coins', ...(viaProfile ? { via_profile: true } : {}) }),
+      body: JSON.stringify({ target_type: 'drop', target_id: postId, payment_method: 'coins', ...(viaProfile ? { via_profile: true } : {}), ...(ask ? { ask: true } : {}) }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.connection_id) return { connectionId: data.connection_id };
+    if (res.ok && data.status === 'pending') return { pending: true, already: !!data.already };
     const code = data?.detail?.code;
     if (code === 'coins_short') return { short: true, cost: data.detail.cost };
     if (code === 'age_verification_required') return { ageGate: true };
@@ -32,6 +34,22 @@ function confirmKnock(post) {
   const { auth, coins } = store.getState();
   const cost = auth.user?.is_premium ? 0 : LINKUP_COST;
   const name = post.anonymous_name || 'them';
+  if (post.ask) {
+    return confirm({
+      title: `Unlock ${name}?`,
+      icon: 'coins',
+      message: cost
+        ? `Your request goes to ${name}. The ${cost} coins leave only if they let you in.`
+        : `Free for you. Your request goes to ${name}.`,
+      rows: cost
+        ? [
+          { label: 'Unlock', value: `${cost} coins`, highlight: true },
+          { label: 'Your balance', value: `${coins.balance ?? 0} coins` },
+        ]
+        : [],
+      confirmLabel: cost ? `Send request · ${cost} coins` : 'Send request',
+    });
+  }
   return confirm({
     title: `Link up with ${name}?`,
     icon: 'coins',
@@ -51,9 +69,11 @@ function confirmKnock(post) {
 /** Tap Knock: confirm, then straight into the chat, or to Coins / the age check first. */
 export async function knockIn(navigation, post, showToast) {
   if (!(await confirmKnock(post))) return;
-  const r = await payIn(post.id, !!post.kind && post.kind !== 'hookup');
+  const r = await payIn(post.id, !!post.kind && post.kind !== 'hookup', !!post.ask);
+  const who = post.anonymous_name || 'They';
   if (r.connectionId) navigation.navigate('DropChat', { connectionId: r.connectionId });
-  else if (r.short) navigation.navigate('Coins', { knockFor: { id: post.id, name: post.anonymous_name || null, cost: r.cost || LINKUP_COST } });
+  else if (r.pending) showToast?.({ type: 'success', message: r.already ? `Already sent. Waiting for ${who} to answer.` : `Request sent. ${who} decides. Coins leave only if they let you in.` });
+  else if (r.short) navigation.navigate('Coins', { knockFor: { id: post.id, name: post.anonymous_name || null, cost: r.cost || LINKUP_COST, viaProfile: !!post.kind && post.kind !== 'hookup', ask: !!post.ask } });
   else if (r.ageGate) navigation.navigate('PostUnlock', { post });
   else showToast?.({ type: 'warning', message: r.error });
 }

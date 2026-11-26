@@ -71,6 +71,7 @@ ACTIONS = {
     "linkup_accepted": "let you in. The Room is open",
     "linkup_mutual": "knocked back. It's mutual",
     "linkup_short": "wants to let you in. Top up to get inside",
+    "linkup_request": "wants in. Let them in or decline",
     "gift": "sent you gifts",
     "live_join": "joined your live",
     "live_started": "is live now",

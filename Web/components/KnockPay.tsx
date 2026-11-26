@@ -11,10 +11,11 @@ import Sheet from "./Sheet";
 import AgeGate from "./AgeGate";
 
 type Pack = { id: string; coins: number; display_price: string };
-type Target = { id: string; anonymous_name?: string | null; kind?: string | null };
+// ask: the knock waits for their answer (from a profile); coins leave only when they let you in.
+type Target = { id: string; anonymous_name?: string | null; kind?: string | null; ask?: boolean };
 const PHONE_KEY = "anonixx.mpesa.phone";
 
-export function useKnock(onToast?: (m: string) => void) {
+export function useKnock(onToast?: (m: string) => void, onSent?: (m: string) => void) {
   const router = useRouter();
   const { user, refresh } = useAuth();
   const [busy, setBusy] = useState("");
@@ -27,9 +28,15 @@ export function useKnock(onToast?: (m: string) => void) {
     setBusy(post.id);
     try {
       const viaProfile = !!post.kind && post.kind !== "hookup";
-      const r = await api<{ connection_id?: string }>("/unlock-requests", { body: { target_type: "drop", target_id: post.id, payment_method: "coins", ...(viaProfile ? { via_profile: true } : {}) } });
+      const r = await api<{ connection_id?: string; status?: string; already?: boolean }>("/unlock-requests", {
+        body: { target_type: "drop", target_id: post.id, payment_method: "coins", ...(viaProfile ? { via_profile: true } : {}), ...(post.ask ? { ask: true } : {}) },
+      });
       refresh();
       if (r.connection_id) router.push(`/chat/${r.connection_id}`);
+      else if (r.status === "pending") {
+        const who = post.anonymous_name || "They";
+        (onSent || onToast)?.(r.already ? `Already sent. Waiting for ${who} to answer.` : `Request sent. ${who} decides. Coins leave only if they let you in.`);
+      }
     } catch (e) {
       if (e instanceof ApiError && e.code === "coins_short") setPay(post);
       else if (e instanceof ApiError && e.code === "age_verification_required") setAge(post);
@@ -37,7 +44,7 @@ export function useKnock(onToast?: (m: string) => void) {
     } finally {
       setBusy("");
     }
-  }, [busy, refresh, router, onToast]);
+  }, [busy, refresh, router, onToast, onSent]);
 
   const knock = useCallback(async (post: Target) => {
     if (busy) return;
@@ -45,18 +52,20 @@ export function useKnock(onToast?: (m: string) => void) {
     const balance = user?.coin_balance ?? 0;
     const name = post.anonymous_name || "them";
     const ok = await confirm({
-      title: `Link up with ${name}?`,
+      title: post.ask ? `Unlock ${name}?` : `Link up with ${name}?`,
       icon: "coins",
-      message: cost
-        ? "You go straight into the chat. If they don't reply within 7 days, your coins come back."
-        : "Free for you. You go straight into the chat.",
+      message: post.ask
+        ? (cost ? `Your request goes to ${name}. The ${cost} coins leave only if they let you in.` : `Free for you. Your request goes to ${name}.`)
+        : cost
+          ? "You go straight into the chat. If they don't reply within 7 days, your coins come back."
+          : "Free for you. You go straight into the chat.",
       detail: cost ? (
         <>
           <div className="cf-row"><span>Link Up</span><b className="cf-cost">{cost} coins</b></div>
           <div className="cf-row"><span>Your balance</span><b>{balance} coins</b></div>
         </>
       ) : undefined,
-      confirmLabel: cost ? `Pay ${cost} coins` : "Link Up",
+      confirmLabel: post.ask ? (cost ? `Send request · ${cost} coins` : "Send request") : cost ? `Pay ${cost} coins` : "Link Up",
     });
     if (ok) await payIn(post);
   }, [busy, user?.is_premium, user?.coin_balance, confirm, payIn]);

@@ -133,8 +133,8 @@ export default function AnonProfileSheet({
   }, [visible, anonymousName]);
 
   // ── Link up: opens PostUnlockScreen with the post (or a linkupTarget). ──
-  // byUser (opened from a comment): no post in hand, so it links up on their latest post,
-  // or opens the chat if you're already linked.
+  // byUser (opened from a comment): sends a request on their latest post that they accept or
+  // decline (coins leave only on accept), or opens the chat if you're already linked.
   const handleLinkUp = useCallback(() => {
     if (!post && !linkupTarget && !(byUser && userId)) return;
     closeSheet();
@@ -148,7 +148,7 @@ export default function AnonProfileSheet({
           if (!res.ok) { showToast({ type: 'warning', message: t?.detail || "Couldn't open their profile." }); return; }
           if (t.connection_id) navigation?.navigate('DropChat', { connectionId: t.connection_id });
           else if (!t.post) showToast({ type: 'info', message: `${anonymousName || 'They'} hasn't posted anything to link up on yet.` });
-          else knockIn(navigation, t.post, showToast);
+          else knockIn(navigation, { ...t.post, ask: true }, showToast);
         } catch {
           showToast({ type: 'warning', message: "Can't reach Anonixx right now." });
         }

@@ -18,6 +18,7 @@ const KIND_ICON: Record<string, { Icon: LucideIcon; tone: string }> = {
   reply: { Icon: MessageCircle, tone: "blue" },
   mention: { Icon: AtSign, tone: "violet" },
   linkup_in: { Icon: DoorOpen, tone: "rose" },
+  linkup_request: { Icon: DoorOpen, tone: "rose" },
   linkup_accepted: { Icon: DoorOpen, tone: "rose" },
   linkup_mutual: { Icon: Sparkles, tone: "rose" },
   linkup_short: { Icon: Coins, tone: "gold" },

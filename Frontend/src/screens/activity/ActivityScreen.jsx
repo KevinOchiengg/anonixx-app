@@ -21,6 +21,7 @@ const KIND_ICON = {
   reply: { Icon: MessageCircle, color: BLUE },
   mention: { Icon: AtSign, color: T.violet },
   linkup_in: { Icon: DoorOpen, color: T.primary },
+  linkup_request: { Icon: DoorOpen, color: T.primary },
   linkup_accepted: { Icon: DoorOpen, color: T.primary },
   linkup_mutual: { Icon: Sparkles, color: T.primary },
   linkup_short: { Icon: Coins, color: T.gold },

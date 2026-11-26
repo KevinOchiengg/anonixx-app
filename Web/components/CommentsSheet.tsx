@@ -92,9 +92,11 @@ export default function CommentsSheet({
   const [who, setWho] = useState<Comment | null>(null);   // a commenter's profile, opened from their name
   const router = useRouter();
   const [error, setError] = useState("");
-  const { knock, ui: knockUi } = useKnock(setError);
+  const [notice, setNotice] = useState("");
+  const { knock, ui: knockUi } = useKnock(setError, setNotice);
 
-  // Link Up from a commenter's profile: unlocks their latest post, or opens the chat if already linked.
+  // From a commenter's profile: a request on their latest post that they accept or decline
+  // (coins leave only on accept), or the chat if you're already linked.
   async function linkUpWith(c: Comment) {
     if (!user) { onNeedAuth(); return; }
     const name = c.anonymous_name || "They";
@@ -104,7 +106,7 @@ export default function CommentsSheet({
       );
       if (t.connection_id) { router.push(`/chat/${t.connection_id}`); return; }
       if (!t.post) { setError(`${name} hasn't posted anything to link up on yet.`); return; }
-      await knock(t.post);
+      await knock({ ...t.post, ask: true });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -484,6 +486,7 @@ export default function CommentsSheet({
             </div>
           )}
           {error ? <div className="err">{error}</div> : null}
+          {notice ? <div className="cmt-notice" role="status">{notice}</div> : null}
         </form>
       </div>
     </div>

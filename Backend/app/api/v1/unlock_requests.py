@@ -74,6 +74,8 @@ class CreateUnlockRequestBody(BaseModel):
     # Sent from the poster's profile/Room rather than the post itself — the only
     # way to link up on a regular confession, which has no Link up button.
     via_profile: bool = False
+    # Ask first: the knock waits for the owner's yes, and coins leave only when they accept.
+    ask: bool = False
 
 
 class AcceptAllBody(BaseModel):
@@ -311,6 +313,9 @@ async def create_unlock_request(
     if mutual:
         return mutual
 
+    if data.ask:
+        return await _ask(data, doc, owner_id, current_user_id, requester, requester_name, snippet, pitch, intents, peek, rule, db)
+
     # Pay and walk in. A knock still waiting from before is folded into this one.
     await db["drop_unlock_requests"].update_many(
         {"target_id": data.target_id, "requester_id": current_user_id, "status": "pending"},
@@ -375,6 +380,44 @@ async def create_unlock_request(
     )
     return {"status": "accepted", "request_id": request_id, "connection_id": connection_id,
             "room_user_id": owner_id, "cost": cost, "refund_after_hours": int(REFUND_AFTER.total_seconds() // 3600) if cost > 0 else None}
+
+
+async def _ask(data, doc, owner_id, requester_id, requester, requester_name, snippet, pitch, intents, peek, rule, db) -> dict:
+    """A knock that waits: the owner accepts (coins are charged then) or declines (nothing is)."""
+    from app.api.v1.drops import unlock_cost_for
+    cost = await unlock_cost_for(requester_id, db)
+    if cost > (requester or {}).get("coin_balance", 0):
+        raise HTTPException(status_code=402, detail={
+            "code": "coins_short", "cost": cost, "balance": (requester or {}).get("coin_balance", 0),
+            "message": f"Unlocking is {cost} coins. Top up to send it.",
+        })
+    waiting = await db["drop_unlock_requests"].find_one(
+        {"target_id": data.target_id, "requester_id": requester_id, "status": "pending", "expires_at": {"$gt": now_utc()}},
+        {"_id": 1},
+    )
+    if waiting:
+        return {"status": "pending", "request_id": str(waiting["_id"]), "already": True, "cost": cost}
+    now = now_utc()
+    req_doc = {
+        "_id": ObjectId(), "target_type": data.target_type, "target_id": data.target_id,
+        "owner_id": owner_id, "requester_id": requester_id, "requester_anonymous_name": requester_name,
+        "confession_snippet": snippet, "payment_method": "coins",
+        "media_url": data.media_url, "media_type": data.media_type, "media_duration": data.media_duration,
+        "pitch": pitch, "intents": intents, "peek": peek, "voice_url": data.voice_url,
+        "voice_duration": data.voice_duration if data.voice_url else None, "door_rule": rule,
+        "status": "pending", "connection_id": None, "created_at": now, "responded_at": None,
+        "expires_at": now + timedelta(days=REQUEST_EXPIRY_DAYS),
+    }
+    await db["drop_unlock_requests"].insert_one(req_doc)
+    request_id = str(req_doc["_id"])
+    await emit_unlock_request_received(owner_id, {"request_id": request_id, "requester_anonymous_name": requester_name})
+    await activity.record(db, owner_id, "linkup_request", actor_id=requester_id, text=pitch, url="/inbox")
+    await send_push_notification(
+        owner_id, f"{requester_name} wants in 🔥", "Let them in or decline. Your call.", db,
+        data={"type": "linkup_request", "request_id": request_id, "url": "/inbox"},
+        category="linkup_request", kind="knock",
+    )
+    return {"status": "pending", "request_id": request_id, "cost": cost}
 
 
 async def refund_silent_knocks(db, limit: int = 200, drop_ids: Optional[list] = None) -> int:

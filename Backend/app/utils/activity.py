@@ -22,6 +22,7 @@ CATEGORY = {
     "reply": "comments",
     "mention": "mentions",
     "linkup_in": "linkups",
+    "linkup_request": "linkups",
     "linkup_accepted": "linkups",
     "linkup_mutual": "linkups",
     "linkup_declined": "linkups",
