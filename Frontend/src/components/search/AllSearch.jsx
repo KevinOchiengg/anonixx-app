@@ -9,6 +9,13 @@ import { getDeviceId } from '../../utils/deviceId';
 import { rs, rf } from '../../utils/responsive';
 import T from '../../utils/theme';
 
+// Same facts the feed shows on hookup posts (DropsSwipeScreen hookupTags).
+const hookupFacts = (h) => (h ? [
+  h.area ? `Location: ${h.area}` : null,
+  h.age ? `Age: ${h.age}` : null,
+  h.gender && h.gender !== 'other' ? `Gender: ${h.gender}` : null,
+].filter(Boolean) : []);
+
 const CHIPS = [
   ['kind', 'hookup', 'Hookups'], ['kind', 'confession', 'Confessions'],
   ['media', 'video', 'Videos'], ['media', 'audio', 'Audio'], ['media', 'photo', 'Photos'],
@@ -201,6 +208,11 @@ function Tile({ post, onPress }) {
         )}
         <Text style={s.likes}>{post.likes_count || 0} likes</Text>
       </View>
+      {post.kind === 'hookup' && hookupFacts(post.hookup).length > 0 && (
+        <View style={s.tags}>
+          {hookupFacts(post.hookup).map((t) => <Text key={t} style={s.tag}>{t}</Text>)}
+        </View>
+      )}
       {!!cover && !!post.content && <Text style={s.cap} numberOfLines={2}>{post.content}</Text>}
     </TouchableOpacity>
   );
@@ -232,5 +244,7 @@ const s = StyleSheet.create({
   kind: { position: 'absolute', top: rs(8), left: rs(8), flexDirection: 'row', alignItems: 'center', gap: rs(3), paddingHorizontal: rs(7), paddingVertical: rs(3), borderRadius: rs(999), backgroundColor: T.primary },
   kindText: { color: '#fff', fontSize: rf(10), fontWeight: '800' },
   likes: { position: 'absolute', left: rs(8), bottom: rs(8), color: '#fff', fontSize: rf(11), fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: rs(6), paddingVertical: rs(2), borderRadius: rs(6), overflow: 'hidden' },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: rs(4), marginTop: rs(6) },
+  tag: { color: T.text, fontSize: rf(10), fontWeight: '700', paddingHorizontal: rs(7), paddingVertical: rs(2), borderRadius: rs(999), backgroundColor: T.primaryDim, borderWidth: 1, borderColor: T.primaryBorder, overflow: 'hidden' },
   cap: { color: T.text, fontSize: rf(12), lineHeight: rf(16), marginTop: rs(6) },
 });

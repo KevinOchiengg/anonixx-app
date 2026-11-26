@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { AudioLines, Bell, BellRing, Flame, Image as ImageIcon, Play, Type } from "lucide-react";
 import { api, compact, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { hookupTags } from "@/lib/linkup";
 
 type Res = { results: Post[]; has_more: boolean; cursor: string | null; query_id: string | null };
 type Chip = { key: "kind" | "media" | "since"; value: string; label: string };
@@ -192,6 +193,9 @@ function Tile({ post, onOpen }: { post: Post; onOpen: () => void }) {
         {post.kind === "hookup" ? <span className="as-kind"><Flame size={12} strokeWidth={2} aria-hidden /> Hookup</span> : null}
         <span className="as-likes">{compact(post.likes_count || 0)} likes</span>
       </span>
+      {post.kind === "hookup" && hookupTags(post.hookup).length ? (
+        <span className="as-tags">{hookupTags(post.hookup).slice(0, 3).map((t) => <span key={t}>{t}</span>)}</span>
+      ) : null}
       {cover && post.content ? <span className="as-cap">{post.content}</span> : null}
     </button>
   );
