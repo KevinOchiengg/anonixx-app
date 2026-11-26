@@ -1256,6 +1256,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
   const [posts, setPosts] = useState([]);
   const [linkedPost, setLinkedPost] = useState(null);
+  const [linkedQueue, setLinkedQueue] = useState(null);   // search results, played before the feed
   const [feedAds, setFeedAds] = useState([]);
   const [promotedLives, setPromotedLives] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1632,7 +1633,9 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
   // Mix in a market slide every MARKET_FREQUENCY drops and an ad every FEED_AD_FREQUENCY.
   const data = useMemo(() => {
-    const base = linkedPost ? [linkedPost, ...posts.filter((p) => p.id !== linkedPost.id)] : posts;
+    const lead = linkedQueue || (linkedPost ? [linkedPost] : null);
+    const leadIds = new Set((lead || []).map((p) => p.id));
+    const base = lead ? [...lead, ...posts.filter((p) => !leadIds.has(p.id))] : posts;
     let out = base;
     if (marketFeed.length > 0 || feedAds.length > 0 || promotedLives.length > 0) {
       out = [];
@@ -1659,7 +1662,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
       });
     }
     return replay.length ? [...out, ...replay] : out;
-  }, [posts, linkedPost, marketFeed, feedAds, promotedLives, replay]);
+  }, [posts, linkedPost, linkedQueue, marketFeed, feedAds, promotedLives, replay]);
 
   // ── Our own pan drives slide changes so a swipe snaps instantly (native paging always glides).
   // A flick or a drag past SNAP_DRAG moves one slide.
@@ -1703,8 +1706,15 @@ export default function DropsSwipeScreen({ navigation, route }) {
 
   // Opened from a shared link (anonixx.com/drop/<id>): show that drop first.
   const linkedDropId = route?.params?.dropId;
+  const searchQueue = route?.params?.queue;
   useEffect(() => {
-    if (!linkedDropId) return;
+    if (!Array.isArray(searchQueue) || !searchQueue.length) return;
+    const at = Math.max(0, searchQueue.findIndex((p) => p.id === linkedDropId));
+    setLinkedQueue([...searchQueue.slice(at), ...searchQueue.slice(0, at)]);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [searchQueue, linkedDropId]);
+  useEffect(() => {
+    if (!linkedDropId || searchQueue) return;
     (async () => {
       try {
         const token = await AsyncStorage.getItem('token');
@@ -1720,7 +1730,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch { /* offline — the normal feed still shows */ }
     })();
-  }, [linkedDropId, showToast]);
+  }, [linkedDropId, searchQueue, showToast]);
 
   // Prefetch the next page a few slides before the end, and warm the image cache ahead.
   const PREFETCH_AHEAD = 4;

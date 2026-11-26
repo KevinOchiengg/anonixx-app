@@ -15,6 +15,7 @@ import DropCard from '../../components/feed/DropCard';
 import { API_BASE_URL } from '../../config/api';
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import T from '../../utils/theme';
+import AllSearch from '../../components/search/AllSearch';
 
 const HISTORY_KEY = '@anonixx_search_history';
 const WHERE_KEY   = '@anonixx_discover_in';
@@ -104,7 +105,9 @@ function usePaged(url) {
 export default function SearchScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
-  const [tab, setTab] = useState('near');
+  const [tab, setTab] = useState('all');
+  const tabRef = useRef('all');
+  tabRef.current = tab;
   const [query, setQuery] = useState('');
   const [parsed, setParsed] = useState(null);
   const [applied, setApplied] = useState([]);   // chips in force, from typing or a suggestion
@@ -128,7 +131,7 @@ export default function SearchScreen({ navigation }) {
     (async () => {
       try {
         const [t, w, h] = await Promise.all([AsyncStorage.getItem(TAB_KEY), AsyncStorage.getItem(WHERE_KEY), AsyncStorage.getItem(HISTORY_KEY)]);
-        if (t === 'near' || t === 'stories') setTab(t);
+        if (t === 'all' || t === 'near' || t === 'stories') setTab(t);
         if (w) setWhere(JSON.parse(w));
         else if (isAuthenticated) {
           const me = await get('/users/me').catch(() => null);
@@ -157,7 +160,7 @@ export default function SearchScreen({ navigation }) {
       get(`/discover/parse?q=${encodeURIComponent(q)}`)
         .then((p) => {
           setParsed(p);
-          if (p.surface) pickTab(p.surface);
+          if (p.surface && tabRef.current !== 'all') pickTab(p.surface);
           p.chips.forEach((c) => applyChip(c.kind === 'place' ? { ...c, country: p.country || '' } : c, false));
         })
         .catch(() => setParsed(null));
@@ -409,7 +412,7 @@ export default function SearchScreen({ navigation }) {
             onSubmitEditing={() => { remember(); setFocused(false); }}
             onFocus={() => setFocused(true)}
             onBlur={() => setTimeout(() => setFocused(false), 150)}
-            placeholder={tab === 'near' ? 'try “someone nearby tonight”' : 'try “heartbreak stories”'}
+            placeholder={tab === 'all' ? 'Search videos, audio, confessions…' : tab === 'near' ? 'try “someone nearby tonight”' : 'try “heartbreak stories”'}
             placeholderTextColor={T.textMute}
             returnKeyType="search"
             autoCorrect={false}
@@ -442,14 +445,14 @@ export default function SearchScreen({ navigation }) {
       )}
 
       <View style={styles.tabs}>
-        {[['near', 'Near'], ['stories', 'Stories']].map(([id, l]) => (
+        {[['all', 'All'], ['near', 'Near'], ['stories', 'Stories']].map(([id, l]) => (
           <TouchableOpacity key={id} style={[styles.tab, tab === id && styles.tabOn]} onPress={() => pickTab(id)} accessibilityRole="tab" accessibilityState={{ selected: tab === id }}>
             <Text style={[styles.tabText, tab === id && styles.tabTextOn]}>{l}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {applied.length > 0 && (
+      {tab !== 'all' && applied.length > 0 && (
         <View style={styles.readRow}>
           <Text style={styles.meta}>{parsed?.chips?.length ? 'Reading it as' : 'Filtering by'}</Text>
           {applied.map((c) => (
@@ -460,7 +463,7 @@ export default function SearchScreen({ navigation }) {
           ))}
         </View>
       )}
-      {(parsed?.suggest || []).filter((c) => !applied.some((a) => a.kind === c.kind && a.value === c.value)).length > 0 && (
+      {tab !== 'all' && (parsed?.suggest || []).filter((c) => !applied.some((a) => a.kind === c.kind && a.value === c.value)).length > 0 && (
         <View style={styles.readRow}>
           <Text style={styles.meta}>Did you mean</Text>
           {parsed.suggest.filter((c) => !applied.some((a) => a.kind === c.kind && a.value === c.value)).map((c) => (
@@ -471,6 +474,9 @@ export default function SearchScreen({ navigation }) {
         </View>
       )}
 
+      {tab === 'all' ? (
+        <AllSearch query={query} signedIn={isAuthenticated} navigation={navigation} />
+      ) : (
       <FlatList
         data={list.items}
         keyExtractor={(item, i) => (tab === 'near' ? item.post?.id : item.id) || String(i)}
@@ -483,6 +489,7 @@ export default function SearchScreen({ navigation }) {
         onEndReached={list.more}
         onEndReachedThreshold={0.4}
       />
+      )}
     </View>
   );
 }
