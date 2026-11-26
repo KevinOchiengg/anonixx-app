@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { allowMature } from "@/lib/matureConsent";
 
 const KEY = "anonixx.adult.ok";
-const AFTER = 3;
+const AFTER = 9;
 
 function accepted(): boolean {
   try { return localStorage.getItem(KEY) === "1"; } catch { return false; }
