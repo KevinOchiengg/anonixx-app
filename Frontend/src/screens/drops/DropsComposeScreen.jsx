@@ -16,7 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useDispatch } from 'react-redux';
 import {
   ChevronLeft, Images, BarChart2, AudioLines, AlertTriangle, X,
-  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, Feather, MessageSquareLock, Music,
+  MapPin, UserPlus, Sparkles, Share2, Shuffle, Send, Film, Rocket, Flame, MessageSquareLock, Music,
 } from 'lucide-react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useAudioPlayer } from 'expo-audio';
@@ -26,7 +26,6 @@ import { streamEnabled, uploadToStream, queueDrop, STREAM_DIRECT_MAX_BYTES } fro
 import { countryHeader } from '../../utils/country';
 import TagUserSection from '../../components/drops/TagUserSection';
 import LocationField from '../../components/drops/LocationField';
-import TopicPicker from '../../components/drops/TopicPicker';
 import GuidedConfession, { GUIDED_SAVE_KEY } from '../../components/drops/GuidedConfession';
 import { ConfessionPreview, alpha } from '../../components/feed/ConfessionCard';
 
@@ -88,7 +87,6 @@ const POST_COST = 3;
 
 const DEFAULT_INTENT = 'skeleton-in-the-closet';
 const HOOK_MAX = 100;
-const topicLabel = (t) => (t === 'growth' ? 'Personal growth' : t.charAt(0).toUpperCase() + t.slice(1));
 const HINT_MAX = 16;
 
 // ─── Placeholder lines per confession type (never inserted into the text). Shuffle cycles them.
@@ -345,7 +343,6 @@ export default function DropsComposeScreen({ navigation, route }) {
   const [locationCounty, setLocationCounty] = useState('');
   const [locationSubCounty, setLocationSubCounty] = useState('');
   const [locationEstate, setLocationEstate] = useState('');
-  const [storyTopics, setStoryTopics] = useState([]);   // author's moods/topics (confessions only)
   // Optional opening line, shown as the feed headline.
   const [hook, setHook] = useState('');
   const [fontStyle, setFontStyle] = useState(DEFAULT_CARD_FONT); // an id from CARD_FONT_LIST
@@ -617,11 +614,6 @@ export default function DropsComposeScreen({ navigation, route }) {
       showToast({ type: 'warning', message: 'Write something or add a photo first.' });
       return;
     }
-    if (isAdmin && !fullText.trim() && kind !== 'hookup' && !storyTopics.length) {
-      showToast({ type: 'warning', message: 'Add a caption or pick a mood so people can find it.' });
-      setActiveSheet('feeling');
-      return;
-    }
 
     setLoading(true);
     try {
@@ -678,7 +670,6 @@ export default function DropsComposeScreen({ navigation, route }) {
         intent:     cardIntent,
         mood_tag:   moodTag,
         intensity,
-        ...(kind !== 'hookup' && storyTopics.length ? { topics: storyTopics } : {}),
         // Hint only makes sense when a specific user is tagged.
         ...(taggedUser && hintClean ? { recognition_hint: hintClean } : {}),
         // Tag a specific user AND still hit marketplace.
@@ -823,7 +814,7 @@ export default function DropsComposeScreen({ navigation, route }) {
   }, [
     format, text, fullText, mediaUri, mediaKind, extraImageUris, theme, cardIntent, moodTag,
     kind, intensity, hint, taggedUser, publisherOptIn,
-    locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, storyTopics, paidPrice, isSuperAdmin,
+    locationCountry, locationCounty, locationSubCounty, locationEstate, fontStyle, paidPrice, isSuperAdmin,
     isAdmin, videoEdit, videoMeta, coverAt, soundId, extraVideos, muteOriginal, promo, promoHours, publishAt,
     dispatch, navigation, showToast,
   ]);
@@ -1070,17 +1061,6 @@ export default function DropsComposeScreen({ navigation, route }) {
               <UserPlus size={rs(18)} color={taggedUser ? T.primary : T.textMute} />
             </ToolIcon>
 
-            {kind !== 'hookup' && (
-            <ToolIcon
-              active={storyTopics.length > 0}
-              onPress={() => { dismissToolbarHint(); setActiveSheet('feeling'); }}
-              label={storyTopics.length ? `Feeling · ${storyTopics.length}` : 'Feeling'}
-              a11yLabel="Mood and topic — helps people find it in Stories"
-            >
-              <Feather size={rs(18)} color={storyTopics.length ? T.primary : T.textMute} />
-            </ToolIcon>
-            )}
-
             {!isAdmin && (
             <ToolIcon
               active={!!locationSummary}
@@ -1193,7 +1173,7 @@ export default function DropsComposeScreen({ navigation, route }) {
                     category="curiosity"
                     text={fullText}
                     name={user?.anonymous_name}
-                    facts={storyTopics.slice(0, 3).map((t) => ({ text: topicLabel(t) }))}
+                    facts={[]}
                   />
                 </>
               )}
@@ -1288,11 +1268,6 @@ export default function DropsComposeScreen({ navigation, route }) {
               <Text style={s.hintCount}>{HINT_MAX - hint.length} left</Text>
             </View>
           )}
-        </OptionSheet>
-
-        {/* ── Mood / topic sheet ── */}
-        <OptionSheet visible={activeSheet === 'feeling'} title="Mood and topic" onClose={closeSheet}>
-          <TopicPicker value={storyTopics} onChange={setStoryTopics} />
         </OptionSheet>
 
         {/* ── Location sheet ── */}

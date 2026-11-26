@@ -1,6 +1,6 @@
 "use client";
 // One search box over every drop (components/search/AllSearch.tsx, backend search.py).
-// Nothing shows until you type or tap a mood. Recent searches stay on this device.
+// Nothing shows until you type. Recent searches stay on this device.
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";

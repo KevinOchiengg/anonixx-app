@@ -119,7 +119,7 @@ async def autotag(db, batch: int = 4) -> None:
     docs = await db["drops"].find(
         {"autotag_at": {"$exists": False}, "media_url": {"$nin": [None, ""]}, "is_active": {"$ne": False},
          "media_type": {"$in": ["video", "voice", "audio", "image"]}},
-        {"media_type": 1, "media_url": 1, "media_download_url": 1, "cover_url": 1, "images": 1},
+        {"media_type": 1, "media_url": 1, "media_download_url": 1, "cover_url": 1, "images": 1, "topics": 1},
     ).sort("created_at", -1).limit(batch).to_list(batch)
     for d in docs:
         update: dict = {"autotag_at": _now()}
@@ -130,6 +130,9 @@ async def autotag(db, batch: int = 4) -> None:
                 if transcript:
                     update["transcript"] = transcript
                     tags += _topics_in(transcript)
+                    spoken = lex.detect_topics(transcript)
+                    if spoken and not d.get("topics"):
+                        update["topics"] = spoken
             if vision:
                 image = d["media_url"] if d["media_type"] == "image" else d.get("cover_url")
                 if image and image.startswith("https://"):
@@ -139,6 +142,19 @@ async def autotag(db, batch: int = 4) -> None:
         if tags:
             update["auto_tags"] = list(dict.fromkeys(tags))[:16]
         await db["drops"].update_one({"_id": d["_id"]}, {"$set": update})
+
+
+async def detect_moods(db, batch: int = 300) -> None:
+    """Older drops: work out moods from their words. Moods an author already picked stay."""
+    docs = await db["drops"].find(
+        {"topics_auto": {"$exists": False}, "kind": {"$ne": "hookup"}},
+        {"confession": 1, "poll": 1, "transcript": 1, "topics": 1},
+    ).limit(batch).to_list(batch)
+    for d in docs:
+        topics = d.get("topics") or lex.detect_topics(
+            d.get("confession"), (d.get("poll") or {}).get("question"), d.get("transcript"),
+        ) or None
+        await db["drops"].update_one({"_id": d["_id"]}, {"$set": {"topics": topics, "topics_auto": True}})
 
 
 async def build_embeddings(db, batch: int = 32) -> None:
@@ -190,7 +206,7 @@ async def saved_alerts(db) -> None:
 async def run_once(db) -> None:
     global _last_affinity
     loop = asyncio.get_running_loop()
-    for step in (refresh_comment_text, autotag, build_embeddings, saved_alerts):
+    for step in (refresh_comment_text, detect_moods, autotag, build_embeddings, saved_alerts):
         try:
             await step(db)
         except Exception as e:

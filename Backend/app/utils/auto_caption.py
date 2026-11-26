@@ -39,6 +39,11 @@ async def pick(db, mature: bool) -> dict | None:
     return random.choice(pool) if pool else None
 
 
+def _topics(text: str, drop: dict):
+    from app.utils.search_lexicon import detect_topics
+    return detect_topics(text, drop.get("transcript")) or drop.get("topics") or None
+
+
 async def fill(db, drop: dict) -> str | None:
     """Give one drop a caption. Returns the caption, or None if the bank has none."""
     caption = await pick(db, drop.get("sensitivity") == "mature")
@@ -47,7 +52,7 @@ async def fill(db, drop: dict) -> str | None:
     text = caption["text"]
     done = await db["drops"].update_one(
         {"_id": drop["_id"], "$or": uncaptioned_query()["$or"]},
-        {"$set": {"confession": text, "auto_caption": True}},
+        {"$set": {"confession": text, "auto_caption": True, "topics": _topics(text, drop), "topics_auto": True}},
     )
     if not done.modified_count:
         return None

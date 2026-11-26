@@ -1,5 +1,4 @@
 "use client";
-import TopicPicker from "../compose/TopicPicker";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import BulkVideos, { isVideoFile } from "./BulkVideos";
@@ -125,7 +124,6 @@ export default function PostStudio() {
     }
   }, []);
   const [topicNote, setTopicNote] = useState("");
-  const [topics, setTopics] = useState<string[]>([]);
   const [bestTimes, setBestTimes] = useState<{ weekday: number; hour: number; at_utc: string }[]>([]);
   useEffect(() => {
     const tz = -new Date().getTimezoneOffset();
@@ -171,9 +169,7 @@ export default function PostStudio() {
   }, [extras]);
   const extraFailed = format === "video" && extras.some((x) => x.up.state.status === "error");
   const uploadFailed = bgState?.status === "error" || extraFailed ? "A video didn't upload. Tap Retry on it." : "";
-  // A drop with no words can still be found by its mood.
-  const unfindable = format !== "text" && format !== "poll" && !text.trim() && !topics.length ? "Add a caption or pick a mood so people can find it." : "";
-  const blocker = missing || unfindable || laterMissing || uploadFailed;
+  const blocker = missing || laterMissing || uploadFailed;
 
   function track(file: File): Pick {
     const url = URL.createObjectURL(file);
@@ -343,7 +339,6 @@ export default function PostStudio() {
           confession: caption || (format === "poll" ? question.trim() : undefined),
           font_style: "classic",
           ...(topicNote ? { tags: [topicNote] } : {}),
-          ...(topics.length ? { topics } : {}),
           sensitivity: mature ? "mature" : "general",
           publisher_opt_in: share,
           ...(sound && format !== "voice" ? { sound_id: sound.id, sound_mute_original: format === "video" && muteOriginal } : {}),
@@ -416,7 +411,7 @@ export default function PostStudio() {
     extrasRef.current.forEach((x) => x.up.cancel()); setExtras([]);
     setText(""); setPhotos([]); setVideo(null); setVlen(0); setVedit(null); setVoice(null);
     setQuestion(""); setOptions(["", ""]);
-    setTopicNote(""); setTopics([]); setMature(false); setError(""); setPublished(null);
+    setTopicNote(""); setMature(false); setError(""); setPublished(null);
     setCoverAt(null); setSoundId(""); setMuteOriginal(false); setPromo(""); setLater(false); setLaterAt(""); setCopied(false);
   }
 
@@ -659,12 +654,7 @@ export default function PostStudio() {
           </section>
 
           <section className="ps-sec">
-            <h3><i>3</i> Mood <small className="ps-help">{text.trim() ? "Optional. Helps people find it." : "Needed when there's no caption, so search can find it."}</small></h3>
-            <TopicPicker value={topics} onChange={setTopics} />
-          </section>
-
-          <section className="ps-sec">
-            <h3><i>4</i> Reach</h3>
+            <h3><i>3</i> Reach</h3>
             <label className="ps-switch">
               <span><b>Share to Anonixx socials</b><small>Eligible for our official accounts.</small></span>
               <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} />
@@ -676,7 +666,7 @@ export default function PostStudio() {
           </section>
 
           <section className="ps-sec ps-spot">
-            <h3><i>5</i> Spotlight <em className="ps-pro">admin</em></h3>
+            <h3><i>4</i> Spotlight <em className="ps-pro">admin</em></h3>
             <p className="ps-help">Extras that make a drop stop the scroll and travel further.</p>
 
             {format === "video" ? (

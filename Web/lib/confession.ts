@@ -28,7 +28,6 @@ export function splitConfession(text: string): { head: string; body: string } {
   return { head: parts.hook, body: parts.rest };
 }
 
-export const topicLabel = (t: string) => (t === "growth" ? "Personal growth" : t.charAt(0).toUpperCase() + t.slice(1));
 
 export type Fact = { text: string; hot?: boolean };
 

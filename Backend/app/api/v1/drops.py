@@ -31,7 +31,7 @@ from app.tasks import scheduled_publisher
 from app.utils import stream
 from app.utils.countries import country_from_header, known_country
 from app.utils.discovery import VISIBLE as DISCOVERY_VISIBLE, fresh as discovery_fresh
-from app.utils.search_lexicon import clean_topics, place_from_area
+from app.utils.search_lexicon import detect_topics, place_from_area
 from app.utils import activity
 from app.websockets.comments import (
     emit_new_comment, emit_comment_liked, emit_comment_pinned, emit_comment_unpinned, emit_comment_deleted,
@@ -381,7 +381,7 @@ class CreateDropRequest(BaseModel):
     # notes) be found from the search bar even when it has little or no text.
     tags: Optional[List[str]] = None
     display_name: Optional[str] = None
-    # Author-picked moods/topics for Stories (utils/search_lexicon.STORY_TAGS), up to 3.
+    # Ignored: moods are worked out from the words (search_lexicon.detect_topics). Kept so old apps still post.
     topics: Optional[List[str]] = None
     # Optional feed category for a confession: one of CONFESSION_CATEGORIES. Ignored on hookups.
     category: Optional[str] = None
@@ -902,7 +902,11 @@ async def create_drop(
         "poll":       poll_data,
         "font_style": font_style,
         "tags":       tags or None,
-        "topics":     (clean_topics(data.topics) or None) if kind != "hookup" else None,
+        "topics":     (detect_topics(
+            data.confession, data.poll.question if data.poll else None,
+            " ".join(o.get("text", "") for o in (video_edit_data or {}).get("overlays", []) if isinstance(o, dict)),
+        ) or None) if kind != "hookup" else None,
+        "topics_auto": True,
         "category":   data.category if kind != "hookup" and data.category in CONFESSION_CATEGORIES else None,
 
         # ── Native social engagement (like/save/comment/view) ─
@@ -2528,7 +2532,7 @@ async def extend_hookup(
 
 class EditDropRequest(BaseModel):
     content: Optional[str] = None
-    topics: Optional[List[str]] = None   # replaces the author's moods/topics; [] clears
+    topics: Optional[List[str]] = None   # ignored; moods come from the words
     location_country: Optional[str] = None   # "" clears; country only
 
 
@@ -2561,7 +2565,7 @@ async def edit_drop(
     current_user_id: str = Depends(get_current_user_id),
     db = Depends(get_database),
 ):
-    if data.content is None and data.topics is None and data.location_country is None:
+    if data.content is None and data.location_country is None:
         raise HTTPException(status_code=400, detail="Nothing to change.")
     if data.content is not None and not data.content.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty.")
@@ -2590,10 +2594,8 @@ async def edit_drop(
             raise HTTPException(status_code=400, detail=MODERATION_ERROR)
         update["confession"] = text
         update["sensitivity"] = classify_sensitivity(text, marked_mature=drop.get("sensitivity") == "mature")
-    if data.topics is not None:
-        if drop.get("kind") == "hookup":
-            raise HTTPException(status_code=400, detail="Moods and topics are for confessions.")
-        update["topics"] = clean_topics(data.topics) or None
+        if drop.get("kind") != "hookup":
+            update["topics"] = detect_topics(text) or None
     if data.location_country is not None:
         if drop.get("kind") == "hookup":
             raise HTTPException(status_code=400, detail="A hookup's place comes from its area.")

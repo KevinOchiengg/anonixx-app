@@ -41,14 +41,12 @@ async function call(path, body) {
 export default function AllSearch({ query, signedIn, navigation, header, likeId, onClearLike, onPick }) {
   const [q, setQ] = useState(query.trim());
   const [sel, setSel] = useState({});
-  const [topic, setTopic] = useState('');
   const [items, setItems] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [queryId, setQueryId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [popular, setPopular] = useState([]);
-  const [topics, setTopics] = useState([]);
   const [saved, setSaved] = useState('');
   const seq = useRef(0);
 
@@ -58,13 +56,12 @@ export default function AllSearch({ query, signedIn, navigation, header, likeId,
   }, [query]);
 
   useEffect(() => {
-    call('/search/suggest').then((r) => { setPopular(r.popular || []); setTopics(r.topics || []); }).catch(() => {});
+    call('/search/suggest').then((r) => { setPopular(r.popular || []); }).catch(() => {});
   }, []);
 
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   Object.entries(sel).forEach(([k, v]) => params.set(k, v));
-  if (topic) params.set('topic', topic);
   const qs = params.toString();
   const path = likeId ? `/search/similar/${encodeURIComponent(likeId)}` : qs ? `/search?${qs}` : null;
   const searching = !!path;
@@ -115,12 +112,11 @@ export default function AllSearch({ query, signedIn, navigation, header, likeId,
   const save = async () => {
     setSaved('busy');
     try {
-      await call('/search/saved', { q, kind: sel.kind || null, media: sel.media || null, topic: topic || null });
+      await call('/search/saved', { q, kind: sel.kind || null, media: sel.media || null, topic: null });
       setSaved('done');
     } catch { setSaved('error'); }
   };
 
-  const moodLabel = topics.find((t) => t.id === topic)?.label;
 
   const Header = (
     <View>
@@ -133,7 +129,6 @@ export default function AllSearch({ query, signedIn, navigation, header, likeId,
       ) : searching ? (
         <>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-            {!!moodLabel && <Chip label={`${moodLabel} ✕`} on onPress={() => setTopic('')} />}
             {CHIPS.map(([k, v, l]) => <Chip key={k + v} label={l} on={sel[k] === v} onPress={() => toggle(k, v)} />)}
           </ScrollView>
           {signedIn && (
@@ -145,14 +140,6 @@ export default function AllSearch({ query, signedIn, navigation, header, likeId,
         </>
       ) : (
         <>
-          {topics.length > 0 && (
-            <>
-              <Text style={s.section}>Moods</Text>
-              <View style={[s.chips, s.wrap]}>
-                {topics.map((t) => <Chip key={t.id} label={t.label} onPress={() => setTopic(t.id)} />)}
-              </View>
-            </>
-          )}
           {popular.length > 0 && (
             <>
               <Text style={s.section}>Trending searches</Text>

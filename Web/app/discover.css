@@ -81,17 +81,6 @@
   .dc-card, .dc-sheet, .dc-sheet-in { animation: none; }
 }
 
-/* Mood/topic picker (components/compose/TopicPicker.tsx): compose sheet + dashboard */
-.tp { display: flex; flex-direction: column; gap: 12px; }
-.tp-title { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); }
-.tp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.tp-chips button { padding: 7px 13px; border-radius: 16px; font-size: 13px; font-weight: 700; color: var(--fg); background: var(--surface-alt); border: 1px solid var(--line); }
-.tp-chips button.on { color: var(--rose); border-color: rgba(255, 99, 74, 0.55); background: var(--rose-dim); }
-.tp-chips button:disabled { opacity: 0.4; }
-.tp-hint { margin: 0; font-size: 12px; color: var(--muted); }
-.tx:has(.dash-topics) { flex-wrap: wrap; }
-.dash-topics { flex-basis: 100%; display: flex; flex-direction: column; gap: 10px; padding: 10px 0 4px; }
-.dash-topics > .pill { align-self: flex-start; }
 
 /* Suggestions dropdown + "did you mean" */
 .dc .sp-head { position: relative; }

@@ -529,7 +529,8 @@ async def edit_admin_drop(
     if not text and not drop.get("media_url"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Post text cannot be empty")
 
-    extra: dict = {}
+    from app.utils.search_lexicon import detect_topics
+    extra: dict = {"topics": detect_topics(text) or None, "topics_auto": True}
     if data.video_edit is not None:
         if drop.get("media_type") != "video":
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only videos take text over them")

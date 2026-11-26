@@ -29,14 +29,12 @@ export default function AllSearch({ query, likeId, onPick, onTrack }: { query: s
   const router = useRouter();
   const [q, setQ] = useState(query.trim());
   const [sel, setSel] = useState<Record<string, string>>({});
-  const [topic, setTopic] = useState("");
   const [items, setItems] = useState<Post[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [queryId, setQueryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [popular, setPopular] = useState<string[]>([]);
-  const [topics, setTopics] = useState<{ id: string; label: string }[]>([]);
   const [saved, setSaved] = useState<"" | "busy" | "done" | "error">("");
   const seq = useRef(0);
   const track = useRef(onTrack);
@@ -48,15 +46,14 @@ export default function AllSearch({ query, likeId, onPick, onTrack }: { query: s
   }, [query]);
 
   useEffect(() => {
-    api<{ popular: string[]; topics: { id: string; label: string }[] }>("/search/suggest")
-      .then((r) => { setPopular(r.popular); setTopics(r.topics); })
+    api<{ popular: string[] }>("/search/suggest")
+      .then((r) => setPopular(r.popular))
       .catch(() => {});
   }, []);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   Object.entries(sel).forEach(([k, v]) => params.set(k, v));
-  if (topic) params.set("topic", topic);
   const url = likeId ? `/search/similar/${likeId}` : params.toString() ? `/search?${params}` : null;
 
   useEffect(() => {
@@ -109,14 +106,12 @@ export default function AllSearch({ query, likeId, onPick, onTrack }: { query: s
   async function save() {
     setSaved("busy");
     try {
-      await api("/search/saved", { body: { q, kind: sel.kind || null, media: sel.media || null, topic: topic || null } });
+      await api("/search/saved", { body: { q, kind: sel.kind || null, media: sel.media || null, topic: null } });
       setSaved("done");
     } catch { setSaved("error"); }
   }
 
-  const searching = Boolean(q || Object.keys(sel).length || topic);
-
-  const moodLabel = topics.find((t) => t.id === topic)?.label;
+  const searching = Boolean(q || Object.keys(sel).length);
 
   return (
     <>
@@ -125,7 +120,6 @@ export default function AllSearch({ query, likeId, onPick, onTrack }: { query: s
       ) : searching ? (
         <>
           <div className="sp-facets dc-chips" aria-label="Filters">
-            {moodLabel ? <button type="button" className="facet on" aria-pressed onClick={() => setTopic("")}>{moodLabel} ✕</button> : null}
             {CHIPS.map((c) => (
               <button key={c.key + c.value} type="button" className={`facet${sel[c.key] === c.value ? " on" : ""}`} aria-pressed={sel[c.key] === c.value} onClick={() => toggle(c)}>{c.label}</button>
             ))}
@@ -141,14 +135,6 @@ export default function AllSearch({ query, likeId, onPick, onTrack }: { query: s
         </>
       ) : (
         <>
-          {topics.length ? (
-            <>
-              <div className="sp-section"><span>Moods</span></div>
-              <div className="sp-facets dc-chips as-moods" aria-label="Moods and topics">
-                {topics.map((t) => <button key={t.id} type="button" className="facet" onClick={() => setTopic(t.id)}>{t.label}</button>)}
-              </div>
-            </>
-          ) : null}
           {popular.length ? (
             <>
               <div className="sp-section"><span>Trending searches</span></div>
@@ -168,12 +154,7 @@ export default function AllSearch({ query, likeId, onPick, onTrack }: { query: s
       {!loading && (searching || likeId) && !items.length ? (
         <div className="dc-empty">
           <b>{failed ? "Couldn't search right now." : "Nothing matches that yet."}</b>
-          <p>{failed ? "Check your connection and try again." : "Try another word, or one of these."}</p>
-          {!failed && topics.length ? (
-            <div className="sp-facets dc-chips">
-              {topics.slice(0, 6).map((t) => <button key={t.id} type="button" className="facet" onClick={() => { setSel({}); onPick(""); setTopic(t.id); }}>{t.label}</button>)}
-            </div>
-          ) : null}
+          <p>{failed ? "Check your connection and try again." : "Try another word."}</p>
         </div>
       ) : null}
     </>

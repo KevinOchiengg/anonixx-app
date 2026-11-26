@@ -272,6 +272,20 @@ def keyword_filter(keyword: str, fields: list) -> tuple:
     return strict, loose
 
 
+def detect_topics(*texts: Optional[str]) -> list:
+    """Moods and topics a drop is about, worked out from its words (nobody picks them).
+    The MAX_TOPICS with the most matching words, strongest first."""
+    text = normalize(" ".join(t for t in texts if t))
+    if not text:
+        return []
+    hits = []
+    for t in (*MOODS, *STORY_TOPICS):
+        n = len(re.findall(topic_regex(t), text))
+        if n:
+            hits.append((n, t))
+    return [t for _, t in sorted(hits, key=lambda h: -h[0])[:MAX_TOPICS]]
+
+
 def topic_regex(topic: Optional[str]) -> Optional[str]:
     """Case-insensitive pattern matching any of a topic's words, on word boundaries."""
     words = TOPICS.get(topic or "")

@@ -6,7 +6,7 @@
  * it (rail, gestures, menus) stays in Slide.tsx. Same design as the app's ConfessionCard.jsx. */
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Post } from "@/lib/api";
-import { CATEGORIES, categoryOf, linkUpFacts, splitConfession, topicLabel, type Category, type Fact } from "@/lib/confession";
+import { CATEGORIES, categoryOf, linkUpFacts, splitConfession, type Category, type Fact } from "@/lib/confession";
 import { Flame, Sparkles } from "lucide-react";
 import KnockLabel from "./KnockLabel";
 
@@ -52,8 +52,8 @@ function ConfessionCard({ post, headline, fontStyle, onKnock, extend }: Props) {
   const meta = CATEGORIES[cat];
   const { head, body } = useMemo(() => splitConfession(post.content), [post.content]);
   const facts = useMemo(
-    () => (cat === "linkup" ? linkUpFacts(post.hookup, post.live_until) : (post.topics || []).slice(0, 3).map((t) => ({ text: topicLabel(t) }))),
-    [cat, post.hookup, post.live_until, post.topics],
+    () => (cat === "linkup" ? linkUpFacts(post.hookup, post.live_until) : []),
+    [cat, post.hookup, post.live_until],
   );
   // "Read the rest" shows only when the clamp actually cut something.
   const copyRef = useRef<HTMLDivElement>(null);

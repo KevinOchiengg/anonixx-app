@@ -48,7 +48,6 @@ export function splitConfession(text) {
 const HOSTING = { can_host: 'can host', can_travel: 'you host', either: 'host or travel' };
 const WHEN = { asap: 'ASAP', today: 'Today', tonight: 'Tonight', week: 'This week', flexible: 'Flexible' };
 const FRESH = { tonight: 'Tonight', weekend: 'This weekend', week: 'This week', flexible: 'Flexible' };
-const TOPIC_LABEL = (t) => (t === 'growth' ? 'Personal growth' : t.charAt(0).toUpperCase() + t.slice(1));
 
 // Compact facts for the chips. Area is the poster's own words (never coordinates).
 export function linkUpFacts(h, liveUntil) {
@@ -104,9 +103,8 @@ function ConfessionCard({
   const meta = CATEGORIES[cat];
   const { head, body } = useMemo(() => splitConfession(post.content), [post.content]);
   const facts = useMemo(
-    () => (cat === 'linkup' ? linkUpFacts(post.hookup, post.live_until)
-      : (post.topics || []).slice(0, 3).map((t) => ({ text: TOPIC_LABEL(t) }))),
-    [cat, post.hookup, post.live_until, post.topics],
+    () => (cat === 'linkup' ? linkUpFacts(post.hookup, post.live_until) : []),
+    [cat, post.hookup, post.live_until],
   );
   const short = winH < 700;
   const bodyLines = short ? 5 : 8;
