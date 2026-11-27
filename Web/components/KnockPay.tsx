@@ -52,7 +52,7 @@ export function useKnock(onToast?: (m: string) => void, onSent?: (m: string) => 
     const balance = user?.coin_balance ?? 0;
     const name = post.anonymous_name || "them";
     const ok = await confirm({
-      title: post.ask ? `Unlock ${name}?` : `Link up with ${name}?`,
+      title: `Link up with ${name}?`,
       icon: "coins",
       message: post.ask
         ? (cost ? `Your request goes to ${name}. The ${cost} coins leave only if they let you in.` : `Free for you. Your request goes to ${name}.`)

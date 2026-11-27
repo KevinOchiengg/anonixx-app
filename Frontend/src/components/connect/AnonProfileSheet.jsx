@@ -12,7 +12,7 @@ import {
 } from 'lucide-react-native';
 
 import { API_BASE_URL } from '../../config/api';
-import { knockIn } from '../../utils/knock';
+import { knockCopy, payIn, settleKnock } from '../../utils/knock';
 import AuthorAvatar from '../common/AuthorAvatar';
 import { useToast } from '../ui/Toast';
 import {
@@ -45,6 +45,8 @@ export default function AnonProfileSheet({
   const [profile,      setProfile]      = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
+  const [pay,          setPay]          = useState(null);   // the Link Up coin details, shown in the sheet
+  const [paying,       setPaying]       = useState(false);
 
   const slideAnim     = useRef(new Animated.Value(H)).current;
   const backdropOp    = useRef(new Animated.Value(0)).current;
@@ -121,6 +123,7 @@ export default function AnonProfileSheet({
   }, [anonymousName, userId]);
 
   useEffect(() => {
+    if (visible) { setPay(null); setPaying(false); }
     if (visible && anonymousName) {
       openSheet();
       loadProfile();
@@ -135,27 +138,39 @@ export default function AnonProfileSheet({
   // ── Link up: opens PostUnlockScreen with the post (or a linkupTarget). ──
   // byUser (opened from a comment): sends a request on their latest post that they accept or
   // decline (coins leave only on accept), or opens the chat if you're already linked.
-  const handleLinkUp = useCallback(() => {
+  const handleLinkUp = useCallback(async () => {
     if (!post && !linkupTarget && !(byUser && userId)) return;
-    closeSheet();
-    setTimeout(async () => {
-      if (byUser && userId) {
-        try {
-          const token = await AsyncStorage.getItem('token');
-          if (!token) { navigation?.navigate('AuthNav', { screen: 'Login' }); return; }
-          const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/${userId}/knock-target`, { headers: { Authorization: `Bearer ${token}` } });
-          const t = await res.json().catch(() => ({}));
-          if (!res.ok) { showToast({ type: 'warning', message: t?.detail || "Couldn't open their profile." }); return; }
-          if (t.connection_id) navigation?.navigate('DropChat', { connectionId: t.connection_id });
-          else if (!t.post) showToast({ type: 'info', message: `${anonymousName || 'They'} hasn't posted anything to link up on yet.` });
-          else knockIn(navigation, { ...t.post, ask: true }, showToast);
-        } catch {
-          showToast({ type: 'warning', message: "Can't reach Anonixx right now." });
-        }
-      } else if (post && navigation) knockIn(navigation, post, showToast);
-      else navigation?.navigate('PostUnlock', { linkupTarget, viaProfile: true });
-    }, 300);
+    if (!byUser && !post) {
+      closeSheet();
+      setTimeout(() => navigation?.navigate('PostUnlock', { linkupTarget, viaProfile: true }), 300);
+      return;
+    }
+    const token = await AsyncStorage.getItem('token');
+    if (!token) { navigation?.navigate('AuthNav', { screen: 'Login' }); return; }
+    if (!byUser) { setPay({ target: post, copy: knockCopy(post) }); return; }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/${userId}/knock-target`, { headers: { Authorization: `Bearer ${token}` } });
+      const t = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast({ type: 'warning', message: t?.detail || "Couldn't open their profile." }); return; }
+      if (t.connection_id) {
+        closeSheet();
+        setTimeout(() => navigation?.navigate('DropChat', { connectionId: t.connection_id }), 300);
+      } else if (!t.post) showToast({ type: 'info', message: `${anonymousName || 'They'} hasn't posted anything to link up on yet.` });
+      else { const target = { ...t.post, ask: true }; setPay({ target, copy: knockCopy(target) }); }
+    } catch {
+      showToast({ type: 'warning', message: "Can't reach Anonixx right now." });
+    }
   }, [post, linkupTarget, byUser, userId, anonymousName, closeSheet, navigation, showToast]);
+
+  const confirmPay = useCallback(async () => {
+    if (!pay || paying) return;
+    setPaying(true);
+    const { target } = pay;
+    const r = await payIn(target.id, !!target.kind && target.kind !== 'hookup', !!target.ask);
+    setPaying(false);
+    closeSheet();
+    setTimeout(() => settleKnock(navigation, target, r, showToast), 300);
+  }, [pay, paying, closeSheet, navigation, showToast]);
 
   const accentColor = T.primary;
 
@@ -325,23 +340,41 @@ export default function AnonProfileSheet({
                     </View>
                   </TouchableOpacity>
                 </View>
-              ) : (
-              <TouchableOpacity
-                style={[styles.connectBtn, { backgroundColor: accentColor }]}
-                onPress={handleLinkUp}
-                hitSlop={HIT_SLOP}
-                activeOpacity={0.85}
-              >
-                <View style={styles.connectBtnInner}>
-                  <Link2 size={rs(16)} color="#fff" />
-                  <Text style={styles.connectBtnText}>Link Up</Text>
+              ) : pay ? (
+                <View style={styles.payCard}>
+                  <Text style={styles.payTitle}>{pay.copy.title}</Text>
+                  <Text style={styles.connectSub}>{pay.copy.message}</Text>
+                  {pay.copy.rows.map((row) => (
+                    <View key={row.label} style={styles.payRow}>
+                      <Text style={styles.payLabel}>{row.label}</Text>
+                      <Text style={[styles.payValue, row.highlight && { color: T.primary }]}>{row.value}</Text>
+                    </View>
+                  ))}
+                  <TouchableOpacity
+                    style={[styles.connectBtn, { backgroundColor: accentColor }]}
+                    onPress={confirmPay} disabled={paying} hitSlop={HIT_SLOP} activeOpacity={0.85}
+                  >
+                    {paying ? <ActivityIndicator color="#fff" /> : <Text style={styles.connectBtnText}>{pay.copy.confirmLabel}</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setPay(null)} disabled={paying} hitSlop={HIT_SLOP} style={styles.payCancel}>
+                    <Text style={styles.payCancelText}>Not now</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-              )}
-
-              {/* Sub-copy */}
-              {!profile.is_self && (
-                <Text style={styles.connectSub}>You go straight in. No reply in 7 days and your coins come back.</Text>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.connectBtn, { backgroundColor: accentColor }]}
+                    onPress={handleLinkUp}
+                    hitSlop={HIT_SLOP}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.connectBtnInner}>
+                      <Link2 size={rs(16)} color="#fff" />
+                      <Text style={styles.connectBtnText}>Link Up</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <Text style={styles.connectSub}>{byUser ? 'They decide. Coins leave only if they let you in.' : "You go straight in. No reply in 7 days and your coins come back."}</Text>
+                </>
               )}
 
             </ScrollView>
@@ -595,6 +628,13 @@ const styles = StyleSheet.create({
     elevation:      6,
     marginTop:      SPACING.xs,
   },
+  payCard:       { gap: rp(10) },
+  payTitle:      { color: T.text, fontSize: FONT.lg, fontWeight: '800', textAlign: 'center' },
+  payRow:        { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: rp(10), paddingHorizontal: rp(14), borderRadius: RADIUS.md, backgroundColor: 'rgba(255,255,255,0.04)' },
+  payLabel:      { color: T.textSecondary, fontSize: FONT.sm },
+  payValue:      { color: T.text, fontSize: FONT.sm, fontWeight: '800' },
+  payCancel:     { alignSelf: 'center', paddingVertical: rp(6) },
+  payCancelText: { color: T.textSecondary, fontSize: FONT.sm, fontWeight: '600' },
   connectBtnInner: {
     flexDirection: 'row',
     alignItems:    'center',

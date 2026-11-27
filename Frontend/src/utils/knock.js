@@ -30,50 +30,39 @@ export async function payIn(postId, viaProfile = false, ask = false) {
   }
 }
 
-function confirmKnock(post) {
+/** The Link Up coin details: one wording for every way in (card, avatar, comment). */
+export function knockCopy(post) {
   const { auth, coins } = store.getState();
   const cost = auth.user?.is_premium ? 0 : LINKUP_COST;
   const name = post.anonymous_name || 'them';
-  if (post.ask) {
-    return confirm({
-      title: `Unlock ${name}?`,
-      icon: 'coins',
-      message: cost
-        ? `Your request goes to ${name}. The ${cost} coins leave only if they let you in.`
-        : `Free for you. Your request goes to ${name}.`,
-      rows: cost
-        ? [
-          { label: 'Unlock', value: `${cost} coins`, highlight: true },
-          { label: 'Your balance', value: `${coins.balance ?? 0} coins` },
-        ]
-        : [],
-      confirmLabel: cost ? `Send request · ${cost} coins` : 'Send request',
-    });
-  }
-  return confirm({
+  return {
     title: `Link up with ${name}?`,
     icon: 'coins',
-    message: cost
-      ? "You go straight into the chat. If they don't reply within 7 days, your coins come back."
-      : 'Free for you. You go straight into the chat.',
+    message: post.ask
+      ? (cost ? `Your request goes to ${name}. The ${cost} coins leave only if they let you in.` : `Free for you. Your request goes to ${name}.`)
+      : (cost ? "You go straight into the chat. If they don't reply within 7 days, your coins come back." : 'Free for you. You go straight into the chat.'),
     rows: cost
       ? [
         { label: 'Link Up', value: `${cost} coins`, highlight: true },
         { label: 'Your balance', value: `${coins.balance ?? 0} coins` },
       ]
       : [],
-    confirmLabel: cost ? `Pay ${cost} coins` : 'Link Up',
-  });
+    confirmLabel: post.ask ? (cost ? `Send request · ${cost} coins` : 'Send request') : cost ? `Pay ${cost} coins` : 'Link Up',
+  };
 }
 
-/** Tap Knock: confirm, then straight into the chat, or to Coins / the age check first. */
-export async function knockIn(navigation, post, showToast) {
-  if (!(await confirmKnock(post))) return;
-  const r = await payIn(post.id, !!post.kind && post.kind !== 'hookup', !!post.ask);
+/** After payIn: into the chat, a sent notice, or Coins / the age check first. */
+export function settleKnock(navigation, post, r, showToast) {
   const who = post.anonymous_name || 'They';
   if (r.connectionId) navigation.navigate('DropChat', { connectionId: r.connectionId });
   else if (r.pending) showToast?.({ type: 'success', message: r.already ? `Already sent. Waiting for ${who} to answer.` : `Request sent. ${who} decides. Coins leave only if they let you in.` });
   else if (r.short) navigation.navigate('Coins', { knockFor: { id: post.id, name: post.anonymous_name || null, cost: r.cost || LINKUP_COST, viaProfile: !!post.kind && post.kind !== 'hookup', ask: !!post.ask } });
   else if (r.ageGate) navigation.navigate('PostUnlock', { post });
   else showToast?.({ type: 'warning', message: r.error });
+}
+
+/** Tap Knock: confirm, then pay and settle. */
+export async function knockIn(navigation, post, showToast) {
+  if (!(await confirm(knockCopy(post)))) return;
+  settleKnock(navigation, post, await payIn(post.id, !!post.kind && post.kind !== 'hookup', !!post.ask), showToast);
 }

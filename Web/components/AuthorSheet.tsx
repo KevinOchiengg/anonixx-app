@@ -25,11 +25,12 @@ type Profile = {
 const GENDER: Record<string, string> = { male: "Male", female: "Female", nonbinary: "Non-binary" };
 
 export default function AuthorSheet({
-  post, onClose, onLinkUp,
+  post, onClose, onLinkUp, ask = false,
 }: {
   post: Post;
   onClose: () => void;
   onLinkUp: (post: Post) => void;
+  ask?: boolean;
 }) {
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState("");
@@ -92,7 +93,7 @@ export default function AuthorSheet({
                   <button className="u-cta" onClick={() => { onClose(); onLinkUp(post); }}>
                     <Link2 />Link Up
                   </button>
-                  <p className="u-hint">You go straight in. No reply in 7 days and your coins come back.</p>
+                  <p className="u-hint">{ask ? "They decide. Coins leave only if they let you in." : "You go straight in. No reply in 7 days and your coins come back."}</p>
                 </>
               ) : null}
             </>

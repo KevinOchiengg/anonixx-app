@@ -495,6 +495,7 @@ export default function CommentsSheet({
         post={{ id: who.id, user_id: who.user_id, anonymous_name: who.anonymous_name, avatar_url: who.avatar_url ?? null } as unknown as Post}
         onClose={() => setWho(null)}
         onLinkUp={() => linkUpWith(who)}
+        ask
       />
     ) : null}
     {knockUi}
