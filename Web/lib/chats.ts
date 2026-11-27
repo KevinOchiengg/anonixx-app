@@ -16,6 +16,7 @@ export type Chat = {
   last_message_at: string | null;
   last_message_is_own?: boolean;
   last_message_seen?: boolean;
+  last_message_delivered?: boolean;
   is_sender?: boolean;
   pinned?: boolean;
   archived?: boolean;

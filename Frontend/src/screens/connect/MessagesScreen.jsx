@@ -125,7 +125,7 @@ export default function MessagesScreen({ navigation, route }) {
       timers[userId] = setTimeout(() => setTypingIds((p) => { const s = new Set(p); s.delete(userId); return s; }), 3000);
     };
     const events = [['user_online', onOnline], ['user_offline', onOffline], ['user_typing', onTyping],
-      ['new_message', soon], ['messages_seen', soon], ['message_deleted', soon],
+      ['new_message', soon], ['messages_seen', soon], ['messages_delivered', soon], ['message_deleted', soon],
       ['unlock_request_received', soon], ['unlock_request_cancelled', soon]];
     events.forEach(([e, fn]) => socketService.on?.(e, fn));
     return () => {

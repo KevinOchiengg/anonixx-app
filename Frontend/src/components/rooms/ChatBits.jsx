@@ -106,7 +106,7 @@ export const ChatRow = React.memo(({ item, online, typing, selected, onPress, on
           ) : (
             <View style={st.previewRow}>
               {item.last_message_is_own && !item.last_message_deleted ? (
-                <Text style={item.last_message_seen ? st.tickSeen : st.tick}>{item.last_message_seen ? '✓✓' : '✓'}</Text>
+                <Text style={item.last_message_seen ? st.tickSeen : st.tick}>{item.last_message_seen || item.last_message_delivered ? '✓✓' : '✓'}</Text>
               ) : null}
               {item.last_message_deleted ? <Ban size={rs(13)} color={T.textMuted} strokeWidth={2} /> : <PreviewIcon type={item.last_message_type} />}
               <Text style={[st.preview, unread && st.previewUnread, item.last_message_deleted && st.previewDeleted]} numberOfLines={1}>{text}</Text>

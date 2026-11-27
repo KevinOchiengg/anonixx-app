@@ -57,7 +57,7 @@ const ReactionRow = React.memo(({ item, onReact }) => {
   );
 });
 
-// Time, and on my messages a tick: one = sent, two in ice blue = seen.
+// Time, and on my messages a tick: one grey = sent, two grey = delivered, two ice blue = seen.
 function Meta({ item, light, overlay, inline }) {
   const color = overlay ? '#fff' : light ? 'rgba(255,255,255,0.75)' : T.textMute;
   return (
@@ -65,8 +65,10 @@ function Meta({ item, light, overlay, inline }) {
       <Text style={[s.time, { color }]}>{item.time_ago}</Text>
       {item.is_own && !item.deleted ? (
         item.seen
-          ? <CheckCheck size={rs(14)} color={SEEN} strokeWidth={2.4} />
-          : <Check size={rs(14)} color={color} strokeWidth={2.4} />
+          ? <CheckCheck size={rs(14)} color={SEEN} strokeWidth={2.4} accessibilityLabel="Seen" />
+          : item.delivered
+            ? <CheckCheck size={rs(14)} color={color} strokeWidth={2.4} accessibilityLabel="Delivered" />
+            : <Check size={rs(14)} color={color} strokeWidth={2.4} accessibilityLabel="Sent" />
       ) : null}
     </View>
   );

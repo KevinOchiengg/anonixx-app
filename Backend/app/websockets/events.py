@@ -1,5 +1,6 @@
 """Socket.IO handlers: presence, comment-thread rooms and chat typing."""
 
+import asyncio
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -56,6 +57,13 @@ async def connect(sid: str, environ: dict, auth: dict):
 
     # Personal room so the server can reach this user directly
     await sio.enter_room(sid, f"user_{user_id}")
+
+    # Messages sent while they were away have now reached them: two grey ticks for the sender.
+    try:
+        from app.api.v1.drops import mark_delivered
+        asyncio.create_task(mark_delivered(_db(), user_id))
+    except Exception:
+        pass
 
     # Tell all OTHER connected users who just came online (userId required
     # so the frontend can update per-user presence indicators)

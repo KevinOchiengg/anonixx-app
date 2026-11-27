@@ -50,7 +50,7 @@ export function ChatRow({ c, href, onPrefs, onOpen }: { c: Chat; href?: string; 
         </span>
         <span className="mx-bot">
           <span className={`mx-prev${unread ? " un" : ""}${c.last_message_deleted ? " del" : ""}`}>
-            {c.last_message_is_own && !c.last_message_deleted ? <span className={`mx-tick${c.last_message_seen ? " seen" : ""}`}>{c.last_message_seen ? "✓✓" : "✓"}</span> : null}
+            {c.last_message_is_own && !c.last_message_deleted ? <span className={`mx-tick${c.last_message_seen ? " seen" : ""}`}>{c.last_message_seen || c.last_message_delivered ? "✓✓" : "✓"}</span> : null}
             {c.last_message_deleted ? "⊘ " : null}
             {text}
           </span>

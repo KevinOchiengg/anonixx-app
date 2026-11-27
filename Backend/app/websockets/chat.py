@@ -20,6 +20,14 @@ async def emit_messages_seen(other_user_id: str, connection_id: str, seen_at: st
     )
 
 
+async def emit_messages_delivered(other_user_id: str, connection_id: str, delivered_at: str):
+    await sio.emit(
+        "messages_delivered",
+        {"connectionId": connection_id, "deliveredAt": delivered_at},
+        room=f"user_{other_user_id}",
+    )
+
+
 async def emit_message_deleted(other_user_id: str, connection_id: str, message_id: str):
     await sio.emit(
         "message_deleted",

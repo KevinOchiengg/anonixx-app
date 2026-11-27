@@ -100,7 +100,7 @@ function Inner({ id }: { id: string }) {
     sock.current = so;
     setSockUp(true);
     const refresh = (d: { connectionId?: string }) => { if (d?.connectionId === id) load(); };
-    ["new_message", "messages_seen", "message_deleted", "message_reaction", "message_opened"].forEach((ev) => so.on(ev, refresh));
+    ["new_message", "messages_seen", "messages_delivered", "message_deleted", "message_reaction", "message_opened"].forEach((ev) => so.on(ev, refresh));
     so.on("user_typing", (d: { connectionId?: string }) => {
       if (d?.connectionId !== id) return;
       setTyping(true);

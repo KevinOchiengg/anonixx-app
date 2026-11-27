@@ -25,7 +25,11 @@ export default function useChatSocket(socketService, connectionId, setMessages, 
       }),
       // The other person read up to seenAt: my earlier messages flip to seen.
       messages_seen: mine(({ seenAt }) => setMessages((prev) => prev.map((m) => (
-        m.is_own && m.created_at <= seenAt ? { ...m, seen: true } : m
+        m.is_own && m.created_at <= seenAt ? { ...m, seen: true, delivered: true } : m
+      )))),
+      // It reached their phone: one grey tick becomes two.
+      messages_delivered: mine(({ deliveredAt }) => setMessages((prev) => prev.map((m) => (
+        m.is_own && !m.delivered && m.created_at <= deliveredAt ? { ...m, delivered: true } : m
       )))),
       message_deleted: mine(({ messageId }) => patch(messageId, { deleted: true, content: '', media_url: null, media_type: null })),
       message_reaction: mine(({ messageId, reactions }) => patch(messageId, { reactions })),

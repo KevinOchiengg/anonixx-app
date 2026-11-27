@@ -15,6 +15,7 @@ export type Msg = {
   sender_id: string;
   is_own: boolean;
   seen: boolean;
+  delivered?: boolean;
   time_ago: string;
   duration_seconds?: number | null;
   reply_to?: { id: string; preview: string; media_type: string | null; is_own: boolean } | null;
@@ -183,7 +184,7 @@ export default function ChatBubble({ m, otherName, open, end = true, fresh = fal
       , document.body) : null}
       {media === "voice" ? <VoiceNote src={m.media_url!} seconds={m.duration_seconds} /> : null}
       {!m.deleted && m.content ? <span>{m.content}</span> : null}
-      <small className="b-meta">{m.time_ago}{m.is_own && !m.deleted ? (m.seen ? <CheckCheck className="b-tick seen" size={14} strokeWidth={2.4} aria-label="Seen" /> : <Check className="b-tick" size={14} strokeWidth={2.4} aria-label="Sent" />) : null}</small>
+      <small className="b-meta">{m.time_ago}{m.is_own && !m.deleted ? (m.seen ? <CheckCheck className="b-tick seen" size={14} strokeWidth={2.4} aria-label="Seen" /> : m.delivered ? <CheckCheck className="b-tick" size={14} strokeWidth={2.4} aria-label="Delivered" /> : <Check className="b-tick" size={14} strokeWidth={2.4} aria-label="Sent" />) : null}</small>
       {m.reactions?.length ? (
         <div className="msg-reactions" onClick={(e) => e.stopPropagation()}>
           {m.reactions.map((r) => (

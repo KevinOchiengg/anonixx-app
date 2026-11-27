@@ -2863,6 +2863,7 @@ async def get_drop_connections(
         db["drop_connections"].find(query).sort("last_message_at", -1).to_list(None),
         get_unread_message_counts(db, current_user_id),
     )
+    await mark_delivered(db, current_user_id, raw_connections)
 
     # The other person's current avatar (it can change after connecting).
     other_ids = set()
@@ -2907,6 +2908,10 @@ async def get_drop_connections(
             last_message_is_own and other_last_read_at
             and last_msg["created_at"] <= other_last_read_at
         )
+        other_delivered_at = conn.get("unlocker_last_delivered_at" if is_sender else "sender_last_delivered_at")
+        last_message_delivered = last_message_seen or bool(
+            last_message_is_own and other_delivered_at and last_msg["created_at"] <= other_delivered_at
+        )
 
         connections.append({
             "id": str(conn["_id"]),
@@ -2929,6 +2934,7 @@ async def get_drop_connections(
             "last_message_at": conn["last_message_at"].isoformat(),
             "last_message_is_own": last_message_is_own,
             "last_message_seen": last_message_seen,
+            "last_message_delivered": last_message_delivered,
             **_prefs_out(conn, current_user_id),
         })
 
@@ -2948,6 +2954,26 @@ def _prefs_out(conn: dict, user_id: str) -> dict:
         "archived": bool(prefs.get("archived")),
         "muted_until": muted.isoformat() if muted else None,
     }
+
+
+async def mark_delivered(db, user_id: str, conns: Optional[list] = None) -> None:
+    """Everything sent to this person so far has reached their device: the sender's ticks turn
+    from one to two. Runs when they come online or open their chats."""
+    from app.websockets.chat import emit_messages_delivered
+    if conns is None:
+        conns = await db["drop_connections"].find(
+            {"$or": [{"sender_id": user_id}, {"unlocker_id": user_id}], "removed_at": None},
+            {"sender_id": 1, "unlocker_id": 1, "last_message_at": 1, "sender_last_delivered_at": 1, "unlocker_last_delivered_at": 1},
+        ).to_list(500)
+    now = now_utc()
+    for c in conns:
+        field = "sender_last_delivered_at" if c["sender_id"] == user_id else "unlocker_last_delivered_at"
+        last, prev = c.get("last_message_at"), c.get(field)
+        if not last or (prev and _ensure_aware(prev) >= _ensure_aware(last)):
+            continue
+        await db["drop_connections"].update_one({"_id": c["_id"]}, {"$set": {field: now}})
+        other = c["unlocker_id"] if c["sender_id"] == user_id else c["sender_id"]
+        await emit_messages_delivered(other, str(c["_id"]), now.isoformat())
 
 
 async def _avatar_of(db, user_id: str) -> tuple[Optional[str], Optional[str]]:
@@ -3207,6 +3233,7 @@ async def get_drop_messages(
     other_user_id = conn["unlocker_id"] if is_sender else conn["sender_id"]
     # The other person's last read time, which decides if my messages show as seen.
     other_last_read_at = conn.get("unlocker_last_read_at" if is_sender else "sender_last_read_at")
+    other_delivered_at = conn.get("unlocker_last_delivered_at" if is_sender else "sender_last_delivered_at")
 
     messages = []
     async for msg in db["drop_messages"].find(
@@ -3240,6 +3267,10 @@ async def get_drop_messages(
             # Only meaningful on my own sent messages — ticks aren't shown
             # on messages I received.
             "seen": bool(is_own and other_last_read_at and msg["created_at"] <= other_last_read_at),
+            "delivered": bool(is_own and (
+                (other_last_read_at and msg["created_at"] <= other_last_read_at)
+                or (other_delivered_at and msg["created_at"] <= other_delivered_at)
+            )),
             "time_ago": get_time_ago(msg["created_at"]),
             "created_at": msg["created_at"].isoformat(),
         })
@@ -3416,6 +3447,7 @@ def _own_message_out(msg: dict, viewer_id: str) -> dict:
         "reply_to": _reply_payload_for(msg.get("reply_to"), viewer_id),
         "is_own": True,
         "seen": False,
+        "delivered": bool(msg.get("delivered")),
         "time_ago": "just now",
         "created_at": msg["created_at"].isoformat(),
     }
@@ -3457,6 +3489,11 @@ async def _deliver_message(db, conn: dict, sender_id: str, *, content: str, medi
 
     other_id = conn["unlocker_id"] if sender_id == conn["sender_id"] else conn["sender_id"]
     sender_name = conn["sender_anonymous_name"] if sender_id == conn["sender_id"] else conn["unlocker_anonymous_name"]
+    from app.websockets.events import is_user_online
+    if is_user_online(other_id):
+        field = "unlocker_last_delivered_at" if sender_id == conn["sender_id"] else "sender_last_delivered_at"
+        await db["drop_connections"].update_one({"_id": conn["_id"]}, {"$set": {field: msg["created_at"]}})
+        msg["delivered"] = True
 
     await emit_new_message(other_id, connection_id, {
         "id":               str(msg["_id"]),
