@@ -33,15 +33,12 @@ export const alpha = (hex, a) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-// Headline + body. A real first sentence or line becomes the headline; a short confession is
-// all headline; a long run-on with no sentence break is all body.
+// Headline + body: the first line is the headline (see captionHook); no line break, all body.
 export function splitConfession(text) {
   const t = (text || '').trim();
   if (!t) return { head: '', body: '' };
   const parts = splitHook(t);
   if (!parts) return { head: '', body: t };
-  if (!parts.rest) return { head: t.length <= 160 ? t : '', body: t.length <= 160 ? '' : t };
-  if (parts.inline) return { head: '', body: t };
   return { head: parts.hook, body: parts.rest };
 }
 

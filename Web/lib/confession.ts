@@ -16,15 +16,12 @@ export const categoryOf = (post: Pick<Post, "category" | "kind">): Category => {
   return category === "linkup" ? "linkup" : "curiosity";
 };
 
-/** Headline + body. A real first sentence or line is the headline; a short confession is all
- * headline; a long run-on with no sentence break is all body. */
+/** Headline + body: the first line is the headline (see captionHook); no line break, all body. */
 export function splitConfession(text: string): { head: string; body: string } {
   const t = (text || "").trim();
   if (!t) return { head: "", body: "" };
   const parts = splitHook(t);
   if (!parts) return { head: "", body: t };
-  if (!parts.rest) return t.length <= 160 ? { head: t, body: "" } : { head: "", body: t };
-  if (parts.inline) return { head: "", body: t };
   return { head: parts.hook, body: parts.rest };
 }
 
