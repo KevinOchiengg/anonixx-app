@@ -38,6 +38,7 @@ import useVoiceNote from '../../hooks/useVoiceNote';
 import { callsApi, callParams } from '../../services/calls';
 import { chatsApi } from '../../services/chats';
 import { confirmBlock, confirmClear, sendFakeReport, sendReport } from '../../services/roomActions';
+import AuthorAvatar from '../../components/common/AuthorAvatar';
 
 // Fallback poll; messages normally arrive over the socket.
 const MAX_MEDIA = 10;   // photos and videos sent in one go
@@ -449,8 +450,8 @@ export default function DropChatScreen({ route, navigation }) {
                 {headerPic ? (
                   <Image source={{ uri: headerPic }} style={s.avatar} />
                 ) : (
-                  <View style={[s.avatar, s.avatarInitial]}>
-                    <Text style={s.avatarInitialText}>{otherName[0]?.toUpperCase() || 'A'}</Text>
+                  <View style={[s.avatar, { overflow: 'hidden' }]}>
+                    <AuthorAvatar seed={connection?.other_user_id} name={otherName} gender={connection?.other_gender} />
                   </View>
                 )}
               </View>

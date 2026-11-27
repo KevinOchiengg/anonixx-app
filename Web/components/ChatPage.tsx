@@ -23,10 +23,11 @@ import ChatBubble, { type Msg } from "./chat/ChatBubble";
 import "../app/chat-media.css";
 import { ArrowLeft, BellOff, Camera, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, Video, X } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
+import AuthorAvatar from "./AuthorAvatar";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
-  removable_at?: string | null; other_avatar_url?: string | null; inside_since?: string | null;
+  removable_at?: string | null; other_avatar_url?: string | null; other_gender?: string | null; inside_since?: string | null;
   knock_pitch?: string | null; knock_intents?: string[]; pinned?: boolean; archived?: boolean; muted_until?: string | null;
 };
 type Profile = { font_style: string; profile_picture_url: string | null };
@@ -289,8 +290,8 @@ function Inner({ id }: { id: string }) {
         <Link href="/inbox" className="chat-back" aria-label="Back to Rooms"><ArrowLeft size={22} strokeWidth={2} aria-hidden /></Link>
         <button type="button" className="mx-headbtn" onClick={() => setInfo(true)} aria-label={`${name}, contact info`}>
           <span className="u-ava">
-            <span style={pic ? undefined : { background: "var(--rose-dim)", color: "var(--rose)" }}>
-              {pic ? <Image src={pic} alt="" width={38} height={38} /> : name[0]?.toUpperCase() || "A"}
+            <span>
+              <AuthorAvatar src={pic} seed={conn?.other_user_id} name={name} gender={conn?.other_gender} size={38} />
             </span>
             {online ? <em /> : null}
           </span>

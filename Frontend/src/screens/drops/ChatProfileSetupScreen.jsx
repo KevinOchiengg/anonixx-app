@@ -454,7 +454,7 @@ export default function ChatProfileSetupScreen({ navigation, route }) {
               {inside.map((c) => (
                 <View key={c.id} style={styles.person}>
                   <View style={styles.personAva}>
-                    <AuthorAvatar uri={c.other_avatar_url} seed={c.other_user_id} name={c.other_anonymous_name} />
+                    <AuthorAvatar uri={c.other_avatar_url} seed={c.other_user_id} name={c.other_anonymous_name} gender={c.other_gender} />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.personName} numberOfLines={1}>{c.other_anonymous_name || 'Anonymous'}</Text>

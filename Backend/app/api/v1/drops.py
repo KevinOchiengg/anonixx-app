@@ -2870,10 +2870,12 @@ async def get_drop_connections(
         is_sender = conn["sender_id"] == current_user_id
         other_ids.add(conn["unlocker_id"] if is_sender else conn["sender_id"])
     avatar_by_id = {}
+    gender_by_id = {}
     if other_ids:
         valid_ids = [ObjectId(oid) for oid in other_ids if ObjectId.is_valid(oid)]
-        async for u in db["users"].find({"_id": {"$in": valid_ids}}, {"avatar_url": 1}):
+        async for u in db["users"].find({"_id": {"$in": valid_ids}}, {"avatar_url": 1, "gender": 1}):
             avatar_by_id[str(u["_id"])] = u.get("avatar_url")
+            gender_by_id[str(u["_id"])] = u.get("gender") if u.get("gender") in AUTHOR_GENDERS else None
 
     from app.websockets.events import is_user_online
 
@@ -2913,6 +2915,7 @@ async def get_drop_connections(
             "other_user_id": other_id,
             "other_anonymous_name": other_name,
             "other_avatar_url": avatar_by_id.get(other_id),
+            "other_gender": gender_by_id.get(other_id),
             "other_is_online": is_user_online(other_id),
             "is_sender": is_sender,
             # Owner side: when "Remove from Room" unlocks (blocking never waits).
@@ -2947,11 +2950,12 @@ def _prefs_out(conn: dict, user_id: str) -> dict:
     }
 
 
-async def _avatar_of(db, user_id: str) -> Optional[str]:
+async def _avatar_of(db, user_id: str) -> tuple[Optional[str], Optional[str]]:
+    """(avatar_url, gender) for a chat header."""
     if not ObjectId.is_valid(user_id or ""):
-        return None
-    u = await db["users"].find_one({"_id": ObjectId(user_id)}, {"avatar_url": 1})
-    return (u or {}).get("avatar_url")
+        return None, None
+    u = await db["users"].find_one({"_id": ObjectId(user_id)}, {"avatar_url": 1, "gender": 1}) or {}
+    return u.get("avatar_url"), (u.get("gender") if u.get("gender") in AUTHOR_GENDERS else None)
 
 
 async def _my_chat(db, connection_id: str, user_id: str) -> dict:
@@ -3249,7 +3253,7 @@ async def get_drop_messages(
 
     # None of these depend on each other: one wait instead of five.
     # The chat_profile is always the drop's *sender*'s (reused across every unlocker).
-    _, chat_profile, active_call, knock, other_avatar = await asyncio.gather(
+    _, chat_profile, active_call, knock, (other_avatar, other_gender) = await asyncio.gather(
         db["drop_connections"].update_one({"_id": ObjectId(connection_id)}, {"$set": {read_field: seen_at}}),
         db["chat_profiles"].find_one({"user_id": conn["sender_id"]}),
         get_active_call_for_host(conn["sender_id"], db, viewer_id=current_user_id),
@@ -3289,6 +3293,7 @@ async def get_drop_messages(
             "knock_pitch": (knock or {}).get("pitch"),
             "knock_intents": (knock or {}).get("intents") or [],
             "other_avatar_url": other_avatar,
+            "other_gender": other_gender,
             **_prefs_out(conn, current_user_id),
         },
         "chat_profile": {

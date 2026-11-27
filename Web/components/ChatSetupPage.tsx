@@ -21,6 +21,7 @@ import AppShell from "./AppShell";
 import KnockClues, { type KnockClue } from "./KnockClues";
 import RoomThemePicker, { RoomMini } from "./RoomThemePicker";
 import { askConfirm } from "@/lib/confirm";
+import AuthorAvatar from "./AuthorAvatar";
 
 type Profile = {
   font_style?: string;
@@ -71,7 +72,7 @@ const LISTINGS: { id: string; label: string; hint: string }[] = [
   { id: "private", label: "Keep me out of Near", hint: "Your posts still show in the feed, but you won't appear in Near." },
 ];
 type Conn = {
-  id: string; other_user_id: string; other_anonymous_name: string; other_avatar_url: string | null;
+  id: string; other_user_id: string; other_anonymous_name: string; other_avatar_url: string | null; other_gender?: string | null;
   is_sender: boolean; last_message: string | null; last_message_at: string; removable_at?: string | null;
 };
 
@@ -87,9 +88,9 @@ const REPORT_REASONS: [string, string][] = [
   ["spam", "Spam or scam"], ["other", "Something else"],
 ];
 
-function Ava({ src, name }: { src: string | null; name: string }) {
+function Ava({ src, name, seed, gender }: { src: string | null; name: string; seed?: string | null; gender?: string | null }) {
   return (
-    <span className="lr-ava"><span>{src ? <Image src={src} alt="" width={42} height={42} /> : name[0]?.toUpperCase() || "A"}</span></span>
+    <span className="lr-ava"><span>{src || seed ? <AuthorAvatar src={src} seed={seed} name={name} gender={gender} size={42} /> : name[0]?.toUpperCase() || "A"}</span></span>
   );
 }
 
@@ -422,7 +423,7 @@ function Inner() {
               <p className="rs-info">People you&apos;ve let in. Remove after 3 days, block any time.</p>
               {inside.map((c) => (
                 <div className="rs-person" key={c.id}>
-                  <Ava src={c.other_avatar_url} name={c.other_anonymous_name || "A"} />
+                  <Ava src={c.other_avatar_url} name={c.other_anonymous_name || "A"} seed={c.other_user_id} gender={c.other_gender} />
                   <div className="rs-person-t">
                     <b>{c.other_anonymous_name || "Anonymous"}</b>
                     <small>{c.last_message || "No messages yet"}</small>
