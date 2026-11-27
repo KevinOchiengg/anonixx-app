@@ -2,6 +2,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDraft from "@/lib/useDraft";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { linkedChat } from "@/lib/linkup";
 import { api, type Post } from "@/lib/api";
@@ -461,7 +462,15 @@ export default function CommentsSheet({
               <small className="gif-by">via Tenor</small>
             </div>
           ) : null}
-          {rec ? (
+          {!user ? (
+            <div className="cmt-join">
+              <p>Join the thread. Your name stays hidden.</p>
+              <div>
+                <Link href={`/signup?next=${encodeURIComponent(`/drop/${postId}`)}`} className="pill">Join free</Link>
+                <Link href={`/login?next=${encodeURIComponent(`/drop/${postId}`)}`} className="pill ghost">Log in</Link>
+              </div>
+            </div>
+          ) : rec ? (
             <div className="cmt-input cmt-rec">
               <button type="button" className="emoji-toggle" onClick={cancelRec} aria-label="Cancel recording"><Close /></button>
               <span className="rec-dot" aria-hidden />
@@ -475,8 +484,7 @@ export default function CommentsSheet({
                   value={text}
                   maxLength={500}
                   onChange={(e) => setText(e.target.value)}
-                  placeholder={!user ? "Sign in. No one will know it's you." : replyTo ? "Add reply..." : "Add comment..."}
-                  onFocus={() => { if (!user) onNeedAuth(); }}
+                  placeholder={replyTo ? "Add reply..." : "Add comment..."}
                 />
                 <button type="button" className="emoji-toggle at" onClick={() => setText((t) => (t + "@").slice(0, 500))} aria-label="Mention someone">@</button>
                 <button type="button" className="emoji-toggle" onClick={() => { if (!user) onNeedAuth(); else fileRef.current?.click(); }} disabled={busy} aria-label="Add a photo"><ImageIcon /></button>

@@ -901,7 +901,22 @@ export const CommentBottomSheet = React.memo(({
           />
         )}
 
-        {/* Input: shared ChatInputBar. paddingBottom clears the nav bar. */}
+        {/* Signed out: read freely, join to write. Signed in: shared ChatInputBar (paddingBottom clears the nav bar). */}
+        {!isAuthenticated ? (
+          <View style={[st.joinBar, { paddingBottom: 12 + insets.bottom }]}>
+            <Text style={st.joinText}>Join the thread. Your name stays hidden.</Text>
+            <View style={st.joinBtns}>
+              <TouchableOpacity style={st.joinPrimary} activeOpacity={0.85}
+                onPress={() => { onClose?.(); navigation?.navigate?.('AuthNav', { screen: 'SignUp' }); }}>
+                <Text style={st.joinPrimaryText}>Join free</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.joinGhost} activeOpacity={0.85}
+                onPress={() => { onClose?.(); navigation?.navigate?.('AuthNav', { screen: 'Login' }); }}>
+                <Text style={st.joinGhostText}>Log in</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
         <ChatInputBar
           inputRef={inputRef}
           value={text}
@@ -928,6 +943,7 @@ export const CommentBottomSheet = React.memo(({
               : <VoiceNoteRecorder onSend={handleVoiceSend} disabled={!isAuthenticated} filled />
           }
         />
+        )}
         </KeyboardAvoidingView>
       </Animated.View>
 
@@ -956,6 +972,13 @@ export const CommentBottomSheet = React.memo(({
 
 // ─── Styles ───────────────────────────────────────────────────
 const st = StyleSheet.create({
+  joinBar: { paddingHorizontal: 16, paddingTop: 12, gap: 10, borderTopWidth: 1, borderTopColor: T.border },
+  joinText: { color: T.textSecondary, fontSize: 13, textAlign: 'center' },
+  joinBtns: { flexDirection: 'row', gap: 10 },
+  joinPrimary: { flex: 1, height: 44, borderRadius: 999, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  joinPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  joinGhost: { flex: 1, height: 44, borderRadius: 999, borderWidth: 1, borderColor: T.border, alignItems: 'center', justifyContent: 'center' },
+  joinGhostText: { color: T.text, fontWeight: '700', fontSize: 15 },
   backdrop: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.7)',

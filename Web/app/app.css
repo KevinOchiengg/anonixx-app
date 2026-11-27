@@ -348,3 +348,8 @@
 .ad-cap .cap-hook { display: block; }
 .ad-btn { align-self: flex-start; padding: 12px 22px; border-radius: 999px; background: var(--rose); color: #fff; font-weight: 800; font-size: 15px; text-decoration: none; }
 .ad-btn:focus-visible, .ad-rail button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Comments, signed out: read freely, join to write (CommentsSheet) */
+.cmt-join { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-top: 1px solid var(--line); }
+.cmt-join p { margin: 0; font-size: 13px; color: var(--muted); min-width: 0; }
+.cmt-join div { display: flex; gap: 8px; }
