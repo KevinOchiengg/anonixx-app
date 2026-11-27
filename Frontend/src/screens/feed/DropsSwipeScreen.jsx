@@ -1400,7 +1400,19 @@ export default function DropsSwipeScreen({ navigation, route }) {
   useEffect(() => { if (!screenFocused) flushDwell(null); }, [screenFocused, flushDwell]);
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
+  const focusedRef = useRef(true);
+  const activeIndexRef = useRef(0);
+  activeIndexRef.current = activeIndex;
+  focusedRef.current = screenFocused;
+  // Back on the feed: line the list up with the drop you left on.
+  useEffect(() => {
+    if (!screenFocused) return;
+    const id = requestAnimationFrame(() => flatListRef.current?.scrollToOffset({ offset: activeIndexRef.current * listHeight, animated: false }));
+    return () => cancelAnimationFrame(id);
+  }, [screenFocused, listHeight]);
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    // Hidden behind another screen, a resize can shift the list; keep the drop you were on.
+    if (!focusedRef.current) return;
     if (viewableItems.length > 0) {
       const item = viewableItems[0];
       setActiveIndex(item.index);
