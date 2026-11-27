@@ -313,3 +313,21 @@
 .aw-fine a { color: rgba(255, 255, 255, 0.8); text-decoration: underline; }
 @keyframes aw-in { from { opacity: 0; transform: scale(1.02); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .aw { animation: none; } }
+
+/* Link Up success: ♀ and ♂ slide in and lock together (components/LinkedUp.tsx) */
+.lku { position: absolute; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; background: rgba(11, 15, 24, 0.82); backdrop-filter: blur(6px); animation: lku-fade 2.6s ease forwards; }
+.lku-stage { position: relative; width: 120px; height: 72px; margin-bottom: 6px; color: var(--rose); }
+.lku-stage span { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 56px; height: 56px; margin: -28px 0 0 -28px; }
+.lku-stage svg { width: 100%; height: 100%; }
+.lku-l { animation: lku-left 0.9s cubic-bezier(.2, .8, .2, 1) forwards; }
+.lku-r { animation: lku-right 0.9s cubic-bezier(.2, .8, .2, 1) forwards; }
+.lku-one { opacity: 0; transform: scale(0.6); filter: drop-shadow(0 0 14px rgba(255, 99, 99, 0.55)); animation: lku-lock 0.5s 0.85s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+.lku b { font-size: 20px; color: var(--fg); opacity: 0; animation: lku-up 0.4s 1.1s ease forwards; }
+.lku p { margin: 0; font-size: 14px; color: var(--muted, rgba(255, 255, 255, 0.7)); opacity: 0; animation: lku-up 0.4s 1.25s ease forwards; }
+@keyframes lku-left { from { transform: translateX(-90px) rotate(-25deg); opacity: 0; } 70% { opacity: 1; } to { transform: translateX(0); opacity: 0; } }
+@keyframes lku-right { from { transform: translateX(90px) rotate(25deg); opacity: 0; } 70% { opacity: 1; } to { transform: translateX(0); opacity: 0; } }
+@keyframes lku-lock { to { opacity: 1; transform: scale(1); } }
+@keyframes lku-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes lku-fade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .lku *, .lku { animation-duration: 0.01s !important; animation-delay: 0s !important; } }
+.chat { position: relative; }

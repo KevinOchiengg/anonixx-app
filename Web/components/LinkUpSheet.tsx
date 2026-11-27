@@ -13,6 +13,7 @@ import Sheet from "./Sheet";
 import VoiceRecorder, { type VoiceDraft } from "./compose/VoiceRecorder";
 import { Camera, Flame, X } from "lucide-react";
 import AuthorAvatar from "@/components/AuthorAvatar";
+import { markLinked } from "./LinkedUp";
 
 const MAX_CLUE_VIDEO_SECONDS = 30;
 
@@ -131,6 +132,7 @@ export default function LinkUpSheet({
       const r = await api<{ already_unlocked?: boolean; mutual?: boolean; connection_id?: string }>("/unlock-requests", { body });
       clearPitch();
       if (r.connection_id) {
+        if (!r.already_unlocked) markLinked(r.connection_id);
         router.push(`/chat/${r.connection_id}`);
         return;
       }

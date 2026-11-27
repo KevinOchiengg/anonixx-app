@@ -39,6 +39,7 @@ import { callsApi, callParams } from '../../services/calls';
 import { chatsApi } from '../../services/chats';
 import { confirmBlock, confirmClear, sendFakeReport, sendReport } from '../../services/roomActions';
 import AuthorAvatar from '../../components/common/AuthorAvatar';
+import LinkedUpBurst from '../../components/feed/LinkedUpBurst';
 
 // Fallback poll; messages normally arrive over the socket.
 const MAX_MEDIA = 10;   // photos and videos sent in one go
@@ -70,7 +71,7 @@ async function authed(path, options = {}) {
 }
 
 export default function DropChatScreen({ route, navigation }) {
-  const { connectionId } = route.params;
+  const { connectionId, linkedUp } = route.params;
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const { refreshUnread } = useUnread();
@@ -598,6 +599,7 @@ export default function DropChatScreen({ route, navigation }) {
         onDelete={handleDelete}
       />
       {viewerMedia && <ChatMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />}
+      <LinkedUpBurst visible={!!linkedUp} name={connection?.other_anonymous_name} />
     </View>
   );
 }

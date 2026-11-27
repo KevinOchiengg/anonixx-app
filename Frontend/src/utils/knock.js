@@ -32,7 +32,7 @@ export async function payIn(postId, viaProfile = false, ask = false) {
       body: JSON.stringify({ target_type: 'drop', target_id: postId, payment_method: 'coins', ...(viaProfile ? { via_profile: true } : {}), ...(ask ? { ask: true } : {}) }),
     });
     const data = await res.json().catch(() => ({}));
-    if (res.ok && data.connection_id) return { connectionId: data.connection_id };
+    if (res.ok && data.connection_id) return { connectionId: data.connection_id, fresh: !data.already_unlocked };
     if (res.ok && data.status === 'pending') return { pending: true, already: !!data.already };
     const code = data?.detail?.code;
     if (code === 'coins_short') return { short: true, cost: data.detail.cost };
@@ -67,7 +67,7 @@ export function knockCopy(post) {
 /** After payIn: into the chat, a sent notice, or Coins / the age check first. */
 export function settleKnock(navigation, post, r, showToast) {
   const who = post.anonymous_name || 'They';
-  if (r.connectionId) navigation.navigate('DropChat', { connectionId: r.connectionId });
+  if (r.connectionId) navigation.navigate('DropChat', { connectionId: r.connectionId, linkedUp: !!r.fresh });
   else if (r.pending) showToast?.({ type: 'success', message: r.already ? `Already sent. Waiting for ${who} to answer.` : `Request sent. ${who} decides. Coins leave only if they let you in.` });
   else if (r.short) navigation.navigate('Coins', { knockFor: { id: post.id, name: post.anonymous_name || null, cost: r.cost || LINKUP_COST, viaProfile: !!post.kind && post.kind !== 'hookup', ask: !!post.ask } });
   else if (r.ageGate) navigation.navigate('PostUnlock', { post });

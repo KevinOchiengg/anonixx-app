@@ -354,7 +354,7 @@ export default function CoinsScreen({ navigation, route }) {
     if (!knockFor || walking.current || (balance ?? 0) < (knockFor.cost || LINKUP_COST)) return;
     walking.current = true;
     payIn(knockFor.id, !!knockFor.viaProfile, !!knockFor.ask).then((r) => {
-      if (r.connectionId) navigation.replace('DropChat', { connectionId: r.connectionId });
+      if (r.connectionId) navigation.replace('DropChat', { connectionId: r.connectionId, linkedUp: !!r.fresh });
       else if (r.pending) navigation.goBack();
       else walking.current = false;
     });

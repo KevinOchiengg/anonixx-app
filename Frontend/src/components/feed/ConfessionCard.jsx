@@ -7,7 +7,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Flame, Sparkles } from 'lucide-react-native';
+import { Sparkles, VenusAndMars } from 'lucide-react-native';
 
 import { T } from '../../utils/theme';
 import { rf, rp, rs, RADIUS, HIT_SLOP } from '../../utils/responsive';
@@ -17,7 +17,7 @@ import KnockLabel from './KnockLabel';
 
 export const CATEGORIES = {
   curiosity: { label: 'Confession', tint: T.primary, Icon: Sparkles },
-  linkup: { label: 'Link Up', tint: T.primary, Icon: Flame },
+  linkup: { label: 'Link Up', tint: T.primary, Icon: VenusAndMars },
 };
 
 export const categoryOf = (post) => {

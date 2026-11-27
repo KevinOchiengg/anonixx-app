@@ -7,12 +7,12 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Post } from "@/lib/api";
 import { CATEGORIES, categoryOf, linkUpFacts, splitConfession, type Category, type Fact } from "@/lib/confession";
-import { Flame, Sparkles } from "lucide-react";
+import { Sparkles, VenusAndMars } from "lucide-react";
 import KnockLabel from "./KnockLabel";
 
 function CategoryIcon({ c }: { c: Category }) {
   const p = { strokeWidth: 2, "aria-hidden": true } as const;
-  if (c === "linkup") return <Flame {...p} />;
+  if (c === "linkup") return <VenusAndMars {...p} />;
   return <Sparkles {...p} />;
 }
 

@@ -24,6 +24,7 @@ import "../app/chat-media.css";
 import { ArrowLeft, BellOff, Camera, EllipsisVertical, ImagePlus, Mic, Phone, SendHorizontal, Video, X } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import AuthorAvatar from "./AuthorAvatar";
+import LinkedUp from "./LinkedUp";
 
 type Conn = {
   other_anonymous_name: string; other_user_id?: string; other_is_online: boolean; confession: string; is_sender?: boolean;
@@ -285,6 +286,7 @@ function Inner({ id }: { id: string }) {
 
   return (
     <div className="chat u-themed" style={fontStyleById(profile?.font_style)}>
+      <LinkedUp connectionId={id} name={name} />
       <link rel="stylesheet" href={FONTS_HREF} precedence="default" />
       <div className="chat-head u-chat-head">
         <Link href="/inbox" className="chat-back" aria-label="Back to Rooms"><ArrowLeft size={22} strokeWidth={2} aria-hidden /></Link>

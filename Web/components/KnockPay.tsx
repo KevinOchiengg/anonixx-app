@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { useConfirm } from "@/lib/confirm";
 import Sheet from "./Sheet";
 import AgeGate from "./AgeGate";
+import { markLinked } from "./LinkedUp";
 
 type Pack = { id: string; coins: number; display_price: string };
 // ask: the knock waits for their answer (from a profile); coins leave only when they let you in.
@@ -28,11 +29,14 @@ export function useKnock(onToast?: (m: string) => void, onSent?: (m: string) => 
     setBusy(post.id);
     try {
       const viaProfile = !!post.kind && post.kind !== "hookup";
-      const r = await api<{ connection_id?: string; status?: string; already?: boolean }>("/unlock-requests", {
+      const r = await api<{ connection_id?: string; status?: string; already?: boolean; already_unlocked?: boolean }>("/unlock-requests", {
         body: { target_type: "drop", target_id: post.id, payment_method: "coins", ...(viaProfile ? { via_profile: true } : {}), ...(post.ask ? { ask: true } : {}) },
       });
       refresh();
-      if (r.connection_id) router.push(`/chat/${r.connection_id}`);
+      if (r.connection_id) {
+        if (!r.already_unlocked) markLinked(r.connection_id);
+        router.push(`/chat/${r.connection_id}`);
+      }
       else if (r.status === "pending") {
         const who = post.anonymous_name || "They";
         (onSent || onToast)?.(r.already ? `Already sent. Waiting for ${who} to answer.` : `Request sent. ${who} decides. Coins leave only if they let you in.`);
