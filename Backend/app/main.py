@@ -4,6 +4,7 @@ import socketio
 from bson import ObjectId
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 from app.config import settings
@@ -250,6 +251,7 @@ app.add_middleware(
     # the browser's tus uploader reads these from POST /upload/stream/tus
     expose_headers=["Location", "X-Stream-Uid", "Tus-Resumable", "Server-Timing"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 
 @app.middleware("http")
