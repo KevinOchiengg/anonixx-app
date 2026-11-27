@@ -4,12 +4,13 @@ import { api } from "@/lib/api";
 
 type Result = { audio_url: string; drop_id?: string; sound?: { title: string } };
 
-/** Super admin: pull a video's sound out. Post it as its own audio drop (no caption) and/or save it
+/** Super admin: pull a video's sound out. Post it as its own audio drop with a caption you write and/or save it
  *  to Sounds under a name you give it. The video drop doesn't change. */
 export default function ExtractAudio({ dropId }: { dropId: string }) {
   const [post, setPost] = useState(false);
   const [library, setLibrary] = useState(false);
   const [title, setTitle] = useState("");
+  const [caption, setCaption] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState<Result | null>(null);
@@ -21,7 +22,7 @@ export default function ExtractAudio({ dropId }: { dropId: string }) {
     setBusy(true); setErr("");
     try {
       setDone(await api<Result>(`/admin/drops/${dropId}/extract-audio`, {
-        body: { post, library, title: library ? title.trim() : null },
+        body: { post, library, title: library ? title.trim() : null, caption: post ? caption.trim() : null },
       }));
     } catch (e) {
       setErr((e as Error).message);
@@ -45,6 +46,9 @@ export default function ExtractAudio({ dropId }: { dropId: string }) {
         <label className="small"><input type="checkbox" checked={post} onChange={(e) => setPost(e.target.checked)} /> Post as audio drop</label>
         <label className="small"><input type="checkbox" checked={library} onChange={(e) => setLibrary(e.target.checked)} /> Save to Sounds</label>
       </div>
+      {post ? (
+        <textarea className="adm-input" rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={1800} placeholder="Caption for the audio drop" aria-label="Audio caption" />
+      ) : null}
       {library ? (
         <input className="adm-input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="Name this sound" aria-label="Sound name" />
       ) : null}

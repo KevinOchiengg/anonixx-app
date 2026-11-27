@@ -75,13 +75,14 @@ function SoundPick({ sounds, video, value, mute, hearing, onChange, onHear }) {
   );
 }
 
-// Super admin: pull a video's sound out. Post it as its own audio drop (no caption) and/or save it
+// Super admin: pull a video's sound out. Post it as its own audio drop with a caption you write and/or save it
 // to Sounds under a name you give it. The video drop doesn't change.
 function ExtractAudio({ item }) {
   const { showToast } = useToast();
   const [post, setPost] = useState(false);
   const [library, setLibrary] = useState(false);
   const [title, setTitle] = useState('');
+  const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const ready = (post || library) && (!library || title.trim().length > 0);
@@ -91,7 +92,7 @@ function ExtractAudio({ item }) {
     setBusy(true);
     const { ok, data } = await apiFetch(`/admin/drops/${item.id}/extract-audio`, {
       method: 'POST',
-      body: { post, library, title: library ? title.trim() : null },
+      body: { post, library, title: library ? title.trim() : null, caption: post ? caption.trim() : null },
     });
     setBusy(false);
     if (!ok) { showToast({ type: 'error', message: data?.detail || 'Could not extract the audio.' }); return; }
@@ -111,6 +112,12 @@ function ExtractAudio({ item }) {
           <Text style={[st.sortText, library && st.sortTextOn]}>Save to Sounds</Text>
         </TouchableOpacity>
       </View>
+      {post ? (
+        <TextInput
+          style={[st.edit, { minHeight: rs(64) }]} value={caption} onChangeText={setCaption} maxLength={1800} multiline
+          placeholder="Caption for the audio drop" placeholderTextColor={T.textMuted}
+        />
+      ) : null}
       {library ? (
         <TextInput
           style={[st.edit, { minHeight: 0 }]} value={title} onChangeText={setTitle} maxLength={80}
