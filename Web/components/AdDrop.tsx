@@ -10,6 +10,8 @@ import { splitHook } from "@/lib/captionHook";
 function href(ad: FeedAd): { url: string; internal: boolean } {
   const drop = ad.link_url.match(/^anonixx:\/\/drop\/([\w-]+)/);
   if (drop) return { url: `/drop/${drop[1]}`, internal: true };
+  const room = ad.link_url.match(/^anonixx:\/\/room\/([\w-]+)/);
+  if (room) return { url: `/room/${room[1]}`, internal: true };
   return { url: `${API_URL}/ads/${ad.id}/go?v=${encodeURIComponent(getDeviceId())}`, internal: false };
 }
 
