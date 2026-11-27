@@ -73,6 +73,9 @@ function replayRound(posts: Post[], lastId: string | undefined): string[] {
   return pool;
 }
 
+const BACK_KEY = "anx_feed_back";
+const BACK_TTL_MS = 30 * 60 * 1000;
+
 export default function Feed({ initialPosts, initialCursor, startId, fillAfterStart = false }: Props) {
   const { user, ready } = useAuth();
   const router = useRouter();
@@ -150,9 +153,22 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
     return () => { live = false; };
   }, [initialPosts.length, firstTry]);
 
+  // Back from editing a drop: pick up the same queue instead of starting a new feed.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (!startId) return;
+    let snap: { at: number; posts: Post[]; cursor: string | null; sessionPosts: number } | null = null;
+    try { snap = JSON.parse(sessionStorage.getItem(BACK_KEY) || "null"); sessionStorage.removeItem(BACK_KEY); } catch { /* ignore */ }
+    if (!snap || snap.posts[0]?.id !== startId || Date.now() - snap.at > BACK_TTL_MS) return;
+    restored.current = true;
+    setPosts((prev) => [prev.find((p) => p.id === startId) || snap!.posts[0], ...snap!.posts.slice(1)]);
+    setCursor(snap.cursor);
+    setSessionPosts(snap.sessionPosts);
+  }, [startId]);
+
   // Drop pages server-render only their own drop; queue the public feed after it here.
   useEffect(() => {
-    if (!fillAfterStart) return;
+    if (!fillAfterStart || restored.current) return;
     let live = true;
     loadMoreClient(null).then((page) => {
       if (!live || authedRef.current || !page) return;
@@ -193,6 +209,13 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
     if (!ready || !user || authed) return;
     let cancelled = false;
     (async () => {
+      if (restored.current && startId) {
+        const single = await api<{ post: Post }>(`/drops/single/${startId}`).catch(() => null);
+        if (cancelled) return;
+        if (single) setPosts((prev) => [single.post, ...prev.filter((p) => p.id !== startId)]);
+        setAuthed(true);
+        return;
+      }
       try {
         const [feed, single] = await Promise.all([
           api<AuthedFeed>("/drops/feed?session_posts=0"),
@@ -275,6 +298,18 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
   // a quick skip, a long look, or a full watch.
   const dwell = useRef<{ id: string; at: number } | null>(null);
   const activeId = (() => { const it = items[active]; return it && it.kind === "post" ? it.post.id : null; })();
+  const backSnap = useRef({ posts, cursor, sessionPosts, activeId });
+  backSnap.current = { posts, cursor, sessionPosts, activeId };
+  useEffect(() => {
+    const save = () => {
+      const { posts: list, cursor: c, sessionPosts: n, activeId: id } = backSnap.current;
+      const from = id ? list.findIndex((p) => p.id === id) : -1;
+      if (from < 0) return;
+      try { sessionStorage.setItem(BACK_KEY, JSON.stringify({ at: Date.now(), posts: list.slice(from, from + 60), cursor: c, sessionPosts: n })); } catch { /* ignore */ }
+    };
+    window.addEventListener("pagehide", save);
+    return () => window.removeEventListener("pagehide", save);
+  }, []);
   useEffect(() => {
     if (!user && activeId) { try { localStorage.setItem(RETURNING_KEY, "1"); } catch { /* ignore */ } }
     const send = (id: string, ms: number) => {
