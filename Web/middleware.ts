@@ -38,7 +38,7 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: "/((?!_next/|og|sounds/|sitemap.xml|robots.txt|sw.js|favicon.ico|.*\.(?:png|jpe?g|svg|webp|gif|ico|mp3|mp4|js|css|txt|xml|json|woff2?)$).*)",
+      source: "/((?!_next/|og(?:/|$)|sounds/|sitemap.xml|robots.txt|sw.js|favicon.ico|.*\\.(?:png|jpe?g|svg|webp|gif|ico|mp3|mp4|js|css|txt|xml|json|woff2?)$).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },
