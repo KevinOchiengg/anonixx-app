@@ -75,31 +75,50 @@ function SoundPick({ sounds, video, value, mute, hearing, onChange, onHear }) {
   );
 }
 
-// Super admin: one tap pulls the whole video's sound out and posts it as an audio drop with the
-// same caption. The video drop doesn't change.
-function ExtractAudio({ item, caption }) {
+// Super admin: pull a video's sound out. Post it as its own audio drop (no caption) and/or save it
+// to Sounds under a name you give it. The video drop doesn't change.
+function ExtractAudio({ item }) {
   const { showToast } = useToast();
+  const [post, setPost] = useState(false);
   const [library, setLibrary] = useState(false);
+  const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const ready = (post || library) && (!library || title.trim().length > 0);
 
   const run = async () => {
+    if (!ready || busy) return;
     setBusy(true);
     const { ok, data } = await apiFetch(`/admin/drops/${item.id}/extract-audio`, {
       method: 'POST',
-      body: { post: true, library, caption: (caption || '').trim() },
+      body: { post, library, title: library ? title.trim() : null },
     });
     setBusy(false);
     if (!ok) { showToast({ type: 'error', message: data?.detail || 'Could not extract the audio.' }); return; }
-    showToast({ type: 'success', message: data.sound ? 'Posted as an audio drop and added to Sounds.' : 'Posted as an audio drop.' });
+    setDone(true);
+    showToast({ type: 'success', message: [data.drop_id ? 'Posted as an audio drop.' : '', data.sound ? `Saved to Sounds as "${data.sound.title}".` : ''].filter(Boolean).join(' ') });
   };
 
+  if (done) return <Text style={st.sortText}>Audio extracted.</Text>;
+
   return (
-    <View style={st.promoRow}>
-      <TouchableOpacity style={a.btn} onPress={run} disabled={busy} activeOpacity={0.85}>
+    <View style={{ gap: rp(8) }}>
+      <View style={st.promoRow}>
+        <TouchableOpacity onPress={() => setPost((v) => !v)} style={[st.sortChip, post && st.sortChipOn]} activeOpacity={0.8}>
+          <Text style={[st.sortText, post && st.sortTextOn]}>Post as audio drop</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setLibrary((v) => !v)} style={[st.sortChip, library && st.sortChipOn]} activeOpacity={0.8}>
+          <Text style={[st.sortText, library && st.sortTextOn]}>Save to Sounds</Text>
+        </TouchableOpacity>
+      </View>
+      {library ? (
+        <TextInput
+          style={[st.edit, { minHeight: 0 }]} value={title} onChangeText={setTitle} maxLength={80}
+          placeholder="Name this sound" placeholderTextColor={T.textMuted}
+        />
+      ) : null}
+      <TouchableOpacity style={[a.btn, !ready && { opacity: 0.45 }]} onPress={run} disabled={!ready || busy} activeOpacity={0.85}>
         {busy ? <ActivityIndicator size="small" color={T.primary} /> : <Text style={[a.btnText, { color: T.primary }]}>Extract audio</Text>}
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => setLibrary((v) => !v)} style={[st.sortChip, library && st.sortChipOn]} activeOpacity={0.8}>
-        <Text style={[st.sortText, library && st.sortTextOn]}>Also add to Sounds</Text>
       </TouchableOpacity>
     </View>
   );
@@ -126,7 +145,7 @@ const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onS
       />
     ) : null}
     {editing != null && canPin && item.is_admin_drop && item.media_type === 'video' && item.media_url ? (
-      <ExtractAudio item={item} caption={editing} />
+      <ExtractAudio item={item} />
     ) : null}
     {editing != null ? (
       <TouchableOpacity onPress={onMature} style={[st.sortChip, mature && st.sortChipOn, { alignSelf: 'flex-start', marginTop: 8 }]} activeOpacity={0.8}>

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pymongo import ReturnDocument
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone, timedelta
@@ -1011,7 +1012,7 @@ async def bootstrap_admin(
 class ExtractAudioRequest(BaseModel):
     start:      float = 0.0
     end:        Optional[float] = None
-    post:       bool = True                  # post it as an audio drop
+    post:       bool = False                 # post it as an audio drop
     library:    bool = False                 # add it to the Sounds library
     caption:    Optional[str] = None
     title:      Optional[str] = None         # Sounds library title
@@ -1039,6 +1040,9 @@ async def extract_drop_audio(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Paid videos can't be extracted")
     if data.end is not None and data.end <= data.start:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "The end has to come after the start")
+    title = (data.title or "").strip()[:80]
+    if data.library and not title:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Name the sound first")
 
     r2_storage.require_configured()
     try:
@@ -1050,15 +1054,18 @@ async def extract_drop_audio(
     except Exception:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Couldn't save the audio. Try again")
 
-    caption = (data.caption if data.caption is not None else drop.get("confession") or "").strip()
+    caption = (data.caption or "").strip()
     out: dict = {"audio_url": url, "duration_seconds": seconds}
 
     if data.library:
-        title = (data.title or caption or "Original sound").strip()[:80]
-        doc = {"title": title, "mood": "any", "url": url, "active": True, "created_by": admin_id,
-               "created_at": _now(), "source_drop_id": drop_id}
-        res = await db["sounds"].insert_one(doc)
-        out["sound"] = {"id": str(res.inserted_id), "title": title, "url": url}
+        clip = {"source_drop_id": drop_id, "clip_start": data.start, "clip_end": data.end}
+        doc = await db["sounds"].find_one_and_update(
+            clip,
+            {"$set": {"title": title, "url": url, "active": True, "updated_at": _now()},
+             "$setOnInsert": {**clip, "mood": "any", "created_by": admin_id, "created_at": _now()}},
+            upsert=True, return_document=ReturnDocument.AFTER,
+        )
+        out["sound"] = {"id": str(doc["_id"]), "title": title, "url": url}
 
     if data.post:
         payload = {
