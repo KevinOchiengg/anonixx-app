@@ -48,18 +48,26 @@ async def build_affinity(db) -> None:
     await db["search_affinity"].delete_many({"at": {"$lt": _now() - timedelta(days=1)}})
 
 
-async def refresh_comment_text(db) -> None:
-    """Latest 50 comments' words on drops commented on since the last run."""
+async def _fold_comments(db, did: str) -> None:
+    from bson import ObjectId
+    if not ObjectId.is_valid(did):
+        return
+    rows = await db["drop_threads"].find({"drop_id": did, "content": {"$type": "string"}}, {"content": 1}) \
+        .sort("created_at", -1).limit(50).to_list(50)
+    text = " ".join(r["content"] for r in rows)[:4000]
+    await db["drops"].update_one({"_id": ObjectId(did)}, {"$set": {"comment_text": text}})
+
+
+async def refresh_comment_text(db, backfill: int = 300) -> None:
+    """Latest 50 comments' words on drops commented on since the last run, plus older
+    commented drops that were never folded in."""
     since = _now() - timedelta(seconds=EVERY * 2)
     ids = await db["drop_threads"].distinct("drop_id", {"created_at": {"$gte": since}})
-    from bson import ObjectId
-    for did in ids[:200]:
-        if not ObjectId.is_valid(did):
-            continue
-        rows = await db["drop_threads"].find({"drop_id": did, "content": {"$type": "string"}}, {"content": 1}) \
-            .sort("created_at", -1).limit(50).to_list(50)
-        text = " ".join(r["content"] for r in rows)[:4000]
-        await db["drops"].update_one({"_id": ObjectId(did)}, {"$set": {"comment_text": text}})
+    old = await db["drops"].find(
+        {"comment_text": {"$exists": False}, "thread_count": {"$gt": 0}}, {"_id": 1},
+    ).limit(backfill).to_list(backfill)
+    for did in dict.fromkeys(ids[:200] + [str(d["_id"]) for d in old]):
+        await _fold_comments(db, did)
 
 
 async def _transcribe(src: str) -> str:
@@ -111,7 +119,7 @@ def _topics_in(text: str) -> list:
     return [t for t, ws in lex.TOPICS.items() if any(re.search(r"\b" + re.escape(w) + r"\b", low) for w in ws)]
 
 
-async def autotag(db, batch: int = 4) -> None:
+async def autotag(db, batch: int = 24) -> None:
     stt = bool(settings.SEARCH_STT_KEY)
     vision = bool(settings.SEARCH_AUTOTAG_VISION and settings.ANTHROPIC_API_KEY)
     if not (stt or vision):
@@ -121,27 +129,32 @@ async def autotag(db, batch: int = 4) -> None:
          "media_type": {"$in": ["video", "voice", "audio", "image"]}},
         {"media_type": 1, "media_url": 1, "media_download_url": 1, "cover_url": 1, "images": 1, "topics": 1},
     ).sort("created_at", -1).limit(batch).to_list(batch)
-    for d in docs:
-        update: dict = {"autotag_at": _now()}
-        tags: list = []
-        try:
-            if stt and d["media_type"] in ("video", "voice", "audio"):
-                transcript = await _transcribe(d.get("media_download_url") or d["media_url"])
-                if transcript:
-                    update["transcript"] = transcript
-                    tags += _topics_in(transcript)
-                    spoken = lex.detect_topics(transcript)
-                    if spoken and not d.get("topics"):
-                        update["topics"] = spoken
-            if vision:
-                image = d["media_url"] if d["media_type"] == "image" else d.get("cover_url")
-                if image and image.startswith("https://"):
-                    tags += await _vision_tags(image)
-        except Exception as e:
-            log.info("autotag %s skipped: %s", d["_id"], e)
-        if tags:
-            update["auto_tags"] = list(dict.fromkeys(tags))[:16]
-        await db["drops"].update_one({"_id": d["_id"]}, {"$set": update})
+    gate = asyncio.Semaphore(4)
+
+    async def one(d):
+        async with gate:
+            update: dict = {"autotag_at": _now()}
+            tags: list = []
+            try:
+                if stt and d["media_type"] in ("video", "voice", "audio"):
+                    transcript = await _transcribe(d.get("media_download_url") or d["media_url"])
+                    if transcript:
+                        update["transcript"] = transcript
+                        tags += _topics_in(transcript)
+                        spoken = lex.detect_topics(transcript)
+                        if spoken and not d.get("topics"):
+                            update["topics"] = spoken
+                if vision:
+                    image = d["media_url"] if d["media_type"] == "image" else d.get("cover_url")
+                    if image and image.startswith("https://"):
+                        tags += await _vision_tags(image)
+            except Exception as e:
+                log.info("autotag %s skipped: %s", d["_id"], e)
+            if tags:
+                update["auto_tags"] = list(dict.fromkeys(tags))[:16]
+            await db["drops"].update_one({"_id": d["_id"]}, {"$set": update})
+
+    await asyncio.gather(*(one(d) for d in docs))
 
 
 async def detect_moods(db, batch: int = 300) -> None:
