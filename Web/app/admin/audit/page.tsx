@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -20,8 +21,8 @@ const describe = (e: Entry) => {
 
 export default function AuditPage() {
   const { isSuper } = useAdminRole();
-  const [kind, setKind] = useState("");
-  const [skip, setSkip] = useState(0);
+  const [kind, setKind] = useKept("kind", "");
+  const [skip, setSkip] = useKept("skip", 0);
   const [d, setD] = useState<Page | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {

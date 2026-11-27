@@ -308,7 +308,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
       try { sessionStorage.setItem(BACK_KEY, JSON.stringify({ at: Date.now(), posts: list.slice(from, from + 60), cursor: c, sessionPosts: n })); } catch { /* ignore */ }
     };
     window.addEventListener("pagehide", save);
-    return () => window.removeEventListener("pagehide", save);
+    return () => { window.removeEventListener("pagehide", save); save(); };
   }, []);
   useEffect(() => {
     if (!user && activeId) { try { localStorage.setItem(RETURNING_KEY, "1"); } catch { /* ignore */ } }

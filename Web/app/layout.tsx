@@ -20,6 +20,7 @@ import { AuthProvider } from "@/lib/auth";
 import { ConfirmProvider } from "@/lib/confirm";
 import OfflineBar from "@/components/OfflineBar";
 import VisitTracker from "@/components/VisitTracker";
+import ScrollMemory from "@/components/ScrollMemory";
 import IncomingCall from "@/components/IncomingCall";
 import KeyboardViewport from "@/components/KeyboardViewport";
 
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </AuthProvider>
         <OfflineBar />
         <VisitTracker />
+        <ScrollMemory />
         <KeyboardViewport />
         {ADSENSE ? (
           <Script

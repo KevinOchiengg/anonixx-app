@@ -1,4 +1,5 @@
 "use client";
+import { hasKept, useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -13,8 +14,8 @@ export type MarketItem = {
 const LIMIT = 20;
 
 function Inner() {
-  const [items, setItems] = useState<MarketItem[] | null>(null);
-  const [more, setMore] = useState(false);
+  const [items, setItems] = useKept<MarketItem[] | null>("items", null);
+  const [more, setMore] = useKept("more", false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,7 +28,7 @@ function Inner() {
     } catch (e) { setError((e as Error).message); setItems((p) => p || []); }
     setBusy(false);
   }, []);
-  useEffect(() => { load(0); }, [load]);
+  useEffect(() => { if (!hasKept("items")) load(0); }, [load]);
 
   if (items === null) return <p className="muted center">Loading…</p>;
   if (error && !items.length) return <div className="err pad">{error}</div>;

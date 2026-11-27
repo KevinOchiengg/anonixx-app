@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -17,13 +18,13 @@ const LIMIT = 20;
 
 export default function AdminUsers() {
   const { isSuper } = useAdminRole();
-  const [q, setQ] = useState("");
-  const [search, setSearch] = useState("");
+  const [q, setQ] = useKept("q", "");
+  const [search, setSearch] = useKept("search", "");
   useEffect(() => {
     const q0 = new URLSearchParams(window.location.search).get("q");
     if (q0) { setQ(q0); setSearch(q0); }
   }, []);
-  const [skip, setSkip] = useState(0);
+  const [skip, setSkip] = useKept("skip", 0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);

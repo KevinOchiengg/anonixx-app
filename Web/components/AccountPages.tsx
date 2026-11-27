@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -414,8 +415,8 @@ const INTENTS: [string, string][] = [
 const MOODS = ["longing", "untold", "horny"];
 
 function SearchInner() {
-  const [q, setQ] = useState("");
-  const [intent, setIntent] = useState("");
+  const [q, setQ] = useKept("q", "");
+  const [intent, setIntent] = useKept("intent", "");
   const [mood, setMood] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [busy, setBusy] = useState(false);

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { splitHook } from "@/lib/captionHook";
 import { api, API_URL, compact, getDeviceId, getToken, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useRouter } from "next/navigation";
 import AuthorAvatar from "./AuthorAvatar";
 import { hookupTags, timeLeft } from "@/lib/linkup";
 import { allowMature, useMatureOk } from "@/lib/matureConsent";
@@ -79,6 +80,7 @@ export default function Slide({
   speed, onSpeed, clear, onClear, onCopyLink, onNotInterested,
 }: Props) {
   const { user } = useAuth();
+  const router = useRouter();
   const [page, setPage] = useState(0);
   // One tap opens every mature post on this device; verified adults never see the veil.
   const matureOk = useMatureOk();
@@ -140,7 +142,7 @@ export default function Slide({
       onPatch(post.id, { paywall: { ...pw, unlocked: true } });
     } catch (e) {
       if ((e as { status?: number }).status === 402) {
-        if (await askConfirm({ title: "Not enough coins", message: `You need ${pw.price} coins to unlock this.`, confirmLabel: "Top up", icon: "coins" })) window.location.href = "/coins";
+        if (await askConfirm({ title: "Not enough coins", message: `You need ${pw.price} coins to unlock this.`, confirmLabel: "Top up", icon: "coins" })) router.push("/coins");
       } else {
         onToast((e as Error).message);
       }
@@ -530,7 +532,7 @@ export default function Slide({
           <Share />
         </button>
         {user?.is_super_admin && post.is_admin_drop ? (
-          <button onClick={() => { window.location.href = `/admin/posts?edit=${post.id}`; }} aria-label="Edit drop" title="Edit drop" className="r-act r-edit">
+          <button onClick={() => { router.push(`/admin/posts?edit=${post.id}`); }} aria-label="Edit drop" title="Edit drop" className="r-act r-edit">
             <Pencil aria-hidden />
           </button>
         ) : null}

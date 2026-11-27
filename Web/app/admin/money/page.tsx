@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { LineChart } from "@/components/admin/charts";
@@ -63,7 +64,7 @@ function PaidDropsPanel() {
 }
 
 export default function MoneyPage() {
-  const [days, setDays] = useState<(typeof RANGES)[number]>(30);
+  const [days, setDays] = useKept<(typeof RANGES)[number]>("days", 30);
   const [d, setD] = useState<Money | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {

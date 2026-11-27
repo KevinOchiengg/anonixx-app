@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -31,7 +32,7 @@ const REF_HINT: Record<Profile["method"], string> = { mpesa: "M-Pesa code, e.g. 
 
 function LivesTab() {
   const confirm = useConfirm();
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useKept("status", "");
   const [rows, setRows] = useState<LiveRow[] | null>(null);
   const [error, setError] = useState("");
   const pg = usePaged(rows || [], { size: 20, text: (r) => `${r.title} ${r.host.name || ""}` });

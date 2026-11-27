@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge, Pager, Tabs, fmtDate, useTab } from "@/components/admin/bits";
@@ -19,7 +20,7 @@ const VIEWS = ["flagged posts", "deception"] as const;
 
 export default function AdminModeration() {
   const [view, setView] = useTab(VIEWS);
-  const [skip, setSkip] = useState(0);
+  const [skip, setSkip] = useKept("skip", 0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);

@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -24,7 +25,7 @@ const pctCell = (v: number | null) => (v == null ? <span className="muted">too n
 const money = (usd: number, kes: number) => [usd ? `$${usd.toFixed(2)}` : "", kes ? `KES ${kes.toLocaleString()}` : ""].filter(Boolean).join(" + ") || "—";
 
 function Channels() {
-  const [days, setDays] = useState(90);
+  const [days, setDays] = useKept("days27", 90);
   const [d, setD] = useState<{ total_signups: number; channels: Channel[] } | null>(null);
   const pg = usePaged(d?.channels || [], { text: (c) => c.channel });
   const [err, setErr] = useState("");
@@ -216,7 +217,7 @@ const pc = (n: number | null | undefined) => (n == null ? "—" : `${Math.round(
 // Discover (Backend api/v1/discover.py /discover/admin/stats): is attention in Near
 // concentrating on a few people, and is search finding things? Daily counters only.
 function Discover() {
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useKept("days219", 7);
   const [d, setD] = useState<DiscoverStats | null>(null);
   const pg = usePaged(d ? [...d.daily].reverse() : [], { text: (r) => `${r.day} ${r.surface}` });
   const [err, setErr] = useState("");
@@ -259,7 +260,7 @@ function Discover() {
 }
 
 export default function GrowthPage() {
-  const [tab, setTab] = useState<Tab>("channels");
+  const [tab, setTab] = useKept<Tab>("tab262", "channels");
   return (
     <>
       <div className="adm-pagehead"><div><h2>Growth</h2><p>Which channels bring people who stay, and what to make more of.</p></div></div>

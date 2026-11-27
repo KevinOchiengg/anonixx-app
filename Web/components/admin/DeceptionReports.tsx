@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
@@ -12,7 +13,7 @@ type Page = { total: number; skip: number; limit: number; reports: R[] };
 const LIMIT = 20;
 
 export default function AdminDeception() {
-  const [skip, setSkip] = useState(0);
+  const [skip, setSkip] = useKept("skip", 0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);

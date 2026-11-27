@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -33,11 +34,11 @@ function Who({ p }: { p: Person }) {
 
 export default function LinkupsPage() {
   const { isSuper } = useAdminRole();
-  const [q, setQ] = useState("");
+  const [q, setQ] = useKept("q", "");
   const [term, setTerm] = useState("");
-  const [status, setStatus] = useState("");
-  const [days, setDays] = useState(30);
-  const [skip, setSkip] = useState(0);
+  const [status, setStatus] = useKept("status", "");
+  const [days, setDays] = useKept("days", 30);
+  const [skip, setSkip] = useKept("skip", 0);
   const [d, setD] = useState<Page | null>(null);
   const [err, setErr] = useState("");
 

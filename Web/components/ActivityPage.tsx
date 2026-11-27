@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -100,7 +101,7 @@ function Row({ item }: { item: ActivityItem }) {
 }
 
 function Inner() {
-  const [filter, setFilter] = useState<ActivityCategory>("all");
+  const [filter, setFilter] = useKept<ActivityCategory>("filter", "all");
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState("");

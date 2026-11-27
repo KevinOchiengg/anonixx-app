@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge, usePaged } from "@/components/admin/bits";
@@ -11,7 +12,7 @@ export default function AdminCaptions() {
   const [bank, setBank] = useState<Bank | null>(null);
   const [draft, setDraft] = useState("");
   const [mature, setMature] = useState(false);
-  const [filter, setFilter] = useState<"all" | "general" | "mature">("all");
+  const [filter, setFilter] = useKept<"all" | "general" | "mature">("filter", "all");
   const [editing, setEditing] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [busy, setBusy] = useState(false);

@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -43,11 +44,11 @@ function Delta({ now, before, lowerIsBetter }: { now: number; before: number; lo
 export default function VisitorsPage() {
   const { isSuper } = useAdminRole();
   const [tab, setTab] = useTab(TABS);
-  const [days, setDays] = useState<(typeof RANGES)[number]>(7);
+  const [days, setDays] = useKept<(typeof RANGES)[number]>("days", 7);
   const [cache, setCache] = useState<Record<string, Data>>({});
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Journey | null>(null);
-  const [page, setPage] = useState<string | null>(null);
+  const [page, setPage] = useKept<string | null>("page", null);
   const pick = (p: string) => { setOpen(null); setPage(p); };
   const key = `${tab}:${days}`;
   const data = cache[key];

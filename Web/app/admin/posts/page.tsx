@@ -1,6 +1,8 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, type Sound } from "@/lib/api";
 import { Badge, Pager, fmtDate } from "@/components/admin/bits";
 import AdminMedia, { type DropMedia } from "@/components/admin/AdminMedia";
@@ -88,8 +90,9 @@ const startEdit = (d: D): Editing => ({
 });
 
 export default function AdminPosts() {
-  const [q, setQ] = useState("");
-  const [search, setSearch] = useState("");
+  const router = useRouter();
+  const [q, setQ] = useKept("q", "");
+  const [search, setSearch] = useKept("search", "");
   useEffect(() => {
     const u = new URLSearchParams(window.location.search);
     const q0 = u.get("q");
@@ -101,8 +104,8 @@ export default function AdminPosts() {
   const { isSuper } = useAdminRole();
   const [only, setOnly] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const [sort, setSort] = useState("recent");
-  const [skip, setSkip] = useState(0);
+  const [sort, setSort] = useKept("sort", "recent");
+  const [skip, setSkip] = useKept("skip", 0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -135,7 +138,7 @@ export default function AdminPosts() {
       await api(`/admin/drops/${d.id}`, { method: "DELETE" });
       setEditing(null);
       // From the feed's pencil: the drop is gone, so back to the feed.
-      if (only) { window.location.href = "/"; return; }
+      if (only) { router.replace("/"); return; }
       await load();
     } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   }

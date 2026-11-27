@@ -1,4 +1,5 @@
 import type { VideoEdit } from "./videoEdit";
+import { cachedGet, forgetGets, rememberGet } from "./backNav";
 
 export const API_URL =(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
 // Canonicals, the sitemap and robots are built from this, so a missing env var must never
@@ -188,6 +189,11 @@ export async function api<T = unknown>(
     if (adultMode()) headers["X-Content-Mode"] = "full";
   }
   const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  const method = opts.method || (opts.body !== undefined ? "POST" : "GET");
+  if (method === "GET") {
+    const kept = cachedGet(path);
+    if (kept !== undefined) return kept as T;
+  }
   if (opts.body !== undefined && !isForm) headers["Content-Type"] = "application/json";
 
   // Uploads can legitimately take a while; everything else gives up on a stalled connection.
@@ -197,7 +203,7 @@ export async function api<T = unknown>(
   let text: string;
   try {
     res = await fetch(`${API_URL}${path}`, {
-      method: opts.method || (opts.body !== undefined ? "POST" : "GET"),
+      method,
       headers,
       body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
       signal: ctl?.signal,
@@ -215,6 +221,8 @@ export async function api<T = unknown>(
     const d = (data as { detail?: { code?: string } } | null)?.detail;
     throw new ApiError(res.status, errorText(data, `Something went wrong (${res.status}).`), typeof d === "object" && d ? d.code : undefined);
   }
+  if (method === "GET") rememberGet(path, data);
+  else forgetGets();
   return data as T;
 }
 

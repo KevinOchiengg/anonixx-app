@@ -1,6 +1,7 @@
 "use client";
 // One search box over every drop (components/search/AllSearch.tsx, backend search.py).
 // Nothing shows until you type. Recent searches stay on this device.
+import { useKept } from "@/lib/pageMemory";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -22,7 +23,7 @@ function writeHistory(list: string[]) {
 
 export default function SearchPage() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useKept("query", "");
   const [likeId, setLikeId] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
 

@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAdminRole } from "@/components/admin/AdminShell";
@@ -17,7 +18,7 @@ const LIMIT = 30;
 export default function AdminRefunds() {
   const { isSuper } = useAdminRole();
   const [status, setStatus] = useTab(STATUSES);
-  const [skip, setSkip] = useState(0);
+  const [skip, setSkip] = useKept("skip", 0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);

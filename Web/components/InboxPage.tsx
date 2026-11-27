@@ -4,6 +4,7 @@
  * Each chat's ⌄ menu (or right-click) pins, mutes or archives it. The ⋮ menu has Archived
  * and every Room setting.
  * ?tab=chats|knocks|sent|calls (old connections / requests still work; updates / live / myroom open Chats). */
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -144,14 +145,14 @@ function Knocks({ view, setView, reqs, sent, reload }: { view: "knocks" | "sent"
 
 export default function InboxPage() {
   const router = useRouter();
-  const [view, setViewState] = useState<View>("chats");
+  const [view, setViewState] = useKept<View>("view", "chats");
   const [chats, setChats] = useState<Chat[] | null>(null);
   const [reqs, setReqs] = useState<Req[] | null>(null);
   const [sent, setSent] = useState<Sent[] | null>(null);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useKept<Filter>("filter", "all");
   const [searching, setSearching] = useState(false);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useKept("query", "");
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
   const [picker, setPicker] = useState<"chat" | "call" | null>(null);

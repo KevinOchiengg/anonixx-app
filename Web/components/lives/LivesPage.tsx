@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -43,7 +44,7 @@ export function LiveTile({ live }: { live: LiveCard }) {
 
 export default function LivesPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>("live");
+  const [tab, setTab] = useKept<Tab>("tab", "live");
   const [lives, setLives] = useState<LiveCard[] | null>(null);
   const [error, setError] = useState("");
 

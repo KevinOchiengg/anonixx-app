@@ -1,6 +1,7 @@
 "use client";
 /** Shared messenger pieces for Rooms on the web: avatar, a chat row with its ⌄ menu, the chat
  * picker (New chat / New call), and the Calls log. Same behaviour as the app. */
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -97,7 +98,7 @@ export function PickChats({ mode, title, exclude, onClose, onOpen, onCall, extra
   extras?: { label: string; hint: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
 }) {
   const [chats, setChats] = useState<Chat[] | null>(null);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useKept("q", "");
   useEffect(() => { chatsApi.list().then((r) => setChats(r.connections)).catch(() => setChats([])); }, []);
   const list = useMemo(() => (chats || [])
     .filter((c) => c.id !== exclude && (!q.trim() || c.other_anonymous_name.toLowerCase().includes(q.trim().toLowerCase())))

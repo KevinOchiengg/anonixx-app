@@ -1,4 +1,5 @@
 "use client";
+import { useKept } from "@/lib/pageMemory";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -17,7 +18,7 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 export default function AdminSearch() {
   const [pane, setPane] = useState<Pane>("quality");
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useKept("days", 7);
   const [stats, setStats] = useState<Stats | null>(null);
   const [unmet, setUnmet] = useState<Unmet[] | null>(null);
   const [flags, setFlags] = useState<Flag[] | null>(null);
