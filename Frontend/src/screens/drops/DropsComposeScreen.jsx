@@ -48,7 +48,7 @@ const SCREEN_W = Dimensions.get('window').width;
 // The toolbar uses the card theme's dark gradient stop, so it reads as the card's footer.
 const TOOLBAR_BG = DROP_THEMES['desire'].bgTo;
 const CARD_W   = SCREEN_W - SPACING.md * 2;
-const MAX_CHARS = 1800;
+const MAX_CHARS = 900;
 
 // Any video length can be picked; over 3 minutes the editor starts cut to 3:00.
 

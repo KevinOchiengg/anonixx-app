@@ -376,7 +376,7 @@ export default function DashboardScreen({ navigation }) {
               onChangeText={setEditText}
               style={s.modalInput}
               multiline
-              maxLength={1800}
+              maxLength={900}
               placeholderTextColor={THEME.textMuted}
             />
             <TouchableOpacity

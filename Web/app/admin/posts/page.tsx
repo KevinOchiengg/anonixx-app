@@ -235,7 +235,7 @@ export default function AdminPosts() {
                       <>
                         {!video ? <AdminMedia media={d} open /> : null}
                         <textarea
-                          className="adm-edit" rows={4} maxLength={1800} autoFocus value={editing.text}
+                          className="adm-edit" rows={4} maxLength={900} autoFocus value={editing.text}
                           onChange={(e) => setEditing({ ...editing, text: e.target.value })} aria-label="Post text"
                         />
                         <label className="small"><input type="checkbox" checked={editing.mature} onChange={(e) => setEditing({ ...editing, mature: e.target.checked })} /> Mature: blurred until the viewer taps</label>
@@ -296,7 +296,7 @@ export default function AdminPosts() {
                 </div>
               ) : null}
               <div className={`adm-foot${editing?.id === d.id ? " sticky" : ""}`}>
-                <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/1800` : fmtDate(d.created_at)}</span>
+                <span className="muted small">{editing?.id === d.id ? `${editing.text.length}/900` : fmtDate(d.created_at)}</span>
                 <div className="adm-actions">
                   {editing?.id === d.id ? (
                     <>

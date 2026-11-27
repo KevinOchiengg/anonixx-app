@@ -114,7 +114,7 @@ function ExtractAudio({ item }) {
       </View>
       {post ? (
         <TextInput
-          style={[st.edit, { minHeight: rs(64) }]} value={caption} onChangeText={setCaption} maxLength={1800} multiline
+          style={[st.edit, { minHeight: rs(64) }]} value={caption} onChangeText={setCaption} maxLength={900} multiline
           placeholder="Caption for the audio drop" placeholderTextColor={T.textMuted}
         />
       ) : null}
@@ -141,7 +141,7 @@ const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onS
     </Text>
     {editing != null ? (
       <TextInput
-        style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={1800} autoFocus
+        style={st.edit} value={editing} onChangeText={onChangeText} multiline maxLength={900} autoFocus
         placeholder="Post text" placeholderTextColor={T.textMuted}
       />
     ) : null}
@@ -227,7 +227,7 @@ const PostRow = React.memo(({ item, onDelete, editing, onEdit, onChangeText, onS
             <Text style={a.btnText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity style={a.btn} onPress={onSave} disabled={saving || (!editing.trim() && !item.media_url)} activeOpacity={0.85}>
-            <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/1800`}</Text>
+            <Text style={[a.btnText, { color: T.primary }]}>{saving ? 'Saving…' : `Save · ${editing.length}/900`}</Text>
           </TouchableOpacity>
         </>
       ) : (

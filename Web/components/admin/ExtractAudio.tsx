@@ -47,7 +47,7 @@ export default function ExtractAudio({ dropId }: { dropId: string }) {
         <label className="small"><input type="checkbox" checked={library} onChange={(e) => setLibrary(e.target.checked)} /> Save to Sounds</label>
       </div>
       {post ? (
-        <textarea className="adm-input" rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={1800} placeholder="Caption for the audio drop" aria-label="Audio caption" />
+        <textarea className="adm-input" rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={900} placeholder="Caption for the audio drop" aria-label="Audio caption" />
       ) : null}
       {library ? (
         <input className="adm-input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="Name this sound" aria-label="Sound name" />

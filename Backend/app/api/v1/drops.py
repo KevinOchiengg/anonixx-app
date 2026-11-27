@@ -640,8 +640,8 @@ async def create_drop(
     if data.confession and len(data.confession.strip()) == 0:
         raise HTTPException(status_code=400, detail="Confession cannot be empty")
 
-    if data.confession and len(data.confession) > 1800:
-        raise HTTPException(status_code=400, detail="Confession must be 1800 characters or less")
+    if data.confession and len(data.confession) > 900:
+        raise HTTPException(status_code=400, detail="Confession must be 900 characters or less")
 
     if contains_contact_info(data.confession):
         raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
@@ -2587,8 +2587,8 @@ async def edit_drop(
         # Edits pass the same gates as a new post (they used to skip them, so a
         # clean post could be edited into one carrying a phone number).
         text = data.content.strip()
-        if len(text) > 1800:
-            raise HTTPException(status_code=400, detail="Confession must be 1800 characters or less")
+        if len(text) > 900:
+            raise HTTPException(status_code=400, detail="Confession must be 900 characters or less")
         if contains_contact_info(text):
             raise HTTPException(status_code=400, detail=CONTACT_INFO_ERROR)
         if violates_policy(text):
