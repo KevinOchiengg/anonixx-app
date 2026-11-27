@@ -21,6 +21,7 @@ import { WANTS, MEET_WHEN, FRESH_FOR_WHEN } from '../../utils/hookupDraft';
 import AgeGate from './AgeGate';
 import { ConfessionPreview, linkUpFacts, alpha } from '../feed/ConfessionCard';
 import T from '../../utils/theme';
+import { backToMain } from '../../utils/backToMain';
 
 // Must match DROP_POST_COST in Backend/app/api/v1/drops.py.
 const POST_COST = 3;
@@ -239,7 +240,7 @@ export default function GuidedConfession({ navigation, onBack }) {
       AsyncStorage.setItem(MY_AGE_KEY, a.age).catch(() => {});
       showToast({ type: 'success', title: 'Dropped.', message: 'Someone out there is about to read your secret.' });
       dispatch(awardMilestone('first_drop'));
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      backToMain(navigation, { refreshFeed: true });
     } catch (err) {
       showToast({ type: 'error', message: err?.message || 'Could not drop it. Try again.' });
     } finally {

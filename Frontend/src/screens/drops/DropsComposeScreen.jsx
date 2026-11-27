@@ -42,6 +42,7 @@ import DropCardRenderer, {
   CARD_INTENTS, CARD_INTENT_LIST, CardPattern, DROP_THEMES, CARD_FONT_LIST, CARD_FONT_STYLES, DEFAULT_CARD_FONT,
 } from '../../components/drops/DropCardRenderer';
 import T from '../../utils/theme';
+import { backToMain } from '../../utils/backToMain';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -754,7 +755,7 @@ export default function DropsComposeScreen({ navigation, route }) {
             ? `Goes live ${whenLabel(later)}.`
             : 'Polishing your video. It posts in a minute or two.',
         });
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        backToMain(navigation, { refreshFeed: true });
         return;
       }
 
@@ -802,7 +803,7 @@ export default function DropsComposeScreen({ navigation, route }) {
       dispatch(awardMilestone('first_drop'));
 
       // Back to the feed, where the new drop appears.
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      backToMain(navigation, { refreshFeed: true });
     } catch (err) {
       showToast({
         type: 'error',

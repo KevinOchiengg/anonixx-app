@@ -12,6 +12,7 @@ import { useToast } from '../../components/ui/Toast';
 import T from '../../utils/theme';
 import { apiFetch } from '../admin/adminShared';
 import useDraft from '../../hooks/useDraft';
+import { backToMain } from '../../utils/backToMain';
 
 const MAX_LEN = 500;
 
@@ -66,7 +67,7 @@ export default function WhatsAppSendScreen({ navigation, route }) {
           message: "They'll be asked before anything is shown. You stay anonymous.",
         });
         clearText();
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        backToMain(navigation);
       } else {
         const detail = typeof data?.detail === 'string' ? data.detail : null;
         showToast({ type: 'error', message: detail || 'Could not send. Try again.' });

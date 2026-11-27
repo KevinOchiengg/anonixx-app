@@ -30,6 +30,7 @@ import { DROP_THEMES, CARD_INTENTS } from '../../components/drops/DropCardRender
 import { T } from '../../utils/colorTokens';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import { useAuth } from '../../context/AuthContext';
+import { backToMain } from '../../utils/backToMain';
 
 const SCREEN_W      = Dimensions.get('window').width;
 const MAX_MB        = 10;
@@ -314,7 +315,7 @@ export default function DropsRecordScreen({ navigation, route }) {
 
       // Land back in the main feed — the voice drop shows up there as a
       // genuine post now (see create_drop's post-mirroring on the backend).
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      backToMain(navigation, { refreshFeed: true });
     } catch (err) {
       showToast({
         type:    'error',

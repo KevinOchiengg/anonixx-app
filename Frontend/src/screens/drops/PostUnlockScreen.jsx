@@ -26,6 +26,7 @@ import { INTENTS, MAX_INTENTS, MAX_PITCH } from '../../config/linkup';
 import AgeGate from '../../components/drops/AgeGate';
 import useDraft from '../../hooks/useDraft';
 import AuthorAvatar from '../../components/common/AuthorAvatar';
+import { backToMain } from '../../utils/backToMain';
 
 // Must match COINS_UNLOCK_COST in Backend/app/api/v1/drops.py
 const UNLOCK_COST = 6;
@@ -195,7 +196,7 @@ export default function PostUnlockScreen({ route, navigation }) {
         dispatch(fetchBalance());
         clearPitch();
         if (fromRoom) navigation.goBack();
-        else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        else backToMain(navigation);
         return;
       }
 

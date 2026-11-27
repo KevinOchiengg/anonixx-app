@@ -19,6 +19,7 @@ import { uploadToR2 } from '../../utils/upload';
 import DropScreenHeader from '../../components/drops/DropScreenHeader';
 import T from '../../utils/theme';
 import { useAuth } from '../../context/AuthContext';
+import { backToMain } from '../../utils/backToMain';
 
 export default function DropsPollScreen({ navigation, route }) {
   const { showToast } = useToast();
@@ -151,7 +152,7 @@ export default function DropsPollScreen({ navigation, route }) {
 
       // Land back in the main feed — the poll shows up there as a genuine
       // post now (see create_drop's post-mirroring on the backend).
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      backToMain(navigation, { refreshFeed: true });
     } catch (err) {
       showToast({ type: 'error', message: err?.message || 'Could not post your poll. Try again.' });
     } finally {
