@@ -499,11 +499,18 @@ async def edit_admin_ad(ad_id: str, data: AdminAdPatch, admin_id: str = Depends(
 
 @router.delete("/admin/{ad_id}")
 async def delete_admin_ad(ad_id: str, admin_id: str = Depends(require_super_admin), db = Depends(get_database)):
-    res = await db["feed_ads"].delete_one({"_id": _oid(ad_id)})
-    if not res.deleted_count:
+    ad = await db["feed_ads"].find_one_and_delete({"_id": _oid(ad_id)})
+    if not ad:
         raise HTTPException(status_code=404, detail="Ad not found")
+    refund = 0
+    if ad.get("ad_type") == "sponsored" and ad.get("created_by") and ad.get("status") in ("approved", "pending_review"):
+        paid = ad.get("budget_coins") or ad.get("coins_paid") or 0
+        refund = max(0, paid - coins_for(ad.get("views_billed") or 0)) if ad.get("views_cap") else paid
+        if refund:
+            await credit_coins(db=db, user_id=ad["created_by"], amount=refund, reason="feed_ad_refund",
+                               description="Ad removed by Anonixx, unused budget", meta={"ad_id": ad_id})
     await audit(db, admin_id, "ad.delete", "ad", ad_id)
-    return {"id": ad_id, "deleted": True}
+    return {"id": ad_id, "deleted": True, "refunded": refund}
 
 
 # ==================== MEMBER ADS ====================

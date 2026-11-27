@@ -54,6 +54,7 @@ import AdminSupportScreen from '../screens/admin/AdminSupportScreen';
 import AdminSearchScreen from '../screens/admin/AdminSearchScreen';
 import SupportChatScreen from '../screens/support/SupportChatScreen';
 import CreateAdScreen from '../screens/feed/CreateAdScreen';
+import MyAdsScreen from '../screens/feed/MyAdsScreen';
 import DropsComposeScreen from '../screens/drops/DropsComposeScreen';
 import DropsRecordScreen from '../screens/drops/DropsRecordScreen';
 import DropsPublishScreen from '../screens/drops/DropsPublishScreen';
@@ -197,6 +198,7 @@ export default function AppNavigator({ fontsReady }) {
         <Stack.Screen name="AdminSearch"     component={withBackdrop(AdminSearchScreen)} />
         <Stack.Screen name="SupportChat"     component={withBackdrop(SupportChatScreen, { brand: false })} />
         <Stack.Screen name="CreateAd"        component={withBackdrop(CreateAdScreen)} />
+        <Stack.Screen name="MyAds"           component={withBackdrop(MyAdsScreen)} />
         {/* Accessible from HamburgerMenu across all tabs */}
         <Stack.Screen name="Settings"       component={withBackdrop(SettingsScreen)} />
         <Stack.Screen name="EditProfile"    component={withBackdrop(EditProfileScreen)} />

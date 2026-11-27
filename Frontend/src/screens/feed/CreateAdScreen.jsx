@@ -1,285 +1,254 @@
-/** Buy a feed ad, priced by duration. Members pay coins and wait for approval; admins post free.
- * The ad always points at one of your active drops (no drop yet = make one first). */
-import React, { useCallback, useEffect, useState } from 'react';
+/** Promote a drop or your Room, step by step: what, the ad, who sees it, budget, review and pay.
+ * Paid per view from a budget held up front (backend ads.py /ads/campaigns). Same as Web CreateAdPage. */
+import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform,
-  ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import {
-  ArrowLeft, Image as ImageIcon, Video as VideoIcon, Sticker, Music, Check, FileText,
-} from 'lucide-react-native';
+import { useSelector } from 'react-redux';
+import { ArrowLeft } from 'lucide-react-native';
 
 import { rs, rf, rp, SPACING, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { useToast } from '../../components/ui/Toast';
 import { API_BASE_URL } from '../../config/api';
+import { uploadToR2 } from '../../utils/upload';
 import T from '../../utils/theme';
 import useDraft from '../../hooks/useDraft';
 
-const AD_COINS_PER_HOUR = 5;
+const STEPS = ['Promote', 'Your ad', 'Audience', 'Budget', 'Review'];
+const BUDGETS = [50, 100, 250, 500, 1000];
+const GENDERS = [{ id: 'female', label: 'Women' }, { id: 'male', label: 'Men' }, { id: 'nonbinary', label: 'Non-binary' }];
 
-const MEDIA_TABS = [
-  { id: 'image', label: 'Image', icon: ImageIcon },
-  { id: 'video', label: 'Video', icon: VideoIcon },
-  { id: 'gif',   label: 'GIF',   icon: Sticker },
-  { id: 'audio', label: 'Audio', icon: Music },
-];
+async function call(path, opts = {}) {
+  const token = await AsyncStorage.getItem('token');
+  const res = await fetch(`${API_BASE_URL}/api/v1${path}`, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = data?.detail;
+    const err = new Error(typeof d === 'string' ? d : d?.message || 'Something went wrong.');
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+const Chip = ({ on, label, onPress }) => (
+  <TouchableOpacity onPress={onPress} style={[s.chip, on && s.chipOn]} activeOpacity={0.8}>
+    <Text style={[s.chipText, on && s.chipTextOn]}>{label}</Text>
+  </TouchableOpacity>
+);
 
 export default function CreateAdScreen({ navigation }) {
   const { showToast } = useToast();
-
+  const balance = useSelector((st) => st.coins?.balance ?? 0);
+  const [rules, setRules] = useState(null);
+  const [drops, setDrops] = useState(null);
+  const [step, setStep] = useState(0);
+  const [target, setTarget] = useState('drop');
+  const [dropId, setDropId] = useState(null);
   const [title, setTitle, clearTitle] = useDraft('ad:title', '');
-  const [hours, setHours]         = useState('24');
-  const [mediaType, setMediaType] = useState('image');
-  const [mediaUri, setMediaUri]   = useState(null);
-  const [mediaName, setMediaName] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [drops, setDrops]         = useState(null);   // null = loading
-  const [selectedDropId, setSelectedDropId] = useState(null);
-
-  const authHeaders = useCallback(async (json = false) => {
-    const token = await AsyncStorage.getItem('token');
-    return {
-      Authorization: `Bearer ${token}`,
-      ...(json ? { 'Content-Type': 'application/json' } : {}),
-    };
-  }, []);
+  const [cta, setCta] = useState('Link Up');
+  const [media, setMedia] = useState(null);
+  const [countries, setCountries] = useState('');
+  const [genders, setGenders] = useState([]);
+  const [ageMin, setAgeMin] = useState('');
+  const [ageMax, setAgeMax] = useState('');
+  const [budget, setBudget] = useState(100);
+  const [daily, setDaily] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [needCoins, setNeedCoins] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/ads/my-drops`, { headers: await authHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setDrops(data.drops || []);
-          if (data.drops?.length) setSelectedDropId(data.drops[0].id);
-        } else {
-          setDrops([]);
-        }
-      } catch {
-        setDrops([]);
-      }
-    })();
-  }, [authHeaders]);
-
-  // Switching tabs clears whatever was picked under the old type — a video
-  // file left over while on the Image tab would silently upload wrong.
-  const handleSelectMediaType = useCallback((id) => {
-    setMediaType(id);
-    setMediaUri(null);
-    setMediaName(null);
+    call('/ads/campaigns/rules').then(setRules).catch(() => {});
+    call('/ads/my-drops').then((r) => setDrops(r.drops || [])).catch(() => setDrops([]));
   }, []);
 
-  const handlePickVisualMedia = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      showToast({ type: 'warning', message: 'Gallery access is needed.' });
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      legacy: true,   // Android: pick straight from Gallery / Files, not the Google Photos picker
-      mediaTypes: mediaType === 'video' ? ['videos'] : ['images'],
-      quality: 0.85,
-    });
-    if (result.canceled) return;
-    setMediaUri(result.assets[0].uri);
-    setMediaName(null);
-  }, [mediaType, showToast]);
+  const rate = rules?.coins_per_1000 ?? 50;
+  const views = Math.floor((budget * 1000) / rate);
 
-  const handlePickAudio = useCallback(async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*' });
-    if (result.canceled) return;
-    const asset = result.assets?.[0];
-    if (!asset) return;
-    setMediaUri(asset.uri);
-    setMediaName(asset.name);
-  }, []);
+  const pick = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.85 });
+    if (!r.canceled && r.assets?.[0]) setMedia(r.assets[0]);
+  };
 
-  const cost = (parseInt(hours, 10) || 0) * AD_COINS_PER_HOUR;
+  const problem = () => {
+    if (step === 0 && target === 'drop' && !dropId) return 'Pick the drop you want to promote.';
+    if (step === 1 && !title.trim()) return 'Write what your ad says.';
+    if (step === 1 && target === 'room' && !media) return 'Add a photo or video for your Room ad.';
+    if (step === 2 && ageMin && ageMax && Number(ageMin) > Number(ageMax)) return 'The youngest age has to be under the oldest.';
+    return '';
+  };
 
-  const handleSubmit = useCallback(async () => {
-    const durationHours = parseInt(hours, 10);
-    if (!title.trim() || !selectedDropId || !durationHours) {
-      showToast({ type: 'warning', message: 'Add a title, pick a Drop to link to, and a duration.' });
-      return;
-    }
-    setSubmitting(true);
+  const next = () => {
+    const why = problem();
+    if (why) { showToast({ type: 'warning', message: why }); return; }
+    setStep((v) => Math.min(v + 1, STEPS.length - 1));
+  };
+
+  const submit = async () => {
+    setBusy(true); setNeedCoins(false);
     try {
-      let uploadedUrl = null;
-      if (mediaUri) {
-        const ext = mediaUri.split('?')[0].split('.').pop()?.toLowerCase()
-          || (mediaType === 'video' ? 'mp4' : mediaType === 'audio' ? 'm4a' : 'jpg');
-        const mimeByType = {
-          image: 'image/jpeg', gif: 'image/gif', video: 'video/mp4', audio: 'audio/mpeg',
-        };
-        const uploadEndpoint = mediaType === 'video' ? 'video' : mediaType === 'audio' ? 'audio' : 'image';
-        const form = new FormData();
-        form.append('file', { uri: mediaUri, name: `feed_ad.${ext}`, type: mimeByType[mediaType] });
-        const uploadRes = await fetch(`${API_BASE_URL}/api/v1/upload/${uploadEndpoint}`, {
-          method: 'POST', headers: await authHeaders(), body: form,
-        });
-        if (!uploadRes.ok) throw new Error('Upload failed');
-        uploadedUrl = (await uploadRes.json()).url;
+      let media_url = null;
+      let media_type = 'image';
+      if (media) {
+        media_type = media.type === 'video' ? 'video' : 'image';
+        media_url = await uploadToR2(media.uri, media_type, media_type === 'video' ? 'video/mp4' : 'image/jpeg');
       }
-
-      const res = await fetch(`${API_BASE_URL}/api/v1/ads`, {
+      await call('/ads/campaigns', {
         method: 'POST',
-        headers: await authHeaders(true),
         body: JSON.stringify({
-          title: title.trim(),
-          drop_id: selectedDropId,
-          media_url: uploadedUrl,
-          media_type: mediaType,
-          duration_hours: durationHours,
+          target_type: target, drop_id: target === 'drop' ? dropId : null, title: title.trim(), cta, media_url, media_type,
+          countries: countries.split(',').map((c) => c.trim()).filter(Boolean), genders,
+          age_min: ageMin ? Number(ageMin) : null, age_max: ageMax ? Number(ageMax) : null,
+          budget_coins: budget, daily_coins: daily ? Number(daily) : null,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        showToast({ type: 'success', message: data.message || 'Ad submitted.' });
-        clearTitle();
-        navigation.goBack();
-      } else if (res.status === 402) {
-        showToast({ type: 'warning', message: data.detail || 'Not enough coins.' });
-        navigation.navigate('Coins');
-      } else {
-        showToast({ type: 'error', message: data.detail || 'Could not submit ad.' });
-      }
-    } catch {
-      showToast({ type: 'error', message: 'Could not submit ad. Try again.' });
+      clearTitle();
+      showToast({ type: 'success', message: `Sent for review. ${budget} coins are held until it runs.` });
+      navigation.replace('MyAds');
+    } catch (e) {
+      if (e.status === 402) setNeedCoins(true);
+      showToast({ type: 'error', message: e.message });
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
-  }, [title, selectedDropId, hours, mediaUri, mediaType, authHeaders, showToast, navigation]);
+  };
 
+  const header = (
+    <View style={s.header}>
+      <TouchableOpacity onPress={() => (step > 0 ? setStep(step - 1) : navigation.goBack())} hitSlop={HIT_SLOP}>
+        <ArrowLeft size={rs(22)} color={T.text} />
+      </TouchableOpacity>
+      <Text style={s.headerTitle}>New ad</Text>
+      <View style={{ width: rs(22) }} />
+    </View>
+  );
+
+  if (rules && !rules.can_advertise) {
+    return (
+      <SafeAreaView style={s.safe} edges={['top']}>
+        {header}
+        <View style={s.center}><Text style={s.h}>Not yet</Text><Text style={s.muted}>{rules.reason}</Text></View>
+      </SafeAreaView>
+    );
+  }
+
+  const selected = drops?.find((d) => d.id === dropId);
   return (
-    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT_SLOP} style={s.headerBtn}>
-          <ArrowLeft size={rs(20)} color={T.text} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Advertise</Text>
-        <View style={s.headerBtn} />
-      </View>
-
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-        <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-          <Text style={s.hint}>
-            {AD_COINS_PER_HOUR} coins per hour it runs. Submissions go to a human for review before
-            they reach the main feed — rejected ads are refunded in full.
-          </Text>
-
-          <Text style={s.label}>Title</Text>
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="What are you promoting?"
-            placeholderTextColor={T.textMuted}
-            style={s.input}
-            maxLength={80}
-          />
-
-          <Text style={s.label}>Links to</Text>
-          {drops === null ? (
-            <ActivityIndicator color={T.primary} style={{ marginVertical: rp(12) }} />
-          ) : drops.length === 0 ? (
-            <View style={s.emptyDrops}>
-              <Text style={s.emptyDropsText}>
-                You need an active Drop to advertise — this is what people land on when they tap your ad.
-              </Text>
-              <TouchableOpacity
-                style={s.emptyDropsBtn}
-                onPress={() => navigation.navigate('DropsCompose')}
-                activeOpacity={0.85}
-              >
-                <Text style={s.emptyDropsBtnText}>Create a Drop</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={s.dropList}>
-              {drops.map((d) => (
-                <TouchableOpacity
-                  key={d.id}
-                  style={[s.dropRow, selectedDropId === d.id && s.dropRowActive]}
-                  onPress={() => setSelectedDropId(d.id)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[s.dropCheck, selectedDropId === d.id && s.dropCheckActive]}>
-                    {selectedDropId === d.id && <Check size={rs(11)} color="#fff" strokeWidth={2.5} />}
-                  </View>
-                  <Text style={s.dropRowText} numberOfLines={2}>
-                    {d.confession || '[media drop]'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          <Text style={s.label}>Duration (hours)</Text>
-          <TextInput
-            value={hours}
-            onChangeText={(v) => setHours(v.replace(/[^0-9]/g, ''))}
-            placeholder="24"
-            placeholderTextColor={T.textMuted}
-            style={s.input}
-            keyboardType="number-pad"
-          />
-
-          <Text style={s.label}>Ad media (optional)</Text>
-          <View style={s.mediaTabsRow}>
-            {MEDIA_TABS.map((tab) => {
-              const Icon = tab.icon;
-              const active = mediaType === tab.id;
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  onPress={() => handleSelectMediaType(tab.id)}
-                  style={[s.mediaTab, active && s.mediaTabActive]}
-                  activeOpacity={0.85}
-                >
-                  <Icon size={rs(14)} color={active ? T.primary : T.textMuted} />
-                  <Text style={[s.mediaTabText, active && s.mediaTabTextActive]}>{tab.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
+    <SafeAreaView style={s.safe} edges={['top']}>
+      {header}
+      <View style={s.steps}>
+        {STEPS.map((label, i) => (
+          <View key={label} style={[s.step, i <= step && s.stepDone, i === step && s.stepOn]}>
+            <Text style={[s.stepText, i === step && { color: T.primary }]} numberOfLines={1}>{label}</Text>
           </View>
-
-          <TouchableOpacity
-            style={s.mediaPickBtn}
-            onPress={mediaType === 'audio' ? handlePickAudio : handlePickVisualMedia}
-            activeOpacity={0.85}
-          >
-            {mediaType === 'audio' && mediaUri ? (
-              <View style={s.audioPicked}>
-                <FileText size={rs(18)} color={T.primary} />
-                <Text style={s.audioPickedText} numberOfLines={1}>{mediaName || 'Audio file selected'}</Text>
+        ))}
+      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
+          {step === 0 ? (
+            <>
+              <Text style={s.h}>What do you want to promote?</Text>
+              <View style={s.chips}>
+                <Chip on={target === 'drop'} label="A drop" onPress={() => { setTarget('drop'); setCta('Link Up'); }} />
+                <Chip on={target === 'room'} label="My Room" onPress={() => { setTarget('room'); setCta('Visit my Room'); }} />
               </View>
-            ) : mediaUri ? (
-              <Image source={{ uri: mediaUri }} style={s.mediaPreview} />
-            ) : (
-              <>
-                <ImageIcon size={rs(18)} color={T.textMuted} />
-                <Text style={s.mediaPickText}>
-                  {mediaType === 'audio' ? 'Attach an audio file' : `Attach ${mediaType === 'gif' ? 'a gif' : `a ${mediaType}`}`}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+              {target === 'drop' ? (
+                drops === null ? <ActivityIndicator color={T.primary} /> : drops.length === 0 ? (
+                  <Text style={s.muted}>You have no live drops. Post one first, or promote your Room.</Text>
+                ) : drops.map((d) => (
+                  <TouchableOpacity key={d.id} style={[s.option, dropId === d.id && s.optionOn]} onPress={() => setDropId(d.id)} activeOpacity={0.8}>
+                    <Text style={s.optionText} numberOfLines={2}>{d.confession || 'Drop with media'}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : <Text style={s.muted}>People who tap your ad land in your Room.</Text>}
+            </>
+          ) : null}
 
-          <Text style={s.costText}>Cost: {cost} coins for {hours || 0}h</Text>
+          {step === 1 ? (
+            <>
+              <Text style={s.h}>Your ad</Text>
+              <TextInput style={[s.input, { minHeight: rs(110) }]} value={title} onChangeText={setTitle} maxLength={900} multiline textAlignVertical="top"
+                placeholder="What it says (first line shows in bold)" placeholderTextColor={T.textMuted} />
+              <TouchableOpacity style={s.ghostBtn} onPress={pick} activeOpacity={0.85}>
+                <Text style={s.ghostText}>{media ? `${media.type === 'video' ? 'Video' : 'Photo'} picked · change` : target === 'drop' ? "Add a photo or video (or use the drop's)" : 'Add a photo or video'}</Text>
+              </TouchableOpacity>
+              {media && media.type !== 'video' ? <Image source={{ uri: media.uri }} style={s.preview} /> : null}
+              <Text style={s.label}>Button</Text>
+              <View style={s.chips}>
+                {(rules?.ctas || ['Link Up', 'See more', 'Visit my Room']).map((c) => <Chip key={c} on={cta === c} label={c} onPress={() => setCta(c)} />)}
+              </View>
+            </>
+          ) : null}
 
-          <TouchableOpacity
-            style={s.submitBtn}
-            onPress={handleSubmit}
-            disabled={submitting}
-            activeOpacity={0.88}
-          >
-            {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.submitBtnText}>Submit ad</Text>}
-          </TouchableOpacity>
+          {step === 2 ? (
+            <>
+              <Text style={s.h}>Who sees it</Text>
+              <Text style={s.muted}>Leave anything blank to reach everyone.</Text>
+              <Text style={s.label}>Gender</Text>
+              <View style={s.chips}>
+                {GENDERS.map((g) => (
+                  <Chip key={g.id} on={genders.includes(g.id)} label={g.label}
+                    onPress={() => setGenders((cur) => (cur.includes(g.id) ? cur.filter((x) => x !== g.id) : [...cur, g.id]))} />
+                ))}
+              </View>
+              <Text style={s.label}>Age</Text>
+              <View style={s.row}>
+                <TextInput style={[s.input, { flex: 1 }]} value={ageMin} onChangeText={(v) => setAgeMin(v.replace(/\D/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="From 18" placeholderTextColor={T.textMuted} />
+                <TextInput style={[s.input, { flex: 1 }]} value={ageMax} onChangeText={(v) => setAgeMax(v.replace(/\D/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="To any" placeholderTextColor={T.textMuted} />
+              </View>
+              <Text style={s.label}>Countries</Text>
+              <TextInput style={s.input} value={countries} onChangeText={setCountries} placeholder="Everywhere, or e.g. Kenya, Nigeria" placeholderTextColor={T.textMuted} />
+            </>
+          ) : null}
+
+          {step === 3 ? (
+            <>
+              <Text style={s.h}>Budget</Text>
+              <View style={s.chips}>{BUDGETS.map((b) => <Chip key={b} on={budget === b} label={`${b} coins`} onPress={() => setBudget(b)} />)}</View>
+              <Text style={s.est}>About <Text style={{ color: T.primary }}>{views.toLocaleString()}</Text> views</Text>
+              <Text style={s.muted}>{rate} coins per 1,000 views. You pay only for views you get; whatever is left comes back when you stop the ad.</Text>
+              <Text style={s.label}>Daily limit (optional)</Text>
+              <TextInput style={s.input} value={daily} onChangeText={(v) => setDaily(v.replace(/\D/g, ''))} keyboardType="number-pad" placeholder="Coins per day" placeholderTextColor={T.textMuted} />
+            </>
+          ) : null}
+
+          {step === 4 ? (
+            <>
+              <Text style={s.h}>Review</Text>
+              {[
+                ['Promoting', target === 'room' ? 'Your Room' : (selected?.confession || 'Your drop').slice(0, 80)],
+                ['Says', title],
+                ['Button', cta],
+                ['Audience', [genders.length ? genders.map((g) => GENDERS.find((x) => x.id === g)?.label).join(', ') : 'Everyone', ageMin || ageMax ? `${ageMin || 18}–${ageMax || 'any'}` : '', countries || 'everywhere'].filter(Boolean).join(' · ')],
+                ['Budget', `${budget} coins · about ${views.toLocaleString()} views${daily ? ` · up to ${daily} a day` : ''}`],
+                ['Your coins', String(balance)],
+              ].map(([k, v]) => (
+                <View key={k} style={s.reviewRow}><Text style={s.reviewKey}>{k}</Text><Text style={s.reviewVal}>{v}</Text></View>
+              ))}
+              <Text style={s.muted}>We review every ad before it runs. Rejected, every coin comes back.</Text>
+              {needCoins ? (
+                <TouchableOpacity style={s.ghostBtn} onPress={() => navigation.navigate('Coins')}><Text style={s.ghostText}>Get coins</Text></TouchableOpacity>
+              ) : null}
+            </>
+          ) : null}
         </ScrollView>
+        <View style={s.foot}>
+          {step < STEPS.length - 1 ? (
+            <TouchableOpacity style={s.primary} onPress={next} activeOpacity={0.85}><Text style={s.primaryText}>Next</Text></TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={s.primary} onPress={submit} disabled={busy} activeOpacity={0.85}>
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>Send for review · {budget} coins</Text>}
+            </TouchableOpacity>
+          )}
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -287,70 +256,36 @@ export default function CreateAdScreen({ navigation }) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: 'transparent' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md, paddingVertical: rp(12),
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  headerBtn: { padding: rp(4), width: rs(28) },
-  headerTitle: { fontSize: FONT.md, fontWeight: '700', color: T.text, fontFamily: 'PlayfairDisplay-Bold' },
-
-  content: { padding: SPACING.md, gap: rp(4), paddingBottom: rs(60) },
-  hint: { fontSize: FONT.xs, color: T.textSecondary, lineHeight: rf(18), marginBottom: SPACING.md },
-
-  label: { fontSize: FONT.xs, fontWeight: '700', color: T.textSecondary, marginTop: SPACING.sm, marginBottom: rp(6) },
-  input: {
-    backgroundColor: T.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border,
-    paddingHorizontal: rp(14), paddingVertical: rp(12), color: T.text, fontSize: FONT.sm,
-  },
-
-  emptyDrops: {
-    backgroundColor: T.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border,
-    padding: rp(16), gap: rp(10), alignItems: 'center',
-  },
-  emptyDropsText: { fontSize: FONT.sm, color: T.textSecondary, textAlign: 'center', lineHeight: rf(19) },
-  emptyDropsBtn: { backgroundColor: T.primary, borderRadius: RADIUS.md, paddingHorizontal: rp(18), paddingVertical: rp(10) },
-  emptyDropsBtnText: { fontSize: FONT.sm, fontWeight: '700', color: '#fff' },
-
-  dropList: { gap: rp(8) },
-  dropRow: {
-    flexDirection: 'row', alignItems: 'center', gap: rp(10),
-    backgroundColor: T.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border,
-    padding: rp(12),
-  },
-  dropRowActive: { borderColor: T.primaryBorder, backgroundColor: T.primaryDim },
-  dropCheck: {
-    width: rs(20), height: rs(20), borderRadius: rs(10), borderWidth: 1.5, borderColor: T.border,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  dropCheckActive: { backgroundColor: T.primary, borderColor: T.primary },
-  dropRowText: { flex: 1, fontSize: FONT.sm, color: T.text, fontStyle: 'italic' },
-
-  mediaTabsRow: { flexDirection: 'row', gap: rp(8) },
-  mediaTab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(5),
-    backgroundColor: T.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border,
-    paddingVertical: rp(10),
-  },
-  mediaTabActive: { backgroundColor: T.primaryDim, borderColor: T.primaryBorder },
-  mediaTabText: { fontSize: rf(11), fontWeight: '600', color: T.textMuted },
-  mediaTabTextActive: { color: T.primary },
-
-  mediaPickBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(8),
-    backgroundColor: T.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border,
-    borderStyle: 'dashed', paddingVertical: rp(16), marginTop: SPACING.md, overflow: 'hidden',
-  },
-  mediaPickText: { fontSize: FONT.sm, color: T.textMuted },
-  mediaPreview: { width: '100%', height: rs(140), borderRadius: RADIUS.sm },
-  audioPicked: { flexDirection: 'row', alignItems: 'center', gap: rp(8), paddingHorizontal: rp(16) },
-  audioPickedText: { fontSize: FONT.sm, color: T.text, flexShrink: 1 },
-
-  costText: { fontSize: FONT.sm, fontWeight: '700', color: T.text, textAlign: 'center', marginTop: SPACING.lg },
-
-  submitBtn: {
-    marginTop: SPACING.md, backgroundColor: T.primary, borderRadius: RADIUS.md,
-    paddingVertical: rp(14), alignItems: 'center', justifyContent: 'center',
-  },
-  submitBtnText: { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingVertical: rp(12) },
+  headerTitle: { color: T.text, fontSize: FONT.md, fontWeight: '700', fontFamily: 'PlayfairDisplay-Bold' },
+  steps: { flexDirection: 'row', gap: rp(4), paddingHorizontal: SPACING.md },
+  step: { flex: 1, paddingBottom: rp(6), borderBottomWidth: 3, borderBottomColor: T.border, alignItems: 'center' },
+  stepDone: { borderBottomColor: 'rgba(255,99,74,0.45)' },
+  stepOn: { borderBottomColor: T.primary },
+  stepText: { color: T.textSecondary, fontSize: rf(10), fontWeight: '700' },
+  body: { padding: SPACING.md, gap: rp(12), paddingBottom: rs(40) },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, gap: rp(8) },
+  h: { color: T.text, fontSize: rf(18), fontWeight: '800' },
+  label: { color: T.textSecondary, fontSize: rf(12), fontWeight: '700', marginTop: rp(4) },
+  muted: { color: T.textSecondary, fontSize: FONT.sm, lineHeight: rf(19) },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: rp(8) },
+  chip: { paddingHorizontal: rp(14), paddingVertical: rp(9), borderRadius: RADIUS.full, borderWidth: 1, borderColor: T.border },
+  chipOn: { borderColor: T.primary, backgroundColor: 'rgba(255,99,74,0.12)' },
+  chipText: { color: T.textSecondary, fontSize: FONT.sm, fontWeight: '700' },
+  chipTextOn: { color: T.primary },
+  option: { padding: rp(12), borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border },
+  optionOn: { borderColor: T.primary, backgroundColor: 'rgba(255,99,74,0.08)' },
+  optionText: { color: T.text, fontSize: FONT.sm },
+  input: { color: T.text, fontSize: FONT.sm, borderWidth: 1, borderColor: T.border, borderRadius: RADIUS.md, paddingHorizontal: rp(12), paddingVertical: rp(10), backgroundColor: 'rgba(255,255,255,0.03)' },
+  row: { flexDirection: 'row', gap: rp(10) },
+  ghostBtn: { paddingVertical: rp(12), borderRadius: RADIUS.md, borderWidth: 1, borderColor: T.border, alignItems: 'center' },
+  ghostText: { color: T.text, fontSize: FONT.sm, fontWeight: '700' },
+  preview: { width: '100%', height: rs(200), borderRadius: RADIUS.md },
+  est: { color: T.text, fontSize: rf(18), fontWeight: '800' },
+  reviewRow: { flexDirection: 'row', gap: rp(12), paddingVertical: rp(8), borderBottomWidth: 1, borderBottomColor: T.border },
+  reviewKey: { width: rs(90), color: T.textSecondary, fontSize: FONT.sm },
+  reviewVal: { flex: 1, color: T.text, fontSize: FONT.sm },
+  foot: { padding: SPACING.md },
+  primary: { height: rs(50), borderRadius: RADIUS.full, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { color: '#fff', fontSize: FONT.md, fontWeight: '800' },
 });

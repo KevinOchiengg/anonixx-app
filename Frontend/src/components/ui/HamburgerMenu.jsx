@@ -200,7 +200,7 @@ export default function HamburgerMenu({ visible, onClose, navigation }) {
           <View style={sec.card}>
             <NavRow icon={Heart} label="Saved Drops" onPress={() => go('SavedDrops')} />
             <View style={sec.div} />
-            <NavRow icon={Megaphone} label="Advertise" onPress={() => go('CreateAd')} />
+            <NavRow icon={Megaphone} label="Advertise" onPress={() => go('MyAds')} />
           </View>
 
           {/* ── Privacy & Safety ── */}
