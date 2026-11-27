@@ -19,7 +19,7 @@ export default function LinkedUp({ connectionId, name }: { connectionId: string;
       sessionStorage.removeItem(LINKED_KEY);
     } catch { return; }
     setShow(true);
-    const t = window.setTimeout(() => setShow(false), 2600);
+    const t = window.setTimeout(() => setShow(false), 3200);
     return () => window.clearTimeout(t);
   }, [connectionId]);
 
@@ -31,8 +31,8 @@ export default function LinkedUp({ connectionId, name }: { connectionId: string;
         <span className="lku-r"><Mars strokeWidth={2} /></span>
         <span className="lku-one"><VenusAndMars strokeWidth={2} /></span>
       </div>
-      <b>You&apos;re linked up.</b>
-      <p>{name} is waiting. Say something worth answering.</p>
+      <b>You and {name} just hooked up.</b>
+      <p>Taking you to the Room…</p>
     </div>
   );
 }

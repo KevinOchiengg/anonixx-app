@@ -20,7 +20,7 @@ export default function LinkedUpBurst({ visible, name }) {
       Animated.timing(meet, { toValue: 1, duration: 850, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       Animated.spring(lock, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }),
       Animated.timing(words, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.delay(900),
+      Animated.delay(1500),
       Animated.timing(fade, { toValue: 0, duration: 350, useNativeDriver: true }),
     ]);
     run.start(({ finished }) => { if (finished) setShow(false); });
@@ -48,8 +48,8 @@ export default function LinkedUpBurst({ visible, name }) {
           </Animated.View>
         </View>
         <Animated.View style={{ opacity: words, alignItems: 'center', gap: rp(6) }}>
-          <Text style={st.title}>You're linked up.</Text>
-          <Text style={st.sub}>{name || 'They'} is waiting. Say something worth answering.</Text>
+          <Text style={st.title}>You and {name || 'them'} just hooked up.</Text>
+          <Text style={st.sub}>Taking you to the Room…</Text>
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -61,6 +61,6 @@ const st = StyleSheet.create({
   fill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: rp(24) },
   stage: { width: rs(120), height: rs(72), alignItems: 'center', justifyContent: 'center', marginBottom: rp(10) },
   icon: { position: 'absolute', shadowColor: T.primary, shadowOpacity: 0.6, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
-  title: { color: T.text, fontSize: rf(20), fontWeight: '800' },
+  title: { color: T.text, fontSize: rf(20), fontWeight: '800', textAlign: 'center' },
   sub: { color: T.textSecondary, fontSize: rf(14), textAlign: 'center' },
 });

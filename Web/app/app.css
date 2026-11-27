@@ -315,7 +315,7 @@
 @media (prefers-reduced-motion: reduce) { .aw { animation: none; } }
 
 /* Link Up success: ♀ and ♂ slide in and lock together (components/LinkedUp.tsx) */
-.lku { position: absolute; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; background: rgba(11, 15, 24, 0.82); backdrop-filter: blur(6px); animation: lku-fade 2.6s ease forwards; }
+.lku { position: absolute; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; background: rgba(11, 15, 24, 0.82); backdrop-filter: blur(6px); animation: lku-fade 3.2s ease forwards; }
 .lku-stage { position: relative; width: 120px; height: 72px; margin-bottom: 6px; color: var(--rose); }
 .lku-stage span { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 56px; height: 56px; margin: -28px 0 0 -28px; }
 .lku-stage svg { width: 100%; height: 100%; }
