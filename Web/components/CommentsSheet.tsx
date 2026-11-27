@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import useDraft from "@/lib/useDraft";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { linkedChat } from "@/lib/linkup";
 import { api, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { uploadFile } from "@/lib/upload";
@@ -343,7 +344,12 @@ export default function CommentsSheet({
     const expanded = open[c.id];
     const name = c.anonymous_name || "Anonymous";
     const canOpen = Boolean(c.user_id) && !c.id.startsWith("tmp-");
-    const openWho = () => { if (canOpen) setWho(c); };
+    const openWho = async () => {
+      if (!canOpen) return;
+      const chat = user ? await linkedChat(c.user_id) : null;
+      if (chat) router.push(`/chat/${chat}`);
+      else setWho(c);
+    };
     return (
       <div key={c.id} className={`cmt${depth ? " nested" : ""}`}>
         <div className="cmt-main">

@@ -306,6 +306,17 @@ async def create_unlock_request(
         )
         return {"already_unlocked": True, "connection_id": connection_id}
 
+    link = await person_link(db, current_user_id, owner_id)
+    if link.get("connection_id"):
+        return {"already_unlocked": True, "connection_id": link["connection_id"]}
+    if link.get("pending_id"):
+        return {"status": "pending", "request_id": link["pending_id"], "already": True}
+    if link.get("wait_until"):
+        days = max(1, -(-int((link["wait_until"] - now_utc()).total_seconds()) // 86400))
+        raise HTTPException(status_code=409, detail={
+            "code": "linked_recently", "message": f"You linked up recently. Try again in {days} day{'s' if days > 1 else ''}.",
+        })
+
     requester_name = requester.get("anonymous_name", "Anonymous") if requester else "Anonymous"
 
     # Mutual link up: they already knocked on you. Connect both of you now, free.
@@ -380,6 +391,27 @@ async def create_unlock_request(
     )
     return {"status": "accepted", "request_id": request_id, "connection_id": connection_id,
             "room_user_id": owner_id, "cost": cost, "refund_after_hours": int(REFUND_AFTER.total_seconds() // 3600) if cost > 0 else None}
+
+
+LINK_GAP = timedelta(days=7)
+
+
+async def person_link(db, viewer_id: str, other_id: str) -> dict:
+    """Once per person per 7 days: an open chat, a knock still waiting, or a recent link that ended."""
+    pair = {"$or": [{"sender_id": other_id, "unlocker_id": viewer_id}, {"sender_id": viewer_id, "unlocker_id": other_id}]}
+    open_chat = await db["drop_connections"].find_one({**pair, "removed_at": None}, {"_id": 1}, sort=[("created_at", -1)])
+    if open_chat:
+        return {"connection_id": str(open_chat["_id"])}
+    since = now_utc() - LINK_GAP
+    waiting = await db["drop_unlock_requests"].find_one(
+        {"requester_id": viewer_id, "owner_id": other_id, "status": "pending", "expires_at": {"$gt": now_utc()}}, {"_id": 1},
+    )
+    if waiting:
+        return {"pending_id": str(waiting["_id"])}
+    ended = await db["drop_connections"].find_one({**pair, "created_at": {"$gte": since}}, {"created_at": 1}, sort=[("created_at", -1)])
+    if ended:
+        return {"wait_until": _ensure_aware(ended["created_at"]) + LINK_GAP}
+    return {}
 
 
 async def _ask(data, doc, owner_id, requester_id, requester, requester_name, snippet, pitch, intents, peek, rule, db) -> dict:

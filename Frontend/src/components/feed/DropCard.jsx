@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { API_BASE_URL } from '../../config/api';
+import { linkedChat } from '../../utils/knock';
 import { useAuth } from '../../context/AuthContext';
 import { useActiveVideo } from '../../context/VideoFeedContext';
 import { FONT, HIT_SLOP, RADIUS, rf, rp, rs, SPACING } from '../../utils/responsive';
@@ -509,10 +510,12 @@ function DropCard({
   const handleReport    = useCallback(() => { setMenuVisible(false); setReportVisible(true); }, []);
 
   // Never open a profile for official drops (it would reveal the admin account).
-  const handleProfilePress  = useCallback(() => {
+  const handleProfilePress  = useCallback(async () => {
     if (post.is_admin_drop) return;
-    setProfileSheetVisible(true);
-  }, [post.is_admin_drop]);
+    const chat = await linkedChat(post.user_id);
+    if (chat) navigation?.navigate('DropChat', { connectionId: chat });
+    else setProfileSheetVisible(true);
+  }, [post.is_admin_drop, post.user_id, navigation]);
   const handleMenuOpen      = useCallback(() => setMenuVisible(true), []);
   const handleMenuClose     = useCallback(() => setMenuVisible(false), []);
   const handleCommentsOpen  = useCallback(() => setShowComments(true), []);

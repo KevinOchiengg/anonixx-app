@@ -544,14 +544,13 @@ async def get_knock_target(
     user = await db["users"].find_one({"_id": ObjectId(user_id)}, {"anonymous_name": 1, "is_active": 1})
     if not user or user.get("is_active") is False or await is_blocked_between(db, user_id, current_user_id):
         raise HTTPException(status_code=404, detail="Room not found.")
-    connection = await db["drop_connections"].find_one({"$or": [
-        {"sender_id": user_id, "unlocker_id": current_user_id},
-        {"sender_id": current_user_id, "unlocker_id": user_id},
-    ], "removed_at": None}, {"_id": 1})
+    from app.api.v1.unlock_requests import person_link
+    link = await person_link(db, current_user_id, user_id)
     real = {"sender_id": user_id, "is_active": True, "is_admin_drop": {"$ne": True}}
     post = await db["drops"].find_one({**real, "kind": "hookup", "live_until": {"$gt": _now()}}, {"kind": 1}, sort=[("created_at", -1)])         or await db["drops"].find_one({**real, "kind": "confession"}, {"kind": 1}, sort=[("created_at", -1)])
     return {
-        "connection_id": str(connection["_id"]) if connection else None,
+        "connection_id": link.get("connection_id"),
+        "pending": bool(link.get("pending_id")),
         "post": {"id": str(post["_id"]), "kind": post.get("kind"), "anonymous_name": user.get("anonymous_name")} if post else None,
     }
 

@@ -1,4 +1,14 @@
-import type { Post } from "@/lib/api";
+import { api, type Post } from "@/lib/api";
+
+/** The open chat with this person, if you're already linked up. */
+export async function linkedChat(userId?: string | null): Promise<string | null> {
+  if (!userId) return null;
+  try {
+    return (await api<{ connection_id: string | null }>(`/chat-profile/${userId}/knock-target`)).connection_id;
+  } catch {
+    return null;
+  }
+}
 
 // Link up extras shared by the sheet, the Room and the inbox. Ids match the
 // backend's INTENT_CHIPS; anything unknown is dropped server side.

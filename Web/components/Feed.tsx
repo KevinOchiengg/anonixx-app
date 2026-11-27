@@ -12,6 +12,8 @@ import BottomNav from "./BottomNav";
 import AdultWelcome from "./AdultWelcome";
 import CommentsSheet from "./CommentsSheet";
 import LinkUpSheet from "./LinkUpSheet";
+import { linkedChat } from "@/lib/linkup";
+import { useRouter } from "next/navigation";
 import { useKnock } from "./KnockPay";
 import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
@@ -71,7 +73,12 @@ function replayRound(posts: Post[], lastId: string | undefined): string[] {
 
 export default function Feed({ initialPosts, initialCursor, startId, fillAfterStart = false }: Props) {
   const { user, ready } = useAuth();
-  const openProfile = (p: Post) => setProfileFor(p);
+  const router = useRouter();
+  const openProfile = async (p: Post) => {
+    const chat = user && !p.is_admin_drop ? await linkedChat(p.user_id) : null;
+    if (chat) router.push(`/chat/${chat}`);
+    else setProfileFor(p);
+  };
   const linkUp = (p: Post) => (p.kind === "hookup" ? knockIn(p) : setLinkFor(p));
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [cursor, setCursor] = useState<string | null>(initialCursor);

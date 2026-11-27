@@ -14,6 +14,7 @@ import {
   ChevronDown, CornerDownRight, Heart, Pin, X, MessageCircle, MessageSquareMore, Target, Flame,
 } from 'lucide-react-native';
 import { API_BASE_URL } from '../../config/api';
+import { linkedChat } from '../../utils/knock';
 import T from '../../utils/theme';
 import { rs, rp } from '../../utils/responsive';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
@@ -644,10 +645,12 @@ export const CommentBottomSheet = React.memo(({
 
   // Mentions are plain text, so look the user up on tap, then open their profile.
   // A commenter's name or photo opens their profile; from there they can knock on their Room.
-  const handleAuthorPress = useCallback((c) => {
+  const handleAuthorPress = useCallback(async (c) => {
     if (!c?.user_id) return;
+    const chat = await linkedChat(c.user_id);
+    if (chat) { onClose?.(); navigation?.navigate?.('DropChat', { connectionId: chat }); return; }
     setMentionProfile({ visible: true, userId: c.user_id, anonymousName: c.anonymous_name || 'Anonymous' });
-  }, []);
+  }, [onClose, navigation]);
 
   const handleMentionPress = useCallback(async (username) => {
     try {

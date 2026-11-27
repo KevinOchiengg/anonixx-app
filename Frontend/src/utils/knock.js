@@ -8,6 +8,19 @@ import { confirm } from './confirm';
 
 export const LINKUP_COST = 6;
 
+/** The open chat with this person, if you're already linked up (signed out: null). */
+export async function linkedChat(userId) {
+  if (!userId) return null;
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) return null;
+    const res = await fetch(`${API_BASE_URL}/api/v1/chat-profile/${userId}/knock-target`, { headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? (await res.json()).connection_id || null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Returns { connectionId } | { pending, already } | { short: true } | { ageGate: true } | { error }.
  * ask: the knock waits for their answer; coins leave only if they let you in. */
 export async function payIn(postId, viaProfile = false, ask = false) {

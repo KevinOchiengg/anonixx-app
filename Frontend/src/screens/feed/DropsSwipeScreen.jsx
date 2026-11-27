@@ -37,7 +37,7 @@ import { HeartBursts, useDoubleTapLike } from '../../components/feed/DoubleTapLi
 import { useAuth } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { apiFetch } from '../admin/adminShared';
-import { knockIn } from '../../utils/knock';
+import { knockIn, linkedChat } from '../../utils/knock';
 import { getDeviceId } from '../../utils/deviceId';
 import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
@@ -386,9 +386,12 @@ const AuthorProfileTrigger = ({ post, navigation, children }) => {
   return (
     <>
       <TouchableOpacity
-        onPress={() => (
-          opensDashboard ? navigation.navigate('AdminDashboard') : setVisible(true)
-        )}
+        onPress={async () => {
+          if (opensDashboard) { navigation.navigate('AdminDashboard'); return; }
+          const chat = await linkedChat(post.user_id);
+          if (chat) navigation.navigate('DropChat', { connectionId: chat });
+          else setVisible(true);
+        }}
         activeOpacity={post.is_admin_drop && !opensDashboard ? 1 : 0.75}
         disabled={post.is_admin_drop && !opensDashboard}
       >
