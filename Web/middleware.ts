@@ -34,6 +34,15 @@ export function middleware(req: NextRequest) {
   return res;
 }
 
+// Page visits only: no files, share images, sitemap or link prefetches.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    {
+      source: "/((?!_next/|og|sounds/|sitemap.xml|robots.txt|sw.js|favicon.ico|.*\.(?:png|jpe?g|svg|webp|gif|ico|mp3|mp4|js|css|txt|xml|json|woff2?)$).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
+  ],
 };
