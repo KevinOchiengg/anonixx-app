@@ -202,6 +202,12 @@ async def lifespan(app: FastAPI):
     await admin_monitor.start()             # alerts, morning digest, risk scores for flagged posts
     await auto_captioner.start()            # caption official media drops from the caption bank
     await _ensure_search_indexes()
+    try:
+        from app.api.v1 import ads as ads_api
+        from app.database import get_database
+        await ads_api.ensure_indexes(await get_database())
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Ad indexes skipped: %s", exc)
     await search_worker.start()             # search learning, auto-tags, saved-search alerts
     geoip.start_loading()                   # local IP->country database for payment pricing (background)
     yield
