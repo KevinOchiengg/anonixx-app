@@ -5,7 +5,8 @@ import { api, API_URL, SHARE_TEXT, getDeviceId, getToken, loadMoreClient, type F
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
-import { AdSlide, LiveSlide, MarketSlide } from "./FeedPromo";
+import { LiveSlide, MarketSlide } from "./FeedPromo";
+import { useMatureOk } from "@/lib/matureConsent";
 import { livesApi, type LiveCard } from "@/lib/lives";
 import { MapPin, MenuIcon, SearchIcon, ShieldIcon } from "./feedicons";
 import BottomNav from "./BottomNav";
@@ -18,6 +19,7 @@ import { useKnock } from "./KnockPay";
 import AuthorSheet from "./AuthorSheet";
 import ReportSheet from "./ReportSheet";
 import { Eye, SatelliteDish } from "lucide-react";
+import AdDrop from "./AdDrop";
 
 type Item =
   | { kind: "post"; post: Post; first: boolean; key?: string }
@@ -37,7 +39,7 @@ type AuthedFeed = {
 
 const AD_EVERY = 6;
 const MARKET_EVERY = 7;
-const FEED_AD_EVERY = 8;
+const FEED_AD_EVERY = 9;
 const LIVE_EVERY = 5;
 const ADSENSE_ON = Boolean(process.env.NEXT_PUBLIC_ADSENSE_CLIENT && process.env.NEXT_PUBLIC_ADSENSE_SLOT);
 const LOCATION_LABELS: Record<string, string> = { country: "Country", county: "Region", sub_county: "Area", estate: "Nearby" };
@@ -96,6 +98,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
   const [profileFor, setProfileFor] = useState<Post | null>(null);
   const [reportFor, setReportFor] = useState<Post | null>(null);
   const [ads, setAds] = useState<FeedAd[]>([]);
+  const matureOk = useMatureOk();
   const [market, setMarket] = useState<MarketTease[]>([]);
   const [lives, setLives] = useState<LiveCard[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
@@ -111,10 +114,15 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
   useEffect(() => {
     if (!ready) return;
     api<{ sounds?: Sound[] }>("/sounds").then((r) => setSounds(r.sounds || [])).catch(() => {});
-    api<{ ads?: FeedAd[] }>("/ads/active?limit=10").then((r) => setAds(r.ads || [])).catch(() => {});
     api<{ items?: MarketTease[] }>("/market/items?limit=20&offset=0").then((r) => setMarket(r.items || [])).catch(() => {});
     livesApi.promoted().then((r) => setLives(r.lives)).catch(() => {});
   }, [ready, user]);
+
+  useEffect(() => {
+    if (!ready) return;
+    api<{ ads?: FeedAd[] }>(`/ads/active?limit=10&platform=web&adult_ok=${matureOk ? "true" : "false"}`)
+      .then((r) => setAds(r.ads || [])).catch(() => {});
+  }, [ready, user, matureOk]);
 
   // The server couldn't hand us any posts (backend slow or down at build time): fetch them here,
   // and fall back to the last feed this browser saw.
@@ -547,7 +555,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
         <div className="scroller" ref={scroller}>
           {items.map((it, i) => {
             if (it.kind === "ad") return <AdSlot key={it.key} index={i} />;
-            if (it.kind === "promo") return <AdSlide key={it.key} ad={it.ad} index={i} />;
+            if (it.kind === "promo") return <AdDrop key={it.key} ad={it.ad} index={i} isActive={i === active} onHide={(id) => setAds((cur) => cur.filter((a) => a.id !== id))} />;
             if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;
             if (it.kind === "live") return <LiveSlide key={it.key} live={it.live} index={i} />;
             if (it.kind === "status") {

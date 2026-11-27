@@ -1,33 +1,10 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import type { FeedAd, MarketTease } from "@/lib/api";
-import { ChevronRight, ExternalLink, Lock, Megaphone } from "./feedicons";
+import type { MarketTease } from "@/lib/api";
+import { ChevronRight, Lock } from "./feedicons";
 import AuthorAvatar from "./AuthorAvatar";
 import { startsLabel, type LiveCard } from "@/lib/lives";
-
-export function AdSlide({ ad, index }: { ad: FeedAd; index: number }) {
-  return (
-    <section className="slide promo-slide" aria-label="Advertisement" data-idx={index}>
-      <div className="promo-center">
-        <a className="fad-card" href={ad.link_url} target="_blank" rel="noopener noreferrer sponsored">
-          <span className="fad-badge"><Megaphone />{ad.ad_type === "house" ? "Anonixx" : "Sponsored"}</span>
-          {ad.media_url && ad.media_type === "video" ? (
-            <video className="fad-cover" src={ad.media_url} autoPlay muted loop playsInline />
-          ) : ad.media_url && ad.media_type === "audio" ? (
-            <span className="fad-audio">♪ Audio</span>
-          ) : ad.media_url ? (
-            <Image className="fad-cover" src={ad.media_url} alt="" width={1080} height={1350} sizes="100vw" />
-          ) : null}
-          <span className="fad-title">{ad.title}</span>
-        </a>
-        <a className="ad-cta" href={ad.link_url} target="_blank" rel="noopener noreferrer sponsored">
-          <ExternalLink />Learn more
-        </a>
-      </div>
-    </section>
-  );
-}
 
 export function MarketSlide({ item, index }: { item: MarketTease; index: number }) {
   return (

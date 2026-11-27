@@ -181,7 +181,7 @@ export async function api<T = unknown>(
   opts: { method?: string; body?: unknown } = {},
 ): Promise<T> {
   const headers: Record<string, string> = countryHeader();
-  if (path.startsWith("/auth/") || path.startsWith("/search")) headers["X-Device-Id"] = getDeviceId();
+  if (path.startsWith("/auth/") || path.startsWith("/search") || path.startsWith("/ads")) headers["X-Device-Id"] = getDeviceId();
   const token = getToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -248,6 +248,9 @@ export type FeedAd = {
   link_url: string;
   media_url?: string | null;
   media_type?: "image" | "gif" | "video" | "audio" | null;
+  cover_url?: string | null;
+  cta?: string | null;
+  adult?: boolean;
   ad_type?: string;
 };
 export type MarketTease = { id: string; title: string; teaser: string; media_url?: string | null; price_coins: number };
