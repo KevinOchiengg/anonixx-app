@@ -322,6 +322,18 @@ export default function CommentsSheet({
     }
   }
 
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const holdTimer = useRef<number | null>(null);
+  const cancelHold = () => { if (holdTimer.current) { window.clearTimeout(holdTimer.current); holdTimer.current = null; } };
+  function openMenu(c: Comment) {
+    cancelHold();
+    if (c.content || (c.is_own_reply && !c.id.startsWith("tmp-"))) setMenuFor(c.id);
+  }
+  async function copy(c: Comment) {
+    setMenuFor(null);
+    try { await navigator.clipboard.writeText(c.content || ""); setNotice("Copied."); } catch { setError("Couldn't copy that."); }
+  }
+
   async function remove(c: Comment) {
     const replies = c.replies.length;
     const ok = await askConfirm({
@@ -357,7 +369,14 @@ export default function CommentsSheet({
           <button type="button" className="cmt-who" onClick={openWho} disabled={!canOpen} aria-label={`See ${name}'s profile`}>
             <Av name={name} src={c.avatar_url} small={depth > 0} />
           </button>
-          <div className="cmt-col">
+          <div
+            className={`cmt-col${menuFor === c.id ? " held" : ""}`}
+            onContextMenu={(e) => { e.preventDefault(); openMenu(c); }}
+            onPointerDown={() => { holdTimer.current = window.setTimeout(() => openMenu(c), 450); }}
+            onPointerUp={cancelHold}
+            onPointerLeave={cancelHold}
+            onPointerMove={cancelHold}
+          >
             <div className="cmt-head">
               <button type="button" className="cmt-who" onClick={openWho} disabled={!canOpen}><b>{name}</b></button>
               {c.pinned ? <span className="cmt-badge pinned"><Pin />Pinned</span> : null}
@@ -369,6 +388,13 @@ export default function CommentsSheet({
             {c.image_url || c.gif_url ? (
               <Image className="cmt-img" src={(c.image_url || c.gif_url)!} alt="" width={480} height={480} style={{ height: "auto" }} sizes="70vw" />
             ) : null}
+            {menuFor === c.id ? (
+              <div className="cmt-menu" role="menu">
+                {c.content ? <button type="button" role="menuitem" onClick={() => copy(c)}>Copy</button> : null}
+                {c.is_own_reply && !c.id.startsWith("tmp-") ? <button type="button" role="menuitem" className="danger" onClick={() => { setMenuFor(null); remove(c); }}>Delete</button> : null}
+                <button type="button" role="menuitem" onClick={() => setMenuFor(null)}>Cancel</button>
+              </div>
+            ) : null}
             <div className="cmt-actions">
               <span className="cmt-time">{c.time_ago || "just now"}</span>
               {depth === 0 ? (
@@ -378,9 +404,6 @@ export default function CommentsSheet({
               ) : null}
               {depth === 0 && isOwner && !c.id.startsWith("tmp-") ? (
                 <button className={c.pinned ? "on" : ""} onClick={() => pin(c)}>{c.pinned ? "Unpin" : "Pin"}</button>
-              ) : null}
-              {c.is_own_reply && !c.id.startsWith("tmp-") ? (
-                <button className="cmt-del" onClick={() => remove(c)}>Delete</button>
               ) : null}
             </div>
           </div>

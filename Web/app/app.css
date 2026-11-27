@@ -353,3 +353,11 @@
 .cmt-join { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-top: 1px solid var(--line); }
 .cmt-join p { margin: 0; font-size: 13px; color: var(--muted); min-width: 0; }
 .cmt-join div { display: flex; gap: 8px; }
+
+/* Comments: long-press (or right-click) for Copy / Delete (CommentsSheet) */
+.cmt-col { -webkit-touch-callout: none; border-radius: 12px; transition: background 0.15s ease; }
+.cmt-col.held { background: rgba(255, 255, 255, 0.05); }
+.cmt-menu { display: flex; gap: 6px; margin: 6px 0 2px; }
+.cmt-menu button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.cmt-menu button.danger { color: var(--rose); border-color: rgba(255, 99, 74, 0.4); }
+.cmt-menu button:focus-visible { outline: 2px solid var(--rose); outline-offset: 2px; }

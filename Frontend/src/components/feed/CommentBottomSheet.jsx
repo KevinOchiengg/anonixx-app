@@ -2,7 +2,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image,
+  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Pressable,
   KeyboardAvoidingView, Modal, PanResponder, Platform, StyleSheet,
   Text, TouchableOpacity, TouchableWithoutFeedback, View,
 } from 'react-native';
@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 import {
   ChevronDown, CornerDownRight, Heart, Pin, X, MessageCircle, MessageSquareMore, Target, Flame,
 } from 'lucide-react-native';
@@ -108,7 +109,7 @@ const EmojiPicker = React.memo(({ onSelect }) => {
 // ─── Comment row ──────────────────────────────────────────────
 const CommentItem = React.memo(({
   item, isFirst, isHot, onReply, replyingTo, onLike, onOpenImage, depth = 0,
-  isOwner, onPin, onMentionPress, onDelete, onAuthorPress,
+  isOwner, onPin, onMentionPress, onDelete, onAuthorPress, onLongPress,
 }) => {
   const isReplying = replyingTo === item.id;
   const replies    = item.replies ?? [];
@@ -142,7 +143,7 @@ const CommentItem = React.memo(({
         <AuthorAvatar uri={item.avatar_url} seed={item.user_id} name={item.anonymous_name} />
       </TouchableOpacity>
 
-      <View style={st.commentBody}>
+      <Pressable style={st.commentBody} onLongPress={() => onLongPress?.(item, depth)} delayLongPress={350}>
         <View style={st.commentMetaRow}>
           <TouchableOpacity onPress={() => onAuthorPress?.(item)} disabled={!item.user_id || item._optimistic} activeOpacity={0.75} style={{ flexShrink: 1 }}>
             <Text style={st.commentAuthor} numberOfLines={1}>
@@ -199,15 +200,6 @@ const CommentItem = React.memo(({
               </Text>
             </TouchableOpacity>
           )}
-          {isOwn && !item._optimistic && onDelete && (
-            <TouchableOpacity
-              onPress={() => onDelete(item, depth)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel="Delete your comment"
-            >
-              <Text style={st.commentFooterAction}>Delete</Text>
-            </TouchableOpacity>
-          )}
           {depth === 0 && isOwner && (
             <TouchableOpacity
               onPress={() => onPin(item.id, !item.pinned)}
@@ -247,13 +239,14 @@ const CommentItem = React.memo(({
                 onOpenImage={onOpenImage}
                 onMentionPress={onMentionPress}
                 onDelete={onDelete}
+                onLongPress={onLongPress}
                 onAuthorPress={onAuthorPress}
                 depth={1}
               />
             ))}
           </View>
         )}
-      </View>
+      </Pressable>
 
       <TouchableOpacity
         onPress={handleLike}
@@ -557,6 +550,18 @@ export const CommentBottomSheet = React.memo(({
     } catch {}
   }, [postId]);
 
+  // Long-press a comment: Copy, and Delete on your own.
+  const handleLongPress = useCallback((comment, depth) => {
+    const own = !!comment.is_own_reply && !comment._optimistic;
+    const options = [];
+    if (comment.content) {
+      options.push({ text: 'Copy', onPress: () => { Clipboard.setStringAsync(comment.content).catch(() => {}); } });
+    }
+    if (own) options.push({ text: 'Delete', style: 'destructive', onPress: () => handleDelete(comment, depth) });
+    if (!options.length) return;
+    Alert.alert('', undefined, [...options, { text: 'Cancel', style: 'cancel' }], { cancelable: true });
+  }, [handleDelete]);
+
   // Your own comment (and the replies under it). Asks first; removes it once the server agrees.
   const handleDelete = useCallback((comment, depth) => {
     const n = depth === 0 ? (comment.replies ?? []).length : 0;
@@ -763,9 +768,10 @@ export const CommentBottomSheet = React.memo(({
       onPin={handlePin}
       onMentionPress={handleMentionPress}
       onDelete={handleDelete}
+      onLongPress={handleLongPress}
       onAuthorPress={handleAuthorPress}
     />
-  ), [firstCommentId, hotCommentId, replyingTo, handleLike, isOwner, handlePin, handleMentionPress, handleDelete, handleAuthorPress]);
+  ), [firstCommentId, hotCommentId, replyingTo, handleLike, isOwner, handlePin, handleMentionPress, handleDelete, handleAuthorPress, handleLongPress]);
 
   const keyExtractor = useCallback((item, i) => item.id || String(i), []);
 
