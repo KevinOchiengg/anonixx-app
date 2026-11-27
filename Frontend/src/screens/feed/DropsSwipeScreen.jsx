@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import {
-  Bookmark, Eye, ExternalLink, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Pencil, Play, Search, Share2, ShieldCheck, VolumeX, Music,
+  Bookmark, Eye, Heart, Link2, Lock, LockOpen, MapPin, Menu, MessageCircle, MessageSquareMore, Pause, Pencil, Play, Search, Share2, ShieldCheck, VolumeX, Music,
 } from 'lucide-react-native';
 
 import { CommentBottomSheet } from '../../components/feed/CommentBottomSheet';
@@ -27,7 +27,6 @@ import AnonProfileSheet from '../../components/connect/AnonProfileSheet';
 import { PollCard } from '../../components/feed/DropCard';
 import ConfessionCard from '../../components/feed/ConfessionCard';
 import MarketCard from '../../components/feed/MarketCard';
-import FeedAdCard from '../../components/feed/FeedAdCard';
 import DailyRewardBanner from '../../components/rewards/DailyRewardBanner';
 import HamburgerMenu from '../../components/ui/HamburgerMenu';
 import { useToast } from '../../components/ui/Toast';
@@ -39,6 +38,7 @@ import { API_BASE_URL } from '../../config/api';
 import { apiFetch } from '../admin/adminShared';
 import { knockIn, linkedChat } from '../../utils/knock';
 import { getDeviceId } from '../../utils/deviceId';
+import AdDrop, { adHeaders } from '../../components/feed/AdDrop';
 import { rs, rf, rp, FONT, RADIUS, HIT_SLOP } from '../../utils/responsive';
 import { THEME } from '../../utils/theme';
 import { CARD_INTENTS, CARD_FONT_STYLES, DROP_THEMES } from '../../components/drops/DropCardRenderer';
@@ -106,7 +106,7 @@ const sharePost = async (p) => {
 
 // Every 7th drop gets a market slide, every 8th an ad (they can coincide).
 const MARKET_FREQUENCY = 7;
-const FEED_AD_FREQUENCY = 8;
+const FEED_AD_FREQUENCY = 9;
 const LIVE_FREQUENCY = 5;
 
 const { width, height } = Dimensions.get('window');
@@ -1208,19 +1208,6 @@ const MarketSlide = ({ item, onPress }) => (
   </View>
 );
 
-// ─── Ad slide: FeedAdCard plus a pinned button below.
-const AdSlide = ({ ad, onPress }) => (
-  <View style={[ss.slide, sw.promoSlide]}>
-    <View style={sw.promoCenter}>
-      <FeedAdCard ad={ad} onPress={() => {}} />
-      <TouchableOpacity onPress={() => onPress(ad)} style={sw.adCtaBtn} activeOpacity={0.85} hitSlop={HIT_SLOP}>
-        <ExternalLink size={rs(15)} color="#fff" />
-        <Text style={sw.adCtaBtnText}>Learn more</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-);
-
 // ─── Promoted live slide
 const LiveSlide = ({ live, onPress }) => (
   <View style={[ss.slide, sw.promoSlide]}>
@@ -1297,12 +1284,19 @@ export default function DropsSwipeScreen({ navigation, route }) {
   // stream below (see `data`). Same source DropsFeedScreen used.
   useEffect(() => {
     dispatch(fetchMarketItems({ offset: 0, limit: 20 }));
-    fetch(`${API_BASE_URL}/api/v1/ads/active?limit=10`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((d) => { if (d) setFeedAds(d.ads || []); })
-      .catch(() => { /* offline — feed just skips ad injection this session */ });
     livesApi.promoted().then((r) => setPromotedLives(r.lives || [])).catch(() => {});
   }, [dispatch]);
+
+  // Ads: this platform, 18+ ones only for people who confirmed their age.
+  const adultOk = !!user?.age_verified;
+  useEffect(() => {
+    adHeaders()
+      .then((headers) => fetch(`${API_BASE_URL}/api/v1/ads/active?limit=10&platform=app&adult_ok=${adultOk}`, { headers }))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((d) => { if (d) setFeedAds(d.ads || []); })
+      .catch(() => { /* offline: the feed skips ads this session */ });
+  }, [adultOk, isAuthenticated]);
+  const hideAd = useCallback((id) => setFeedAds((cur) => cur.filter((a) => a.id !== id)), []);
 
   const loadFeed = useCallback(async (reset = false) => {
     if (loadingRef.current) return;
@@ -1600,10 +1594,6 @@ export default function DropsSwipeScreen({ navigation, route }) {
     navigation.navigate('MarketItem', { itemId: id });
   }, [navigation]);
 
-  const handleAdPress = useCallback((ad) => {
-    Linking.openURL(ad.link_url).catch(() => {});
-  }, []);
-
   // A failed "load more" retries quietly every few seconds.
   useEffect(() => {
     if (!loadError || !posts.length || !screenFocused) return;
@@ -1759,7 +1749,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     if (item.__ad) {
       return (
         <View style={{ height: listHeight, width }}>
-          <AdSlide ad={item.__ad} onPress={handleAdPress} />
+          <AdDrop ad={item.__ad} isActive={index === activeIndex && screenFocused} onHide={hideAd} topInset={headerHeight} />
         </View>
       );
     }
@@ -1812,7 +1802,7 @@ export default function DropsSwipeScreen({ navigation, route }) {
     return <View style={{ height: listHeight, width }}>{slide}</View>;
   }, [
     activeIndex, screenFocused, likeMap, saveMap, saveCounts, commentCounts, listHeight,
-    handleLike, handleSave, handleLinkUp, handleVote, handleShare, handleMarketOpen, handleAdPress, handleUnlock,
+    handleLike, handleSave, handleLinkUp, handleVote, handleShare, handleMarketOpen, hideAd, handleUnlock,
     isAuthenticated, navigation, headerHeight, chromeHidden, clearMode, playSpeed, user?.is_premium, noteDuration,
   ]);
 
@@ -2074,13 +2064,6 @@ const sw = StyleSheet.create({
 
   promoSlide: { alignItems: 'center', justifyContent: 'center', backgroundColor: THEME.background },
   promoCenter: { width: '100%', paddingHorizontal: rp(4) },
-  adCtaBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rp(8),
-    marginHorizontal: rp(12), marginTop: rp(4), paddingVertical: rp(13), borderRadius: RADIUS.full,
-    backgroundColor: THEME.primary,
-    shadowColor: THEME.primary, shadowOffset: { width: 0, height: rs(4) }, shadowOpacity: 0.4, shadowRadius: rs(10), elevation: 5,
-  },
-  adCtaBtnText: { fontSize: FONT.sm, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
 
   linkUpWrap: {
     marginTop: rp(6), alignSelf: 'flex-start', width: rs(280), maxWidth: '100%', borderRadius: RADIUS.full,
