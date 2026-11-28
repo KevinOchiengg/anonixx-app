@@ -24,7 +24,6 @@ import VideoOverlays from '../common/VideoOverlays';
 import { CommentBottomSheet } from './CommentBottomSheet';
 import ReportSheet from './ReportSheet';
 import AuthorAvatar from '../../components/common/AuthorAvatar';
-import { SHARE_TEXT } from '../../utils/share';
 
 // Matches UNLOCK_COST in screens/drops/PostUnlockScreen.jsx — shown here so
 // tapping Link up is never a price surprise.
@@ -503,7 +502,7 @@ function DropCard({
       return;
     }
     try {
-      await Share.share({ message: `${SHARE_TEXT}\nhttps://anonixx.com/drop/${post.id}` });
+      await Share.share({ message: `https://anonixx.com/drop/${post.id}` });
     } catch {}
   }, [post.id, isAuthenticated, showToast, navigation]);
 

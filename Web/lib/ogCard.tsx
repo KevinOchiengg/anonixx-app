@@ -60,7 +60,9 @@ export async function blurredDropCard(source: Buffer, sigma: number = BLUR.media
             background: "radial-gradient(circle at 50% 50%, rgba(11,15,24,0.15) 0%, rgba(11,15,24,0.65) 75%)",
           }}
         >
-          <div style={{ display: "flex", fontSize: 88, fontWeight: 700 }}>Be alone for this 🤫</div>
+          {/* Chat apps crop the card to a centre square, so everything stays inside it. */}
+          <div style={{ display: "flex", fontSize: 36, letterSpacing: 2, color: "#FF634A", fontWeight: 700 }}>anonixx.com</div>
+          <div style={{ display: "flex", marginTop: 16, fontSize: 60, fontWeight: 700 }}>Be alone for this 🤫</div>
         </div>
       </div>
     ),

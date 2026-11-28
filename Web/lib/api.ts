@@ -5,7 +5,6 @@ export const API_URL =(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000
 // Canonicals, the sitemap and robots are built from this, so a missing env var must never
 // tell Google the site lives on localhost.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://anonixx.com").replace(/\/$/, "");
-export const SHARE_TEXT = "Someone confessed something on Anonixx.";
 
 // Short text drops with no likes or replies stay out of search. Same as THIN_DROP_CHARS in public.py.
 export const THIN_DROP_CHARS = 80;

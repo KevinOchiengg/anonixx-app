@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, API_URL, SHARE_TEXT, getDeviceId, getToken, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
+import { api, API_URL, getDeviceId, getToken, loadMoreClient, type FeedAd, type MarketTease, type Post, type Sound } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Slide from "./Slide";
 import AdSlot from "./AdSlot";
@@ -539,7 +539,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
     const url = `${window.location.origin}/drop/${post.id}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Anonixx", text: SHARE_TEXT, url });
+        await navigator.share({ url });
         api(`/drops/${post.id}/share`, { method: "POST" }).catch(() => {});
       } else {
         await navigator.clipboard.writeText(url);

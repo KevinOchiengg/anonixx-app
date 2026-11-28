@@ -53,7 +53,6 @@ import { fillsFrame } from '../../utils/mediaFit';
 import { fetchMarketItems, selectMarketFeed } from '../../store/slices/marketSlice';
 import * as Clipboard from 'expo-clipboard';
 import { fetchBalance } from '../../store/slices/coinsSlice';
-import { SHARE_TEXT } from '../../utils/share';
 import LivePromoCard from '../../components/lives/LivePromoCard';
 import { livesApi } from '../../utils/lives';
 import KnockLabel from '../../components/feed/KnockLabel';
@@ -99,7 +98,7 @@ function BufferLine({ style }) {
 
 const sharePost = async (p) => {
   try {
-    const r = await Share.share({ message: `${SHARE_TEXT}\n${dropLink(p)}` });
+    const r = await Share.share({ message: dropLink(p) });
     if (r?.action !== Share.dismissedAction) signal(p.id, 'share');
   } catch {}
 };
