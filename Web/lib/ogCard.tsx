@@ -4,7 +4,7 @@ import sharp from "sharp";
 // The 1200×630 share card: the site default (/og) and per-drop cards (/og/drop/[id]).
 export const OG_SIZE = { width: 1200, height: 630 };
 
-export const BLUR = { media: 30, text: 15 } as const;
+export const BLUR = { media: 16, text: 15 } as const;
 
 export function ogCard(quote: string | null) {
   return new ImageResponse(
@@ -60,16 +60,7 @@ export async function blurredDropCard(source: Buffer, sigma: number = BLUR.media
             background: "radial-gradient(circle at 50% 50%, rgba(11,15,24,0.15) 0%, rgba(11,15,24,0.65) 75%)",
           }}
         >
-          <div style={{ display: "flex", fontSize: 30, letterSpacing: 8, color: "#FF634A", fontWeight: 700 }}>ANONIXX</div>
-          <div style={{ display: "flex", marginTop: 22, fontSize: 64, fontWeight: 700 }}>Someone confessed something</div>
-          <div
-            style={{
-              display: "flex", marginTop: 34, padding: "16px 36px", borderRadius: 999,
-              background: "#FF634A", fontSize: 30, fontWeight: 700,
-            }}
-          >
-            Tap to see it on Anonixx
-          </div>
+          <div style={{ display: "flex", fontSize: 88, fontWeight: 700 }}>Be alone for this 🤫</div>
         </div>
       </div>
     ),

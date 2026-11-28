@@ -23,8 +23,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const title = quote ? `“${quote}”` : "An anonymous confession";
   // Link previews stay content-free: a generic title and a blurred card.
   const share = {
-    title: "Someone confessed something on Anonixx",
-    description: "Tap to see it. No names, no trace.",
+    title: "Anonixx",
+    // A blank, not empty: an empty one is dropped and apps fall back to the confession text.
+    description: " ",
     image: `${SITE_URL}/og/drop/${id}`,
   };
 
