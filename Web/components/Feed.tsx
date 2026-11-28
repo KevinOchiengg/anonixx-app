@@ -275,7 +275,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
         out.push({ kind: "ad", key: `adsense-${i}` });
       }
     });
-    if (loadingMore || loadFailed || first !== "idle") out.push({ kind: "status" });
+    if (first !== "idle") out.push({ kind: "status" });
     if (replay.length) {
       const byId = new Map(posts.map((p) => [p.id, p]));
       replay.forEach((id, i) => {
@@ -284,7 +284,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
       });
     }
     return out;
-  }, [posts, replay, ads, market, lives, loadingMore, loadFailed, first]);
+  }, [posts, replay, ads, market, lives, first]);
 
   // Out of new posts (no next page, or the server's session cap): add another replay round
   // as the viewer nears the end, so the scroll never hits a wall.
@@ -394,6 +394,16 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
       .catch(() => setLoadFailed(true))
       .finally(() => { loading.current = false; setLoadingMore(false); });
   }, [active, cursor, items.length, authed, sessionPosts, retry, loadFailed]);
+
+  // A failed page retries on its own, backing off; the viewer only sees the loading line.
+  const backoff = useRef(0);
+  useEffect(() => {
+    if (!loadFailed) { backoff.current = 0; return; }
+    const wait = Math.min(15000, 2000 * 2 ** backoff.current++);
+    const t = window.setTimeout(() => { setLoadFailed(false); setRetry((n) => n + 1); }, wait);
+    return () => window.clearTimeout(t);
+  }, [loadFailed]);
+  const waiting = (loadingMore || loadFailed) && posts.length > 0 && active >= items.length - 1;
 
   const tryAgain = useCallback(() => {
     setLoadFailed(false);
@@ -594,14 +604,14 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
             if (it.kind === "market") return <MarketSlide key={it.key} item={it.item} index={i} />;
             if (it.kind === "live") return <LiveSlide key={it.key} live={it.live} index={i} />;
             if (it.kind === "status") {
-              const bad = first === "failed" || loadFailed;
+              const bad = first === "failed";
               return (
                 <section key="status" className="slide limit-slide net-slide" data-idx={i}>
                   {bad ? (
                     <>
                       <span className="limit-moon" aria-hidden><SatelliteDish strokeWidth={1.5} /></span>
-                      <h2>{first === "failed" ? "Can't reach Anonixx." : "Couldn't load more."}</h2>
-                      <p>Check your connection. Nothing you've seen is lost.</p>
+                      <h2>Can&apos;t reach Anonixx.</h2>
+                      <p>Check your connection.</p>
                       <button className="pill" onClick={tryAgain}>Try again</button>
                     </>
                   ) : (
@@ -640,6 +650,7 @@ export default function Feed({ initialPosts, initialCursor, startId, fillAfterSt
           })}
         </div>
 
+        {waiting ? <span className="vp-buffer feed-wait" role="status" aria-label="Loading" /> : null}
         {coach ? <div className="coach" role="status"><span>Swipe up for the next one</span><i /><span>Double-tap to like</span></div> : null}
         <BottomNav />
         <AdultWelcome seen={active} />

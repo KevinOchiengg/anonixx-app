@@ -653,6 +653,8 @@
 
 /* feed loading: just the loading line along the bottom, like a buffering video */
 .net-slide { position: relative; }
+/* waiting for the next page at the end of the feed: the same line, where the video bar sits */
+.feed-wait { bottom: var(--nav-h); z-index: 6; }
 
 /* Knock label: "Knock at Name’s door", centered; only the name truncates */
 .knock-label { flex: 1; min-width: 0; display: flex; justify-content: center; white-space: nowrap; }
